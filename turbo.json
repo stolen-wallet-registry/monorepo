@@ -19,6 +19,12 @@
     "typecheck": {
       "dependsOn": ["^build"]
     },
+    "format": {
+      "cache": false
+    },
+    "format:check": {
+      "outputs": []
+    },
     "clean": {
       "cache": false
     }
