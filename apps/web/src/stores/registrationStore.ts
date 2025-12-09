@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { logger } from '@/lib/logger';
 
 export type RegistrationType = 'standard' | 'selfRelay' | 'p2pRelay';
 
@@ -46,26 +47,36 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
 
       setRegistrationType: (type) =>
         set((state) => {
+          logger.registration.info('Registration type selected', {
+            type,
+            initialStep: getInitialStep(type),
+          });
           state.registrationType = type;
           state.step = getInitialStep(type);
         }),
 
       setStep: (step) =>
         set((state) => {
+          logger.registration.info('Step transition', { from: state.step, to: step });
           state.step = step;
         }),
 
       setAcknowledgementHash: (hash) =>
         set((state) => {
+          logger.registration.info('Acknowledgement hash received', { hash });
           state.acknowledgementHash = hash;
         }),
 
       setRegistrationHash: (hash) =>
         set((state) => {
+          logger.registration.info('Registration hash received', { hash });
           state.registrationHash = hash;
         }),
 
-      reset: () => set(initialState),
+      reset: () => {
+        logger.registration.info('Registration state reset');
+        set(initialState);
+      },
     })),
     {
       name: 'registration-state',

@@ -1,10 +1,32 @@
 import { Web3Provider } from '@/providers/Web3Provider';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useChainId } from 'wagmi';
+import { useEffect, useRef } from 'react';
+import { logger } from '@/lib/logger';
 
 function WalletStatus() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const prevConnected = useRef(isConnected);
+  const prevChainId = useRef(chainId);
+
+  // Log wallet connection changes
+  useEffect(() => {
+    if (isConnected && !prevConnected.current) {
+      logger.wallet.info('Wallet connected', { address, chainId });
+    } else if (!isConnected && prevConnected.current) {
+      logger.wallet.info('Wallet disconnected');
+    }
+    prevConnected.current = isConnected;
+  }, [isConnected, address, chainId]);
+
+  // Log chain changes
+  useEffect(() => {
+    if (chainId !== prevChainId.current && prevChainId.current !== undefined) {
+      logger.wallet.info('Chain changed', { from: prevChainId.current, to: chainId });
+    }
+    prevChainId.current = chainId;
+  }, [chainId]);
 
   if (!isConnected) {
     return <p className="text-muted-foreground">Connect your wallet to get started.</p>;
