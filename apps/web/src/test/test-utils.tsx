@@ -1,5 +1,5 @@
-import { render, RenderOptions } from '@testing-library/react';
-import { ReactElement, ReactNode } from 'react';
+import { render, type RenderOptions } from '@testing-library/react';
+import { type ReactElement, type ReactNode } from 'react';
 
 interface WrapperProps {
   children: ReactNode;

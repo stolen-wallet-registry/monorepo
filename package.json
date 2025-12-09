@@ -13,7 +13,8 @@
     "clean": "turbo clean && rm -rf node_modules",
     "prepare": "husky",
     "storybook": "turbo storybook",
-    "build-storybook": "turbo build-storybook"
+    "build-storybook": "turbo build-storybook",
+    "anvil": "anvil --ipc /tmp/anvil.ipc --steps-tracing --block-time 13"
   },
   "devDependencies": {
     "husky": "^9.1.7",

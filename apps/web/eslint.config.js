@@ -22,5 +22,19 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Allow barrel exports and test utilities to re-export
+      'react-refresh/only-export-components': [
+        'warn',
+        { allowExportNames: ['render', 'buttonVariants'] },
+      ],
+    },
+  },
+  {
+    // Disable react-refresh for test files
+    files: ['**/test/**', '**/*.test.*'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
   },
 ]);
