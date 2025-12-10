@@ -1,14 +1,17 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 
-import { ThemeProviderContext } from './ThemeProviderContext';
-
-type Theme = 'dark' | 'light' | 'system';
+import { ThemeProviderContext, type ColorScheme, type ThemeVariant } from './ThemeProviderContext';
 
 type ThemeProviderProps = {
   children: React.ReactNode;
-  defaultTheme?: Theme;
-  storageKey?: string;
+  defaultColorScheme?: ColorScheme;
+  defaultVariant?: ThemeVariant;
+  colorSchemeStorageKey?: string;
+  variantStorageKey?: string;
 };
+
+const COLOR_SCHEME_KEY = 'swr-color-scheme';
+const VARIANT_KEY = 'swr-theme-variant';
 
 function getSystemTheme(): 'light' | 'dark' {
   if (typeof window === 'undefined') return 'light';
@@ -17,29 +20,45 @@ function getSystemTheme(): 'light' | 'dark' {
 
 export function ThemeProvider({
   children,
-  defaultTheme = 'system',
-  storageKey = 'swr-ui-theme',
+  defaultColorScheme = 'system',
+  defaultVariant = 'base',
+  colorSchemeStorageKey = COLOR_SCHEME_KEY,
+  variantStorageKey = VARIANT_KEY,
   ...props
 }: ThemeProviderProps) {
-  const [theme, setThemeState] = useState<Theme>(
-    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
+  // Color scheme state
+  const [colorScheme, setColorSchemeState] = useState<ColorScheme>(() => {
+    const stored = localStorage.getItem(colorSchemeStorageKey);
+    // Also check legacy key for migration
+    const legacy = localStorage.getItem('swr-ui-theme');
+    return (stored as ColorScheme) || (legacy as ColorScheme) || defaultColorScheme;
+  });
+
+  // Theme variant state
+  const [themeVariant, setThemeVariantState] = useState<ThemeVariant>(
+    () => (localStorage.getItem(variantStorageKey) as ThemeVariant) || defaultVariant
   );
 
   // Track system preference separately for reactive updates
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(getSystemTheme);
 
-  // Derive resolvedTheme from theme and systemPreference
-  const resolvedTheme = useMemo<'light' | 'dark'>(() => {
-    if (theme === 'system') return systemPreference;
-    return theme;
-  }, [theme, systemPreference]);
+  // Derive resolved color scheme from colorScheme and systemPreference
+  const resolvedColorScheme = useMemo<'light' | 'dark'>(() => {
+    if (colorScheme === 'system') return systemPreference;
+    return colorScheme;
+  }, [colorScheme, systemPreference]);
 
-  // Apply theme class to document
+  // Apply theme classes to document
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-    root.classList.add(resolvedTheme);
-  }, [resolvedTheme]);
+
+    // Remove all theme-related classes
+    root.classList.remove('light', 'dark', 'base', 'hacker');
+
+    // Add current color scheme and variant
+    root.classList.add(resolvedColorScheme);
+    root.classList.add(themeVariant);
+  }, [resolvedColorScheme, themeVariant]);
 
   // Listen for system theme changes
   useEffect(() => {
@@ -53,21 +72,35 @@ export function ThemeProvider({
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
-  const setTheme = useCallback(
-    (newTheme: Theme) => {
-      localStorage.setItem(storageKey, newTheme);
-      setThemeState(newTheme);
+  const setColorScheme = useCallback(
+    (newScheme: ColorScheme) => {
+      localStorage.setItem(colorSchemeStorageKey, newScheme);
+      setColorSchemeState(newScheme);
     },
-    [storageKey]
+    [colorSchemeStorageKey]
+  );
+
+  const setThemeVariant = useCallback(
+    (newVariant: ThemeVariant) => {
+      localStorage.setItem(variantStorageKey, newVariant);
+      setThemeVariantState(newVariant);
+    },
+    [variantStorageKey]
   );
 
   const value = useMemo(
     () => ({
-      theme,
-      setTheme,
-      resolvedTheme,
+      colorScheme,
+      resolvedColorScheme,
+      themeVariant,
+      setColorScheme,
+      setThemeVariant,
+      // Legacy aliases for backward compatibility
+      theme: colorScheme,
+      setTheme: setColorScheme,
+      resolvedTheme: resolvedColorScheme,
     }),
-    [theme, setTheme, resolvedTheme]
+    [colorScheme, resolvedColorScheme, themeVariant, setColorScheme, setThemeVariant]
   );
 
   return (

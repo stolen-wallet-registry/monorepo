@@ -14,24 +14,24 @@ export const AnimatedThemeToggler = ({
   duration = 400,
   ...props
 }: AnimatedThemeTogglerProps) => {
-  const { resolvedTheme, setTheme } = useTheme();
+  const { resolvedColorScheme, setColorScheme } = useTheme();
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const isDark = resolvedTheme === 'dark';
+  const isDark = resolvedColorScheme === 'dark';
 
   const toggleTheme = useCallback(async () => {
     if (!buttonRef.current) return;
 
-    const newTheme = isDark ? 'light' : 'dark';
+    const newScheme = isDark ? 'light' : 'dark';
 
     // Check if View Transitions API is supported
     if (!document.startViewTransition) {
-      setTheme(newTheme);
+      setColorScheme(newScheme);
       return;
     }
 
     await document.startViewTransition(() => {
       flushSync(() => {
-        setTheme(newTheme);
+        setColorScheme(newScheme);
       });
     }).ready;
 
@@ -53,7 +53,7 @@ export const AnimatedThemeToggler = ({
         pseudoElement: '::view-transition-new(root)',
       }
     );
-  }, [isDark, duration, setTheme]);
+  }, [isDark, duration, setColorScheme]);
 
   return (
     <button ref={buttonRef} onClick={toggleTheme} className={cn(className)} {...props}>

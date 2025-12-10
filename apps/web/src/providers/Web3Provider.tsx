@@ -1,38 +1,28 @@
 import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { RainbowKitProvider, darkTheme, lightTheme } from '@rainbow-me/rainbowkit';
+import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
 import { config } from '@/lib/wagmi';
 import { useTheme } from '@/providers/useTheme';
+import { createRainbowKitTheme } from '@/lib/rainbowkit-theme';
 import '@rainbow-me/rainbowkit/styles.css';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useState, useMemo } from 'react';
 
 interface Web3ProviderProps {
   children: ReactNode;
 }
 
-// RainbowKit theme configuration
-const rainbowKitLightTheme = lightTheme({
-  borderRadius: 'medium',
-  fontStack: 'system',
-});
-
-const rainbowKitDarkTheme = darkTheme({
-  borderRadius: 'medium',
-  fontStack: 'system',
-});
-
 // Inner component that can access ThemeProvider context
 function RainbowKitWrapper({ children }: { children: ReactNode }) {
-  const { resolvedTheme } = useTheme();
+  const { resolvedColorScheme, themeVariant } = useTheme();
 
-  return (
-    <RainbowKitProvider
-      theme={resolvedTheme === 'dark' ? rainbowKitDarkTheme : rainbowKitLightTheme}
-    >
-      {children}
-    </RainbowKitProvider>
+  // Memoize theme to avoid unnecessary re-renders
+  const theme = useMemo(
+    () => createRainbowKitTheme(resolvedColorScheme, themeVariant),
+    [resolvedColorScheme, themeVariant]
   );
+
+  return <RainbowKitProvider theme={theme}>{children}</RainbowKitProvider>;
 }
 
 export function Web3Provider({ children }: Web3ProviderProps) {

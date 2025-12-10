@@ -13,7 +13,7 @@ interface AppProvidersProps {
  */
 export function AppProviders({ children }: AppProvidersProps) {
   return (
-    <ThemeProvider defaultTheme="system" storageKey="swr-ui-theme">
+    <ThemeProvider defaultColorScheme="system" defaultVariant="base">
       <Web3Provider>{children}</Web3Provider>
     </ThemeProvider>
   );
