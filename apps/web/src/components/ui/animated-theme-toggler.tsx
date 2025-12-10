@@ -29,11 +29,16 @@ export const AnimatedThemeToggler = ({
       return;
     }
 
-    await document.startViewTransition(() => {
+    // Mark that we're using View Transition (disables CSS transitions)
+    document.documentElement.setAttribute('data-view-transition', '');
+
+    const transition = document.startViewTransition(() => {
       flushSync(() => {
         setColorScheme(newScheme);
       });
-    }).ready;
+    });
+
+    await transition.ready;
 
     const { top, left, width, height } = buttonRef.current.getBoundingClientRect();
     const x = left + width / 2;
@@ -53,6 +58,11 @@ export const AnimatedThemeToggler = ({
         pseudoElement: '::view-transition-new(root)',
       }
     );
+
+    // Clean up after animation completes
+    transition.finished.then(() => {
+      document.documentElement.removeAttribute('data-view-transition');
+    });
   }, [isDark, duration, setColorScheme]);
 
   return (

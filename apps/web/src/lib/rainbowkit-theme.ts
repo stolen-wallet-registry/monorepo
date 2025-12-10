@@ -3,124 +3,80 @@ import { darkTheme, lightTheme, type Theme } from '@rainbow-me/rainbowkit';
 import type { ThemeVariant } from '@/providers';
 
 /**
- * Theme color definitions for RainbowKit
- * RainbowKit doesn't support OKLCH, so we use hex colors
+ * Static color palettes that match our CSS theme variables.
+ * These are hex equivalents of the OKLCH values in index.css.
  */
-const THEME_COLORS = {
+const PALETTES = {
   base: {
     light: {
-      accentColor: '#000000',
+      background: '#ffffff',
+      foreground: '#000000',
+      card: '#ffffff',
+      // Accent: used for buttons AND some label text - needs to work for both
+      accentColor: '#888888',
       accentColorForeground: '#ffffff',
-      modalBackground: '#ffffff',
-      modalText: '#000000',
-      modalTextSecondary: '#666666',
-      closeButton: '#000000',
-      closeButtonBackground: '#f0f0f0',
-      actionButtonBorder: '#000000',
-      actionButtonBorderMobile: '#000000',
-      actionButtonSecondaryBackground: '#f5f5f5',
-      generalBorder: '#d9d9d9',
-      generalBorderDim: '#e5e5e5',
-      connectButtonBackground: '#ffffff',
-      connectButtonBackgroundError: '#ff4444',
-      connectButtonInnerBackground: '#f5f5f5',
-      connectButtonText: '#000000',
-      connectButtonTextError: '#ffffff',
-      profileForeground: '#f5f5f5',
-      selectedOptionBorder: '#000000',
-      downloadBottomCardBackground: '#ffffff',
-      downloadTopCardBackground: '#f5f5f5',
-      profileAction: '#000000',
-      profileActionHover: '#333333',
-      menuItemBackground: '#f5f5f5',
-      error: '#ff4444',
-      standby: '#ffcc00',
+      // Profile action overlays (subtle transparency like RainbowKit defaults)
+      profileAction: 'rgba(0, 0, 0, 0.1)',
+      profileActionHover: 'rgba(0, 0, 0, 0.15)',
+      profileForeground: 'rgba(0, 0, 0, 0.04)',
+      // Other
+      muted: '#f5f5f5',
+      mutedForeground: '#888888',
+      border: '#e5e5e5',
+      destructive: '#ef4444',
     },
     dark: {
-      accentColor: '#ffffff',
+      background: '#000000',
+      foreground: '#ffffff',
+      card: '#1a1a1a',
+      // Accent: used for buttons AND some label text - needs to work for both
+      accentColor: '#aaaaaa',
       accentColorForeground: '#000000',
-      modalBackground: '#000000',
-      modalText: '#ffffff',
-      modalTextSecondary: '#999999',
-      closeButton: '#ffffff',
-      closeButtonBackground: '#1a1a1a',
-      actionButtonBorder: '#ffffff',
-      actionButtonBorderMobile: '#ffffff',
-      actionButtonSecondaryBackground: '#1a1a1a',
-      generalBorder: '#333333',
-      generalBorderDim: '#262626',
-      connectButtonBackground: '#000000',
-      connectButtonBackgroundError: '#ff4444',
-      connectButtonInnerBackground: '#1a1a1a',
-      connectButtonText: '#ffffff',
-      connectButtonTextError: '#ffffff',
-      profileForeground: '#1a1a1a',
-      selectedOptionBorder: '#ffffff',
-      downloadBottomCardBackground: '#000000',
-      downloadTopCardBackground: '#1a1a1a',
-      profileAction: '#ffffff',
-      profileActionHover: '#cccccc',
-      menuItemBackground: '#1a1a1a',
-      error: '#ff6666',
-      standby: '#ffcc00',
+      // Profile action overlays
+      profileAction: 'rgba(255, 255, 255, 0.1)',
+      profileActionHover: 'rgba(255, 255, 255, 0.2)',
+      profileForeground: 'rgba(255, 255, 255, 0.05)',
+      // Other
+      muted: '#262626',
+      mutedForeground: '#aaaaaa',
+      border: '#333333',
+      destructive: '#dc2626',
     },
   },
   hacker: {
     light: {
-      accentColor: '#1a5c1a', // Dark green
-      accentColorForeground: '#f0fff0',
-      modalBackground: '#f0fff0',
-      modalText: '#1a3d1a',
-      modalTextSecondary: '#4a7a4a',
-      closeButton: '#1a5c1a',
-      closeButtonBackground: '#d0f0d0',
-      actionButtonBorder: '#1a5c1a',
-      actionButtonBorderMobile: '#1a5c1a',
-      actionButtonSecondaryBackground: '#e0ffe0',
-      generalBorder: '#8fc98f',
-      generalBorderDim: '#c0e0c0',
-      connectButtonBackground: '#f0fff0',
-      connectButtonBackgroundError: '#ff4444',
-      connectButtonInnerBackground: '#e0ffe0',
-      connectButtonText: '#1a5c1a',
-      connectButtonTextError: '#ffffff',
-      profileForeground: '#e0ffe0',
-      selectedOptionBorder: '#1a5c1a',
-      downloadBottomCardBackground: '#f0fff0',
-      downloadTopCardBackground: '#e0ffe0',
-      profileAction: '#1a5c1a',
-      profileActionHover: '#2a7c2a',
-      menuItemBackground: '#e0ffe0',
-      error: '#cc3333',
-      standby: '#8fcc00',
+      background: '#f7fdf7',
+      foreground: '#1a4d1a',
+      card: '#f0faf0',
+      // Accent: used for buttons AND some label text - medium green that works for both
+      accentColor: '#3a8a3a',
+      accentColorForeground: '#ffffff',
+      // Profile action overlays
+      profileAction: 'rgba(26, 77, 26, 0.1)',
+      profileActionHover: 'rgba(26, 77, 26, 0.15)',
+      profileForeground: 'rgba(26, 77, 26, 0.04)',
+      // Other
+      muted: '#e0f0e0',
+      mutedForeground: '#3a7a3a',
+      border: '#a0d0a0',
+      destructive: '#dc2626',
     },
     dark: {
-      accentColor: '#00ff00', // Neon green
-      accentColorForeground: '#000a00',
-      modalBackground: '#0a1a0a',
-      modalText: '#00ff00',
-      modalTextSecondary: '#00aa00',
-      closeButton: '#00ff00',
-      closeButtonBackground: '#0f2a0f',
-      actionButtonBorder: '#00ff00',
-      actionButtonBorderMobile: '#00ff00',
-      actionButtonSecondaryBackground: '#0f2a0f',
-      generalBorder: '#005500',
-      generalBorderDim: '#003300',
-      connectButtonBackground: '#0a1a0a',
-      connectButtonBackgroundError: '#550000',
-      connectButtonInnerBackground: '#0f2a0f',
-      connectButtonText: '#00ff00',
-      connectButtonTextError: '#ff6666',
-      profileForeground: '#0f2a0f',
-      selectedOptionBorder: '#00ff00',
-      downloadBottomCardBackground: '#0a1a0a',
-      downloadTopCardBackground: '#0f2a0f',
-      profileAction: '#00ff00',
-      profileActionHover: '#00cc00',
-      menuItemBackground: '#0f2a0f',
-      error: '#ff3333',
-      standby: '#aaff00',
+      background: '#0a140a',
+      foreground: '#22cc22',
+      card: '#0f1f0f',
+      // Accent: used for buttons AND some label text - bright green that works for both
+      accentColor: '#44cc44',
+      accentColorForeground: '#001a00',
+      // Profile action overlays
+      profileAction: 'rgba(34, 255, 34, 0.1)',
+      profileActionHover: 'rgba(34, 255, 34, 0.2)',
+      profileForeground: 'rgba(34, 255, 34, 0.05)',
+      // Other
+      muted: '#142814',
+      mutedForeground: '#55dd55',
+      border: '#1f4f1f',
+      destructive: '#ff3333',
     },
   },
 } as const;
@@ -134,12 +90,79 @@ const THEME_FONTS = {
 } as const;
 
 /**
- * Creates a RainbowKit theme based on color scheme and variant
+ * Creates a RainbowKit theme based on color scheme and variant.
  */
 export function createRainbowKitTheme(colorScheme: 'light' | 'dark', variant: ThemeVariant): Theme {
   const baseTheme = colorScheme === 'dark' ? darkTheme() : lightTheme();
-  const colors = THEME_COLORS[variant][colorScheme];
   const fontFamily = THEME_FONTS[variant];
+  const p = PALETTES[variant][colorScheme];
+
+  const colors = {
+    // Accent - THE button background and text colors
+    accentColor: p.accentColor,
+    accentColorForeground: p.accentColorForeground,
+
+    // Modal
+    modalBackground: p.card,
+    modalBorder: p.border,
+    modalText: p.foreground,
+    // Secondary text - computed based on theme for better visibility
+    modalTextDim:
+      variant === 'hacker'
+        ? colorScheme === 'dark'
+          ? 'rgba(34, 204, 34, 0.5)'
+          : 'rgba(26, 77, 26, 0.5)'
+        : colorScheme === 'dark'
+          ? 'rgba(255, 255, 255, 0.5)'
+          : 'rgba(0, 0, 0, 0.5)',
+    modalTextSecondary:
+      variant === 'hacker'
+        ? colorScheme === 'dark'
+          ? 'rgba(34, 204, 34, 0.7)'
+          : 'rgba(26, 77, 26, 0.7)'
+        : colorScheme === 'dark'
+          ? 'rgba(255, 255, 255, 0.7)'
+          : 'rgba(0, 0, 0, 0.7)',
+
+    // Close button
+    closeButton: p.mutedForeground,
+    closeButtonBackground: p.muted,
+
+    // Action buttons (these are transparent overlays)
+    actionButtonBorder: 'rgba(0, 0, 0, 0.04)',
+    actionButtonBorderMobile: 'rgba(0, 0, 0, 0.06)',
+    actionButtonSecondaryBackground: p.muted,
+
+    // General borders
+    generalBorder: p.border,
+    generalBorderDim: p.muted,
+
+    // Connect button (in navbar)
+    connectButtonBackground: p.card,
+    connectButtonBackgroundError: p.destructive,
+    connectButtonInnerBackground: p.muted,
+    connectButtonText: p.foreground,
+    connectButtonTextError: '#ffffff',
+
+    // Profile modal - these are OVERLAYS, not solid colors
+    profileForeground: p.profileForeground,
+    profileAction: p.profileAction,
+    profileActionHover: p.profileActionHover,
+
+    // Selection border
+    selectedOptionBorder: p.accentColor,
+
+    // Download cards
+    downloadBottomCardBackground: p.card,
+    downloadTopCardBackground: p.muted,
+
+    // Menu
+    menuItemBackground: p.muted,
+
+    // Status colors
+    error: p.destructive,
+    standby: '#ffcc00',
+  };
 
   return {
     ...baseTheme,
@@ -152,7 +175,6 @@ export function createRainbowKitTheme(colorScheme: 'light' | 'dark', variant: Th
     },
     radii: {
       ...baseTheme.radii,
-      // Slightly sharper corners for a more modern look
       actionButton: '8px',
       connectButton: '8px',
       menuButton: '8px',

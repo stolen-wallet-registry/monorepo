@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 import { useTheme, type ColorScheme, type ThemeVariant } from '@/providers';
 import { cn } from '@/lib/utils';
@@ -9,10 +9,32 @@ import { cn } from '@/lib/utils';
  */
 export function DevTools() {
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { colorScheme, setColorScheme, themeVariant, setThemeVariant, resolvedColorScheme } =
     useTheme();
 
   const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
+
+  // Close on click outside
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    // Delay adding listener to avoid immediate close from the toggle click
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
 
   // Only render in development
   if (import.meta.env.PROD) {
@@ -23,7 +45,7 @@ export function DevTools() {
   const variantOptions: ThemeVariant[] = ['base', 'hacker'];
 
   return (
-    <div className="fixed bottom-4 left-4 z-50" data-no-transition>
+    <div ref={containerRef} className="fixed bottom-4 left-4 z-50" data-no-transition>
       {/* Toggle button */}
       <button
         type="button"

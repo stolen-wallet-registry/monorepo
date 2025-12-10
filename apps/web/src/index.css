@@ -26,10 +26,26 @@
   --theme-transition-duration: 200ms;
 }
 
-/* Apply smooth transitions to theme-related properties */
-*,
-*::before,
-*::after {
+/*
+ * Disable CSS transitions during View Transitions API animation.
+ * The ::view-transition pseudo-elements handle the animation, so we need
+ * to prevent competing CSS transitions on the underlying elements.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/*
+ * Only apply smooth transitions when NOT using View Transitions API.
+ * This is a fallback for browsers that don't support it (Safari, Firefox).
+ * We detect this by checking if the html element has the data-transitioning attribute
+ * which we'll set during programmatic theme changes without View Transitions.
+ */
+html:not([data-view-transition]) *,
+html:not([data-view-transition]) *::before,
+html:not([data-view-transition]) *::after {
   transition:
     color var(--theme-transition-duration) ease,
     background-color var(--theme-transition-duration) ease,
@@ -38,7 +54,14 @@
     stroke var(--theme-transition-duration) ease;
 }
 
-/* Disable transitions for elements that shouldn't animate */
+/* During View Transition, disable all CSS transitions */
+html[data-view-transition] *,
+html[data-view-transition] *::before,
+html[data-view-transition] *::after {
+  transition: none !important;
+}
+
+/* Disable transitions for elements that should never animate */
 [data-no-transition],
 [data-no-transition] * {
   transition: none !important;
@@ -262,9 +285,4 @@
   code, pre, kbd, samp {
     font-family: var(--font-mono);
   }
-}
-
-::view-transition-old(root), ::view-transition-new(root) {
-    animation: none;
-    mix-blend-mode: normal;
 }
