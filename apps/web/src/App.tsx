@@ -2,6 +2,7 @@ import { AppProviders } from '@/providers';
 import { Layout } from '@/components/layout';
 import { WalletStatus } from '@/components/composed/WalletStatus';
 import { DevTools } from '@/components/dev';
+import { Toaster } from '@/components/ui/sonner';
 
 function App() {
   return (
@@ -10,6 +11,7 @@ function App() {
         <WalletStatus />
       </Layout>
       <DevTools />
+      <Toaster />
     </AppProviders>
   );
 }
