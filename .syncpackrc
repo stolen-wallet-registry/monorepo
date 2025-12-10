@@ -1,0 +1,20 @@
+{
+  "dependencyTypes": ["prod", "dev"],
+  "versionGroups": [
+    {
+      "label": "React packages should match across all packages",
+      "dependencies": ["react", "react-dom", "@types/react", "@types/react-dom"],
+      "packages": ["**"]
+    },
+    {
+      "label": "Web3 packages should match across all packages",
+      "dependencies": ["wagmi", "viem", "@rainbow-me/rainbowkit", "@tanstack/react-query"],
+      "packages": ["**"]
+    },
+    {
+      "label": "TypeScript should match across all packages",
+      "dependencies": ["typescript"],
+      "packages": ["**"]
+    }
+  ]
+}
