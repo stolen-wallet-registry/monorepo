@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Data storage (peer identity persisted here)
+.data/
+
+# Keys (contains secrets - NEVER commit)
+keys.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store

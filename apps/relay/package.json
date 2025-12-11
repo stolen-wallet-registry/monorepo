@@ -1,0 +1,34 @@
+{
+  "name": "@swr/relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "libp2p circuit relay server for P2P wallet registration",
+  "main": "src/index.mjs",
+  "scripts": {
+    "dev": "node src/index.mjs",
+    "dev:debug": "DEBUG=libp2p* node src/index.mjs",
+    "start": "node src/index.mjs",
+    "start:debug": "DEBUG=libp2p* node src/index.mjs",
+    "lint": "eslint src/",
+    "typecheck": "echo 'No TypeScript in relay (pure JS)'"
+  },
+  "dependencies": {
+    "@chainsafe/libp2p-noise": "^16.0.0",
+    "@chainsafe/libp2p-yamux": "^7.0.1",
+    "@libp2p/circuit-relay-v2": "^3.1.6",
+    "@libp2p/config": "^1.0.0",
+    "@libp2p/identify": "^3.0.14",
+    "@libp2p/keychain": "^5.0.11",
+    "@libp2p/mplex": "^11.0.13",
+    "@libp2p/websockets": "^9.0.13",
+    "datastore-level": "^11.0.1",
+    "libp2p": "^2.3.1"
+  },
+  "devDependencies": {
+    "eslint": "^9.17.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

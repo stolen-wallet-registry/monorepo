@@ -1,0 +1,6 @@
+{
+  "id": "YOUR_PEER_ID",
+  "privKey": "LEGACY_NOT_USED",
+  "pubKey": "LEGACY_NOT_USED",
+  "password": "your-secure-keychain-password"
+}
