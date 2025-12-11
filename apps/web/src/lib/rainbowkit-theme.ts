@@ -90,12 +90,33 @@ const THEME_FONTS = {
 } as const;
 
 /**
+ * Computes modal text colors based on theme variant and color scheme.
+ */
+function getModalTextColors(colorScheme: 'light' | 'dark', variant: ThemeVariant) {
+  const isDark = colorScheme === 'dark';
+  const isHacker = variant === 'hacker';
+
+  if (isHacker) {
+    return {
+      dim: isDark ? 'rgba(34, 204, 34, 0.5)' : 'rgba(26, 77, 26, 0.5)',
+      secondary: isDark ? 'rgba(34, 204, 34, 0.7)' : 'rgba(26, 77, 26, 0.7)',
+    };
+  }
+
+  return {
+    dim: isDark ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)',
+    secondary: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
+  };
+}
+
+/**
  * Creates a RainbowKit theme based on color scheme and variant.
  */
 export function createRainbowKitTheme(colorScheme: 'light' | 'dark', variant: ThemeVariant): Theme {
   const baseTheme = colorScheme === 'dark' ? darkTheme() : lightTheme();
   const fontFamily = THEME_FONTS[variant];
   const p = PALETTES[variant][colorScheme];
+  const modalTextColors = getModalTextColors(colorScheme, variant);
 
   const colors = {
     // Accent - THE button background and text colors
@@ -107,22 +128,8 @@ export function createRainbowKitTheme(colorScheme: 'light' | 'dark', variant: Th
     modalBorder: p.border,
     modalText: p.foreground,
     // Secondary text - computed based on theme for better visibility
-    modalTextDim:
-      variant === 'hacker'
-        ? colorScheme === 'dark'
-          ? 'rgba(34, 204, 34, 0.5)'
-          : 'rgba(26, 77, 26, 0.5)'
-        : colorScheme === 'dark'
-          ? 'rgba(255, 255, 255, 0.5)'
-          : 'rgba(0, 0, 0, 0.5)',
-    modalTextSecondary:
-      variant === 'hacker'
-        ? colorScheme === 'dark'
-          ? 'rgba(34, 204, 34, 0.7)'
-          : 'rgba(26, 77, 26, 0.7)'
-        : colorScheme === 'dark'
-          ? 'rgba(255, 255, 255, 0.7)'
-          : 'rgba(0, 0, 0, 0.7)',
+    modalTextDim: modalTextColors.dim,
+    modalTextSecondary: modalTextColors.secondary,
 
     // Close button
     closeButton: p.mutedForeground,

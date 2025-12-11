@@ -69,7 +69,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             <CardContent>
               <div className="rounded-md bg-muted p-3">
                 <code className="text-sm text-muted-foreground break-all">
-                  {this.state.error?.message || 'Unknown error'}
+                  {import.meta.env.DEV
+                    ? this.state.error?.message || 'Unknown error'
+                    : 'An unexpected error occurred'}
                 </code>
               </div>
             </CardContent>

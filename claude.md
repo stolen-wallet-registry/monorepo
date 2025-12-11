@@ -150,13 +150,13 @@ find_tasks(filter_by="project", filter_value="proj-123")
 
 ## Current Tech Stack
 
-```
-Build:      Vite 7.x, TypeScript 5.9, Turborepo 2.x, pnpm workspaces
-UI:         React 19, Tailwind CSS 4.x, shadcn/ui, Radix UI, Lucide icons
-Web3:       wagmi 2.x, viem 2.x, RainbowKit 2.x, TanStack Query 5.x
-State:      Zustand 5.x (persist + immer), React Hook Form 7.x, Zod 4.x
-Animation:  motion (framer-motion successor)
-Testing:    Vitest 4.x, Storybook 10.x, Testing Library, Playwright
+```yaml
+Build: Vite 7.x, TypeScript 5.9, Turborepo 2.x, pnpm workspaces
+UI: React 19, Tailwind CSS 4.x, shadcn/ui, Radix UI, Lucide icons
+Web3: wagmi 2.x, viem 2.x, RainbowKit 2.x, TanStack Query 5.x
+State: Zustand 5.x (persist + immer), React Hook Form 7.x, Zod 4.x
+Animation: motion (framer-motion successor)
+Testing: Vitest 4.x, Storybook 10.x, Testing Library, Playwright
 ```
 
 ---
@@ -246,7 +246,7 @@ logger.registration.info('Step complete', { from: 'acknowledge', to: 'gracePerio
 
 ### Provider Hierarchy
 
-```
+```text
 AppProviders
   └─ ThemeProvider (must wrap Web3 for RainbowKit theming)
        └─ Web3Provider
@@ -267,7 +267,7 @@ ThemeProvider must wrap Web3Provider so RainbowKit can access theme context at r
 
 ### Component Organization
 
-```
+```text
 src/components/
 ├── ui/           # shadcn primitives (no custom stories needed)
 ├── composed/     # Business components (WITH stories)
@@ -310,7 +310,7 @@ src/components/
 
 ### Test File Location
 
-```
+```text
 component.tsx        → component.test.tsx  (co-located)
 src/test/setup.ts    → Test setup and mocks
 src/test/test-utils.tsx → Custom render with providers
@@ -330,7 +330,7 @@ src/test/test-utils.tsx → Custom render with providers
 
 ## File Structure Reference
 
-```
+```text
 apps/web/
 ├── src/
 │   ├── components/

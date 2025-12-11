@@ -76,7 +76,11 @@ export function RegistrationMethodSelector({
   }));
 
   return (
-    <div className={cn('grid gap-4 md:grid-cols-3', className)}>
+    <div
+      role="radiogroup"
+      aria-label="Registration method"
+      className={cn('grid gap-4 md:grid-cols-3', className)}
+    >
       {methods.map((method) => {
         const isSelected = selected === method.type;
         const isDisabled = method.disabled;
@@ -84,9 +88,9 @@ export function RegistrationMethodSelector({
         return (
           <Card
             key={method.type}
-            role="button"
+            role="radio"
             tabIndex={isDisabled ? -1 : 0}
-            aria-pressed={isSelected}
+            aria-checked={isSelected}
             aria-disabled={isDisabled}
             onClick={() => !isDisabled && onSelect(method.type)}
             onKeyDown={(e) => {

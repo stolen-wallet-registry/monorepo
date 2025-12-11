@@ -4,6 +4,7 @@
  * User signs and pays from the same wallet.
  */
 
+import { useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
@@ -42,9 +43,14 @@ export function StandardRegistrationPage() {
   const { isConnected } = useAccount();
   const { step, reset } = useRegistrationStore();
 
-  // Redirect if not connected
+  // Redirect if not connected (side effect in useEffect, not during render)
+  useEffect(() => {
+    if (!isConnected) {
+      setLocation('/');
+    }
+  }, [isConnected, setLocation]);
+
   if (!isConnected) {
-    setLocation('/');
     return null;
   }
 
@@ -56,7 +62,7 @@ export function StandardRegistrationPage() {
   const currentTitle = step ? (STEP_TITLES[step] ?? 'Unknown Step') : 'Getting Started';
   const currentDescription = step
     ? (STEP_DESCRIPTIONS[step] ?? '')
-    : 'Connect your wallet to begin';
+    : 'Follow the steps in the sidebar to complete your registration.';
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-8">

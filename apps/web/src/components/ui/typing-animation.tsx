@@ -156,7 +156,7 @@ export function TypingAnimation({
       ref={elementRef}
       className={cn('leading-[5rem] tracking-[-0.02em]', className)}
       aria-live="polite"
-      aria-atomic="false"
+      aria-atomic="true"
       {...props}
     >
       {displayedText}

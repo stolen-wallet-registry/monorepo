@@ -99,7 +99,7 @@ export const RegistrationSuccess: Story = {
 /**
  * Signing error.
  */
-export const Error: Story = {
+export const SigningError: Story = {
   args: {
     type: 'acknowledgement',
     data: sampleData,

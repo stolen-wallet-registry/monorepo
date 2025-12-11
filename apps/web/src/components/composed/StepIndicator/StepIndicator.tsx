@@ -60,6 +60,15 @@ function getStepStatus(
   const stepIndex = sequence.indexOf(step);
   const currentIndex = sequence.indexOf(currentStep);
 
+  // Guard against invalid/unknown steps (-1 from indexOf)
+  if (currentIndex === -1) {
+    console.warn(`[StepIndicator] Unknown currentStep: ${currentStep}`);
+    return 'pending';
+  }
+  if (stepIndex === -1) {
+    return 'pending';
+  }
+
   if (stepIndex < currentIndex) return 'completed';
   if (stepIndex === currentIndex) return 'current';
   return 'pending';

@@ -5,7 +5,7 @@
  * Each signature must use the current nonce, which increments after each successful use.
  */
 
-import { useReadContract, useChainId } from 'wagmi';
+import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
 import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
 import { getContractAddress } from '@/lib/contracts/addresses';
 
@@ -14,7 +14,7 @@ export interface UseContractNonceResult {
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
-  refetch: () => void;
+  refetch: UseReadContractReturnType['refetch'];
 }
 
 /**

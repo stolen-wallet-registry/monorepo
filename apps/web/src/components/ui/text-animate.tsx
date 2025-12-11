@@ -345,6 +345,11 @@ const TextAnimateBase = ({
       break;
   }
 
+  // Guard against empty segments (prevents duration/segments.length = Infinity)
+  if (segments.length === 0) {
+    segments = [''];
+  }
+
   const finalVariants = variants
     ? {
         container: {

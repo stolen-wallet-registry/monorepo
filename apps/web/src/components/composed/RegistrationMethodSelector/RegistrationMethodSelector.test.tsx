@@ -67,7 +67,7 @@ describe('RegistrationMethodSelector', () => {
 
       const card = screen
         .getByText('Standard Registration')
-        .closest('[role="button"]') as HTMLElement;
+        .closest('[role="radio"]') as HTMLElement;
       card.focus();
       await user.keyboard('{Enter}');
 
@@ -81,7 +81,7 @@ describe('RegistrationMethodSelector', () => {
 
       const card = screen
         .getByText('Self-Relay Registration')
-        .closest('[role="button"]') as HTMLElement;
+        .closest('[role="radio"]') as HTMLElement;
       card.focus();
       await user.keyboard(' ');
 
@@ -122,27 +122,34 @@ describe('RegistrationMethodSelector', () => {
   });
 
   describe('accessibility', () => {
-    it('sets aria-pressed on selected card', () => {
+    it('has radiogroup container with label', () => {
+      render(<RegistrationMethodSelector {...defaultProps} />);
+
+      const radiogroup = screen.getByRole('radiogroup');
+      expect(radiogroup).toHaveAttribute('aria-label', 'Registration method');
+    });
+
+    it('sets aria-checked on selected card', () => {
       render(<RegistrationMethodSelector {...defaultProps} selected="selfRelay" />);
 
-      const selfRelayCard = screen.getByText('Self-Relay Registration').closest('[role="button"]');
-      expect(selfRelayCard).toHaveAttribute('aria-pressed', 'true');
+      const selfRelayCard = screen.getByText('Self-Relay Registration').closest('[role="radio"]');
+      expect(selfRelayCard).toHaveAttribute('aria-checked', 'true');
 
-      const standardCard = screen.getByText('Standard Registration').closest('[role="button"]');
-      expect(standardCard).toHaveAttribute('aria-pressed', 'false');
+      const standardCard = screen.getByText('Standard Registration').closest('[role="radio"]');
+      expect(standardCard).toHaveAttribute('aria-checked', 'false');
     });
 
     it('sets aria-disabled on disabled card', () => {
       render(<RegistrationMethodSelector {...defaultProps} p2pAvailable={false} />);
 
-      const p2pCard = screen.getByText('P2P Relay Registration').closest('[role="button"]');
+      const p2pCard = screen.getByText('P2P Relay Registration').closest('[role="radio"]');
       expect(p2pCard).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('sets tabIndex -1 on disabled card', () => {
       render(<RegistrationMethodSelector {...defaultProps} p2pAvailable={false} />);
 
-      const p2pCard = screen.getByText('P2P Relay Registration').closest('[role="button"]');
+      const p2pCard = screen.getByText('P2P Relay Registration').closest('[role="radio"]');
       expect(p2pCard).toHaveAttribute('tabIndex', '-1');
     });
   });

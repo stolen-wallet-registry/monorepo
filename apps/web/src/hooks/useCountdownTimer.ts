@@ -68,7 +68,10 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
   }, [targetBlock, currentBlock]);
 
   const [totalMs, setTotalMs] = useState<number>(() => calculateInitialMs());
-  const [isRunning, setIsRunning] = useState<boolean>(autoStart && calculateInitialMs() > 0);
+  const [isRunning, setIsRunning] = useState<boolean>(() => {
+    const initialMs = calculateInitialMs();
+    return autoStart && initialMs > 0;
+  });
   const [hasExpired, setHasExpired] = useState<boolean>(false);
 
   const onExpireRef = useRef(onExpire);

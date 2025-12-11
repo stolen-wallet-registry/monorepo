@@ -7,8 +7,7 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { truncateAddress } from '@/lib/address';
-import { areAddressesEqual } from '@/lib/address';
+import { truncateAddress, areAddressesEqual } from '@/lib/address';
 import { Wallet, ArrowRight, Check, AlertTriangle } from 'lucide-react';
 
 export type WalletStatus = 'correct' | 'wrong-wallet' | 'wrong-network' | 'disconnected';

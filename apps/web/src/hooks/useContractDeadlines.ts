@@ -69,14 +69,24 @@ export function useContractDeadlines(
 
   // Transform the raw array result into a typed object
   const transformedData: DeadlineData | undefined = result.data
-    ? {
-        currentBlock: result.data[0],
-        expiry: result.data[1],
-        start: result.data[2],
-        graceBlocks: result.data[3],
-        deadlineBlock: result.data[4],
-        isExpired: result.data[5],
-      }
+    ? (() => {
+        // Validate we have all expected fields from the contract
+        if (!result.data || result.data.length !== 6) {
+          console.error(
+            '[useContractDeadlines] Unexpected getDeadlines result structure:',
+            result.data
+          );
+          return undefined;
+        }
+        return {
+          currentBlock: result.data[0],
+          expiry: result.data[1],
+          start: result.data[2],
+          graceBlocks: result.data[3],
+          deadlineBlock: result.data[4],
+          isExpired: result.data[5],
+        };
+      })()
     : undefined;
 
   return {

@@ -5,7 +5,7 @@
  * The hash struct returned can be used for verification but is typically not needed client-side.
  */
 
-import { useReadContract, useChainId } from 'wagmi';
+import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
 import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
 import { getContractAddress } from '@/lib/contracts/addresses';
 import { SIGNATURE_STEP, type SignatureStep } from '@/lib/signatures';
@@ -20,7 +20,7 @@ export interface UseGenerateHashStructResult {
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
-  refetch: () => void;
+  refetch: UseReadContractReturnType['refetch'];
 }
 
 /**

@@ -6,11 +6,14 @@ export type ColorScheme = 'light' | 'dark' | 'system';
 /** Theme variant - visual style independent of light/dark */
 export type ThemeVariant = 'base' | 'hacker';
 
+/** Resolved color scheme (system preference resolved to actual light/dark) */
+export type ResolvedColorScheme = Exclude<ColorScheme, 'system'>;
+
 export type ThemeProviderState = {
   /** Current color scheme setting */
   colorScheme: ColorScheme;
   /** Resolved color scheme (system preference resolved to light/dark) */
-  resolvedColorScheme: 'light' | 'dark';
+  resolvedColorScheme: ResolvedColorScheme;
   /** Current theme variant */
   themeVariant: ThemeVariant;
   /** Set the color scheme preference */

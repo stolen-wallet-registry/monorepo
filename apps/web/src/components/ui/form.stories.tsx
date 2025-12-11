@@ -312,7 +312,8 @@ function FormWithErrorsExample() {
   // Trigger validation on mount to show errors
   React.useEffect(() => {
     form.trigger();
-  }, [form]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Form {...form}>

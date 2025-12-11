@@ -65,7 +65,8 @@ function LiveCountdown({ initialSeconds = 30 }: { initialSeconds?: number }) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isRunning, totalMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- totalMs checked in early return, functional updater handles state
+  }, [isRunning]);
 
   const timeRemaining = formatTimeRemaining(totalMs);
   const isExpired = totalMs <= 0;

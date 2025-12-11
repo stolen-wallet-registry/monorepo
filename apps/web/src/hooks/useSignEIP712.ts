@@ -50,15 +50,25 @@ export function useSignEIP712(): UseSignEIP712Result {
   }
 
   /**
-   * Sign an acknowledgement message (Phase 1).
+   * Validates that wallet is connected and contract is configured.
+   * @throws Error if validation fails
+   * @returns The validated contract address
    */
-  const signAcknowledgement = async (params: SignParams): Promise<`0x${string}`> => {
+  const validateSigningPreconditions = (): `0x${string}` => {
     if (!address) {
       throw new Error('Wallet not connected');
     }
     if (!contractAddress) {
       throw new Error('Contract not configured for this chain');
     }
+    return contractAddress;
+  };
+
+  /**
+   * Sign an acknowledgement message (Phase 1).
+   */
+  const signAcknowledgement = async (params: SignParams): Promise<`0x${string}`> => {
+    const validatedAddress = validateSigningPreconditions();
 
     const message: AcknowledgementMessage = {
       owner: params.owner,
@@ -67,7 +77,7 @@ export function useSignEIP712(): UseSignEIP712Result {
       deadline: params.deadline,
     };
 
-    const typedData = buildAcknowledgementTypedData(chainId, contractAddress, message);
+    const typedData = buildAcknowledgementTypedData(chainId, validatedAddress, message);
 
     const signature = await signTypedDataAsync({
       domain: typedData.domain,
@@ -83,12 +93,7 @@ export function useSignEIP712(): UseSignEIP712Result {
    * Sign a registration message (Phase 2).
    */
   const signRegistration = async (params: SignParams): Promise<`0x${string}`> => {
-    if (!address) {
-      throw new Error('Wallet not connected');
-    }
-    if (!contractAddress) {
-      throw new Error('Contract not configured for this chain');
-    }
+    const validatedAddress = validateSigningPreconditions();
 
     const message: RegistrationMessage = {
       owner: params.owner,
@@ -97,7 +102,7 @@ export function useSignEIP712(): UseSignEIP712Result {
       deadline: params.deadline,
     };
 
-    const typedData = buildRegistrationTypedData(chainId, contractAddress, message);
+    const typedData = buildRegistrationTypedData(chainId, validatedAddress, message);
 
     const signature = await signTypedDataAsync({
       domain: typedData.domain,
