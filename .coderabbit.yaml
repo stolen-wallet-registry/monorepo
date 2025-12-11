@@ -1,0 +1,91 @@
+# CodeRabbit Configuration
+# Balanced profile: Focus on bugs, security, a11y - skip minor style nitpicks
+
+language: en-US
+
+reviews:
+  profile: chill
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+
+  # Path-specific review instructions
+  path_instructions:
+    - path: "**/*.tsx"
+      instructions: |
+        React 19 + TypeScript component review:
+        - Check for React 19 compatibility (ref handling, use hooks)
+        - Verify accessibility (keyboard navigation, ARIA attributes, focus management)
+        - Ensure SSR safety (no localStorage/window access during render)
+        - Flag missing error boundaries for async components
+        - Check for proper TypeScript types (avoid `any`)
+
+    - path: "**/signatures/**"
+      instructions: |
+        SECURITY-CRITICAL: EIP-712 signature handling code.
+        Review thoroughly for:
+        - Correct signature generation and verification
+        - Proper deadline and nonce handling
+        - No exposure of private keys or sensitive data
+        - Correct typed data structure per EIP-712 spec
+        - Domain separator correctness
+
+    - path: "**/contracts/**"
+      instructions: |
+        Contract integration code. Check:
+        - ABI correctness and completeness
+        - Address validation (0x + 40 hex chars)
+        - Proper error handling for contract calls
+        - Chain ID awareness
+
+    - path: "**/*.stories.tsx"
+      instructions: |
+        Storybook stories. Focus on:
+        - Coverage of component states and variants
+        - Accessibility in example usage
+        - Proper args typing
+        Skip: Minor style issues, import ordering
+
+    - path: "**/stores/**"
+      instructions: |
+        Zustand stores. Check:
+        - Correct Immer usage for mutations
+        - Persistence configuration if applicable
+        - Action naming consistency
+        - Type safety for state shape
+
+    - path: "**/providers/**"
+      instructions: |
+        React context providers. Check:
+        - SSR safety (useEffect for side effects)
+        - Proper context typing
+        - Memoization of context values
+        - Clear error messages for missing providers
+
+    - path: "**/lib/logger/**"
+      instructions: |
+        Logger implementation. Check:
+        - Sensitive data redaction (privateKey, mnemonic, etc.)
+        - Environment-aware configuration
+        - No circular reference issues
+        - Clean output format for LLM consumption
+
+  # Files/paths to exclude from review
+  path_filters:
+    - "!**/pnpm-lock.yaml"
+    - "!**/.turbo/**"
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/storybook-static/**"
+    - "!**/*.d.ts"
+    - "!**/coverage/**"
+    - "!**/.next/**"
+    - "!**/node_modules/**"
+
+  auto_review:
+    enabled: true
+    drafts: false
+
+chat:
+  auto_reply: true

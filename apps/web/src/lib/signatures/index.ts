@@ -22,3 +22,13 @@ export {
   clearAllSignatures,
   type StoredSignature,
 } from './storage';
+
+export {
+  parseSignature,
+  isSignatureExpired,
+  isWithinRegistrationWindow,
+  getStepName,
+  isValidSignatureFormat,
+  STEP_NAMES,
+  type ParsedSignature,
+} from './utils';

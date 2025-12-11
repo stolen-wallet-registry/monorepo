@@ -14,8 +14,29 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(dirname, './src'),
     },
+  },
+  // Pre-bundle Web3 dependencies for faster dev server startup
+  optimizeDeps: {
+    include: [
+      '@rainbow-me/rainbowkit',
+      'wagmi',
+      'viem',
+      '@tanstack/react-query',
+      '@tanstack/react-query-devtools',
+    ],
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
+  // Build configuration for production
+  build: {
+    target: 'esnext',
+  },
+  // Global definitions for Web3 compatibility
+  define: {
+    global: 'globalThis',
   },
   test: {
     projects: [
