@@ -4,7 +4,7 @@
  * Collects addresses and NFT options, then triggers acknowledgement signing.
  */
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -79,6 +79,18 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
   const [signatureStatus, setSignatureStatus] = useState<SignatureStatus>('idle');
   const [signatureError, setSignatureError] = useState<string | null>(null);
   const [signature, setSignature] = useState<`0x${string}` | null>(null);
+
+  // Ref for timeout cleanup
+  const completionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (completionTimeoutRef.current) {
+        clearTimeout(completionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Watch form values for validation using useWatch (React Compiler compatible)
   const watchedRelayer = useWatch({ control: form.control, name: 'relayer' });
@@ -229,8 +241,12 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
       setSignatureStatus('success');
 
       logger.registration.info('Acknowledgement signing complete, advancing to next step');
+      // Clear any existing timeout before setting a new one
+      if (completionTimeoutRef.current) {
+        clearTimeout(completionTimeoutRef.current);
+      }
       // Advance to next step after short delay
-      setTimeout(onComplete, 1000);
+      completionTimeoutRef.current = setTimeout(onComplete, 1000);
     } catch (err) {
       logger.signature.error(
         'Acknowledgement signing failed',

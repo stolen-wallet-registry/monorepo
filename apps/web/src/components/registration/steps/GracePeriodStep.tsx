@@ -32,12 +32,16 @@ export function GracePeriodStep({ onComplete }: GracePeriodStepProps) {
   const initialTotalMsRef = useRef<number | null>(null);
   const hasLoggedStart = useRef(false);
 
+  // Normalize registeree before passing to hook to avoid invalid queries
+  // Convert null to undefined for the hook (formStore uses null, hook expects undefined)
+  const normalizedRegisteree = registeree ?? undefined;
+
   // Fetch deadlines from contract
   const {
     data: deadlines,
     isLoading: deadlinesLoading,
     isError: deadlinesError,
-  } = useContractDeadlines(registeree ?? undefined);
+  } = useContractDeadlines(normalizedRegisteree);
 
   // Log when deadlines are loaded
   useEffect(() => {

@@ -143,10 +143,7 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
           // Instead, wait for actual block confirmation
           setIsRunning(false);
           setIsWaitingForBlock(true);
-          logger.registration.info('Timer estimate reached 0, waiting for block confirmation', {
-            targetBlock: targetBlock?.toString() ?? 'null',
-            currentBlock: currentBlock?.toString() ?? 'null',
-          });
+          logger.registration.info('Timer estimate reached 0, waiting for block confirmation');
           return 0;
         }
         return next;
@@ -154,7 +151,7 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isRunning, totalMs, targetBlock, currentBlock]);
+  }, [isRunning, totalMs]);
 
   // Block verification effect - determines actual expiration from chain data
   // This runs whenever currentBlock updates from contract polling

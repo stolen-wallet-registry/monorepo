@@ -39,7 +39,9 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   const expectedWallet = isSelfRelay ? relayer : registeree;
 
   // Check if correct wallet is connected
-  const isCorrectWallet = address && expectedWallet && areAddressesEqual(address, expectedWallet);
+  const isCorrectWallet = Boolean(
+    address && expectedWallet && areAddressesEqual(address, expectedWallet)
+  );
 
   // Contract hook
   const {
@@ -82,7 +84,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
       setAcknowledgementHash(hash);
       logger.registration.info('Acknowledgement complete, advancing to grace period');
       // Advance to next step after short delay
-      const timerId = window.setTimeout(onComplete, 1500);
+      const timerId = setTimeout(onComplete, 1500);
       return () => clearTimeout(timerId);
     }
   }, [isConfirmed, hash, setAcknowledgementHash, onComplete, registeree, registrationType]);
@@ -203,6 +205,8 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
           currentAddress={address}
           expectedAddress={expectedWallet}
           expectedLabel="Gas Wallet"
+          currentChainId={chainId}
+          expectedChainId={chainId}
         />
       )}
 

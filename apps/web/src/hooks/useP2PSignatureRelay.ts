@@ -1,0 +1,456 @@
+/**
+ * Hook for P2P signature relay operations.
+ *
+ * Coordinates sending signatures between registeree and relayer during P2P registration.
+ * Built on top of useP2PConnection with protocol-specific helpers.
+ */
+
+import { useCallback } from 'react';
+import { useAccount } from 'wagmi';
+import type { Connection } from '@libp2p/interface/connection';
+import type { IncomingStreamData } from '@libp2p/interface/stream-handler';
+import {
+  useP2PConnection,
+  type UseP2PConnectionOptions,
+  type UseP2PConnectionResult,
+} from './useP2PConnection';
+import {
+  PROTOCOLS,
+  passStreamData,
+  readStreamData,
+  getPeerConnection,
+  type ParsedStreamData,
+  type SignatureOverTheWire,
+  type ProtocolHandler,
+} from '@/lib/p2p';
+import { storeSignature, type StoredSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { useFormStore } from '@/stores/formStore';
+import { useRegistrationStore } from '@/stores/registrationStore';
+import { useP2PStore } from '@/stores/p2pStore';
+import { logger } from '@/lib/logger';
+
+export type P2PRole = 'registeree' | 'relayer';
+
+export interface UseP2PSignatureRelayOptions {
+  /** The role of this peer (registeree sends signatures, relayer receives) */
+  role: P2PRole;
+  /** Callback when a signature is received (relayer only) */
+  onSignatureReceived?: (signature: SignatureOverTheWire, protocol: string) => void;
+  /** Callback when a transaction hash is received (registeree only) */
+  onTxHashReceived?: (hash: `0x${string}`, protocol: string) => void;
+  /** Callback when peer connection is established */
+  onPeerConnected?: (remotePeerId: string) => void;
+  /** Callback when registration step should advance */
+  onStepAdvance?: () => void;
+  /** Custom protocol handlers (overrides defaults) */
+  customHandlers?: ProtocolHandler[];
+}
+
+export interface UseP2PSignatureRelayResult extends Omit<UseP2PConnectionResult, 'send'> {
+  /** Role of this peer */
+  role: P2PRole;
+  /** Send acknowledgement signature (registeree) */
+  sendAckSignature: (signature: SignatureOverTheWire) => Promise<void>;
+  /** Send registration signature (registeree) */
+  sendRegSignature: (signature: SignatureOverTheWire) => Promise<void>;
+  /** Send acknowledgement tx hash (relayer) */
+  sendAckTxHash: (hash: `0x${string}`) => Promise<void>;
+  /** Send registration tx hash (relayer) */
+  sendRegTxHash: (hash: `0x${string}`) => Promise<void>;
+  /** Confirm signature received (relayer) */
+  confirmAckReceived: () => Promise<void>;
+  /** Confirm registration signature received (relayer) */
+  confirmRegReceived: () => Promise<void>;
+  /** Send connect handshake with form data */
+  sendConnectHandshake: () => Promise<void>;
+}
+
+/**
+ * Hook for P2P signature relay coordination.
+ *
+ * @example Registeree usage:
+ * ```tsx
+ * const { initialize, connect, sendAckSignature, sendRegSignature } = useP2PSignatureRelay({
+ *   role: 'registeree',
+ *   onTxHashReceived: (hash, protocol) => {
+ *     // Handle received tx hash from relayer
+ *   },
+ * });
+ * ```
+ *
+ * @example Relayer usage:
+ * ```tsx
+ * const { initialize, peerId, sendAckTxHash, sendRegTxHash } = useP2PSignatureRelay({
+ *   role: 'relayer',
+ *   onSignatureReceived: (signature, protocol) => {
+ *     // Store signature and submit transaction
+ *   },
+ * });
+ * ```
+ */
+export function useP2PSignatureRelay(
+  options: UseP2PSignatureRelayOptions
+): UseP2PSignatureRelayResult {
+  const {
+    role,
+    onSignatureReceived,
+    onTxHashReceived,
+    onPeerConnected,
+    onStepAdvance,
+    customHandlers = [],
+  } = options;
+
+  const { address } = useAccount();
+
+  // Form store for registeree/relayer addresses
+  const { setFormValues } = useFormStore();
+  // Registration store for tx hashes
+  const { setAcknowledgementHash, setRegistrationHash } = useRegistrationStore();
+  // P2P store for connection state
+  const { setPartnerPeerId, setConnectedToPeer } = useP2PStore();
+
+  // Build protocol handlers based on role
+  const buildRoleHandlers = useCallback((): ProtocolHandler[] => {
+    const handlers: ProtocolHandler[] = [];
+
+    // Both roles handle CONNECT
+    handlers.push({
+      protocol: PROTOCOLS.CONNECT,
+      streamHandler: {
+        handler: async ({ connection, stream }: IncomingStreamData) => {
+          try {
+            const data = await readStreamData(stream.source);
+            logger.p2p.info('Received CONNECT', { role, data });
+
+            // Update form with partner's address
+            if (data.form) {
+              setFormValues(data.form);
+            }
+
+            // Update P2P state with partner info
+            if (data.p2p?.partnerPeerId) {
+              setPartnerPeerId(data.p2p.partnerPeerId);
+            }
+            setConnectedToPeer(true);
+
+            // Relayer responds to CONNECT with their address
+            if (role === 'relayer') {
+              await passStreamData({
+                connection,
+                protocols: [PROTOCOLS.CONNECT],
+                streamData: {
+                  form: { relayer: address },
+                  success: true,
+                },
+              });
+            }
+
+            onPeerConnected?.(connection.remotePeer.toString());
+            onStepAdvance?.();
+          } catch (err) {
+            logger.p2p.error('Error handling CONNECT', {}, err as Error);
+          }
+        },
+        options: { runOnTransientConnection: true },
+      },
+    });
+
+    if (role === 'relayer') {
+      // Relayer receives signatures
+      handlers.push({
+        protocol: PROTOCOLS.ACK_SIG,
+        streamHandler: {
+          handler: async ({ connection, stream }: IncomingStreamData) => {
+            try {
+              const data = await readStreamData(stream.source);
+              logger.p2p.info('Received ACK signature', { role });
+
+              if (data.signature) {
+                // Store the signature for later use
+                const sig = data.signature;
+                const stored: StoredSignature = {
+                  signature: sig.value as `0x${string}`,
+                  deadline: BigInt(sig.deadline),
+                  nonce: BigInt(sig.nonce),
+                  address: sig.address,
+                  chainId: sig.chainId,
+                  step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
+                  storedAt: Date.now(),
+                };
+                storeSignature(stored);
+
+                // Confirm receipt
+                await passStreamData({
+                  connection,
+                  protocols: [PROTOCOLS.ACK_REC],
+                  streamData: { success: true, message: 'Signature received' },
+                });
+
+                onSignatureReceived?.(data.signature, PROTOCOLS.ACK_SIG);
+                onStepAdvance?.();
+              }
+            } catch (err) {
+              logger.p2p.error('Error handling ACK_SIG', {}, err as Error);
+            }
+          },
+          options: { runOnTransientConnection: true },
+        },
+      });
+
+      handlers.push({
+        protocol: PROTOCOLS.REG_SIG,
+        streamHandler: {
+          handler: async ({ connection, stream }: IncomingStreamData) => {
+            try {
+              const data = await readStreamData(stream.source);
+              logger.p2p.info('Received REG signature', { role });
+
+              if (data.signature) {
+                // Store the signature for later use
+                const sig = data.signature;
+                const stored: StoredSignature = {
+                  signature: sig.value as `0x${string}`,
+                  deadline: BigInt(sig.deadline),
+                  nonce: BigInt(sig.nonce),
+                  address: sig.address,
+                  chainId: sig.chainId,
+                  step: SIGNATURE_STEP.REGISTRATION,
+                  storedAt: Date.now(),
+                };
+                storeSignature(stored);
+
+                // Confirm receipt
+                await passStreamData({
+                  connection,
+                  protocols: [PROTOCOLS.REG_REC],
+                  streamData: { success: true, message: 'Signature received' },
+                });
+
+                onSignatureReceived?.(data.signature, PROTOCOLS.REG_SIG);
+                onStepAdvance?.();
+              }
+            } catch (err) {
+              logger.p2p.error('Error handling REG_SIG', {}, err as Error);
+            }
+          },
+          options: { runOnTransientConnection: true },
+        },
+      });
+    }
+
+    if (role === 'registeree') {
+      // Registeree receives tx hashes and confirmations
+      handlers.push({
+        protocol: PROTOCOLS.ACK_REC,
+        streamHandler: {
+          handler: async ({ stream }: IncomingStreamData) => {
+            try {
+              const data = await readStreamData(stream.source);
+              logger.p2p.info('ACK signature confirmed received', { data });
+              onStepAdvance?.();
+            } catch (err) {
+              logger.p2p.error('Error handling ACK_REC', {}, err as Error);
+            }
+          },
+          options: { runOnTransientConnection: true },
+        },
+      });
+
+      handlers.push({
+        protocol: PROTOCOLS.ACK_PAY,
+        streamHandler: {
+          handler: async ({ stream }: IncomingStreamData) => {
+            try {
+              const data = await readStreamData(stream.source);
+              logger.p2p.info('Received ACK payment hash', { data });
+
+              if (data.hash) {
+                setAcknowledgementHash(data.hash);
+                onTxHashReceived?.(data.hash, PROTOCOLS.ACK_PAY);
+              }
+              onStepAdvance?.();
+            } catch (err) {
+              logger.p2p.error('Error handling ACK_PAY', {}, err as Error);
+            }
+          },
+          options: { runOnTransientConnection: true },
+        },
+      });
+
+      handlers.push({
+        protocol: PROTOCOLS.REG_REC,
+        streamHandler: {
+          handler: async ({ stream }: IncomingStreamData) => {
+            try {
+              const data = await readStreamData(stream.source);
+              logger.p2p.info('REG signature confirmed received', { data });
+              onStepAdvance?.();
+            } catch (err) {
+              logger.p2p.error('Error handling REG_REC', {}, err as Error);
+            }
+          },
+          options: { runOnTransientConnection: true },
+        },
+      });
+
+      handlers.push({
+        protocol: PROTOCOLS.REG_PAY,
+        streamHandler: {
+          handler: async ({ stream }: IncomingStreamData) => {
+            try {
+              const data = await readStreamData(stream.source);
+              logger.p2p.info('Received REG payment hash', { data });
+
+              if (data.hash) {
+                setRegistrationHash(data.hash);
+                onTxHashReceived?.(data.hash, PROTOCOLS.REG_PAY);
+              }
+              onStepAdvance?.();
+            } catch (err) {
+              logger.p2p.error('Error handling REG_PAY', {}, err as Error);
+            }
+          },
+          options: { runOnTransientConnection: true },
+        },
+      });
+    }
+
+    return [...handlers, ...customHandlers];
+  }, [
+    role,
+    address,
+    setFormValues,
+    setPartnerPeerId,
+    setConnectedToPeer,
+    setAcknowledgementHash,
+    setRegistrationHash,
+    onSignatureReceived,
+    onTxHashReceived,
+    onPeerConnected,
+    onStepAdvance,
+    customHandlers,
+  ]);
+
+  // Configure base P2P connection
+  const connectionOptions: UseP2PConnectionOptions = {
+    autoInit: true,
+    handlers: buildRoleHandlers(),
+  };
+
+  const p2pConnection = useP2PConnection(connectionOptions);
+
+  // Helper to get current connection
+  const getConnection = useCallback(async (): Promise<Connection> => {
+    if (p2pConnection.connection) {
+      return p2pConnection.connection;
+    }
+
+    const partnerId = useP2PStore.getState().partnerPeerId;
+    if (!partnerId || !p2pConnection.node) {
+      throw new Error('No connection available');
+    }
+
+    return getPeerConnection({ libp2p: p2pConnection.node, remotePeerId: partnerId });
+  }, [p2pConnection.connection, p2pConnection.node]);
+
+  // Send connect handshake
+  const sendConnectHandshake = useCallback(async () => {
+    const connection = await getConnection();
+    const streamData: ParsedStreamData = {
+      form: { registeree: address },
+      p2p: { partnerPeerId: p2pConnection.peerId || undefined },
+    };
+    await passStreamData({ connection, protocols: [PROTOCOLS.CONNECT], streamData });
+    logger.p2p.info('Sent CONNECT handshake');
+  }, [getConnection, address, p2pConnection.peerId]);
+
+  // Registeree: Send acknowledgement signature
+  const sendAckSignature = useCallback(
+    async (signature: SignatureOverTheWire) => {
+      const connection = await getConnection();
+      await passStreamData({
+        connection,
+        protocols: [PROTOCOLS.ACK_SIG],
+        streamData: { signature },
+      });
+      logger.p2p.info('Sent ACK signature');
+    },
+    [getConnection]
+  );
+
+  // Registeree: Send registration signature
+  const sendRegSignature = useCallback(
+    async (signature: SignatureOverTheWire) => {
+      const connection = await getConnection();
+      await passStreamData({
+        connection,
+        protocols: [PROTOCOLS.REG_SIG],
+        streamData: { signature },
+      });
+      logger.p2p.info('Sent REG signature');
+    },
+    [getConnection]
+  );
+
+  // Relayer: Send acknowledgement tx hash
+  const sendAckTxHash = useCallback(
+    async (hash: `0x${string}`) => {
+      const connection = await getConnection();
+      await passStreamData({
+        connection,
+        protocols: [PROTOCOLS.ACK_PAY],
+        streamData: { hash },
+      });
+      logger.p2p.info('Sent ACK tx hash', { hash });
+    },
+    [getConnection]
+  );
+
+  // Relayer: Send registration tx hash
+  const sendRegTxHash = useCallback(
+    async (hash: `0x${string}`) => {
+      const connection = await getConnection();
+      await passStreamData({
+        connection,
+        protocols: [PROTOCOLS.REG_PAY],
+        streamData: { hash },
+      });
+      logger.p2p.info('Sent REG tx hash', { hash });
+    },
+    [getConnection]
+  );
+
+  // Relayer: Confirm ack signature received (manual if needed)
+  const confirmAckReceived = useCallback(async () => {
+    const connection = await getConnection();
+    await passStreamData({
+      connection,
+      protocols: [PROTOCOLS.ACK_REC],
+      streamData: { success: true, message: 'Signature received' },
+    });
+    logger.p2p.info('Sent ACK receipt confirmation');
+  }, [getConnection]);
+
+  // Relayer: Confirm reg signature received (manual if needed)
+  const confirmRegReceived = useCallback(async () => {
+    const connection = await getConnection();
+    await passStreamData({
+      connection,
+      protocols: [PROTOCOLS.REG_REC],
+      streamData: { success: true, message: 'Signature received' },
+    });
+    logger.p2p.info('Sent REG receipt confirmation');
+  }, [getConnection]);
+
+  return {
+    ...p2pConnection,
+    role,
+    sendAckSignature,
+    sendRegSignature,
+    sendAckTxHash,
+    sendRegTxHash,
+    confirmAckReceived,
+    confirmRegReceived,
+    sendConnectHandshake,
+  };
+}

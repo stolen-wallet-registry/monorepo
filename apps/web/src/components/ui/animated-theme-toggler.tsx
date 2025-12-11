@@ -68,7 +68,7 @@ export const AnimatedThemeToggler = ({
 
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
-      toggleTheme();
+      toggleTheme().catch(console.error);
       onClick?.(event);
     },
     [toggleTheme, onClick]

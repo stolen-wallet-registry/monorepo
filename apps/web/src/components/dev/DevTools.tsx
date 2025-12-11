@@ -2,7 +2,10 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 import { useTheme, type ColorScheme, type ThemeVariant } from '@/providers';
+import { useP2PStore } from '@/stores/p2pStore';
 import { cn } from '@/lib/utils';
+
+type DevToolsTab = 'theme' | 'p2p' | 'tests';
 
 /**
  * Component that throws an error on mount.
@@ -19,12 +22,14 @@ function ErrorThrower(): never {
  */
 export function DevTools() {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<DevToolsTab>('theme');
   // errorKey controls when ErrorThrower renders - null means no error
   // Using a function initializer ensures fresh state on HMR
   const [errorKey, setErrorKey] = useState<number | null>(() => null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { colorScheme, setColorScheme, themeVariant, setThemeVariant, resolvedColorScheme } =
     useTheme();
+  const p2pState = useP2PStore();
 
   const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
 
@@ -103,182 +108,314 @@ export function DevTools() {
       {isOpen && (
         <div
           className={cn(
-            'absolute bottom-14 left-0 min-w-72',
-            'rounded-lg border bg-card p-4 shadow-xl',
+            'absolute bottom-14 left-0 min-w-80 max-w-96',
+            'rounded-lg border bg-card shadow-xl',
             'animate-in slide-in-from-bottom-2 fade-in-0 duration-200'
           )}
         >
-          <h3 className="mb-4 text-sm font-semibold text-foreground">Dev Tools</h3>
+          {/* Tab Header */}
+          <div className="flex border-b border-border">
+            {(['theme', 'p2p', 'tests'] as DevToolsTab[]).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  'flex-1 px-3 py-2 text-xs font-medium uppercase tracking-wide',
+                  'transition-colors focus:outline-none',
+                  activeTab === tab
+                    ? 'border-b-2 border-primary bg-muted/50 text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
 
-          {/* Theme Variant Toggle */}
-          <div className="mb-4">
-            <label className="mb-2 block text-xs font-medium text-muted-foreground">
-              Theme Variant
-            </label>
-            <div className="flex gap-2">
-              {variantOptions.map((variant) => (
-                <button
-                  key={variant}
-                  type="button"
-                  onClick={() => setThemeVariant(variant)}
-                  className={cn(
-                    'rounded-md px-3 py-1.5 text-sm font-medium capitalize',
-                    'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
-                    themeVariant === variant
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+          <div className="p-4">
+            {/* Theme Tab */}
+            {activeTab === 'theme' && (
+              <>
+                {/* Theme Variant Toggle */}
+                <div className="mb-4">
+                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                    Theme Variant
+                  </label>
+                  <div className="flex gap-2">
+                    {variantOptions.map((variant) => (
+                      <button
+                        key={variant}
+                        type="button"
+                        onClick={() => setThemeVariant(variant)}
+                        className={cn(
+                          'rounded-md px-3 py-1.5 text-sm font-medium capitalize',
+                          'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+                          themeVariant === variant
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        )}
+                      >
+                        {variant}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Color Scheme Toggle */}
+                <div className="mb-4">
+                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                    Color Scheme
+                  </label>
+                  <div className="flex gap-2">
+                    {colorSchemeOptions.map((scheme) => (
+                      <button
+                        key={scheme}
+                        type="button"
+                        onClick={() => setColorScheme(scheme)}
+                        className={cn(
+                          'rounded-md px-3 py-1.5 text-sm font-medium capitalize',
+                          'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+                          colorScheme === scheme
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        )}
+                      >
+                        {scheme}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Current State Display */}
+                <div className="border-t border-border pt-3">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Current State</h4>
+                  <div className="space-y-1 font-mono text-xs text-muted-foreground">
+                    <p>
+                      <span className="text-foreground">colorScheme:</span> {colorScheme}
+                    </p>
+                    <p>
+                      <span className="text-foreground">resolved:</span> {resolvedColorScheme}
+                    </p>
+                    <p>
+                      <span className="text-foreground">variant:</span> {themeVariant}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="mt-4 border-t border-border pt-3">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Quick Actions</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setThemeVariant('hacker');
+                        setColorScheme('dark');
+                      }}
+                      className="rounded bg-green-900 px-2 py-1 text-xs text-green-400 hover:bg-green-800"
+                    >
+                      Hacker Dark
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setThemeVariant('base');
+                        setColorScheme('dark');
+                      }}
+                      className="rounded bg-neutral-900 px-2 py-1 text-xs text-white hover:bg-neutral-800"
+                    >
+                      Base Dark
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setThemeVariant('base');
+                        setColorScheme('light');
+                      }}
+                      className="rounded bg-white px-2 py-1 text-xs text-black hover:bg-neutral-100"
+                    >
+                      Base Light
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* P2P Tab */}
+            {activeTab === 'p2p' && (
+              <>
+                {/* Connection Status */}
+                <div className="mb-4">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">
+                    Connection Status
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        'h-2 w-2 rounded-full',
+                        p2pState.connectionStatus === 'connected'
+                          ? 'bg-green-500'
+                          : p2pState.connectionStatus === 'connecting'
+                            ? 'bg-yellow-500 animate-pulse'
+                            : p2pState.connectionStatus === 'error'
+                              ? 'bg-red-500'
+                              : 'bg-gray-500'
+                      )}
+                    />
+                    <span className="text-sm capitalize">{p2pState.connectionStatus}</span>
+                    {!p2pState.isInitialized && (
+                      <span className="text-xs text-muted-foreground">(not initialized)</span>
+                    )}
+                  </div>
+                  {p2pState.errorMessage && (
+                    <p className="mt-1 text-xs text-red-400">{p2pState.errorMessage}</p>
                   )}
-                >
-                  {variant}
-                </button>
-              ))}
-            </div>
-          </div>
+                </div>
 
-          {/* Color Scheme Toggle */}
-          <div className="mb-4">
-            <label className="mb-2 block text-xs font-medium text-muted-foreground">
-              Color Scheme
-            </label>
-            <div className="flex gap-2">
-              {colorSchemeOptions.map((scheme) => (
-                <button
-                  key={scheme}
-                  type="button"
-                  onClick={() => setColorScheme(scheme)}
-                  className={cn(
-                    'rounded-md px-3 py-1.5 text-sm font-medium capitalize',
-                    'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
-                    colorScheme === scheme
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  )}
-                >
-                  {scheme}
-                </button>
-              ))}
-            </div>
-          </div>
+                {/* Peer Info */}
+                <div className="border-t border-border pt-3">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Peer Info</h4>
+                  <div className="space-y-2 font-mono text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Local ID:</span>
+                      <p className="mt-0.5 break-all text-foreground">
+                        {p2pState.peerId || '(not set)'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Partner ID:</span>
+                      <p className="mt-0.5 break-all text-foreground">
+                        {p2pState.partnerPeerId || '(not connected)'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-          {/* Current State Display */}
-          <div className="border-t border-border pt-3">
-            <h4 className="mb-2 text-xs font-medium text-muted-foreground">Current State</h4>
-            <div className="space-y-1 font-mono text-xs text-muted-foreground">
-              <p>
-                <span className="text-foreground">colorScheme:</span> {colorScheme}
-              </p>
-              <p>
-                <span className="text-foreground">resolved:</span> {resolvedColorScheme}
-              </p>
-              <p>
-                <span className="text-foreground">variant:</span> {themeVariant}
-              </p>
-              <p>
-                <span className="text-foreground">classes:</span>{' '}
-                <span className="break-all">
-                  {typeof document !== 'undefined' && document.documentElement.className}
-                </span>
-              </p>
-            </div>
-          </div>
+                {/* P2P Actions */}
+                <div className="mt-4 border-t border-border pt-3">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Actions</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (p2pState.peerId) {
+                          navigator.clipboard.writeText(p2pState.peerId);
+                          toast.success('Peer ID copied!');
+                        }
+                      }}
+                      disabled={!p2pState.peerId}
+                      className={cn(
+                        'rounded px-2 py-1 text-xs',
+                        p2pState.peerId
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'bg-muted text-muted-foreground cursor-not-allowed'
+                      )}
+                    >
+                      Copy Peer ID
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        p2pState.reset();
+                        toast.info('P2P state reset');
+                      }}
+                      className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700"
+                    >
+                      Reset State
+                    </button>
+                  </div>
+                </div>
 
-          {/* Quick Actions */}
-          <div className="mt-4 border-t border-border pt-3">
-            <h4 className="mb-2 text-xs font-medium text-muted-foreground">Quick Actions</h4>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setThemeVariant('hacker');
-                  setColorScheme('dark');
-                }}
-                className="rounded bg-green-900 px-2 py-1 text-xs text-green-400 hover:bg-green-800"
-              >
-                Hacker Dark
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setThemeVariant('base');
-                  setColorScheme('dark');
-                }}
-                className="rounded bg-neutral-900 px-2 py-1 text-xs text-white hover:bg-neutral-800"
-              >
-                Base Dark
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setThemeVariant('base');
-                  setColorScheme('light');
-                }}
-                className="rounded bg-white px-2 py-1 text-xs text-black hover:bg-neutral-100"
-              >
-                Base Light
-              </button>
-            </div>
-          </div>
+                {/* State Debug */}
+                <div className="mt-4 border-t border-border pt-3">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">State Debug</h4>
+                  <pre className="max-h-32 overflow-auto rounded bg-muted p-2 font-mono text-xs">
+                    {JSON.stringify(
+                      {
+                        peerId: p2pState.peerId,
+                        partnerPeerId: p2pState.partnerPeerId,
+                        connectedToPeer: p2pState.connectedToPeer,
+                        connectionStatus: p2pState.connectionStatus,
+                        isInitialized: p2pState.isInitialized,
+                        errorMessage: p2pState.errorMessage,
+                      },
+                      null,
+                      2
+                    )}
+                  </pre>
+                </div>
+              </>
+            )}
 
-          {/* Toast Tests */}
-          <div className="mt-4 border-t border-border pt-3">
-            <h4 className="mb-2 text-xs font-medium text-muted-foreground">Toast Tests</h4>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => toast.success('Success! Operation completed.')}
-                className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700"
-              >
-                Success
-              </button>
-              <button
-                type="button"
-                onClick={() => toast.error('Error! Something went wrong.')}
-                className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700"
-              >
-                Error
-              </button>
-              <button
-                type="button"
-                onClick={() => toast.warning('Warning! Check this out.')}
-                className="rounded bg-yellow-600 px-2 py-1 text-xs text-white hover:bg-yellow-700"
-              >
-                Warning
-              </button>
-              <button
-                type="button"
-                onClick={() => toast.info('Info: Here is some information.')}
-                className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
-              >
-                Info
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const id = toast.loading('Loading... (auto-completes in 2s)');
-                  setTimeout(() => {
-                    toast.success('Loading complete!', { id });
-                  }, 2000);
-                }}
-                className="rounded bg-gray-600 px-2 py-1 text-xs text-white hover:bg-gray-700"
-              >
-                Loading
-              </button>
-            </div>
-          </div>
+            {/* Tests Tab */}
+            {activeTab === 'tests' && (
+              <>
+                {/* Toast Tests */}
+                <div className="mb-4">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Toast Tests</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toast.success('Success! Operation completed.')}
+                      className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700"
+                    >
+                      Success
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toast.error('Error! Something went wrong.')}
+                      className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700"
+                    >
+                      Error
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toast.warning('Warning! Check this out.')}
+                      className="rounded bg-yellow-600 px-2 py-1 text-xs text-white hover:bg-yellow-700"
+                    >
+                      Warning
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toast.info('Info: Here is some information.')}
+                      className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
+                    >
+                      Info
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const id = toast.loading('Loading... (auto-completes in 2s)');
+                        setTimeout(() => {
+                          toast.success('Loading complete!', { id });
+                        }, 2000);
+                      }}
+                      className="rounded bg-gray-600 px-2 py-1 text-xs text-white hover:bg-gray-700"
+                    >
+                      Loading
+                    </button>
+                  </div>
+                </div>
 
-          {/* Error Boundary Test */}
-          <div className="mt-4 border-t border-border pt-3">
-            <h4 className="mb-2 text-xs font-medium text-muted-foreground">Error Boundary Test</h4>
-            <button
-              type="button"
-              onClick={() => setErrorKey(Date.now())}
-              className="rounded bg-red-900 px-2 py-1 text-xs text-red-300 hover:bg-red-800"
-            >
-              Trigger Error
-            </button>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Throws an error to test the ErrorBoundary UI
-            </p>
+                {/* Error Boundary Test */}
+                <div className="border-t border-border pt-3">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">
+                    Error Boundary Test
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setErrorKey(Date.now())}
+                    className="rounded bg-red-900 px-2 py-1 text-xs text-red-300 hover:bg-red-800"
+                  >
+                    Trigger Error
+                  </button>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Throws an error to test the ErrorBoundary UI
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

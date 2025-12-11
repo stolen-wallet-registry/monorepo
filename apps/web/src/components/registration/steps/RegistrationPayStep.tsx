@@ -39,7 +39,9 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   const expectedWallet = isSelfRelay ? relayer : registeree;
 
   // Check if correct wallet is connected
-  const isCorrectWallet = address && expectedWallet && areAddressesEqual(address, expectedWallet);
+  const isCorrectWallet = Boolean(
+    address && expectedWallet && areAddressesEqual(address, expectedWallet)
+  );
 
   // Contract hook
   const { submitRegistration, hash, isPending, isConfirming, isConfirmed, isError, error, reset } =

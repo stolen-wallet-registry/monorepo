@@ -107,6 +107,7 @@ export function SuccessStep() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline flex items-center gap-1 text-sm"
+                  aria-label="View acknowledgement transaction on block explorer"
                 >
                   View
                   <ExternalLink className="h-3 w-3" />
@@ -129,6 +130,7 @@ export function SuccessStep() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline flex items-center gap-1 text-sm"
+                  aria-label="View registration transaction on block explorer"
                 >
                   View
                   <ExternalLink className="h-3 w-3" />

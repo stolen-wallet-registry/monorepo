@@ -76,7 +76,7 @@ export function GracePeriodTimer({
   if (isWaitingForBlock) {
     return (
       <div className={cn('space-y-3 text-center', className)}>
-        <div className="text-2xl font-semibold text-amber-600 dark:text-amber-400 animate-pulse">
+        <div className="text-2xl font-semibold text-amber-600 dark:text-amber-400 animate-pulse motion-reduce:animate-none">
           Waiting for Block...
         </div>
         <p className="text-sm text-muted-foreground">

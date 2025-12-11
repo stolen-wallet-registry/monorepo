@@ -6,7 +6,7 @@
  * - Sepolia testnet: ~12 seconds
  * - Base/Optimism: ~2 seconds
  * - Arbitrum: ~0.25 seconds (250ms)
- * - Localhost/Anvil: ~1 second (configurable)
+ * - Localhost/Anvil: ~13 seconds (configurable, match your anvil --block-time setting)
  */
 
 /**
