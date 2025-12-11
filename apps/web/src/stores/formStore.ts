@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { logger } from '@/lib/logger';
 
 export interface FormState {
   registeree: `0x${string}` | null;
@@ -32,33 +33,49 @@ export const useFormStore = create<FormState & FormActions>()(
 
       setRegisteree: (address) =>
         set((state) => {
+          logger.store.debug('Form registeree updated', { address });
           state.registeree = address;
         }),
 
       setRelayer: (address) =>
         set((state) => {
+          logger.store.debug('Form relayer updated', { address });
           state.relayer = address;
         }),
 
       setSupportNFT: (value) =>
         set((state) => {
+          logger.store.debug('Form supportNFT updated', { value });
           state.supportNFT = value;
         }),
 
       setWalletNFT: (value) =>
         set((state) => {
+          logger.store.debug('Form walletNFT updated', { value });
           state.walletNFT = value;
         }),
 
       setFormValues: (values) =>
         set((state) => {
+          logger.store.debug('Form values batch updated', { values });
           Object.assign(state, values);
         }),
 
-      reset: () => set(initialState),
+      reset: () => {
+        logger.store.debug('Form state reset');
+        set(initialState);
+      },
     })),
     {
-      name: 'form-state',
+      name: 'swr-form-state',
+      version: 1,
+      migrate: (persisted, version) => {
+        // Future migrations can be added here
+        if (version === 0) {
+          // Migration from unversioned to v1 - no changes needed
+        }
+        return persisted as FormState & FormActions;
+      },
     }
   )
 );

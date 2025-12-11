@@ -79,7 +79,15 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
       },
     })),
     {
-      name: 'registration-state',
+      name: 'swr-registration-state',
+      version: 1,
+      migrate: (persisted, version) => {
+        // Future migrations can be added here
+        if (version === 0) {
+          // Migration from unversioned to v1 - no changes needed
+        }
+        return persisted as RegistrationState & RegistrationActions;
+      },
     }
   )
 );
