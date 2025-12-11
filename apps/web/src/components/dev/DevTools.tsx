@@ -5,14 +5,12 @@ import { useTheme, type ColorScheme, type ThemeVariant } from '@/providers';
 import { cn } from '@/lib/utils';
 
 /**
- * Component that throws an error when triggered.
+ * Component that throws an error on mount.
  * Used to test the ErrorBoundary.
+ * Always throws - parent controls mounting via key prop.
  */
-function ErrorThrower({ shouldThrow }: { shouldThrow: boolean }) {
-  if (shouldThrow) {
-    throw new Error('Test error from DevTools - ErrorBoundary is working!');
-  }
-  return null;
+function ErrorThrower(): never {
+  throw new Error('Test error from DevTools - ErrorBoundary is working!');
 }
 
 /**
@@ -21,8 +19,17 @@ function ErrorThrower({ shouldThrow }: { shouldThrow: boolean }) {
  */
 export function DevTools() {
   const [isOpen, setIsOpen] = useState(false);
-  const [shouldThrowError, setShouldThrowError] = useState(false);
+  const [errorKey, setErrorKey] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isMounted = useRef(false);
+
+  // Reset error state on mount (clears HMR-preserved state)
+  useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      setErrorKey(null);
+    }
+  }, []);
   const { colorScheme, setColorScheme, themeVariant, setThemeVariant, resolvedColorScheme } =
     useTheme();
 
@@ -271,7 +278,7 @@ export function DevTools() {
             <h4 className="mb-2 text-xs font-medium text-muted-foreground">Error Boundary Test</h4>
             <button
               type="button"
-              onClick={() => setShouldThrowError(true)}
+              onClick={() => setErrorKey(Date.now())}
               className="rounded bg-red-900 px-2 py-1 text-xs text-red-300 hover:bg-red-800"
             >
               Trigger Error
@@ -283,8 +290,8 @@ export function DevTools() {
         </div>
       )}
 
-      {/* Error thrower component - renders outside the panel */}
-      <ErrorThrower shouldThrow={shouldThrowError} />
+      {/* Error thrower component - only renders when errorKey is set */}
+      {errorKey !== null && <ErrorThrower key={errorKey} />}
     </div>
   );
 }
