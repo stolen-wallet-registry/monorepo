@@ -14,6 +14,7 @@ import { useFormStore } from '@/stores/formStore';
 import { clearAllSignatures } from '@/lib/signatures';
 import { truncateAddress } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
+import { logger } from '@/lib/logger';
 import { CheckCircle2, ExternalLink, Home, RefreshCw } from 'lucide-react';
 
 /**
@@ -33,6 +34,11 @@ export function SuccessStep() {
    * Reset all state and go home.
    */
   const handleGoHome = () => {
+    logger.registration.info('User navigating home, resetting registration state', {
+      registeree,
+      acknowledgementHash,
+      registrationHash,
+    });
     resetRegistration();
     resetForm();
     clearAllSignatures();
@@ -43,6 +49,9 @@ export function SuccessStep() {
    * Reset and register another wallet.
    */
   const handleRegisterAnother = () => {
+    logger.registration.info('User starting new registration, resetting state', {
+      previousRegisteree: registeree,
+    });
     resetRegistration();
     resetForm();
     clearAllSignatures();

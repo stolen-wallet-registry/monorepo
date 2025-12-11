@@ -107,11 +107,7 @@ export function SelfRelayRegistrationPage() {
               <CardDescription>{currentDescription}</CardDescription>
             </CardHeader>
             <CardContent>
-              <StepRenderer
-                registrationType="selfRelay"
-                currentStep={step}
-                onStepComplete={goToNextStep}
-              />
+              <StepRenderer currentStep={step} onStepComplete={goToNextStep} />
             </CardContent>
           </Card>
         </main>

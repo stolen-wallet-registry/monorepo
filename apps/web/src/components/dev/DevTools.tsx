@@ -19,17 +19,10 @@ function ErrorThrower(): never {
  */
 export function DevTools() {
   const [isOpen, setIsOpen] = useState(false);
-  const [errorKey, setErrorKey] = useState<number | null>(null);
+  // errorKey controls when ErrorThrower renders - null means no error
+  // Using a function initializer ensures fresh state on HMR
+  const [errorKey, setErrorKey] = useState<number | null>(() => null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const isMounted = useRef(false);
-
-  // Reset error state on mount (clears HMR-preserved state)
-  useEffect(() => {
-    if (!isMounted.current) {
-      isMounted.current = true;
-      setErrorKey(null);
-    }
-  }, []);
   const { colorScheme, setColorScheme, themeVariant, setThemeVariant, resolvedColorScheme } =
     useTheme();
 

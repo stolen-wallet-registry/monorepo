@@ -107,11 +107,7 @@ export function StandardRegistrationPage() {
               <CardDescription>{currentDescription}</CardDescription>
             </CardHeader>
             <CardContent>
-              <StepRenderer
-                registrationType="standard"
-                currentStep={step}
-                onStepComplete={goToNextStep}
-              />
+              <StepRenderer currentStep={step} onStepComplete={goToNextStep} />
             </CardContent>
           </Card>
         </main>

@@ -13,6 +13,7 @@ import { GracePeriodTimer } from '@/components/composed/GracePeriodTimer';
 import { useFormStore } from '@/stores/formStore';
 import { useContractDeadlines } from '@/hooks/useContractDeadlines';
 import { useCountdownTimer } from '@/hooks/useCountdownTimer';
+import { logger } from '@/lib/logger';
 import { AlertCircle, Clock } from 'lucide-react';
 
 export interface GracePeriodStepProps {
@@ -29,6 +30,7 @@ export function GracePeriodStep({ onComplete }: GracePeriodStepProps) {
 
   // Track initial total time for progress calculation
   const initialTotalMsRef = useRef<number | null>(null);
+  const hasLoggedStart = useRef(false);
 
   // Fetch deadlines from contract
   const {
@@ -37,21 +39,49 @@ export function GracePeriodStep({ onComplete }: GracePeriodStepProps) {
     isError: deadlinesError,
   } = useContractDeadlines(registeree ?? undefined);
 
+  // Log when deadlines are loaded
+  useEffect(() => {
+    if (deadlines && !hasLoggedStart.current) {
+      hasLoggedStart.current = true;
+      logger.registration.info('Grace period started', {
+        registeree,
+        currentBlock: deadlines.currentBlock.toString(),
+        windowOpensAtBlock: deadlines.start.toString(),
+        windowClosesAtBlock: deadlines.expiry.toString(),
+        blocksUntilOpen: (deadlines.start - deadlines.currentBlock).toString(),
+        chainId,
+      });
+    }
+  }, [deadlines, registeree, chainId]);
+
+  // Custom onExpire handler with logging
+  const handleExpire = () => {
+    logger.registration.info('Grace period complete, registration window is now open', {
+      registeree,
+    });
+    onComplete();
+  };
+
   // Countdown timer - target is the START block (when window opens)
-  const { timeRemaining, totalMs, blocksLeft, isExpired, isRunning } = useCountdownTimer({
-    targetBlock: deadlines?.start ?? null,
-    currentBlock: deadlines?.currentBlock ?? null,
-    chainId,
-    onExpire: onComplete,
-    autoStart: true,
-  });
+  const { timeRemaining, totalMs, blocksLeft, isExpired, isRunning, isWaitingForBlock } =
+    useCountdownTimer({
+      targetBlock: deadlines?.start ?? null,
+      currentBlock: deadlines?.currentBlock ?? null,
+      chainId,
+      onExpire: handleExpire,
+      autoStart: true,
+    });
 
   // Store initial total time on first render with data
   useEffect(() => {
     if (totalMs > 0 && initialTotalMsRef.current === null) {
       initialTotalMsRef.current = totalMs;
+      logger.registration.debug('Grace period timer initialized', {
+        totalMs,
+        blocksLeft: blocksLeft.toString(),
+      });
     }
-  }, [totalMs]);
+  }, [totalMs, blocksLeft]);
 
   // Missing registeree
   if (!registeree) {
@@ -130,22 +160,33 @@ export function GracePeriodStep({ onComplete }: GracePeriodStepProps) {
           blocksLeft={blocksLeft}
           isExpired={isExpired}
           isRunning={isRunning}
+          isWaitingForBlock={isWaitingForBlock}
           initialTotalMs={initialTotalMsRef.current ?? undefined}
         />
 
         {/* Additional info */}
-        <div className="mt-6 space-y-2 text-sm text-muted-foreground">
+        <div
+          className="mt-6 space-y-2 text-sm text-muted-foreground"
+          role="region"
+          aria-label="Registration deadline information"
+        >
           <div className="flex justify-between">
-            <span>Current Block:</span>
-            <span className="font-mono">{deadlines.currentBlock.toString()}</span>
+            <span id="current-block-label">Current Block:</span>
+            <span className="font-mono" aria-labelledby="current-block-label">
+              {deadlines.currentBlock.toString()}
+            </span>
           </div>
           <div className="flex justify-between">
-            <span>Window Opens:</span>
-            <span className="font-mono">{deadlines.start.toString()}</span>
+            <span id="window-opens-label">Window Opens:</span>
+            <span className="font-mono" aria-labelledby="window-opens-label">
+              {deadlines.start.toString()}
+            </span>
           </div>
           <div className="flex justify-between">
-            <span>Window Closes:</span>
-            <span className="font-mono">{deadlines.expiry.toString()}</span>
+            <span id="window-closes-label">Window Closes:</span>
+            <span className="font-mono" aria-labelledby="window-closes-label">
+              {deadlines.expiry.toString()}
+            </span>
           </div>
         </div>
       </CardContent>

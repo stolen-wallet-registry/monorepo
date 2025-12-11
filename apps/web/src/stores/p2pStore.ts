@@ -60,12 +60,20 @@ export const useP2PStore = create<P2PState & P2PActions>()(
     {
       name: 'swr-p2p-state',
       version: 1,
-      migrate: (persisted, version) => {
-        // Future migrations can be added here
-        if (version === 0) {
-          // Migration from unversioned to v1 - no changes needed
+      migrate: (persisted) => {
+        // Validate basic shape
+        if (!persisted || typeof persisted !== 'object') {
+          return initialState;
         }
-        return persisted as P2PState & P2PActions;
+
+        const state = persisted as Partial<P2PState>;
+
+        // Ensure all required fields exist with fallbacks
+        return {
+          peerId: state.peerId ?? initialState.peerId,
+          partnerPeerId: state.partnerPeerId ?? initialState.partnerPeerId,
+          connectedToPeer: state.connectedToPeer ?? initialState.connectedToPeer,
+        };
       },
     }
   )

@@ -16,6 +16,7 @@ import { useAcknowledgement } from '@/hooks/useAcknowledgement';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
+import { logger } from '@/lib/logger';
 import { AlertCircle } from 'lucide-react';
 
 export interface AcknowledgementPayStepProps {
@@ -73,17 +74,37 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   // Handle confirmed transaction
   useEffect(() => {
     if (isConfirmed && hash) {
+      logger.contract.info('Acknowledgement transaction confirmed', {
+        hash,
+        registeree,
+        registrationType,
+      });
       setAcknowledgementHash(hash);
+      logger.registration.info('Acknowledgement complete, advancing to grace period');
       // Advance to next step after short delay
-      setTimeout(onComplete, 1500);
+      const timerId = window.setTimeout(onComplete, 1500);
+      return () => clearTimeout(timerId);
     }
-  }, [isConfirmed, hash, setAcknowledgementHash, onComplete]);
+  }, [isConfirmed, hash, setAcknowledgementHash, onComplete, registeree, registrationType]);
 
   /**
    * Submit the acknowledgement transaction.
    */
   const handleSubmit = async () => {
+    logger.contract.info('Acknowledgement transaction submission initiated', {
+      registeree,
+      hasStoredSignature: !!storedSignature,
+      registrationType,
+      connectedWallet: address,
+      expectedWallet,
+      isCorrectWallet,
+    });
+
     if (!storedSignature || !registeree) {
+      logger.contract.error('Cannot submit acknowledgement - missing data', {
+        hasStoredSignature: !!storedSignature,
+        registeree,
+      });
       setLocalError('Missing signature data. Please go back and sign again.');
       return;
     }
@@ -94,14 +115,31 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
     try {
       const parsedSig = parseSignature(storedSignature.signature);
 
+      logger.contract.info('Submitting acknowledgementOfRegistry to contract', {
+        deadline: storedSignature.deadline.toString(),
+        nonce: storedSignature.nonce.toString(),
+        registeree,
+        signatureV: parsedSig.v,
+        chainId,
+      });
+
       await submitAcknowledgement({
         deadline: storedSignature.deadline,
         nonce: storedSignature.nonce,
         registeree,
         signature: parsedSig,
       });
+
+      logger.contract.info('Acknowledgement transaction submitted, waiting for confirmation');
     } catch (err) {
-      console.error('[AcknowledgementPayStep] Submit failed:', err);
+      logger.contract.error(
+        'Acknowledgement transaction failed',
+        {
+          error: err instanceof Error ? err.message : String(err),
+          registeree,
+        },
+        err instanceof Error ? err : undefined
+      );
       setLocalError(err instanceof Error ? err.message : 'Transaction failed');
     } finally {
       setIsSubmitting(false);
@@ -175,8 +213,9 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         hash={hash}
         error={errorMessage}
         explorerUrl={explorerUrl}
-        onSubmit={isCorrectWallet ? handleSubmit : () => {}}
+        onSubmit={handleSubmit}
         onRetry={handleRetry}
+        disabled={!isCorrectWallet}
       />
 
       {/* Disabled state message when wrong wallet */}

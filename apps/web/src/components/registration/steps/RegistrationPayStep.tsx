@@ -16,6 +16,7 @@ import { useRegistration } from '@/hooks/useRegistration';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
+import { logger } from '@/lib/logger';
 import { AlertCircle } from 'lucide-react';
 
 export interface RegistrationPayStepProps {
@@ -65,17 +66,40 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // Handle confirmed transaction
   useEffect(() => {
     if (isConfirmed && hash) {
+      logger.contract.info('Registration transaction confirmed', {
+        hash,
+        registeree,
+        registrationType,
+      });
       setRegistrationHash(hash);
+      logger.registration.info('Registration complete! Wallet successfully registered as stolen', {
+        registeree,
+        transactionHash: hash,
+      });
       // Advance to next step after short delay
-      setTimeout(onComplete, 1500);
+      const timerId = window.setTimeout(onComplete, 1500);
+      return () => clearTimeout(timerId);
     }
-  }, [isConfirmed, hash, setRegistrationHash, onComplete]);
+  }, [isConfirmed, hash, setRegistrationHash, onComplete, registeree, registrationType]);
 
   /**
    * Submit the registration transaction.
    */
   const handleSubmit = async () => {
+    logger.contract.info('Registration transaction submission initiated', {
+      registeree,
+      hasStoredSignature: !!storedSignature,
+      registrationType,
+      connectedWallet: address,
+      expectedWallet,
+      isCorrectWallet,
+    });
+
     if (!storedSignature || !registeree) {
+      logger.contract.error('Cannot submit registration - missing data', {
+        hasStoredSignature: !!storedSignature,
+        registeree,
+      });
       setLocalError('Missing signature data. Please go back and sign again.');
       return;
     }
@@ -86,14 +110,31 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     try {
       const parsedSig = parseSignature(storedSignature.signature);
 
+      logger.contract.info('Submitting walletRegistration to contract', {
+        deadline: storedSignature.deadline.toString(),
+        nonce: storedSignature.nonce.toString(),
+        registeree,
+        signatureV: parsedSig.v,
+        chainId,
+      });
+
       await submitRegistration({
         deadline: storedSignature.deadline,
         nonce: storedSignature.nonce,
         registeree,
         signature: parsedSig,
       });
+
+      logger.contract.info('Registration transaction submitted, waiting for confirmation');
     } catch (err) {
-      console.error('[RegistrationPayStep] Submit failed:', err);
+      logger.contract.error(
+        'Registration transaction failed',
+        {
+          error: err instanceof Error ? err.message : String(err),
+          registeree,
+        },
+        err instanceof Error ? err : undefined
+      );
       setLocalError(err instanceof Error ? err.message : 'Transaction failed');
     } finally {
       setIsSubmitting(false);
@@ -167,8 +208,9 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         hash={hash}
         error={errorMessage}
         explorerUrl={explorerUrl}
-        onSubmit={isCorrectWallet ? handleSubmit : () => {}}
+        onSubmit={handleSubmit}
         onRetry={handleRetry}
+        disabled={!isCorrectWallet}
       />
 
       {/* Disabled state message when wrong wallet */}

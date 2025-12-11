@@ -40,6 +40,8 @@ export interface SignatureCardProps {
   onSign: () => void;
   /** Callback to retry after error */
   onRetry?: () => void;
+  /** Whether the sign button is disabled */
+  disabled?: boolean;
   /** Additional class names */
   className?: string;
 }
@@ -63,6 +65,7 @@ export function SignatureCard({
   signature,
   onSign,
   onRetry,
+  disabled = false,
   className,
 }: SignatureCardProps) {
   const typeLabel = TYPE_LABELS[type];
@@ -142,7 +145,8 @@ export function SignatureCard({
         {!isSuccess && (
           <Button
             onClick={isError && onRetry ? onRetry : onSign}
-            disabled={isSigning}
+            disabled={isSigning || (disabled && !isError)}
+            aria-disabled={isSigning || (disabled && !isError)}
             className="w-full"
             size="lg"
           >

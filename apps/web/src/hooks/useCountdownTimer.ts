@@ -12,6 +12,7 @@ import {
   blocksRemaining,
   type TimeRemaining,
 } from '@/lib/blocks';
+import { logger } from '@/lib/logger';
 
 export interface UseCountdownTimerOptions {
   /** Target block number when the countdown ends */
@@ -33,10 +34,12 @@ export interface UseCountdownTimerResult {
   totalMs: number;
   /** Estimated blocks remaining */
   blocksLeft: bigint;
-  /** Whether the countdown has expired */
+  /** Whether the countdown has expired (verified by actual block) */
   isExpired: boolean;
   /** Whether the timer is currently running */
   isRunning: boolean;
+  /** Whether waiting for block confirmation after timer estimate hit 0 */
+  isWaitingForBlock: boolean;
   /** Start the timer */
   start: () => void;
   /** Pause the timer */
@@ -64,9 +67,8 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
 
   const calculateBlocksLeft = useCallback((): bigint => {
     if (!targetBlock || !currentBlock) return 0n;
-    const remaining = blocksRemaining(currentBlock, targetBlock);
-    // Clamp to 0n to prevent negative values
-    return remaining > 0n ? remaining : 0n;
+    // blocksRemaining already returns 0n when targetBlock <= currentBlock
+    return blocksRemaining(currentBlock, targetBlock);
   }, [targetBlock, currentBlock]);
 
   const [totalMs, setTotalMs] = useState<number>(() => calculateInitialMs());
@@ -75,28 +77,59 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     return autoStart && initialMs > 0;
   });
   const [hasExpired, setHasExpired] = useState<boolean>(false);
+  const [isWaitingForBlock, setIsWaitingForBlock] = useState<boolean>(false);
 
   const onExpireRef = useRef(onExpire);
   onExpireRef.current = onExpire;
 
   const expiredCallbackFired = useRef(false);
 
+  // Check if actual block target has been reached
+  const isBlockTargetReached = useCallback((): boolean => {
+    if (targetBlock === null || currentBlock === null) return false;
+    return currentBlock >= targetBlock;
+  }, [targetBlock, currentBlock]);
+
   // Reset when target/current block changes
   useEffect(() => {
+    // Don't process if we don't have valid block data yet
+    if (targetBlock === null || currentBlock === null) {
+      logger.registration.debug('Countdown timer waiting for block data', {
+        targetBlock: targetBlock?.toString() ?? 'null',
+        currentBlock: currentBlock?.toString() ?? 'null',
+      });
+      return;
+    }
+
     const newMs = calculateInitialMs();
+    const blocks = blocksRemaining(currentBlock, targetBlock);
+
+    logger.registration.debug('Countdown timer calculation', {
+      targetBlock: targetBlock.toString(),
+      currentBlock: currentBlock.toString(),
+      blocksRemaining: blocks.toString(),
+      calculatedMs: newMs,
+      willExpireImmediately: newMs <= 0,
+      chainId,
+    });
+
     setTotalMs(newMs);
     setHasExpired(newMs <= 0);
     expiredCallbackFired.current = false;
 
     if (newMs <= 0) {
+      logger.registration.debug('Block target reached, timer complete', {
+        targetBlock: targetBlock.toString(),
+        currentBlock: currentBlock.toString(),
+      });
       // Normalize isRunning to false when instant-expired
       setIsRunning(false);
     } else if (autoStart) {
       setIsRunning(true);
     }
-  }, [calculateInitialMs, autoStart]);
+  }, [calculateInitialMs, autoStart, targetBlock, currentBlock, chainId]);
 
-  // Countdown interval
+  // Countdown interval - only manages display time, NOT expiration
   useEffect(() => {
     if (!isRunning || totalMs <= 0) {
       return;
@@ -106,8 +139,14 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
       setTotalMs((prev) => {
         const next = prev - 1000;
         if (next <= 0) {
+          // Timer estimate hit 0, but DON'T set hasExpired yet
+          // Instead, wait for actual block confirmation
           setIsRunning(false);
-          setHasExpired(true);
+          setIsWaitingForBlock(true);
+          logger.registration.info('Timer estimate reached 0, waiting for block confirmation', {
+            targetBlock: targetBlock?.toString() ?? 'null',
+            currentBlock: currentBlock?.toString() ?? 'null',
+          });
           return 0;
         }
         return next;
@@ -115,7 +154,48 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isRunning, totalMs]);
+  }, [isRunning, totalMs, targetBlock, currentBlock]);
+
+  // Block verification effect - determines actual expiration from chain data
+  // This runs whenever currentBlock updates from contract polling
+  useEffect(() => {
+    // Only verify when we're waiting for block confirmation OR timer hit 0
+    if (!isWaitingForBlock && totalMs > 0) {
+      return;
+    }
+
+    const blockReached = isBlockTargetReached();
+
+    if (blockReached && !hasExpired) {
+      logger.registration.info('Block target reached, setting expired', {
+        targetBlock: targetBlock?.toString() ?? 'null',
+        currentBlock: currentBlock?.toString() ?? 'null',
+      });
+      setIsWaitingForBlock(false);
+      setHasExpired(true);
+    } else if (isWaitingForBlock && !blockReached) {
+      // Timer estimate hit 0 but blocks haven't caught up - resync
+      const newMs = calculateInitialMs();
+      if (newMs > 0) {
+        logger.registration.info('Resyncing timer - blocks behind estimate', {
+          newMs,
+          targetBlock: targetBlock?.toString() ?? 'null',
+          currentBlock: currentBlock?.toString() ?? 'null',
+        });
+        setTotalMs(newMs);
+        setIsWaitingForBlock(false);
+        setIsRunning(true);
+      }
+    }
+  }, [
+    currentBlock,
+    targetBlock,
+    isWaitingForBlock,
+    totalMs,
+    hasExpired,
+    isBlockTargetReached,
+    calculateInitialMs,
+  ]);
 
   // Fire onExpire callback once
   useEffect(() => {
@@ -155,6 +235,7 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     blocksLeft: calculateBlocksLeft(),
     isExpired: hasExpired,
     isRunning,
+    isWaitingForBlock,
     start,
     pause,
     reset,

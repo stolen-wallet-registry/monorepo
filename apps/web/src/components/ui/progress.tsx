@@ -11,8 +11,10 @@ function Progress({
   max = 100,
   ...props
 }: React.ComponentProps<typeof ProgressPrimitive.Root>) {
+  // Guard against division by zero or invalid max values
+  const safeMax = max > 0 ? max : 1;
   // Compute percentage, clamped between 0 and 100
-  const percentage = value != null ? Math.min(Math.max((value / max) * 100, 0), 100) : 0;
+  const percentage = value != null ? Math.min(Math.max((value / safeMax) * 100, 0), 100) : 0;
 
   return (
     <ProgressPrimitive.Root

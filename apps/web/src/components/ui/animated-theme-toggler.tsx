@@ -75,7 +75,14 @@ export const AnimatedThemeToggler = ({
   );
 
   return (
-    <button ref={buttonRef} type="button" onClick={handleClick} className={cn(className)} {...rest}>
+    <button
+      ref={buttonRef}
+      {...rest}
+      type="button"
+      onClick={handleClick}
+      className={cn(className)}
+      aria-pressed={isDark}
+    >
       {isDark ? <Sun /> : <Moon />}
       <span className="sr-only">Toggle theme</span>
     </button>

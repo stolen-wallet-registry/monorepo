@@ -21,6 +21,8 @@ export interface GracePeriodTimerProps {
   isExpired: boolean;
   /** Whether the timer is currently running */
   isRunning: boolean;
+  /** Whether waiting for block confirmation after timer estimate hit 0 */
+  isWaitingForBlock?: boolean;
   /** Initial total time in ms (for progress calculation) */
   initialTotalMs?: number;
   /** Whether data is still loading */
@@ -38,6 +40,7 @@ export function GracePeriodTimer({
   blocksLeft,
   isExpired,
   isRunning,
+  isWaitingForBlock = false,
   initialTotalMs,
   isLoading = false,
   className,
@@ -68,6 +71,24 @@ export function GracePeriodTimer({
     showHours: timeRemaining.hours > 0 || timeRemaining.days > 0,
     padHours: true,
   });
+
+  // Waiting for block confirmation state
+  if (isWaitingForBlock) {
+    return (
+      <div className={cn('space-y-3 text-center', className)}>
+        <div className="text-2xl font-semibold text-amber-600 dark:text-amber-400 animate-pulse">
+          Waiting for Block...
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Timer estimate reached zero. Waiting for blockchain confirmation...
+        </p>
+        <p className="text-xs text-muted-foreground">
+          ~{blocksLeft.toString()} block{blocksLeft !== 1n ? 's' : ''} remaining
+        </p>
+        <Progress value={95} className="h-2 [&>[data-slot=progress-indicator]]:bg-amber-500" />
+      </div>
+    );
+  }
 
   // Expired state
   if (isExpired) {

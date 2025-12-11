@@ -4,7 +4,7 @@
  * Signs the registration message after the grace period.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -17,6 +17,7 @@ import { useRegistrationHashStruct } from '@/hooks/useGenerateHashStruct';
 import { useContractNonce } from '@/hooks/useContractNonce';
 import { storeSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
+import { logger } from '@/lib/logger';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 export interface RegistrationSignStepProps {
@@ -48,6 +49,13 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
   const [signatureStatus, setSignatureStatus] = useState<SignatureStatus>('idle');
   const [signatureError, setSignatureError] = useState<string | null>(null);
   const [signature, setSignature] = useState<`0x${string}` | null>(null);
+  const [shouldAdvance, setShouldAdvance] = useState(false);
+
+  // Ref to track onComplete for cleanup
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   // Contract hooks
   const {
@@ -67,34 +75,77 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
   const isContractDataLoading = nonceLoading || hashLoading;
   const hasContractError = nonceError || hashError;
 
+  // Handle advancing to next step with cleanup
+  useEffect(() => {
+    if (shouldAdvance) {
+      const timerId = window.setTimeout(() => {
+        onCompleteRef.current();
+      }, 1000);
+      return () => clearTimeout(timerId);
+    }
+  }, [shouldAdvance]);
+
   /**
    * Handle signing the registration.
    */
   const handleSign = async () => {
+    logger.signature.info('Registration sign requested', {
+      registeree,
+      forwarder,
+      hasHashStructData: !!hashStructData,
+      hasNonce: nonce !== undefined,
+      isCorrectWallet,
+      connectedAddress: address,
+      registrationType,
+    });
+
     if (!registeree || !forwarder || !hashStructData || nonce === undefined) {
+      logger.signature.error('Missing required data for registration signing', {
+        registeree,
+        forwarder,
+        hashStructData: !!hashStructData,
+        nonce,
+      });
       setSignatureError('Missing required data for signing');
       setSignatureStatus('error');
       return;
     }
 
     if (!isCorrectWallet) {
+      logger.wallet.warn('Wrong wallet connected for registration signing', {
+        connected: address,
+        expected: expectedWallet,
+      });
       setSignatureError('Please connect the correct wallet');
       setSignatureStatus('error');
       return;
     }
 
     // Refetch to get fresh deadline
+    logger.contract.debug('Refetching hash struct for fresh registration deadline');
     await refetchHashStruct();
 
     setSignatureStatus('signing');
     setSignatureError(null);
 
     try {
+      logger.signature.info('Requesting EIP-712 registration signature', {
+        owner: registeree,
+        forwarder,
+        nonce: nonce.toString(),
+        deadline: hashStructData.deadline.toString(),
+        chainId,
+      });
+
       const sig = await signRegistration({
         owner: registeree,
         forwarder,
         nonce,
         deadline: hashStructData.deadline,
+      });
+
+      logger.signature.info('Registration signature obtained', {
+        signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
       });
 
       // Store signature
@@ -107,14 +158,22 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         step: SIGNATURE_STEP.REGISTRATION,
         storedAt: Date.now(),
       });
+      logger.signature.debug('Registration signature stored in localStorage');
 
       setSignature(sig);
       setSignatureStatus('success');
 
-      // Advance to next step after short delay
-      setTimeout(onComplete, 1000);
+      logger.registration.info('Registration signing complete, advancing to payment step');
+      // Trigger advance to next step (handled by useEffect with cleanup)
+      setShouldAdvance(true);
     } catch (err) {
-      console.error('[RegistrationSignStep] Signing failed:', err);
+      logger.signature.error(
+        'Registration signing failed',
+        {
+          error: err instanceof Error ? err.message : String(err),
+        },
+        err instanceof Error ? err : undefined
+      );
       setSignatureError(err instanceof Error ? err.message : 'Failed to sign');
       setSignatureStatus('error');
     }
@@ -191,8 +250,9 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
           status={signatureStatus}
           error={signatureError}
           signature={signature}
-          onSign={isCorrectWallet ? handleSign : () => {}}
+          onSign={handleSign}
           onRetry={handleRetry}
+          disabled={!isCorrectWallet}
         />
       )}
 

@@ -32,6 +32,7 @@ import { useAcknowledgementHashStruct } from '@/hooks/useGenerateHashStruct';
 import { useContractNonce } from '@/hooks/useContractNonce';
 import { storeSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
+import { logger } from '@/lib/logger';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 export interface InitialFormStepProps {
@@ -115,9 +116,19 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
    * Handle form submission - show signature card.
    */
   const handleFormSubmit = async (values: FormValues) => {
+    logger.registration.info('Form submitted', {
+      registrationType,
+      registeree: values.registeree,
+      relayer: isSelfRelay ? values.relayer : 'same as registeree',
+      isSelfRelay,
+    });
+
     // Validate relayer for self-relay mode
     if (isSelfRelay) {
       if (!values.relayer || !isAddress(values.relayer)) {
+        logger.registration.warn('Invalid relayer address in self-relay mode', {
+          relayer: values.relayer,
+        });
         form.setError('relayer', {
           type: 'manual',
           message: 'Valid Ethereum address required',
@@ -125,6 +136,10 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         return;
       }
       if (relayerSameAsRegisteree) {
+        logger.registration.warn('Relayer same as registeree - validation failed', {
+          registeree: values.registeree,
+          relayer: values.relayer,
+        });
         form.setError('relayer', {
           type: 'manual',
           message: 'Gas wallet must be different from stolen wallet',
@@ -134,17 +149,21 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     }
 
     // Save form values to store
-    setFormValues({
+    const formData = {
       registeree: values.registeree as `0x${string}`,
       relayer: (isSelfRelay ? values.relayer : values.registeree) as `0x${string}`,
       supportNFT: values.supportNFT,
       walletNFT: values.walletNFT,
-    });
+    };
+    setFormValues(formData);
+    logger.store.debug('Form values saved to store', formData);
 
     // Refetch hash struct to get fresh deadline
+    logger.contract.debug('Refetching hash struct for fresh deadline');
     await refetchHashStruct();
 
     // Show signature card
+    logger.registration.info('Proceeding to signature step');
     setShowSignature(true);
   };
 
@@ -152,7 +171,18 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
    * Handle signing the acknowledgement.
    */
   const handleSign = async () => {
+    logger.signature.info('Acknowledgement sign requested', {
+      hasAddress: !!address,
+      hasHashStructData: !!hashStructData,
+      hasNonce: nonce !== undefined,
+    });
+
     if (!address || !hashStructData || nonce === undefined) {
+      logger.signature.error('Missing required data for acknowledgement signing', {
+        address,
+        hashStructData: !!hashStructData,
+        nonce,
+      });
       setSignatureError('Missing required data for signing');
       setSignatureStatus('error');
       return;
@@ -164,11 +194,23 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     try {
       const forwarder = isSelfRelay ? (form.getValues('relayer') as `0x${string}`) : address;
 
+      logger.signature.info('Requesting EIP-712 acknowledgement signature', {
+        owner: address,
+        forwarder,
+        nonce: nonce.toString(),
+        deadline: hashStructData.deadline.toString(),
+        chainId,
+      });
+
       const sig = await signAcknowledgement({
         owner: address,
         forwarder,
         nonce,
         deadline: hashStructData.deadline,
+      });
+
+      logger.signature.info('Acknowledgement signature obtained', {
+        signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
       });
 
       // Store signature
@@ -181,14 +223,20 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
         storedAt: Date.now(),
       });
+      logger.signature.debug('Acknowledgement signature stored in localStorage');
 
       setSignature(sig);
       setSignatureStatus('success');
 
+      logger.registration.info('Acknowledgement signing complete, advancing to next step');
       // Advance to next step after short delay
       setTimeout(onComplete, 1000);
     } catch (err) {
-      console.error('[InitialFormStep] Signing failed:', err);
+      logger.signature.error(
+        'Acknowledgement signing failed',
+        { error: err instanceof Error ? err.message : String(err) },
+        err instanceof Error ? err : undefined
+      );
       setSignatureError(err instanceof Error ? err.message : 'Failed to sign');
       setSignatureStatus('error');
     }

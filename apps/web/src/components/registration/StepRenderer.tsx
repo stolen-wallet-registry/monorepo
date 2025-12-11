@@ -14,11 +14,9 @@ import {
   RegistrationPayStep,
   SuccessStep,
 } from './steps';
-import type { RegistrationStep, RegistrationType } from '@/stores/registrationStore';
+import type { RegistrationStep } from '@/stores/registrationStore';
 
 export interface StepRendererProps {
-  /** Current registration type */
-  registrationType: RegistrationType;
   /** Current step in the flow */
   currentStep: RegistrationStep | null;
   /** Callback to advance to next step */

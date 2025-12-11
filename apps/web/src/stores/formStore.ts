@@ -69,12 +69,21 @@ export const useFormStore = create<FormState & FormActions>()(
     {
       name: 'swr-form-state',
       version: 1,
-      migrate: (persisted, version) => {
-        // Future migrations can be added here
-        if (version === 0) {
-          // Migration from unversioned to v1 - no changes needed
+      migrate: (persisted) => {
+        // Validate basic shape
+        if (!persisted || typeof persisted !== 'object') {
+          return initialState;
         }
-        return persisted as FormState & FormActions;
+
+        const state = persisted as Partial<FormState>;
+
+        // Ensure all required fields exist with fallbacks
+        return {
+          registeree: state.registeree ?? initialState.registeree,
+          relayer: state.relayer ?? initialState.relayer,
+          supportNFT: state.supportNFT ?? initialState.supportNFT,
+          walletNFT: state.walletNFT ?? initialState.walletNFT,
+        };
       },
     }
   )
