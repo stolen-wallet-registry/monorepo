@@ -103,11 +103,12 @@ export function P2PRegistereeRegistrationPage() {
               switch (protocol) {
                 case PROTOCOLS.CONNECT:
                   // Connection established, relayer responded
+                  // Only update state here - step advancement is handled by WaitForConnectionStep.onComplete()
                   if (data.form?.relayer) {
                     setFormValues({ relayer: data.form.relayer });
                   }
                   setConnectedToPeer(true);
-                  goToNextStepRef.current();
+                  // DO NOT call goToNextStepRef.current() here - causes double step advancement
                   break;
 
                 case PROTOCOLS.ACK_REC:
