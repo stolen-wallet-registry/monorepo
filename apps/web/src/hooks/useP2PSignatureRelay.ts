@@ -5,7 +5,7 @@
  * Built on top of useP2PConnection with protocol-specific helpers.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useAccount } from 'wagmi';
 import type { Connection } from '@libp2p/interface/connection';
 import type { IncomingStreamData } from '@libp2p/interface/stream-handler';
@@ -30,6 +30,30 @@ import { useP2PStore } from '@/stores/p2pStore';
 import { logger } from '@/lib/logger';
 
 export type P2PRole = 'registeree' | 'relayer';
+
+/**
+ * Validate signature data before processing.
+ * Ensures all required fields exist and can be safely converted to BigInt.
+ */
+function isValidSignature(sig: unknown): sig is SignatureOverTheWire {
+  if (!sig || typeof sig !== 'object') return false;
+
+  const s = sig as Record<string, unknown>;
+
+  // Check required string fields exist
+  if (typeof s.value !== 'string' || !s.value) return false;
+  if (typeof s.address !== 'string' || !s.address.startsWith('0x')) return false;
+  if (typeof s.keyRef !== 'string') return false;
+
+  // Check chainId is a valid number
+  if (typeof s.chainId !== 'number' || !Number.isFinite(s.chainId)) return false;
+
+  // Check deadline and nonce can be safely converted to BigInt
+  if (typeof s.deadline !== 'string' || !/^\d+$/.test(s.deadline)) return false;
+  if (typeof s.nonce !== 'string' || !/^\d+$/.test(s.nonce)) return false;
+
+  return true;
+}
 
 export interface UseP2PSignatureRelayOptions {
   /** The role of this peer (registeree sends signatures, relayer receives) */
@@ -230,30 +254,37 @@ export function useP2PSignatureRelay(
               const data = await readStreamData(stream.source);
               logger.p2p.info('Received ACK signature', { role });
 
-              if (data.signature) {
-                // Store the signature for later use
-                const sig = data.signature;
-                const stored: StoredSignature = {
-                  signature: sig.value as `0x${string}`,
-                  deadline: BigInt(sig.deadline),
-                  nonce: BigInt(sig.nonce),
-                  address: sig.address,
-                  chainId: sig.chainId,
-                  step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
-                  storedAt: Date.now(),
-                };
-                storeSignature(stored);
-
-                // Confirm receipt
-                await passStreamData({
-                  connection,
-                  protocols: [PROTOCOLS.ACK_REC],
-                  streamData: { success: true, message: 'Signature received' },
+              // Validate signature data before processing
+              if (!isValidSignature(data.signature)) {
+                logger.p2p.error('Invalid ACK signature data received', {
+                  hasSignature: !!data.signature,
+                  fields: data.signature ? Object.keys(data.signature) : [],
                 });
-
-                onSignatureReceived?.(data.signature, PROTOCOLS.ACK_SIG);
-                onStepAdvance?.();
+                return;
               }
+
+              // Store the signature for later use
+              const sig = data.signature;
+              const stored: StoredSignature = {
+                signature: sig.value as `0x${string}`,
+                deadline: BigInt(sig.deadline),
+                nonce: BigInt(sig.nonce),
+                address: sig.address,
+                chainId: sig.chainId,
+                step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
+                storedAt: Date.now(),
+              };
+              storeSignature(stored);
+
+              // Confirm receipt
+              await passStreamData({
+                connection,
+                protocols: [PROTOCOLS.ACK_REC],
+                streamData: { success: true, message: 'Signature received' },
+              });
+
+              onSignatureReceived?.(sig, PROTOCOLS.ACK_SIG);
+              onStepAdvance?.();
             } catch (err) {
               logger.p2p.error('Error handling ACK_SIG', {}, err as Error);
             }
@@ -271,30 +302,37 @@ export function useP2PSignatureRelay(
               const data = await readStreamData(stream.source);
               logger.p2p.info('Received REG signature', { role });
 
-              if (data.signature) {
-                // Store the signature for later use
-                const sig = data.signature;
-                const stored: StoredSignature = {
-                  signature: sig.value as `0x${string}`,
-                  deadline: BigInt(sig.deadline),
-                  nonce: BigInt(sig.nonce),
-                  address: sig.address,
-                  chainId: sig.chainId,
-                  step: SIGNATURE_STEP.REGISTRATION,
-                  storedAt: Date.now(),
-                };
-                storeSignature(stored);
-
-                // Confirm receipt
-                await passStreamData({
-                  connection,
-                  protocols: [PROTOCOLS.REG_REC],
-                  streamData: { success: true, message: 'Signature received' },
+              // Validate signature data before processing
+              if (!isValidSignature(data.signature)) {
+                logger.p2p.error('Invalid REG signature data received', {
+                  hasSignature: !!data.signature,
+                  fields: data.signature ? Object.keys(data.signature) : [],
                 });
-
-                onSignatureReceived?.(data.signature, PROTOCOLS.REG_SIG);
-                onStepAdvance?.();
+                return;
               }
+
+              // Store the signature for later use
+              const sig = data.signature;
+              const stored: StoredSignature = {
+                signature: sig.value as `0x${string}`,
+                deadline: BigInt(sig.deadline),
+                nonce: BigInt(sig.nonce),
+                address: sig.address,
+                chainId: sig.chainId,
+                step: SIGNATURE_STEP.REGISTRATION,
+                storedAt: Date.now(),
+              };
+              storeSignature(stored);
+
+              // Confirm receipt
+              await passStreamData({
+                connection,
+                protocols: [PROTOCOLS.REG_REC],
+                streamData: { success: true, message: 'Signature received' },
+              });
+
+              onSignatureReceived?.(sig, PROTOCOLS.REG_SIG);
+              onStepAdvance?.();
             } catch (err) {
               logger.p2p.error('Error handling REG_SIG', {}, err as Error);
             }
@@ -402,10 +440,13 @@ export function useP2PSignatureRelay(
     customHandlers,
   ]);
 
+  // Memoize handlers array to prevent recreating on every render
+  const handlers = useMemo(() => buildRoleHandlers(), [buildRoleHandlers]);
+
   // Configure base P2P connection
   const connectionOptions: UseP2PConnectionOptions = {
     autoInit: true,
-    handlers: buildRoleHandlers(),
+    handlers,
   };
 
   const p2pConnection = useP2PConnection(connectionOptions);

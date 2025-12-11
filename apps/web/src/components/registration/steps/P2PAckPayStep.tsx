@@ -171,11 +171,12 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
         </Alert>
 
         {acknowledgementHash ? (
+          // TransactionCard hides submit button when status='confirmed' - onSubmit is unused but required by interface
           <TransactionCard
             type="acknowledgement"
             status="confirmed"
             hash={acknowledgementHash}
-            onSubmit={() => {}}
+            onSubmit={() => undefined}
           />
         ) : (
           <WaitingForData

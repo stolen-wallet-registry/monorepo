@@ -53,7 +53,7 @@ export function PeerIdDisplay({ peerId, isLoading }: PeerIdDisplayProps) {
 
   if (isLoading) {
     return (
-      <Button className="w-full" disabled>
+      <Button className="w-full" disabled aria-busy="true" aria-live="polite">
         <span className="font-bold">Connecting to relay...</span>
       </Button>
     );

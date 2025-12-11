@@ -19,6 +19,9 @@ function ErrorThrower(): never {
 /**
  * Development-only tools panel for testing theming and other dev features.
  * Only renders in development mode (import.meta.env.DEV).
+ *
+ * Note: P2P debug info is displayed on P2P registration pages via P2PDebugPanel,
+ * not here, since the libp2p node lives in page state.
  */
 export function DevTools() {
   const [isOpen, setIsOpen] = useState(false);
@@ -114,17 +117,43 @@ export function DevTools() {
           )}
         >
           {/* Tab Header */}
-          <div className="flex border-b border-border" role="tablist">
+          <div
+            className="flex border-b border-border"
+            role="tablist"
+            aria-label="DevTools sections"
+            onKeyDown={(e) => {
+              const tabs: DevToolsTab[] = ['theme', 'p2p', 'tests'];
+              const currentIndex = tabs.indexOf(activeTab);
+              if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                const nextIndex = (currentIndex + 1) % tabs.length;
+                setActiveTab(tabs[nextIndex]);
+              } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+                setActiveTab(tabs[prevIndex]);
+              } else if (e.key === 'Home') {
+                e.preventDefault();
+                setActiveTab(tabs[0]);
+              } else if (e.key === 'End') {
+                e.preventDefault();
+                setActiveTab(tabs[tabs.length - 1]);
+              }
+            }}
+          >
             {(['theme', 'p2p', 'tests'] as DevToolsTab[]).map((tab) => (
               <button
                 key={tab}
                 type="button"
                 role="tab"
+                id={`devtools-tab-${tab}`}
                 aria-selected={activeTab === tab}
+                aria-controls={`devtools-tabpanel-${tab}`}
+                tabIndex={activeTab === tab ? 0 : -1}
                 onClick={() => setActiveTab(tab)}
                 className={cn(
                   'flex-1 px-3 py-2 text-xs font-medium uppercase tracking-wide',
-                  'transition-colors focus:outline-none',
+                  'transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring',
                   activeTab === tab
                     ? 'border-b-2 border-primary bg-muted/50 text-foreground'
                     : 'text-muted-foreground hover:text-foreground'
@@ -135,7 +164,13 @@ export function DevTools() {
             ))}
           </div>
 
-          <div className="p-4">
+          <div
+            className="p-4"
+            role="tabpanel"
+            id={`devtools-tabpanel-${activeTab}`}
+            aria-labelledby={`devtools-tab-${activeTab}`}
+            tabIndex={0}
+          >
             {/* Theme Tab */}
             {activeTab === 'theme' && (
               <>
@@ -246,13 +281,20 @@ export function DevTools() {
 
             {/* P2P Tab */}
             {activeTab === 'p2p' && (
-              <>
-                {/* Connection Status */}
-                <div className="mb-4">
-                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">
-                    Connection Status
-                  </h4>
-                  <div className="flex items-center gap-2">
+              <div className="space-y-4">
+                {/* Note about debug panel location */}
+                <div className="rounded-md bg-muted/50 p-3 text-xs">
+                  <p className="text-muted-foreground">
+                    Detailed P2P info (multiaddresses, protocols, connections) is shown on the{' '}
+                    <span className="font-medium text-foreground">P2P registration pages</span> via
+                    the debug panel below the main content.
+                  </p>
+                </div>
+
+                {/* Connection Status from Store */}
+                <div>
+                  <h4 className="text-xs font-medium text-muted-foreground">Store State</h4>
+                  <div className="mt-2 flex items-center gap-2">
                     <span
                       className={cn(
                         'h-2 w-2 rounded-full',
@@ -275,7 +317,7 @@ export function DevTools() {
                   )}
                 </div>
 
-                {/* Peer Info */}
+                {/* Peer Info from Store */}
                 <div className="border-t border-border pt-3">
                   <h4 className="mb-2 text-xs font-medium text-muted-foreground">Peer Info</h4>
                   <div className="space-y-2 font-mono text-xs">
@@ -295,7 +337,7 @@ export function DevTools() {
                 </div>
 
                 {/* P2P Actions */}
-                <div className="mt-4 border-t border-border pt-3">
+                <div className="border-t border-border pt-3">
                   <h4 className="mb-2 text-xs font-medium text-muted-foreground">Actions</h4>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -328,26 +370,7 @@ export function DevTools() {
                     </button>
                   </div>
                 </div>
-
-                {/* State Debug */}
-                <div className="mt-4 border-t border-border pt-3">
-                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">State Debug</h4>
-                  <pre className="max-h-32 overflow-auto rounded bg-muted p-2 font-mono text-xs">
-                    {JSON.stringify(
-                      {
-                        peerId: p2pState.peerId,
-                        partnerPeerId: p2pState.partnerPeerId,
-                        connectedToPeer: p2pState.connectedToPeer,
-                        connectionStatus: p2pState.connectionStatus,
-                        isInitialized: p2pState.isInitialized,
-                        errorMessage: p2pState.errorMessage,
-                      },
-                      null,
-                      2
-                    )}
-                  </pre>
-                </div>
-              </>
+              </div>
             )}
 
             {/* Tests Tab */}

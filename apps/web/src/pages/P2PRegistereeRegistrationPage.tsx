@@ -5,7 +5,7 @@
  * Relayer pays gas fees on behalf of the registeree.
  */
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
@@ -15,6 +15,7 @@ import type { IncomingStreamData } from '@libp2p/interface/stream-handler';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StepIndicator } from '@/components/composed/StepIndicator';
+import { P2PDebugPanel } from '@/components/dev/P2PDebugPanel';
 import {
   WaitForConnectionStep,
   P2PAckSignStep,
@@ -229,6 +230,9 @@ export function P2PRegistereeRegistrationPage() {
     setLocation('/');
   }, [resetFlow, resetP2P, libp2p, setLocation]);
 
+  // Getter for P2P debug panel - must be before early return
+  const getLibp2p = useMemo(() => () => libp2p, [libp2p]);
+
   if (!isConnected) {
     return null;
   }
@@ -318,7 +322,7 @@ export function P2PRegistereeRegistrationPage() {
         </aside>
 
         {/* Main Content */}
-        <main>
+        <main className="space-y-4">
           <Card className="min-h-[400px]">
             <CardHeader>
               <CardTitle>{currentTitle}</CardTitle>
@@ -326,6 +330,9 @@ export function P2PRegistereeRegistrationPage() {
             </CardHeader>
             <CardContent>{renderStep()}</CardContent>
           </Card>
+
+          {/* P2P Debug Panel - development only */}
+          <P2PDebugPanel getLibp2p={getLibp2p} />
         </main>
       </div>
     </div>
