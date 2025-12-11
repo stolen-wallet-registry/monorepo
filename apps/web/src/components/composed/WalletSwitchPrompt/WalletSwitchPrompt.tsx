@@ -117,7 +117,12 @@ export function WalletSwitchPrompt({
     );
   }
 
-  // wrong-wallet
+  // wrong-wallet status guarantees non-null currentAddress
+  // If this invariant is violated, something is broken in getWalletStatus
+  if (!currentAddress) {
+    throw new Error('Invariant violation: wrong-wallet status with null address');
+  }
+
   return (
     <Alert
       className={cn(
@@ -135,7 +140,7 @@ export function WalletSwitchPrompt({
           <div className="flex items-center gap-2">
             <span className="text-xs uppercase tracking-wide opacity-70">Current:</span>
             <Badge variant="outline" className="font-mono">
-              {truncateAddress(currentAddress!, 6)}
+              {truncateAddress(currentAddress, 6)}
             </Badge>
           </div>
           <div className="flex items-center gap-2">

@@ -12,7 +12,9 @@ import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StepIndicator } from '@/components/composed/StepIndicator';
+import { StepRenderer } from '@/components/registration';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
+import { useStepNavigation } from '@/hooks/useStepNavigation';
 
 /**
  * Step descriptions for standard flow.
@@ -41,7 +43,15 @@ const STEP_TITLES: Partial<Record<RegistrationStep, string>> = {
 export function StandardRegistrationPage() {
   const [, setLocation] = useLocation();
   const { isConnected } = useAccount();
-  const { step, reset } = useRegistrationStore();
+  const { registrationType, step, setRegistrationType } = useRegistrationStore();
+  const { goToNextStep, resetFlow } = useStepNavigation();
+
+  // Initialize registration type on mount
+  useEffect(() => {
+    if (registrationType !== 'standard') {
+      setRegistrationType('standard');
+    }
+  }, [registrationType, setRegistrationType]);
 
   // Redirect if not connected (side effect in useEffect, not during render)
   useEffect(() => {
@@ -55,7 +65,7 @@ export function StandardRegistrationPage() {
   }
 
   const handleBack = () => {
-    reset();
+    resetFlow();
     setLocation('/');
   };
 
@@ -97,12 +107,11 @@ export function StandardRegistrationPage() {
               <CardDescription>{currentDescription}</CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Step content will be rendered here based on current step */}
-              <div className="text-muted-foreground text-center py-12">
-                Step component for &ldquo;{step || 'none'}&rdquo; will be rendered here.
-                <br />
-                <span className="text-sm">(Phase 1B: Component integration pending)</span>
-              </div>
+              <StepRenderer
+                registrationType="standard"
+                currentStep={step}
+                onStepComplete={goToNextStep}
+              />
             </CardContent>
           </Card>
         </main>

@@ -37,3 +37,6 @@ export {
   type UseCountdownTimerOptions,
   type UseCountdownTimerResult,
 } from './useCountdownTimer';
+
+// Navigation hooks
+export { useStepNavigation, type UseStepNavigationResult } from './useStepNavigation';

@@ -121,10 +121,10 @@ export function SignatureCard({
         </div>
 
         {/* Error message */}
-        {isError && error && (
+        {isError && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{error ?? 'An unexpected error occurred'}</AlertDescription>
           </Alert>
         )}
 

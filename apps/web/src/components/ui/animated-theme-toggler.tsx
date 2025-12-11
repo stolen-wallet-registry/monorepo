@@ -12,7 +12,8 @@ interface AnimatedThemeTogglerProps extends React.ComponentPropsWithoutRef<'butt
 export const AnimatedThemeToggler = ({
   className,
   duration = 400,
-  ...props
+  onClick,
+  ...rest
 }: AnimatedThemeTogglerProps) => {
   const { resolvedColorScheme, setColorScheme } = useTheme();
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -65,8 +66,16 @@ export const AnimatedThemeToggler = ({
     });
   }, [isDark, duration, setColorScheme]);
 
+  const handleClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      toggleTheme();
+      onClick?.(event);
+    },
+    [toggleTheme, onClick]
+  );
+
   return (
-    <button ref={buttonRef} onClick={toggleTheme} className={cn(className)} {...props}>
+    <button ref={buttonRef} type="button" onClick={handleClick} className={cn(className)} {...rest}>
       {isDark ? <Sun /> : <Moon />}
       <span className="sr-only">Toggle theme</span>
     </button>

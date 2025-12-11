@@ -70,7 +70,6 @@ export function TransactionCard({
   const isSubmitting = status === 'submitting';
   const isPending = status === 'pending';
   const isFailed = status === 'failed';
-  const isLoading = isSubmitting || isPending;
 
   const getIcon = () => {
     if (isConfirmed) return <Check className="h-5 w-5 text-green-600 dark:text-green-400" />;
@@ -154,22 +153,8 @@ export function TransactionCard({
 
         {/* Action button */}
         {(status === 'idle' || isFailed) && (
-          <Button
-            onClick={isFailed && onRetry ? onRetry : onSubmit}
-            disabled={isLoading}
-            className="w-full"
-            size="lg"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Submitting...
-              </>
-            ) : isFailed ? (
-              'Retry Transaction'
-            ) : (
-              `Submit ${typeLabel}`
-            )}
+          <Button onClick={isFailed && onRetry ? onRetry : onSubmit} className="w-full" size="lg">
+            {isFailed ? 'Retry Transaction' : `Submit ${typeLabel}`}
           </Button>
         )}
 

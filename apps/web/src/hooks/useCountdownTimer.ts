@@ -64,7 +64,9 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
 
   const calculateBlocksLeft = useCallback((): bigint => {
     if (!targetBlock || !currentBlock) return 0n;
-    return blocksRemaining(currentBlock, targetBlock);
+    const remaining = blocksRemaining(currentBlock, targetBlock);
+    // Clamp to 0n to prevent negative values
+    return remaining > 0n ? remaining : 0n;
   }, [targetBlock, currentBlock]);
 
   const [totalMs, setTotalMs] = useState<number>(() => calculateInitialMs());
@@ -86,7 +88,10 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     setHasExpired(newMs <= 0);
     expiredCallbackFired.current = false;
 
-    if (autoStart && newMs > 0) {
+    if (newMs <= 0) {
+      // Normalize isRunning to false when instant-expired
+      setIsRunning(false);
+    } else if (autoStart) {
       setIsRunning(true);
     }
   }, [calculateInitialMs, autoStart]);
@@ -135,7 +140,11 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     setTotalMs(newMs);
     setHasExpired(newMs <= 0);
     expiredCallbackFired.current = false;
-    if (autoStart && newMs > 0) {
+
+    if (newMs <= 0) {
+      // Normalize isRunning to false when instant-expired
+      setIsRunning(false);
+    } else if (autoStart) {
       setIsRunning(true);
     }
   }, [calculateInitialMs, autoStart]);

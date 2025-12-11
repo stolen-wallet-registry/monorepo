@@ -5,11 +5,23 @@ import { useTheme, type ColorScheme, type ThemeVariant } from '@/providers';
 import { cn } from '@/lib/utils';
 
 /**
+ * Component that throws an error when triggered.
+ * Used to test the ErrorBoundary.
+ */
+function ErrorThrower({ shouldThrow }: { shouldThrow: boolean }) {
+  if (shouldThrow) {
+    throw new Error('Test error from DevTools - ErrorBoundary is working!');
+  }
+  return null;
+}
+
+/**
  * Development-only tools panel for testing theming and other dev features.
  * Only renders in development mode (import.meta.env.DEV).
  */
 export function DevTools() {
   const [isOpen, setIsOpen] = useState(false);
+  const [shouldThrowError, setShouldThrowError] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { colorScheme, setColorScheme, themeVariant, setThemeVariant, resolvedColorScheme } =
     useTheme();
@@ -253,8 +265,26 @@ export function DevTools() {
               </button>
             </div>
           </div>
+
+          {/* Error Boundary Test */}
+          <div className="mt-4 border-t border-border pt-3">
+            <h4 className="mb-2 text-xs font-medium text-muted-foreground">Error Boundary Test</h4>
+            <button
+              type="button"
+              onClick={() => setShouldThrowError(true)}
+              className="rounded bg-red-900 px-2 py-1 text-xs text-red-300 hover:bg-red-800"
+            >
+              Trigger Error
+            </button>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Throws an error to test the ErrorBoundary UI
+            </p>
+          </div>
         </div>
       )}
+
+      {/* Error thrower component - renders outside the panel */}
+      <ErrorThrower shouldThrow={shouldThrowError} />
     </div>
   );
 }
