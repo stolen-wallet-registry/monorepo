@@ -148,6 +148,11 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
 
   // Manual retry handler for user-initiated resend
   const handleResendHash = useCallback(() => {
+    // Clear any pending auto-retry to avoid duplicate attempts
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
     setSendError(null);
     setRetryCount((prev) => prev + 1);
   }, []);

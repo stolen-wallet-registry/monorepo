@@ -467,10 +467,13 @@ export function useP2PSignatureRelay(
 
   // Send connect handshake
   const sendConnectHandshake = useCallback(async () => {
+    if (!p2pConnection.peerId) {
+      throw new Error('Cannot send connect handshake: local peer ID not available');
+    }
     const connection = await getConnection();
     const streamData: ParsedStreamData = {
       form: { registeree: address },
-      p2p: { partnerPeerId: p2pConnection.peerId || undefined },
+      p2p: { partnerPeerId: p2pConnection.peerId },
     };
     await passStreamData({ connection, protocols: [PROTOCOLS.CONNECT], streamData });
     logger.p2p.info('Sent CONNECT handshake');

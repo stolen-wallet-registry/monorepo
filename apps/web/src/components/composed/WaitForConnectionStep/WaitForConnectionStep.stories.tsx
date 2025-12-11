@@ -14,7 +14,7 @@ import { PeerIdDisplay, PeerConnectForm } from '@/components/p2p';
  * - Registeree ready: shows form to enter relayer's Peer ID
  */
 
-const meta: Meta = {
+const meta = {
   title: 'Composed/WaitForConnectionStep',
   parameters: {
     layout: 'centered',
@@ -27,10 +27,10 @@ const meta: Meta = {
       </div>
     ),
   ],
-};
+} satisfies Meta;
 
 export default meta;
-type Story = StoryObj;
+type Story = StoryObj<typeof meta>;
 
 /**
  * Initializing state - shown while P2P node connects to relay server.
@@ -38,7 +38,12 @@ type Story = StoryObj;
  */
 export const Initializing: Story = {
   render: () => (
-    <div className="flex flex-col items-center justify-center py-12 space-y-4">
+    <div
+      className="flex flex-col items-center justify-center py-12 space-y-4"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       <p className="text-muted-foreground">Connecting to relay server...</p>
     </div>

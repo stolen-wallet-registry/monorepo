@@ -32,7 +32,15 @@ export function DevTools() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { colorScheme, setColorScheme, themeVariant, setThemeVariant, resolvedColorScheme } =
     useTheme();
-  const p2pState = useP2PStore();
+  // Use selector to only subscribe to needed state
+  const p2pState = useP2PStore((state) => ({
+    peerId: state.peerId,
+    partnerPeerId: state.partnerPeerId,
+    connectionStatus: state.connectionStatus,
+    isInitialized: state.isInitialized,
+    errorMessage: state.errorMessage,
+    reset: state.reset,
+  }));
 
   const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
 
@@ -342,10 +350,14 @@ export function DevTools() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
                         if (p2pState.peerId) {
-                          navigator.clipboard.writeText(p2pState.peerId);
-                          toast.success('Peer ID copied!');
+                          try {
+                            await navigator.clipboard.writeText(p2pState.peerId);
+                            toast.success('Peer ID copied!');
+                          } catch {
+                            toast.error('Failed to copy to clipboard');
+                          }
                         }
                       }}
                       disabled={!p2pState.peerId}
