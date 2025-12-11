@@ -23,7 +23,7 @@ function FormWrapper({ children }: { children: React.ReactNode }) {
 }
 
 const meta = {
-  title: 'UI/Form',
+  title: 'Primitives/Form',
   component: FormWrapper,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
@@ -100,7 +100,11 @@ const walletSchema = z.object({
     .string()
     .min(1, 'Wallet address is required')
     .regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address'),
-  relayerAddress: z.string().optional(),
+  relayerAddress: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address')
+    .optional()
+    .or(z.literal('')),
   mintNft: z.boolean(),
   notifyExchanges: z.boolean(),
 });

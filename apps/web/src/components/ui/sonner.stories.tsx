@@ -5,7 +5,7 @@ import { Button } from './button';
 import { ThemeProvider } from '@/providers/ThemeProvider';
 
 const meta = {
-  title: 'UI/Toaster',
+  title: 'Primitives/Toaster',
   component: Toaster,
   parameters: {
     layout: 'padded',

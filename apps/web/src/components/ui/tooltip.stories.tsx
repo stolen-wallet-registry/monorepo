@@ -4,7 +4,7 @@ import { Button } from './button';
 import { InfoIcon, HelpCircleIcon, CopyIcon } from 'lucide-react';
 
 const meta = {
-  title: 'UI/Tooltip',
+  title: 'Primitives/Tooltip',
   component: Tooltip,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
@@ -109,7 +109,13 @@ export const HelpTooltip: Story = {
       <span className="text-sm font-medium">Grace Period</span>
       <Tooltip>
         <TooltipTrigger asChild>
-          <HelpCircleIcon className="h-4 w-4 text-muted-foreground cursor-help" />
+          <button
+            type="button"
+            className="inline-flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            aria-label="What is the grace period?"
+          >
+            <HelpCircleIcon className="h-4 w-4 text-muted-foreground cursor-help" />
+          </button>
         </TooltipTrigger>
         <TooltipContent className="max-w-[200px]">
           <p>
@@ -127,9 +133,13 @@ export const StatusTooltip: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive cursor-help">
+        <button
+          type="button"
+          className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive cursor-help focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="View wallet status details"
+        >
           Compromised
-        </span>
+        </button>
       </TooltipTrigger>
       <TooltipContent>
         <p>Registered on Dec 10, 2025 via P2P Relay</p>

@@ -155,11 +155,16 @@ export function TypingAnimation({
     <MotionComponent
       ref={elementRef}
       className={cn('leading-[5rem] tracking-[-0.02em]', className)}
+      aria-live="polite"
+      aria-atomic="false"
       {...props}
     >
       {displayedText}
       {shouldShowCursor && (
-        <span className={cn('inline-block', blinkCursor && 'animate-blink-cursor')}>
+        <span
+          className={cn('inline-block', blinkCursor && 'animate-blink-cursor')}
+          aria-hidden="true"
+        >
           {getCursorChar()}
         </span>
       )}

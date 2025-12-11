@@ -12,7 +12,7 @@ import {
 import { Button } from './button';
 
 const meta = {
-  title: 'UI/Dialog',
+  title: 'Primitives/Dialog',
   component: Dialog,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],

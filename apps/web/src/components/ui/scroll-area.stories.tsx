@@ -3,7 +3,7 @@ import { ScrollArea } from './scroll-area';
 import { Separator } from './separator';
 
 const meta = {
-  title: 'UI/ScrollArea',
+  title: 'Primitives/ScrollArea',
   component: ScrollArea,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],

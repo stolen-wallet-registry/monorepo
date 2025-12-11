@@ -3,7 +3,7 @@ import { AlertCircle, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from './alert';
 
 const meta = {
-  title: 'UI/Alert',
+  title: 'Primitives/Alert',
   component: Alert,
   parameters: { layout: 'padded' },
   tags: ['autodocs'],
@@ -49,7 +49,6 @@ export const WithoutIcon: Story = {
 };
 
 export const AllVariants: Story = {
-  parameters: { layout: 'padded' },
   render: () => (
     <div className="flex flex-col gap-4 w-full max-w-md">
       <Alert>
@@ -68,7 +67,6 @@ export const AllVariants: Story = {
 
 export const RegistrationAlerts: Story = {
   name: 'Registration Flow Examples',
-  parameters: { layout: 'padded' },
   render: () => (
     <div className="flex flex-col gap-4 w-full max-w-md">
       <Alert>

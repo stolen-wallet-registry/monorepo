@@ -3,7 +3,7 @@ import { AnimatedThemeToggler } from './animated-theme-toggler';
 import { ThemeProvider } from '@/providers/ThemeProvider';
 
 const meta = {
-  title: 'UI/AnimatedThemeToggler',
+  title: 'Theme/AnimatedThemeToggler',
   component: AnimatedThemeToggler,
   parameters: {
     layout: 'centered',
@@ -64,12 +64,10 @@ export const InHeader: Story = {
   name: 'In Header Context',
   decorators: [
     (Story) => (
-      <ThemeProvider defaultColorScheme="light" defaultVariant="base">
-        <header className="flex items-center justify-between p-4 bg-background border-b w-[400px] rounded-lg">
-          <span className="font-semibold">Stolen Wallet Registry</span>
-          <Story />
-        </header>
-      </ThemeProvider>
+      <header className="flex items-center justify-between p-4 bg-background border-b w-[400px] rounded-lg">
+        <span className="font-semibold">Stolen Wallet Registry</span>
+        <Story />
+      </header>
     ),
   ],
   args: {
@@ -81,14 +79,12 @@ export const WithLabel: Story = {
   name: 'With Visible Label',
   decorators: [
     (Story) => (
-      <ThemeProvider defaultColorScheme="light" defaultVariant="base">
-        <div className="p-4 bg-background text-foreground rounded-lg border">
-          <div className="flex items-center gap-2">
-            <Story />
-            <span className="text-sm text-muted-foreground">Toggle theme</span>
-          </div>
+      <div className="p-4 bg-background text-foreground rounded-lg border">
+        <div className="flex items-center gap-2">
+          <Story />
+          <span className="text-sm text-muted-foreground">Toggle theme</span>
         </div>
-      </ThemeProvider>
+      </div>
     ),
   ],
   args: {

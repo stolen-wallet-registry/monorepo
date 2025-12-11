@@ -3,7 +3,7 @@ import { Skeleton } from './skeleton';
 import { Card, CardContent, CardHeader } from './card';
 
 const meta = {
-  title: 'UI/Skeleton',
+  title: 'Primitives/Skeleton',
   component: Skeleton,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],

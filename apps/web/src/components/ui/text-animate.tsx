@@ -183,6 +183,16 @@ const defaultItemAnimationVariants: Record<
           filter: { duration: 0.3 },
         },
       },
+      exit: {
+        opacity: 0,
+        filter: 'blur(10px)',
+        y: -20,
+        transition: {
+          y: { duration: 0.3 },
+          opacity: { duration: 0.4 },
+          filter: { duration: 0.3 },
+        },
+      },
     },
   },
   slideUp: {

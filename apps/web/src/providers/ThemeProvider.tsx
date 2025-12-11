@@ -18,25 +18,32 @@ function getSystemTheme(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+// Safe localStorage read that works in SSR
+function getStoredColorScheme(key: string, defaultValue: ColorScheme): ColorScheme {
+  if (typeof window === 'undefined') return defaultValue;
+  return (localStorage.getItem(key) as ColorScheme) || defaultValue;
+}
+
+function getStoredVariant(key: string, defaultValue: ThemeVariant): ThemeVariant {
+  if (typeof window === 'undefined') return defaultValue;
+  return (localStorage.getItem(key) as ThemeVariant) || defaultValue;
+}
+
 export function ThemeProvider({
   children,
   defaultColorScheme = 'system',
   defaultVariant = 'base',
   colorSchemeStorageKey = COLOR_SCHEME_KEY,
   variantStorageKey = VARIANT_KEY,
-  ...props
 }: ThemeProviderProps) {
-  // Color scheme state
-  const [colorScheme, setColorSchemeState] = useState<ColorScheme>(() => {
-    const stored = localStorage.getItem(colorSchemeStorageKey);
-    // Also check legacy key for migration
-    const legacy = localStorage.getItem('swr-ui-theme');
-    return (stored as ColorScheme) || (legacy as ColorScheme) || defaultColorScheme;
-  });
+  // Color scheme state - use lazy initializer that's SSR-safe
+  const [colorScheme, setColorSchemeState] = useState<ColorScheme>(() =>
+    getStoredColorScheme(colorSchemeStorageKey, defaultColorScheme)
+  );
 
-  // Theme variant state
-  const [themeVariant, setThemeVariantState] = useState<ThemeVariant>(
-    () => (localStorage.getItem(variantStorageKey) as ThemeVariant) || defaultVariant
+  // Theme variant state - use lazy initializer that's SSR-safe
+  const [themeVariant, setThemeVariantState] = useState<ThemeVariant>(() =>
+    getStoredVariant(variantStorageKey, defaultVariant)
   );
 
   // Track system preference separately for reactive updates
@@ -95,17 +102,9 @@ export function ThemeProvider({
       themeVariant,
       setColorScheme,
       setThemeVariant,
-      // Legacy aliases for backward compatibility
-      theme: colorScheme,
-      setTheme: setColorScheme,
-      resolvedTheme: resolvedColorScheme,
     }),
     [colorScheme, resolvedColorScheme, themeVariant, setColorScheme, setThemeVariant]
   );
 
-  return (
-    <ThemeProviderContext.Provider {...props} value={value}>
-      {children}
-    </ThemeProviderContext.Provider>
-  );
+  return <ThemeProviderContext.Provider value={value}>{children}</ThemeProviderContext.Provider>;
 }

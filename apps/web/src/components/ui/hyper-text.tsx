@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/static-components -- MagicUI pattern: dynamic `as` prop requires runtime motion.create() */
+/* eslint-disable react-hooks/refs -- MagicUI pattern: uses refs during render for derived state sync */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, type MotionProps } from 'motion/react';
 
@@ -51,6 +51,14 @@ export function HyperText({
   const [isAnimating, setIsAnimating] = useState(false);
   const iterationCount = useRef(0);
   const elementRef = useRef<HTMLElement>(null);
+  const prevChildrenRef = useRef(children);
+
+  // Reset displayText when children changes (synchronize on render, not in effect)
+  if (prevChildrenRef.current !== children) {
+    prevChildrenRef.current = children;
+    setDisplayText(children.split(''));
+    iterationCount.current = 0;
+  }
 
   const handleAnimationTrigger = () => {
     if (animateOnHover && !isAnimating) {

@@ -171,6 +171,7 @@ export function createRainbowKitTheme(colorScheme: 'light' | 'dark', variant: Th
       ...colors,
     },
     fonts: {
+      ...baseTheme.fonts,
       body: fontFamily,
     },
     radii: {
