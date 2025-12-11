@@ -4,6 +4,7 @@
  * Users choose whether they are the registeree (wallet owner) or relayer (gas payer).
  */
 
+import type { ReactNode } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft, User, HandHelping } from 'lucide-react';
@@ -14,16 +15,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 interface RoleCardProps {
   title: string;
   description: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   details: string[];
   onClick: () => void;
 }
 
 function RoleCard({ title, description, icon, details, onClick }: RoleCardProps) {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
   return (
     <Card
       className="cursor-pointer transition-all hover:border-primary hover:shadow-md"
       onClick={onClick}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
     >
       <CardHeader className="text-center">
         <div className="mx-auto mb-4 p-4 rounded-full bg-muted">{icon}</div>

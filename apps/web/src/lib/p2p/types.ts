@@ -76,25 +76,59 @@ export interface RelayConfig {
 
 /**
  * Default relay servers by environment.
+ *
+ * IMPORTANT: Production relay servers MUST be configured before deployment.
+ * The system will fail fast if production mode has no relay servers configured.
  */
 export const RELAY_SERVERS: Record<string, RelayConfig[]> = {
   development: [
     {
-      multiaddr:
-        '/ip4/127.0.0.1/tcp/12312/ws/p2p/12D3KooWNucVJrR4PKToXbVK9xxTRSUFYV7C28TYqCN26CofJN7F',
+      multiaddr: '/ip4/127.0.0.1/tcp/12312/ws/p2p/QmQ2zigjQikYnyYUSXZydNXrDRhBut2mubwJBaLXobMt3A',
       isDev: true,
     },
   ],
   production: [
-    // TODO: Add production relay server
+    // TODO: Add production relay server before deployment
+    // Configure via environment variable VITE_RELAY_MULTIADDR or add here:
     // { multiaddr: '/ip4/167.172.223.225/tcp/12312/ws/p2p/${PEER_ID}' },
   ],
 };
 
 /**
+ * Error thrown when relay server configuration is missing.
+ */
+export class RelayConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RelayConfigurationError';
+  }
+}
+
+/**
  * Get relay servers for current environment.
+ *
+ * @throws {RelayConfigurationError} If production mode has no relay servers configured
  */
 export function getRelayServers(): RelayConfig[] {
   const env = import.meta.env.MODE || 'development';
-  return RELAY_SERVERS[env] || RELAY_SERVERS.development;
+
+  // Check for environment variable override
+  const envRelay = import.meta.env.VITE_RELAY_MULTIADDR;
+  if (envRelay) {
+    return [{ multiaddr: envRelay, isDev: false }];
+  }
+
+  const servers = RELAY_SERVERS[env];
+
+  // Fail fast in production if no relay servers are configured
+  if (env === 'production' && (!servers || servers.length === 0)) {
+    throw new RelayConfigurationError(
+      'Production relay servers not configured. ' +
+        'Set VITE_RELAY_MULTIADDR environment variable or add servers to RELAY_SERVERS.production. ' +
+        'Cannot fall back to development relays in production mode.'
+    );
+  }
+
+  // For non-production, fall back to development servers
+  return servers && servers.length > 0 ? servers : RELAY_SERVERS.development;
 }

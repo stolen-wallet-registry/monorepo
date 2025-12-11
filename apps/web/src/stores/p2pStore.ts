@@ -104,6 +104,11 @@ export const useP2PStore = create<P2PState & P2PActions>()(
         const state = persisted as Partial<P2PState>;
 
         // Ensure all required fields exist with fallbacks
+        // Note: connectionStatus, errorMessage, and isInitialized are intentionally
+        // reset to initial values on reload. These are ephemeral states that reflect
+        // the current session's P2P connection status and should not persist across
+        // browser refreshes. The libp2p node needs to be re-initialized each session,
+        // so preserving these values would be misleading.
         return {
           peerId: state.peerId ?? initialState.peerId,
           partnerPeerId: state.partnerPeerId ?? initialState.partnerPeerId,

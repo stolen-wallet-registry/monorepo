@@ -68,9 +68,13 @@ export function PeerIdDisplay({ peerId, isLoading }: PeerIdDisplayProps) {
   }
 
   return (
-    <Button className="w-full" onClick={handleCopy}>
-      <span className="font-bold">Peer ID: {peerId}</span>
-      <ClipboardCopy className="ml-2 h-4 w-4" />
+    <Button
+      className="w-full"
+      onClick={handleCopy}
+      aria-label={`Copy Peer ID ${peerId} to clipboard`}
+    >
+      <span className="font-bold truncate">Peer ID: {truncateMiddle(peerId, 8, 8)}</span>
+      <ClipboardCopy className="ml-2 h-4 w-4 flex-shrink-0" />
     </Button>
   );
 }

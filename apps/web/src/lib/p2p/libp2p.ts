@@ -88,8 +88,9 @@ export function libp2pDefaults(): Libp2pOptions<DefaultLibp2pServices> {
     peerDiscovery: bootstrapList.length > 0 ? [bootstrap({ list: bootstrapList })] : [],
     connectionGater: {
       denyDialMultiaddr: () => {
-        // Allow local addresses in development for testing
-        return import.meta.env.MODE !== 'development';
+        // Allow all dials - returning false means "do not deny"
+        // In production, you could implement specific address filtering here
+        return false;
       },
     },
     services: {
@@ -125,7 +126,8 @@ export async function setup(handlers: ProtocolHandler[]): Promise<{ libp2p: Libp
   for (const h of handlers) {
     const { protocol, streamHandler } = h;
     logger.p2p.debug('Registering protocol handler', { protocol });
-    libp2p.handle(protocol, streamHandler.handler);
+    // Pass options to libp2p.handle() if provided (e.g., runOnTransientConnection)
+    libp2p.handle(protocol, streamHandler.handler, streamHandler.options);
   }
 
   logger.p2p.info('libp2p node created', {
@@ -152,8 +154,11 @@ export const getPeerConnection = async ({
 }): Promise<Connection> => {
   logger.p2p.debug('Getting peer connection', { remotePeerId });
 
-  // Check for existing connection
-  let connection = libp2p.getConnections().find((conn) => conn.remotePeer.equals(remotePeerId));
+  // Parse the remote peer ID for comparison
+  const peerId = peerIdFromString(remotePeerId);
+
+  // Check for existing connection using proper PeerId comparison
+  let connection = libp2p.getConnections().find((conn) => conn.remotePeer.equals(peerId));
 
   if (connection) {
     logger.p2p.debug('Using existing connection', { remotePeerId });
@@ -161,8 +166,6 @@ export const getPeerConnection = async ({
   }
 
   // Create new connection via circuit relay
-  const peerId = peerIdFromString(remotePeerId);
-
   const multiaddrs = libp2p.getMultiaddrs().map((ma) => {
     // code 290 is the p2p-circuit code
     if (WebRTC.matches(ma)) {

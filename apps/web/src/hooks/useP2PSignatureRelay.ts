@@ -46,29 +46,75 @@ export interface UseP2PSignatureRelayOptions {
   customHandlers?: ProtocolHandler[];
 }
 
+/**
+ * Result interface for useP2PSignatureRelay hook.
+ *
+ * All send functions (`sendAckSignature`, `sendRegSignature`, `sendAckTxHash`, `sendRegTxHash`,
+ * `confirmAckReceived`, `confirmRegReceived`, `sendConnectHandshake`) are async and will
+ * reject with an error if the connection fails or the stream cannot be opened.
+ *
+ * **Error Handling:** Callers MUST wrap these functions in try/catch blocks to handle:
+ * - Connection errors (peer offline, network issues)
+ * - Stream errors (protocol mismatch, timeout)
+ *
+ * @example
+ * ```tsx
+ * const handleSend = async () => {
+ *   try {
+ *     await sendAckSignature(signature);
+ *   } catch (err) {
+ *     // Handle error - show user feedback, retry, etc.
+ *     console.error('Failed to send signature:', err);
+ *   }
+ * };
+ * ```
+ */
 export interface UseP2PSignatureRelayResult extends Omit<UseP2PConnectionResult, 'send'> {
   /** Role of this peer */
   role: P2PRole;
-  /** Send acknowledgement signature (registeree) */
+  /**
+   * Send acknowledgement signature to relayer (registeree only).
+   * @throws {Error} If connection fails or stream cannot be opened
+   */
   sendAckSignature: (signature: SignatureOverTheWire) => Promise<void>;
-  /** Send registration signature (registeree) */
+  /**
+   * Send registration signature to relayer (registeree only).
+   * @throws {Error} If connection fails or stream cannot be opened
+   */
   sendRegSignature: (signature: SignatureOverTheWire) => Promise<void>;
-  /** Send acknowledgement tx hash (relayer) */
+  /**
+   * Send acknowledgement transaction hash to registeree (relayer only).
+   * @throws {Error} If connection fails or stream cannot be opened
+   */
   sendAckTxHash: (hash: `0x${string}`) => Promise<void>;
-  /** Send registration tx hash (relayer) */
+  /**
+   * Send registration transaction hash to registeree (relayer only).
+   * @throws {Error} If connection fails or stream cannot be opened
+   */
   sendRegTxHash: (hash: `0x${string}`) => Promise<void>;
-  /** Confirm signature received (relayer) */
+  /**
+   * Confirm acknowledgement signature received (relayer only).
+   * @throws {Error} If connection fails or stream cannot be opened
+   */
   confirmAckReceived: () => Promise<void>;
-  /** Confirm registration signature received (relayer) */
+  /**
+   * Confirm registration signature received (relayer only).
+   * @throws {Error} If connection fails or stream cannot be opened
+   */
   confirmRegReceived: () => Promise<void>;
-  /** Send connect handshake with form data */
+  /**
+   * Send connect handshake with form data.
+   * @throws {Error} If connection fails or stream cannot be opened
+   */
   sendConnectHandshake: () => Promise<void>;
 }
 
 /**
  * Hook for P2P signature relay coordination.
  *
- * @example Registeree usage:
+ * **Important:** All send functions reject on error. Callers must handle errors appropriately.
+ *
+ * @example Registeree usage with error handling:
  * ```tsx
  * const { initialize, connect, sendAckSignature, sendRegSignature } = useP2PSignatureRelay({
  *   role: 'registeree',
@@ -76,9 +122,18 @@ export interface UseP2PSignatureRelayResult extends Omit<UseP2PConnectionResult,
  *     // Handle received tx hash from relayer
  *   },
  * });
+ *
+ * const handleSign = async () => {
+ *   try {
+ *     await sendAckSignature(signature);
+ *   } catch (err) {
+ *     // Show error to user, implement retry logic
+ *     setError(err instanceof Error ? err.message : 'Failed to send');
+ *   }
+ * };
  * ```
  *
- * @example Relayer usage:
+ * @example Relayer usage with error handling:
  * ```tsx
  * const { initialize, peerId, sendAckTxHash, sendRegTxHash } = useP2PSignatureRelay({
  *   role: 'relayer',
@@ -86,6 +141,15 @@ export interface UseP2PSignatureRelayResult extends Omit<UseP2PConnectionResult,
  *     // Store signature and submit transaction
  *   },
  * });
+ *
+ * const handleSendHash = async () => {
+ *   try {
+ *     await sendAckTxHash(hash);
+ *   } catch (err) {
+ *     // Implement retry with exponential backoff
+ *     logger.error('Failed to send hash', err);
+ *   }
+ * };
  * ```
  */
 export function useP2PSignatureRelay(
@@ -151,6 +215,7 @@ export function useP2PSignatureRelay(
             logger.p2p.error('Error handling CONNECT', {}, err as Error);
           }
         },
+        // Use runOnTransientConnection (correct libp2p API property name)
         options: { runOnTransientConnection: true },
       },
     });
@@ -193,6 +258,7 @@ export function useP2PSignatureRelay(
               logger.p2p.error('Error handling ACK_SIG', {}, err as Error);
             }
           },
+          // Use runOnTransientConnection (correct libp2p API property name)
           options: { runOnTransientConnection: true },
         },
       });
@@ -233,6 +299,7 @@ export function useP2PSignatureRelay(
               logger.p2p.error('Error handling REG_SIG', {}, err as Error);
             }
           },
+          // Use runOnTransientConnection (correct libp2p API property name)
           options: { runOnTransientConnection: true },
         },
       });
@@ -252,6 +319,7 @@ export function useP2PSignatureRelay(
               logger.p2p.error('Error handling ACK_REC', {}, err as Error);
             }
           },
+          // Use runOnTransientConnection (correct libp2p API property name)
           options: { runOnTransientConnection: true },
         },
       });
@@ -273,6 +341,7 @@ export function useP2PSignatureRelay(
               logger.p2p.error('Error handling ACK_PAY', {}, err as Error);
             }
           },
+          // Use runOnTransientConnection (correct libp2p API property name)
           options: { runOnTransientConnection: true },
         },
       });
@@ -289,6 +358,7 @@ export function useP2PSignatureRelay(
               logger.p2p.error('Error handling REG_REC', {}, err as Error);
             }
           },
+          // Use runOnTransientConnection (correct libp2p API property name)
           options: { runOnTransientConnection: true },
         },
       });
@@ -310,6 +380,7 @@ export function useP2PSignatureRelay(
               logger.p2p.error('Error handling REG_PAY', {}, err as Error);
             }
           },
+          // Use runOnTransientConnection (correct libp2p API property name)
           options: { runOnTransientConnection: true },
         },
       });

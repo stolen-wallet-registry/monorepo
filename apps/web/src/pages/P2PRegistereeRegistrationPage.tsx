@@ -5,7 +5,7 @@
  * Relayer pays gas fees on behalf of the registeree.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
@@ -67,13 +67,21 @@ export function P2PRegistereeRegistrationPage() {
     setRegistrationHash,
   } = useRegistrationStore();
   const { setFormValues } = useFormStore();
-  const { setPeerId, setConnectedToPeer, reset: resetP2P } = useP2PStore();
+  const { setPeerId, setConnectedToPeer, setInitialized, reset: resetP2P } = useP2PStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
 
   const [libp2p, setLibp2p] = useState<Libp2p | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // Initialize P2P node
+  // Use ref for goToNextStep to avoid recreating P2P node when step changes
+  const goToNextStepRef = useRef(goToNextStep);
+
+  // Update ref in effect to avoid updating during render (React Compiler rule)
+  useEffect(() => {
+    goToNextStepRef.current = goToNextStep;
+  }, [goToNextStep]);
+
+  // Initialize P2P node - only depends on connection state, not step navigation
   useEffect(() => {
     let mounted = true;
     let node: Libp2p | null = null;
@@ -85,6 +93,7 @@ export function P2PRegistereeRegistrationPage() {
         logger.p2p.info('Initializing P2P node for registeree');
 
         // Build protocol handlers for registeree
+        // Note: Uses ref for goToNextStep to avoid handler recreation
         const streamHandler = (protocol: string) => ({
           handler: async ({ stream }: IncomingStreamData) => {
             try {
@@ -98,13 +107,13 @@ export function P2PRegistereeRegistrationPage() {
                     setFormValues({ relayer: data.form.relayer });
                   }
                   setConnectedToPeer(true);
-                  goToNextStep();
+                  goToNextStepRef.current();
                   break;
 
                 case PROTOCOLS.ACK_REC:
                   // Signature received confirmation
                   logger.p2p.info('ACK signature received by relayer');
-                  goToNextStep();
+                  goToNextStepRef.current();
                   break;
 
                 case PROTOCOLS.ACK_PAY:
@@ -112,13 +121,13 @@ export function P2PRegistereeRegistrationPage() {
                   if (data.hash) {
                     setAcknowledgementHash(data.hash);
                   }
-                  goToNextStep();
+                  goToNextStepRef.current();
                   break;
 
                 case PROTOCOLS.REG_REC:
                   // Registration signature received confirmation
                   logger.p2p.info('REG signature received by relayer');
-                  goToNextStep();
+                  goToNextStepRef.current();
                   break;
 
                 case PROTOCOLS.REG_PAY:
@@ -126,13 +135,14 @@ export function P2PRegistereeRegistrationPage() {
                   if (data.hash) {
                     setRegistrationHash(data.hash);
                   }
-                  goToNextStep();
+                  goToNextStepRef.current();
                   break;
               }
             } catch (err) {
               logger.p2p.error('Error handling protocol', { protocol }, err as Error);
             }
           },
+          // Use runOnTransientConnection (correct libp2p API property name)
           options: { runOnTransientConnection: true },
         });
 
@@ -151,6 +161,7 @@ export function P2PRegistereeRegistrationPage() {
           setLibp2p(p2pNode);
           setPeerId(p2pNode.peerId.toString());
           setFormValues({ registeree: address });
+          setInitialized(true);
           setIsInitializing(false);
           logger.p2p.info('P2P node initialized for registeree', {
             peerId: p2pNode.peerId.toString(),
@@ -177,15 +188,16 @@ export function P2PRegistereeRegistrationPage() {
         }
       }
     };
+    // Note: goToNextStep excluded from deps - accessed via ref to prevent node recreation
   }, [
     isConnected,
     address,
     setPeerId,
     setFormValues,
     setConnectedToPeer,
+    setInitialized,
     setAcknowledgementHash,
     setRegistrationHash,
-    goToNextStep,
   ]);
 
   // Initialize registration type on mount
@@ -243,7 +255,7 @@ export function P2PRegistereeRegistrationPage() {
         );
 
       case 'acknowledge-and-sign':
-        return <P2PAckSignStep libp2p={libp2p} onComplete={goToNextStep} />;
+        return <P2PAckSignStep libp2p={libp2p} />;
 
       case 'acknowledgement-payment':
         return (
@@ -257,7 +269,7 @@ export function P2PRegistereeRegistrationPage() {
         return <GracePeriodStep onComplete={goToNextStep} />;
 
       case 'register-and-sign':
-        return <P2PRegSignStep libp2p={libp2p} onComplete={goToNextStep} />;
+        return <P2PRegSignStep libp2p={libp2p} />;
 
       case 'registration-payment':
         return (

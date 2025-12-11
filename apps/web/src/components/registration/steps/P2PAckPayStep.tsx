@@ -5,13 +5,14 @@
  * - Registeree: Waits for relayer to submit transaction
  */
 
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { useChainId } from 'wagmi';
 import type { Libp2p } from 'libp2p';
 
 import { TransactionCard, type TransactionStatus } from '@/components/composed/TransactionCard';
 import { WaitingForData } from '@/components/p2p';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { useAcknowledgement } from '@/hooks/useAcknowledgement';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistrationStore } from '@/stores/registrationStore';
@@ -19,6 +20,11 @@ import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
 import { useP2PStore } from '@/stores/p2pStore';
 import { logger } from '@/lib/logger';
+
+/** Maximum number of automatic retries for sending hash */
+const MAX_AUTO_RETRIES = 3;
+/** Base delay for exponential backoff (ms) */
+const BASE_RETRY_DELAY = 1000;
 
 export interface P2PAckPayStepProps {
   /** Called when transaction is confirmed */
@@ -38,6 +44,9 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
   const { partnerPeerId } = useP2PStore();
   const { acknowledgementHash } = useRegistrationStore();
   const [hasSentHash, setHasSentHash] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get stored signature (relayer only)
   const storedSig =
@@ -85,7 +94,16 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
     });
   }, [storedSig, registeree, submitAcknowledgement]);
 
-  // Relayer: Send tx hash to registeree after confirmation
+  // Cleanup retry timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Relayer: Send tx hash to registeree after confirmation with retry logic
   useEffect(() => {
     const sendHash = async () => {
       if (role !== 'relayer' || !isConfirmed || !hash || !libp2p || !partnerPeerId || hasSentHash) {
@@ -93,6 +111,9 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
       }
 
       try {
+        setSendError(null);
+        logger.p2p.info('Attempting to send ACK tx hash', { hash, attempt: retryCount + 1 });
+
         const connection = await getPeerConnection({ libp2p, remotePeerId: partnerPeerId });
         await passStreamData({
           connection,
@@ -104,12 +125,32 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
         logger.p2p.info('Sent ACK tx hash to registeree', { hash });
         onComplete();
       } catch (err) {
-        logger.p2p.error('Failed to send ACK tx hash', {}, err as Error);
+        const message = err instanceof Error ? err.message : 'Failed to send hash';
+        logger.p2p.error('Failed to send ACK tx hash', { attempt: retryCount + 1 }, err as Error);
+
+        // Auto-retry with exponential backoff
+        if (retryCount < MAX_AUTO_RETRIES) {
+          const delay = BASE_RETRY_DELAY * Math.pow(2, retryCount);
+          logger.p2p.info('Scheduling retry', { attempt: retryCount + 2, delay });
+          retryTimeoutRef.current = setTimeout(() => {
+            setRetryCount((prev) => prev + 1);
+          }, delay);
+        } else {
+          // Max retries exceeded, show error to user
+          setSendError(message);
+          logger.p2p.error('Max retries exceeded for sending ACK tx hash', { hash });
+        }
       }
     };
 
     sendHash();
-  }, [role, isConfirmed, hash, libp2p, partnerPeerId, hasSentHash, onComplete]);
+  }, [role, isConfirmed, hash, libp2p, partnerPeerId, hasSentHash, retryCount, onComplete]);
+
+  // Manual retry handler for user-initiated resend
+  const handleResendHash = useCallback(() => {
+    setSendError(null);
+    setRetryCount((prev) => prev + 1);
+  }, []);
 
   // Registeree: Wait for hash and auto-advance
   useEffect(() => {
@@ -162,15 +203,27 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
           waitingFor="acknowledgement signature"
         />
       ) : (
-        <TransactionCard
-          type="acknowledgement"
-          status={getStatus()}
-          hash={hash}
-          error={error?.message}
-          onSubmit={handleSubmit}
-          onRetry={reset}
-          disabled={!storedSig}
-        />
+        <>
+          <TransactionCard
+            type="acknowledgement"
+            status={getStatus()}
+            hash={hash}
+            error={error?.message}
+            onSubmit={handleSubmit}
+            onRetry={reset}
+            disabled={!storedSig}
+          />
+          {sendError && isConfirmed && !hasSentHash && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertDescription className="flex items-center justify-between">
+                <span>Failed to send hash to registeree: {sendError}</span>
+                <Button variant="outline" size="sm" onClick={handleResendHash}>
+                  Resend Hash
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+        </>
       )}
     </div>
   );

@@ -67,6 +67,10 @@ export function GracePeriodStep({ onComplete }: GracePeriodStepProps) {
   };
 
   // Countdown timer - target is the START block (when window opens)
+  // Note: The hook is intentionally called even when deadlines is null/loading.
+  // The hook is designed to handle null values gracefully (returns 0 time remaining),
+  // and this pattern follows React's rules of hooks (always call hooks in the same order).
+  // The early return for loading state above prevents invalid UI while data loads.
   const { timeRemaining, totalMs, blocksLeft, isExpired, isRunning, isWaitingForBlock } =
     useCountdownTimer({
       targetBlock: deadlines?.start ?? null,

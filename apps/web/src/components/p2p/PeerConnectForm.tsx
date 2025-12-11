@@ -60,7 +60,12 @@ export function PeerConnectForm({ onConnect, isConnecting, error }: PeerConnectF
 
   const handleSubmit = async (values: FormValues) => {
     logger.p2p.info('Initiating peer connection', { targetPeerId: values.peerId });
-    await onConnect(values.peerId);
+    try {
+      await onConnect(values.peerId);
+    } catch (err) {
+      logger.p2p.error('Peer connection failed', { targetPeerId: values.peerId }, err as Error);
+      // Error will be shown via the error prop from parent
+    }
   };
 
   return (

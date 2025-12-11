@@ -19,10 +19,11 @@ import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 
 export interface P2PRegSignStepProps {
-  /** Called when signature is sent */
-  onComplete: () => void;
   /** The libp2p node instance */
   libp2p: Libp2p | null;
+  // Note: onComplete is intentionally not included here.
+  // Step advancement is handled by the parent page via protocol handlers
+  // when REG_REC is received from the relayer, ensuring reliable completion.
 }
 
 /**
@@ -164,8 +165,12 @@ export function P2PRegSignStep({ libp2p }: P2PRegSignStepProps) {
       </Alert>
 
       {isLoading && (
-        <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        <div className="flex items-center justify-center py-8" role="status" aria-label="Loading">
+          <div
+            className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+            aria-hidden="true"
+          />
+          <span className="sr-only">Loading signature data...</span>
         </div>
       )}
 

@@ -4,7 +4,7 @@
  * Relayer receives signatures from registeree via P2P and pays gas fees.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
@@ -73,7 +73,15 @@ export function P2PRelayerRegistrationPage() {
   const [libp2p, setLibp2p] = useState<Libp2p | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // Initialize P2P node
+  // Use ref for goToNextStep to avoid recreating P2P node when step changes
+  const goToNextStepRef = useRef(goToNextStep);
+
+  // Update ref in effect to avoid updating during render (React Compiler rule)
+  useEffect(() => {
+    goToNextStepRef.current = goToNextStep;
+  }, [goToNextStep]);
+
+  // Initialize P2P node - only depends on connection state, not step navigation
   useEffect(() => {
     let mounted = true;
     let node: Libp2p | null = null;
@@ -85,6 +93,7 @@ export function P2PRelayerRegistrationPage() {
         logger.p2p.info('Initializing P2P node for relayer');
 
         // Build protocol handlers for relayer
+        // Note: Uses ref for goToNextStep to avoid handler recreation
         const streamHandler = (protocol: string) => ({
           handler: async ({ connection, stream }: IncomingStreamData) => {
             try {
@@ -112,12 +121,18 @@ export function P2PRelayerRegistrationPage() {
                     },
                   });
 
-                  goToNextStep();
+                  goToNextStepRef.current();
                   break;
 
                 case PROTOCOLS.ACK_SIG:
-                  // Acknowledgement signature received
-                  if (data.signature) {
+                  // Acknowledgement signature received - validate all required fields
+                  if (
+                    data.signature?.value &&
+                    data.signature?.deadline &&
+                    data.signature?.nonce &&
+                    data.signature?.address &&
+                    data.signature?.chainId !== undefined
+                  ) {
                     const sig = data.signature;
                     const stored: StoredSignature = {
                       signature: sig.value as `0x${string}`,
@@ -138,13 +153,21 @@ export function P2PRelayerRegistrationPage() {
                     });
 
                     logger.p2p.info('ACK signature stored, advancing to payment');
-                    goToNextStep();
+                    goToNextStepRef.current();
+                  } else {
+                    logger.p2p.warn('Received malformed ACK signature data', { data });
                   }
                   break;
 
                 case PROTOCOLS.REG_SIG:
-                  // Registration signature received
-                  if (data.signature) {
+                  // Registration signature received - validate all required fields
+                  if (
+                    data.signature?.value &&
+                    data.signature?.deadline &&
+                    data.signature?.nonce &&
+                    data.signature?.address &&
+                    data.signature?.chainId !== undefined
+                  ) {
                     const sig = data.signature;
                     const stored: StoredSignature = {
                       signature: sig.value as `0x${string}`,
@@ -165,7 +188,9 @@ export function P2PRelayerRegistrationPage() {
                     });
 
                     logger.p2p.info('REG signature stored, advancing to payment');
-                    goToNextStep();
+                    goToNextStepRef.current();
+                  } else {
+                    logger.p2p.warn('Received malformed REG signature data', { data });
                   }
                   break;
               }
@@ -173,6 +198,7 @@ export function P2PRelayerRegistrationPage() {
               logger.p2p.error('Error handling protocol', { protocol }, err as Error);
             }
           },
+          // Use runOnTransientConnection (correct libp2p API property name)
           options: { runOnTransientConnection: true },
         });
 
@@ -216,6 +242,7 @@ export function P2PRelayerRegistrationPage() {
         }
       }
     };
+    // Note: goToNextStep excluded from deps - accessed via ref to prevent node recreation
   }, [
     isConnected,
     address,
@@ -224,7 +251,6 @@ export function P2PRelayerRegistrationPage() {
     setPartnerPeerId,
     setConnectedToPeer,
     setInitialized,
-    goToNextStep,
   ]);
 
   // Initialize registration type on mount

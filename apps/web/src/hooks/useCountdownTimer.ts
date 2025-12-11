@@ -127,7 +127,8 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     } else if (autoStart) {
       setIsRunning(true);
     }
-  }, [calculateInitialMs, autoStart, targetBlock, currentBlock, chainId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chainId is captured within calculateInitialMs
+  }, [calculateInitialMs, autoStart, targetBlock, currentBlock]);
 
   // Countdown interval - only manages display time, NOT expiration
   useEffect(() => {

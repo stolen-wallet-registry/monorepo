@@ -114,11 +114,13 @@ export function DevTools() {
           )}
         >
           {/* Tab Header */}
-          <div className="flex border-b border-border">
+          <div className="flex border-b border-border" role="tablist">
             {(['theme', 'p2p', 'tests'] as DevToolsTab[]).map((tab) => (
               <button
                 key={tab}
                 type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
                 onClick={() => setActiveTab(tab)}
                 className={cn(
                   'flex-1 px-3 py-2 text-xs font-medium uppercase tracking-wide',

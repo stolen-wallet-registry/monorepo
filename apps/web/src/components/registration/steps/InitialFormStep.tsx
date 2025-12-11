@@ -97,7 +97,12 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
   const watchedRegisteree = useWatch({ control: form.control, name: 'registeree' });
 
   // Determine forwarder address (who will submit the tx)
-  const forwarderAddress = isSelfRelay ? (watchedRelayer as `0x${string}` | undefined) : address;
+  // Use explicit type narrowing to ensure valid Ethereum address format
+  const forwarderAddress = isSelfRelay
+    ? isAddress(watchedRelayer)
+      ? (watchedRelayer as `0x${string}`)
+      : undefined
+    : address;
 
   // Contract hooks
   const { nonce, isLoading: nonceLoading, isError: nonceError } = useContractNonce(address);
