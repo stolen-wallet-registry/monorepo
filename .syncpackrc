@@ -15,6 +15,31 @@
       "label": "TypeScript should match across all packages",
       "dependencies": ["typescript"],
       "packages": ["**"]
+    },
+    {
+      "label": "libp2p packages allowed to differ between web (0.46.x) and relay (2.x) until WebRTC upgrade",
+      "dependencies": [
+        "libp2p",
+        "@chainsafe/libp2p-noise",
+        "@chainsafe/libp2p-yamux",
+        "@chainsafe/libp2p-gossipsub",
+        "@libp2p/bootstrap",
+        "@libp2p/circuit-relay-v2",
+        "@libp2p/config",
+        "@libp2p/dcutr",
+        "@libp2p/identify",
+        "@libp2p/interface",
+        "@libp2p/kad-dht",
+        "@libp2p/keychain",
+        "@libp2p/mplex",
+        "@libp2p/peer-id",
+        "@libp2p/peer-id-factory",
+        "@libp2p/peer-record",
+        "@libp2p/webrtc",
+        "@libp2p/websockets",
+        "@libp2p/webtransport"
+      ],
+      "isIgnored": true
     }
   ]
 }
