@@ -10,7 +10,7 @@
       "project": ["src/**/*.ts"]
     }
   },
-  "ignore": ["**/*.stories.tsx", "**/*.test.tsx", "**/*.d.ts"],
-  "ignoreDependencies": ["tailwindcss", "@tailwindcss/vite"],
-  "ignoreBinaries": ["anvil"]
+  "ignore": ["**/*.stories.tsx", "**/*.test.tsx", "**/*.d.ts", "**/index.ts"],
+  "ignoreDependencies": ["tailwindcss"],
+  "ignoreBinaries": ["anvil", "eslint"]
 }

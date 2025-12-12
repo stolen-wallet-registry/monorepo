@@ -275,6 +275,8 @@ src/components/
 └── dev/          # DevTools, debugging utilities
 ```
 
+**IMPORTANT: Before creating new UI components, always check if shadcn/ui already provides it.** Browse https://ui.shadcn.com/docs/components or check `src/components/ui/` for existing primitives. Only create custom components in `composed/` when combining shadcn primitives or adding business logic.
+
 ### EIP-712 Two-Phase Registration (SECURITY-CRITICAL)
 
 **Flow:**

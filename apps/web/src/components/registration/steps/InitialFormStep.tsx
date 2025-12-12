@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { SignatureCard, type SignatureStatus } from '@/components/composed/SignatureCard';
+import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { useSignEIP712 } from '@/hooks/useSignEIP712';
@@ -349,7 +350,13 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
           name="registeree"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Wallet to Register as Stolen</FormLabel>
+              <div className="flex items-center gap-2">
+                <FormLabel>Wallet to Register as Stolen</FormLabel>
+                <InfoTooltip
+                  content="This field shows your connected wallet address. You must sign with this wallet to prove ownership before registering it as stolen."
+                  side="right"
+                />
+              </div>
               <FormControl>
                 <Input {...field} readOnly className="font-mono bg-muted" />
               </FormControl>
@@ -387,9 +394,15 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
           />
         )}
 
-        {/* NFT Options (Phase 2 - disabled for now) */}
+        {/* Soul Bound Token Options (Phase 2 - disabled for now) */}
         <div className="space-y-4 rounded-lg border p-4 bg-muted/50">
-          <p className="text-sm font-medium">Optional NFT Features</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium">Optional Soul Bound Tokens</p>
+            <InfoTooltip
+              content="Soul Bound Tokens (SBTs) are non-transferable tokens permanently linked to your wallet address. Unlike regular NFTs, they cannot be sold or moved, making them ideal for identity and reputation markers."
+              side="right"
+            />
+          </div>
           <FormField
             control={form.control}
             name="supportNFT"
@@ -404,7 +417,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
                 </FormControl>
                 <div className="space-y-1 leading-none">
                   <FormLabel className="text-sm font-normal text-muted-foreground">
-                    Support NFT ($3) - Coming Soon
+                    Support Token ($3) - Coming Soon
                   </FormLabel>
                 </div>
               </FormItem>
@@ -424,7 +437,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
                 </FormControl>
                 <div className="space-y-1 leading-none">
                   <FormLabel className="text-sm font-normal text-muted-foreground">
-                    Wallet NFT ($3) - Coming Soon
+                    Wallet Token ($3) - Coming Soon
                   </FormLabel>
                 </div>
               </FormItem>

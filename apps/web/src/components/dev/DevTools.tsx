@@ -2,26 +2,9 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 import { useTheme, type ColorScheme, type ThemeVariant } from '@/providers';
-import { useP2PStore } from '@/stores/p2pStore';
 import { cn } from '@/lib/utils';
 
-type DevToolsTab = 'theme' | 'p2p' | 'tests';
-
-/**
- * Get status indicator color class based on connection status.
- */
-function getStatusColor(status: string): string {
-  switch (status) {
-    case 'connected':
-      return 'bg-green-500';
-    case 'connecting':
-      return 'bg-yellow-500 animate-pulse';
-    case 'error':
-      return 'bg-red-500';
-    default:
-      return 'bg-gray-500';
-  }
-}
+type DevToolsTab = 'theme' | 'tests';
 
 /**
  * Component that throws an error on mount.
@@ -36,8 +19,7 @@ function ErrorThrower(): never {
  * Development-only tools panel for testing theming and other dev features.
  * Only renders in development mode (import.meta.env.DEV).
  *
- * Note: P2P debug info is displayed on P2P registration pages via P2PDebugPanel,
- * not here, since the libp2p node lives in page state.
+ * Note: P2P debug info is displayed on P2P registration pages via P2PDebugPanel.
  */
 export function DevTools() {
   const [isOpen, setIsOpen] = useState(false);
@@ -48,15 +30,6 @@ export function DevTools() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { colorScheme, setColorScheme, themeVariant, setThemeVariant, resolvedColorScheme } =
     useTheme();
-  // Use selector to only subscribe to needed state
-  const p2pState = useP2PStore((state) => ({
-    peerId: state.peerId,
-    partnerPeerId: state.partnerPeerId,
-    connectionStatus: state.connectionStatus,
-    isInitialized: state.isInitialized,
-    errorMessage: state.errorMessage,
-    reset: state.reset,
-  }));
 
   const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
 
@@ -146,7 +119,7 @@ export function DevTools() {
             role="tablist"
             aria-label="DevTools sections"
             onKeyDown={(e) => {
-              const tabs: DevToolsTab[] = ['theme', 'p2p', 'tests'];
+              const tabs: DevToolsTab[] = ['theme', 'tests'];
               const currentIndex = tabs.indexOf(activeTab);
               if (e.key === 'ArrowRight') {
                 e.preventDefault();
@@ -165,7 +138,7 @@ export function DevTools() {
               }
             }}
           >
-            {(['theme', 'p2p', 'tests'] as DevToolsTab[]).map((tab) => (
+            {(['theme', 'tests'] as DevToolsTab[]).map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -300,99 +273,6 @@ export function DevTools() {
                   </div>
                 </div>
               </>
-            )}
-
-            {/* P2P Tab */}
-            {activeTab === 'p2p' && (
-              <div className="space-y-4">
-                {/* Note about debug panel location */}
-                <div className="rounded-md bg-muted/50 p-3 text-xs">
-                  <p className="text-muted-foreground">
-                    Detailed P2P info (multiaddresses, protocols, connections) is shown on the{' '}
-                    <span className="font-medium text-foreground">P2P registration pages</span> via
-                    the debug panel below the main content.
-                  </p>
-                </div>
-
-                {/* Connection Status from Store */}
-                <div>
-                  <h4 className="text-xs font-medium text-muted-foreground">Store State</h4>
-                  <div className="mt-2 flex items-center gap-2">
-                    <span
-                      className={cn(
-                        'h-2 w-2 rounded-full',
-                        getStatusColor(p2pState.connectionStatus)
-                      )}
-                    />
-                    <span className="text-sm capitalize">{p2pState.connectionStatus}</span>
-                    {!p2pState.isInitialized && (
-                      <span className="text-xs text-muted-foreground">(not initialized)</span>
-                    )}
-                  </div>
-                  {p2pState.errorMessage && (
-                    <p className="mt-1 text-xs text-red-400">{p2pState.errorMessage}</p>
-                  )}
-                </div>
-
-                {/* Peer Info from Store */}
-                <div className="border-t border-border pt-3">
-                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Peer Info</h4>
-                  <div className="space-y-2 font-mono text-xs">
-                    <div>
-                      <span className="text-muted-foreground">Local ID:</span>
-                      <p className="mt-0.5 break-all text-foreground">
-                        {p2pState.peerId || '(not set)'}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Partner ID:</span>
-                      <p className="mt-0.5 break-all text-foreground">
-                        {p2pState.partnerPeerId || '(not connected)'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* P2P Actions */}
-                <div className="border-t border-border pt-3">
-                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Actions</h4>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (p2pState.peerId) {
-                          try {
-                            await navigator.clipboard.writeText(p2pState.peerId);
-                            toast.success('Peer ID copied!');
-                          } catch (error) {
-                            console.error('Failed to copy peer ID:', error);
-                            toast.error('Failed to copy to clipboard');
-                          }
-                        }
-                      }}
-                      disabled={!p2pState.peerId}
-                      className={cn(
-                        'rounded px-2 py-1 text-xs',
-                        p2pState.peerId
-                          ? 'bg-blue-600 text-white hover:bg-blue-700'
-                          : 'bg-muted text-muted-foreground cursor-not-allowed'
-                      )}
-                    >
-                      Copy Peer ID
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        p2pState.reset();
-                        toast.info('P2P state reset');
-                      }}
-                      className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700"
-                    >
-                      Reset State
-                    </button>
-                  </div>
-                </div>
-              </div>
             )}
 
             {/* Tests Tab */}

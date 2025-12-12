@@ -29,17 +29,3 @@ export const PROTOCOLS = {
 } as const;
 
 export type ProtocolId = (typeof PROTOCOLS)[keyof typeof PROTOCOLS];
-
-/**
- * Get all protocol IDs as an array.
- */
-export function getAllProtocols(): ProtocolId[] {
-  return Object.values(PROTOCOLS);
-}
-
-/**
- * Check if a string is a valid SWR protocol.
- */
-export function isSwrProtocol(protocol: string): protocol is ProtocolId {
-  return Object.values(PROTOCOLS).includes(protocol as ProtocolId);
-}
