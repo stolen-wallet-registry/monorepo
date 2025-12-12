@@ -52,7 +52,7 @@ const STEP_TOOLTIPS: Partial<Record<RegistrationStep, string>> = {
   'grace-period':
     'A randomized waiting period (1-4 minutes) designed to prevent phishing attacks. This delay ensures you have time to recognize and cancel suspicious registrations.',
   'register-and-sign':
-    'Second signature: Sign the final registration message. This confirms your intent after the grace period.',
+    'Second signature: Sign the final registration message. This confirms your intent to register the wallet as stollen after the grace period.',
   'register-and-pay':
     'Submit the registration transaction to permanently mark this wallet as stolen on the blockchain.',
   success: 'Your wallet has been successfully registered as stolen in the on-chain registry.',
@@ -101,10 +101,10 @@ export function StandardRegistrationPage() {
         Back to Home
       </Button>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-stretch">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
         {/* Step Indicator Sidebar */}
-        <aside className="flex">
-          <Card className="flex-1 flex flex-col">
+        <aside>
+          <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CardTitle className="text-lg">Standard Registration</CardTitle>
@@ -115,7 +115,7 @@ export function StandardRegistrationPage() {
               </div>
               <CardDescription>Sign and pay from the same wallet</CardDescription>
             </CardHeader>
-            <CardContent className="flex-1">
+            <CardContent>
               <StepIndicator
                 registrationType="standard"
                 currentStep={step}
@@ -126,8 +126,8 @@ export function StandardRegistrationPage() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex">
-          <Card className="flex-1 flex flex-col justify-center">
+        <main>
+          <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CardTitle>{currentTitle}</CardTitle>

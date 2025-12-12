@@ -12,8 +12,8 @@ import { useAccount, useChainId } from 'wagmi';
 import { isAddress } from 'viem';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { AddressInput } from '@/components/composed/AddressInput';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Form,
@@ -360,7 +360,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
                 />
               </div>
               <FormControl>
-                <Input {...field} readOnly className="font-mono bg-muted" />
+                <AddressInput {...field} readOnly addressType="ethereum" className="bg-muted" />
               </FormControl>
               <FormDescription>
                 This is your currently connected wallet. It will be registered as stolen.
@@ -377,9 +377,15 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
             name="relayer"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Gas Wallet Address</FormLabel>
+                <div className="flex items-center gap-2">
+                  <FormLabel>Gas Wallet Address</FormLabel>
+                  <InfoTooltip
+                    content="This is a separate wallet you control that has funds for gas fees. After signing with your stolen wallet, you'll switch to this wallet to submit the transaction."
+                    side="right"
+                  />
+                </div>
                 <FormControl>
-                  <Input {...field} placeholder="0x..." className="font-mono" />
+                  <AddressInput {...field} placeholder="0x..." addressType="ethereum" />
                 </FormControl>
                 <FormDescription>
                   Enter the address of the wallet you&apos;ll use to pay gas fees. You&apos;ll need

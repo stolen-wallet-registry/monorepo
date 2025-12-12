@@ -88,8 +88,8 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
       });
       setAcknowledgementHash(hash);
       logger.registration.info('Acknowledgement complete, advancing to grace period');
-      // Advance to next step after short delay
-      const timerId = setTimeout(onComplete, 1500);
+      // Advance to next step after delay to let user see success
+      const timerId = setTimeout(onComplete, 3000);
       return () => clearTimeout(timerId);
     }
   }, [isConfirmed, hash, setAcknowledgementHash, onComplete, registeree, registrationType]);

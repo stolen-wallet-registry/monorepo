@@ -307,7 +307,7 @@ export function P2PRegistereeRegistrationPage() {
         Back to Home
       </Button>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-8">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
         {/* Step Indicator Sidebar */}
         <aside>
           <Card>
@@ -339,7 +339,7 @@ export function P2PRegistereeRegistrationPage() {
             </Alert>
           )}
 
-          <Card className="min-h-[400px]">
+          <Card>
             <CardHeader>
               <CardTitle>{currentTitle}</CardTitle>
               <CardDescription>{currentDescription}</CardDescription>

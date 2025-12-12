@@ -9,13 +9,14 @@ import { useLocation } from 'wouter';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { clearAllSignatures } from '@/lib/signatures';
 import { truncateAddress } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
-import { CheckCircle2, ExternalLink, Home, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Home, RefreshCw } from 'lucide-react';
 
 /**
  * Success step - shows confirmation after registration.
@@ -94,48 +95,16 @@ export function SuccessStep() {
           <p className="text-sm font-medium text-muted-foreground">Transaction History</p>
 
           {acknowledgementHash && (
-            <div className="flex items-center justify-between rounded-lg bg-white dark:bg-gray-900 border p-3">
-              <div>
-                <p className="text-sm font-medium">Acknowledgement</p>
-                <p className="font-mono text-xs text-muted-foreground">
-                  {truncateAddress(acknowledgementHash, 10)}
-                </p>
-              </div>
-              {ackExplorerUrl && (
-                <a
-                  href={ackExplorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline flex items-center gap-1 text-sm"
-                  aria-label="View acknowledgement transaction on block explorer"
-                >
-                  View
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
+            <div className="rounded-lg bg-white dark:bg-gray-900 border p-3">
+              <p className="text-sm font-medium mb-1">Acknowledgement</p>
+              <ExplorerLink value={acknowledgementHash} href={ackExplorerUrl} />
             </div>
           )}
 
           {registrationHash && (
-            <div className="flex items-center justify-between rounded-lg bg-white dark:bg-gray-900 border p-3">
-              <div>
-                <p className="text-sm font-medium">Registration</p>
-                <p className="font-mono text-xs text-muted-foreground">
-                  {truncateAddress(registrationHash, 10)}
-                </p>
-              </div>
-              {regExplorerUrl && (
-                <a
-                  href={regExplorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline flex items-center gap-1 text-sm"
-                  aria-label="View registration transaction on block explorer"
-                >
-                  View
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
+            <div className="rounded-lg bg-white dark:bg-gray-900 border p-3">
+              <p className="text-sm font-medium mb-1">Registration</p>
+              <ExplorerLink value={registrationHash} href={regExplorerUrl} />
             </div>
           )}
         </div>

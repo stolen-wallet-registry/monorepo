@@ -9,17 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
+import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
 import { truncateAddress } from '@/lib/address';
-import {
-  Send,
-  Check,
-  AlertCircle,
-  Loader2,
-  ExternalLink,
-  Clock,
-  FileSignature,
-} from 'lucide-react';
+import { Send, Check, AlertCircle, Loader2, Clock, FileSignature } from 'lucide-react';
 
 export type TransactionStatus = 'idle' | 'submitting' | 'pending' | 'confirmed' | 'failed';
 
@@ -132,7 +125,17 @@ export function TransactionCard({
               {getIcon()}
             </div>
             <div>
-              <CardTitle className="text-lg">Submit {typeLabel}</CardTitle>
+              <div className="flex items-center gap-1.5">
+                <CardTitle className="text-lg">Submit {typeLabel}</CardTitle>
+                <InfoTooltip
+                  content={
+                    type === 'acknowledgement'
+                      ? 'Submit your signed acknowledgement to the blockchain. This records your intent and starts the grace period before final registration.'
+                      : 'Submit your signed registration to permanently record this wallet as stolen in the on-chain registry. This action cannot be undone.'
+                  }
+                  size="sm"
+                />
+              </div>
               <CardDescription>{getDescription()}</CardDescription>
             </div>
           </div>
@@ -159,19 +162,40 @@ export function TransactionCard({
             </div>
             <div className="space-y-2 font-mono text-sm">
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Registeree:</span>
+                <span className="text-muted-foreground flex items-center gap-1">
+                  Registeree:
+                  <InfoTooltip content="The wallet address being registered as stolen." size="sm" />
+                </span>
                 <span>{truncateAddress(signedMessage.registeree, 6)}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Forwarder:</span>
+                <span className="text-muted-foreground flex items-center gap-1">
+                  Forwarder:
+                  <InfoTooltip
+                    content="The wallet submitting this transaction and paying gas fees."
+                    size="sm"
+                  />
+                </span>
                 <span>{truncateAddress(signedMessage.forwarder, 6)}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Nonce:</span>
+                <span className="text-muted-foreground flex items-center gap-1">
+                  Nonce:
+                  <InfoTooltip
+                    content="A unique number preventing replay attacks. Each signature uses a different nonce."
+                    size="sm"
+                  />
+                </span>
                 <span>{signedMessage.nonce.toString()}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Deadline:</span>
+                <span className="text-muted-foreground flex items-center gap-1">
+                  Deadline:
+                  <InfoTooltip
+                    content="The block number after which this signature expires and cannot be used."
+                    size="sm"
+                  />
+                </span>
                 <span>Block {signedMessage.deadline.toString()}</span>
               </div>
               <div className="pt-2 border-t">
@@ -196,23 +220,8 @@ export function TransactionCard({
         {/* Transaction hash */}
         {hash && (
           <div className="rounded-lg bg-muted p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Transaction Hash</span>
-              {explorerUrl && (
-                <a
-                  href={explorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline flex items-center gap-1"
-                >
-                  View on Explorer
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
-            </div>
-            <p className="font-mono text-sm mt-1 break-all">
-              {hash.slice(0, 20)}...{hash.slice(-20)}
-            </p>
+            <span className="text-sm text-muted-foreground block mb-1">Transaction Hash</span>
+            <ExplorerLink value={hash} href={explorerUrl} />
           </div>
         )}
 

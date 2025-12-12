@@ -92,7 +92,17 @@ export function SignatureCard({
               )}
             </div>
             <div>
-              <CardTitle className="text-lg">Sign {typeLabel}</CardTitle>
+              <div className="flex items-center gap-1.5">
+                <CardTitle className="text-lg">Sign {typeLabel}</CardTitle>
+                <InfoTooltip
+                  content={
+                    type === 'acknowledgement'
+                      ? 'Sign this EIP-712 message to acknowledge your intent to register this wallet as stolen. This signature will be submitted to the blockchain in the next step.'
+                      : 'Sign this EIP-712 message to complete your registration. This signature will permanently mark your wallet as stolen in the on-chain registry.'
+                  }
+                  size="sm"
+                />
+              </div>
               <CardDescription>
                 {isSuccess
                   ? 'Signature complete'

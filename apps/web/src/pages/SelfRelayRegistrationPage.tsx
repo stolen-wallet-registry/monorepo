@@ -81,7 +81,7 @@ export function SelfRelayRegistrationPage() {
         Back to Home
       </Button>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-8">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
         {/* Step Indicator Sidebar */}
         <aside>
           <Card>
@@ -101,7 +101,7 @@ export function SelfRelayRegistrationPage() {
 
         {/* Main Content */}
         <main>
-          <Card className="min-h-[400px]">
+          <Card>
             <CardHeader>
               <CardTitle>{currentTitle}</CardTitle>
               <CardDescription>{currentDescription}</CardDescription>
