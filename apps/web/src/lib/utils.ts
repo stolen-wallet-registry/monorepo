@@ -18,7 +18,7 @@ export function sanitizeErrorMessage(error: unknown): string {
     console.error('[Error Details]', error);
   }
 
-  // Handle viem errors by name for consistent matching
+  // Check for known viem error types
   if (error instanceof BaseError) {
     switch (error.name) {
       case 'UserRejectedRequestError':
@@ -33,7 +33,7 @@ export function sanitizeErrorMessage(error: unknown): string {
     }
   }
 
-  // Fallback to message-based detection for non-viem errors
+  // Fallback to message-based detection
   const message = error instanceof Error ? error.message : String(error);
 
   if (message.includes('User rejected') || message.includes('user rejected')) {

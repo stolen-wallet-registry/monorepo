@@ -72,7 +72,7 @@ describe('sanitizeErrorMessage', () => {
     });
   });
 
-  describe('message-based fallback handling', () => {
+  describe('message-based fallback', () => {
     it('handles user rejected message variants', () => {
       expect(sanitizeErrorMessage(new Error('User rejected the request'))).toBe(
         'Transaction was cancelled. Please try again when ready.'

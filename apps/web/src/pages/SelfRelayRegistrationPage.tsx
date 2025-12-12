@@ -76,7 +76,7 @@ export function SelfRelayRegistrationPage() {
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-8">
-      <Button variant="ghost" onClick={handleBack} className="mb-6">
+      <Button variant="outline" onClick={handleBack} className="mb-6">
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back to Home
       </Button>

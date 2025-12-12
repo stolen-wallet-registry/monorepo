@@ -1,17 +1,41 @@
 /**
  * Transaction card component for blockchain transaction submission.
  *
- * Displays transaction status and links to block explorer.
+ * Displays transaction status, signed message preview, and links to block explorer.
  */
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { cn } from '@/lib/utils';
-import { Send, Check, AlertCircle, Loader2, ExternalLink, Clock } from 'lucide-react';
+import { truncateAddress } from '@/lib/address';
+import {
+  Send,
+  Check,
+  AlertCircle,
+  Loader2,
+  ExternalLink,
+  Clock,
+  FileSignature,
+} from 'lucide-react';
 
 export type TransactionStatus = 'idle' | 'submitting' | 'pending' | 'confirmed' | 'failed';
+
+/** Signed message data to display */
+export interface SignedMessageData {
+  /** Wallet being registered */
+  registeree: `0x${string}`;
+  /** Wallet that will submit transaction */
+  forwarder: `0x${string}`;
+  /** Signature nonce */
+  nonce: bigint;
+  /** Block deadline for signature validity */
+  deadline: bigint;
+  /** The actual signature */
+  signature: `0x${string}`;
+}
 
 export interface TransactionCardProps {
   /** Type of transaction */
@@ -24,6 +48,8 @@ export interface TransactionCardProps {
   error?: string | null;
   /** Block explorer URL */
   explorerUrl?: string | null;
+  /** Signed message data to display */
+  signedMessage?: SignedMessageData | null;
   /** Callback to submit transaction */
   onSubmit: () => void;
   /** Callback to retry after failure */
@@ -62,6 +88,7 @@ export function TransactionCard({
   hash,
   error,
   explorerUrl,
+  signedMessage,
   onSubmit,
   onRetry,
   disabled = false,
@@ -115,6 +142,57 @@ export function TransactionCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Signed message preview */}
+        {signedMessage && !isConfirmed && (
+          <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <FileSignature className="h-4 w-4 text-muted-foreground" />
+              <span>Signed Message</span>
+              <InfoTooltip
+                content={
+                  type === 'acknowledgement'
+                    ? 'This is the EIP-712 acknowledgement message you signed. Submitting this transaction will record your intent to register this wallet as stolen and start the grace period.'
+                    : 'This is the EIP-712 registration message you signed. Submitting this transaction will permanently mark this wallet as stolen in the on-chain registry.'
+                }
+                size="sm"
+              />
+            </div>
+            <div className="space-y-2 font-mono text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Registeree:</span>
+                <span>{truncateAddress(signedMessage.registeree, 6)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Forwarder:</span>
+                <span>{truncateAddress(signedMessage.forwarder, 6)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Nonce:</span>
+                <span>{signedMessage.nonce.toString()}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Deadline:</span>
+                <span>Block {signedMessage.deadline.toString()}</span>
+              </div>
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground mb-1">Signature</p>
+                <p className="text-xs break-all text-muted-foreground/80">
+                  {signedMessage.signature.slice(0, 26)}...{signedMessage.signature.slice(-24)}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Info text for payment */}
+        {signedMessage && status === 'idle' && (
+          <p className="text-sm text-muted-foreground text-center">
+            {type === 'acknowledgement'
+              ? 'Click below to pay gas and submit your signed acknowledgement to the blockchain.'
+              : 'Click below to pay gas and permanently register this wallet as stolen.'}
+          </p>
+        )}
+
         {/* Transaction hash */}
         {hash && (
           <div className="rounded-lg bg-muted p-4">
@@ -148,22 +226,31 @@ export function TransactionCard({
 
         {/* Error message */}
         {isFailed && error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+          <Alert variant="destructive" className="overflow-hidden">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <AlertDescription className="break-words">{error}</AlertDescription>
           </Alert>
         )}
 
-        {/* Action button */}
-        {(status === 'idle' || isFailed) && (
+        {/* Action button - show during idle, submitting, and failed states */}
+        {(status === 'idle' || isSubmitting || isFailed) && (
           <Button
             onClick={isFailed && onRetry ? onRetry : onSubmit}
             className="w-full"
             size="lg"
-            disabled={disabled && !isFailed}
-            aria-disabled={disabled && !isFailed}
+            disabled={isSubmitting || (disabled && !isFailed)}
+            aria-disabled={isSubmitting || (disabled && !isFailed)}
           >
-            {isFailed ? 'Retry Transaction' : `Submit ${typeLabel}`}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Submitting...
+              </>
+            ) : isFailed ? (
+              'Retry Transaction'
+            ) : (
+              `Submit ${typeLabel}`
+            )}
           </Button>
         )}
 
