@@ -2,9 +2,11 @@
  * Log formatting utilities
  * - Safe stringification (circular refs, BigInt, truncation)
  * - Sensitive data redaction
+ * - Ethereum address redaction (using viem)
  * - Console output formatting
  */
 
+import { isAddress } from 'viem';
 import type { LogConfig, LogEntry, LogLevel } from './types';
 
 // Keys that should be redacted from log output
@@ -24,13 +26,28 @@ const SENSITIVE_KEYS = [
 const MAX_STRING_LENGTH = 5000;
 
 /**
+ * Redact an Ethereum address, keeping last 4 characters for debugging.
+ * Example: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0 → 0x...bEb0
+ */
+function redactAddress(address: string): string {
+  return `0x...${address.slice(-4)}`;
+}
+
+export interface SafeStringifyOptions {
+  maxLength?: number;
+  redactAddresses?: boolean;
+}
+
+/**
  * Safely stringify any value, handling:
  * - Circular references
  * - BigInt values
  * - Sensitive data redaction
+ * - Ethereum address redaction (when enabled)
  * - Length truncation
  */
-export function safeStringify(obj: unknown, maxLength = MAX_STRING_LENGTH): string {
+export function safeStringify(obj: unknown, options: SafeStringifyOptions = {}): string {
+  const { maxLength = MAX_STRING_LENGTH, redactAddresses = false } = options;
   const seen = new WeakSet();
 
   try {
@@ -40,6 +57,11 @@ export function safeStringify(obj: unknown, maxLength = MAX_STRING_LENGTH): stri
         // Redact sensitive data based on key name
         if (key && SENSITIVE_KEYS.some((k) => key.toLowerCase().includes(k))) {
           return '[REDACTED]';
+        }
+
+        // Redact Ethereum addresses when enabled (staging/production)
+        if (redactAddresses && typeof value === 'string' && isAddress(value)) {
+          return redactAddress(value);
         }
 
         // Handle circular references

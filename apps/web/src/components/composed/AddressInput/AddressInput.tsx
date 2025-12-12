@@ -2,7 +2,9 @@
  * Address input with real-time validation.
  *
  * Shows visual feedback (checkmark/warning) based on address validity.
- * Currently supports Ethereum addresses; extensible for multi-chain.
+ * Currently supports Ethereum addresses with full validation via viem.
+ * Solana and Bitcoin use basic regex validation (consider adding proper
+ * library validation with @solana/web3.js and bech32 for production use).
  */
 
 import * as React from 'react';
@@ -25,7 +27,13 @@ export interface AddressInputProps extends Omit<React.ComponentProps<'input'>, '
 
 /**
  * Validates an address based on its type.
- * Currently only Ethereum is fully implemented.
+ *
+ * Ethereum: Uses viem's isAddress for full checksum validation.
+ * Solana: Basic Base58 regex (32-44 chars). For production, consider
+ *   using @solana/web3.js PublicKey for proper base58 decoding and
+ *   32-byte key validation.
+ * Bitcoin: Basic regex for P2PKH/P2SH/Bech32 formats. For production,
+ *   consider using the bech32 library for proper checksum verification.
  */
 function validateAddress(value: string, type: AddressType): boolean | null {
   if (!value || value.length === 0) return null; // Empty = no validation state
@@ -35,11 +43,11 @@ function validateAddress(value: string, type: AddressType): boolean | null {
       return isAddress(value);
     case 'solana':
       // Solana: Base58, 32-44 characters
-      // Basic validation - future: use @solana/web3.js
+      // TODO: Use @solana/web3.js PublicKey for proper validation
       return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value);
     case 'bitcoin':
       // Bitcoin: P2PKH (1...), P2SH (3...), Bech32 (bc1...)
-      // Basic validation - future: use bitcoinjs-lib
+      // TODO: Use bech32 library for proper checksum verification
       return (
         /^(1|3)[1-9A-HJ-NP-Za-km-z]{25,34}$/.test(value) ||
         /^bc1[a-zA-HJ-NP-Z0-9]{39,59}$/.test(value)
@@ -71,7 +79,11 @@ export const AddressInput = forwardRef<HTMLInputElement, AddressInputProps>(
     const stringValue = typeof value === 'string' ? value : '';
 
     const isValid = useMemo(() => {
+      // Empty value = no validation state (null)
+      if (stringValue === '') return null;
+      // Use custom validator if provided
       if (validate) return validate(stringValue);
+      // Otherwise use built-in address validation
       return validateAddress(stringValue, addressType);
     }, [stringValue, addressType, validate]);
 
@@ -80,7 +92,8 @@ export const AddressInput = forwardRef<HTMLInputElement, AddressInputProps>(
         <Input
           ref={ref}
           type="text"
-          value={value}
+          value={stringValue}
+          aria-invalid={isValid === false}
           className={cn('font-mono pr-10', className)}
           {...props}
         />

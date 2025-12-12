@@ -177,7 +177,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     setFormValues(formData);
     logger.store.debug('Form values saved to store', formData);
 
-    // Refetch hash struct to get fresh deadline
+    // Refetch hash struct to get fresh deadline (result used in handleSign)
     logger.contract.debug('Refetching hash struct for fresh deadline');
     await refetchHashStruct();
 
@@ -196,13 +196,27 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
       hasNonce: nonce !== undefined,
     });
 
-    if (!address || !hashStructData || nonce === undefined) {
+    if (!address || nonce === undefined) {
       logger.signature.error('Missing required data for acknowledgement signing', {
         address,
         hashStructData: !!hashStructData,
         nonce,
       });
       setSignatureError('Missing required data for signing');
+      setSignatureStatus('error');
+      return;
+    }
+
+    // Refetch hash struct to get fresh deadline
+    logger.contract.debug('Refetching hash struct for fresh deadline');
+    const refetchResult = await refetchHashStruct();
+    // Refetch returns raw contract data [deadline, hashStruct], transform if present
+    const rawData = refetchResult?.data as [bigint, `0x${string}`] | undefined;
+    const freshDeadline = rawData?.[0] ?? hashStructData?.deadline;
+
+    if (freshDeadline === undefined) {
+      logger.signature.error('Failed to get hash struct data');
+      setSignatureError('Failed to load signing data. Please try again.');
       setSignatureStatus('error');
       return;
     }
@@ -217,7 +231,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         owner: address,
         forwarder,
         nonce: nonce.toString(),
-        deadline: hashStructData.deadline.toString(),
+        deadline: freshDeadline.toString(),
         chainId,
       });
 
@@ -225,7 +239,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         owner: address,
         forwarder,
         nonce,
-        deadline: hashStructData.deadline,
+        deadline: freshDeadline,
       });
 
       logger.signature.info('Acknowledgement signature obtained', {
@@ -235,7 +249,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
       // Store signature
       storeSignature({
         signature: sig,
-        deadline: hashStructData.deadline,
+        deadline: freshDeadline,
         nonce,
         address,
         chainId,
@@ -291,7 +305,24 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     return (
       <div className="space-y-4">
         {/* Back button */}
-        <Button variant="outline" onClick={() => setShowSignature(false)} disabled={isSigning}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            // Clear pending completion timeout
+            if (completionTimeoutRef.current) {
+              clearTimeout(completionTimeoutRef.current);
+              completionTimeoutRef.current = null;
+            }
+            // Reset signature state
+            resetSigning();
+            setSignatureStatus('idle');
+            setSignatureError(null);
+            setSignature(null);
+            // Return to form
+            setShowSignature(false);
+          }}
+          disabled={isSigning}
+        >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Form
         </Button>

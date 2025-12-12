@@ -100,7 +100,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
       registrationType,
     });
 
-    if (!registeree || !forwarder || !hashStructData || nonce === undefined) {
+    if (!registeree || !forwarder || nonce === undefined) {
       logger.signature.error('Missing required data for registration signing', {
         registeree,
         forwarder,
@@ -124,7 +124,17 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
 
     // Refetch to get fresh deadline
     logger.contract.debug('Refetching hash struct for fresh registration deadline');
-    await refetchHashStruct();
+    const refetchResult = await refetchHashStruct();
+    // Refetch returns raw contract data [deadline, hashStruct], transform if present
+    const rawData = refetchResult?.data as [bigint, `0x${string}`] | undefined;
+    const freshDeadline = rawData?.[0] ?? hashStructData?.deadline;
+
+    if (freshDeadline === undefined) {
+      logger.signature.error('Failed to get hash struct data');
+      setSignatureError('Failed to load signing data. Please try again.');
+      setSignatureStatus('error');
+      return;
+    }
 
     setSignatureStatus('signing');
     setSignatureError(null);
@@ -134,7 +144,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         owner: registeree,
         forwarder,
         nonce: nonce.toString(),
-        deadline: hashStructData.deadline.toString(),
+        deadline: freshDeadline.toString(),
         chainId,
       });
 
@@ -142,7 +152,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         owner: registeree,
         forwarder,
         nonce,
-        deadline: hashStructData.deadline,
+        deadline: freshDeadline,
       });
 
       logger.signature.info('Registration signature obtained', {
@@ -152,7 +162,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
       // Store signature
       storeSignature({
         signature: sig,
-        deadline: hashStructData.deadline,
+        deadline: freshDeadline,
         nonce,
         address: registeree,
         chainId,

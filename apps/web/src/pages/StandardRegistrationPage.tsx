@@ -52,7 +52,7 @@ const STEP_TOOLTIPS: Partial<Record<RegistrationStep, string>> = {
   'grace-period':
     'A randomized waiting period (1-4 minutes) designed to prevent phishing attacks. This delay ensures you have time to recognize and cancel suspicious registrations.',
   'register-and-sign':
-    'Second signature: Sign the final registration message. This confirms your intent to register the wallet as stollen after the grace period.',
+    'Second signature: Sign the final registration message. This confirms your intent to register the wallet as stolen after the grace period.',
   'register-and-pay':
     'Submit the registration transaction to permanently mark this wallet as stolen on the blockchain.',
   success: 'Your wallet has been successfully registered as stolen in the on-chain registry.',

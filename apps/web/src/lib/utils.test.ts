@@ -142,8 +142,10 @@ describe('sanitizeErrorMessage', () => {
     });
 
     it('handles unknown input types', () => {
-      // Objects stringify to [object Object] which passes length check
-      expect(sanitizeErrorMessage({ message: 'some object' })).toBe('[object Object]');
+      // Objects stringify to [object Object] which should return generic message
+      expect(sanitizeErrorMessage({ message: 'some object' })).toBe(
+        'An unexpected error occurred. Please try again.'
+      );
       // Null/undefined become short strings, triggering generic message
       expect(sanitizeErrorMessage(null)).toBe('An unexpected error occurred. Please try again.');
     });
@@ -151,6 +153,11 @@ describe('sanitizeErrorMessage', () => {
 
   describe('development logging', () => {
     it('logs full error in development', () => {
+      // This test only applies in dev mode
+      if (!import.meta.env.DEV) {
+        return;
+      }
+
       const error = new Error('Test error');
       sanitizeErrorMessage(error);
 

@@ -4,7 +4,7 @@
  * Users choose whether they are the registeree (wallet owner) or relayer (gas payer).
  */
 
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft, User, HandHelping } from 'lucide-react';
@@ -21,21 +21,8 @@ interface RoleCardProps {
 }
 
 function RoleCard({ title, description, icon, details, onClick }: RoleCardProps) {
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onClick();
-    }
-  };
-
   return (
-    <Card
-      className="cursor-pointer transition-all hover:border-primary hover:shadow-md"
-      onClick={onClick}
-      onKeyDown={handleKeyDown}
-      role="button"
-      tabIndex={0}
-    >
+    <Card className="transition-all hover:border-primary hover:shadow-md">
       <CardHeader className="text-center">
         <div className="mx-auto mb-4 p-4 rounded-full bg-muted">{icon}</div>
         <CardTitle>{title}</CardTitle>
@@ -50,7 +37,9 @@ function RoleCard({ title, description, icon, details, onClick }: RoleCardProps)
             </li>
           ))}
         </ul>
-        <Button className="w-full mt-6">Select</Button>
+        <Button className="w-full mt-6" onClick={onClick}>
+          Select
+        </Button>
       </CardContent>
     </Card>
   );
@@ -61,10 +50,11 @@ export function P2PRoleSelectionPage() {
   const { isConnected } = useAccount();
 
   // Redirect if not connected
-  if (!isConnected) {
-    setLocation('/');
-    return null;
-  }
+  useEffect(() => {
+    if (!isConnected) setLocation('/');
+  }, [isConnected, setLocation]);
+
+  if (!isConnected) return null;
 
   const handleBack = () => {
     setLocation('/');

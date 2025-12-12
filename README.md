@@ -21,7 +21,7 @@ The Stolen Wallet Registry (SWR) gives crypto fraud victims a way to publicly ma
 
 ## Tech Stack
 
-```
+```text
 Build:     Vite 7.x, TypeScript 5.9, Turborepo 2.x, pnpm
 UI:        React 19, Tailwind CSS 4.x, shadcn/ui, Radix UI
 Web3:      wagmi 2.x, viem 2.x, RainbowKit 2.x, TanStack Query 5.x
@@ -103,7 +103,7 @@ pnpm relay:debug        # Run with debug logging (verbose libp2p output)
 
 ## Project Structure
 
-```
+```text
 stolen-wallet-registry-monorepo/
 ├── apps/
 │   ├── relay/                # libp2p circuit relay server

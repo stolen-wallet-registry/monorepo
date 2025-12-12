@@ -61,8 +61,8 @@ export function sanitizeErrorMessage(error: unknown): string {
   // Clean up any double spaces or trailing punctuation issues
   sanitized = sanitized.replace(/\s+/g, ' ').trim();
 
-  // If we stripped everything meaningful, provide a generic message
-  if (!sanitized || sanitized.length < 10) {
+  // If we stripped everything meaningful or got useless output like [object Object], provide a generic message
+  if (!sanitized || sanitized.length < 10 || /^\[object .+\]$/.test(sanitized)) {
     return 'An unexpected error occurred. Please try again.';
   }
 

@@ -36,7 +36,10 @@ export function ExplorerLink({
 
   if (!href) {
     return (
-      <span className={cn('font-mono text-sm inline-flex items-center gap-1.5', className)}>
+      <span
+        data-testid="explorer-link"
+        className={cn('font-mono text-sm inline-flex items-center gap-1.5', className)}
+      >
         {displayValue}
         {showDisabledIcon && (
           <ExternalLink
@@ -53,6 +56,7 @@ export function ExplorerLink({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
+      data-testid="explorer-link"
       className={cn(
         'font-mono text-sm inline-flex items-center gap-1.5 hover:text-primary transition-colors',
         className

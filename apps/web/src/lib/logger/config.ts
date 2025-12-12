@@ -41,8 +41,8 @@ const ALL_CATEGORIES_ENABLED = {
   ui: true,
 } as const;
 
-// Staging categories - no store/ui to prevent wallet address leaks in logs
-const STAGING_CATEGORIES = {
+// Staging categories - store/ui disabled to reduce log noise
+const STAGING_CATEGORIES: LogConfig['categories'] = {
   wallet: true,
   contract: true,
   signature: true,
@@ -50,7 +50,7 @@ const STAGING_CATEGORIES = {
   p2p: true,
   store: false,
   ui: false,
-} as const;
+};
 
 const ALL_CATEGORIES_DISABLED = {
   wallet: false,
@@ -69,6 +69,7 @@ export const DEFAULT_CONFIGS: Record<Environment, LogConfig> = {
     categories: { ...ALL_CATEGORIES_ENABLED },
     includeTimestamp: true,
     includeStackTrace: false, // Clean output for LLM copy-paste
+    redactAddresses: false, // Show full addresses in dev for debugging
   },
   staging: {
     enabled: true,
@@ -76,6 +77,7 @@ export const DEFAULT_CONFIGS: Record<Environment, LogConfig> = {
     categories: { ...STAGING_CATEGORIES },
     includeTimestamp: true,
     includeStackTrace: false,
+    redactAddresses: true, // Redact addresses to prevent PII leaks
   },
   production: {
     enabled: false, // Disabled by default, can be turned on
@@ -83,6 +85,7 @@ export const DEFAULT_CONFIGS: Record<Environment, LogConfig> = {
     categories: { ...ALL_CATEGORIES_DISABLED },
     includeTimestamp: true,
     includeStackTrace: false,
+    redactAddresses: true, // Redact addresses to prevent PII leaks
   },
   test: {
     enabled: false, // Disabled to keep test output clean
@@ -90,6 +93,7 @@ export const DEFAULT_CONFIGS: Record<Environment, LogConfig> = {
     categories: { ...ALL_CATEGORIES_DISABLED },
     includeTimestamp: false,
     includeStackTrace: false,
+    redactAddresses: false,
   },
 };
 

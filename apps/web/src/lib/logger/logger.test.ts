@@ -92,7 +92,7 @@ describe('logger', () => {
 
     it('truncates long output', () => {
       const longArray = Array(1000).fill('x'.repeat(100));
-      const result = safeStringify(longArray, 100);
+      const result = safeStringify(longArray, { maxLength: 100 });
       expect(result.length).toBeLessThanOrEqual(115); // 100 + '...[truncated]'
       expect(result).toContain('[truncated]');
     });

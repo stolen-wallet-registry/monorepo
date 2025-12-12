@@ -66,15 +66,13 @@ describe('TransactionCard', () => {
     });
 
     it('displays transaction hash', () => {
-      const { container } = render(
-        <TransactionCard {...defaultProps} status="pending" hash={sampleHash} />
-      );
+      render(<TransactionCard {...defaultProps} status="pending" hash={sampleHash} />);
 
       expect(screen.getByText('Transaction Hash')).toBeInTheDocument();
-      // Hash is displayed via ExplorerLink component (truncated with font-mono)
-      const hashElement = container.querySelector('.font-mono');
+      // Hash is displayed via ExplorerLink component
+      const hashElement = screen.getByTestId('explorer-link');
       expect(hashElement).toBeInTheDocument();
-      expect(hashElement?.textContent).toContain('0x12345678');
+      expect(hashElement).toHaveTextContent('0x12345678');
     });
 
     it('shows waiting message', () => {
