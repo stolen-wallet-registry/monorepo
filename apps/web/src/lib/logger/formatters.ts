@@ -78,7 +78,7 @@ export function safeStringify(obj: unknown, options: SafeStringifyOptions = {}):
           return '[REDACTED]';
         }
 
-        // Redact Ethereum addresses when enabled (staging/production)
+        // Redact Ethereum addresses when enabled
         if (redactAddresses && typeof value === 'string' && isAddress(value)) {
           return redactAddress(value);
         }
