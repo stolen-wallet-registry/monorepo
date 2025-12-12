@@ -28,9 +28,28 @@ const MAX_STRING_LENGTH = 5000;
 /**
  * Redact an Ethereum address, keeping last 4 characters for debugging.
  * Example: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0 → 0x...bEb0
+ *
+ * Defensively handles invalid inputs to prevent data leakage.
  */
-export function redactAddress(address: string): string {
-  return `0x...${address.slice(-4)}`;
+export function redactAddress(address: unknown): string {
+  // Handle null/undefined
+  if (address == null) {
+    return '0x...[redacted]';
+  }
+
+  // Must be a string
+  if (typeof address !== 'string') {
+    return '0x...[redacted]';
+  }
+
+  const trimmed = address.trim();
+
+  // Validate it looks like an ETH address (0x + at least 4 chars for safe slicing)
+  if (!trimmed.startsWith('0x') || trimmed.length < 6) {
+    return '0x...[redacted]';
+  }
+
+  return `0x...${trimmed.slice(-4)}`;
 }
 
 export interface SafeStringifyOptions {

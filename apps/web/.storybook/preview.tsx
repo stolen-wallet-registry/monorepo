@@ -39,6 +39,7 @@ const preview: Preview = {
     options: {
       storySort: {
         order: ['Primitives', 'Composed', 'MagicUI'],
+        method: 'alphabetical', // Fallback for unlisted groups
       },
     },
     backgrounds: { disable: true }, // Use theme backgrounds instead

@@ -87,7 +87,7 @@ export function emitLog(entry: LogEntry): void {
       typeof entry.data === 'string' &&
       isAddress(entry.data)
     ) {
-      // Redact string addresses in staging/production
+      // Redact string addresses when redactAddresses config is enabled
       args.push(redactAddress(entry.data));
     } else {
       args.push(entry.data);

@@ -91,9 +91,10 @@ describe('TransactionCard', () => {
         />
       );
 
-      // ExplorerLink renders as anchor with truncated hash
-      const link = screen.getByTestId('explorer-link');
-      expect(link).toHaveAttribute('href', 'https://etherscan.io/tx/0x123');
+      // ExplorerLink renders with nested anchor for explorer link
+      const explorerLink = screen.getByTestId('explorer-link');
+      const anchor = explorerLink.querySelector('a[href]');
+      expect(anchor).toHaveAttribute('href', 'https://etherscan.io/tx/0x123');
     });
 
     it('hides submit button during pending', () => {
@@ -198,11 +199,12 @@ describe('TransactionCard', () => {
         />
       );
 
-      // ExplorerLink renders truncated hash as link
-      const link = screen.getByTestId('explorer-link');
-      expect(link).toHaveAttribute('href', explorerUrl);
-      expect(link).toHaveAttribute('target', '_blank');
-      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      // ExplorerLink renders with nested anchor for explorer link
+      const explorerLink = screen.getByTestId('explorer-link');
+      const anchor = explorerLink.querySelector('a[href]');
+      expect(anchor).toHaveAttribute('href', explorerUrl);
+      expect(anchor).toHaveAttribute('target', '_blank');
+      expect(anchor).toHaveAttribute('rel', 'noopener noreferrer');
     });
   });
 });
