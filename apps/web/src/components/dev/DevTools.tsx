@@ -4,12 +4,29 @@ import { toast } from 'sonner';
 import { useTheme, type ColorScheme, type ThemeVariant } from '@/providers';
 import { cn } from '@/lib/utils';
 
+type DevToolsTab = 'theme' | 'tests';
+
+/**
+ * Component that throws an error on mount.
+ * Used to test the ErrorBoundary.
+ * Always throws - parent controls mounting via key prop.
+ */
+function ErrorThrower(): never {
+  throw new Error('Test error from DevTools - ErrorBoundary is working!');
+}
+
 /**
  * Development-only tools panel for testing theming and other dev features.
  * Only renders in development mode (import.meta.env.DEV).
+ *
+ * Note: P2P debug info is displayed on P2P registration pages via P2PDebugPanel.
  */
 export function DevTools() {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<DevToolsTab>('theme');
+  // errorKey controls when ErrorThrower renders - null means no error
+  // Using a function initializer ensures fresh state on HMR
+  const [errorKey, setErrorKey] = useState<number | null>(() => null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { colorScheme, setColorScheme, themeVariant, setThemeVariant, resolvedColorScheme } =
     useTheme();
@@ -91,170 +108,247 @@ export function DevTools() {
       {isOpen && (
         <div
           className={cn(
-            'absolute bottom-14 left-0 min-w-72',
-            'rounded-lg border bg-card p-4 shadow-xl',
+            'absolute bottom-14 left-0 min-w-80 max-w-96',
+            'rounded-lg border bg-card shadow-xl',
             'animate-in slide-in-from-bottom-2 fade-in-0 duration-200'
           )}
         >
-          <h3 className="mb-4 text-sm font-semibold text-foreground">Dev Tools</h3>
-
-          {/* Theme Variant Toggle */}
-          <div className="mb-4">
-            <label className="mb-2 block text-xs font-medium text-muted-foreground">
-              Theme Variant
-            </label>
-            <div className="flex gap-2">
-              {variantOptions.map((variant) => (
-                <button
-                  key={variant}
-                  type="button"
-                  onClick={() => setThemeVariant(variant)}
-                  className={cn(
-                    'rounded-md px-3 py-1.5 text-sm font-medium capitalize',
-                    'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
-                    themeVariant === variant
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  )}
-                >
-                  {variant}
-                </button>
-              ))}
-            </div>
+          {/* Tab Header */}
+          <div
+            className="flex border-b border-border"
+            role="tablist"
+            aria-label="DevTools sections"
+            onKeyDown={(e) => {
+              const tabs: DevToolsTab[] = ['theme', 'tests'];
+              const currentIndex = tabs.indexOf(activeTab);
+              if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                const nextIndex = (currentIndex + 1) % tabs.length;
+                setActiveTab(tabs[nextIndex]);
+              } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+                setActiveTab(tabs[prevIndex]);
+              } else if (e.key === 'Home') {
+                e.preventDefault();
+                setActiveTab(tabs[0]);
+              } else if (e.key === 'End') {
+                e.preventDefault();
+                setActiveTab(tabs[tabs.length - 1]);
+              }
+            }}
+          >
+            {(['theme', 'tests'] as DevToolsTab[]).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                id={`devtools-tab-${tab}`}
+                aria-selected={activeTab === tab}
+                aria-controls={`devtools-tabpanel-${tab}`}
+                tabIndex={activeTab === tab ? 0 : -1}
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  'flex-1 px-3 py-2 text-xs font-medium uppercase tracking-wide',
+                  'transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring',
+                  activeTab === tab
+                    ? 'border-b-2 border-primary bg-muted/50 text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {tab}
+              </button>
+            ))}
           </div>
 
-          {/* Color Scheme Toggle */}
-          <div className="mb-4">
-            <label className="mb-2 block text-xs font-medium text-muted-foreground">
-              Color Scheme
-            </label>
-            <div className="flex gap-2">
-              {colorSchemeOptions.map((scheme) => (
-                <button
-                  key={scheme}
-                  type="button"
-                  onClick={() => setColorScheme(scheme)}
-                  className={cn(
-                    'rounded-md px-3 py-1.5 text-sm font-medium capitalize',
-                    'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
-                    colorScheme === scheme
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  )}
-                >
-                  {scheme}
-                </button>
-              ))}
-            </div>
-          </div>
+          <div
+            className="p-4"
+            role="tabpanel"
+            id={`devtools-tabpanel-${activeTab}`}
+            aria-labelledby={`devtools-tab-${activeTab}`}
+          >
+            {/* Theme Tab */}
+            {activeTab === 'theme' && (
+              <>
+                {/* Theme Variant Toggle */}
+                <div className="mb-4">
+                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                    Theme Variant
+                  </label>
+                  <div className="flex gap-2">
+                    {variantOptions.map((variant) => (
+                      <button
+                        key={variant}
+                        type="button"
+                        onClick={() => setThemeVariant(variant)}
+                        className={cn(
+                          'rounded-md px-3 py-1.5 text-sm font-medium capitalize',
+                          'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+                          themeVariant === variant
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        )}
+                      >
+                        {variant}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-          {/* Current State Display */}
-          <div className="border-t border-border pt-3">
-            <h4 className="mb-2 text-xs font-medium text-muted-foreground">Current State</h4>
-            <div className="space-y-1 font-mono text-xs text-muted-foreground">
-              <p>
-                <span className="text-foreground">colorScheme:</span> {colorScheme}
-              </p>
-              <p>
-                <span className="text-foreground">resolved:</span> {resolvedColorScheme}
-              </p>
-              <p>
-                <span className="text-foreground">variant:</span> {themeVariant}
-              </p>
-              <p>
-                <span className="text-foreground">classes:</span>{' '}
-                <span className="break-all">
-                  {typeof document !== 'undefined' && document.documentElement.className}
-                </span>
-              </p>
-            </div>
-          </div>
+                {/* Color Scheme Toggle */}
+                <div className="mb-4">
+                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                    Color Scheme
+                  </label>
+                  <div className="flex gap-2">
+                    {colorSchemeOptions.map((scheme) => (
+                      <button
+                        key={scheme}
+                        type="button"
+                        onClick={() => setColorScheme(scheme)}
+                        className={cn(
+                          'rounded-md px-3 py-1.5 text-sm font-medium capitalize',
+                          'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+                          colorScheme === scheme
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        )}
+                      >
+                        {scheme}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-          {/* Quick Actions */}
-          <div className="mt-4 border-t border-border pt-3">
-            <h4 className="mb-2 text-xs font-medium text-muted-foreground">Quick Actions</h4>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setThemeVariant('hacker');
-                  setColorScheme('dark');
-                }}
-                className="rounded bg-green-900 px-2 py-1 text-xs text-green-400 hover:bg-green-800"
-              >
-                Hacker Dark
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setThemeVariant('base');
-                  setColorScheme('dark');
-                }}
-                className="rounded bg-neutral-900 px-2 py-1 text-xs text-white hover:bg-neutral-800"
-              >
-                Base Dark
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setThemeVariant('base');
-                  setColorScheme('light');
-                }}
-                className="rounded bg-white px-2 py-1 text-xs text-black hover:bg-neutral-100"
-              >
-                Base Light
-              </button>
-            </div>
-          </div>
+                {/* Current State Display */}
+                <div className="border-t border-border pt-3">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Current State</h4>
+                  <div className="space-y-1 font-mono text-xs text-muted-foreground">
+                    <p>
+                      <span className="text-foreground">colorScheme:</span> {colorScheme}
+                    </p>
+                    <p>
+                      <span className="text-foreground">resolved:</span> {resolvedColorScheme}
+                    </p>
+                    <p>
+                      <span className="text-foreground">variant:</span> {themeVariant}
+                    </p>
+                  </div>
+                </div>
 
-          {/* Toast Tests */}
-          <div className="mt-4 border-t border-border pt-3">
-            <h4 className="mb-2 text-xs font-medium text-muted-foreground">Toast Tests</h4>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => toast.success('Success! Operation completed.')}
-                className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700"
-              >
-                Success
-              </button>
-              <button
-                type="button"
-                onClick={() => toast.error('Error! Something went wrong.')}
-                className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700"
-              >
-                Error
-              </button>
-              <button
-                type="button"
-                onClick={() => toast.warning('Warning! Check this out.')}
-                className="rounded bg-yellow-600 px-2 py-1 text-xs text-white hover:bg-yellow-700"
-              >
-                Warning
-              </button>
-              <button
-                type="button"
-                onClick={() => toast.info('Info: Here is some information.')}
-                className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
-              >
-                Info
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const id = toast.loading('Loading... (auto-completes in 2s)');
-                  setTimeout(() => {
-                    toast.success('Loading complete!', { id });
-                  }, 2000);
-                }}
-                className="rounded bg-gray-600 px-2 py-1 text-xs text-white hover:bg-gray-700"
-              >
-                Loading
-              </button>
-            </div>
+                {/* Quick Actions */}
+                <div className="mt-4 border-t border-border pt-3">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Quick Actions</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setThemeVariant('hacker');
+                        setColorScheme('dark');
+                      }}
+                      className="rounded bg-green-900 px-2 py-1 text-xs text-green-400 hover:bg-green-800"
+                    >
+                      Hacker Dark
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setThemeVariant('base');
+                        setColorScheme('dark');
+                      }}
+                      className="rounded bg-neutral-900 px-2 py-1 text-xs text-white hover:bg-neutral-800"
+                    >
+                      Base Dark
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setThemeVariant('base');
+                        setColorScheme('light');
+                      }}
+                      className="rounded bg-white px-2 py-1 text-xs text-black hover:bg-neutral-100"
+                    >
+                      Base Light
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Tests Tab */}
+            {activeTab === 'tests' && (
+              <>
+                {/* Toast Tests */}
+                <div className="mb-4">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Toast Tests</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toast.success('Success! Operation completed.')}
+                      className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700"
+                    >
+                      Success
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toast.error('Error! Something went wrong.')}
+                      className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700"
+                    >
+                      Error
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toast.warning('Warning! Check this out.')}
+                      className="rounded bg-yellow-600 px-2 py-1 text-xs text-white hover:bg-yellow-700"
+                    >
+                      Warning
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toast.info('Info: Here is some information.')}
+                      className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
+                    >
+                      Info
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const id = toast.loading('Loading... (auto-completes in 2s)');
+                        setTimeout(() => {
+                          toast.success('Loading complete!', { id });
+                        }, 2000);
+                      }}
+                      className="rounded bg-gray-600 px-2 py-1 text-xs text-white hover:bg-gray-700"
+                    >
+                      Loading
+                    </button>
+                  </div>
+                </div>
+
+                {/* Error Boundary Test */}
+                <div className="border-t border-border pt-3">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">
+                    Error Boundary Test
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setErrorKey(Date.now())}
+                    className="rounded bg-red-900 px-2 py-1 text-xs text-red-300 hover:bg-red-800"
+                  >
+                    Trigger Error
+                  </button>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Throws an error to test the ErrorBoundary UI
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
+
+      {/* Error thrower component - only renders when errorKey is set */}
+      {errorKey !== null && <ErrorThrower key={errorKey} />}
     </div>
   );
 }

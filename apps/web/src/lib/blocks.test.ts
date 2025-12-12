@@ -21,7 +21,7 @@ describe('block utilities', () => {
     });
 
     it('returns correct block time for localhost/Anvil', () => {
-      expect(getBlockTime(31337)).toBe(1);
+      expect(getBlockTime(31337)).toBe(13);
     });
 
     it('returns correct block time for Base', () => {
@@ -65,9 +65,9 @@ describe('block utilities', () => {
       expect(estimateTimeFromBlocks(100n, 42161)).toBe(25000);
     });
 
-    it('calculates time for localhost (1s blocks)', () => {
-      // 60 blocks * 1 second * 1000 = 60000ms
-      expect(estimateTimeFromBlocks(60n, 31337)).toBe(60000);
+    it('calculates time for localhost (13s blocks)', () => {
+      // 60 blocks * 13 seconds * 1000 = 780000ms
+      expect(estimateTimeFromBlocks(60n, 31337)).toBe(780000);
     });
 
     it('returns 0 for zero blocks', () => {

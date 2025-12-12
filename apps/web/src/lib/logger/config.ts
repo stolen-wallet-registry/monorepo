@@ -37,8 +37,8 @@ const ALL_CATEGORIES_ENABLED = {
   signature: true,
   registration: true,
   p2p: true,
-  store: false, // Noisy, disabled by default
-  ui: false, // Optional, disabled by default
+  store: true,
+  ui: true,
 } as const;
 
 const ALL_CATEGORIES_DISABLED = {

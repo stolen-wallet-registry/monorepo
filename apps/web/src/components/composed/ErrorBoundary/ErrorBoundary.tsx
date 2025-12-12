@@ -57,7 +57,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
       // Default error UI
       return (
-        <div className="flex items-center justify-center min-h-[200px] p-4">
+        <div className="flex items-center justify-center min-h-screen p-4">
           <Card className="w-full max-w-md">
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -88,22 +88,4 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
     return this.props.children;
   }
-}
-
-// Functional wrapper for easier use with hooks
-export function withErrorBoundary<P extends object>(
-  WrappedComponent: React.ComponentType<P>,
-  options?: { fallback?: ReactNode; onError?: (error: Error, errorInfo: ErrorInfo) => void }
-) {
-  function WithErrorBoundary(props: P) {
-    return (
-      <ErrorBoundary fallback={options?.fallback} onError={options?.onError}>
-        <WrappedComponent {...props} />
-      </ErrorBoundary>
-    );
-  }
-
-  WithErrorBoundary.displayName = `withErrorBoundary(${WrappedComponent.displayName || WrappedComponent.name || 'Component'})`;
-
-  return WithErrorBoundary;
 }

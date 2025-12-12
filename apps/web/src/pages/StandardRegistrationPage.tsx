@@ -12,7 +12,10 @@ import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StepIndicator } from '@/components/composed/StepIndicator';
+import { InfoTooltip } from '@/components/composed/InfoTooltip';
+import { StepRenderer } from '@/components/registration';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
+import { useStepNavigation } from '@/hooks/useStepNavigation';
 
 /**
  * Step descriptions for standard flow.
@@ -38,10 +41,35 @@ const STEP_TITLES: Partial<Record<RegistrationStep, string>> = {
   success: 'Complete',
 };
 
+/**
+ * Tooltip content for each step explaining what it does.
+ */
+const STEP_TOOLTIPS: Partial<Record<RegistrationStep, string>> = {
+  'acknowledge-and-sign':
+    'First step: Sign an EIP-712 message acknowledging your intent to register this wallet as stolen. This creates a cryptographic proof that you control the wallet.',
+  'acknowledge-and-pay':
+    'Submit the acknowledgement transaction to the blockchain. This starts a mandatory grace period before final registration.',
+  'grace-period':
+    'A randomized waiting period (1-4 minutes) designed to prevent phishing attacks. This delay ensures you have time to recognize and cancel suspicious registrations.',
+  'register-and-sign':
+    'Second signature: Sign the final registration message. This confirms your intent after the grace period.',
+  'register-and-pay':
+    'Submit the registration transaction to permanently mark this wallet as stolen on the blockchain.',
+  success: 'Your wallet has been successfully registered as stolen in the on-chain registry.',
+};
+
 export function StandardRegistrationPage() {
   const [, setLocation] = useLocation();
   const { isConnected } = useAccount();
-  const { step, reset } = useRegistrationStore();
+  const { registrationType, step, setRegistrationType } = useRegistrationStore();
+  const { goToNextStep, resetFlow } = useStepNavigation();
+
+  // Initialize registration type on mount
+  useEffect(() => {
+    if (registrationType !== 'standard') {
+      setRegistrationType('standard');
+    }
+  }, [registrationType, setRegistrationType]);
 
   // Redirect if not connected (side effect in useEffect, not during render)
   useEffect(() => {
@@ -55,7 +83,7 @@ export function StandardRegistrationPage() {
   }
 
   const handleBack = () => {
-    reset();
+    resetFlow();
     setLocation('/');
   };
 
@@ -63,6 +91,7 @@ export function StandardRegistrationPage() {
   const currentDescription = step
     ? (STEP_DESCRIPTIONS[step] ?? '')
     : 'Follow the steps in the sidebar to complete your registration.';
+  const currentTooltip = step ? STEP_TOOLTIPS[step] : undefined;
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-8">
@@ -71,15 +100,21 @@ export function StandardRegistrationPage() {
         Back to Home
       </Button>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-8">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-stretch">
         {/* Step Indicator Sidebar */}
-        <aside>
-          <Card>
+        <aside className="flex">
+          <Card className="flex-1 flex flex-col">
             <CardHeader>
-              <CardTitle className="text-lg">Standard Registration</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-lg">Standard Registration</CardTitle>
+                <InfoTooltip
+                  content="Register your stolen wallet using your own funds. You'll sign and pay from the same wallet being registered."
+                  side="right"
+                />
+              </div>
               <CardDescription>Sign and pay from the same wallet</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1">
               <StepIndicator
                 registrationType="standard"
                 currentStep={step}
@@ -90,19 +125,17 @@ export function StandardRegistrationPage() {
         </aside>
 
         {/* Main Content */}
-        <main>
-          <Card className="min-h-[400px]">
+        <main className="flex">
+          <Card className="flex-1 flex flex-col justify-center">
             <CardHeader>
-              <CardTitle>{currentTitle}</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle>{currentTitle}</CardTitle>
+                {currentTooltip && <InfoTooltip content={currentTooltip} side="right" />}
+              </div>
               <CardDescription>{currentDescription}</CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Step content will be rendered here based on current step */}
-              <div className="text-muted-foreground text-center py-12">
-                Step component for &ldquo;{step || 'none'}&rdquo; will be rendered here.
-                <br />
-                <span className="text-sm">(Phase 1B: Component integration pending)</span>
-              </div>
+              <StepRenderer currentStep={step} onStepComplete={goToNextStep} />
             </CardContent>
           </Card>
         </main>

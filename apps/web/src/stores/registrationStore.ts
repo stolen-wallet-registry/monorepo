@@ -79,7 +79,24 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
       },
     })),
     {
-      name: 'registration-state',
+      name: 'swr-registration-state',
+      version: 1,
+      migrate: (persisted) => {
+        // Validate basic shape
+        if (!persisted || typeof persisted !== 'object') {
+          return initialState;
+        }
+
+        const state = persisted as Partial<RegistrationState>;
+
+        // Ensure all required fields exist with fallbacks
+        return {
+          registrationType: state.registrationType ?? initialState.registrationType,
+          step: state.step ?? initialState.step,
+          acknowledgementHash: state.acknowledgementHash ?? initialState.acknowledgementHash,
+          registrationHash: state.registrationHash ?? initialState.registrationHash,
+        };
+      },
     }
   )
 );

@@ -29,7 +29,7 @@ export function HomePage() {
         setLocation('/registration/self-relay');
         break;
       case 'p2pRelay':
-        setLocation('/registration/p2p');
+        setLocation('/registration/p2p-relay');
         break;
     }
   };
@@ -66,7 +66,7 @@ export function HomePage() {
           <RegistrationMethodSelector
             selected={registrationType}
             onSelect={handleMethodSelect}
-            p2pAvailable={false} // P2P not yet implemented
+            p2pAvailable={true}
           />
         </div>
       )}

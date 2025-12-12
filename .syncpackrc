@@ -15,6 +15,17 @@
       "label": "TypeScript should match across all packages",
       "dependencies": ["typescript"],
       "packages": ["**"]
+    },
+    {
+      "label": "libp2p packages should match across all packages (both on 0.46.x)",
+      "dependencies": [
+        "libp2p",
+        "@chainsafe/libp2p-noise",
+        "@chainsafe/libp2p-yamux",
+        "@libp2p/mplex",
+        "@libp2p/websockets"
+      ],
+      "packages": ["**"]
     }
   ]
 }

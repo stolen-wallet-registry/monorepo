@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "turbo dev",
+    "dev": "pnpm --filter web dev",
     "build": "turbo build",
     "test": "turbo test",
     "lint": "turbo lint",
@@ -17,6 +17,8 @@
     "storybook": "turbo storybook",
     "build-storybook": "turbo build-storybook",
     "anvil": "anvil --ipc /tmp/anvil.ipc --steps-tracing --block-time 13",
+    "relay": "pnpm --filter @swr/relay dev",
+    "relay:debug": "pnpm --filter @swr/relay dev:debug",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "changeset publish",

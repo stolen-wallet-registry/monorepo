@@ -255,3 +255,25 @@ export const SingleBlock: Story = {
     initialTotalMs: 300_000,
   },
 };
+
+/**
+ * Waiting for block confirmation state.
+ * Timer estimate hit 0 but blockchain hasn't confirmed target block yet.
+ */
+export const WaitingForBlock: Story = {
+  args: {
+    timeRemaining: {
+      days: 0,
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+      totalSeconds: 0,
+    },
+    totalMs: 0,
+    blocksLeft: 2n, // Still 2 blocks remaining on chain
+    isExpired: false,
+    isRunning: false,
+    isWaitingForBlock: true,
+    initialTotalMs: 300_000,
+  },
+};

@@ -6,7 +6,7 @@
  * - Sepolia testnet: ~12 seconds
  * - Base/Optimism: ~2 seconds
  * - Arbitrum: ~0.25 seconds (250ms)
- * - Localhost/Anvil: ~1 second (configurable)
+ * - Localhost/Anvil: ~13 seconds (configurable, match your anvil --block-time setting)
  */
 
 /**
@@ -15,7 +15,7 @@
 export const BLOCK_TIMES: Record<number, number> = {
   1: 12, // Ethereum mainnet
   11155111: 12, // Sepolia
-  31337: 1, // Localhost/Anvil (can be configured faster)
+  31337: 13, // Localhost/Anvil - match your anvil --block-time setting
   8453: 2, // Base
   84532: 2, // Base Sepolia
   10: 2, // Optimism

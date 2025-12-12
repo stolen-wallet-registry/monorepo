@@ -22,6 +22,19 @@ export interface SignParams {
   deadline: bigint;
 }
 
+/**
+ * Converts SignParams to the base message structure used by both
+ * acknowledgement and registration messages.
+ */
+function toBaseMessage(params: SignParams) {
+  return {
+    owner: params.owner,
+    forwarder: params.forwarder,
+    nonce: params.nonce,
+    deadline: params.deadline,
+  };
+}
+
 export interface UseSignEIP712Result {
   signAcknowledgement: (params: SignParams) => Promise<`0x${string}`>;
   signRegistration: (params: SignParams) => Promise<`0x${string}`>;
@@ -69,14 +82,7 @@ export function useSignEIP712(): UseSignEIP712Result {
    */
   const signAcknowledgement = async (params: SignParams): Promise<`0x${string}`> => {
     const validatedAddress = validateSigningPreconditions();
-
-    const message: AcknowledgementMessage = {
-      owner: params.owner,
-      forwarder: params.forwarder,
-      nonce: params.nonce,
-      deadline: params.deadline,
-    };
-
+    const message: AcknowledgementMessage = toBaseMessage(params);
     const typedData = buildAcknowledgementTypedData(chainId, validatedAddress, message);
 
     const signature = await signTypedDataAsync({
@@ -94,14 +100,7 @@ export function useSignEIP712(): UseSignEIP712Result {
    */
   const signRegistration = async (params: SignParams): Promise<`0x${string}`> => {
     const validatedAddress = validateSigningPreconditions();
-
-    const message: RegistrationMessage = {
-      owner: params.owner,
-      forwarder: params.forwarder,
-      nonce: params.nonce,
-      deadline: params.deadline,
-    };
-
+    const message: RegistrationMessage = toBaseMessage(params);
     const typedData = buildRegistrationTypedData(chainId, validatedAddress, message);
 
     const signature = await signTypedDataAsync({

@@ -28,6 +28,8 @@ export interface TransactionCardProps {
   onSubmit: () => void;
   /** Callback to retry after failure */
   onRetry?: () => void;
+  /** Whether the submit button is disabled */
+  disabled?: boolean;
   /** Additional class names */
   className?: string;
 }
@@ -62,6 +64,7 @@ export function TransactionCard({
   explorerUrl,
   onSubmit,
   onRetry,
+  disabled = false,
   className,
 }: TransactionCardProps) {
   const typeLabel = TYPE_LABELS[type];
@@ -70,7 +73,6 @@ export function TransactionCard({
   const isSubmitting = status === 'submitting';
   const isPending = status === 'pending';
   const isFailed = status === 'failed';
-  const isLoading = isSubmitting || isPending;
 
   const getIcon = () => {
     if (isConfirmed) return <Check className="h-5 w-5 text-green-600 dark:text-green-400" />;
@@ -156,20 +158,12 @@ export function TransactionCard({
         {(status === 'idle' || isFailed) && (
           <Button
             onClick={isFailed && onRetry ? onRetry : onSubmit}
-            disabled={isLoading}
             className="w-full"
             size="lg"
+            disabled={disabled && !isFailed}
+            aria-disabled={disabled && !isFailed}
           >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Submitting...
-              </>
-            ) : isFailed ? (
-              'Retry Transaction'
-            ) : (
-              `Submit ${typeLabel}`
-            )}
+            {isFailed ? 'Retry Transaction' : `Submit ${typeLabel}`}
           </Button>
         )}
 
