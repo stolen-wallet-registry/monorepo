@@ -47,7 +47,7 @@ The contracts currently live in a separate repository and will be integrated int
 **Repository:** [stolen-wallet-registry-contracts](https://github.com/stolen-wallet-registry/stolen-wallet-registry-contracts)
 
 ```bash
-# Clone the contracts repo
+# Clone the contracts repo (outside the monorepo)
 git clone https://github.com/stolen-wallet-registry/stolen-wallet-registry-contracts.git
 cd stolen-wallet-registry-contracts
 
@@ -55,17 +55,22 @@ cd stolen-wallet-registry-contracts
 pnpm install
 forge build
 
-# Start local Anvil node (in a separate terminal)
-# --block-time 13 is required for the grace period timer to work
-anvil --ipc /tmp/anvil.ipc --steps-tracing --block-time 13
-
-# Deploy contracts to local Anvil
+# Deploy contracts to local Anvil (after starting Anvil - see below)
 pnpm deploy:dev
 ```
 
-The `--block-time 13` flag simulates ~13 second block times (similar to Ethereum mainnet), which is required for the grace period countdown feature to function correctly.
+### 2. Local Anvil Node
 
-### 2. Frontend
+Start a local Ethereum node. The `--block-time 13` flag is required for the grace period timer to work correctly.
+
+```bash
+# From the monorepo root
+pnpm anvil
+```
+
+This runs: `anvil --ipc /tmp/anvil.ipc --steps-tracing --block-time 13`
+
+### 3. Frontend
 
 ```bash
 # From the monorepo root
@@ -83,21 +88,17 @@ pnpm typecheck    # TypeScript check
 pnpm lint         # ESLint
 ```
 
-### 3. Relay Server (for P2P Registration)
+### 4. Relay Server (for P2P Registration)
 
 The relay server enables P2P registration where a helper can pay gas on behalf of a user with a drained wallet. Only needed when testing P2P relay functionality.
 
-**Location:** `../relayer/` (relative to monorepo)
+**Location:** `apps/relay/`
 
 ```bash
-cd ../relayer
-pnpm install
+# From the monorepo root
+pnpm relay              # Run relay server
 
-# Run relay server
-pnpm p2p-circuit
-
-# Run with debug logging (verbose libp2p output)
-pnpm p2p-circuit:debug
+pnpm relay:debug        # Run with debug logging (verbose libp2p output)
 ```
 
 ## Project Structure
@@ -105,6 +106,7 @@ pnpm p2p-circuit:debug
 ```
 stolen-wallet-registry-monorepo/
 ├── apps/
+│   ├── relay/                # libp2p circuit relay server
 │   └── web/                  # Vite frontend application
 │       ├── src/
 │       │   ├── components/   # UI and composed components
@@ -125,8 +127,9 @@ The project follows a phased development approach:
 | 1     | Frontend rebuild with Vite + modern stack         | In Progress |
 | 2     | Monorepo consolidation (merge contracts, relay)   | Planned     |
 | 3     | Contract architecture expansion (3 subregistries) | Planned     |
-| 4     | Cross-L2 integration                              | Future      |
-| 5     | DAO governance & operator system                  | Future      |
+| 4     | Cross-L2 EVM integration                          | Future      |
+| 5     | Cross-blockchain support (CAIP-10)                | Future      |
+| 6     | DAO governance & operator system                  | Future      |
 
 ### Future Subregistries
 
