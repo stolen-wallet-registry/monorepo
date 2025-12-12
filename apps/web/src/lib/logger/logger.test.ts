@@ -112,6 +112,81 @@ describe('logger', () => {
       const result = safeStringify(undefined);
       expect(typeof result).toBe('string');
     });
+
+    describe('redactAddresses option', () => {
+      // Use lowercase addresses (always accepted by viem's isAddress)
+      const address1 = '0x1234567890abcdef1234567890abcdef12345678';
+      const address2 = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd';
+
+      it('redacts valid Ethereum addresses when enabled', () => {
+        const result = safeStringify(
+          {
+            sender: address1,
+            recipient: address2,
+            amount: 100,
+          },
+          { redactAddresses: true }
+        );
+
+        // Addresses should be redacted to 0x...XXXX format
+        expect(result).toContain('0x...5678');
+        expect(result).toContain('0x...abcd');
+        // Full addresses should not appear
+        expect(result).not.toContain(address1);
+        expect(result).not.toContain(address2);
+        // Non-address data preserved
+        expect(result).toContain('100');
+      });
+
+      it('does not redact addresses when disabled', () => {
+        const result = safeStringify({ address: address1 }, { redactAddresses: false });
+
+        expect(result).toContain(address1);
+        expect(result).not.toContain('0x...5678');
+      });
+
+      it('does not redact non-address hex strings', () => {
+        const result = safeStringify(
+          {
+            txHash: '0x1234567890abcdef',
+            shortHex: '0xabc',
+          },
+          { redactAddresses: true }
+        );
+
+        // These are not valid addresses (wrong length), so should not be redacted
+        expect(result).toContain('0x1234567890abcdef');
+        expect(result).toContain('0xabc');
+      });
+
+      it('redacts nested addresses', () => {
+        const result = safeStringify(
+          {
+            transaction: {
+              from: address1,
+              to: address2,
+            },
+          },
+          { redactAddresses: true }
+        );
+
+        expect(result).toContain('0x...5678');
+        expect(result).toContain('0x...abcd');
+        expect(result).not.toContain(address1);
+      });
+
+      it('redacts addresses in arrays', () => {
+        const result = safeStringify(
+          {
+            addresses: [address1, address2],
+          },
+          { redactAddresses: true }
+        );
+
+        expect(result).toContain('0x...5678');
+        expect(result).toContain('0x...abcd');
+      });
+    });
   });
 
   describe('configuration', () => {

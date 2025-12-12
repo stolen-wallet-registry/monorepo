@@ -29,7 +29,7 @@ const MAX_STRING_LENGTH = 5000;
  * Redact an Ethereum address, keeping last 4 characters for debugging.
  * Example: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0 → 0x...bEb0
  */
-function redactAddress(address: string): string {
+export function redactAddress(address: string): string {
   return `0x...${address.slice(-4)}`;
 }
 

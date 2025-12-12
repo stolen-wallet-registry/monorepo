@@ -21,8 +21,8 @@ export interface AddressInputProps extends Omit<React.ComponentProps<'input'>, '
   addressType?: AddressType;
   /** Whether to show validation icon (default: true) */
   showValidation?: boolean;
-  /** Custom validation function (overrides addressType validation) */
-  validate?: (value: string) => boolean;
+  /** Custom validation function (overrides addressType validation). Return null for no validation state. */
+  validate?: (value: string) => boolean | null;
 }
 
 /**
@@ -92,10 +92,10 @@ export const AddressInput = forwardRef<HTMLInputElement, AddressInputProps>(
         <Input
           ref={ref}
           type="text"
+          {...props}
           value={stringValue}
           aria-invalid={isValid === false}
           className={cn('font-mono pr-10', className)}
-          {...props}
         />
         {showValidation && isValid !== null && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">

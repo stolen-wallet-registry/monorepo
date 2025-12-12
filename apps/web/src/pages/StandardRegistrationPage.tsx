@@ -64,13 +64,12 @@ export function StandardRegistrationPage() {
   const { registrationType, step, setRegistrationType } = useRegistrationStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
 
-  // Initialize registration type on mount only
+  // Initialize registration type
   useEffect(() => {
     if (registrationType !== 'standard') {
       setRegistrationType('standard');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Run only on mount to set initial type
-  }, []);
+  }, [registrationType, setRegistrationType]);
 
   // Redirect if not connected (side effect in useEffect, not during render)
   useEffect(() => {
@@ -96,14 +95,14 @@ export function StandardRegistrationPage() {
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-8">
-      <Button variant="outline" onClick={handleBack} className="mb-6">
+      <Button type="button" variant="outline" onClick={handleBack} className="mb-6">
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back to Home
       </Button>
 
       <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
         {/* Step Indicator Sidebar */}
-        <aside>
+        <aside aria-label="Registration steps">
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">

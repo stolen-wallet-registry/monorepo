@@ -15,7 +15,8 @@ import type {
   Logger,
 } from './types';
 import { getDefaultConfig, LOG_LEVEL_PRIORITY } from './config';
-import { formatConsolePrefix, LEVEL_COLORS, safeStringify } from './formatters';
+import { isAddress } from 'viem';
+import { formatConsolePrefix, LEVEL_COLORS, redactAddress, safeStringify } from './formatters';
 
 // Current configuration (mutable, can be updated at runtime)
 let currentConfig: LogConfig = getDefaultConfig();
@@ -81,6 +82,13 @@ export function emitLog(entry: LogEntry): void {
       args.push(
         '\n' + safeStringify(entry.data, { redactAddresses: currentConfig.redactAddresses })
       );
+    } else if (
+      currentConfig.redactAddresses &&
+      typeof entry.data === 'string' &&
+      isAddress(entry.data)
+    ) {
+      // Redact string addresses in staging/production
+      args.push(redactAddress(entry.data));
     } else {
       args.push(entry.data);
     }
