@@ -41,6 +41,17 @@ const ALL_CATEGORIES_ENABLED = {
   ui: true,
 } as const;
 
+// Staging categories - no store/ui to prevent wallet address leaks in logs
+const STAGING_CATEGORIES = {
+  wallet: true,
+  contract: true,
+  signature: true,
+  registration: true,
+  p2p: true,
+  store: false,
+  ui: false,
+} as const;
+
 const ALL_CATEGORIES_DISABLED = {
   wallet: false,
   contract: false,
@@ -62,7 +73,7 @@ export const DEFAULT_CONFIGS: Record<Environment, LogConfig> = {
   staging: {
     enabled: true,
     level: 'info',
-    categories: { ...ALL_CATEGORIES_ENABLED },
+    categories: { ...STAGING_CATEGORIES },
     includeTimestamp: true,
     includeStackTrace: false,
   },

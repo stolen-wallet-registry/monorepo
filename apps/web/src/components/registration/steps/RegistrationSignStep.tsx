@@ -18,6 +18,7 @@ import { useContractNonce } from '@/hooks/useContractNonce';
 import { storeSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { logger } from '@/lib/logger';
+import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 export interface RegistrationSignStepProps {
@@ -174,7 +175,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         },
         err instanceof Error ? err : undefined
       );
-      setSignatureError(err instanceof Error ? err.message : 'Failed to sign');
+      setSignatureError(sanitizeErrorMessage(err));
       setSignatureStatus('error');
     }
   };

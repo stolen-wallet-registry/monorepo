@@ -64,12 +64,13 @@ export function StandardRegistrationPage() {
   const { registrationType, step, setRegistrationType } = useRegistrationStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
 
-  // Initialize registration type on mount
+  // Initialize registration type on mount only
   useEffect(() => {
     if (registrationType !== 'standard') {
       setRegistrationType('standard');
     }
-  }, [registrationType, setRegistrationType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Run only on mount to set initial type
+  }, []);
 
   // Redirect if not connected (side effect in useEffect, not during render)
   useEffect(() => {
@@ -95,7 +96,7 @@ export function StandardRegistrationPage() {
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-8">
-      <Button variant="ghost" onClick={handleBack} className="mb-6">
+      <Button variant="outline" onClick={handleBack} className="mb-6">
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back to Home
       </Button>

@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { cn } from '@/lib/utils';
 import { truncateAddress } from '@/lib/address';
 import { PenTool, Check, AlertCircle, Loader2 } from 'lucide-react';
@@ -105,20 +106,44 @@ export function SignatureCard({
       <CardContent className="space-y-4">
         {/* Data being signed */}
         <div className="rounded-lg bg-muted p-4 space-y-2 font-mono text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Registeree:</span>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground flex items-center gap-1">
+              Registeree:
+              <InfoTooltip
+                content="The wallet address being registered as stolen. This is the compromised wallet you're reporting."
+                size="sm"
+              />
+            </span>
             <span>{truncateAddress(data.registeree, 6)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Forwarder:</span>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground flex items-center gap-1">
+              Forwarder:
+              <InfoTooltip
+                content="The wallet that will submit the transaction and pay gas fees. In standard registration, this is the same as the registeree."
+                size="sm"
+              />
+            </span>
             <span>{truncateAddress(data.forwarder, 6)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Nonce:</span>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground flex items-center gap-1">
+              Nonce:
+              <InfoTooltip
+                content="A unique number that prevents replay attacks. Each signature uses a different nonce to ensure it can only be used once."
+                size="sm"
+              />
+            </span>
             <span>{data.nonce.toString()}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Deadline:</span>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground flex items-center gap-1">
+              Deadline:
+              <InfoTooltip
+                content="The block number after which this signature expires. This prevents old signatures from being used maliciously."
+                size="sm"
+              />
+            </span>
             <span>Block {data.deadline.toString()}</span>
           </div>
         </div>

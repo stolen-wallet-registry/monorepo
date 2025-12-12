@@ -34,7 +34,8 @@ import { useContractNonce } from '@/hooks/useContractNonce';
 import { storeSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { logger } from '@/lib/logger';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { sanitizeErrorMessage } from '@/lib/utils';
+import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 
 export interface InitialFormStepProps {
   /** Called when step is complete */
@@ -259,7 +260,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         { error: err instanceof Error ? err.message : String(err) },
         err instanceof Error ? err : undefined
       );
-      setSignatureError(err instanceof Error ? err.message : 'Failed to sign');
+      setSignatureError(sanitizeErrorMessage(err));
       setSignatureStatus('error');
     }
   };
@@ -290,7 +291,8 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     return (
       <div className="space-y-4">
         {/* Back button */}
-        <Button variant="ghost" onClick={() => setShowSignature(false)} disabled={isSigning}>
+        <Button variant="outline" onClick={() => setShowSignature(false)} disabled={isSigning}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Form
         </Button>
 
