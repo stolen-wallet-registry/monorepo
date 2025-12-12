@@ -65,13 +65,13 @@ describe('SignatureCard', () => {
       render(<SignatureCard {...defaultProps} status="signing" />);
 
       expect(screen.getByText(/Waiting for signature/i)).toBeInTheDocument();
-      expect(screen.getByRole('button')).toBeDisabled();
+      expect(screen.getByRole('button', { name: /Waiting for signature/i })).toBeDisabled();
     });
 
     it('button is disabled during signing', () => {
       render(<SignatureCard {...defaultProps} status="signing" />);
 
-      expect(screen.getByRole('button')).toBeDisabled();
+      expect(screen.getByRole('button', { name: /Waiting for signature/i })).toBeDisabled();
     });
   });
 

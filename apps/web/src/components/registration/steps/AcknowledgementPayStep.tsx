@@ -8,7 +8,11 @@ import { useEffect, useState } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { TransactionCard, type TransactionStatus } from '@/components/composed/TransactionCard';
+import {
+  TransactionCard,
+  type TransactionStatus,
+  type SignedMessageData,
+} from '@/components/composed/TransactionCard';
 import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
@@ -17,6 +21,7 @@ import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
+import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
 
 export interface AcknowledgementPayStepProps {
@@ -83,8 +88,8 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
       });
       setAcknowledgementHash(hash);
       logger.registration.info('Acknowledgement complete, advancing to grace period');
-      // Advance to next step after short delay
-      const timerId = setTimeout(onComplete, 1500);
+      // Advance to next step after delay to let user see success
+      const timerId = setTimeout(onComplete, 3000);
       return () => clearTimeout(timerId);
     }
   }, [isConfirmed, hash, setAcknowledgementHash, onComplete, registeree, registrationType]);
@@ -142,7 +147,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         },
         err instanceof Error ? err : undefined
       );
-      setLocalError(err instanceof Error ? err.message : 'Transaction failed');
+      setLocalError(sanitizeErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -193,9 +198,19 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   // Get explorer URL
   const explorerUrl = hash ? getExplorerTxUrl(chainId, hash) : null;
 
-  // Get error message
-  const errorMessage =
-    localError || (error instanceof Error ? error.message : error ? String(error) : null);
+  // Get error message - sanitize both local errors and hook errors
+  const errorMessage = localError || (error ? sanitizeErrorMessage(error) : null);
+
+  // Build signed message data for display
+  const signedMessageData: SignedMessageData | null = storedSignature
+    ? {
+        registeree,
+        forwarder: expectedWallet,
+        nonce: storedSignature.nonce,
+        deadline: storedSignature.deadline,
+        signature: storedSignature.signature,
+      }
+    : null;
 
   return (
     <div className="space-y-4">
@@ -217,6 +232,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         hash={hash}
         error={errorMessage}
         explorerUrl={explorerUrl}
+        signedMessage={signedMessageData}
         onSubmit={handleSubmit}
         onRetry={handleRetry}
         disabled={!isCorrectWallet}

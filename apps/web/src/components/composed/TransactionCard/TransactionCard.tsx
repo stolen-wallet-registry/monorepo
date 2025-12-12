@@ -1,17 +1,34 @@
 /**
  * Transaction card component for blockchain transaction submission.
  *
- * Displays transaction status and links to block explorer.
+ * Displays transaction status, signed message preview, and links to block explorer.
  */
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { InfoTooltip } from '@/components/composed/InfoTooltip';
+import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
-import { Send, Check, AlertCircle, Loader2, ExternalLink, Clock } from 'lucide-react';
+import { truncateAddress } from '@/lib/address';
+import { Send, Check, AlertCircle, Loader2, Clock, FileSignature } from 'lucide-react';
 
 export type TransactionStatus = 'idle' | 'submitting' | 'pending' | 'confirmed' | 'failed';
+
+/** Signed message data to display */
+export interface SignedMessageData {
+  /** Wallet being registered */
+  registeree: `0x${string}`;
+  /** Wallet that will submit transaction */
+  forwarder: `0x${string}`;
+  /** Signature nonce */
+  nonce: bigint;
+  /** Block deadline for signature validity */
+  deadline: bigint;
+  /** The actual signature */
+  signature: `0x${string}`;
+}
 
 export interface TransactionCardProps {
   /** Type of transaction */
@@ -24,6 +41,8 @@ export interface TransactionCardProps {
   error?: string | null;
   /** Block explorer URL */
   explorerUrl?: string | null;
+  /** Signed message data to display */
+  signedMessage?: SignedMessageData | null;
   /** Callback to submit transaction */
   onSubmit: () => void;
   /** Callback to retry after failure */
@@ -62,6 +81,7 @@ export function TransactionCard({
   hash,
   error,
   explorerUrl,
+  signedMessage,
   onSubmit,
   onRetry,
   disabled = false,
@@ -105,7 +125,17 @@ export function TransactionCard({
               {getIcon()}
             </div>
             <div>
-              <CardTitle className="text-lg">Submit {typeLabel}</CardTitle>
+              <div className="flex items-center gap-1.5">
+                <CardTitle className="text-lg">Submit {typeLabel}</CardTitle>
+                <InfoTooltip
+                  content={
+                    type === 'acknowledgement'
+                      ? 'Submit your signed acknowledgement to the blockchain. This records your intent and starts the grace period before final registration.'
+                      : 'Submit your signed registration to permanently record this wallet as stolen in the on-chain registry. This action cannot be undone.'
+                  }
+                  size="sm"
+                />
+              </div>
               <CardDescription>{getDescription()}</CardDescription>
             </div>
           </div>
@@ -115,26 +145,83 @@ export function TransactionCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Signed message preview */}
+        {signedMessage && !isConfirmed && (
+          <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <FileSignature className="h-4 w-4 text-muted-foreground" />
+              <span>Signed Message</span>
+              <InfoTooltip
+                content={
+                  type === 'acknowledgement'
+                    ? 'This is the EIP-712 acknowledgement message you signed. Submitting this transaction will record your intent to register this wallet as stolen and start the grace period.'
+                    : 'This is the EIP-712 registration message you signed. Submitting this transaction will permanently mark this wallet as stolen in the on-chain registry.'
+                }
+                size="sm"
+              />
+            </div>
+            <div className="space-y-2 font-mono text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  Registeree:
+                  <InfoTooltip content="The wallet address being registered as stolen." size="sm" />
+                </span>
+                <span>{truncateAddress(signedMessage.registeree, 6)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  Forwarder:
+                  <InfoTooltip
+                    content="The wallet submitting this transaction and paying gas fees."
+                    size="sm"
+                  />
+                </span>
+                <span>{truncateAddress(signedMessage.forwarder, 6)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  Nonce:
+                  <InfoTooltip
+                    content="A unique number preventing replay attacks. Each signature uses a different nonce."
+                    size="sm"
+                  />
+                </span>
+                <span>{signedMessage.nonce.toString()}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  Deadline:
+                  <InfoTooltip
+                    content="The block number after which this signature expires and cannot be used."
+                    size="sm"
+                  />
+                </span>
+                <span>Block {signedMessage.deadline.toString()}</span>
+              </div>
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground mb-1">Signature</p>
+                <p className="text-xs break-all text-muted-foreground/80">
+                  {signedMessage.signature.slice(0, 26)}...{signedMessage.signature.slice(-24)}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Info text for payment */}
+        {signedMessage && status === 'idle' && (
+          <p className="text-sm text-muted-foreground text-center">
+            {type === 'acknowledgement'
+              ? 'Click below to pay gas and submit your signed acknowledgement to the blockchain.'
+              : 'Click below to pay gas and permanently register this wallet as stolen.'}
+          </p>
+        )}
+
         {/* Transaction hash */}
         {hash && (
           <div className="rounded-lg bg-muted p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Transaction Hash</span>
-              {explorerUrl && (
-                <a
-                  href={explorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline flex items-center gap-1"
-                >
-                  View on Explorer
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
-            </div>
-            <p className="font-mono text-sm mt-1 break-all">
-              {hash.slice(0, 20)}...{hash.slice(-20)}
-            </p>
+            <span className="text-sm text-muted-foreground block mb-1">Transaction Hash</span>
+            <ExplorerLink value={hash} href={explorerUrl} />
           </div>
         )}
 
@@ -148,22 +235,31 @@ export function TransactionCard({
 
         {/* Error message */}
         {isFailed && error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+          <Alert variant="destructive" className="overflow-hidden">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <AlertDescription className="break-words">{error}</AlertDescription>
           </Alert>
         )}
 
-        {/* Action button */}
-        {(status === 'idle' || isFailed) && (
+        {/* Action button - show during idle, submitting, and failed states */}
+        {(status === 'idle' || isSubmitting || isFailed) && (
           <Button
             onClick={isFailed && onRetry ? onRetry : onSubmit}
             className="w-full"
             size="lg"
-            disabled={disabled && !isFailed}
-            aria-disabled={disabled && !isFailed}
+            disabled={isSubmitting || (disabled && !isFailed)}
+            aria-disabled={isSubmitting || (disabled && !isFailed)}
           >
-            {isFailed ? 'Retry Transaction' : `Submit ${typeLabel}`}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Submitting...
+              </>
+            ) : isFailed ? (
+              'Retry Transaction'
+            ) : (
+              `Submit ${typeLabel}`
+            )}
           </Button>
         )}
 

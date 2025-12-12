@@ -12,8 +12,8 @@ import { useAccount, useChainId } from 'wagmi';
 import { isAddress } from 'viem';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { AddressInput } from '@/components/composed/AddressInput';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Form,
@@ -34,7 +34,8 @@ import { useContractNonce } from '@/hooks/useContractNonce';
 import { storeSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { logger } from '@/lib/logger';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { sanitizeErrorMessage } from '@/lib/utils';
+import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 
 export interface InitialFormStepProps {
   /** Called when step is complete */
@@ -176,7 +177,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     setFormValues(formData);
     logger.store.debug('Form values saved to store', formData);
 
-    // Refetch hash struct to get fresh deadline
+    // Refetch hash struct to get fresh deadline (result used in handleSign)
     logger.contract.debug('Refetching hash struct for fresh deadline');
     await refetchHashStruct();
 
@@ -195,13 +196,27 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
       hasNonce: nonce !== undefined,
     });
 
-    if (!address || !hashStructData || nonce === undefined) {
+    if (!address || nonce === undefined) {
       logger.signature.error('Missing required data for acknowledgement signing', {
         address,
         hashStructData: !!hashStructData,
         nonce,
       });
       setSignatureError('Missing required data for signing');
+      setSignatureStatus('error');
+      return;
+    }
+
+    // Refetch hash struct to get fresh deadline
+    logger.contract.debug('Refetching hash struct for fresh deadline');
+    const refetchResult = await refetchHashStruct();
+    // Refetch returns raw contract data [deadline, hashStruct], transform if present
+    const rawData = refetchResult?.data as [bigint, `0x${string}`] | undefined;
+    const freshDeadline = rawData?.[0] ?? hashStructData?.deadline;
+
+    if (freshDeadline === undefined) {
+      logger.signature.error('Failed to get hash struct data');
+      setSignatureError('Failed to load signing data. Please try again.');
       setSignatureStatus('error');
       return;
     }
@@ -216,7 +231,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         owner: address,
         forwarder,
         nonce: nonce.toString(),
-        deadline: hashStructData.deadline.toString(),
+        deadline: freshDeadline.toString(),
         chainId,
       });
 
@@ -224,7 +239,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         owner: address,
         forwarder,
         nonce,
-        deadline: hashStructData.deadline,
+        deadline: freshDeadline,
       });
 
       logger.signature.info('Acknowledgement signature obtained', {
@@ -234,7 +249,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
       // Store signature
       storeSignature({
         signature: sig,
-        deadline: hashStructData.deadline,
+        deadline: freshDeadline,
         nonce,
         address,
         chainId,
@@ -259,7 +274,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         { error: err instanceof Error ? err.message : String(err) },
         err instanceof Error ? err : undefined
       );
-      setSignatureError(err instanceof Error ? err.message : 'Failed to sign');
+      setSignatureError(sanitizeErrorMessage(err));
       setSignatureStatus('error');
     }
   };
@@ -290,7 +305,25 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     return (
       <div className="space-y-4">
         {/* Back button */}
-        <Button variant="ghost" onClick={() => setShowSignature(false)} disabled={isSigning}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            // Clear pending completion timeout
+            if (completionTimeoutRef.current) {
+              clearTimeout(completionTimeoutRef.current);
+              completionTimeoutRef.current = null;
+            }
+            // Reset signature state
+            resetSigning();
+            setSignatureStatus('idle');
+            setSignatureError(null);
+            setSignature(null);
+            // Return to form
+            setShowSignature(false);
+          }}
+          disabled={isSigning}
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Form
         </Button>
 
@@ -358,7 +391,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
                 />
               </div>
               <FormControl>
-                <Input {...field} readOnly className="font-mono bg-muted" />
+                <AddressInput {...field} readOnly addressType="ethereum" className="bg-muted" />
               </FormControl>
               <FormDescription>
                 This is your currently connected wallet. It will be registered as stolen.
@@ -375,9 +408,15 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
             name="relayer"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Gas Wallet Address</FormLabel>
+                <div className="flex items-center gap-2">
+                  <FormLabel>Gas Wallet Address</FormLabel>
+                  <InfoTooltip
+                    content="This is a separate wallet you control that has funds for gas fees. After signing with your stolen wallet, you'll switch to this wallet to submit the transaction."
+                    side="right"
+                  />
+                </div>
                 <FormControl>
-                  <Input {...field} placeholder="0x..." className="font-mono" />
+                  <AddressInput {...field} placeholder="0x..." addressType="ethereum" />
                 </FormControl>
                 <FormDescription>
                   Enter the address of the wallet you&apos;ll use to pay gas fees. You&apos;ll need

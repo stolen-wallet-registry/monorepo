@@ -7,6 +7,7 @@
 
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { cn } from '@/lib/utils';
 import { formatTimeString, type TimeRemaining } from '@/lib/blocks';
 
@@ -108,20 +109,28 @@ export function GracePeriodTimer({
   return (
     <div className={cn('space-y-3 text-center', className)}>
       {/* Time display */}
-      <div
-        className={cn(
-          'font-mono text-4xl font-bold tabular-nums tracking-tight',
-          isUrgent && 'text-amber-600 dark:text-amber-400 animate-pulse',
-          !isUrgent && 'text-foreground'
-        )}
-      >
-        {timeDisplay}
+      <div className="flex items-center justify-center gap-2">
+        <div
+          className={cn(
+            'font-mono text-4xl font-bold tabular-nums tracking-tight',
+            isUrgent && 'text-amber-600 dark:text-amber-400 animate-pulse',
+            !isUrgent && 'text-foreground'
+          )}
+        >
+          {timeDisplay}
+        </div>
       </div>
 
       {/* Blocks remaining */}
-      <p className="text-sm text-muted-foreground">
-        ~{blocksLeft.toString()} block{blocksLeft !== 1n ? 's' : ''} remaining
-      </p>
+      <div className="flex items-center justify-center gap-1">
+        <p className="text-sm text-muted-foreground">
+          ~{blocksLeft.toString()} block{blocksLeft !== 1n ? 's' : ''} remaining
+        </p>
+        <InfoTooltip
+          content="The grace period is measured in blockchain blocks, not wall-clock time. The time shown above is an estimate based on average block times. Actual completion depends on when the target block is confirmed on-chain."
+          size="sm"
+        />
+      </div>
 
       {/* Progress bar */}
       <Progress

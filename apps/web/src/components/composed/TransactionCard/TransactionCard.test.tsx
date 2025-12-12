@@ -66,15 +66,13 @@ describe('TransactionCard', () => {
     });
 
     it('displays transaction hash', () => {
-      const { container } = render(
-        <TransactionCard {...defaultProps} status="pending" hash={sampleHash} />
-      );
+      render(<TransactionCard {...defaultProps} status="pending" hash={sampleHash} />);
 
       expect(screen.getByText('Transaction Hash')).toBeInTheDocument();
-      // Hash is displayed in a monospace paragraph element
-      const hashParagraph = container.querySelector('.font-mono.break-all');
-      expect(hashParagraph).toBeInTheDocument();
-      expect(hashParagraph?.textContent).toContain('0x1234567890');
+      // Hash is displayed via ExplorerLink component
+      const hashElement = screen.getByTestId('explorer-link');
+      expect(hashElement).toBeInTheDocument();
+      expect(hashElement).toHaveTextContent('0x12345678');
     });
 
     it('shows waiting message', () => {
@@ -93,7 +91,10 @@ describe('TransactionCard', () => {
         />
       );
 
-      expect(screen.getByText('View on Explorer')).toBeInTheDocument();
+      // ExplorerLink renders with nested anchor for explorer link
+      const explorerLink = screen.getByTestId('explorer-link');
+      const anchor = explorerLink.querySelector('a[href]');
+      expect(anchor).toHaveAttribute('href', 'https://etherscan.io/tx/0x123');
     });
 
     it('hides submit button during pending', () => {
@@ -198,10 +199,12 @@ describe('TransactionCard', () => {
         />
       );
 
-      const link = screen.getByRole('link', { name: /View on Explorer/i });
-      expect(link).toHaveAttribute('href', explorerUrl);
-      expect(link).toHaveAttribute('target', '_blank');
-      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      // ExplorerLink renders with nested anchor for explorer link
+      const explorerLink = screen.getByTestId('explorer-link');
+      const anchor = explorerLink.querySelector('a[href]');
+      expect(anchor).toHaveAttribute('href', explorerUrl);
+      expect(anchor).toHaveAttribute('target', '_blank');
+      expect(anchor).toHaveAttribute('rel', 'noopener noreferrer');
     });
   });
 });

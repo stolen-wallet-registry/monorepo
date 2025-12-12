@@ -52,7 +52,7 @@ const STEP_TOOLTIPS: Partial<Record<RegistrationStep, string>> = {
   'grace-period':
     'A randomized waiting period (1-4 minutes) designed to prevent phishing attacks. This delay ensures you have time to recognize and cancel suspicious registrations.',
   'register-and-sign':
-    'Second signature: Sign the final registration message. This confirms your intent after the grace period.',
+    'Second signature: Sign the final registration message. This confirms your intent to register the wallet as stolen after the grace period.',
   'register-and-pay':
     'Submit the registration transaction to permanently mark this wallet as stolen on the blockchain.',
   success: 'Your wallet has been successfully registered as stolen in the on-chain registry.',
@@ -64,7 +64,7 @@ export function StandardRegistrationPage() {
   const { registrationType, step, setRegistrationType } = useRegistrationStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
 
-  // Initialize registration type on mount
+  // Initialize registration type
   useEffect(() => {
     if (registrationType !== 'standard') {
       setRegistrationType('standard');
@@ -95,15 +95,15 @@ export function StandardRegistrationPage() {
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-8">
-      <Button variant="ghost" onClick={handleBack} className="mb-6">
+      <Button type="button" variant="outline" onClick={handleBack} className="mb-6">
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back to Home
       </Button>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-stretch">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
         {/* Step Indicator Sidebar */}
-        <aside className="flex">
-          <Card className="flex-1 flex flex-col">
+        <aside aria-label="Registration steps">
+          <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CardTitle className="text-lg">Standard Registration</CardTitle>
@@ -114,7 +114,7 @@ export function StandardRegistrationPage() {
               </div>
               <CardDescription>Sign and pay from the same wallet</CardDescription>
             </CardHeader>
-            <CardContent className="flex-1">
+            <CardContent>
               <StepIndicator
                 registrationType="standard"
                 currentStep={step}
@@ -125,8 +125,8 @@ export function StandardRegistrationPage() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex">
-          <Card className="flex-1 flex flex-col justify-center">
+        <main>
+          <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CardTitle>{currentTitle}</CardTitle>

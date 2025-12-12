@@ -15,7 +15,8 @@ import type {
   Logger,
 } from './types';
 import { getDefaultConfig, LOG_LEVEL_PRIORITY } from './config';
-import { formatConsolePrefix, LEVEL_COLORS, safeStringify } from './formatters';
+import { isAddress } from 'viem';
+import { formatConsolePrefix, LEVEL_COLORS, redactAddress, safeStringify } from './formatters';
 
 // Current configuration (mutable, can be updated at runtime)
 let currentConfig: LogConfig = getDefaultConfig();
@@ -31,6 +32,7 @@ export function configureLogger(config: LogConfigUpdate): void {
     ...(config.level !== undefined && { level: config.level }),
     ...(config.includeTimestamp !== undefined && { includeTimestamp: config.includeTimestamp }),
     ...(config.includeStackTrace !== undefined && { includeStackTrace: config.includeStackTrace }),
+    ...(config.redactAddresses !== undefined && { redactAddresses: config.redactAddresses }),
     // Deep merge categories if provided
     categories: config.categories
       ? { ...currentConfig.categories, ...config.categories }
@@ -75,9 +77,18 @@ export function emitLog(entry: LogEntry): void {
 
   // Add data if present
   if (entry.data !== undefined) {
-    // For objects, stringify them nicely
+    // For objects, stringify them nicely (with address redaction if enabled)
     if (typeof entry.data === 'object' && entry.data !== null) {
-      args.push('\n' + safeStringify(entry.data));
+      args.push(
+        '\n' + safeStringify(entry.data, { redactAddresses: currentConfig.redactAddresses })
+      );
+    } else if (
+      currentConfig.redactAddresses &&
+      typeof entry.data === 'string' &&
+      isAddress(entry.data)
+    ) {
+      // Redact string addresses when redactAddresses config is enabled
+      args.push(redactAddress(entry.data));
     } else {
       args.push(entry.data);
     }

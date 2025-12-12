@@ -69,6 +69,11 @@ function getStepStatus(
     return 'pending';
   }
 
+  // Success step should show as completed when we're on it (not spinner)
+  if (step === 'success' && currentStep === 'success') {
+    return 'completed';
+  }
+
   if (stepIndex < currentIndex) return 'completed';
   if (stepIndex === currentIndex) return 'current';
   return 'pending';

@@ -8,8 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { InfoTooltip } from '@/components/composed/InfoTooltip';
+import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
-import { truncateAddress } from '@/lib/address';
 import { PenTool, Check, AlertCircle, Loader2 } from 'lucide-react';
 
 export type SignatureStatus = 'idle' | 'signing' | 'success' | 'error';
@@ -91,7 +92,17 @@ export function SignatureCard({
               )}
             </div>
             <div>
-              <CardTitle className="text-lg">Sign {typeLabel}</CardTitle>
+              <div className="flex items-center gap-1.5">
+                <CardTitle className="text-lg">Sign {typeLabel}</CardTitle>
+                <InfoTooltip
+                  content={
+                    type === 'acknowledgement'
+                      ? 'Sign this EIP-712 message to acknowledge your intent to register this wallet as stolen. This signature will be submitted to the blockchain in the next step.'
+                      : 'Sign this EIP-712 message to complete your registration. This signature will permanently mark your wallet as stolen in the on-chain registry.'
+                  }
+                  size="sm"
+                />
+              </div>
               <CardDescription>
                 {isSuccess
                   ? 'Signature complete'
@@ -105,20 +116,44 @@ export function SignatureCard({
       <CardContent className="space-y-4">
         {/* Data being signed */}
         <div className="rounded-lg bg-muted p-4 space-y-2 font-mono text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Registeree:</span>
-            <span>{truncateAddress(data.registeree, 6)}</span>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground flex items-center gap-1">
+              Registeree:
+              <InfoTooltip
+                content="The wallet address being registered as stolen. This is the compromised wallet you're reporting."
+                size="sm"
+              />
+            </span>
+            <ExplorerLink value={data.registeree} showDisabledIcon={false} />
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Forwarder:</span>
-            <span>{truncateAddress(data.forwarder, 6)}</span>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground flex items-center gap-1">
+              Forwarder:
+              <InfoTooltip
+                content="The wallet that will submit the transaction and pay gas fees. In standard registration, this is the same as the registeree."
+                size="sm"
+              />
+            </span>
+            <ExplorerLink value={data.forwarder} showDisabledIcon={false} />
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Nonce:</span>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground flex items-center gap-1">
+              Nonce:
+              <InfoTooltip
+                content="A unique number that prevents replay attacks. Each signature uses a different nonce to ensure it can only be used once."
+                size="sm"
+              />
+            </span>
             <span>{data.nonce.toString()}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Deadline:</span>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground flex items-center gap-1">
+              Deadline:
+              <InfoTooltip
+                content="The block number after which this signature expires. This prevents old signatures from being used maliciously."
+                size="sm"
+              />
+            </span>
             <span>Block {data.deadline.toString()}</span>
           </div>
         </div>

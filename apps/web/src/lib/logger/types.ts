@@ -20,6 +20,8 @@ export interface LogConfig {
   categories: Record<LogCategory, boolean>;
   includeTimestamp: boolean;
   includeStackTrace: boolean;
+  /** Redact Ethereum addresses in log output (recommended for staging/production) */
+  redactAddresses: boolean;
 }
 
 // For configureLogger, categories can be partial
@@ -29,6 +31,7 @@ export interface LogConfigUpdate {
   categories?: Partial<Record<LogCategory, boolean>>;
   includeTimestamp?: boolean;
   includeStackTrace?: boolean;
+  redactAddresses?: boolean;
 }
 
 export interface LogEntry {
