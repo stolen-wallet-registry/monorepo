@@ -8,6 +8,10 @@ const meta: Meta<typeof TransactionCard> = {
     layout: 'centered',
   },
   tags: ['autodocs'],
+  argTypes: {
+    // Disable controls for object with BigInt - Storybook can't serialize them
+    signedMessage: { control: false },
+  },
   decorators: [
     (Story) => (
       <div className="w-[420px] p-4">

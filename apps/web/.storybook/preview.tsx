@@ -36,6 +36,11 @@ const preview: Preview = {
   },
   decorators: [withThemeClasses],
   parameters: {
+    options: {
+      storySort: {
+        order: ['Primitives', 'Composed', 'MagicUI'],
+      },
+    },
     backgrounds: { disable: true }, // Use theme backgrounds instead
     controls: {
       matchers: {

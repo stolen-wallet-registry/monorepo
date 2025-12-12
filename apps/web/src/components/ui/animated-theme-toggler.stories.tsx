@@ -3,7 +3,7 @@ import { AnimatedThemeToggler } from './animated-theme-toggler';
 import { ThemeProvider } from '@/providers/ThemeProvider';
 
 const meta = {
-  title: 'Theme/AnimatedThemeToggler',
+  title: 'Magic UI/AnimatedThemeToggler',
   component: AnimatedThemeToggler,
   parameters: {
     layout: 'centered',

@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
+import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
-import { truncateAddress } from '@/lib/address';
 import { PenTool, Check, AlertCircle, Loader2 } from 'lucide-react';
 
 export type SignatureStatus = 'idle' | 'signing' | 'success' | 'error';
@@ -124,7 +124,7 @@ export function SignatureCard({
                 size="sm"
               />
             </span>
-            <span>{truncateAddress(data.registeree, 6)}</span>
+            <ExplorerLink value={data.registeree} showDisabledIcon={false} />
           </div>
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground flex items-center gap-1">
@@ -134,7 +134,7 @@ export function SignatureCard({
                 size="sm"
               />
             </span>
-            <span>{truncateAddress(data.forwarder, 6)}</span>
+            <ExplorerLink value={data.forwarder} showDisabledIcon={false} />
           </div>
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground flex items-center gap-1">

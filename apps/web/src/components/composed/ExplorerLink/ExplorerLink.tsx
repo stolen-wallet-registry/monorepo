@@ -1,11 +1,15 @@
 /**
  * Explorer link component for displaying blockchain hashes/addresses with links.
  *
- * Renders a truncated hash or address with an external link icon that opens
- * the block explorer. Shows disabled icon when no URL is provided (e.g., local chains).
+ * Features:
+ * - Truncated display with full address searchable via Ctrl+F
+ * - Native browser highlight works on visible start/end portions
+ * - Tooltip on hover showing full address for copying
+ * - Disabled icon for local chains without explorers
  */
 
 import { ExternalLink } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 export interface ExplorerLinkProps {
@@ -17,41 +21,53 @@ export interface ExplorerLinkProps {
   truncate?: boolean;
   /** Whether to show the external link icon when disabled (default: true) */
   showDisabledIcon?: boolean;
+  /** Whether to show tooltip with full value on hover (default: true when truncated) */
+  showTooltip?: boolean;
   /** Additional class names */
   className?: string;
 }
 
 /**
+ * Searchable truncated address using CSS clipping.
+ * Full address is in DOM twice (start + end portions) for Ctrl+F searchability.
+ * RTL direction trick right-aligns the end portion to show last 8 chars.
+ */
+function TruncatedAddress({ value }: { value: string }) {
+  return (
+    <span className="inline-flex whitespace-nowrap" aria-label={value}>
+      {/* Start: first 10 chars visible */}
+      <span className="inline-block overflow-hidden" style={{ width: '10ch' }}>
+        {value}
+      </span>
+      <span>...</span>
+      {/* End: last 8 chars visible via RTL alignment */}
+      <span className="inline-block overflow-hidden" style={{ width: '8ch', direction: 'rtl' }}>
+        <span style={{ direction: 'ltr', unicodeBidi: 'bidi-override' }}>{value}</span>
+      </span>
+    </span>
+  );
+}
+
+/**
  * Displays a blockchain hash or address with optional explorer link.
- * Shows a disabled external link icon for local chains without explorers.
+ *
+ * When truncated, tooltip shows full address on hover for easy copying.
  */
 export function ExplorerLink({
   value,
   href,
   truncate = true,
   showDisabledIcon = true,
+  showTooltip = true,
   className,
 }: ExplorerLinkProps) {
-  const displayValue = truncate ? `${value.slice(0, 10)}...${value.slice(-8)}` : value;
+  const shouldShowTooltip = truncate && showTooltip;
 
-  if (!href) {
-    return (
-      <span
-        data-testid="explorer-link"
-        className={cn('font-mono text-sm inline-flex items-center gap-1.5', className)}
-      >
-        {displayValue}
-        {showDisabledIcon && (
-          <ExternalLink
-            className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/40"
-            aria-label="No block explorer available for this network"
-          />
-        )}
-      </span>
-    );
-  }
+  // Content display (truncated or full)
+  const displayContent = truncate ? <TruncatedAddress value={value} /> : value;
 
-  return (
+  // Core content (link or span)
+  const content = href ? (
     <a
       href={href}
       target="_blank"
@@ -62,8 +78,35 @@ export function ExplorerLink({
         className
       )}
     >
-      {displayValue}
+      {displayContent}
       <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
     </a>
+  ) : (
+    <span
+      data-testid="explorer-link"
+      className={cn('font-mono text-sm inline-flex items-center gap-1.5', className)}
+    >
+      {displayContent}
+      {showDisabledIcon && (
+        <ExternalLink
+          className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/40"
+          aria-label="No block explorer available for this network"
+        />
+      )}
+    </span>
+  );
+
+  // Wrap in tooltip if truncated
+  if (!shouldShowTooltip) {
+    return content;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{content}</TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[400px]">
+        <p className="font-mono text-xs break-all">{value}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
