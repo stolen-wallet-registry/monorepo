@@ -8,6 +8,22 @@ import { cn } from '@/lib/utils';
 type DevToolsTab = 'theme' | 'p2p' | 'tests';
 
 /**
+ * Get status indicator color class based on connection status.
+ */
+function getStatusColor(status: string): string {
+  switch (status) {
+    case 'connected':
+      return 'bg-green-500';
+    case 'connecting':
+      return 'bg-yellow-500 animate-pulse';
+    case 'error':
+      return 'bg-red-500';
+    default:
+      return 'bg-gray-500';
+  }
+}
+
+/**
  * Component that throws an error on mount.
  * Used to test the ErrorBoundary.
  * Always throws - parent controls mounting via key prop.
@@ -177,7 +193,6 @@ export function DevTools() {
             role="tabpanel"
             id={`devtools-tabpanel-${activeTab}`}
             aria-labelledby={`devtools-tab-${activeTab}`}
-            tabIndex={0}
           >
             {/* Theme Tab */}
             {activeTab === 'theme' && (
@@ -306,13 +321,7 @@ export function DevTools() {
                     <span
                       className={cn(
                         'h-2 w-2 rounded-full',
-                        p2pState.connectionStatus === 'connected'
-                          ? 'bg-green-500'
-                          : p2pState.connectionStatus === 'connecting'
-                            ? 'bg-yellow-500 animate-pulse'
-                            : p2pState.connectionStatus === 'error'
-                              ? 'bg-red-500'
-                              : 'bg-gray-500'
+                        getStatusColor(p2pState.connectionStatus)
                       )}
                     />
                     <span className="text-sm capitalize">{p2pState.connectionStatus}</span>
@@ -355,7 +364,8 @@ export function DevTools() {
                           try {
                             await navigator.clipboard.writeText(p2pState.peerId);
                             toast.success('Peer ID copied!');
-                          } catch {
+                          } catch (error) {
+                            console.error('Failed to copy peer ID:', error);
                             toast.error('Failed to copy to clipboard');
                           }
                         }

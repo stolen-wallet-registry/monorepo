@@ -168,11 +168,12 @@ export function P2PRegPayStep({ onComplete, role, libp2p }: P2PRegPayStepProps) 
         </Alert>
 
         {registrationHash ? (
+          // TransactionCard hides submit button when status='confirmed' - onSubmit is unused but required by interface
           <TransactionCard
             type="registration"
             status="confirmed"
             hash={registrationHash}
-            onSubmit={() => {}}
+            onSubmit={() => undefined}
           />
         ) : (
           <WaitingForData

@@ -42,11 +42,19 @@ function isValidSignature(sig: unknown): sig is SignatureOverTheWire {
 
   // Check required string fields exist
   if (typeof s.value !== 'string' || !s.value) return false;
-  if (typeof s.address !== 'string' || !s.address.startsWith('0x')) return false;
+  // Validate address is 0x-prefixed hex string of correct length (42 chars)
+  if (
+    typeof s.address !== 'string' ||
+    !s.address.startsWith('0x') ||
+    s.address.length !== 42 ||
+    !/^0x[0-9a-fA-F]{40}$/.test(s.address)
+  ) {
+    return false;
+  }
   if (typeof s.keyRef !== 'string') return false;
 
-  // Check chainId is a valid number
-  if (typeof s.chainId !== 'number' || !Number.isFinite(s.chainId)) return false;
+  // Check chainId is a valid integer (not a float)
+  if (typeof s.chainId !== 'number' || !Number.isInteger(s.chainId)) return false;
 
   // Check deadline and nonce can be safely converted to BigInt
   if (typeof s.deadline !== 'string' || !/^\d+$/.test(s.deadline)) return false;
@@ -55,16 +63,85 @@ function isValidSignature(sig: unknown): sig is SignatureOverTheWire {
   return true;
 }
 
+/**
+ * Validate transaction hash from network payload.
+ * Ensures it's a properly formatted 0x-prefixed hex string.
+ * Tx hashes should be 66 characters (0x + 64 hex chars).
+ */
+function isValidTxHash(hash: unknown): hash is `0x${string}` {
+  return (
+    typeof hash === 'string' &&
+    hash.startsWith('0x') &&
+    hash.length === 66 &&
+    /^0x[0-9a-fA-F]{64}$/.test(hash)
+  );
+}
+
+/**
+ * Merge protocol handlers, with customHandlers overriding defaults.
+ * Uses Map-based deduplication keyed by protocol identifier.
+ */
+function mergeHandlers(
+  defaultHandlers: ProtocolHandler[],
+  customHandlers: ProtocolHandler[]
+): ProtocolHandler[] {
+  const handlerMap = new Map<string, ProtocolHandler>();
+
+  // Add defaults first
+  for (const handler of defaultHandlers) {
+    handlerMap.set(handler.protocol, handler);
+  }
+
+  // Custom handlers override defaults with same protocol
+  for (const handler of customHandlers) {
+    handlerMap.set(handler.protocol, handler);
+  }
+
+  return Array.from(handlerMap.values());
+}
+
+/**
+ * Options for the useP2PSignatureRelay hook.
+ *
+ * **Important:** Callback props (`onSignatureReceived`, `onTxHashReceived`, `onPeerConnected`,
+ * `onStepAdvance`) should be stable references (memoized with useCallback or refs) to avoid
+ * rebuilding protocol handlers on every render. If these callbacks change frequently, consider
+ * using a ref pattern like the page components do for goToNextStep.
+ *
+ * @example Stable callbacks with useCallback:
+ * ```tsx
+ * const handleSignatureReceived = useCallback((sig, protocol) => {
+ *   // handle signature
+ * }, []); // stable deps
+ *
+ * const { ... } = useP2PSignatureRelay({
+ *   role: 'relayer',
+ *   onSignatureReceived: handleSignatureReceived,
+ * });
+ * ```
+ */
 export interface UseP2PSignatureRelayOptions {
   /** The role of this peer (registeree sends signatures, relayer receives) */
   role: P2PRole;
-  /** Callback when a signature is received (relayer only) */
+  /**
+   * Callback when a signature is received (relayer only).
+   * Should be memoized to avoid handler recreation.
+   */
   onSignatureReceived?: (signature: SignatureOverTheWire, protocol: string) => void;
-  /** Callback when a transaction hash is received (registeree only) */
+  /**
+   * Callback when a transaction hash is received (registeree only).
+   * Should be memoized to avoid handler recreation.
+   */
   onTxHashReceived?: (hash: `0x${string}`, protocol: string) => void;
-  /** Callback when peer connection is established */
+  /**
+   * Callback when peer connection is established.
+   * Should be memoized to avoid handler recreation.
+   */
   onPeerConnected?: (remotePeerId: string) => void;
-  /** Callback when registration step should advance */
+  /**
+   * Callback when registration step should advance.
+   * Should be memoized to avoid handler recreation.
+   */
   onStepAdvance?: () => void;
   /** Custom protocol handlers (overrides defaults) */
   customHandlers?: ProtocolHandler[];
@@ -221,8 +298,8 @@ export function useP2PSignatureRelay(
             }
             setConnectedToPeer(true);
 
-            // Relayer responds to CONNECT with their address
-            if (role === 'relayer') {
+            // Relayer responds to CONNECT with their address (only if address is defined)
+            if (role === 'relayer' && address) {
               await passStreamData({
                 connection,
                 protocols: [PROTOCOLS.CONNECT],
@@ -230,6 +307,13 @@ export function useP2PSignatureRelay(
                   form: { relayer: address },
                   success: true,
                 },
+              });
+            } else if (role === 'relayer') {
+              // Still send success response even without address
+              await passStreamData({
+                connection,
+                protocols: [PROTOCOLS.CONNECT],
+                streamData: { success: true },
               });
             }
 
@@ -370,9 +454,12 @@ export function useP2PSignatureRelay(
               const data = await readStreamData(stream.source);
               logger.p2p.info('Received ACK payment hash', { data });
 
-              if (data.hash) {
+              // Validate tx hash before storing/propagating
+              if (isValidTxHash(data.hash)) {
                 setAcknowledgementHash(data.hash);
                 onTxHashReceived?.(data.hash, PROTOCOLS.ACK_PAY);
+              } else if (data.hash) {
+                logger.p2p.warn('Received malformed ACK payment hash', { hash: data.hash });
               }
               onStepAdvance?.();
             } catch (err) {
@@ -409,9 +496,12 @@ export function useP2PSignatureRelay(
               const data = await readStreamData(stream.source);
               logger.p2p.info('Received REG payment hash', { data });
 
-              if (data.hash) {
+              // Validate tx hash before storing/propagating
+              if (isValidTxHash(data.hash)) {
                 setRegistrationHash(data.hash);
                 onTxHashReceived?.(data.hash, PROTOCOLS.REG_PAY);
+              } else if (data.hash) {
+                logger.p2p.warn('Received malformed REG payment hash', { hash: data.hash });
               }
               onStepAdvance?.();
             } catch (err) {
@@ -424,7 +514,8 @@ export function useP2PSignatureRelay(
       });
     }
 
-    return [...handlers, ...customHandlers];
+    // Merge handlers with customHandlers overriding defaults (Map-based deduplication)
+    return mergeHandlers(handlers, customHandlers);
   }, [
     role,
     address,

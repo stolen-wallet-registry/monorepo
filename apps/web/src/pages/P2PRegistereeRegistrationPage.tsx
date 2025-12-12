@@ -12,6 +12,7 @@ import { ArrowLeft } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
 import type { IncomingStreamData } from '@libp2p/interface/stream-handler';
 
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StepIndicator } from '@/components/composed/StepIndicator';
@@ -73,6 +74,7 @@ export function P2PRegistereeRegistrationPage() {
 
   const [libp2p, setLibp2p] = useState<Libp2p | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [protocolError, setProtocolError] = useState<string | null>(null);
 
   // Use ref for goToNextStep to avoid recreating P2P node when step changes
   const goToNextStepRef = useRef(goToNextStep);
@@ -141,7 +143,9 @@ export function P2PRegistereeRegistrationPage() {
                   break;
               }
             } catch (err) {
+              const message = err instanceof Error ? err.message : 'Protocol handling error';
               logger.p2p.error('Error handling protocol', { protocol }, err as Error);
+              setProtocolError(`Error in ${protocol}: ${message}`);
             }
           },
           // Use runOnTransientConnection (correct libp2p API property name)
@@ -323,6 +327,18 @@ export function P2PRegistereeRegistrationPage() {
 
         {/* Main Content */}
         <main className="space-y-4">
+          {/* Protocol error alert */}
+          {protocolError && (
+            <Alert variant="destructive">
+              <AlertDescription className="flex items-center justify-between">
+                <span>{protocolError}</span>
+                <Button variant="outline" size="sm" onClick={() => setProtocolError(null)}>
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
           <Card className="min-h-[400px]">
             <CardHeader>
               <CardTitle>{currentTitle}</CardTitle>

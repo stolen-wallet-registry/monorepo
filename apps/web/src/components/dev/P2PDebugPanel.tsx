@@ -82,6 +82,7 @@ function ConnectionSection({ connection }: { connection: ConnectionInfo }) {
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex w-full items-center gap-1 text-left text-xs"
+        aria-expanded={isExpanded}
       >
         {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         <span
@@ -193,9 +194,10 @@ export function P2PDebugPanel({
   }, [getLibp2p]);
 
   // Auto-refresh every 15 seconds when expanded
+  // Note: Timer starts when panel is expanded, even if node isn't ready yet.
+  // This allows auto-refresh to work if node initializes after panel is opened.
   useEffect(() => {
-    const libp2p = getLibp2p();
-    if (!isExpanded || !libp2p) return;
+    if (!isExpanded) return;
 
     // Initial refresh when opening - use setTimeout to avoid sync setState in effect
     const initialTimeout = setTimeout(refresh, 0);
@@ -205,7 +207,7 @@ export function P2PDebugPanel({
       clearTimeout(initialTimeout);
       clearInterval(interval);
     };
-  }, [isExpanded, getLibp2p, refresh]);
+  }, [isExpanded, refresh]);
 
   // Only render in development
   if (import.meta.env.PROD) {
@@ -223,6 +225,7 @@ export function P2PDebugPanel({
         size="sm"
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full justify-between px-3 py-2 h-auto"
+        aria-expanded={isExpanded}
       >
         <span className="flex items-center gap-2 text-xs font-medium">
           <Bug className="h-4 w-4" />
@@ -250,6 +253,7 @@ export function P2PDebugPanel({
                     onClick={refresh}
                     className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
                     title="Refresh"
+                    aria-label="Refresh P2P debug info"
                   >
                     <RefreshCw className="h-3 w-3" />
                   </button>

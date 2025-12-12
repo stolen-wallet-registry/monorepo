@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
   storeSignature,
   getSignature,
@@ -14,7 +14,7 @@ describe('signature storage', () => {
   const testChainId = 1;
 
   const createTestSignature = (
-    step: 1 | 2,
+    step: StoredSignature['step'],
     overrides: Partial<StoredSignature> = {}
   ): StoredSignature => ({
     signature:
@@ -28,12 +28,8 @@ describe('signature storage', () => {
     ...overrides,
   });
 
-  beforeEach(() => {
-    // Clear localStorage before each test
-    localStorage.clear();
-  });
-
   afterEach(() => {
+    // Clear localStorage after each test for guaranteed cleanup
     localStorage.clear();
   });
 
@@ -115,8 +111,8 @@ describe('signature storage', () => {
 
       storeSignature(original);
 
-      // Check the actual key in localStorage
-      const expectedKey = `swr_sig_${mixedCaseAddress.toLowerCase()}_${testChainId}_1`;
+      // Check the actual key in localStorage - derive step from constant to stay aligned
+      const expectedKey = `swr_sig_${mixedCaseAddress.toLowerCase()}_${testChainId}_${SIGNATURE_STEP.ACKNOWLEDGEMENT}`;
       expect(localStorage.getItem(expectedKey)).not.toBeNull();
     });
   });
@@ -162,6 +158,18 @@ describe('signature storage', () => {
       expect(getSignature(testAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT)).toBeNull();
       expect(getSignature(testAddress, testChainId, SIGNATURE_STEP.REGISTRATION)).not.toBeNull();
     });
+
+    it('removes a signature regardless of address case', () => {
+      const upperAddress = testAddress.toUpperCase() as `0x${string}`;
+
+      storeSignature(
+        createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT, { address: upperAddress })
+      );
+
+      removeSignature(upperAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+
+      expect(getSignature(testAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT)).toBeNull();
+    });
   });
 
   describe('clearSignatures', () => {
@@ -205,6 +213,20 @@ describe('signature storage', () => {
       expect(
         getSignature(testAddress, otherChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT)
       ).not.toBeNull();
+    });
+
+    it('clears signatures regardless of address case', () => {
+      const upperAddress = testAddress.toUpperCase() as `0x${string}`;
+
+      storeSignature(
+        createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT, { address: upperAddress })
+      );
+      storeSignature(createTestSignature(SIGNATURE_STEP.REGISTRATION, { address: upperAddress }));
+
+      clearSignatures(upperAddress, testChainId);
+
+      expect(getSignature(testAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT)).toBeNull();
+      expect(getSignature(testAddress, testChainId, SIGNATURE_STEP.REGISTRATION)).toBeNull();
     });
   });
 

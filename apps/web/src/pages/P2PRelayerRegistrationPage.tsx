@@ -10,6 +10,7 @@ import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
 import type { IncomingStreamData } from '@libp2p/interface/stream-handler';
+import type { Connection } from '@libp2p/interface/connection';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,9 +28,75 @@ import { useRegistrationStore, type RegistrationStep } from '@/stores/registrati
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
-import { setup, PROTOCOLS, readStreamData, passStreamData, type ProtocolHandler } from '@/lib/p2p';
+import {
+  setup,
+  PROTOCOLS,
+  readStreamData,
+  passStreamData,
+  type ProtocolHandler,
+  type ParsedStreamData,
+} from '@/lib/p2p';
 import { storeSignature, SIGNATURE_STEP, type StoredSignature } from '@/lib/signatures';
 import { logger } from '@/lib/logger';
+
+/**
+ * Validate and check if signature data has all required fields.
+ */
+function isValidSignatureData(data: ParsedStreamData): data is ParsedStreamData & {
+  signature: NonNullable<ParsedStreamData['signature']>;
+} {
+  return !!(
+    data.signature?.value &&
+    data.signature?.deadline &&
+    data.signature?.nonce &&
+    data.signature?.address &&
+    data.signature?.chainId !== undefined
+  );
+}
+
+/**
+ * Process a received signature: validate, store, confirm receipt, and advance step.
+ */
+async function processSignature(
+  data: ParsedStreamData,
+  connection: Connection,
+  step: typeof SIGNATURE_STEP.ACKNOWLEDGEMENT | typeof SIGNATURE_STEP.REGISTRATION,
+  receiptProtocol: string,
+  goToNextStep: () => void
+): Promise<boolean> {
+  if (!isValidSignatureData(data)) {
+    logger.p2p.warn(
+      `Received malformed ${step === SIGNATURE_STEP.ACKNOWLEDGEMENT ? 'ACK' : 'REG'} signature data`,
+      { data }
+    );
+    return false;
+  }
+
+  const sig = data.signature;
+  const stored: StoredSignature = {
+    signature: sig.value as `0x${string}`,
+    deadline: BigInt(sig.deadline),
+    nonce: BigInt(sig.nonce),
+    address: sig.address,
+    chainId: sig.chainId,
+    step,
+    storedAt: Date.now(),
+  };
+  storeSignature(stored);
+
+  // Confirm receipt
+  await passStreamData({
+    connection,
+    protocols: [receiptProtocol],
+    streamData: { success: true, message: 'Signature received' },
+  });
+
+  logger.p2p.info(
+    `${step === SIGNATURE_STEP.ACKNOWLEDGEMENT ? 'ACK' : 'REG'} signature stored, advancing to payment`
+  );
+  goToNextStep();
+  return true;
+}
 
 /**
  * Step descriptions for P2P relayer flow.
@@ -126,73 +193,25 @@ export function P2PRelayerRegistrationPage() {
                   break;
 
                 case PROTOCOLS.ACK_SIG:
-                  // Acknowledgement signature received - validate all required fields
-                  if (
-                    data.signature?.value &&
-                    data.signature?.deadline &&
-                    data.signature?.nonce &&
-                    data.signature?.address &&
-                    data.signature?.chainId !== undefined
-                  ) {
-                    const sig = data.signature;
-                    const stored: StoredSignature = {
-                      signature: sig.value as `0x${string}`,
-                      deadline: BigInt(sig.deadline),
-                      nonce: BigInt(sig.nonce),
-                      address: sig.address,
-                      chainId: sig.chainId,
-                      step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
-                      storedAt: Date.now(),
-                    };
-                    storeSignature(stored);
-
-                    // Confirm receipt
-                    await passStreamData({
-                      connection,
-                      protocols: [PROTOCOLS.ACK_REC],
-                      streamData: { success: true, message: 'Signature received' },
-                    });
-
-                    logger.p2p.info('ACK signature stored, advancing to payment');
-                    goToNextStepRef.current();
-                  } else {
-                    logger.p2p.warn('Received malformed ACK signature data', { data });
-                  }
+                  // Acknowledgement signature received
+                  await processSignature(
+                    data,
+                    connection,
+                    SIGNATURE_STEP.ACKNOWLEDGEMENT,
+                    PROTOCOLS.ACK_REC,
+                    goToNextStepRef.current
+                  );
                   break;
 
                 case PROTOCOLS.REG_SIG:
-                  // Registration signature received - validate all required fields
-                  if (
-                    data.signature?.value &&
-                    data.signature?.deadline &&
-                    data.signature?.nonce &&
-                    data.signature?.address &&
-                    data.signature?.chainId !== undefined
-                  ) {
-                    const sig = data.signature;
-                    const stored: StoredSignature = {
-                      signature: sig.value as `0x${string}`,
-                      deadline: BigInt(sig.deadline),
-                      nonce: BigInt(sig.nonce),
-                      address: sig.address,
-                      chainId: sig.chainId,
-                      step: SIGNATURE_STEP.REGISTRATION,
-                      storedAt: Date.now(),
-                    };
-                    storeSignature(stored);
-
-                    // Confirm receipt
-                    await passStreamData({
-                      connection,
-                      protocols: [PROTOCOLS.REG_REC],
-                      streamData: { success: true, message: 'Signature received' },
-                    });
-
-                    logger.p2p.info('REG signature stored, advancing to payment');
-                    goToNextStepRef.current();
-                  } else {
-                    logger.p2p.warn('Received malformed REG signature data', { data });
-                  }
+                  // Registration signature received
+                  await processSignature(
+                    data,
+                    connection,
+                    SIGNATURE_STEP.REGISTRATION,
+                    PROTOCOLS.REG_REC,
+                    goToNextStepRef.current
+                  );
                   break;
               }
             } catch (err) {
