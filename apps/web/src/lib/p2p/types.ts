@@ -75,6 +75,33 @@ export interface RelayConfig {
 }
 
 /**
+ * Extract peer ID from a multiaddr string.
+ * Returns the peer ID portion after /p2p/ or null if not found.
+ */
+export function extractPeerIdFromMultiaddr(multiaddr: string): string | null {
+  const match = multiaddr.match(/\/p2p\/([^/]+)$/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Get peer IDs of all known relay servers.
+ * Useful for tagging connections in debug tools.
+ */
+export function getRelayPeerIds(): Set<string> {
+  const peerIds = new Set<string>();
+  const servers = getRelayServers();
+
+  for (const server of servers) {
+    const peerId = extractPeerIdFromMultiaddr(server.multiaddr);
+    if (peerId) {
+      peerIds.add(peerId);
+    }
+  }
+
+  return peerIds;
+}
+
+/**
  * Default relay servers by environment.
  *
  * IMPORTANT: Production relay servers MUST be configured before deployment.
@@ -83,7 +110,10 @@ export interface RelayConfig {
 export const RELAY_SERVERS: Record<string, RelayConfig[]> = {
   development: [
     {
-      multiaddr: '/ip4/127.0.0.1/tcp/12312/ws/p2p/QmQ2zigjQikYnyYUSXZydNXrDRhBut2mubwJBaLXobMt3A',
+      // Note: Use VITE_RELAY_MULTIADDR env var to override if relay peer ID changes
+      // The peer ID uses Ed25519 key format (12D3KooW... prefix)
+      multiaddr:
+        '/ip4/127.0.0.1/tcp/12312/ws/p2p/12D3KooWFSaPwwQYj7GTdHduUiHGPygkiEudkodcVdJJvzwr1xq8',
       isDev: true,
     },
   ],

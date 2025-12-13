@@ -10,7 +10,7 @@ import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
-import type { IncomingStreamData } from '@libp2p/interface/stream-handler';
+import type { Stream } from '@libp2p/interface';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -97,10 +97,11 @@ export function P2PRegistereeRegistrationPage() {
 
         // Build protocol handlers for registeree
         // Note: Uses ref for goToNextStep to avoid handler recreation
+        // In libp2p 3.x, handler signature is (stream, connection) not ({stream, connection})
         const streamHandler = (protocol: string) => ({
-          handler: async ({ stream }: IncomingStreamData) => {
+          handler: async (stream: Stream) => {
             try {
-              const data = await readStreamData(stream.source);
+              const data = await readStreamData(stream);
               logger.p2p.info('Registeree received data', { protocol, data });
 
               switch (protocol) {
@@ -148,8 +149,8 @@ export function P2PRegistereeRegistrationPage() {
               setProtocolError(`Error in ${protocol}: ${message}`);
             }
           },
-          // Use runOnTransientConnection (correct libp2p API property name)
-          options: { runOnTransientConnection: true },
+          // In libp2p 3.x, runOnTransientConnection renamed to runOnLimitedConnection
+          options: { runOnLimitedConnection: true },
         });
 
         const handlers: ProtocolHandler[] = [

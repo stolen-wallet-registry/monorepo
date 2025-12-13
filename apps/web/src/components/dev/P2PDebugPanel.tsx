@@ -9,10 +9,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Bug, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
-import type { Connection } from '@libp2p/interface/connection';
+import type { Connection } from '@libp2p/interface';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { getRelayPeerIds } from '@/lib/p2p/types';
 
 interface ConnectionInfo {
   id: string;
@@ -22,6 +23,8 @@ interface ConnectionInfo {
   multiplexer?: string;
   encryption?: string;
   status: string;
+  /** Whether this connection is to a known relay server */
+  isRelay: boolean;
   streams: {
     id: string;
     protocol?: string;
@@ -49,18 +52,32 @@ interface P2PDebugPanelProps {
   className?: string;
 }
 
+/** Cached relay peer IDs to avoid recomputing on every refresh */
+let cachedRelayPeerIds: Set<string> | null = null;
+
+function getRelayPeerIdsCache(): Set<string> {
+  if (!cachedRelayPeerIds) {
+    cachedRelayPeerIds = getRelayPeerIds();
+  }
+  return cachedRelayPeerIds;
+}
+
 /**
  * Extract connection info from a libp2p Connection object.
  */
 function extractConnectionInfo(conn: Connection): ConnectionInfo {
+  const remotePeerId = conn.remotePeer.toString();
+  const relayPeerIds = getRelayPeerIdsCache();
+
   return {
     id: conn.id,
     remoteAddr: conn.remoteAddr.toString(),
-    remotePeer: conn.remotePeer.toString(),
+    remotePeer: remotePeerId,
     direction: conn.direction,
     multiplexer: conn.multiplexer,
     encryption: conn.encryption,
     status: conn.status,
+    isRelay: relayPeerIds.has(remotePeerId),
     streams: conn.streams.map((stream) => ({
       id: stream.id,
       protocol: stream.protocol,
@@ -92,6 +109,11 @@ function ConnectionSection({ connection }: { connection: ConnectionInfo }) {
           )}
         />
         <span className="font-medium truncate flex-1">{connection.remotePeer.slice(0, 20)}...</span>
+        {connection.isRelay && (
+          <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+            relay
+          </span>
+        )}
         <span className="text-muted-foreground">{connection.direction}</span>
       </button>
       {isExpanded && (

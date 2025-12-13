@@ -9,8 +9,7 @@ import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
-import type { IncomingStreamData } from '@libp2p/interface/stream-handler';
-import type { Connection } from '@libp2p/interface/connection';
+import type { Connection, Stream } from '@libp2p/interface';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -162,10 +161,11 @@ export function P2PRelayerRegistrationPage() {
 
         // Build protocol handlers for relayer
         // Note: Uses ref for goToNextStep to avoid handler recreation
+        // In libp2p 3.x, handler signature is (stream, connection) not ({stream, connection})
         const streamHandler = (protocol: string) => ({
-          handler: async ({ connection, stream }: IncomingStreamData) => {
+          handler: async (stream: Stream, connection: Connection) => {
             try {
-              const data = await readStreamData(stream.source);
+              const data = await readStreamData(stream);
               logger.p2p.info('Relayer received data', { protocol, data });
 
               switch (protocol) {
@@ -218,8 +218,8 @@ export function P2PRelayerRegistrationPage() {
               logger.p2p.error('Error handling protocol', { protocol }, err as Error);
             }
           },
-          // Use runOnTransientConnection (correct libp2p API property name)
-          options: { runOnTransientConnection: true },
+          // In libp2p 3.x, runOnTransientConnection renamed to runOnLimitedConnection
+          options: { runOnLimitedConnection: true },
         });
 
         const handlers: ProtocolHandler[] = [

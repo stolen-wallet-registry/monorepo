@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { peerIdFromString } from '@libp2p/peer-id';
-import { isPeerId } from '@libp2p/interface/peer-id';
+import { isPeerId } from '@libp2p/interface';
 
 import { Button } from '@/components/ui/button';
 import {

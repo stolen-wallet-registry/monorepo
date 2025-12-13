@@ -1,57 +1,32 @@
 /**
  * libp2p configuration for P2P relay functionality.
  *
- * Based on libp2p 0.46.x - will be upgraded to 2.x during WebRTC/WebTransport phase.
+ * Uses libp2p 3.x with yamux stream muxer, WebRTC, WebSockets, and WebTransport.
  */
 
-import { createLibp2p, type Libp2p } from 'libp2p';
-import type { StreamHandlerRecord } from '@libp2p/interface/stream-handler';
-import type { Connection } from '@libp2p/interface/connection';
+import { createLibp2p, type Libp2p, type Libp2pOptions } from 'libp2p';
+import type { StreamHandlerRecord, Connection, Stream, StreamHandler } from '@libp2p/interface';
 
 import { fromString as uint8ArrayFromString } from 'uint8arrays/from-string';
 import { toString as uint8ArrayToString } from 'uint8arrays/to-string';
 
-import { gossipsub, type GossipsubEvents } from '@chainsafe/libp2p-gossipsub';
 import { noise } from '@chainsafe/libp2p-noise';
 import { yamux } from '@chainsafe/libp2p-yamux';
 import { bootstrap } from '@libp2p/bootstrap';
-import { type DualKadDHT, kadDHT } from '@libp2p/kad-dht';
-import { mplex } from '@libp2p/mplex';
+import { circuitRelayTransport } from '@libp2p/circuit-relay-v2';
+import { dcutr } from '@libp2p/dcutr';
+import { identify } from '@libp2p/identify';
+import { ping } from '@libp2p/ping';
 import { webRTC, webRTCDirect } from '@libp2p/webrtc';
-import * as filters from '@libp2p/websockets/filters';
 import { webSockets } from '@libp2p/websockets';
 import { webTransport } from '@libp2p/webtransport';
-import { ipnsSelector } from 'ipns/selector';
-import { ipnsValidator } from 'ipns/validator';
-import { autoNATService } from 'libp2p/autonat';
-import { circuitRelayTransport } from 'libp2p/circuit-relay';
-import { dcutrService } from 'libp2p/dcutr';
-import { type IdentifyService, identifyService } from 'libp2p/identify';
-import { pingService, type PingService } from 'libp2p/ping';
-import type { PubSub } from '@libp2p/interface/pubsub';
-import type { Libp2pOptions } from 'libp2p';
 
-import { pipe } from 'it-pipe';
 import * as lp from 'it-length-prefixed';
-import map from 'it-map';
 import { peerIdFromString } from '@libp2p/peer-id';
 import { WebRTC } from '@multiformats/multiaddr-matcher';
 
 import { logger } from '@/lib/logger';
 import { getRelayServers, type ParsedStreamData } from './types';
-
-/**
- * libp2p services interface for typed access.
- */
-export interface DefaultLibp2pServices extends Record<string, unknown> {
-  dht: DualKadDHT;
-  delegatedRouting: unknown;
-  pubsub: PubSub<GossipsubEvents>;
-  identify: IdentifyService;
-  autoNAT: unknown;
-  dcutr: unknown;
-  ping: PingService;
-}
 
 /**
  * Protocol handler configuration.
@@ -64,27 +39,17 @@ export interface ProtocolHandler {
 /**
  * Get default libp2p configuration for browser clients.
  */
-export function libp2pDefaults(): Libp2pOptions<DefaultLibp2pServices> {
+export function libp2pDefaults(): Libp2pOptions {
   const relayServers = getRelayServers();
   const bootstrapList = relayServers.map((r) => r.multiaddr);
 
   return {
     addresses: {
-      listen: ['/webrtc'],
+      listen: ['/p2p-circuit', '/webrtc'],
     },
-    transports: [
-      circuitRelayTransport({
-        discoverRelays: 10,
-      }),
-      webRTC(),
-      webRTCDirect(),
-      webTransport(),
-      webSockets({
-        filter: filters.all,
-      }),
-    ],
-    connectionEncryption: [noise()],
-    streamMuxers: [mplex(), yamux()],
+    transports: [circuitRelayTransport(), webRTC(), webRTCDirect(), webTransport(), webSockets()],
+    connectionEncrypters: [noise()],
+    streamMuxers: [yamux()],
     peerDiscovery: bootstrapList.length > 0 ? [bootstrap({ list: bootstrapList })] : [],
     connectionGater: {
       denyDialMultiaddr: () => {
@@ -94,20 +59,9 @@ export function libp2pDefaults(): Libp2pOptions<DefaultLibp2pServices> {
       },
     },
     services: {
-      identify: identifyService(),
-      autoNAT: autoNATService(),
-      pubsub: gossipsub() as (components: unknown) => PubSub<GossipsubEvents>,
-      dcutr: dcutrService(),
-      dht: kadDHT({
-        clientMode: true,
-        validators: {
-          ipns: ipnsValidator,
-        },
-        selectors: {
-          ipns: ipnsSelector,
-        },
-      }) as (components: unknown) => DualKadDHT,
-      ping: pingService(),
+      identify: identify(),
+      dcutr: dcutr(),
+      ping: ping(),
     },
   };
 }
@@ -126,8 +80,8 @@ export async function setup(handlers: ProtocolHandler[]): Promise<{ libp2p: Libp
   for (const h of handlers) {
     const { protocol, streamHandler } = h;
     logger.p2p.debug('Registering protocol handler', { protocol });
-    // Pass options to libp2p.handle() if provided (e.g., runOnTransientConnection)
-    libp2p.handle(protocol, streamHandler.handler, streamHandler.options);
+    // In libp2p 3.x, StreamHandler signature is (stream, connection) => void
+    await libp2p.handle(protocol, streamHandler.handler, streamHandler.options);
   }
 
   logger.p2p.info('libp2p node created', {
@@ -168,7 +122,9 @@ export const getPeerConnection = async ({
   // Create new connection via circuit relay
   const multiaddrs = libp2p.getMultiaddrs().map((ma) => {
     // code 290 is the p2p-circuit code
-    if (WebRTC.matches(ma)) {
+    // Cast to unknown to work around multiaddr-matcher version mismatch
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (WebRTC.matches(ma as any)) {
       return ma.decapsulateCode(290).encapsulate(`/p2p-circuit/webrtc/p2p/${peerId.toString()}`);
     } else {
       return ma.decapsulateCode(290).encapsulate(`/p2p-circuit/p2p/${peerId.toString()}`);
@@ -208,14 +164,13 @@ export const passStreamData = async ({
   });
 
   try {
-    const stream = await connection.newStream(protocols);
+    // Circuit relay connections are "limited" - must explicitly allow streams on them
+    const stream = await connection.newStream(protocols, { runOnLimitedConnection: true });
+    const data = uint8ArrayFromString(JSON.stringify(streamData));
 
-    await pipe(
-      JSON.stringify(streamData),
-      (source) => map(source, (string) => uint8ArrayFromString(string)),
-      (source) => lp.encode(source),
-      stream.sink
-    );
+    // In libp2p 3.x, use lp.encode.single to encode a single message with length prefix
+    const encoded = lp.encode.single(data);
+    stream.send(encoded.subarray());
 
     await stream.close();
     logger.p2p.debug('Stream data sent successfully');
@@ -228,28 +183,32 @@ export const passStreamData = async ({
 /**
  * Read data from an incoming stream.
  *
- * @param source - Incoming stream source (from IncomingStreamData.stream.source)
+ * @param stream - Incoming stream
  * @returns Parsed stream data
  */
-export const readStreamData = async (
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  source: any
-): Promise<ParsedStreamData> => {
+export const readStreamData = async (stream: Stream): Promise<ParsedStreamData> => {
   logger.p2p.debug('Reading stream data');
 
-  const chunks: string[] = [];
+  const chunks: Uint8Array[] = [];
 
-  await pipe(
-    source,
-    (source: AsyncIterable<Uint8Array>) => lp.decode(source),
-    async (decoded: AsyncIterable<{ subarray: () => Uint8Array }>) => {
-      for await (const chunk of decoded) {
-        chunks.push(uint8ArrayToString(chunk.subarray()));
-      }
-    }
-  );
+  // In libp2p 3.x, Stream is AsyncIterable<Uint8Array | Uint8ArrayList>
+  // Pass stream directly to lp.decode
+  for await (const chunk of lp.decode(stream)) {
+    // chunk is Uint8ArrayList in 3.x, get as Uint8Array
+    const bytes = chunk instanceof Uint8Array ? chunk : chunk.subarray();
+    chunks.push(bytes);
+  }
 
-  const jsonString = chunks.join('');
+  // Concatenate all chunks
+  const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+  const combined = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  const jsonString = uint8ArrayToString(combined);
   const data = JSON.parse(jsonString) as ParsedStreamData;
 
   logger.p2p.debug('Stream data received', { success: data.success, message: data.message });
@@ -258,5 +217,5 @@ export const readStreamData = async (
 };
 
 // Re-export types for convenience
-export type { Libp2p, Connection };
+export type { Libp2p, Connection, Stream, StreamHandler };
 export type { ParsedStreamData };
