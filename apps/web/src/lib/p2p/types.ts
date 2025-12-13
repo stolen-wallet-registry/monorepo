@@ -2,7 +2,93 @@
  * P2P type definitions for libp2p stream data.
  */
 
+import { z } from 'zod';
 import type { P2PState } from '@/stores/p2pStore';
+
+// ============================================================================
+// Zod Schemas for P2P Stream Data Validation
+// ============================================================================
+
+/** Ethereum address regex - 0x followed by 40 hex characters */
+const ethereumAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address');
+
+/** Transaction hash regex - 0x followed by 64 hex characters */
+const txHashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid transaction hash');
+
+/** Signature over the wire schema */
+export const SignatureOverTheWireSchema = z
+  .object({
+    keyRef: z.string().max(100),
+    chainId: z.number().int().positive(),
+    address: ethereumAddressSchema,
+    value: z.string().max(500), // Signatures are ~130 chars
+    deadline: z.string().max(50), // BigInt as string
+    nonce: z.string().max(50), // BigInt as string
+  })
+  .strict();
+
+/** Form state over the wire schema */
+export const FormStateOverTheWireSchema = z
+  .object({
+    registeree: ethereumAddressSchema.optional(),
+    relayer: ethereumAddressSchema.optional(),
+  })
+  .strict();
+
+/** Registration state over the wire schema */
+export const RegistrationStateOverTheWireSchema = z
+  .object({
+    currentStep: z.string().max(50).optional(),
+    currentMethod: z.string().max(50).optional(),
+  })
+  .strict();
+
+/** P2P state subset schema (only allow safe fields) */
+export const P2PStateOverTheWireSchema = z
+  .object({
+    peerId: z.string().max(100).optional(),
+    partnerPeerId: z.string().max(100).optional(),
+    connectedToPeer: z.boolean().optional(),
+  })
+  .strict();
+
+/** Main parsed stream data schema */
+export const ParsedStreamDataSchema = z
+  .object({
+    success: z.boolean().optional(),
+    message: z.string().max(1000).optional(),
+    p2p: P2PStateOverTheWireSchema.optional(),
+    form: FormStateOverTheWireSchema.optional(),
+    state: RegistrationStateOverTheWireSchema.optional(),
+    signature: SignatureOverTheWireSchema.optional(),
+    hash: txHashSchema.optional(),
+  })
+  .strict(); // Reject unknown keys for security
+
+// ============================================================================
+// Stream Data Size Limits
+// ============================================================================
+
+/** Maximum size of incoming P2P stream data (100KB) */
+export const MAX_STREAM_SIZE_BYTES = 100 * 1024;
+
+/**
+ * Dangerous JSON keys that could enable prototype pollution attacks.
+ * These are stripped during parsing.
+ */
+export const DANGEROUS_JSON_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+/**
+ * Safe JSON parse that strips dangerous keys to prevent prototype pollution.
+ */
+export function safeJsonParse(jsonString: string): unknown {
+  return JSON.parse(jsonString, (key, value) => {
+    if (DANGEROUS_JSON_KEYS.includes(key)) {
+      return undefined;
+    }
+    return value;
+  });
+}
 
 /**
  * Signature data transmitted over P2P streams.

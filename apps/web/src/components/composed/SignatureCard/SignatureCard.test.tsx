@@ -23,7 +23,8 @@ describe('SignatureCard', () => {
   });
 
   describe('rendering', () => {
-    it('renders acknowledgement type correctly', () => {
+    // First test in file needs longer timeout due to cold-start overhead
+    it('renders acknowledgement type correctly', { timeout: 10000 }, () => {
       render(<SignatureCard {...defaultProps} />);
 
       // Title and button both contain the text

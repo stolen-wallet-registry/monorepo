@@ -26,7 +26,13 @@ import { peerIdFromString } from '@libp2p/peer-id';
 import { WebRTC } from '@multiformats/multiaddr-matcher';
 
 import { logger } from '@/lib/logger';
-import { getRelayServers, type ParsedStreamData } from './types';
+import {
+  getRelayServers,
+  type ParsedStreamData,
+  MAX_STREAM_SIZE_BYTES,
+  safeJsonParse,
+  ParsedStreamDataSchema,
+} from './types';
 
 /**
  * Protocol handler configuration.
@@ -52,10 +58,21 @@ export function libp2pDefaults(): Libp2pOptions {
     streamMuxers: [yamux()],
     peerDiscovery: bootstrapList.length > 0 ? [bootstrap({ list: bootstrapList })] : [],
     connectionGater: {
-      denyDialMultiaddr: () => {
-        // Allow all dials - returning false means "do not deny"
-        // In production, you could implement specific address filtering here
-        return false;
+      denyDialMultiaddr: (ma) => {
+        // In production, block localhost/private network connections
+        if (import.meta.env.PROD) {
+          const addr = ma.toString();
+          if (
+            addr.includes('/ip4/127.') ||
+            addr.includes('/ip4/0.0.0.0') ||
+            addr.includes('/ip4/10.') ||
+            addr.includes('/ip4/192.168.') ||
+            addr.includes('/ip6/::1')
+          ) {
+            return true; // Deny localhost/private in production
+          }
+        }
+        return false; // Allow all other dials
       },
     },
     services: {
@@ -181,27 +198,56 @@ export const passStreamData = async ({
 };
 
 /**
- * Read data from an incoming stream.
+ * Error thrown when stream data validation fails.
+ */
+export class StreamDataValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StreamDataValidationError';
+  }
+}
+
+/**
+ * Read and validate data from an incoming stream.
+ *
+ * Security features:
+ * - Size limit to prevent DoS (100KB max)
+ * - Safe JSON parsing to prevent prototype pollution
+ * - Zod schema validation to reject malformed/malicious data
  *
  * @param stream - Incoming stream
- * @returns Parsed stream data
+ * @returns Validated parsed stream data
+ * @throws {StreamDataValidationError} If data exceeds size limit or fails validation
  */
 export const readStreamData = async (stream: Stream): Promise<ParsedStreamData> => {
   logger.p2p.debug('Reading stream data');
 
   const chunks: Uint8Array[] = [];
+  let totalSize = 0;
 
   // In libp2p 3.x, Stream is AsyncIterable<Uint8Array | Uint8ArrayList>
   // Pass stream directly to lp.decode
   for await (const chunk of lp.decode(stream)) {
     // chunk is Uint8ArrayList in 3.x, get as Uint8Array
     const bytes = chunk instanceof Uint8Array ? chunk : chunk.subarray();
+
+    // Check size limit to prevent DoS attacks
+    totalSize += bytes.length;
+    if (totalSize > MAX_STREAM_SIZE_BYTES) {
+      logger.p2p.warn('Stream data exceeds size limit', {
+        size: totalSize,
+        limit: MAX_STREAM_SIZE_BYTES,
+      });
+      throw new StreamDataValidationError(
+        `Stream data exceeds maximum size limit of ${MAX_STREAM_SIZE_BYTES} bytes`
+      );
+    }
+
     chunks.push(bytes);
   }
 
   // Concatenate all chunks
-  const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-  const combined = new Uint8Array(totalLength);
+  const combined = new Uint8Array(totalSize);
   let offset = 0;
   for (const chunk of chunks) {
     combined.set(chunk, offset);
@@ -209,9 +255,33 @@ export const readStreamData = async (stream: Stream): Promise<ParsedStreamData> 
   }
 
   const jsonString = uint8ArrayToString(combined);
-  const data = JSON.parse(jsonString) as ParsedStreamData;
 
-  logger.p2p.debug('Stream data received', { success: data.success, message: data.message });
+  // Safe JSON parse to prevent prototype pollution
+  let rawData: unknown;
+  try {
+    rawData = safeJsonParse(jsonString);
+  } catch (error) {
+    logger.p2p.warn('Failed to parse stream JSON', { error });
+    throw new StreamDataValidationError('Invalid JSON in stream data');
+  }
+
+  // Validate with Zod schema
+  const parseResult = ParsedStreamDataSchema.safeParse(rawData);
+  if (!parseResult.success) {
+    const issues = parseResult.error.issues;
+    logger.p2p.warn('Stream data validation failed', {
+      errors: issues.map((e) => `${e.path.join('.')}: ${e.message}`),
+    });
+    throw new StreamDataValidationError(
+      `Stream data validation failed: ${issues.map((e) => e.message).join(', ')}`
+    );
+  }
+
+  const data = parseResult.data as ParsedStreamData;
+  logger.p2p.debug('Stream data received and validated', {
+    success: data.success,
+    message: data.message,
+  });
 
   return data;
 };
