@@ -6,8 +6,9 @@
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
-import { truncateAddress, areAddressesEqual } from '@/lib/address';
+import { areAddressesEqual } from '@/lib/address';
 import { Wallet, ArrowRight, Check, AlertTriangle } from 'lucide-react';
 
 export type WalletStatus = 'correct' | 'wrong-wallet' | 'wrong-network' | 'disconnected';
@@ -19,6 +20,8 @@ export interface WalletSwitchPromptProps {
   expectedAddress: `0x${string}`;
   /** Label for the expected wallet (e.g., "Stolen Wallet", "Gas Wallet") */
   expectedLabel: string;
+  /** Label for the current wallet (e.g., "Stolen Wallet", "Gas Wallet") */
+  currentLabel?: string;
   /** Current network chain ID */
   currentChainId?: number;
   /** Expected network chain ID */
@@ -51,6 +54,7 @@ export function WalletSwitchPrompt({
   currentAddress,
   expectedAddress,
   expectedLabel,
+  currentLabel,
   currentChainId,
   expectedChainId,
   className,
@@ -70,7 +74,16 @@ export function WalletSwitchPrompt({
           Correct Wallet Connected
         </AlertTitle>
         <AlertDescription className="text-green-600 dark:text-green-400">
-          <span className="font-mono">{truncateAddress(expectedAddress, 6)}</span> ({expectedLabel})
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <ExplorerLink
+              value={expectedAddress}
+              type="address"
+              href={null}
+              truncate={false}
+              showDisabledIcon={false}
+            />
+            <span className="text-xs">({expectedLabel})</span>
+          </div>
         </AlertDescription>
       </Alert>
     );
@@ -82,9 +95,18 @@ export function WalletSwitchPrompt({
         <AlertTriangle className="h-4 w-4" />
         <AlertTitle>Wallet Not Connected</AlertTitle>
         <AlertDescription>
-          Please connect your <strong>{expectedLabel}</strong> to continue.
-          <div className="mt-2 font-mono text-sm">
-            Expected: {truncateAddress(expectedAddress, 6)}
+          <p className="mb-2">
+            Please connect your <strong>{expectedLabel}</strong> to continue.
+          </p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-xs uppercase tracking-wide opacity-70">Expected:</span>
+            <ExplorerLink
+              value={expectedAddress}
+              type="address"
+              href={null}
+              truncate={false}
+              showDisabledIcon={false}
+            />
           </div>
         </AlertDescription>
       </Alert>
@@ -137,20 +159,29 @@ export function WalletSwitchPrompt({
           Please switch to your <strong>{expectedLabel}</strong> to continue.
         </p>
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-xs uppercase tracking-wide opacity-70">Current:</span>
-            <Badge variant="outline" className="font-mono">
-              {truncateAddress(currentAddress, 6)}
-            </Badge>
+            <ExplorerLink
+              value={currentAddress}
+              type="address"
+              href={null}
+              truncate={false}
+              showDisabledIcon={false}
+            />
+            {currentLabel && <span className="text-xs">({currentLabel})</span>}
           </div>
           <div className="flex items-center gap-2">
             <ArrowRight className="h-4 w-4 mx-2" />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-xs uppercase tracking-wide opacity-70">Expected:</span>
-            <Badge variant="outline" className="font-mono border-amber-500">
-              {truncateAddress(expectedAddress, 6)}
-            </Badge>
+            <ExplorerLink
+              value={expectedAddress}
+              type="address"
+              href={null}
+              truncate={false}
+              showDisabledIcon={false}
+            />
             <span className="text-xs">({expectedLabel})</span>
           </div>
         </div>

@@ -97,9 +97,9 @@ export function P2PRegistereeRegistrationPage() {
 
         // Build protocol handlers for registeree
         // Note: Uses ref for goToNextStep to avoid handler recreation
-        // In libp2p 3.x, handler signature is (stream, connection) not ({stream, connection})
+        // In libp2p 3.x, handler signature is (stream, connection) - connection unused here
         const streamHandler = (protocol: string) => ({
-          handler: async (stream: Stream) => {
+          handler: async (stream: Stream, _connection?: unknown) => {
             try {
               const data = await readStreamData(stream);
               logger.p2p.info('Registeree received data', { protocol, data });

@@ -229,6 +229,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
           currentAddress={address}
           expectedAddress={expectedWallet}
           expectedLabel="Stolen Wallet"
+          currentLabel="Gas Wallet"
         />
       )}
 
@@ -257,6 +258,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
             forwarder,
             nonce,
             deadline: hashStructData.deadline,
+            chainId,
           }}
           status={signatureStatus}
           error={signatureError}

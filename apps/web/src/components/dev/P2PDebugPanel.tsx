@@ -6,7 +6,7 @@
  * Collapsible to avoid cluttering the UI.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Bug, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
 import type { Connection } from '@libp2p/interface';
@@ -14,6 +14,9 @@ import type { Connection } from '@libp2p/interface';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { getRelayPeerIds } from '@/lib/p2p/types';
+
+/** Cached relay peer IDs - computed once on first access, static thereafter */
+let relayPeerIdsCache: Set<string> | null = null;
 
 interface ConnectionInfo {
   id: string;
@@ -52,22 +55,13 @@ interface P2PDebugPanelProps {
   className?: string;
 }
 
-/** Cached relay peer IDs to avoid recomputing on every refresh */
-let cachedRelayPeerIds: Set<string> | null = null;
-
-function getRelayPeerIdsCache(): Set<string> {
-  if (!cachedRelayPeerIds) {
-    cachedRelayPeerIds = getRelayPeerIds();
-  }
-  return cachedRelayPeerIds;
-}
-
 /**
  * Extract connection info from a libp2p Connection object.
+ * @param conn - The connection to extract info from
+ * @param relayPeerIds - Set of known relay peer IDs for tagging
  */
-function extractConnectionInfo(conn: Connection): ConnectionInfo {
+function extractConnectionInfo(conn: Connection, relayPeerIds: Set<string>): ConnectionInfo {
   const remotePeerId = conn.remotePeer.toString();
-  const relayPeerIds = getRelayPeerIdsCache();
 
   return {
     id: conn.id,
@@ -110,7 +104,10 @@ function ConnectionSection({ connection }: { connection: ConnectionInfo }) {
         />
         <span className="font-medium truncate flex-1">{connection.remotePeer.slice(0, 20)}...</span>
         {connection.isRelay && (
-          <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+          <span
+            className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400"
+            title="Known relay server"
+          >
             relay
           </span>
         )}
@@ -160,8 +157,10 @@ function ConnectionSection({ connection }: { connection: ConnectionInfo }) {
 /**
  * Extract debug info from libp2p node.
  * Safely handles node being null or shutting down.
+ * @param libp2p - The libp2p node (or null)
+ * @param relayPeerIds - Set of known relay peer IDs for tagging connections
  */
-function extractDebugInfo(libp2p: Libp2p | null): DebugInfo {
+function extractDebugInfo(libp2p: Libp2p | null, relayPeerIds: Set<string>): DebugInfo {
   if (!libp2p) {
     return {
       peerId: null,
@@ -176,7 +175,7 @@ function extractDebugInfo(libp2p: Libp2p | null): DebugInfo {
       peerId: libp2p.peerId.toString(),
       multiaddrs: libp2p.getMultiaddrs().map((ma) => ma.toString()),
       protocols: libp2p.getProtocols(),
-      connections: libp2p.getConnections().map(extractConnectionInfo),
+      connections: libp2p.getConnections().map((c) => extractConnectionInfo(c, relayPeerIds)),
     };
   } catch {
     // Node may be shutting down
@@ -205,13 +204,31 @@ export function P2PDebugPanel({
 }: P2PDebugPanelProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   // Store extracted debug info in state (plain serializable data)
-  const [debugInfo, setDebugInfo] = useState<DebugInfo>(() => extractDebugInfo(getLibp2p()));
+  // Initialize with empty state - will populate in useEffect to avoid SSR issues
+  const [debugInfo, setDebugInfo] = useState<DebugInfo>({
+    peerId: null,
+    multiaddrs: [],
+    protocols: [],
+    connections: [],
+  });
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+
+  // Lazy-load relay peer IDs once on client - they're static and won't change
+  const relayPeerIdsRef = useRef<Set<string> | null>(null);
+
+  // Initialize relay peer IDs on first client render
+  useEffect(() => {
+    if (!relayPeerIdsCache) {
+      relayPeerIdsCache = getRelayPeerIds();
+    }
+    relayPeerIdsRef.current = relayPeerIdsCache;
+  }, []);
 
   // Manual refresh function - extracts fresh data from node
   const refresh = useCallback(() => {
     const libp2p = getLibp2p();
-    setDebugInfo(extractDebugInfo(libp2p));
+    const relayIds = relayPeerIdsRef.current ?? new Set<string>();
+    setDebugInfo(extractDebugInfo(libp2p, relayIds));
     setLastUpdated(Date.now());
   }, [getLibp2p]);
 

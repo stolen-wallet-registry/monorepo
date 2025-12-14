@@ -8,11 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
 import { truncateAddress } from '@/lib/address';
-import { Send, Check, AlertCircle, Loader2, Clock, FileSignature } from 'lucide-react';
+import { getChainName, getChainShortName } from '@/lib/explorer';
+import { Send, Check, AlertCircle, Loader2, Clock, FileSignature, Globe, Copy } from 'lucide-react';
+import { useState, useCallback } from 'react';
 
 export type TransactionStatus = 'idle' | 'submitting' | 'pending' | 'confirmed' | 'failed';
 
@@ -28,6 +31,8 @@ export interface SignedMessageData {
   deadline: bigint;
   /** The actual signature */
   signature: `0x${string}`;
+  /** Chain ID where signature is valid */
+  chainId?: number;
 }
 
 export interface TransactionCardProps {
@@ -43,6 +48,8 @@ export interface TransactionCardProps {
   explorerUrl?: string | null;
   /** Signed message data to display */
   signedMessage?: SignedMessageData | null;
+  /** Chain ID for network display */
+  chainId?: number;
   /** Callback to submit transaction */
   onSubmit: () => void;
   /** Callback to retry after failure */
@@ -82,17 +89,39 @@ export function TransactionCard({
   error,
   explorerUrl,
   signedMessage,
+  chainId,
   onSubmit,
   onRetry,
   disabled = false,
   className,
 }: TransactionCardProps) {
+  const [signatureCopied, setSignatureCopied] = useState(false);
+
   const typeLabel = TYPE_LABELS[type];
   const statusConfig = STATUS_CONFIG[status];
   const isConfirmed = status === 'confirmed';
   const isSubmitting = status === 'submitting';
   const isPending = status === 'pending';
   const isFailed = status === 'failed';
+
+  // Resolve chainId from props or signedMessage
+  const resolvedChainId = chainId ?? signedMessage?.chainId;
+
+  // Extract signature for dependency tracking (React Compiler compatibility)
+  const signatureValue = signedMessage?.signature;
+
+  const handleCopySignature = useCallback(async () => {
+    if (!signatureValue || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(signatureValue);
+      setSignatureCopied(true);
+      setTimeout(() => setSignatureCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy signature:', error);
+    }
+  }, [signatureValue]);
 
   const getIcon = () => {
     if (isConfirmed) return <Check className="h-5 w-5 text-green-600 dark:text-green-400" />;
@@ -104,7 +133,11 @@ export function TransactionCard({
   const getDescription = () => {
     if (isConfirmed) return 'Transaction confirmed on-chain';
     if (isPending) return 'Waiting for block confirmation...';
-    if (isSubmitting) return 'Submitting to the network...';
+    if (isSubmitting) {
+      return resolvedChainId
+        ? `Submitting to ${getChainShortName(resolvedChainId)}...`
+        : 'Submitting to the network...';
+    }
     if (isFailed) return 'Transaction failed';
     return `Submit the ${typeLabel.toLowerCase()} transaction`;
   };
@@ -148,17 +181,35 @@ export function TransactionCard({
         {/* Signed message preview */}
         {signedMessage && !isConfirmed && (
           <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <FileSignature className="h-4 w-4 text-muted-foreground" />
-              <span>Signed Message</span>
-              <InfoTooltip
-                content={
-                  type === 'acknowledgement'
-                    ? 'This is the EIP-712 acknowledgement message you signed. Submitting this transaction will record your intent to register this wallet as stolen and start the grace period.'
-                    : 'This is the EIP-712 registration message you signed. Submitting this transaction will permanently mark this wallet as stolen in the on-chain registry.'
-                }
-                size="sm"
-              />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <FileSignature className="h-4 w-4 text-muted-foreground" />
+                <span>Signed Message</span>
+                <InfoTooltip
+                  content={
+                    type === 'acknowledgement'
+                      ? 'This is the EIP-712 acknowledgement message you signed. Submitting this transaction will record your intent to register this wallet as stolen and start the grace period.'
+                      : 'This is the EIP-712 registration message you signed. Submitting this transaction will permanently mark this wallet as stolen in the on-chain registry.'
+                  }
+                  size="sm"
+                />
+              </div>
+              {/* Network badge */}
+              {resolvedChainId && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="font-mono text-xs gap-1">
+                      <Globe className="h-3 w-3" />
+                      {getChainShortName(resolvedChainId)}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p className="text-xs">
+                      {getChainName(resolvedChainId)} (Chain ID: {resolvedChainId})
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
             <div className="space-y-2 font-mono text-sm">
               <div className="flex justify-between items-center">
@@ -199,10 +250,38 @@ export function TransactionCard({
                 <span>Block {signedMessage.deadline.toString()}</span>
               </div>
               <div className="pt-2 border-t">
-                <p className="text-xs text-muted-foreground mb-1">Signature</p>
-                <p className="text-xs break-all text-muted-foreground/80">
-                  {signedMessage.signature.slice(0, 26)}...{signedMessage.signature.slice(-24)}
-                </p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs text-muted-foreground">Signature</p>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={handleCopySignature}
+                        className="text-muted-foreground/60 hover:text-foreground transition-colors"
+                        aria-label={signatureCopied ? 'Copied!' : 'Copy signature'}
+                      >
+                        {signatureCopied ? (
+                          <Check className="h-3 w-3 text-green-500" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      <p className="text-xs">{signatureCopied ? 'Copied!' : 'Copy signature'}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="text-xs break-all text-muted-foreground/80 cursor-default">
+                      {signedMessage.signature.slice(0, 26)}...{signedMessage.signature.slice(-24)}
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-md">
+                    <p className="text-xs font-mono break-all">{signedMessage.signature}</p>
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </div>
           </div>
@@ -220,8 +299,15 @@ export function TransactionCard({
         {/* Transaction hash */}
         {hash && (
           <div className="rounded-lg bg-muted p-4">
-            <span className="text-sm text-muted-foreground block mb-1">Transaction Hash</span>
-            <ExplorerLink value={hash} href={explorerUrl} />
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm text-muted-foreground">Transaction Hash</span>
+              {resolvedChainId && (
+                <Badge variant="outline" className="font-mono text-[10px]">
+                  {getChainShortName(resolvedChainId)}
+                </Badge>
+              )}
+            </div>
+            <ExplorerLink value={hash} type="transaction" href={explorerUrl} />
           </div>
         )}
 

@@ -88,9 +88,10 @@ export function useP2PConnection(options: UseP2PConnectionOptions = {}): UseP2PC
   } = useP2PStore();
 
   // Build default handlers that integrate with the onData callback
+  // In libp2p 3.x, StreamHandler signature is (stream, connection) - connection unused in defaults
   const buildHandlers = useCallback((): ProtocolHandler[] => {
     const defaultHandler = (protocol: string): ProtocolHandler['streamHandler'] => ({
-      handler: async (stream: Stream) => {
+      handler: async (stream: Stream, _connection: Connection) => {
         try {
           const data = await readStreamData(stream);
           logger.p2p.info('Received data', { protocol, success: data.success });

@@ -71,6 +71,23 @@ describe('WalletSwitchPrompt', () => {
       const labels = screen.getAllByText(/Gas Wallet/);
       expect(labels.length).toBeGreaterThan(0);
     });
+
+    it('shows current wallet label when provided', () => {
+      render(
+        <WalletSwitchPrompt
+          currentAddress={gasWallet}
+          expectedAddress={stolenWallet}
+          expectedLabel="Stolen Wallet"
+          currentLabel="Gas Wallet"
+        />
+      );
+
+      // Current label appears next to the current address
+      expect(screen.getByText('(Gas Wallet)')).toBeInTheDocument();
+      // Expected label appears in the message and next to expected address
+      const stolenWalletLabels = screen.getAllByText(/Stolen Wallet/);
+      expect(stolenWalletLabels.length).toBeGreaterThan(0);
+    });
   });
 
   describe('disconnected', () => {

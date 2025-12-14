@@ -152,6 +152,7 @@ export function P2PAckSignStep({ libp2p }: P2PAckSignStepProps) {
           forwarder: relayer,
           nonce,
           deadline: hashData.deadline,
+          chainId,
         }
       : null;
 

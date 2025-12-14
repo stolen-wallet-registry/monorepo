@@ -8,10 +8,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
-import { PenTool, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { getChainShortName } from '@/lib/explorer';
+import { PenTool, Check, AlertCircle, Loader2, Copy, Clock } from 'lucide-react';
+import { useState, useCallback } from 'react';
+
+/** Signature session TTL in minutes (must match storage.ts SIGNATURE_TTL_MS) */
+const SIGNATURE_TTL_MINUTES = 30;
 
 export type SignatureStatus = 'idle' | 'signing' | 'success' | 'error';
 
@@ -24,6 +30,8 @@ export interface SignatureData {
   nonce: bigint;
   /** Block deadline for signature validity */
   deadline: bigint;
+  /** Chain ID where signature is valid */
+  chainId?: number;
 }
 
 export interface SignatureCardProps {
@@ -69,10 +77,25 @@ export function SignatureCard({
   disabled = false,
   className,
 }: SignatureCardProps) {
+  const [signatureCopied, setSignatureCopied] = useState(false);
+
   const typeLabel = TYPE_LABELS[type];
   const isSuccess = status === 'success';
   const isSigning = status === 'signing';
   const isError = status === 'error';
+
+  const handleCopySignature = useCallback(async () => {
+    if (!signature || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(signature);
+      setSignatureCopied(true);
+      setTimeout(() => setSignatureCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy signature:', error);
+    }
+  }, [signature]);
 
   return (
     <Card className={cn('w-full', className)}>
@@ -116,6 +139,21 @@ export function SignatureCard({
       <CardContent className="space-y-4">
         {/* Data being signed */}
         <div className="rounded-lg bg-muted p-4 space-y-2 font-mono text-sm">
+          {/* Chain info */}
+          {data.chainId && (
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground flex items-center gap-1">
+                Network:
+                <InfoTooltip
+                  content="The blockchain network where this signature is valid. Signatures are chain-specific and cannot be used on other networks."
+                  size="sm"
+                />
+              </span>
+              <Badge variant="outline" className="font-mono">
+                {getChainShortName(data.chainId)}
+              </Badge>
+            </div>
+          )}
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground flex items-center gap-1">
               Registeree:
@@ -124,7 +162,7 @@ export function SignatureCard({
                 size="sm"
               />
             </span>
-            <ExplorerLink value={data.registeree} showDisabledIcon={false} />
+            <ExplorerLink value={data.registeree} type="address" showDisabledIcon={false} />
           </div>
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground flex items-center gap-1">
@@ -134,7 +172,7 @@ export function SignatureCard({
                 size="sm"
               />
             </span>
-            <ExplorerLink value={data.forwarder} showDisabledIcon={false} />
+            <ExplorerLink value={data.forwarder} type="address" showDisabledIcon={false} />
           </div>
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground flex items-center gap-1">
@@ -166,13 +204,60 @@ export function SignatureCard({
           </Alert>
         )}
 
-        {/* Signature preview */}
+        {/* Signature preview with full tooltip and TTL info */}
         {isSuccess && signature && (
-          <div className="rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 p-3">
-            <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">Signature</p>
-            <p className="font-mono text-xs text-green-600 dark:text-green-400 break-all">
-              {signature.slice(0, 20)}...{signature.slice(-20)}
-            </p>
+          <div className="rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-green-700 dark:text-green-300">Signature</p>
+              <div className="flex items-center gap-2">
+                {/* TTL indicator */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400">
+                      <Clock className="h-3 w-3" />
+                      {SIGNATURE_TTL_MINUTES}m
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p className="text-xs">
+                      Signature stored for {SIGNATURE_TTL_MINUTES} minutes. After expiry, you'll
+                      need to sign again.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+                {/* Copy button */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={handleCopySignature}
+                      className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 transition-colors"
+                      aria-label={signatureCopied ? 'Copied!' : 'Copy signature'}
+                    >
+                      {signatureCopied ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p className="text-xs">{signatureCopied ? 'Copied!' : 'Copy signature'}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+            {/* Truncated signature with full value tooltip */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="font-mono text-xs text-green-600 dark:text-green-400 break-all cursor-default">
+                  {signature.slice(0, 26)}...{signature.slice(-24)}
+                </p>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-md">
+                <p className="text-xs font-mono break-all">{signature}</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         )}
 

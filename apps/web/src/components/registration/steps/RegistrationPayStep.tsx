@@ -215,6 +215,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
           currentAddress={address}
           expectedAddress={expectedWallet}
           expectedLabel="Gas Wallet"
+          currentLabel="Stolen Wallet"
         />
       )}
 
@@ -226,6 +227,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         error={errorMessage}
         explorerUrl={explorerUrl}
         signedMessage={signedMessageData}
+        chainId={chainId}
         onSubmit={handleSubmit}
         onRetry={handleRetry}
         disabled={!isCorrectWallet}

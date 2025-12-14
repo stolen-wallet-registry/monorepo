@@ -427,10 +427,11 @@ export function useP2PSignatureRelay(
 
     if (role === 'registeree') {
       // Registeree receives tx hashes and confirmations
+      // Note: libp2p 3.x StreamHandler signature is (stream, connection) - connection unused here
       handlers.push({
         protocol: PROTOCOLS.ACK_REC,
         streamHandler: {
-          handler: async (stream: Stream) => {
+          handler: async (stream: Stream, _connection: Connection) => {
             try {
               const data = await readStreamData(stream);
               logger.p2p.info('ACK signature confirmed received', { data });
@@ -446,7 +447,7 @@ export function useP2PSignatureRelay(
       handlers.push({
         protocol: PROTOCOLS.ACK_PAY,
         streamHandler: {
-          handler: async (stream: Stream) => {
+          handler: async (stream: Stream, _connection: Connection) => {
             try {
               const data = await readStreamData(stream);
               logger.p2p.info('Received ACK payment hash', { data });
@@ -470,7 +471,7 @@ export function useP2PSignatureRelay(
       handlers.push({
         protocol: PROTOCOLS.REG_REC,
         streamHandler: {
-          handler: async (stream: Stream) => {
+          handler: async (stream: Stream, _connection: Connection) => {
             try {
               const data = await readStreamData(stream);
               logger.p2p.info('REG signature confirmed received', { data });
@@ -486,7 +487,7 @@ export function useP2PSignatureRelay(
       handlers.push({
         protocol: PROTOCOLS.REG_PAY,
         streamHandler: {
-          handler: async (stream: Stream) => {
+          handler: async (stream: Stream, _connection: Connection) => {
             try {
               const data = await readStreamData(stream);
               logger.p2p.info('Received REG payment hash', { data });

@@ -12,11 +12,18 @@ const meta = {
 Displays blockchain hashes/addresses with explorer links.
 
 **Features:**
+- **Type-aware labels**: Automatically detects address vs transaction by length, or set explicitly
+- **Full value tooltip**: Hover over truncated values to see full hash/address
 - **Searchable**: Full address in DOM, Ctrl+F finds and highlights visible portions
 - **Truncation**: Shows start and end of address with ellipsis in middle
-- **Copy button**: Click to copy full address to clipboard
-- **Explorer link**: Click to view on block explorer
+- **Copy button**: Click to copy with type-specific label (e.g., "Copy transaction hash")
+- **Explorer link**: Click to view on explorer with type-specific tooltip
 - **Disabled state**: Shows not-allowed cursor with tooltip for local chains
+
+**Supported types:**
+- \`address\` (default for 42 char values)
+- \`transaction\` (default for 66 char values)
+- \`contract\`, \`token\`, \`block\` (explicit only)
         `,
       },
     },
@@ -32,7 +39,8 @@ const sampleAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
 /**
  * Transaction hash with explorer link.
- * Click copy icon to copy, link icon to view on explorer.
+ * Type auto-detected from length (66 chars = transaction).
+ * Hover over value for full hash, hover copy icon for "Copy transaction hash".
  */
 export const TransactionHash: Story = {
   args: {
@@ -42,13 +50,38 @@ export const TransactionHash: Story = {
 };
 
 /**
- * Address with explorer link.
- * Click copy icon to copy, link icon to view on explorer.
+ * Wallet address with explorer link.
+ * Type auto-detected from length (42 chars = address).
+ * Hover over value for full address, hover copy icon for "Copy address".
  */
 export const Address: Story = {
   args: {
     value: sampleAddress as `0x${string}`,
     href: `https://etherscan.io/address/${sampleAddress}`,
+  },
+};
+
+/**
+ * Contract address with explicit type.
+ * Shows "Copy contract address" and "View contract on explorer" tooltips.
+ */
+export const ContractAddress: Story = {
+  args: {
+    value: sampleAddress as `0x${string}`,
+    type: 'contract',
+    href: `https://etherscan.io/address/${sampleAddress}`,
+  },
+};
+
+/**
+ * Token address with explicit type.
+ * Shows "Copy token address" and "View token on explorer" tooltips.
+ */
+export const TokenAddress: Story = {
+  args: {
+    value: sampleAddress as `0x${string}`,
+    type: 'token',
+    href: `https://etherscan.io/token/${sampleAddress}`,
   },
 };
 

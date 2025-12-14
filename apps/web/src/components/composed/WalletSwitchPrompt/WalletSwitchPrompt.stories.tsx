@@ -35,24 +35,26 @@ export const CorrectWallet: Story = {
 };
 
 /**
- * Need to switch to stolen wallet.
+ * Need to switch to stolen wallet (for registration signing step).
  */
 export const NeedToSwitchToStolen: Story = {
   args: {
     currentAddress: gasWallet,
     expectedAddress: stolenWallet,
     expectedLabel: 'Stolen Wallet',
+    currentLabel: 'Gas Wallet',
   },
 };
 
 /**
- * Need to switch to gas wallet.
+ * Need to switch to gas wallet (for payment step).
  */
 export const NeedToSwitchToGas: Story = {
   args: {
     currentAddress: stolenWallet,
     expectedAddress: gasWallet,
     expectedLabel: 'Gas Wallet',
+    currentLabel: 'Stolen Wallet',
   },
 };
 

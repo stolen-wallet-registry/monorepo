@@ -152,6 +152,7 @@ export function P2PRegSignStep({ libp2p }: P2PRegSignStepProps) {
           forwarder: relayer,
           nonce,
           deadline: hashData.deadline,
+          chainId,
         }
       : null;
 

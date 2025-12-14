@@ -173,6 +173,7 @@ export function P2PRegPayStep({ onComplete, role, libp2p }: P2PRegPayStepProps) 
             type="registration"
             status="confirmed"
             hash={registrationHash}
+            chainId={chainId}
             onSubmit={() => undefined}
           />
         ) : (
@@ -207,6 +208,7 @@ export function P2PRegPayStep({ onComplete, role, libp2p }: P2PRegPayStepProps) 
             status={getStatus()}
             hash={hash}
             error={error?.message}
+            chainId={chainId}
             onSubmit={handleSubmit}
             onRetry={reset}
             disabled={!storedSig}

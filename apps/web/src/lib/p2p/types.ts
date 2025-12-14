@@ -172,10 +172,18 @@ export function extractPeerIdFromMultiaddr(multiaddr: string): string | null {
 /**
  * Get peer IDs of all known relay servers.
  * Useful for tagging connections in debug tools.
+ * Returns empty set if relay servers are not configured (e.g., production without config).
  */
 export function getRelayPeerIds(): Set<string> {
   const peerIds = new Set<string>();
-  const servers = getRelayServers();
+
+  let servers: ReturnType<typeof getRelayServers>;
+  try {
+    servers = getRelayServers();
+  } catch {
+    // Return empty set if relay servers not configured (e.g., unconfigured production)
+    return peerIds;
+  }
 
   for (const server of servers) {
     const peerId = extractPeerIdFromMultiaddr(server.multiaddr);

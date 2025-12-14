@@ -148,6 +148,64 @@ describe('signature storage', () => {
     });
   });
 
+  describe('30-minute TTL expiration', () => {
+    it('returns null and removes signature older than 30 minutes', () => {
+      // Create signature that is 31 minutes old (expired)
+      const expiredSignature = createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT, {
+        storedAt: Date.now() - 31 * 60 * 1000,
+      });
+
+      storeSignature(expiredSignature);
+
+      const result = getSignature(testAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+
+      expect(result).toBeNull();
+
+      // Verify the key was removed from sessionStorage
+      const key = `swr_sig_${testAddress.toLowerCase()}_${testChainId}_${SIGNATURE_STEP.ACKNOWLEDGEMENT}`;
+      expect(sessionStorage.getItem(key)).toBeNull();
+    });
+
+    it('returns signature that is less than 30 minutes old', () => {
+      // Create signature that is 20 minutes old (not expired)
+      const validSignature = createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT, {
+        storedAt: Date.now() - 20 * 60 * 1000,
+      });
+
+      storeSignature(validSignature);
+
+      const result = getSignature(testAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+
+      expect(result).not.toBeNull();
+      expect(result!.signature).toBe(validSignature.signature);
+      expect(result!.storedAt).toBe(validSignature.storedAt);
+    });
+
+    it('returns signature stored just now', () => {
+      const freshSignature = createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT);
+
+      storeSignature(freshSignature);
+
+      const result = getSignature(testAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+
+      expect(result).not.toBeNull();
+      expect(result!.signature).toBe(freshSignature.signature);
+    });
+
+    it('returns null for signature at exactly 30 minutes (boundary)', () => {
+      // Signature at exactly 30 minutes should be expired (> check, not >=)
+      const boundarySignature = createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT, {
+        storedAt: Date.now() - 30 * 60 * 1000 - 1, // Just over 30 minutes
+      });
+
+      storeSignature(boundarySignature);
+
+      const result = getSignature(testAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+
+      expect(result).toBeNull();
+    });
+  });
+
   describe('removeSignature', () => {
     it('removes a specific signature', () => {
       storeSignature(createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT));

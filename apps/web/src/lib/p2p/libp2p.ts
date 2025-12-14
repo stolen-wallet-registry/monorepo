@@ -138,10 +138,14 @@ export const getPeerConnection = async ({
 
   // Create new connection via circuit relay
   const multiaddrs = libp2p.getMultiaddrs().map((ma) => {
-    // code 290 is the p2p-circuit code
-    // Cast to unknown to work around multiaddr-matcher version mismatch
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (WebRTC.matches(ma as any)) {
+    // Code 290 is the p2p-circuit protocol code.
+    //
+    // Type workaround: @multiformats/multiaddr-matcher 1.6.x WebRTC.matches() expects
+    // Multiaddr from @multiformats/multiaddr 12.x, but libp2p 3.x uses @multiformats/multiaddr 13.x.
+    // The runtime behavior is compatible, only the type signatures differ.
+    // Track: https://github.com/multiformats/js-multiaddr-matcher/issues
+    // TODO: Remove cast when multiaddr-matcher updates to support multiaddr 13.x
+    if (WebRTC.matches(ma as Parameters<typeof WebRTC.matches>[0])) {
       return ma.decapsulateCode(290).encapsulate(`/p2p-circuit/webrtc/p2p/${peerId.toString()}`);
     } else {
       return ma.decapsulateCode(290).encapsulate(`/p2p-circuit/p2p/${peerId.toString()}`);

@@ -94,6 +94,22 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     };
   }, []);
 
+  // Sync registeree with connected wallet for ALL registration types before form submission
+  // Once showSignature is true, the registeree is locked
+  useEffect(() => {
+    if (!showSignature && address) {
+      const previousRegisteree = form.getValues('registeree');
+      if (previousRegisteree !== address) {
+        logger.wallet.debug('Syncing registeree with connected wallet', {
+          registrationType,
+          previousRegisteree,
+          newRegisteree: address,
+        });
+        form.setValue('registeree', address);
+      }
+    }
+  }, [address, form, showSignature, registrationType]);
+
   // Watch form values for validation using useWatch (React Compiler compatible)
   const watchedRelayer = useWatch({ control: form.control, name: 'relayer' });
   const watchedRegisteree = useWatch({ control: form.control, name: 'registeree' });
@@ -181,7 +197,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     logger.contract.debug('Refetching hash struct for fresh deadline');
     await refetchHashStruct();
 
-    // Show signature card
+    // Show signature card (this also locks registeree from further wallet changes)
     logger.registration.info('Proceeding to signature step');
     setShowSignature(true);
   };
@@ -361,6 +377,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
               forwarder,
               nonce,
               deadline: hashStructData.deadline,
+              chainId,
             }}
             status={signatureStatus}
             error={signatureError}

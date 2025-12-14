@@ -97,7 +97,11 @@ describe('SignatureCard', () => {
     it('hides sign button on success', () => {
       render(<SignatureCard {...defaultProps} status="success" signature={signature} />);
 
-      expect(screen.queryByRole('button', { name: /Sign/i })).not.toBeInTheDocument();
+      // The "Sign Acknowledgement" / "Sign Registration" button should be hidden
+      expect(
+        screen.queryByRole('button', { name: /Sign Acknowledgement/i })
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Sign Registration/i })).not.toBeInTheDocument();
     });
 
     it('shows completion message on success', () => {

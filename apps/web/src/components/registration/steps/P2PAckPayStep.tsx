@@ -181,6 +181,7 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
             type="acknowledgement"
             status="confirmed"
             hash={acknowledgementHash}
+            chainId={chainId}
             onSubmit={() => undefined}
           />
         ) : (
@@ -215,6 +216,7 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
             status={getStatus()}
             hash={hash}
             error={error?.message}
+            chainId={chainId}
             onSubmit={handleSubmit}
             onRetry={reset}
             disabled={!storedSig}

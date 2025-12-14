@@ -28,6 +28,11 @@ export default defineConfig([
         'warn',
         { allowExportNames: ['render', 'buttonVariants'] },
       ],
+      // Allow underscore-prefixed unused variables (common pattern for intentionally unused params)
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
     },
   },
   {

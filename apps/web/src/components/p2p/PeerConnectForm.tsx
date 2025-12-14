@@ -89,7 +89,11 @@ export function PeerConnectForm({ onConnect, isConnecting, error }: PeerConnectF
           )}
         />
 
-        {error && <div className="text-sm text-destructive">{error}</div>}
+        {error && (
+          <div role="alert" aria-live="polite" className="text-sm text-destructive">
+            {error}
+          </div>
+        )}
 
         <Button type="submit" className="w-full" disabled={isConnecting}>
           {isConnecting ? 'Connecting...' : 'Connect to Peer'}
