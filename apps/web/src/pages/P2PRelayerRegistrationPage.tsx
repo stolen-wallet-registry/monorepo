@@ -144,14 +144,13 @@ export function P2PRelayerRegistrationPage() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
-  // Keep P2P connection alive during grace period
+  // Keep P2P connection alive throughout the session
   // Circuit relay connections timeout after ~2 minutes of inactivity
   useP2PKeepAlive({
     libp2p,
     remotePeerId: partnerPeerId,
-    enabled: step === 'grace-period' || step === 'register-and-sign',
     onConnectionLost: () => {
-      logger.p2p.warn('P2P connection lost during grace period');
+      logger.p2p.warn('P2P connection lost');
       setConnectionError(
         'Connection to registeree was lost. They may need to restart the process.'
       );

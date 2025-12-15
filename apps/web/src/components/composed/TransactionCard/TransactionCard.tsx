@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { truncateAddress } from '@/lib/address';
 import { getChainName, getChainShortName } from '@/lib/explorer';
 import { Check, AlertCircle, Loader2, FileSignature, Globe, Copy } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 
 export type TransactionStatus = 'idle' | 'submitting' | 'pending' | 'confirmed' | 'failed';
 
@@ -96,7 +96,7 @@ export function TransactionCard({
   disabled = false,
   className,
 }: TransactionCardProps) {
-  const [signatureCopied, setSignatureCopied] = useState(false);
+  const { copied: signatureCopied, copy: copySignature } = useCopyToClipboard({ resetMs: 2000 });
 
   const typeLabel = TYPE_LABELS[type];
   const statusConfig = STATUS_CONFIG[status];
@@ -108,21 +108,11 @@ export function TransactionCard({
   // Resolve chainId from props or signedMessage
   const resolvedChainId = chainId ?? signedMessage?.chainId;
 
-  // Extract signature for dependency tracking (React Compiler compatibility)
-  const signatureValue = signedMessage?.signature;
-
-  const handleCopySignature = useCallback(async () => {
-    if (!signatureValue || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
-      return;
+  const handleCopySignature = () => {
+    if (signedMessage?.signature) {
+      copySignature(signedMessage.signature);
     }
-    try {
-      await navigator.clipboard.writeText(signatureValue);
-      setSignatureCopied(true);
-      setTimeout(() => setSignatureCopied(false), 2000);
-    } catch (error) {
-      console.error('Failed to copy signature:', error);
-    }
-  }, [signatureValue]);
+  };
 
   const getDescription = () => {
     if (isConfirmed) return 'Transaction confirmed on-chain';

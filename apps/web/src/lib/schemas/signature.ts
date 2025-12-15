@@ -11,7 +11,7 @@ import { z } from 'zod';
  */
 export const hexStringSchema = z
   .string()
-  .regex(/^0x[a-fA-F0-9]*$/, 'Must be a valid hex string starting with 0x');
+  .regex(/^0x[a-fA-F0-9]+$/, 'Must be a valid hex string starting with 0x');
 
 /**
  * Schema for validating EIP-712 signatures.

@@ -15,7 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { SIGNATURE_TTL_MS } from '@/lib/signatures';
 import { Check, AlertCircle, Loader2, Copy, Clock } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 
 /** Signature session TTL in minutes (derived from single source of truth) */
 const SIGNATURE_TTL_MINUTES = SIGNATURE_TTL_MS / 60000;
@@ -69,25 +69,18 @@ export function SignatureCard({
   disabled = false,
   className,
 }: SignatureCardProps) {
-  const [signatureCopied, setSignatureCopied] = useState(false);
+  const { copied: signatureCopied, copy: copySignature } = useCopyToClipboard({ resetMs: 2000 });
 
   const typeLabel = TYPE_LABELS[type];
   const isSuccess = status === 'success';
   const isSigning = status === 'signing';
   const isError = status === 'error';
 
-  const handleCopySignature = useCallback(async () => {
-    if (!signature || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
-      return;
+  const handleCopySignature = () => {
+    if (signature) {
+      copySignature(signature);
     }
-    try {
-      await navigator.clipboard.writeText(signature);
-      setSignatureCopied(true);
-      setTimeout(() => setSignatureCopied(false), 2000);
-    } catch (error) {
-      console.error('Failed to copy signature:', error);
-    }
-  }, [signature]);
+  };
 
   return (
     <div className={cn('space-y-4', className)}>

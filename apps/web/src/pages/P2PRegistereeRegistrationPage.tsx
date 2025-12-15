@@ -83,14 +83,13 @@ export function P2PRegistereeRegistrationPage() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [protocolError, setProtocolError] = useState<string | null>(null);
 
-  // Keep P2P connection alive during grace period
+  // Keep P2P connection alive throughout the session
   // Circuit relay connections timeout after ~2 minutes of inactivity
   useP2PKeepAlive({
     libp2p,
     remotePeerId: partnerPeerId,
-    enabled: step === 'grace-period' || step === 'acknowledgement-payment',
     onConnectionLost: () => {
-      logger.p2p.warn('P2P connection lost during grace period');
+      logger.p2p.warn('P2P connection lost');
       setProtocolError('Connection to relayer was lost. Please restart the registration process.');
     },
   });

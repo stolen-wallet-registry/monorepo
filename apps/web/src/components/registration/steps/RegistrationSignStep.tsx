@@ -169,7 +169,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         step: SIGNATURE_STEP.REGISTRATION,
         storedAt: Date.now(),
       });
-      logger.signature.debug('Registration signature stored in localStorage');
+      logger.signature.debug('Registration signature stored in sessionStorage');
 
       setSignature(sig);
       setSignatureStatus('success');

@@ -99,8 +99,8 @@ describe('SignatureCard', () => {
     it('shows TTL indicator on success', () => {
       render(<SignatureCard {...defaultProps} status="success" signature={signature} />);
 
-      // TTL indicator shows signature expiry time
-      expect(screen.getByText(/\d+m/)).toBeInTheDocument();
+      // TTL indicator shows signature expiry time (30 minutes from SIGNATURE_TTL_MS)
+      expect(screen.getByText('30m')).toBeInTheDocument();
     });
   });
 

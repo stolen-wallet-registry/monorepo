@@ -21,7 +21,7 @@ export interface StoredSignature {
   storedAt: number; // timestamp
 }
 
-// Serializable version for localStorage
+// Serializable version for sessionStorage
 interface SerializedSignature {
   signature: string;
   deadline: string;

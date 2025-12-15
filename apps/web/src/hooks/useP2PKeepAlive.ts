@@ -70,6 +70,7 @@ export function useP2PKeepAlive({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const consecutiveFailuresRef = useRef(0);
   const prevRemotePeerIdRef = useRef<string | null>(null);
+  const connectionLostFiredRef = useRef(false);
 
   // Use state for values returned during render
   const [lastPingLatency, setLastPingLatency] = useState<number | null>(null);
@@ -129,10 +130,14 @@ export function useP2PKeepAlive({
         error: err instanceof Error ? err.message : 'Unknown error',
       });
 
-      // After MAX_CONSECUTIVE_FAILURES, mark as unhealthy
+      // After MAX_CONSECUTIVE_FAILURES, mark as unhealthy and fire callback once
       if (consecutiveFailuresRef.current >= MAX_CONSECUTIVE_FAILURES) {
         setIsHealthy(false);
-        onConnectionLost?.();
+        // Only call onConnectionLost once per connection
+        if (!connectionLostFiredRef.current) {
+          connectionLostFiredRef.current = true;
+          onConnectionLost?.();
+        }
       }
 
       return null;
@@ -145,7 +150,10 @@ export function useP2PKeepAlive({
     if (remotePeerId !== prevRemotePeerIdRef.current) {
       prevRemotePeerIdRef.current = remotePeerId;
       consecutiveFailuresRef.current = 0;
-      // Note: We don't reset isHealthy/lastPingLatency here as the effect below handles it
+      connectionLostFiredRef.current = false;
+      // Reset state for new peer
+      setIsHealthy(true);
+      setLastPingLatency(null);
     }
 
     if (!enabled || !libp2p || !remotePeerId) {

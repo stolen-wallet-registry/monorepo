@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 import type { P2PState } from '@/stores/p2pStore';
+import { logger } from '@/lib/logger';
 
 // ============================================================================
 // Zod Schemas for P2P Stream Data Validation
@@ -180,8 +181,13 @@ export function getRelayPeerIds(): Set<string> {
   let servers: ReturnType<typeof getRelayServers>;
   try {
     servers = getRelayServers();
-  } catch {
-    // Return empty set if relay servers not configured (e.g., unconfigured production)
+  } catch (error) {
+    // Log in development, return empty set if relay servers not configured
+    if (import.meta.env.DEV) {
+      logger.p2p.warn('Relay servers not configured', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
     return peerIds;
   }
 

@@ -266,7 +266,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
         storedAt: Date.now(),
       });
-      logger.signature.debug('Acknowledgement signature stored in localStorage');
+      logger.signature.debug('Acknowledgement signature stored in sessionStorage');
 
       setSignature(sig);
       setSignatureStatus('success');
