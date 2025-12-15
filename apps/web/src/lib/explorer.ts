@@ -23,7 +23,7 @@ function findChain(chainId: number) {
  */
 export function getExplorerTxUrl(chainId: number, txHash: `0x${string}`): string | null {
   const chain = findChain(chainId);
-  const baseUrl = chain?.blockExplorers?.default?.url;
+  const baseUrl = chain?.blockExplorers?.default?.url?.replace(/\/$/, '');
   if (!baseUrl) return null;
   return `${baseUrl}/tx/${txHash}`;
 }
@@ -37,7 +37,7 @@ export function getExplorerTxUrl(chainId: number, txHash: `0x${string}`): string
  */
 export function getExplorerAddressUrl(chainId: number, address: `0x${string}`): string | null {
   const chain = findChain(chainId);
-  const baseUrl = chain?.blockExplorers?.default?.url;
+  const baseUrl = chain?.blockExplorers?.default?.url?.replace(/\/$/, '');
   if (!baseUrl) return null;
   return `${baseUrl}/address/${address}`;
 }

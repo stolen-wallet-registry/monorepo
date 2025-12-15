@@ -3,6 +3,9 @@
 
 import type { SignatureStep } from './eip712';
 
+/** Signature session TTL in milliseconds (30 minutes) */
+export const SIGNATURE_TTL_MS = 30 * 60 * 1000;
+
 // Storage key format: swr_sig_{address}_{chainId}_{step}
 function getStorageKey(address: `0x${string}`, chainId: number, step: SignatureStep): string {
   return `swr_sig_${address.toLowerCase()}_${chainId}_${step}`;
@@ -60,8 +63,7 @@ export function getSignature(
   try {
     const parsed: SerializedSignature = JSON.parse(stored);
 
-    // Client-side TTL check (30 minutes) - additional protection beyond contract deadline
-    const SIGNATURE_TTL_MS = 30 * 60 * 1000;
+    // Client-side TTL check - additional protection beyond contract deadline
     if (Date.now() - parsed.storedAt > SIGNATURE_TTL_MS) {
       sessionStorage.removeItem(key);
       return null;

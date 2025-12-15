@@ -94,21 +94,24 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     };
   }, []);
 
+  // Destructure form methods for stable references (React Hook Form best practice)
+  const { getValues, setValue } = form;
+
   // Sync registeree with connected wallet for ALL registration types before form submission
   // Once showSignature is true, the registeree is locked
   useEffect(() => {
     if (!showSignature && address) {
-      const previousRegisteree = form.getValues('registeree');
+      const previousRegisteree = getValues('registeree');
       if (previousRegisteree !== address) {
         logger.wallet.debug('Syncing registeree with connected wallet', {
           registrationType,
           previousRegisteree,
           newRegisteree: address,
         });
-        form.setValue('registeree', address);
+        setValue('registeree', address);
       }
     }
-  }, [address, form, showSignature, registrationType]);
+  }, [address, showSignature, registrationType, getValues, setValue]);
 
   // Watch form values for validation using useWatch (React Compiler compatible)
   const watchedRelayer = useWatch({ control: form.control, name: 'relayer' });

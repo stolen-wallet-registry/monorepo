@@ -79,7 +79,6 @@ export function WalletSwitchPrompt({
               value={expectedAddress}
               type="address"
               href={null}
-              truncate={false}
               showDisabledIcon={false}
             />
             <span className="text-xs">({expectedLabel})</span>
@@ -104,7 +103,6 @@ export function WalletSwitchPrompt({
               value={expectedAddress}
               type="address"
               href={null}
-              truncate={false}
               showDisabledIcon={false}
             />
           </div>
@@ -165,7 +163,6 @@ export function WalletSwitchPrompt({
               value={currentAddress}
               type="address"
               href={null}
-              truncate={false}
               showDisabledIcon={false}
             />
             {currentLabel && <span className="text-xs">({currentLabel})</span>}
@@ -179,7 +176,6 @@ export function WalletSwitchPrompt({
               value={expectedAddress}
               type="address"
               href={null}
-              truncate={false}
               showDisabledIcon={false}
             />
             <span className="text-xs">({expectedLabel})</span>

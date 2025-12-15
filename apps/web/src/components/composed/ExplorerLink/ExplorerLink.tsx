@@ -164,9 +164,9 @@ export function ExplorerLink({
               aria-label={copied ? 'Copied!' : labels.copy}
             >
               {copied ? (
-                <Check className="h-3.5 w-3.5 flex-shrink-0 text-green-500" />
+                <Check className="h-3.5 w-3.5 shrink-0 text-green-500" />
               ) : (
-                <Copy className="h-3.5 w-3.5 flex-shrink-0" />
+                <Copy className="h-3.5 w-3.5 shrink-0" />
               )}
             </button>
           </TooltipTrigger>
@@ -187,7 +187,7 @@ export function ExplorerLink({
               className="hover:text-primary transition-colors"
               aria-label={labels.view}
             >
-              <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
             </a>
           </TooltipTrigger>
           <TooltipContent side="top">
@@ -204,7 +204,7 @@ export function ExplorerLink({
                 role="img"
                 aria-label="No explorer available"
               >
-                <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/40" />
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
               </span>
             </TooltipTrigger>
             <TooltipContent side="top">

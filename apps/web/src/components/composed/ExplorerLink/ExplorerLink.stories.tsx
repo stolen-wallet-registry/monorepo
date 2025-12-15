@@ -34,7 +34,8 @@ Displays blockchain hashes/addresses with explorer links.
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const sampleTxHash = '0xf57a8d48fd5d24c81a61646d4faa902cacb46abc123def456789012345678901';
+// Standard 32-byte tx hash fixture (0x + 64 hex chars = 66 chars total)
+const sampleTxHash = '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
 const sampleAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
 /**

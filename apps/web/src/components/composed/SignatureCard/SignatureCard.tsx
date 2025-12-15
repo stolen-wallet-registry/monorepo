@@ -13,11 +13,12 @@ import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
 import { getChainShortName } from '@/lib/explorer';
+import { SIGNATURE_TTL_MS } from '@/lib/signatures';
 import { PenTool, Check, AlertCircle, Loader2, Copy, Clock } from 'lucide-react';
 import { useState, useCallback } from 'react';
 
-/** Signature session TTL in minutes (must match storage.ts SIGNATURE_TTL_MS) */
-const SIGNATURE_TTL_MINUTES = 30;
+/** Signature session TTL in minutes (derived from single source of truth) */
+const SIGNATURE_TTL_MINUTES = SIGNATURE_TTL_MS / 60000;
 
 export type SignatureStatus = 'idle' | 'signing' | 'success' | 'error';
 
