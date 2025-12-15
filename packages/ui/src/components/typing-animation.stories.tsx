@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { TypingAnimation } from './typing-animation';
 
 const meta = {
-  title: 'Magic UI/TypingAnimation',
+  title: 'MagicUI/TypingAnimation',
   component: TypingAnimation,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],

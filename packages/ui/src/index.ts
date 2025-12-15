@@ -64,3 +64,7 @@ export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './comp
 export { TextAnimate } from './components/text-animate';
 export { TypingAnimation } from './components/typing-animation';
 export { HyperText } from './components/hyper-text';
+export { AnimatedBeam, type AnimatedBeamProps } from './components/animated-beam';
+
+// Web3 Icons (re-exported from @web3icons/react)
+export * from '@web3icons/react';

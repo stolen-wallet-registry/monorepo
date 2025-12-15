@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { TextAnimate } from './text-animate';
 
 const meta: Meta<typeof TextAnimate> = {
-  title: 'Magic UI/TextAnimate',
+  title: 'MagicUI/TextAnimate',
   component: TextAnimate,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],

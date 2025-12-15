@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { HyperText } from './hyper-text';
 
 const meta = {
-  title: 'Magic UI/HyperText',
+  title: 'MagicUI/HyperText',
   component: HyperText,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],

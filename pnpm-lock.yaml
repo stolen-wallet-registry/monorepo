@@ -44,9 +44,6 @@ importers:
       '@swr/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@web3icons/react':
-        specifier: ^4.0.27
-        version: 4.1.6(react@19.2.1)(typescript@5.9.3)
       cobe:
         specifier: ^0.6.3
         version: 0.6.5
@@ -431,6 +428,9 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.2.8
         version: 1.2.8(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
+      '@web3icons/react':
+        specifier: ^4.0.27
+        version: 4.1.6(react@19.2.1)(typescript@5.9.3)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
