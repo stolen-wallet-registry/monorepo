@@ -6,7 +6,7 @@ wagmi 2.x, viem 2.x, and RainbowKit 2.x configuration.
 
 ## Provider Hierarchy
 
-```
+```text
 AppProviders
 └─ ThemeProvider        ← Must wrap Web3 (RainbowKit needs theme)
    └─ Web3Provider
@@ -168,7 +168,7 @@ export function createRainbowKitTheme(colorScheme, variant): Theme {
 
 ## Key Files
 
-```
+```text
 apps/web/src/
 ├── lib/
 │   ├── wagmi.ts                 # Chain config

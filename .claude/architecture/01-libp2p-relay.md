@@ -92,7 +92,7 @@ export interface SignatureOverTheWire {
 
 ## Complete Flow
 
-```
+```text
 REGISTEREE                              RELAYER
 (stolen wallet)                         (has funds)
 
@@ -136,7 +136,7 @@ REGISTEREE                              RELAYER
 
 ## Key Files
 
-```
+```text
 apps/web/src/
 ├── lib/p2p/
 │   ├── libp2p.ts       # Node setup, connections, streams

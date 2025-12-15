@@ -146,14 +146,19 @@ export function useP2PKeepAlive({
 
   // Set up periodic pinging
   useEffect(() => {
+    // Track timeout for state reset cleanup
+    let resetStateTimeout: ReturnType<typeof setTimeout> | null = null;
+
     // Reset state when remotePeerId changes
     if (remotePeerId !== prevRemotePeerIdRef.current) {
       prevRemotePeerIdRef.current = remotePeerId;
       consecutiveFailuresRef.current = 0;
       connectionLostFiredRef.current = false;
-      // Reset state for new peer
-      setIsHealthy(true);
-      setLastPingLatency(null);
+      // Reset state for new peer (deferred to avoid synchronous setState in effect)
+      resetStateTimeout = setTimeout(() => {
+        setIsHealthy(true);
+        setLastPingLatency(null);
+      }, 0);
     }
 
     if (!enabled || !libp2p || !remotePeerId) {
@@ -181,6 +186,9 @@ export function useP2PKeepAlive({
     }, pingIntervalMs);
 
     return () => {
+      if (resetStateTimeout) {
+        clearTimeout(resetStateTimeout);
+      }
       clearTimeout(initialPingTimeout);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);

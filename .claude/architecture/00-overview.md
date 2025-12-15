@@ -6,7 +6,7 @@ High-level map of how frontend systems connect.
 
 ## Directory Structure
 
-```
+```text
 apps/web/src/
 ├── providers/           # ThemeProvider, Web3Provider
 ├── stores/              # formStore, registrationStore, p2pStore
@@ -29,7 +29,7 @@ apps/web/src/
 
 ## Provider Hierarchy (Critical Order)
 
-```
+```text
 AppProviders
 └─ ThemeProvider         ← MUST wrap Web3 (RainbowKit needs theme)
    └─ Web3Provider
@@ -42,7 +42,7 @@ AppProviders
 
 ## Data Flow
 
-```
+```text
 USER
   │
   ▼
@@ -56,7 +56,7 @@ HOOKS (useAcknowledgement, useP2PConnection, useSignEIP712)
   │
   ├─────────────────┬─────────────────┐
   ▼                 ▼                 ▼
-wagmi/viem      libp2p          localStorage
+wagmi/viem      libp2p          sessionStorage
   │                 │                 │
   ▼                 ▼                 ▼
 BLOCKCHAIN      RELAY SERVER     SIGNATURES

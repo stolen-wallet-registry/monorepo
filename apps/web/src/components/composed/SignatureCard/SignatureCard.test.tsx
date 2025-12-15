@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SignatureCard, type SignatureData } from './SignatureCard';
+import { SIGNATURE_TTL_MS } from '@/lib/signatures';
 
 describe('SignatureCard', () => {
   const sampleData: SignatureData = {
@@ -99,8 +100,26 @@ describe('SignatureCard', () => {
     it('shows TTL indicator on success', () => {
       render(<SignatureCard {...defaultProps} status="success" signature={signature} />);
 
-      // TTL indicator shows signature expiry time (30 minutes from SIGNATURE_TTL_MS)
-      expect(screen.getByText('30m')).toBeInTheDocument();
+      // TTL indicator derived from SIGNATURE_TTL_MS constant
+      const expectedTTL = `${SIGNATURE_TTL_MS / 60000}m`;
+      expect(screen.getByText(expectedTTL)).toBeInTheDocument();
+    });
+
+    it('copies signature to clipboard when copy button is clicked', async () => {
+      const user = userEvent.setup();
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal('navigator', {
+        ...navigator,
+        clipboard: { writeText: writeTextMock },
+      });
+
+      render(<SignatureCard {...defaultProps} status="success" signature={signature} />);
+
+      await user.click(screen.getByRole('button', { name: /Copy signature/i }));
+
+      expect(writeTextMock).toHaveBeenCalledWith(signature);
+
+      vi.unstubAllGlobals();
     });
   });
 

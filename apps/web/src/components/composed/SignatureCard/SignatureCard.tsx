@@ -122,7 +122,7 @@ export function SignatureCard({
                   <button
                     type="button"
                     onClick={handleCopySignature}
-                    className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 transition-colors"
+                    className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 rounded transition-colors"
                     aria-label={signatureCopied ? 'Copied!' : 'Copy signature'}
                   >
                     {signatureCopied ? (

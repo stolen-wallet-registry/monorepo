@@ -8,7 +8,7 @@ Security-critical two-phase signature system preventing phishing attacks.
 
 **Why two signatures?** Single-signature phishing is trivial:
 
-```
+```text
 Attacker tricks victim → victim signs → wallet registered as stolen
 ```
 
@@ -114,19 +114,19 @@ if (block.number > tf.expiryBlock) revert WindowExpired();
 
 **Standard:** User signs both, pays both
 
-```
+```text
 Sign ACK → Pay ACK → Grace Period → Sign REG → Pay REG
 ```
 
 **Self-Relay:** Sign with stolen, pay with gas wallet
 
-```
+```text
 Sign ACK (stolen) → Switch → Pay ACK (gas) → Grace → Sign REG (stolen) → Pay REG (gas)
 ```
 
 **P2P Relay:** Sign with stolen, helper pays
 
-```
+```text
 Sign ACK → Send via P2P → Helper pays → Grace → Sign REG → Send via P2P → Helper pays
 ```
 
@@ -134,7 +134,7 @@ Sign ACK → Send via P2P → Helper pays → Grace → Sign REG → Send via P2
 
 ## Nonce Mechanics
 
-```
+```text
 Initial: nonces[0x123] = 0
 
 ACK tx: Contract verifies nonce=0 ✓, increments to 1
@@ -157,23 +157,23 @@ Contract uses `block.prevrandao` for randomization:
 
 ## Security Properties
 
-| Property          | Mechanism                           |
-| ----------------- | ----------------------------------- |
-| Chain-binding     | Domain includes `chainId`           |
-| Contract-binding  | Domain includes `verifyingContract` |
-| Phase separation  | Different `primaryType`             |
-| Replay prevention | Nonce increments                    |
-| Time expiration   | `deadline` checked                  |
-| Grace period      | 1-4 min randomized delay            |
-| Client TTL        | 30-min localStorage expiration      |
+| Property          | Mechanism                                               |
+| ----------------- | ------------------------------------------------------- |
+| Chain-binding     | Domain includes `chainId`                               |
+| Contract-binding  | Domain includes `verifyingContract`                     |
+| Phase separation  | Different `primaryType`                                 |
+| Replay prevention | Nonce increments                                        |
+| Time expiration   | `deadline` checked                                      |
+| Grace period      | 1-4 min randomized delay                                |
+| Client TTL        | 30-min sessionStorage expiration (cleared on tab close) |
 
 ---
 
 ## Key Files
 
-```
+```text
 apps/web/src/lib/signatures/
 ├── eip712.ts    # Type definitions, builders
-├── storage.ts   # localStorage persistence
+├── storage.ts   # sessionStorage persistence
 └── utils.ts     # Parsing, validation
 ```
