@@ -6,10 +6,11 @@
  */
 
 import { useCallback, useState, useEffect, useRef } from 'react';
-import { useChainId } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import type { Libp2p } from 'libp2p';
 
 import { TransactionCard, type TransactionStatus } from '@/components/composed/TransactionCard';
+import { SignatureDetails } from '@/components/composed/SignatureDetails';
 import { WaitingForData } from '@/components/p2p';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import { useAcknowledgement } from '@/hooks/useAcknowledgement';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import type { Hash } from '@/lib/types/ethereum';
 import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
 import { useP2PStore } from '@/stores/p2pStore';
 import { logger } from '@/lib/logger';
@@ -40,9 +42,10 @@ export interface P2PAckPayStepProps {
  */
 export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) {
   const chainId = useChainId();
+  const { address: relayerAddress } = useAccount();
   const { registeree } = useFormStore();
   const { partnerPeerId } = useP2PStore();
-  const { acknowledgementHash } = useRegistrationStore();
+  const { acknowledgementHash, setAcknowledgementHash } = useRegistrationStore();
   const [hasSentHash, setHasSentHash] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -102,6 +105,14 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
       }
     };
   }, []);
+
+  // Relayer: Store acknowledgement hash when confirmed (for grace period display)
+  useEffect(() => {
+    if (role === 'relayer' && isConfirmed && hash && !acknowledgementHash) {
+      setAcknowledgementHash(hash as Hash);
+      logger.p2p.info('Relayer stored ACK hash for grace period display', { hash });
+    }
+  }, [role, isConfirmed, hash, acknowledgementHash, setAcknowledgementHash]);
 
   // Relayer: Send tx hash to registeree after confirmation with retry logic
   useEffect(() => {
@@ -199,8 +210,8 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
     <div className="space-y-6">
       <Alert>
         <AlertDescription>
-          You received the acknowledgement signature. Submit the transaction to register on behalf
-          of the stolen wallet owner.
+          You received the acknowledgement signature. Review the details below and submit the
+          transaction to register on behalf of the stolen wallet owner.
         </AlertDescription>
       </Alert>
 
@@ -211,6 +222,19 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
         />
       ) : (
         <>
+          {/* Show signature details for relayer to review */}
+          {registeree && relayerAddress && (
+            <SignatureDetails
+              data={{
+                registeree,
+                forwarder: relayerAddress,
+                nonce: storedSig.nonce,
+                deadline: storedSig.deadline,
+                chainId: storedSig.chainId,
+              }}
+            />
+          )}
+
           <TransactionCard
             type="acknowledgement"
             status={getStatus()}

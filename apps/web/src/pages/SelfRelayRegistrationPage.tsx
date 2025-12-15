@@ -81,10 +81,10 @@ export function SelfRelayRegistrationPage() {
         Back to Home
       </Button>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-stretch">
         {/* Step Indicator Sidebar */}
-        <aside>
-          <Card>
+        <aside aria-label="Registration steps">
+          <Card className="h-full">
             <CardHeader>
               <CardTitle className="text-lg">Self-Relay Registration</CardTitle>
               <CardDescription>Sign with stolen wallet, pay with another</CardDescription>
@@ -99,14 +99,14 @@ export function SelfRelayRegistrationPage() {
           </Card>
         </aside>
 
-        {/* Main Content */}
+        {/* Main Content - min-height matches sidebar via items-stretch */}
         <main>
-          <Card>
+          <Card className="h-full flex flex-col">
             <CardHeader>
               <CardTitle>{currentTitle}</CardTitle>
               <CardDescription>{currentDescription}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-grow flex flex-col justify-center">
               <StepRenderer currentStep={step} onStepComplete={goToNextStep} />
             </CardContent>
           </Card>

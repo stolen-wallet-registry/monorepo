@@ -29,6 +29,7 @@ import { useRegistrationStore, type RegistrationStep } from '@/stores/registrati
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { useP2PKeepAlive } from '@/hooks/useP2PKeepAlive';
 import { setup, PROTOCOLS, readStreamData, type ProtocolHandler } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 
@@ -69,12 +70,30 @@ export function P2PRegistereeRegistrationPage() {
     setRegistrationHash,
   } = useRegistrationStore();
   const { setFormValues } = useFormStore();
-  const { setPeerId, setConnectedToPeer, setInitialized, reset: resetP2P } = useP2PStore();
+  const {
+    partnerPeerId,
+    setPeerId,
+    setConnectedToPeer,
+    setInitialized,
+    reset: resetP2P,
+  } = useP2PStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
 
   const [libp2p, setLibp2p] = useState<Libp2p | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [protocolError, setProtocolError] = useState<string | null>(null);
+
+  // Keep P2P connection alive during grace period
+  // Circuit relay connections timeout after ~2 minutes of inactivity
+  useP2PKeepAlive({
+    libp2p,
+    remotePeerId: partnerPeerId,
+    enabled: step === 'grace-period' || step === 'acknowledgement-payment',
+    onConnectionLost: () => {
+      logger.p2p.warn('P2P connection lost during grace period');
+      setProtocolError('Connection to relayer was lost. Please restart the registration process.');
+    },
+  });
 
   // Use ref for goToNextStep to avoid recreating P2P node when step changes
   const goToNextStepRef = useRef(goToNextStep);
@@ -308,10 +327,10 @@ export function P2PRegistereeRegistrationPage() {
         Back to Home
       </Button>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-stretch">
         {/* Step Indicator Sidebar */}
-        <aside>
-          <Card>
+        <aside aria-label="Registration steps">
+          <Card className="h-full">
             <CardHeader>
               <CardTitle className="text-lg">P2P Relay Registration</CardTitle>
               <CardDescription>Sign with stolen wallet, relayer pays gas</CardDescription>
@@ -326,8 +345,8 @@ export function P2PRegistereeRegistrationPage() {
           </Card>
         </aside>
 
-        {/* Main Content */}
-        <main className="space-y-4">
+        {/* Main Content - min-height matches sidebar via items-stretch */}
+        <main className="flex flex-col gap-4">
           {/* Protocol error alert */}
           {protocolError && (
             <Alert variant="destructive">
@@ -340,12 +359,14 @@ export function P2PRegistereeRegistrationPage() {
             </Alert>
           )}
 
-          <Card>
+          <Card className="flex-grow flex flex-col">
             <CardHeader>
               <CardTitle>{currentTitle}</CardTitle>
               <CardDescription>{currentDescription}</CardDescription>
             </CardHeader>
-            <CardContent>{renderStep()}</CardContent>
+            <CardContent className="flex-grow flex flex-col justify-center">
+              {renderStep()}
+            </CardContent>
           </Card>
 
           {/* P2P Debug Panel - development only */}

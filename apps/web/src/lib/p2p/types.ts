@@ -206,8 +206,9 @@ export const RELAY_SERVERS: Record<string, RelayConfig[]> = {
     {
       // Note: Use VITE_RELAY_MULTIADDR env var to override if relay peer ID changes
       // The peer ID uses Ed25519 key format (12D3KooW... prefix)
+      // TODO: Generate persistent Ed25519 keys for relay server - current keys.json uses RSA format
       multiaddr:
-        '/ip4/127.0.0.1/tcp/12312/ws/p2p/12D3KooWFSaPwwQYj7GTdHduUiHGPygkiEudkodcVdJJvzwr1xq8',
+        '/ip4/127.0.0.1/tcp/12312/ws/p2p/12D3KooWKiDztC8EkavAWNratG2nRPmv4DGa2tEr3p9xrLVgvTG5',
       isDev: true,
     },
   ],

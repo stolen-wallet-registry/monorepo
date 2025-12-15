@@ -9,6 +9,7 @@ import { useAccount, useChainId } from 'wagmi';
 import type { Libp2p } from 'libp2p';
 
 import { SignatureCard, type SignatureStatus } from '@/components/composed/SignatureCard';
+import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useSignEIP712 } from '@/hooks/useSignEIP712';
 import { useRegistrationHashStruct } from '@/hooks/useGenerateHashStruct';
@@ -161,7 +162,13 @@ export function P2PRegSignStep({ libp2p }: P2PRegSignStepProps) {
       <Alert>
         <AlertDescription>
           Sign the registration message with your stolen wallet. The signature will be sent securely
-          to your relayer who will complete the registration.
+          to your relayer{' '}
+          {relayer && (
+            <>
+              (<ExplorerLink value={relayer} type="address" truncate showDisabledIcon={false} />)
+            </>
+          )}{' '}
+          who will complete the registration.
         </AlertDescription>
       </Alert>
 

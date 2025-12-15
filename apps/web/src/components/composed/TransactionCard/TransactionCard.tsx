@@ -1,10 +1,10 @@
 /**
- * Transaction card component for blockchain transaction submission.
+ * Transaction content component for blockchain transaction submission.
  *
  * Displays transaction status, signed message preview, and links to block explorer.
+ * This is a content-only component - wrap in Card if needed for standalone use.
  */
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,7 @@ import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
 import { truncateAddress } from '@/lib/address';
 import { getChainName, getChainShortName } from '@/lib/explorer';
-import { Send, Check, AlertCircle, Loader2, Clock, FileSignature, Globe, Copy } from 'lucide-react';
+import { Check, AlertCircle, Loader2, FileSignature, Globe, Copy } from 'lucide-react';
 import { useState, useCallback } from 'react';
 
 export type TransactionStatus = 'idle' | 'submitting' | 'pending' | 'confirmed' | 'failed';
@@ -81,6 +81,7 @@ const STATUS_CONFIG = {
 
 /**
  * Displays transaction submission UI with status and explorer link.
+ * This is content-only - no Card wrapper. Parent provides the container.
  */
 export function TransactionCard({
   type,
@@ -123,13 +124,6 @@ export function TransactionCard({
     }
   }, [signatureValue]);
 
-  const getIcon = () => {
-    if (isConfirmed) return <Check className="h-5 w-5 text-green-600 dark:text-green-400" />;
-    if (isPending) return <Clock className="h-5 w-5 text-amber-500" />;
-    if (isFailed) return <AlertCircle className="h-5 w-5 text-destructive" />;
-    return <Send className="h-5 w-5" />;
-  };
-
   const getDescription = () => {
     if (isConfirmed) return 'Transaction confirmed on-chain';
     if (isPending) return 'Waiting for block confirmation...';
@@ -143,223 +137,196 @@ export function TransactionCard({
   };
 
   return (
-    <Card className={cn('w-full', className)}>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div
-              className={cn(
-                'p-2 rounded-lg',
-                isConfirmed && 'bg-green-100 dark:bg-green-900',
-                isFailed && 'bg-destructive/10',
-                !isConfirmed && !isFailed && 'bg-muted'
-              )}
-            >
-              {getIcon()}
+    <div className={cn('space-y-4', className)}>
+      {/* Status header */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{getDescription()}</p>
+        <Badge variant={statusConfig.variant} className={cn(isConfirmed && 'bg-green-500')}>
+          {statusConfig.label}
+        </Badge>
+      </div>
+
+      {/* Signed message preview */}
+      {signedMessage && !isConfirmed && (
+        <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <FileSignature className="h-4 w-4 text-muted-foreground" />
+              <span>Signed Message</span>
+              <InfoTooltip
+                content={
+                  type === 'acknowledgement'
+                    ? 'This is the EIP-712 acknowledgement message you signed. Submitting this transaction will record your intent to register this wallet as stolen and start the grace period.'
+                    : 'This is the EIP-712 registration message you signed. Submitting this transaction will permanently mark this wallet as stolen in the on-chain registry.'
+                }
+                size="sm"
+              />
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <CardTitle className="text-lg">Submit {typeLabel}</CardTitle>
-                <InfoTooltip
-                  content={
-                    type === 'acknowledgement'
-                      ? 'Submit your signed acknowledgement to the blockchain. This records your intent and starts the grace period before final registration.'
-                      : 'Submit your signed registration to permanently record this wallet as stolen in the on-chain registry. This action cannot be undone.'
-                  }
-                  size="sm"
-                />
-              </div>
-              <CardDescription>{getDescription()}</CardDescription>
-            </div>
+            {/* Network badge */}
+            {resolvedChainId && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="font-mono text-xs gap-1">
+                    <Globe className="h-3 w-3" />
+                    {getChainShortName(resolvedChainId)}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="text-xs">
+                    {getChainName(resolvedChainId)} (Chain ID: {resolvedChainId})
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
-          <Badge variant={statusConfig.variant} className={cn(isConfirmed && 'bg-green-500')}>
-            {statusConfig.label}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Signed message preview */}
-        {signedMessage && !isConfirmed && (
-          <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <FileSignature className="h-4 w-4 text-muted-foreground" />
-                <span>Signed Message</span>
+          <div className="space-y-2 font-mono text-sm">
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground flex items-center gap-1">
+                Registeree:
+                <InfoTooltip content="The wallet address being registered as stolen." size="sm" />
+              </span>
+              <span>{truncateAddress(signedMessage.registeree, 6)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground flex items-center gap-1">
+                Forwarder:
                 <InfoTooltip
-                  content={
-                    type === 'acknowledgement'
-                      ? 'This is the EIP-712 acknowledgement message you signed. Submitting this transaction will record your intent to register this wallet as stolen and start the grace period.'
-                      : 'This is the EIP-712 registration message you signed. Submitting this transaction will permanently mark this wallet as stolen in the on-chain registry.'
-                  }
+                  content="The wallet submitting this transaction and paying gas fees."
                   size="sm"
                 />
-              </div>
-              {/* Network badge */}
-              {resolvedChainId && (
+              </span>
+              <span>{truncateAddress(signedMessage.forwarder, 6)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground flex items-center gap-1">
+                Nonce:
+                <InfoTooltip
+                  content="A unique number preventing replay attacks. Each signature uses a different nonce."
+                  size="sm"
+                />
+              </span>
+              <span>{signedMessage.nonce.toString()}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground flex items-center gap-1">
+                Deadline:
+                <InfoTooltip
+                  content="The block number after which this signature expires and cannot be used."
+                  size="sm"
+                />
+              </span>
+              <span>Block {signedMessage.deadline.toString()}</span>
+            </div>
+            <div className="pt-2 border-t">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-muted-foreground">Signature</p>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Badge variant="outline" className="font-mono text-xs gap-1">
-                      <Globe className="h-3 w-3" />
-                      {getChainShortName(resolvedChainId)}
-                    </Badge>
+                    <button
+                      type="button"
+                      onClick={handleCopySignature}
+                      className="text-muted-foreground/60 hover:text-foreground transition-colors"
+                      aria-label={signatureCopied ? 'Copied!' : 'Copy signature'}
+                    >
+                      {signatureCopied ? (
+                        <Check className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                    </button>
                   </TooltipTrigger>
                   <TooltipContent side="top">
-                    <p className="text-xs">
-                      {getChainName(resolvedChainId)} (Chain ID: {resolvedChainId})
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-            <div className="space-y-2 font-mono text-sm">
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground flex items-center gap-1">
-                  Registeree:
-                  <InfoTooltip content="The wallet address being registered as stolen." size="sm" />
-                </span>
-                <span>{truncateAddress(signedMessage.registeree, 6)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground flex items-center gap-1">
-                  Forwarder:
-                  <InfoTooltip
-                    content="The wallet submitting this transaction and paying gas fees."
-                    size="sm"
-                  />
-                </span>
-                <span>{truncateAddress(signedMessage.forwarder, 6)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground flex items-center gap-1">
-                  Nonce:
-                  <InfoTooltip
-                    content="A unique number preventing replay attacks. Each signature uses a different nonce."
-                    size="sm"
-                  />
-                </span>
-                <span>{signedMessage.nonce.toString()}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground flex items-center gap-1">
-                  Deadline:
-                  <InfoTooltip
-                    content="The block number after which this signature expires and cannot be used."
-                    size="sm"
-                  />
-                </span>
-                <span>Block {signedMessage.deadline.toString()}</span>
-              </div>
-              <div className="pt-2 border-t">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs text-muted-foreground">Signature</p>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={handleCopySignature}
-                        className="text-muted-foreground/60 hover:text-foreground transition-colors"
-                        aria-label={signatureCopied ? 'Copied!' : 'Copy signature'}
-                      >
-                        {signatureCopied ? (
-                          <Check className="h-3 w-3 text-green-500" />
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">
-                      <p className="text-xs">{signatureCopied ? 'Copied!' : 'Copy signature'}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <p className="text-xs break-all text-muted-foreground/80 cursor-default">
-                      {signedMessage.signature.slice(0, 26)}...{signedMessage.signature.slice(-24)}
-                    </p>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-md">
-                    <p className="text-xs font-mono break-all">{signedMessage.signature}</p>
+                    <p className="text-xs">{signatureCopied ? 'Copied!' : 'Copy signature'}</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-xs break-all text-muted-foreground/80 cursor-default">
+                    {signedMessage.signature.slice(0, 26)}...{signedMessage.signature.slice(-24)}
+                  </p>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-md">
+                  <p className="text-xs font-mono break-all">{signedMessage.signature}</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Info text for payment */}
-        {signedMessage && status === 'idle' && (
-          <p className="text-sm text-muted-foreground text-center">
-            {type === 'acknowledgement'
-              ? 'Click below to pay gas and submit your signed acknowledgement to the blockchain.'
-              : 'Click below to pay gas and permanently register this wallet as stolen.'}
-          </p>
-        )}
+      {/* Info text for payment */}
+      {signedMessage && status === 'idle' && (
+        <p className="text-sm text-muted-foreground text-center">
+          {type === 'acknowledgement'
+            ? 'Click below to pay gas and submit your signed acknowledgement to the blockchain.'
+            : 'Click below to pay gas and permanently register this wallet as stolen.'}
+        </p>
+      )}
 
-        {/* Transaction hash */}
-        {hash && (
-          <div className="rounded-lg bg-muted p-4">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm text-muted-foreground">Transaction Hash</span>
-              {resolvedChainId && (
-                <Badge variant="outline" className="font-mono text-[10px]">
-                  {getChainShortName(resolvedChainId)}
-                </Badge>
-              )}
-            </div>
-            <ExplorerLink value={hash} type="transaction" href={explorerUrl} />
-          </div>
-        )}
-
-        {/* Pending indicator */}
-        {isPending && (
-          <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Waiting for confirmation...</span>
-          </div>
-        )}
-
-        {/* Error message */}
-        {isFailed && error && (
-          <Alert variant="destructive" className="overflow-hidden">
-            <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <AlertDescription className="break-words">{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Action button - show during idle, submitting, and failed states */}
-        {(status === 'idle' || isSubmitting || isFailed) && (
-          <Button
-            onClick={isFailed && onRetry ? onRetry : onSubmit}
-            className="w-full"
-            size="lg"
-            disabled={isSubmitting || (disabled && !isFailed)}
-            aria-disabled={isSubmitting || (disabled && !isFailed)}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Submitting...
-              </>
-            ) : isFailed ? (
-              'Retry Transaction'
-            ) : (
-              `Submit ${typeLabel}`
+      {/* Transaction hash */}
+      {hash && (
+        <div className="rounded-lg bg-muted p-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm text-muted-foreground">Transaction Hash</span>
+            {resolvedChainId && (
+              <Badge variant="outline" className="font-mono text-[10px]">
+                {getChainShortName(resolvedChainId)}
+              </Badge>
             )}
-          </Button>
-        )}
-
-        {/* Success message */}
-        {isConfirmed && (
-          <div className="rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 p-3 text-center">
-            <p className="text-sm text-green-700 dark:text-green-300">
-              {type === 'acknowledgement'
-                ? 'Acknowledgement recorded. Grace period has begun.'
-                : 'Registration complete. Your wallet has been registered.'}
-            </p>
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <ExplorerLink value={hash} type="transaction" href={explorerUrl} />
+        </div>
+      )}
+
+      {/* Pending indicator */}
+      {isPending && (
+        <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Waiting for confirmation...</span>
+        </div>
+      )}
+
+      {/* Error message */}
+      {isFailed && error && (
+        <Alert variant="destructive" className="overflow-hidden">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <AlertDescription className="break-words">{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Action button - show during idle, submitting, and failed states */}
+      {(status === 'idle' || isSubmitting || isFailed) && (
+        <Button
+          onClick={isFailed && onRetry ? onRetry : onSubmit}
+          className="w-full"
+          size="lg"
+          disabled={isSubmitting || (disabled && !isFailed)}
+          aria-disabled={isSubmitting || (disabled && !isFailed)}
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Submitting...
+            </>
+          ) : isFailed ? (
+            'Retry Transaction'
+          ) : (
+            `Submit ${typeLabel}`
+          )}
+        </Button>
+      )}
+
+      {/* Success message */}
+      {isConfirmed && (
+        <div className="rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 p-3 text-center">
+          <p className="text-sm text-green-700 dark:text-green-300">
+            {type === 'acknowledgement'
+              ? 'Acknowledgement recorded. Grace period has begun.'
+              : 'Registration complete. Your wallet has been registered.'}
+          </p>
+        </div>
+      )}
+    </div>
   );
 }

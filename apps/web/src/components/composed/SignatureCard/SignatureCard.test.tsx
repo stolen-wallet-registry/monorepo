@@ -27,15 +27,13 @@ describe('SignatureCard', () => {
     it('renders acknowledgement type correctly', { timeout: 10000 }, () => {
       render(<SignatureCard {...defaultProps} />);
 
-      // Title and button both contain the text
-      expect(screen.getAllByText(/Sign Acknowledgement/i)).toHaveLength(2);
+      // Content-only component - just check the button exists
       expect(screen.getByRole('button', { name: /Sign Acknowledgement/i })).toBeInTheDocument();
     });
 
     it('renders registration type correctly', () => {
       render(<SignatureCard {...defaultProps} type="registration" />);
 
-      expect(screen.getAllByText(/Sign Registration/i)).toHaveLength(2);
       expect(screen.getByRole('button', { name: /Sign Registration/i })).toBeInTheDocument();
     });
 
@@ -80,12 +78,6 @@ describe('SignatureCard', () => {
     const signature =
       '0x1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8538dde03fc8b4c6d7f2c13c82e5c34d0e5f8b1c0b5e2f3a4b5c6d7e8f9a0b1c21b' as `0x${string}`;
 
-    it('shows signed badge on success', () => {
-      render(<SignatureCard {...defaultProps} status="success" signature={signature} />);
-
-      expect(screen.getByText('Signed')).toBeInTheDocument();
-    });
-
     it('shows signature preview on success', () => {
       render(<SignatureCard {...defaultProps} status="success" signature={signature} />);
 
@@ -104,10 +96,11 @@ describe('SignatureCard', () => {
       expect(screen.queryByRole('button', { name: /Sign Registration/i })).not.toBeInTheDocument();
     });
 
-    it('shows completion message on success', () => {
+    it('shows TTL indicator on success', () => {
       render(<SignatureCard {...defaultProps} status="success" signature={signature} />);
 
-      expect(screen.getByText('Signature complete')).toBeInTheDocument();
+      // TTL indicator shows signature expiry time
+      expect(screen.getByText(/\d+m/)).toBeInTheDocument();
     });
   });
 
