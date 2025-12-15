@@ -36,14 +36,19 @@ import {
 
 /**
  * Private/localhost address patterns to block in production.
- * Covers RFC1918 private ranges and localhost addresses.
+ * Patterns must start with '/' for startsWith matching.
+ * Covers RFC1918, RFC3927, RFC4193, and localhost ranges.
  */
 const PRIVATE_ADDRESS_PATTERNS = [
-  '/ip4/127.', // Localhost IPv4
-  '/ip4/0.0.0.0', // Unspecified
+  '/ip4/127.', // Localhost IPv4 (127.0.0.0/8)
+  '/ip4/0.0.0.0', // Unspecified address
   '/ip4/10.', // RFC1918: 10.0.0.0/8
   '/ip4/192.168.', // RFC1918: 192.168.0.0/16
+  '/ip4/169.254.', // RFC3927: IPv4 link-local (169.254.0.0/16)
   '/ip6/::1', // Localhost IPv6
+  '/ip6/fc', // RFC4193: IPv6 ULA (fc00::/7 covers fc00::-fdff::)
+  '/ip6/fd', // RFC4193: IPv6 ULA (fd00::/8, more common ULA prefix)
+  '/ip6/fe80', // IPv6 link-local (fe80::/10)
 ] as const;
 
 /**
@@ -58,10 +63,11 @@ function isPrivate172Range(addr: string): boolean {
 
 /**
  * Check if a multiaddr points to a private/localhost address.
+ * Uses startsWith to avoid false positives from protocol tokens appearing mid-address.
  */
 function isPrivateAddress(addr: string): boolean {
   return (
-    PRIVATE_ADDRESS_PATTERNS.some((pattern) => addr.includes(pattern)) || isPrivate172Range(addr)
+    PRIVATE_ADDRESS_PATTERNS.some((pattern) => addr.startsWith(pattern)) || isPrivate172Range(addr)
   );
 }
 

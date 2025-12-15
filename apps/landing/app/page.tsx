@@ -11,8 +11,17 @@ import Link from 'next/link';
  * the full landing page with all sections (Globe, Beams, Features, etc.).
  */
 
-// App URL - update for production
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5173';
+/**
+ * App URL for "Launch App" links.
+ * In production, NEXT_PUBLIC_APP_URL must be set to avoid localhost fallback.
+ */
+const APP_URL = (() => {
+  const url = process.env.NEXT_PUBLIC_APP_URL;
+  if (!url && process.env.NODE_ENV === 'production') {
+    console.error('NEXT_PUBLIC_APP_URL is not set in production');
+  }
+  return url ?? 'http://localhost:5173';
+})();
 
 export default function LandingPage() {
   return (

@@ -6,3 +6,8 @@ export const THEME_COMBINATIONS = {
 } as const;
 
 export type ThemeKey = keyof typeof THEME_COMBINATIONS;
+
+/** All unique CSS classes used across theme combinations (for cleanup in ThemeWrapper) */
+export const ALL_THEME_CLASSES = [
+  ...new Set(Object.values(THEME_COMBINATIONS).flatMap((t) => [t.colorScheme, t.variant])),
+] as const;

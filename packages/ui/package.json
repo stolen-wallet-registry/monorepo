@@ -11,6 +11,7 @@
     "./styles": "./src/styles/index.css"
   },
   "scripts": {
+    "build": "tsc --emitDeclarationOnly --declaration --outDir dist",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "storybook": "storybook dev -p 6007",
@@ -48,7 +49,7 @@
     "@eslint/js": "^9.39.1",
     "@storybook/addon-a11y": "^10.1.4",
     "@storybook/addon-docs": "^10.1.4",
-    "@storybook/react": "^10.1.4",
+    "@storybook/react": "^10.1.8",
     "@storybook/react-vite": "^10.1.4",
     "@tailwindcss/vite": "^4.1.17",
     "@types/react": "^19.2.5",
@@ -56,7 +57,7 @@
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^16.5.0",
-    "storybook": "^10.1.4",
+    "storybook": "^10.1.8",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4"

@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { Toaster } from './sonner';
 import { Button } from './button';
 
-const meta = {
+const meta: Meta<typeof Toaster> = {
   title: 'Primitives/Toaster',
   component: Toaster,
   parameters: {
@@ -35,7 +35,7 @@ toast.loading('Loading...');
       </div>
     ),
   ],
-} satisfies Meta<typeof Toaster>;
+};
 
 export default meta;
 type Story = StoryObj<typeof meta>;

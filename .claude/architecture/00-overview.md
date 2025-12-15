@@ -4,25 +4,37 @@ High-level map of how frontend systems connect.
 
 ---
 
-## Directory Structure
+## Monorepo Structure
 
 ```text
-apps/web/src/
-├── providers/           # ThemeProvider, Web3Provider
-├── stores/              # formStore, registrationStore, p2pStore
-├── hooks/               # Contract, P2P, signature hooks
-├── components/
-│   ├── ui/              # shadcn primitives (don't modify)
-│   ├── composed/        # Business components (add stories)
-│   ├── registration/    # StepRenderer + step components
-│   └── layout/          # Header, Layout
-├── pages/               # Route entry points
-├── lib/
-│   ├── contracts/       # ABIs, addresses, queryKeys
-│   ├── signatures/      # EIP-712 helpers
-│   ├── p2p/             # libp2p config
-│   └── logger/          # Category-based logging
-└── test/                # Test utilities
+stolen-wallet-registry-monorepo/
+├── apps/
+│   ├── web/                    # Vite SPA - registration flows
+│   │   └── src/
+│   │       ├── providers/      # ThemeProvider, Web3Provider
+│   │       ├── stores/         # formStore, registrationStore, p2pStore
+│   │       ├── hooks/          # Contract, P2P, signature hooks
+│   │       ├── components/     # App-specific components
+│   │       │   ├── composed/   # Business components (add stories)
+│   │       │   ├── registration/ # StepRenderer + step components
+│   │       │   └── layout/     # Header, Layout
+│   │       ├── pages/          # Route entry points
+│   │       ├── lib/
+│   │       │   ├── contracts/  # ABIs, addresses, queryKeys
+│   │       │   ├── signatures/ # EIP-712 helpers
+│   │       │   ├── p2p/        # libp2p config
+│   │       │   └── logger/     # Category-based logging
+│   │       └── test/           # Test utilities
+│   └── landing/                # Next.js - marketing/info site
+│       ├── app/                # Next.js app router pages
+│       └── components/         # Landing-specific components
+├── packages/
+│   └── ui/                     # @swr/ui - shared component library
+│       ├── src/
+│       │   ├── components/     # shadcn primitives + shared composed
+│       │   └── styles/         # Tailwind theme CSS
+│       └── .storybook/         # Component documentation
+└── PRPs/                       # Planning documents
 ```
 
 ---

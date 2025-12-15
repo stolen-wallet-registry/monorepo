@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { TextAnimate } from './text-animate';
 
-const meta = {
+const meta: Meta<typeof TextAnimate> = {
   title: 'Magic UI/TextAnimate',
   component: TextAnimate,
   parameters: { layout: 'centered' },
@@ -37,7 +37,7 @@ const meta = {
       control: 'boolean',
     },
   },
-} satisfies Meta<typeof TextAnimate>;
+};
 
 export default meta;
 type Story = StoryObj<typeof meta>;
