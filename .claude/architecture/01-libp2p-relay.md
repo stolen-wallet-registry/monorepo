@@ -12,15 +12,50 @@ P2P signature relay for helper-assisted wallet registration using libp2p 3.x.
 
 ---
 
-## Transport Stack
+## Component Reference
+
+### Transports
+
+| Transport               | Purpose                         | When Used                                 |
+| ----------------------- | ------------------------------- | ----------------------------------------- |
+| `circuitRelayTransport` | NAT traversal via relay server  | Always (initial connection)               |
+| `webRTC`                | Direct browser-to-browser       | After dcutr upgrade (~85% of connections) |
+| `webRTCDirect`          | WebRTC without signaling server | When peer addresses known                 |
+| `webTransport`          | HTTP/3-based transport          | Modern browsers with QUIC support         |
+| `webSockets`            | Fallback transport              | Safari, older browsers                    |
+
+### Services
+
+| Service    | Purpose                                       | Configuration                         |
+| ---------- | --------------------------------------------- | ------------------------------------- |
+| `identify` | Exchange peer metadata (protocols, addresses) | Required for all libp2p nodes         |
+| `ping`     | Keep-alive heartbeats, latency measurement    | Used by `useP2PKeepAlive` hook        |
+| `dcutr`    | Direct Connection Upgrade through Relay       | Upgrades relayed → direct connections |
+
+### Connection Encryption & Multiplexing
+
+| Component | Purpose                                                   |
+| --------- | --------------------------------------------------------- |
+| `noise`   | Noise Protocol encryption (libp2p standard)               |
+| `yamux`   | Stream multiplexer (multiple streams over one connection) |
+
+---
+
+## Configuration Details
+
+### Web Client (`apps/web/src/lib/p2p/libp2p.ts`)
 
 ```typescript
-// apps/web/src/lib/p2p/libp2p.ts
-
 transports: [
-  circuitRelayTransport(),  // NAT traversal via relay
-  webRTC(),                 // Direct browser-to-browser (primary)
-  webSockets(),             // Safari fallback
+  circuitRelayTransport({
+    // Give slow connections more time during relay reservation
+    // Default: 10s, we use 15s for unreliable networks
+    reservationCompletionTimeout: 15_000,
+  }),
+  webRTC(),
+  webRTCDirect(),
+  webTransport(),
+  webSockets(),
 ],
 
 connectionEncrypters: [noise()],
@@ -28,10 +63,125 @@ streamMuxers: [yamux()],
 
 services: {
   identify: identify(),
-  dcutr: dcutr(),   // Direct Connection Upgrade through Relay
+  dcutr: dcutr(),
   ping: ping(),
 },
+
+connectionGater: {
+  // Block localhost/private networks in production
+  denyDialMultiaddr: (ma) => { ... },
+},
 ```
+
+### Relay Server (`apps/relay/src/index.mjs`)
+
+```javascript
+transports: [webSockets()],
+connectionEncrypters: [noise()],
+streamMuxers: [yamux()],
+
+connectionManager: {
+  maxConnections: 100,
+},
+
+services: {
+  identify: identify(),
+  ping: ping(),     // Enables keep-alive pings from clients
+  dcutr: dcutr(),   // Enables direct connection upgrade through relay
+  relay: circuitRelayServer({
+    // Grace period takes 1-4 min; longer timeout prevents premature resets
+    hopTimeout: 60_000,  // Default: 30s
+    reservations: {
+      maxReservations: 15,
+      reservationTtl: 30 * 60 * 1000, // 30 minutes
+    },
+  }),
+},
+```
+
+---
+
+## How dcutr Works
+
+Direct Connection Upgrade through Relay (dcutr) enables peers to upgrade from a relayed connection to a direct one:
+
+```text
+1. INITIAL STATE
+   Peer A ←──relay──→ Relay Server ←──relay──→ Peer B
+   (All traffic flows through relay - higher latency)
+
+2. DCUTR NEGOTIATION
+   - Peer A sends its public addresses to Peer B via relay
+   - Peer B sends its public addresses to Peer A via relay
+   - Both peers attempt direct connections simultaneously
+   - Simultaneous open helps punch through NAT
+
+3. UPGRADED STATE
+   Peer A ←─────────direct WebRTC─────────→ Peer B
+   (Relay no longer in data path - lower latency)
+```
+
+**Benefits:**
+
+- Reduces relay server load
+- Lower latency for data transfer
+- Works for ~85% of connections (depends on NAT types)
+
+---
+
+## How Keep-Alive Works
+
+The `useP2PKeepAlive` hook uses the ping service to maintain circuit relay connections:
+
+```text
+Circuit relay reservations expire after ~2 minutes of inactivity.
+Without keep-alive, connections drop during grace period (1-4 min).
+
+┌─────────────┐     ping every 45s      ┌─────────────┐
+│  Registeree │ ←───────────────────────→│   Relayer   │
+└─────────────┘                          └─────────────┘
+       │                                        │
+       │  latency measured, failures tracked    │
+       │  3 consecutive failures = unhealthy    │
+       └────────────────────────────────────────┘
+```
+
+**Configuration:**
+
+- Ping interval: 45 seconds (default)
+- Max latency warning: 5 seconds
+- Consecutive failures before unhealthy: 3
+
+---
+
+## Key Configuration Options
+
+### `reservationCompletionTimeout` (Client)
+
+Time allowed for relay reservation to complete. Increase for slow/unreliable networks.
+
+- Default: 10,000ms (10s)
+- Our setting: 15,000ms (15s)
+
+### `hopTimeout` (Relay Server)
+
+Maximum time a relay hop can remain open. Must be longer than your longest operation.
+
+- Default: 30,000ms (30s)
+- Our setting: 60,000ms (60s) - covers 1-4 minute grace period
+
+### `maxReservations` (Relay Server)
+
+Maximum concurrent relay reservations. Limits resource usage.
+
+- Default: 15
+- Development: Can set to `Infinity` for testing
+
+### `reservationTtl` (Relay Server)
+
+How long a reservation remains valid without activity.
+
+- Our setting: 30 minutes
 
 ---
 

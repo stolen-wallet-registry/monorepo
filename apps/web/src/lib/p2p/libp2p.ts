@@ -53,7 +53,16 @@ export function libp2pDefaults(): Libp2pOptions {
     addresses: {
       listen: ['/p2p-circuit', '/webrtc'],
     },
-    transports: [circuitRelayTransport(), webRTC(), webRTCDirect(), webTransport(), webSockets()],
+    transports: [
+      circuitRelayTransport({
+        // Give more time for slow connections during relay reservation (default is 10s)
+        reservationCompletionTimeout: 15_000,
+      }),
+      webRTC(),
+      webRTCDirect(),
+      webTransport(),
+      webSockets(),
+    ],
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
     peerDiscovery: bootstrapList.length > 0 ? [bootstrap({ list: bootstrapList })] : [],

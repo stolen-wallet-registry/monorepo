@@ -1,7 +1,9 @@
 import { noise } from '@chainsafe/libp2p-noise';
 import { yamux } from '@chainsafe/libp2p-yamux';
 import { circuitRelayServer } from '@libp2p/circuit-relay-v2';
+import { dcutr } from '@libp2p/dcutr';
 import { identify } from '@libp2p/identify';
+import { ping } from '@libp2p/ping';
 import { webSockets } from '@libp2p/websockets';
 import { createLibp2p } from 'libp2p';
 
@@ -46,7 +48,11 @@ const server = await createLibp2p({
   },
   services: {
     identify: identify(),
+    ping: ping(), // Enables keep-alive pings from clients
+    dcutr: dcutr(), // Enables direct connection upgrade through relay
     relay: circuitRelayServer({
+      // Grace period can take 1-4 minutes; longer hop timeout prevents premature stream resets
+      hopTimeout: 60_000,
       reservations: {
         maxReservations: 15,
         reservationTtl: 30 * 60 * 1000, // 30 minutes
