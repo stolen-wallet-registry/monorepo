@@ -1,11 +1,11 @@
 import { noise } from '@chainsafe/libp2p-noise';
 import { yamux } from '@chainsafe/libp2p-yamux';
-import { mplex } from '@libp2p/mplex';
+import { circuitRelayServer } from '@libp2p/circuit-relay-v2';
+import { dcutr } from '@libp2p/dcutr';
+import { identify } from '@libp2p/identify';
+import { ping } from '@libp2p/ping';
 import { webSockets } from '@libp2p/websockets';
-import * as filters from '@libp2p/websockets/filters';
 import { createLibp2p } from 'libp2p';
-import { circuitRelayServer } from 'libp2p/circuit-relay';
-import { identifyService } from 'libp2p/identify';
 
 import fs from 'fs';
 import path from 'path';
@@ -40,25 +40,22 @@ const server = await createLibp2p({
   addresses: {
     listen: ['/ip4/0.0.0.0/tcp/12312/ws'],
   },
-  transports: [
-    webSockets({
-      filter: filters.all,
-    }),
-  ],
-  connectionEncryption: [noise()],
-  streamMuxers: [yamux(), mplex()],
+  transports: [webSockets()],
+  connectionEncrypters: [noise()],
+  streamMuxers: [yamux()],
   connectionManager: {
-    maxConnections: Infinity,
-    minConnections: 0,
+    maxConnections: 100,
   },
   services: {
-    identify: identifyService(),
+    identify: identify(),
+    ping: ping(), // Enables keep-alive pings from clients
+    dcutr: dcutr(), // Enables direct connection upgrade through relay
     relay: circuitRelayServer({
+      // Grace period can take 1-4 minutes; longer hop timeout prevents premature stream resets
+      hopTimeout: 60_000,
       reservations: {
-        // this allows us to reload the browser repeatedly without exhausting
-        // the relay's reservation slots - in production you should specify a
-        // limit here or accept the default of 15
-        maxReservations: Infinity,
+        maxReservations: 15,
+        reservationTtl: 30 * 60 * 1000, // 30 minutes
       },
     }),
   },

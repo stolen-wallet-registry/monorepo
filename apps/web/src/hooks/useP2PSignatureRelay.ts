@@ -7,8 +7,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { useAccount } from 'wagmi';
-import type { Connection } from '@libp2p/interface/connection';
-import type { IncomingStreamData } from '@libp2p/interface/stream-handler';
+import type { Connection, Stream } from '@libp2p/interface';
 import {
   useP2PConnection,
   type UseP2PConnectionOptions,
@@ -275,6 +274,7 @@ export function useP2PSignatureRelay(
   const { setPartnerPeerId, setConnectedToPeer } = useP2PStore();
 
   // Build protocol handlers based on role
+  // In libp2p 3.x, StreamHandler signature is (stream: Stream, connection: Connection) => void
   const buildRoleHandlers = useCallback((): ProtocolHandler[] => {
     const handlers: ProtocolHandler[] = [];
 
@@ -282,9 +282,9 @@ export function useP2PSignatureRelay(
     handlers.push({
       protocol: PROTOCOLS.CONNECT,
       streamHandler: {
-        handler: async ({ connection, stream }: IncomingStreamData) => {
+        handler: async (stream: Stream, connection: Connection) => {
           try {
-            const data = await readStreamData(stream.source);
+            const data = await readStreamData(stream);
             logger.p2p.info('Received CONNECT', { role, data });
 
             // Update form with partner's address
@@ -323,8 +323,8 @@ export function useP2PSignatureRelay(
             logger.p2p.error('Error handling CONNECT', {}, err as Error);
           }
         },
-        // Use runOnTransientConnection (correct libp2p API property name)
-        options: { runOnTransientConnection: true },
+        // Use runOnLimitedConnection in libp2p 3.x (was runOnTransientConnection)
+        options: { runOnLimitedConnection: true },
       },
     });
 
@@ -333,9 +333,9 @@ export function useP2PSignatureRelay(
       handlers.push({
         protocol: PROTOCOLS.ACK_SIG,
         streamHandler: {
-          handler: async ({ connection, stream }: IncomingStreamData) => {
+          handler: async (stream: Stream, connection: Connection) => {
             try {
-              const data = await readStreamData(stream.source);
+              const data = await readStreamData(stream);
               logger.p2p.info('Received ACK signature', { role });
 
               // Validate signature data before processing
@@ -373,17 +373,16 @@ export function useP2PSignatureRelay(
               logger.p2p.error('Error handling ACK_SIG', {}, err as Error);
             }
           },
-          // Use runOnTransientConnection (correct libp2p API property name)
-          options: { runOnTransientConnection: true },
+          options: { runOnLimitedConnection: true },
         },
       });
 
       handlers.push({
         protocol: PROTOCOLS.REG_SIG,
         streamHandler: {
-          handler: async ({ connection, stream }: IncomingStreamData) => {
+          handler: async (stream: Stream, connection: Connection) => {
             try {
-              const data = await readStreamData(stream.source);
+              const data = await readStreamData(stream);
               logger.p2p.info('Received REG signature', { role });
 
               // Validate signature data before processing
@@ -421,37 +420,36 @@ export function useP2PSignatureRelay(
               logger.p2p.error('Error handling REG_SIG', {}, err as Error);
             }
           },
-          // Use runOnTransientConnection (correct libp2p API property name)
-          options: { runOnTransientConnection: true },
+          options: { runOnLimitedConnection: true },
         },
       });
     }
 
     if (role === 'registeree') {
       // Registeree receives tx hashes and confirmations
+      // Note: libp2p 3.x StreamHandler signature is (stream, connection) - connection unused here
       handlers.push({
         protocol: PROTOCOLS.ACK_REC,
         streamHandler: {
-          handler: async ({ stream }: IncomingStreamData) => {
+          handler: async (stream: Stream, _connection: Connection) => {
             try {
-              const data = await readStreamData(stream.source);
+              const data = await readStreamData(stream);
               logger.p2p.info('ACK signature confirmed received', { data });
               onStepAdvance?.();
             } catch (err) {
               logger.p2p.error('Error handling ACK_REC', {}, err as Error);
             }
           },
-          // Use runOnTransientConnection (correct libp2p API property name)
-          options: { runOnTransientConnection: true },
+          options: { runOnLimitedConnection: true },
         },
       });
 
       handlers.push({
         protocol: PROTOCOLS.ACK_PAY,
         streamHandler: {
-          handler: async ({ stream }: IncomingStreamData) => {
+          handler: async (stream: Stream, _connection: Connection) => {
             try {
-              const data = await readStreamData(stream.source);
+              const data = await readStreamData(stream);
               logger.p2p.info('Received ACK payment hash', { data });
 
               // Validate tx hash before storing/propagating
@@ -466,34 +464,32 @@ export function useP2PSignatureRelay(
               logger.p2p.error('Error handling ACK_PAY', {}, err as Error);
             }
           },
-          // Use runOnTransientConnection (correct libp2p API property name)
-          options: { runOnTransientConnection: true },
+          options: { runOnLimitedConnection: true },
         },
       });
 
       handlers.push({
         protocol: PROTOCOLS.REG_REC,
         streamHandler: {
-          handler: async ({ stream }: IncomingStreamData) => {
+          handler: async (stream: Stream, _connection: Connection) => {
             try {
-              const data = await readStreamData(stream.source);
+              const data = await readStreamData(stream);
               logger.p2p.info('REG signature confirmed received', { data });
               onStepAdvance?.();
             } catch (err) {
               logger.p2p.error('Error handling REG_REC', {}, err as Error);
             }
           },
-          // Use runOnTransientConnection (correct libp2p API property name)
-          options: { runOnTransientConnection: true },
+          options: { runOnLimitedConnection: true },
         },
       });
 
       handlers.push({
         protocol: PROTOCOLS.REG_PAY,
         streamHandler: {
-          handler: async ({ stream }: IncomingStreamData) => {
+          handler: async (stream: Stream, _connection: Connection) => {
             try {
-              const data = await readStreamData(stream.source);
+              const data = await readStreamData(stream);
               logger.p2p.info('Received REG payment hash', { data });
 
               // Validate tx hash before storing/propagating
@@ -508,8 +504,7 @@ export function useP2PSignatureRelay(
               logger.p2p.error('Error handling REG_PAY', {}, err as Error);
             }
           },
-          // Use runOnTransientConnection (correct libp2p API property name)
-          options: { runOnTransientConnection: true },
+          options: { runOnLimitedConnection: true },
         },
       });
     }

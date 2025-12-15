@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SignatureCard, type SignatureData } from './SignatureCard';
+import { SIGNATURE_TTL_MS } from '@/lib/signatures';
 
 describe('SignatureCard', () => {
   const sampleData: SignatureData = {
@@ -23,18 +24,17 @@ describe('SignatureCard', () => {
   });
 
   describe('rendering', () => {
-    it('renders acknowledgement type correctly', () => {
+    // First test in file needs longer timeout due to cold-start overhead
+    it('renders acknowledgement type correctly', { timeout: 10000 }, () => {
       render(<SignatureCard {...defaultProps} />);
 
-      // Title and button both contain the text
-      expect(screen.getAllByText(/Sign Acknowledgement/i)).toHaveLength(2);
+      // Content-only component - just check the button exists
       expect(screen.getByRole('button', { name: /Sign Acknowledgement/i })).toBeInTheDocument();
     });
 
     it('renders registration type correctly', () => {
       render(<SignatureCard {...defaultProps} type="registration" />);
 
-      expect(screen.getAllByText(/Sign Registration/i)).toHaveLength(2);
       expect(screen.getByRole('button', { name: /Sign Registration/i })).toBeInTheDocument();
     });
 
@@ -79,12 +79,6 @@ describe('SignatureCard', () => {
     const signature =
       '0x1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8538dde03fc8b4c6d7f2c13c82e5c34d0e5f8b1c0b5e2f3a4b5c6d7e8f9a0b1c21b' as `0x${string}`;
 
-    it('shows signed badge on success', () => {
-      render(<SignatureCard {...defaultProps} status="success" signature={signature} />);
-
-      expect(screen.getByText('Signed')).toBeInTheDocument();
-    });
-
     it('shows signature preview on success', () => {
       render(<SignatureCard {...defaultProps} status="success" signature={signature} />);
 
@@ -96,13 +90,36 @@ describe('SignatureCard', () => {
     it('hides sign button on success', () => {
       render(<SignatureCard {...defaultProps} status="success" signature={signature} />);
 
-      expect(screen.queryByRole('button', { name: /Sign/i })).not.toBeInTheDocument();
+      // The "Sign Acknowledgement" / "Sign Registration" button should be hidden
+      expect(
+        screen.queryByRole('button', { name: /Sign Acknowledgement/i })
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Sign Registration/i })).not.toBeInTheDocument();
     });
 
-    it('shows completion message on success', () => {
+    it('shows TTL indicator on success', () => {
       render(<SignatureCard {...defaultProps} status="success" signature={signature} />);
 
-      expect(screen.getByText('Signature complete')).toBeInTheDocument();
+      // TTL indicator derived from SIGNATURE_TTL_MS constant
+      const expectedTTL = `${SIGNATURE_TTL_MS / 60000}m`;
+      expect(screen.getByText(expectedTTL)).toBeInTheDocument();
+    });
+
+    it('copies signature to clipboard when copy button is clicked', async () => {
+      const user = userEvent.setup();
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal('navigator', {
+        ...navigator,
+        clipboard: { writeText: writeTextMock },
+      });
+
+      render(<SignatureCard {...defaultProps} status="success" signature={signature} />);
+
+      await user.click(screen.getByRole('button', { name: /Copy signature/i }));
+
+      expect(writeTextMock).toHaveBeenCalledWith(signature);
+
+      vi.unstubAllGlobals();
     });
   });
 

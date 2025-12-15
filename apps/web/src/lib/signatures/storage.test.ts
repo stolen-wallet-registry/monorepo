@@ -29,8 +29,8 @@ describe('signature storage', () => {
   });
 
   afterEach(() => {
-    // Clear localStorage after each test for guaranteed cleanup
-    localStorage.clear();
+    // Clear sessionStorage after each test for guaranteed cleanup
+    sessionStorage.clear();
   });
 
   describe('storeSignature / getSignature roundtrip', () => {
@@ -111,9 +111,9 @@ describe('signature storage', () => {
 
       storeSignature(original);
 
-      // Check the actual key in localStorage - derive step from constant to stay aligned
+      // Check the actual key in sessionStorage - derive step from constant to stay aligned
       const expectedKey = `swr_sig_${mixedCaseAddress.toLowerCase()}_${testChainId}_${SIGNATURE_STEP.ACKNOWLEDGEMENT}`;
-      expect(localStorage.getItem(expectedKey)).not.toBeNull();
+      expect(sessionStorage.getItem(expectedKey)).not.toBeNull();
     });
   });
 
@@ -125,12 +125,12 @@ describe('signature storage', () => {
 
     it('returns null and removes corrupted JSON', () => {
       const key = `swr_sig_${testAddress.toLowerCase()}_${testChainId}_1`;
-      localStorage.setItem(key, 'not valid json {{{');
+      sessionStorage.setItem(key, 'not valid json {{{');
 
       const result = getSignature(testAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
 
       expect(result).toBeNull();
-      expect(localStorage.getItem(key)).toBeNull(); // Should be cleaned up
+      expect(sessionStorage.getItem(key)).toBeNull(); // Should be cleaned up
     });
 
     it('returns null for different chain', () => {
@@ -144,6 +144,64 @@ describe('signature storage', () => {
       storeSignature(createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT));
 
       const result = getSignature(testAddress, testChainId, SIGNATURE_STEP.REGISTRATION);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('30-minute TTL expiration', () => {
+    it('returns null and removes signature older than 30 minutes', () => {
+      // Create signature that is 31 minutes old (expired)
+      const expiredSignature = createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT, {
+        storedAt: Date.now() - 31 * 60 * 1000,
+      });
+
+      storeSignature(expiredSignature);
+
+      const result = getSignature(testAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+
+      expect(result).toBeNull();
+
+      // Verify the key was removed from sessionStorage
+      const key = `swr_sig_${testAddress.toLowerCase()}_${testChainId}_${SIGNATURE_STEP.ACKNOWLEDGEMENT}`;
+      expect(sessionStorage.getItem(key)).toBeNull();
+    });
+
+    it('returns signature that is less than 30 minutes old', () => {
+      // Create signature that is 20 minutes old (not expired)
+      const validSignature = createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT, {
+        storedAt: Date.now() - 20 * 60 * 1000,
+      });
+
+      storeSignature(validSignature);
+
+      const result = getSignature(testAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+
+      expect(result).not.toBeNull();
+      expect(result!.signature).toBe(validSignature.signature);
+      expect(result!.storedAt).toBe(validSignature.storedAt);
+    });
+
+    it('returns signature stored just now', () => {
+      const freshSignature = createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT);
+
+      storeSignature(freshSignature);
+
+      const result = getSignature(testAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+
+      expect(result).not.toBeNull();
+      expect(result!.signature).toBe(freshSignature.signature);
+    });
+
+    it('returns null for signature at exactly 30 minutes (boundary)', () => {
+      // Signature at exactly 30 minutes should be expired (> check, not >=)
+      const boundarySignature = createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT, {
+        storedAt: Date.now() - 30 * 60 * 1000 - 1, // Just over 30 minutes
+      });
+
+      storeSignature(boundarySignature);
+
+      const result = getSignature(testAddress, testChainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+
       expect(result).toBeNull();
     });
   });
@@ -236,9 +294,9 @@ describe('signature storage', () => {
       storeSignature(createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT));
       storeSignature(createTestSignature(SIGNATURE_STEP.REGISTRATION));
 
-      // Store other localStorage items
-      localStorage.setItem('other_key', 'other_value');
-      localStorage.setItem('wagmi_something', 'wagmi_data');
+      // Store other sessionStorage items
+      sessionStorage.setItem('other_key', 'other_value');
+      sessionStorage.setItem('wagmi_something', 'wagmi_data');
 
       clearAllSignatures();
 
@@ -247,11 +305,11 @@ describe('signature storage', () => {
       expect(getSignature(testAddress, testChainId, SIGNATURE_STEP.REGISTRATION)).toBeNull();
 
       // Other items should remain
-      expect(localStorage.getItem('other_key')).toBe('other_value');
-      expect(localStorage.getItem('wagmi_something')).toBe('wagmi_data');
+      expect(sessionStorage.getItem('other_key')).toBe('other_value');
+      expect(sessionStorage.getItem('wagmi_something')).toBe('wagmi_data');
     });
 
-    it('handles empty localStorage', () => {
+    it('handles empty sessionStorage', () => {
       expect(() => clearAllSignatures()).not.toThrow();
     });
   });

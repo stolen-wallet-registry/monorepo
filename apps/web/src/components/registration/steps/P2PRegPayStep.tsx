@@ -6,10 +6,11 @@
  */
 
 import { useCallback, useState, useEffect, useRef } from 'react';
-import { useChainId } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import type { Libp2p } from 'libp2p';
 
 import { TransactionCard, type TransactionStatus } from '@/components/composed/TransactionCard';
+import { SignatureDetails } from '@/components/composed/SignatureDetails';
 import { WaitingForData } from '@/components/p2p';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import { useRegistration } from '@/hooks/useRegistration';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import type { Hash } from '@/lib/types/ethereum';
 import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
 import { useP2PStore } from '@/stores/p2pStore';
 import { logger } from '@/lib/logger';
@@ -40,9 +42,10 @@ export interface P2PRegPayStepProps {
  */
 export function P2PRegPayStep({ onComplete, role, libp2p }: P2PRegPayStepProps) {
   const chainId = useChainId();
+  const { address: relayerAddress } = useAccount();
   const { registeree } = useFormStore();
   const { partnerPeerId } = useP2PStore();
-  const { registrationHash } = useRegistrationStore();
+  const { registrationHash, setRegistrationHash } = useRegistrationStore();
   const [hasSentHash, setHasSentHash] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -94,6 +97,14 @@ export function P2PRegPayStep({ onComplete, role, libp2p }: P2PRegPayStepProps) 
       }
     };
   }, []);
+
+  // Relayer: Store registration hash when confirmed (for success step display)
+  useEffect(() => {
+    if (role === 'relayer' && isConfirmed && hash && !registrationHash) {
+      setRegistrationHash(hash as Hash);
+      logger.p2p.info('Relayer stored REG hash for success display', { hash });
+    }
+  }, [role, isConfirmed, hash, registrationHash, setRegistrationHash]);
 
   // Relayer: Send tx hash to registeree after confirmation with retry logic
   useEffect(() => {
@@ -173,6 +184,7 @@ export function P2PRegPayStep({ onComplete, role, libp2p }: P2PRegPayStepProps) 
             type="registration"
             status="confirmed"
             hash={registrationHash}
+            chainId={chainId}
             onSubmit={() => undefined}
           />
         ) : (
@@ -190,8 +202,8 @@ export function P2PRegPayStep({ onComplete, role, libp2p }: P2PRegPayStepProps) 
     <div className="space-y-6">
       <Alert>
         <AlertDescription>
-          You received the registration signature. Submit the final transaction to complete the
-          registration.
+          You received the registration signature. Review the details below and submit the final
+          transaction to complete the registration.
         </AlertDescription>
       </Alert>
 
@@ -202,11 +214,25 @@ export function P2PRegPayStep({ onComplete, role, libp2p }: P2PRegPayStepProps) 
         />
       ) : (
         <>
+          {/* Show signature details for relayer to review */}
+          {registeree && relayerAddress && (
+            <SignatureDetails
+              data={{
+                registeree,
+                forwarder: relayerAddress,
+                nonce: storedSig.nonce,
+                deadline: storedSig.deadline,
+                chainId: storedSig.chainId,
+              }}
+            />
+          )}
+
           <TransactionCard
             type="registration"
             status={getStatus()}
             hash={hash}
             error={error?.message}
+            chainId={chainId}
             onSubmit={handleSubmit}
             onRetry={reset}
             disabled={!storedSig}

@@ -220,6 +220,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
           currentAddress={address}
           expectedAddress={expectedWallet}
           expectedLabel="Gas Wallet"
+          currentLabel="Stolen Wallet"
           currentChainId={chainId}
           expectedChainId={chainId}
         />
@@ -233,6 +234,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         error={errorMessage}
         explorerUrl={explorerUrl}
         signedMessage={signedMessageData}
+        chainId={chainId}
         onSubmit={handleSubmit}
         onRetry={handleRetry}
         disabled={!isCorrectWallet}

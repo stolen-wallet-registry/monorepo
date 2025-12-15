@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { peerIdFromString } from '@libp2p/peer-id';
-import { isPeerId } from '@libp2p/interface/peer-id';
+import { isPeerId } from '@libp2p/interface';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -89,7 +89,11 @@ export function PeerConnectForm({ onConnect, isConnecting, error }: PeerConnectF
           )}
         />
 
-        {error && <div className="text-sm text-destructive">{error}</div>}
+        {error && (
+          <div role="alert" aria-live="polite" className="text-sm text-destructive">
+            {error}
+          </div>
+        )}
 
         <Button type="submit" className="w-full" disabled={isConnecting}>
           {isConnecting ? 'Connecting...' : 'Connect to Peer'}

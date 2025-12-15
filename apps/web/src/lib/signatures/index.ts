@@ -15,6 +15,7 @@ export {
 } from './eip712';
 
 export {
+  SIGNATURE_TTL_MS,
   storeSignature,
   getSignature,
   removeSignature,

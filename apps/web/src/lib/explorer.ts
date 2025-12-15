@@ -2,39 +2,17 @@
  * Block explorer URL utilities.
  *
  * Generates explorer URLs for transactions and addresses.
+ * Chain info is derived from wagmi config to avoid duplicate configuration.
  */
+
+import { config } from './wagmi';
 
 /**
- * Explorer configurations by chain ID.
+ * Find a chain by ID from wagmi config.
  */
-const EXPLORERS: Record<number, { name: string; baseUrl: string }> = {
-  // Localhost / Anvil
-  31337: { name: 'Anvil', baseUrl: '' }, // No explorer for local
-
-  // Ethereum
-  1: { name: 'Etherscan', baseUrl: 'https://etherscan.io' },
-
-  // Sepolia (Ethereum testnet)
-  11155111: { name: 'Sepolia Etherscan', baseUrl: 'https://sepolia.etherscan.io' },
-
-  // Goerli (Ethereum testnet - deprecated but still used)
-  5: { name: 'Goerli Etherscan', baseUrl: 'https://goerli.etherscan.io' },
-
-  // Base
-  8453: { name: 'BaseScan', baseUrl: 'https://basescan.org' },
-
-  // Base Sepolia
-  84532: { name: 'Base Sepolia', baseUrl: 'https://sepolia.basescan.org' },
-
-  // Optimism
-  10: { name: 'Optimistic Etherscan', baseUrl: 'https://optimistic.etherscan.io' },
-
-  // Arbitrum
-  42161: { name: 'Arbiscan', baseUrl: 'https://arbiscan.io' },
-
-  // Polygon
-  137: { name: 'Polygonscan', baseUrl: 'https://polygonscan.com' },
-};
+function findChain(chainId: number) {
+  return config.chains.find((c) => c.id === chainId);
+}
 
 /**
  * Get the block explorer URL for a transaction.
@@ -44,11 +22,10 @@ const EXPLORERS: Record<number, { name: string; baseUrl: string }> = {
  * @returns The explorer URL or null if no explorer configured
  */
 export function getExplorerTxUrl(chainId: number, txHash: `0x${string}`): string | null {
-  const explorer = EXPLORERS[chainId];
-  if (!explorer || !explorer.baseUrl) {
-    return null;
-  }
-  return `${explorer.baseUrl}/tx/${txHash}`;
+  const chain = findChain(chainId);
+  const baseUrl = chain?.blockExplorers?.default?.url?.replace(/\/$/, '');
+  if (!baseUrl) return null;
+  return `${baseUrl}/tx/${txHash}`;
 }
 
 /**
@@ -59,11 +36,10 @@ export function getExplorerTxUrl(chainId: number, txHash: `0x${string}`): string
  * @returns The explorer URL or null if no explorer configured
  */
 export function getExplorerAddressUrl(chainId: number, address: `0x${string}`): string | null {
-  const explorer = EXPLORERS[chainId];
-  if (!explorer || !explorer.baseUrl) {
-    return null;
-  }
-  return `${explorer.baseUrl}/address/${address}`;
+  const chain = findChain(chainId);
+  const baseUrl = chain?.blockExplorers?.default?.url?.replace(/\/$/, '');
+  if (!baseUrl) return null;
+  return `${baseUrl}/address/${address}`;
 }
 
 /**
@@ -73,5 +49,37 @@ export function getExplorerAddressUrl(chainId: number, address: `0x${string}`): 
  * @returns The explorer name or "Explorer" as default
  */
 export function getExplorerName(chainId: number): string {
-  return EXPLORERS[chainId]?.name ?? 'Explorer';
+  const chain = findChain(chainId);
+  return chain?.blockExplorers?.default?.name ?? 'Explorer';
+}
+
+/**
+ * Get the full chain name for a chain ID.
+ *
+ * @param chainId - The chain ID
+ * @returns The chain name or "Chain {id}" as default
+ */
+export function getChainName(chainId: number): string {
+  const chain = findChain(chainId);
+  return chain?.name ?? `Chain ${chainId}`;
+}
+
+/**
+ * Get the short chain name for a chain ID (for badges/compact display).
+ *
+ * @param chainId - The chain ID
+ * @returns The short chain name or chain ID as string
+ */
+export function getChainShortName(chainId: number): string {
+  const chain = findChain(chainId);
+  if (!chain) return `#${chainId}`;
+
+  // Special case: localhost/anvil chains show as "Local"
+  const name = chain.name.toLowerCase();
+  if (name.includes('localhost') || name.includes('anvil')) {
+    return 'Local';
+  }
+
+  // Default: use chain name (wagmi names are typically short enough)
+  return chain.name;
 }

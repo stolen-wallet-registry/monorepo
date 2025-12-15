@@ -13,8 +13,7 @@ import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { clearAllSignatures } from '@/lib/signatures';
-import { truncateAddress } from '@/lib/address';
-import { getExplorerTxUrl } from '@/lib/explorer';
+import { getExplorerTxUrl, getExplorerAddressUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
 import { CheckCircle2, Home, RefreshCw } from 'lucide-react';
 
@@ -84,9 +83,13 @@ export function SuccessStep() {
         {/* Registered wallet */}
         {registeree && (
           <div className="rounded-lg bg-white dark:bg-gray-900 border p-4">
-            <p className="text-sm font-medium text-muted-foreground mb-1">Registered Wallet</p>
-            <p className="font-mono text-lg">{truncateAddress(registeree, 8)}</p>
-            <p className="font-mono text-xs text-muted-foreground mt-1 break-all">{registeree}</p>
+            <p className="text-sm font-medium text-muted-foreground mb-2">Registered Wallet</p>
+            <ExplorerLink
+              value={registeree}
+              type="address"
+              href={getExplorerAddressUrl(chainId, registeree)}
+              truncate={false}
+            />
           </div>
         )}
 

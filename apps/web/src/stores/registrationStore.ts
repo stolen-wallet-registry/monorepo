@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { useShallow } from 'zustand/shallow';
 import { logger } from '@/lib/logger';
 
 export type RegistrationType = 'standard' | 'selfRelay' | 'p2pRelay';
@@ -41,63 +42,66 @@ const initialState: RegistrationState = {
 };
 
 export const useRegistrationStore = create<RegistrationState & RegistrationActions>()(
-  persist(
-    immer((set) => ({
-      ...initialState,
+  devtools(
+    persist(
+      immer((set) => ({
+        ...initialState,
 
-      setRegistrationType: (type) =>
-        set((state) => {
-          logger.registration.info('Registration type selected', {
-            type,
-            initialStep: getInitialStep(type),
-          });
-          state.registrationType = type;
-          state.step = getInitialStep(type);
-        }),
+        setRegistrationType: (type) =>
+          set((state) => {
+            logger.registration.info('Registration type selected', {
+              type,
+              initialStep: getInitialStep(type),
+            });
+            state.registrationType = type;
+            state.step = getInitialStep(type);
+          }),
 
-      setStep: (step) =>
-        set((state) => {
-          logger.registration.info('Step transition', { from: state.step, to: step });
-          state.step = step;
-        }),
+        setStep: (step) =>
+          set((state) => {
+            logger.registration.info('Step transition', { from: state.step, to: step });
+            state.step = step;
+          }),
 
-      setAcknowledgementHash: (hash) =>
-        set((state) => {
-          logger.registration.info('Acknowledgement hash received', { hash });
-          state.acknowledgementHash = hash;
-        }),
+        setAcknowledgementHash: (hash) =>
+          set((state) => {
+            logger.registration.info('Acknowledgement hash received', { hash });
+            state.acknowledgementHash = hash;
+          }),
 
-      setRegistrationHash: (hash) =>
-        set((state) => {
-          logger.registration.info('Registration hash received', { hash });
-          state.registrationHash = hash;
-        }),
+        setRegistrationHash: (hash) =>
+          set((state) => {
+            logger.registration.info('Registration hash received', { hash });
+            state.registrationHash = hash;
+          }),
 
-      reset: () => {
-        logger.registration.info('Registration state reset');
-        set(initialState);
-      },
-    })),
-    {
-      name: 'swr-registration-state',
-      version: 1,
-      migrate: (persisted) => {
-        // Validate basic shape
-        if (!persisted || typeof persisted !== 'object') {
-          return initialState;
-        }
+        reset: () => {
+          logger.registration.info('Registration state reset');
+          set(initialState);
+        },
+      })),
+      {
+        name: 'swr-registration-state',
+        version: 1,
+        migrate: (persisted) => {
+          // Validate basic shape
+          if (!persisted || typeof persisted !== 'object') {
+            return initialState;
+          }
 
-        const state = persisted as Partial<RegistrationState>;
+          const state = persisted as Partial<RegistrationState>;
 
-        // Ensure all required fields exist with fallbacks
-        return {
-          registrationType: state.registrationType ?? initialState.registrationType,
-          step: state.step ?? initialState.step,
-          acknowledgementHash: state.acknowledgementHash ?? initialState.acknowledgementHash,
-          registrationHash: state.registrationHash ?? initialState.registrationHash,
-        };
-      },
-    }
+          // Ensure all required fields exist with fallbacks
+          return {
+            registrationType: state.registrationType ?? initialState.registrationType,
+            step: state.step ?? initialState.step,
+            acknowledgementHash: state.acknowledgementHash ?? initialState.acknowledgementHash,
+            registrationHash: state.registrationHash ?? initialState.registrationHash,
+          };
+        },
+      }
+    ),
+    { name: 'RegistrationStore', enabled: process.env.NODE_ENV === 'development' }
   )
 );
 
@@ -165,3 +169,59 @@ export function getPreviousStep(
   }
   return sequence[currentIndex - 1];
 }
+
+// ============================================================================
+// Selectors - Use these for granular subscriptions to prevent unnecessary re-renders
+// ============================================================================
+
+/**
+ * Select registration type and setter.
+ * Use when component only needs to read/change the registration type.
+ */
+export const useRegistrationType = () =>
+  useRegistrationStore(
+    useShallow((s) => ({
+      registrationType: s.registrationType,
+      setRegistrationType: s.setRegistrationType,
+    }))
+  );
+
+/**
+ * Select current step and setter.
+ * Use when component only needs to manage the current step.
+ */
+export const useRegistrationStep = () =>
+  useRegistrationStore(
+    useShallow((s) => ({
+      step: s.step,
+      setStep: s.setStep,
+    }))
+  );
+
+/**
+ * Select transaction hashes.
+ * Use when component needs both acknowledgement and registration tx hashes.
+ */
+export const useRegistrationTxHashes = () =>
+  useRegistrationStore(
+    useShallow((s) => ({
+      acknowledgementHash: s.acknowledgementHash,
+      registrationHash: s.registrationHash,
+      setAcknowledgementHash: s.setAcknowledgementHash,
+      setRegistrationHash: s.setRegistrationHash,
+    }))
+  );
+
+/**
+ * Select full registration flow state (type + step).
+ * Use when component needs to determine overall registration progress.
+ */
+export const useRegistrationFlow = () =>
+  useRegistrationStore(
+    useShallow((s) => ({
+      registrationType: s.registrationType,
+      step: s.step,
+      setStep: s.setStep,
+      reset: s.reset,
+    }))
+  );

@@ -10,7 +10,7 @@ import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
-import type { IncomingStreamData } from '@libp2p/interface/stream-handler';
+import type { Stream } from '@libp2p/interface';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,7 @@ import { useRegistrationStore, type RegistrationStep } from '@/stores/registrati
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { useP2PKeepAlive } from '@/hooks/useP2PKeepAlive';
 import { setup, PROTOCOLS, readStreamData, type ProtocolHandler } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 
@@ -69,12 +70,29 @@ export function P2PRegistereeRegistrationPage() {
     setRegistrationHash,
   } = useRegistrationStore();
   const { setFormValues } = useFormStore();
-  const { setPeerId, setConnectedToPeer, setInitialized, reset: resetP2P } = useP2PStore();
+  const {
+    partnerPeerId,
+    setPeerId,
+    setConnectedToPeer,
+    setInitialized,
+    reset: resetP2P,
+  } = useP2PStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
 
   const [libp2p, setLibp2p] = useState<Libp2p | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [protocolError, setProtocolError] = useState<string | null>(null);
+
+  // Keep P2P connection alive throughout the session
+  // Circuit relay connections timeout after ~2 minutes of inactivity
+  useP2PKeepAlive({
+    libp2p,
+    remotePeerId: partnerPeerId,
+    onConnectionLost: () => {
+      logger.p2p.warn('P2P connection lost');
+      setProtocolError('Connection to relayer was lost. Please restart the registration process.');
+    },
+  });
 
   // Use ref for goToNextStep to avoid recreating P2P node when step changes
   const goToNextStepRef = useRef(goToNextStep);
@@ -97,10 +115,11 @@ export function P2PRegistereeRegistrationPage() {
 
         // Build protocol handlers for registeree
         // Note: Uses ref for goToNextStep to avoid handler recreation
+        // In libp2p 3.x, handler signature is (stream, connection) - connection unused here
         const streamHandler = (protocol: string) => ({
-          handler: async ({ stream }: IncomingStreamData) => {
+          handler: async (stream: Stream, _connection?: unknown) => {
             try {
-              const data = await readStreamData(stream.source);
+              const data = await readStreamData(stream);
               logger.p2p.info('Registeree received data', { protocol, data });
 
               switch (protocol) {
@@ -148,8 +167,8 @@ export function P2PRegistereeRegistrationPage() {
               setProtocolError(`Error in ${protocol}: ${message}`);
             }
           },
-          // Use runOnTransientConnection (correct libp2p API property name)
-          options: { runOnTransientConnection: true },
+          // In libp2p 3.x, runOnTransientConnection renamed to runOnLimitedConnection
+          options: { runOnLimitedConnection: true },
         });
 
         const handlers: ProtocolHandler[] = [
@@ -307,10 +326,10 @@ export function P2PRegistereeRegistrationPage() {
         Back to Home
       </Button>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-stretch">
         {/* Step Indicator Sidebar */}
-        <aside>
-          <Card>
+        <aside aria-label="Registration steps">
+          <Card className="h-full">
             <CardHeader>
               <CardTitle className="text-lg">P2P Relay Registration</CardTitle>
               <CardDescription>Sign with stolen wallet, relayer pays gas</CardDescription>
@@ -325,8 +344,8 @@ export function P2PRegistereeRegistrationPage() {
           </Card>
         </aside>
 
-        {/* Main Content */}
-        <main className="space-y-4">
+        {/* Main Content - min-height matches sidebar via items-stretch */}
+        <main className="flex flex-col gap-4">
           {/* Protocol error alert */}
           {protocolError && (
             <Alert variant="destructive">
@@ -339,12 +358,14 @@ export function P2PRegistereeRegistrationPage() {
             </Alert>
           )}
 
-          <Card>
+          <Card className="flex-grow flex flex-col">
             <CardHeader>
               <CardTitle>{currentTitle}</CardTitle>
               <CardDescription>{currentDescription}</CardDescription>
             </CardHeader>
-            <CardContent>{renderStep()}</CardContent>
+            <CardContent className="flex-grow flex flex-col justify-center">
+              {renderStep()}
+            </CardContent>
           </Card>
 
           {/* P2P Debug Panel - development only */}

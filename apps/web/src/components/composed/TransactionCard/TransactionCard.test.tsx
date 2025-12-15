@@ -21,15 +21,13 @@ describe('TransactionCard', () => {
     it('renders acknowledgement type correctly', () => {
       render(<TransactionCard {...defaultProps} />);
 
-      // Title and button both contain the text
-      expect(screen.getAllByText(/Submit Acknowledgement/i)).toHaveLength(2);
+      // Content-only component - just check the button exists
       expect(screen.getByRole('button', { name: /Submit Acknowledgement/i })).toBeInTheDocument();
     });
 
     it('renders registration type correctly', () => {
       render(<TransactionCard {...defaultProps} type="registration" />);
 
-      expect(screen.getAllByText(/Submit Registration/i)).toHaveLength(2);
       expect(screen.getByRole('button', { name: /Submit Registration/i })).toBeInTheDocument();
     });
 

@@ -1,7 +1,10 @@
 // Signature storage utilities
-// Stores EIP-712 signatures in localStorage with expiry
+// Stores EIP-712 signatures in sessionStorage (clears on tab close for security)
 
 import type { SignatureStep } from './eip712';
+
+/** Signature session TTL in milliseconds (30 minutes) */
+export const SIGNATURE_TTL_MS = 30 * 60 * 1000;
 
 // Storage key format: swr_sig_{address}_{chainId}_{step}
 function getStorageKey(address: `0x${string}`, chainId: number, step: SignatureStep): string {
@@ -18,7 +21,7 @@ export interface StoredSignature {
   storedAt: number; // timestamp
 }
 
-// Serializable version for localStorage
+// Serializable version for sessionStorage
 interface SerializedSignature {
   signature: string;
   deadline: string;
@@ -41,7 +44,7 @@ export function storeSignature(sig: StoredSignature): void {
     step: sig.step,
     storedAt: sig.storedAt,
   };
-  localStorage.setItem(key, JSON.stringify(serialized));
+  sessionStorage.setItem(key, JSON.stringify(serialized));
 }
 
 // Retrieve a signature (returns null if not found or expired)
@@ -51,7 +54,7 @@ export function getSignature(
   step: SignatureStep
 ): StoredSignature | null {
   const key = getStorageKey(address, chainId, step);
-  const stored = localStorage.getItem(key);
+  const stored = sessionStorage.getItem(key);
 
   if (!stored) {
     return null;
@@ -59,6 +62,13 @@ export function getSignature(
 
   try {
     const parsed: SerializedSignature = JSON.parse(stored);
+
+    // Client-side TTL check - additional protection beyond contract deadline
+    if (Date.now() - parsed.storedAt > SIGNATURE_TTL_MS) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+
     const signature: StoredSignature = {
       signature: parsed.signature as `0x${string}`,
       deadline: BigInt(parsed.deadline),
@@ -69,13 +79,10 @@ export function getSignature(
       storedAt: parsed.storedAt,
     };
 
-    // Check if signature is still valid (deadline is block number, not timestamp)
-    // We can't check block number here, so just return it
-    // The contract will validate the deadline
     return signature;
   } catch {
     // Invalid stored data, remove it
-    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
     return null;
   }
 }
@@ -87,7 +94,7 @@ export function removeSignature(
   step: SignatureStep
 ): void {
   const key = getStorageKey(address, chainId, step);
-  localStorage.removeItem(key);
+  sessionStorage.removeItem(key);
 }
 
 // Clear all signatures for an address on a chain
@@ -98,14 +105,14 @@ export function clearSignatures(address: `0x${string}`, chainId: number): void {
   }
 }
 
-// Clear all SWR signatures from localStorage
+// Clear all SWR signatures from sessionStorage
 export function clearAllSignatures(): void {
   const keysToRemove: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i);
     if (key?.startsWith('swr_sig_')) {
       keysToRemove.push(key);
     }
   }
-  keysToRemove.forEach((key) => localStorage.removeItem(key));
+  keysToRemove.forEach((key) => sessionStorage.removeItem(key));
 }

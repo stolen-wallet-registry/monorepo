@@ -55,5 +55,11 @@ export {
   type P2PRole,
 } from './useP2PSignatureRelay';
 
+export {
+  useP2PKeepAlive,
+  type UseP2PKeepAliveOptions,
+  type UseP2PKeepAliveResult,
+} from './useP2PKeepAlive';
+
 // Utility hooks
 export { useCopyToClipboard, type UseCopyToClipboardResult } from './useCopyToClipboard';

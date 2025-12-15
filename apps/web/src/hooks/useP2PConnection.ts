@@ -6,8 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Libp2p } from 'libp2p';
-import type { Connection } from '@libp2p/interface/connection';
-import type { IncomingStreamData } from '@libp2p/interface/stream-handler';
+import type { Connection, Stream } from '@libp2p/interface';
 import {
   setup,
   getPeerConnection,
@@ -60,7 +59,7 @@ export interface UseP2PConnectionResult {
   send: (protocols: string[], data: ParsedStreamData) => Promise<void>;
   /** Shutdown the P2P node */
   shutdown: () => Promise<void>;
-  /** Read data from a stream source */
+  /** Read data from a stream */
   readStream: typeof readStreamData;
 }
 
@@ -89,11 +88,12 @@ export function useP2PConnection(options: UseP2PConnectionOptions = {}): UseP2PC
   } = useP2PStore();
 
   // Build default handlers that integrate with the onData callback
+  // In libp2p 3.x, StreamHandler signature is (stream, connection) - connection unused in defaults
   const buildHandlers = useCallback((): ProtocolHandler[] => {
     const defaultHandler = (protocol: string): ProtocolHandler['streamHandler'] => ({
-      handler: async ({ stream }: IncomingStreamData) => {
+      handler: async (stream: Stream, _connection: Connection) => {
         try {
-          const data = await readStreamData(stream.source);
+          const data = await readStreamData(stream);
           logger.p2p.info('Received data', { protocol, success: data.success });
           onData?.(data, protocol);
         } catch (err) {

@@ -6,6 +6,7 @@
  * - Native browser highlight works on visible start/end portions
  * - Copy to clipboard button for easy copying
  * - Disabled icon with tooltip for local chains without explorers
+ * - Type-aware labels for addresses, transactions, and contracts
  */
 
 import { useState, useCallback } from 'react';
@@ -13,12 +14,49 @@ import { ExternalLink, Copy, Check } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
+/**
+ * Type of blockchain identifier.
+ * - 'address': Wallet or contract address (42 chars: 0x + 40 hex)
+ * - 'transaction': Transaction hash (66 chars: 0x + 64 hex)
+ * - 'contract': Smart contract address (same format as address, semantic distinction)
+ * - 'block': Block hash (66 chars, same as transaction)
+ * - 'token': Token contract address (same format as address)
+ */
+export type ExplorerLinkType = 'address' | 'transaction' | 'contract' | 'block' | 'token';
+
+/**
+ * Human-readable labels for each type.
+ */
+const TYPE_LABELS: Record<ExplorerLinkType, { copy: string; view: string }> = {
+  address: { copy: 'Copy address', view: 'View address on explorer' },
+  transaction: { copy: 'Copy transaction hash', view: 'View transaction on explorer' },
+  contract: { copy: 'Copy contract address', view: 'View contract on explorer' },
+  block: { copy: 'Copy block hash', view: 'View block on explorer' },
+  token: { copy: 'Copy token address', view: 'View token on explorer' },
+};
+
+/**
+ * Infer type from value length if not explicitly provided.
+ * - 42 chars (0x + 40 hex) = address
+ * - 66 chars (0x + 64 hex) = transaction hash
+ */
+function inferType(value: string): ExplorerLinkType {
+  // Transaction hashes are 66 chars (0x + 64 hex chars)
+  if (value.length === 66) {
+    return 'transaction';
+  }
+  // Addresses are 42 chars (0x + 40 hex chars)
+  return 'address';
+}
+
 export interface ExplorerLinkProps {
   /** The hash or address to display */
   value: `0x${string}`;
+  /** Type of value - inferred from length if not provided */
+  type?: ExplorerLinkType;
   /** Explorer URL (if null/undefined, shows disabled icon) */
   href?: string | null;
-  /** Whether to truncate the display (default: true) */
+  /** Whether to truncate the display (default: true for addresses, false for short values) */
   truncate?: boolean;
   /** Whether to show the external link icon when disabled (default: true) */
   showDisabledIcon?: boolean;
@@ -60,10 +98,11 @@ function TruncatedAddress({ value }: { value: string }) {
 
 /**
  * Displays a blockchain hash or address with optional explorer link.
- * Includes copy button and optional explorer link.
+ * Includes copy button and optional explorer link with type-aware labels.
  */
 export function ExplorerLink({
   value,
+  type,
   href,
   truncate = true,
   showDisabledIcon = true,
@@ -71,6 +110,10 @@ export function ExplorerLink({
   className,
 }: ExplorerLinkProps) {
   const [copied, setCopied] = useState(false);
+
+  // Determine type from prop or infer from value length
+  const resolvedType = type ?? inferType(value);
+  const labels = TYPE_LABELS[resolvedType];
 
   const handleCopy = useCallback(async () => {
     // Guard for SSR and clipboard API availability
@@ -95,7 +138,19 @@ export function ExplorerLink({
       data-testid="explorer-link"
       className={cn('font-mono text-sm inline-flex items-center gap-1.5', className)}
     >
-      {displayContent}
+      {/* Full value tooltip on hover for truncated display */}
+      {truncate ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-default">{displayContent}</span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-md">
+            <p className="text-xs font-mono break-all">{value}</p>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        displayContent
+      )}
 
       {/* Copy button with tooltip */}
       {showCopyButton && (
@@ -106,17 +161,17 @@ export function ExplorerLink({
               onClick={handleCopy}
               data-testid="copy-button"
               className="text-muted-foreground/60 hover:text-foreground transition-colors"
-              aria-label={copied ? 'Copied!' : 'Copy address'}
+              aria-label={copied ? 'Copied!' : labels.copy}
             >
               {copied ? (
-                <Check className="h-3.5 w-3.5 flex-shrink-0 text-green-500" />
+                <Check className="h-3.5 w-3.5 shrink-0 text-green-500" />
               ) : (
-                <Copy className="h-3.5 w-3.5 flex-shrink-0" />
+                <Copy className="h-3.5 w-3.5 shrink-0" />
               )}
             </button>
           </TooltipTrigger>
           <TooltipContent side="top">
-            <p className="text-xs">{copied ? 'Copied!' : 'Copy address'}</p>
+            <p className="text-xs">{copied ? 'Copied!' : labels.copy}</p>
           </TooltipContent>
         </Tooltip>
       )}
@@ -130,13 +185,13 @@ export function ExplorerLink({
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-primary transition-colors"
-              aria-label="View on explorer"
+              aria-label={labels.view}
             >
-              <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
             </a>
           </TooltipTrigger>
           <TooltipContent side="top">
-            <p className="text-xs">View on explorer</p>
+            <p className="text-xs">{labels.view}</p>
           </TooltipContent>
         </Tooltip>
       ) : (
@@ -149,7 +204,7 @@ export function ExplorerLink({
                 role="img"
                 aria-label="No explorer available"
               >
-                <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/40" />
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
               </span>
             </TooltipTrigger>
             <TooltipContent side="top">

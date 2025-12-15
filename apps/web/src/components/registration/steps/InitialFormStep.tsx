@@ -7,9 +7,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { useAccount, useChainId } from 'wagmi';
 import { isAddress } from 'viem';
+import { initialFormSchema, type InitialFormInput } from '@/lib/schemas';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -42,17 +42,8 @@ export interface InitialFormStepProps {
   onComplete: () => void;
 }
 
-// Single schema for form validation (relayer is optional, validated in handleFormSubmit)
-const formSchema = z.object({
-  registeree: z.string().refine((val) => isAddress(val), {
-    message: 'Invalid Ethereum address',
-  }),
-  relayer: z.string(),
-  supportNFT: z.boolean(),
-  walletNFT: z.boolean(),
-});
-
-type FormValues = z.infer<typeof formSchema>;
+// Form values type from shared schema
+type FormValues = InitialFormInput;
 
 /**
  * Initial form step that collects data and triggers ACK signing.
@@ -67,7 +58,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
 
   // Form setup
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(initialFormSchema),
     defaultValues: {
       registeree: address || '',
       relayer: isSelfRelay ? '' : address || '',
@@ -93,6 +84,25 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
       }
     };
   }, []);
+
+  // Destructure form methods for stable references (React Hook Form best practice)
+  const { getValues, setValue } = form;
+
+  // Sync registeree with connected wallet for ALL registration types before form submission
+  // Once showSignature is true, the registeree is locked
+  useEffect(() => {
+    if (!showSignature && address) {
+      const previousRegisteree = getValues('registeree');
+      if (previousRegisteree !== address) {
+        logger.wallet.debug('Syncing registeree with connected wallet', {
+          registrationType,
+          previousRegisteree,
+          newRegisteree: address,
+        });
+        setValue('registeree', address);
+      }
+    }
+  }, [address, showSignature, registrationType, getValues, setValue]);
 
   // Watch form values for validation using useWatch (React Compiler compatible)
   const watchedRelayer = useWatch({ control: form.control, name: 'relayer' });
@@ -181,7 +191,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     logger.contract.debug('Refetching hash struct for fresh deadline');
     await refetchHashStruct();
 
-    // Show signature card
+    // Show signature card (this also locks registeree from further wallet changes)
     logger.registration.info('Proceeding to signature step');
     setShowSignature(true);
   };
@@ -256,7 +266,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
         storedAt: Date.now(),
       });
-      logger.signature.debug('Acknowledgement signature stored in localStorage');
+      logger.signature.debug('Acknowledgement signature stored in sessionStorage');
 
       setSignature(sig);
       setSignatureStatus('success');
@@ -361,6 +371,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
               forwarder,
               nonce,
               deadline: hashStructData.deadline,
+              chainId,
             }}
             status={signatureStatus}
             error={signatureError}
