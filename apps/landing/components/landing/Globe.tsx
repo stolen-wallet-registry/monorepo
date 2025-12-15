@@ -72,16 +72,19 @@ export function Globe({
   };
 
   useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
     const onResize = () => {
-      if (canvasRef.current) {
-        widthRef.current = canvasRef.current.offsetWidth;
+      if (canvas) {
+        widthRef.current = canvas.offsetWidth;
       }
     };
 
     window.addEventListener('resize', onResize);
     onResize();
 
-    const globe = createGlobe(canvasRef.current!, {
+    const globe = createGlobe(canvas, {
       ...config,
       width: widthRef.current * 2,
       height: widthRef.current * 2,
@@ -93,7 +96,9 @@ export function Globe({
       },
     });
 
-    setTimeout(() => (canvasRef.current!.style.opacity = '1'), 0);
+    setTimeout(() => {
+      if (canvas) canvas.style.opacity = '1';
+    }, 0);
     return () => {
       globe.destroy();
       window.removeEventListener('resize', onResize);
@@ -107,6 +112,8 @@ export function Globe({
           'size-full opacity-0 transition-opacity duration-500 [contain:layout_paint_size]'
         )}
         ref={canvasRef}
+        role="img"
+        aria-label="Interactive 3D globe showing global fraud registry coverage"
         onPointerDown={(e) => {
           pointerInteracting.current = e.clientX;
           updatePointerInteraction(e.clientX);

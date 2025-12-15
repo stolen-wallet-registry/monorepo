@@ -13,15 +13,10 @@ import Link from 'next/link';
 
 /**
  * App URL for "Launch App" links.
- * In production, NEXT_PUBLIC_APP_URL must be set to avoid localhost fallback.
+ * Configured via NEXT_PUBLIC_APP_URL environment variable.
+ * Falls back to localhost:5173 for development.
  */
-const APP_URL = (() => {
-  const url = process.env.NEXT_PUBLIC_APP_URL;
-  if (!url && process.env.NODE_ENV === 'production') {
-    console.error('NEXT_PUBLIC_APP_URL is not set in production');
-  }
-  return url ?? 'http://localhost:5173';
-})();
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5173';
 
 export default function LandingPage() {
   return (

@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     title: 'Stolen Wallet Registry',
     description: 'A global registry for stolen wallets and fraudulent transactions.',
     type: 'website',
-    url: 'https://stolenwalletregistry.com', // TODO: Update with actual production URL
+    url: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stolenwalletregistry.com',
     siteName: 'Stolen Wallet Registry',
   },
 };
