@@ -10,16 +10,16 @@ import { z } from 'zod';
 import { peerIdFromString } from '@libp2p/peer-id';
 import { isPeerId } from '@libp2p/interface';
 
-import { Button } from '@/components/ui/button';
 import {
+  Button,
   Form,
   FormControl,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
+  Input,
+} from '@swr/ui';
 import { logger } from '@/lib/logger';
 
 const formSchema = z.object({

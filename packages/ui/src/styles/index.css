@@ -1,0 +1,301 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Tell Tailwind to scan UI package components for class usage */
+@source "../components/**/*.tsx";
+@source "../lib/**/*.ts";
+
+@custom-variant dark (&:is(.dark *));
+@custom-variant hacker (&:is(.hacker *));
+
+/* ============================================
+   FONTS
+   ============================================ */
+
+:root {
+  --font-sans: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* Hacker theme uses monospace for everything */
+.hacker {
+  --font-sans: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* ============================================
+   THEME TRANSITIONS
+   ============================================ */
+
+:root {
+  --theme-transition-duration: 200ms;
+}
+
+/*
+ * Disable CSS transitions during View Transitions API animation.
+ * The ::view-transition pseudo-elements handle the animation, so we need
+ * to prevent competing CSS transitions on the underlying elements.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/*
+ * Only apply smooth transitions when NOT using View Transitions API.
+ * This is a fallback for browsers that don't support it (Safari, Firefox).
+ * We detect this by checking if the html element has the data-transitioning attribute
+ * which we'll set during programmatic theme changes without View Transitions.
+ */
+html:not([data-view-transition]) *,
+html:not([data-view-transition]) *::before,
+html:not([data-view-transition]) *::after {
+  transition:
+    color var(--theme-transition-duration) ease,
+    background-color var(--theme-transition-duration) ease,
+    border-color var(--theme-transition-duration) ease,
+    fill var(--theme-transition-duration) ease,
+    stroke var(--theme-transition-duration) ease;
+}
+
+/* During View Transition, disable all CSS transitions */
+html[data-view-transition] *,
+html[data-view-transition] *::before,
+html[data-view-transition] *::after {
+  transition: none !important;
+}
+
+/* Disable transitions for elements that should never animate */
+[data-no-transition],
+[data-no-transition] * {
+  transition: none !important;
+}
+
+/* ============================================
+   BASE THEME - LIGHT MODE
+   Stark black and white minimalist design
+   ============================================ */
+
+:root {
+  --radius: 0.625rem;
+  /* Pure black/white palette */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0 0 0);
+  --primary: oklch(0 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.96 0 0);
+  --secondary-foreground: oklch(0 0 0);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.4 0 0);
+  --accent: oklch(0.96 0 0);
+  --accent-foreground: oklch(0 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.85 0 0);
+  --input: oklch(0.85 0 0);
+  --ring: oklch(0 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.98 0 0);
+  --sidebar-foreground: oklch(0 0 0);
+  --sidebar-primary: oklch(0 0 0);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.96 0 0);
+  --sidebar-accent-foreground: oklch(0 0 0);
+  --sidebar-border: oklch(0.85 0 0);
+  --sidebar-ring: oklch(0 0 0);
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  /* Font families */
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --animate-blink-cursor: blink-cursor 1.2s step-end infinite;
+  @keyframes blink-cursor {
+  0%, 49% {
+    opacity: 1;
+    }
+  50%, 100% {
+    opacity: 0;
+    }
+  }
+}
+
+/* ============================================
+   BASE THEME - DARK MODE
+   Inverted: black background, white text
+   ============================================ */
+
+.dark {
+  --background: oklch(0 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.08 0 0);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.08 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --primary: oklch(1 0 0);
+  --primary-foreground: oklch(0 0 0);
+  --secondary: oklch(0.15 0 0);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.15 0 0);
+  --muted-foreground: oklch(0.6 0 0);
+  --accent: oklch(0.15 0 0);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(1 0 0 / 15%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(1 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.08 0 0);
+  --sidebar-foreground: oklch(1 0 0);
+  --sidebar-primary: oklch(1 0 0);
+  --sidebar-primary-foreground: oklch(0 0 0);
+  --sidebar-accent: oklch(0.15 0 0);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(1 0 0 / 15%);
+  --sidebar-ring: oklch(1 0 0);
+}
+
+/* ============================================
+   HACKER THEME - DARK MODE
+   Matrix-style: black bg, neon green text
+   ============================================ */
+
+.hacker.dark {
+  --background: oklch(0.05 0.02 142);
+  --foreground: oklch(0.75 0.2 142);
+  --card: oklch(0.08 0.03 142);
+  --card-foreground: oklch(0.75 0.2 142);
+  --popover: oklch(0.08 0.03 142);
+  --popover-foreground: oklch(0.75 0.2 142);
+  --primary: oklch(0.75 0.22 142);
+  --primary-foreground: oklch(0.05 0.02 142);
+  --secondary: oklch(0.15 0.05 142);
+  --secondary-foreground: oklch(0.7 0.18 142);
+  --muted: oklch(0.12 0.04 142);
+  --muted-foreground: oklch(0.5 0.12 142);
+  --accent: oklch(0.85 0.25 142);
+  --accent-foreground: oklch(0.05 0.02 142);
+  --destructive: oklch(0.6 0.25 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.45 0.12 142);
+  --input: oklch(0.35 0.1 142);
+  --ring: oklch(0.75 0.22 142);
+  --chart-1: oklch(0.7 0.2 142);
+  --chart-2: oklch(0.6 0.18 160);
+  --chart-3: oklch(0.8 0.22 130);
+  --chart-4: oklch(0.5 0.15 150);
+  --chart-5: oklch(0.65 0.2 140);
+  --sidebar: oklch(0.06 0.02 142);
+  --sidebar-foreground: oklch(0.7 0.18 142);
+  --sidebar-primary: oklch(0.75 0.22 142);
+  --sidebar-primary-foreground: oklch(0.05 0.02 142);
+  --sidebar-accent: oklch(0.15 0.05 142);
+  --sidebar-accent-foreground: oklch(0.7 0.18 142);
+  --sidebar-border: oklch(0.3 0.08 142);
+  --sidebar-ring: oklch(0.75 0.22 142);
+}
+
+/* ============================================
+   HACKER THEME - LIGHT MODE
+   Light bg with green tint, dark green text
+   ============================================ */
+
+.hacker.light {
+  --background: oklch(0.97 0.01 142);
+  --foreground: oklch(0.2 0.12 142);
+  --card: oklch(0.94 0.02 142);
+  --card-foreground: oklch(0.2 0.12 142);
+  --popover: oklch(0.94 0.02 142);
+  --popover-foreground: oklch(0.2 0.12 142);
+  --primary: oklch(0.35 0.15 142);
+  --primary-foreground: oklch(0.97 0.01 142);
+  --secondary: oklch(0.9 0.03 142);
+  --secondary-foreground: oklch(0.25 0.1 142);
+  --muted: oklch(0.92 0.02 142);
+  --muted-foreground: oklch(0.4 0.1 142);
+  --accent: oklch(0.3 0.18 142);
+  --accent-foreground: oklch(0.97 0.01 142);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.7 0.08 142);
+  --input: oklch(0.8 0.05 142);
+  --ring: oklch(0.35 0.15 142);
+  --chart-1: oklch(0.4 0.15 142);
+  --chart-2: oklch(0.5 0.12 160);
+  --chart-3: oklch(0.35 0.18 130);
+  --chart-4: oklch(0.45 0.1 150);
+  --chart-5: oklch(0.38 0.14 140);
+  --sidebar: oklch(0.95 0.015 142);
+  --sidebar-foreground: oklch(0.2 0.12 142);
+  --sidebar-primary: oklch(0.35 0.15 142);
+  --sidebar-primary-foreground: oklch(0.97 0.01 142);
+  --sidebar-accent: oklch(0.9 0.03 142);
+  --sidebar-accent-foreground: oklch(0.25 0.1 142);
+  --sidebar-border: oklch(0.7 0.08 142);
+  --sidebar-ring: oklch(0.35 0.15 142);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    font-family: var(--font-sans);
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: inherit;
+  }
+  code, pre, kbd, samp {
+    font-family: var(--font-mono);
+  }
+}

@@ -4,8 +4,7 @@
  * Guides users to switch to the correct wallet for the current step.
  */
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle, Badge } from '@swr/ui';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
 import { areAddressesEqual } from '@/lib/address';

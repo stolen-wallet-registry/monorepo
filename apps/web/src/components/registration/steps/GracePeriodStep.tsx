@@ -8,8 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChainId } from 'wagmi';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, Skeleton } from '@swr/ui';
 import { GracePeriodTimer } from '@/components/composed/GracePeriodTimer';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';

@@ -35,6 +35,37 @@ import {
 } from './types';
 
 /**
+ * Private/localhost address patterns to block in production.
+ * Covers RFC1918 private ranges and localhost addresses.
+ */
+const PRIVATE_ADDRESS_PATTERNS = [
+  '/ip4/127.', // Localhost IPv4
+  '/ip4/0.0.0.0', // Unspecified
+  '/ip4/10.', // RFC1918: 10.0.0.0/8
+  '/ip4/192.168.', // RFC1918: 192.168.0.0/16
+  '/ip6/::1', // Localhost IPv6
+] as const;
+
+/**
+ * Check if an address is in the 172.16.0.0/12 private range (172.16.x.x - 172.31.x.x).
+ */
+function isPrivate172Range(addr: string): boolean {
+  const match = addr.match(/\/ip4\/172\.(\d+)\./);
+  if (!match) return false;
+  const secondOctet = parseInt(match[1], 10);
+  return secondOctet >= 16 && secondOctet <= 31;
+}
+
+/**
+ * Check if a multiaddr points to a private/localhost address.
+ */
+function isPrivateAddress(addr: string): boolean {
+  return (
+    PRIVATE_ADDRESS_PATTERNS.some((pattern) => addr.includes(pattern)) || isPrivate172Range(addr)
+  );
+}
+
+/**
  * Protocol handler configuration.
  */
 export interface ProtocolHandler {
@@ -70,18 +101,9 @@ export function libp2pDefaults(): Libp2pOptions {
       denyDialMultiaddr: (ma) => {
         // In production, block localhost/private network connections
         if (import.meta.env.PROD) {
-          const addr = ma.toString();
-          if (
-            addr.includes('/ip4/127.') ||
-            addr.includes('/ip4/0.0.0.0') ||
-            addr.includes('/ip4/10.') ||
-            addr.includes('/ip4/192.168.') ||
-            addr.includes('/ip6/::1')
-          ) {
-            return true; // Deny localhost/private in production
-          }
+          return isPrivateAddress(ma.toString());
         }
-        return false; // Allow all other dials
+        return false; // Allow all dials in development
       },
     },
     services: {

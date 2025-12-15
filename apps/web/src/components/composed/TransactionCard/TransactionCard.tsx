@@ -5,10 +5,15 @@
  * This is a content-only component - wrap in Card if needed for standalone use.
  */
 
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Button,
+  Alert,
+  AlertDescription,
+  Badge,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@swr/ui';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';

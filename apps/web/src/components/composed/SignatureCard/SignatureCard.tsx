@@ -5,9 +5,7 @@
  * This is a content-only component - wrap in Card if needed for standalone use.
  */
 
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Button, Alert, AlertDescription, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
 import {
   SignatureDetails,
   type SignatureDetailsData,
@@ -119,10 +117,12 @@ export function SignatureCard({
               {/* Copy button */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={handleCopySignature}
-                    className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 rounded transition-colors"
+                    className="h-auto p-1 text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 hover:bg-transparent"
                     aria-label={signatureCopied ? 'Copied!' : 'Copy signature'}
                   >
                     {signatureCopied ? (
@@ -130,7 +130,7 @@ export function SignatureCard({
                     ) : (
                       <Copy className="h-3.5 w-3.5" />
                     )}
-                  </button>
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top">
                   <p className="text-xs">{signatureCopied ? 'Copied!' : 'Copy signature'}</p>

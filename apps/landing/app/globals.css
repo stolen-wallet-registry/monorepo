@@ -1,0 +1,6 @@
+/* Import shared theme styles from UI package */
+@import '@swr/ui/styles';
+
+/* Tell Tailwind to scan landing page components */
+@source "../components/**/*.tsx";
+@source "./**/*.tsx";

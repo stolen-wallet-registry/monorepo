@@ -8,7 +8,7 @@ import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
 import { RegistrationMethodSelector } from '@/components/composed/RegistrationMethodSelector';
 import { useRegistrationStore, type RegistrationType } from '@/stores/registrationStore';
 

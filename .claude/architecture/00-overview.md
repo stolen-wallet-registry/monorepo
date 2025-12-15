@@ -66,13 +66,13 @@ BLOCKCHAIN      RELAY SERVER     SIGNATURES
 
 ## Core Patterns
 
-| Pattern           | Description                            | See                     |
-| ----------------- | -------------------------------------- | ----------------------- |
-| Step-based flow   | 11 steps across 3 registration methods | 03-registration-flow.md |
-| Two-phase EIP-712 | ACK + REG signatures prevent phishing  | 02-eip712-signatures.md |
-| Zustand stores    | immer + persist + devtools middleware  | 04-state-management.md  |
-| P2P relay         | 8 custom protocols for signature relay | 01-libp2p-relay.md      |
-| Category logging  | wallet, contract, signature, p2p, etc. | 07-logger-system.md     |
+| Pattern           | Description                                                     | See                     |
+| ----------------- | --------------------------------------------------------------- | ----------------------- |
+| Step-based flow   | 11 steps across 3 registration methods                          | 03-registration-flow.md |
+| Two-phase EIP-712 | ACK + REG signatures prevent phishing                           | 02-eip712-signatures.md |
+| Zustand stores    | immer + persist + devtools middleware                           | 04-state-management.md  |
+| P2P relay         | 8 custom protocols for signature relay (see 01-libp2p-relay.md) | 01-libp2p-relay.md      |
+| Category logging  | wallet, contract, signature, p2p, etc.                          | 07-logger-system.md     |
 
 ---
 

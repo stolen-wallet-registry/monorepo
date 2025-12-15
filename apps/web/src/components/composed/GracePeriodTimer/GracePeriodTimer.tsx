@@ -5,8 +5,7 @@
  * with both time-based and block-based countdown.
  */
 
-import { Progress } from '@/components/ui/progress';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Progress, Skeleton } from '@swr/ui';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { cn } from '@/lib/utils';
 import { formatTimeString, type TimeRemaining } from '@/lib/blocks';

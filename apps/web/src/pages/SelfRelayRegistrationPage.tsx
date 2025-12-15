@@ -9,8 +9,7 @@ import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
 import { StepIndicator } from '@/components/composed/StepIndicator';
 import { StepRenderer } from '@/components/registration';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';

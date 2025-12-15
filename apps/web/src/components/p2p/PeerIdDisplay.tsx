@@ -6,7 +6,7 @@
 
 import { ClipboardCopy } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+import { Button } from '@swr/ui';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { logger } from '@/lib/logger';
 

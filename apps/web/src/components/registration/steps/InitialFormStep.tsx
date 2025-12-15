@@ -11,11 +11,11 @@ import { useAccount, useChainId } from 'wagmi';
 import { isAddress } from 'viem';
 import { initialFormSchema, type InitialFormInput } from '@/lib/schemas';
 
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { AddressInput } from '@/components/composed/AddressInput';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
+  Button,
+  Checkbox,
+  Alert,
+  AlertDescription,
   Form,
   FormControl,
   FormDescription,
@@ -23,7 +23,8 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
+} from '@swr/ui';
+import { AddressInput } from '@/components/composed/AddressInput';
 import { SignatureCard, type SignatureStatus } from '@/components/composed/SignatureCard';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { useRegistrationStore } from '@/stores/registrationStore';

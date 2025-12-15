@@ -51,7 +51,10 @@ const server = await createLibp2p({
     ping: ping(), // Enables keep-alive pings from clients
     dcutr: dcutr(), // Enables direct connection upgrade through relay
     relay: circuitRelayServer({
-      // Grace period can take 1-4 minutes; longer hop timeout prevents premature stream resets
+      // hopTimeout controls individual HOP relay request timeouts (default: 30s).
+      // Set to 60s to allow more time for slow network handshakes.
+      // Note: This is separate from the app-level grace period (1-4 min) which is
+      // maintained by the ping/keepalive service, not by extending this timeout.
       hopTimeout: 60_000,
       reservations: {
         maxReservations: 15,

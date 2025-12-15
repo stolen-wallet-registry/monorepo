@@ -8,7 +8,7 @@
 import { useCallback, useState } from 'react';
 import { useAccount } from 'wagmi';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription } from '@swr/ui';
 import { PeerIdDisplay, PeerConnectForm } from '@/components/p2p';
 import { useP2PStore } from '@/stores/p2pStore';
 import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
