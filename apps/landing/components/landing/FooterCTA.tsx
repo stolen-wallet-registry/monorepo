@@ -60,7 +60,7 @@ export function Footer() {
       <p className="text-sm text-muted-foreground">
         Stolen Wallet Registry - A public good for Web3 security
       </p>
-      <p className="mt-2 text-xs text-muted-foreground/70">
+      <p className="mt-2 text-xs text-muted-foreground">
         Built with transparency. Open source. Cross-chain.
       </p>
     </footer>
