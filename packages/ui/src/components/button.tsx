@@ -44,10 +44,13 @@ export type ButtonProps = React.ComponentProps<'button'> &
 function Button({ className, variant, size, asChild = false, type, ...props }: ButtonProps) {
   const Comp = asChild ? Slot : 'button';
 
+  // Only pass type attribute when rendering actual button element
+  const typeProps = asChild ? {} : { type: type ?? 'button' };
+
   return (
     <Comp
       data-slot="button"
-      type={asChild ? type : (type ?? 'button')}
+      {...typeProps}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

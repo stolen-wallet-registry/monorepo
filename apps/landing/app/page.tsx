@@ -1,6 +1,8 @@
 import { Button } from '@swr/ui';
 import Link from 'next/link';
 
+import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler';
+
 /**
  * Landing page - placeholder structure.
  *
@@ -24,9 +26,12 @@ export default function LandingPage() {
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4">
         <div className="text-xl font-bold">SWR</div>
-        <Button asChild>
-          <Link href={APP_URL}>Launch App</Link>
-        </Button>
+        <div className="flex items-center gap-3">
+          <AnimatedThemeToggler />
+          <Button asChild>
+            <Link href={APP_URL}>Launch App</Link>
+          </Button>
+        </div>
       </header>
 
       {/* Hero Section - Placeholder */}

@@ -22,28 +22,34 @@ export function Caip10Emission() {
   const emissionCounter = useRef(0);
 
   useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+
     const emitItem = () => {
       const id = emissionCounter.current++;
       const example = CAIP_EXAMPLES[id % CAIP_EXAMPLES.length];
       setCurrentEmission({ id, value: example.value, type: example.type });
     };
 
-    // Start after beam hits registry
-    const initialTimeout = setTimeout(emitItem, EMIT_DELAY * 1000);
-
-    // Emit new one every beam cycle (3 seconds)
-    const interval = setInterval(emitItem, BEAM_DURATION * 1000);
+    // Start after beam hits registry, then start interval
+    const initialTimeout = setTimeout(() => {
+      emitItem();
+      // Start interval after first emission
+      interval = setInterval(emitItem, BEAM_DURATION * 1000);
+    }, EMIT_DELAY * 1000);
 
     return () => {
       clearTimeout(initialTimeout);
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
     };
   }, []);
 
   const chainConfig = currentEmission ? getChainConfig(currentEmission.value) : null;
 
   return (
-    <div className="pointer-events-none absolute -top-16 left-1/2 -translate-x-1/2">
+    <div
+      className="pointer-events-none absolute -top-16 left-1/2 -translate-x-1/2"
+      aria-hidden="true"
+    >
       <AnimatePresence mode="wait">
         {currentEmission && chainConfig && (
           <motion.div

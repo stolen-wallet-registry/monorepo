@@ -6,6 +6,37 @@ import { cn, NetworkBase, Tooltip, TooltipContent, TooltipTrigger } from '@swr/u
 
 import { Caip10Emission } from './emission';
 
+// Reusable info icon with tooltip - reduces duplication across components
+const InfoTooltip = ({
+  content,
+  ariaLabel,
+  iconSize = 'size-3',
+}: {
+  content: string;
+  ariaLabel: string;
+  iconSize?: string;
+}) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        className="inline-flex items-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      >
+        <Info
+          className={cn(
+            'cursor-help text-muted-foreground/60 transition-colors hover:text-foreground',
+            iconSize
+          )}
+        />
+      </button>
+    </TooltipTrigger>
+    <TooltipContent side="top" className="max-w-xs">
+      <p className="text-sm">{content}</p>
+    </TooltipContent>
+  </Tooltip>
+);
+
 // Section title with info icon tooltip for explanations
 export const SectionTitle = ({
   title,
@@ -18,14 +49,7 @@ export const SectionTitle = ({
 }) => (
   <div className={cn('flex items-center gap-1', className)}>
     <span className="text-xs font-medium text-muted-foreground">{title}</span>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Info className="size-3 cursor-help text-muted-foreground/60 transition-colors hover:text-foreground" />
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-xs">
-        <p className="text-sm">{tooltip}</p>
-      </TooltipContent>
-    </Tooltip>
+    <InfoTooltip content={tooltip} ariaLabel={`Info about ${title}`} />
   </div>
 );
 
@@ -115,18 +139,11 @@ export const RegistryHub = forwardRef<
       {showLabels && (
         <div className="mb-3 flex items-center gap-1">
           <span className="text-sm font-bold text-foreground">Stolen Wallet Registry</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Info className="size-3.5 cursor-help text-muted-foreground/60 transition-colors hover:text-foreground" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs">
-              <p className="text-sm">
-                The consolidated registry on Base stores stolen wallet AND fraudulent transaction
-                reports from all chains. CAIP-10/CAIP-220 compliant storage enables tracking wallet
-                addresses and transactions from any blockchain (Ethereum, Solana, Bitcoin, etc.).
-              </p>
-            </TooltipContent>
-          </Tooltip>
+          <InfoTooltip
+            content="The consolidated registry on Base stores stolen wallet AND fraudulent transaction reports from all chains. CAIP-10/CAIP-220 compliant storage enables tracking wallet addresses and transactions from any blockchain (Ethereum, Solana, Bitcoin, etc.)."
+            ariaLabel="Info about Stolen Wallet Registry"
+            iconSize="size-3.5"
+          />
         </div>
       )}
       {/* Logo element with edge anchors - flush positioning */}
@@ -193,18 +210,11 @@ export function MobileRegistryHub({ showLabels = true }: { showLabels?: boolean 
       {showLabels && (
         <div className="flex items-center gap-1">
           <span className="text-sm font-bold text-foreground">Stolen Wallet Registry</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Info className="size-3.5 cursor-help text-muted-foreground/60 transition-colors hover:text-foreground" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs">
-              <p className="text-sm">
-                The consolidated registry on Base stores stolen wallet AND fraudulent transaction
-                reports from all chains. CAIP-10/CAIP-220 compliant storage enables tracking wallet
-                addresses and transactions from any blockchain (Ethereum, Solana, Bitcoin, etc.).
-              </p>
-            </TooltipContent>
-          </Tooltip>
+          <InfoTooltip
+            content="The consolidated registry on Base stores stolen wallet AND fraudulent transaction reports from all chains. CAIP-10/CAIP-220 compliant storage enables tracking wallet addresses and transactions from any blockchain (Ethereum, Solana, Bitcoin, etc.)."
+            ariaLabel="Info about Stolen Wallet Registry"
+            iconSize="size-3.5"
+          />
         </div>
       )}
 

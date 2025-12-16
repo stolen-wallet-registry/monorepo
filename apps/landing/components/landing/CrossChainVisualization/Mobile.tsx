@@ -20,11 +20,12 @@ import { IconCircle, BridgeIcon, MobileSection, MobileRegistryHub } from './shar
 
 import type { CrossChainVisualizationProps } from './types';
 
-// Animated arrow connector for mobile layout
+// Animated arrow connector for mobile layout (purely decorative)
 function ArrowConnector() {
   return (
     <motion.div
       className="flex flex-col items-center py-1"
+      aria-hidden="true"
       animate={{ opacity: [0.4, 1, 0.4] }}
       transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
     >

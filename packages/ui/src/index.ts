@@ -66,7 +66,37 @@ export { TypingAnimation } from './components/typing-animation';
 export { HyperText } from './components/hyper-text';
 export { AnimatedBeam, type AnimatedBeamProps } from './components/animated-beam';
 
-// Web3 Icons (re-exported from @web3icons/react)
-// Note: Full re-export relies on tree-shaking for bundle optimization.
-// For production apps, consider importing directly from @web3icons/react.
-export * from '@web3icons/react';
+// Web3 Icons (named exports from @web3icons/react)
+// Next.js App Router doesn't support "export *" in client boundaries
+export {
+  // Network icons - L2s
+  NetworkEthereum,
+  NetworkBase,
+  NetworkOptimism,
+  NetworkArbitrumOne,
+  NetworkPolygon,
+  NetworkZksync,
+  NetworkLinea,
+  NetworkGnosis,
+  NetworkCelo,
+  // Network icons - L1s
+  NetworkBinanceSmartChain,
+  NetworkSolana,
+  NetworkBitcoin,
+  NetworkAvalanche,
+  NetworkFantom,
+  NetworkNearProtocol,
+  NetworkCosmosHub,
+  // Exchange icons
+  ExchangeCoinbase,
+  ExchangeKraken,
+  ExchangeGemini,
+  ExchangeBinance,
+  // Wallet icons
+  WalletMetamask,
+  WalletRainbow,
+  WalletCoinbase,
+  WalletLedger,
+  // Token icons
+  TokenLINK,
+} from '@web3icons/react';

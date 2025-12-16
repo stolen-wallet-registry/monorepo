@@ -19,7 +19,11 @@ function SkeletonCircle({ size = 'size-10' }: { size?: string }) {
 // Skeleton loading state for desktop visualization
 export function CrossChainVisualizationSkeletonDesktop({ className }: { className?: string }) {
   return (
-    <div className={cn('flex flex-col items-center gap-6', className)}>
+    <div
+      className={cn('flex flex-col items-center gap-6', className)}
+      role="status"
+      aria-label="Loading visualization"
+    >
       {/* Header skeleton */}
       <div className="flex flex-col items-center gap-2">
         <div className="h-7 w-64 animate-pulse rounded bg-muted/50" />
@@ -64,7 +68,11 @@ export function CrossChainVisualizationSkeletonDesktop({ className }: { classNam
 // Mobile skeleton
 export function CrossChainVisualizationSkeletonMobile({ className }: { className?: string }) {
   return (
-    <div className={cn('flex flex-col items-center gap-4 px-4', className)}>
+    <div
+      className={cn('flex flex-col items-center gap-4 px-4', className)}
+      role="status"
+      aria-label="Loading visualization"
+    >
       {/* Header skeleton */}
       <div className="flex flex-col items-center gap-2">
         <div className="h-6 w-48 animate-pulse rounded bg-muted/50" />

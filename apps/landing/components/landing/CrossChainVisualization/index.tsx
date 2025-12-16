@@ -1,12 +1,18 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, lazy } from 'react';
 
-import { CrossChainVisualizationDesktop } from './Desktop';
-import { CrossChainVisualizationMobile } from './Mobile';
 import { CrossChainVisualizationSkeleton } from './Skeleton';
 
 import type { CrossChainVisualizationProps } from './types';
+
+// Lazy load heavy visualization components for code splitting
+const CrossChainVisualizationDesktop = lazy(() =>
+  import('./Desktop').then((mod) => ({ default: mod.CrossChainVisualizationDesktop }))
+);
+const CrossChainVisualizationMobile = lazy(() =>
+  import('./Mobile').then((mod) => ({ default: mod.CrossChainVisualizationMobile }))
+);
 
 // Main responsive visualization - shows desktop or mobile based on screen size
 export function CrossChainVisualization(props: CrossChainVisualizationProps) {
@@ -24,7 +30,7 @@ export function CrossChainVisualization(props: CrossChainVisualizationProps) {
   );
 }
 
-// Wrapper with Suspense for lazy loading
+// Wrapper with Suspense for lazy loading - skeleton shows while components load
 export function CrossChainVisualizationWithSuspense(props: CrossChainVisualizationProps) {
   return (
     <Suspense fallback={<CrossChainVisualizationSkeleton className={props.className} />}>
