@@ -47,7 +47,9 @@ export function Header() {
       <div className="flex items-center gap-3">
         <AnimatedThemeToggler />
         <Button asChild className="hidden sm:inline-flex">
-          <Link href={APP_URL}>Launch App</Link>
+          <a href={APP_URL} target="_blank" rel="noopener noreferrer">
+            Launch App
+          </a>
         </Button>
 
         {/* Mobile menu button */}
@@ -56,6 +58,7 @@ export function Header() {
           className="inline-flex size-10 items-center justify-center rounded-md text-foreground md:hidden"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={mobileMenuOpen}
         >
           {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
         </button>
@@ -80,7 +83,9 @@ export function Header() {
             </Link>
           ))}
           <Button asChild className="mt-4 w-full sm:hidden">
-            <Link href={APP_URL}>Launch App</Link>
+            <a href={APP_URL} target="_blank" rel="noopener noreferrer">
+              Launch App
+            </a>
           </Button>
         </nav>
       </div>

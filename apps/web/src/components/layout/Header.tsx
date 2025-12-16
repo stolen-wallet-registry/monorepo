@@ -15,6 +15,8 @@ export function Header() {
         href={HOMEPAGE_URL}
         className="text-xl font-bold transition-colors hover:text-primary"
         aria-label="Go to homepage"
+        target="_blank"
+        rel="noopener noreferrer"
       >
         Stolen Wallet Registry
       </a>

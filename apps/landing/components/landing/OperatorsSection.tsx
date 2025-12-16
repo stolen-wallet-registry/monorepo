@@ -17,19 +17,19 @@ const OPERATOR_FEATURES = [
     title: 'Batch Submissions',
     description:
       'Submit hundreds of stolen wallets and fraudulent transactions in a single transaction. Aggregate fraud intelligence from multiple sources efficiently.',
-    icon: <FileStack className="size-6" />,
+    icon: <FileStack className="size-6" aria-hidden="true" />,
   },
   {
     title: 'Fraudulent Contracts',
     description:
       'Operator-exclusive ability to catalog malicious smart contracts. Report known scam patterns, honeypots, and exploit contracts.',
-    icon: <Code2 className="size-6" />,
+    icon: <Code2 className="size-6" aria-hidden="true" />,
   },
   {
     title: 'Higher Trust Signal',
     description:
       'Operator attestations carry elevated trust in the registry. Your submissions are weighted higher in fraud detection algorithms.',
-    icon: <ShieldCheck className="size-6" />,
+    icon: <ShieldCheck className="size-6" aria-hidden="true" />,
   },
 ];
 
@@ -47,7 +47,10 @@ const OPERATOR_DESCRIPTION =
 
 export function OperatorsSection() {
   return (
-    <section className="border-t border-border/50 bg-gradient-to-b from-muted/20 to-background px-4 py-16 md:py-24">
+    <section
+      id="operators"
+      className="border-t border-border/50 bg-gradient-to-b from-muted/20 to-background px-4 py-16 md:py-24"
+    >
       <div className="mx-auto max-w-6xl">
         {/* Section heading */}
         <div className="mb-12 text-center md:mb-16">

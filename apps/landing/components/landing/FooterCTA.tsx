@@ -1,7 +1,5 @@
 'use client';
 
-import Link from 'next/link';
-
 import { Button, TextAnimate } from '@swr/ui';
 
 /**
@@ -37,16 +35,18 @@ export function FooterCTA() {
 
         <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
           <Button size="lg" asChild className="min-w-[160px]">
-            <Link href={APP_URL}>Launch App</Link>
+            <a href={APP_URL} target="_blank" rel="noopener noreferrer">
+              Launch App
+            </a>
           </Button>
           <Button size="lg" variant="outline" asChild className="min-w-[160px]">
-            <Link
+            <a
               href="https://github.com/stolen-wallet-registry"
               target="_blank"
               rel="noopener noreferrer"
             >
               View on GitHub
-            </Link>
+            </a>
           </Button>
         </div>
       </div>

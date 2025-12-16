@@ -1,9 +1,10 @@
 'use client';
 
 import { Suspense, lazy } from 'react';
-import Link from 'next/link';
 
 import { Button, HyperText, TypingAnimation, Skeleton } from '@swr/ui';
+
+import { ErrorBoundary } from '@/components/ui/error-boundary';
 
 const Globe = lazy(() => import('./Globe').then((mod) => ({ default: mod.Globe })));
 
@@ -42,6 +43,7 @@ export function HeroSection() {
       <div className="relative z-10 flex flex-col items-center">
         {/* Main headline with HyperText scramble effect */}
         <HyperText
+          as="h1"
           className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl"
           duration={1200}
           delay={300}
@@ -67,18 +69,22 @@ export function HeroSection() {
 
         {/* Globe visualization */}
         <div className="relative mt-8 h-[250px] w-full max-w-[350px] overflow-hidden sm:h-[300px] sm:max-w-[400px] md:mt-12 md:h-[400px]">
-          <Suspense fallback={<GlobeSkeleton />}>
-            <Globe className="opacity-90" />
-          </Suspense>
+          <ErrorBoundary fallback={<GlobeSkeleton />}>
+            <Suspense fallback={<GlobeSkeleton />}>
+              <Globe className="opacity-90" />
+            </Suspense>
+          </ErrorBoundary>
         </div>
 
         {/* CTA Buttons */}
         <div className="relative z-10 mt-8 flex flex-col gap-4 sm:flex-row md:mt-12">
           <Button asChild size="lg" className="min-w-[140px]">
-            <Link href={APP_URL}>Launch App</Link>
+            <a href={APP_URL} target="_blank" rel="noopener noreferrer">
+              Launch App
+            </a>
           </Button>
           <Button variant="outline" size="lg" asChild className="min-w-[140px]">
-            <Link href="#cross-chain">Learn More</Link>
+            <a href="#cross-chain">Learn More</a>
           </Button>
         </div>
       </div>

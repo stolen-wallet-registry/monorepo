@@ -72,9 +72,14 @@ export function AnimatedThemeToggler({
     );
 
     // Clean up after animation completes
-    transition.finished.then(() => {
-      document.documentElement.removeAttribute('data-view-transition');
-    });
+    transition.finished
+      .then(() => {
+        document.documentElement.removeAttribute('data-view-transition');
+      })
+      .catch(() => {
+        // Transition was skipped - still clean up
+        document.documentElement.removeAttribute('data-view-transition');
+      });
   }, [isDark, duration, setTheme]);
 
   const handleClick = useCallback(

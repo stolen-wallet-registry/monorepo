@@ -17,28 +17,28 @@ const METHODS = [
     title: 'Standard',
     description: 'Sign and pay from the same wallet you are registering as compromised.',
     useCase: 'Wallet compromised but you still have temporary access',
-    icon: <UserCheck className="size-6" />,
+    icon: <UserCheck className="size-6" aria-hidden="true" />,
     highlight: false,
   },
   {
     title: 'Self-Relay',
     description: 'Sign with compromised wallet, pay gas fees from a different wallet.',
     useCase: 'Wallet drained but you have another funded wallet',
-    icon: <ArrowLeftRight className="size-6" />,
+    icon: <ArrowLeftRight className="size-6" aria-hidden="true" />,
     highlight: true,
   },
   {
     title: 'P2P Relay',
     description: 'Sign with compromised wallet, trusted friend pays gas via libp2p relay.',
     useCase: 'Wallet completely compromised, no funds available',
-    icon: <Users className="size-6" />,
+    icon: <Users className="size-6" aria-hidden="true" />,
     highlight: false,
   },
 ];
 
 export function MethodsSection() {
   return (
-    <section className="border-t border-border/50 px-4 py-16 md:py-24">
+    <section id="methods" className="border-t border-border/50 px-4 py-16 md:py-24">
       <div className="mx-auto max-w-6xl">
         {/* Section heading */}
         <div className="mb-12 text-center md:mb-16">

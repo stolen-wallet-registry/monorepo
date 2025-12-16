@@ -9,19 +9,19 @@ const STEPS = [
     number: 1,
     title: 'Acknowledge',
     description: 'Sign intent to register your compromised wallet using EIP-712 typed data.',
-    icon: <PenLine className="size-5" />,
+    icon: <PenLine className="size-5" aria-hidden="true" />,
   },
   {
     number: 2,
     title: 'Wait',
     description: 'Grace period of 1-4 minutes prevents single-transaction phishing attacks.',
-    icon: <Clock className="size-5" />,
+    icon: <Clock className="size-5" aria-hidden="true" />,
   },
   {
     number: 3,
     title: 'Register',
     description: 'Complete registration within the time window. Wallet is marked permanently.',
-    icon: <CheckCircle2 className="size-5" />,
+    icon: <CheckCircle2 className="size-5" aria-hidden="true" />,
   },
 ];
 
