@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
-import { Link2, Globe, Shield, Droplets, CircleDot } from 'lucide-react';
+import { Globe, Shield, Droplets, CircleDot } from 'lucide-react';
 import {
   AnimatedBeam,
   cn,
@@ -44,6 +44,7 @@ import {
   IconCircle,
   BridgeIcon,
   ChainalysisLogo,
+  HyperlaneLogo,
   SealTeamLogo,
   GroupContainer,
   RegistryHub,
@@ -103,8 +104,8 @@ function StaticConnection({
         d={pathD}
         stroke="currentColor"
         strokeWidth={1}
-        strokeOpacity={0.15}
         strokeDasharray="4 4"
+        className="opacity-15 dark:opacity-30"
       />
     </svg>
   );
@@ -217,12 +218,12 @@ export function CrossChainVisualizationDesktop({
                   <NetworkArbitrumOne variant="branded" className="size-5" />
                 </IconCircle>
                 <IconCircle ref={zkSyncRef} label="zkSync Era" size="xs">
-                  <NetworkZksync variant="branded" className="size-5" />
+                  <NetworkZksync variant="mono" className="size-5" />
                 </IconCircle>
               </div>
               <div className="flex items-center gap-1">
                 <IconCircle ref={lineaRef} label="Linea" size="xs">
-                  <NetworkLinea variant="branded" className="size-5" />
+                  <NetworkLinea variant="mono" className="size-5" />
                 </IconCircle>
                 <IconCircle ref={ethHubRef} label="Ethereum" size="lg" className="mx-1">
                   <NetworkEthereum variant="branded" className="size-9" />
@@ -353,7 +354,7 @@ export function CrossChainVisualizationDesktop({
                   <Globe className="size-5 text-purple-500" />
                 </BridgeIcon>
                 <BridgeIcon label="Hyperlane">
-                  <Link2 className="size-5 text-cyan-500" />
+                  <HyperlaneLogo className="size-5" />
                 </BridgeIcon>
               </div>
             </GroupContainer>
@@ -373,7 +374,7 @@ export function CrossChainVisualizationDesktop({
                   <ExchangeKraken className="size-5" />
                 </IconCircle>
                 <IconCircle label="Chainalysis" size="xs">
-                  <ChainalysisLogo className="text-blue-600" />
+                  <ChainalysisLogo className="text-orange-500" />
                 </IconCircle>
                 <IconCircle label="SEAL Team" size="xs">
                   <SealTeamLogo className="text-red-600" />
@@ -458,7 +459,7 @@ export function CrossChainVisualizationDesktop({
             >
               <div className="flex items-center gap-2">
                 <IconCircle label="Chainalysis" size="sm" pulse pulseDelay={PHASE_3_START + 1.4}>
-                  <ChainalysisLogo className="text-blue-600" />
+                  <ChainalysisLogo className="text-orange-500" />
                 </IconCircle>
                 <IconCircle label="SEAL Team" size="sm" pulse pulseDelay={PHASE_3_START + 1.5}>
                   <SealTeamLogo className="text-red-600" />

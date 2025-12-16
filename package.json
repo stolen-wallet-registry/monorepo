@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter web dev",
+    "dev": "turbo dev --filter=web --filter=landing",
+    "dev:web": "pnpm --filter web dev",
+    "dev:landing": "pnpm --filter landing dev",
     "build": "turbo build",
     "test": "turbo test",
     "lint": "turbo lint",

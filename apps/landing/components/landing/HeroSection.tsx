@@ -42,16 +42,12 @@ export function HeroSection() {
       {/* Content container */}
       <div className="relative z-10 flex flex-col items-center">
         {/* Main headline with HyperText scramble effect */}
-        <HyperText
-          as="h1"
-          className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl"
-          duration={1200}
-          delay={300}
-          startOnView
-          animateOnHover
-        >
-          STOLEN WALLET REGISTRY
-        </HyperText>
+        {/* Note: Using h1 wrapper instead of as="h1" to avoid SSR hydration mismatch with motion.create */}
+        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
+          <HyperText duration={1200} delay={300} startOnView animateOnHover>
+            STOLEN WALLET REGISTRY
+          </HyperText>
+        </h1>
 
         {/* Rotating taglines with typewriter effect */}
         <div className="mt-6 h-12">

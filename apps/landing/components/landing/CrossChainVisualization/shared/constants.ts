@@ -6,16 +6,53 @@ export const PHASE_3_START = 2.5; // Base → Consumers
 export const EMIT_DELAY = PHASE_2_START + 0.8; // When CAIP-10 emission appears
 
 // Chain color and icon mapping for CAIP emissions
+// Dark mode uses higher opacity backgrounds and lighter text colors for visibility
 export const CHAIN_CONFIG: Record<string, { bg: string; text: string; icon: string }> = {
-  'eip155:1': { bg: 'bg-[#627eea]/10', text: 'text-[#627eea]', icon: '⟠' }, // Ethereum
-  'eip155:8453': { bg: 'bg-[#0052ff]/10', text: 'text-[#0052ff]', icon: '🔵' }, // Base
-  'eip155:10': { bg: 'bg-[#ff0420]/10', text: 'text-[#ff0420]', icon: '🔴' }, // Optimism
-  'eip155:42161': { bg: 'bg-[#28a0f0]/10', text: 'text-[#28a0f0]', icon: '🔷' }, // Arbitrum
-  'eip155:43114': { bg: 'bg-[#e84142]/10', text: 'text-[#e84142]', icon: '🔺' }, // Avalanche
-  'eip155:56': { bg: 'bg-[#f0b90b]/10', text: 'text-[#f0b90b]', icon: '🟡' }, // BNB
-  solana: { bg: 'bg-[#9945ff]/10', text: 'text-[#9945ff]', icon: '◎' }, // Solana
-  bip122: { bg: 'bg-[#f7931a]/10', text: 'text-[#f7931a]', icon: '₿' }, // Bitcoin
-  cosmos: { bg: 'bg-[#2e3148]/10', text: 'text-[#6f7390]', icon: '⚛' }, // Cosmos
+  'eip155:1': {
+    bg: 'bg-[#627eea]/10 dark:bg-[#627eea]/25',
+    text: 'text-[#627eea] dark:text-[#8b9eff]',
+    icon: '⟠',
+  }, // Ethereum
+  'eip155:8453': {
+    bg: 'bg-[#0052ff]/10 dark:bg-[#0052ff]/25',
+    text: 'text-[#0052ff] dark:text-[#5c9aff]',
+    icon: '🔵',
+  }, // Base
+  'eip155:10': {
+    bg: 'bg-[#ff0420]/10 dark:bg-[#ff0420]/25',
+    text: 'text-[#ff0420] dark:text-[#ff5c6a]',
+    icon: '🔴',
+  }, // Optimism
+  'eip155:42161': {
+    bg: 'bg-[#28a0f0]/10 dark:bg-[#28a0f0]/25',
+    text: 'text-[#28a0f0] dark:text-[#6cc4ff]',
+    icon: '🔷',
+  }, // Arbitrum
+  'eip155:43114': {
+    bg: 'bg-[#e84142]/10 dark:bg-[#e84142]/25',
+    text: 'text-[#e84142] dark:text-[#ff7a7b]',
+    icon: '🔺',
+  }, // Avalanche
+  'eip155:56': {
+    bg: 'bg-[#f0b90b]/10 dark:bg-[#f0b90b]/25',
+    text: 'text-[#f0b90b] dark:text-[#ffd54f]',
+    icon: '🟡',
+  }, // BNB
+  solana: {
+    bg: 'bg-[#9945ff]/10 dark:bg-[#9945ff]/25',
+    text: 'text-[#9945ff] dark:text-[#b980ff]',
+    icon: '◎',
+  }, // Solana
+  bip122: {
+    bg: 'bg-[#f7931a]/10 dark:bg-[#f7931a]/25',
+    text: 'text-[#f7931a] dark:text-[#ffb54c]',
+    icon: '₿',
+  }, // Bitcoin
+  cosmos: {
+    bg: 'bg-[#2e3148]/10 dark:bg-[#6f7390]/25',
+    text: 'text-[#6f7390] dark:text-[#a8adc0]',
+    icon: '⚛',
+  }, // Cosmos
 };
 
 // Get chain config (color + icon) from CAIP address
