@@ -67,4 +67,6 @@ export { HyperText } from './components/hyper-text';
 export { AnimatedBeam, type AnimatedBeamProps } from './components/animated-beam';
 
 // Web3 Icons (re-exported from @web3icons/react)
+// Note: Full re-export relies on tree-shaking for bundle optimization.
+// For production apps, consider importing directly from @web3icons/react.
 export * from '@web3icons/react';

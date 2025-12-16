@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react';
 
-import { CrossChainVisualization } from './CrossChainVisualization';
+import {
+  CrossChainVisualization,
+  CrossChainVisualizationSkeleton,
+} from './CrossChainVisualization';
 
 const meta: Meta<typeof CrossChainVisualization> = {
   title: 'Landing/CrossChainVisualization',
@@ -126,4 +129,104 @@ export const DarkMode: Story = {
       },
     },
   },
+};
+
+export const Skeleton: Story = {
+  render: () => <CrossChainVisualizationSkeleton />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Skeleton loading state shown while the visualization is loading. Use this as a fallback for Suspense or while fetching data.',
+      },
+    },
+  },
+};
+
+export const SkeletonDarkMode: Story = {
+  render: () => <CrossChainVisualizationSkeleton />,
+  decorators: [
+    (Story) => (
+      <div className="dark min-h-screen bg-zinc-950 p-8">
+        <Story />
+      </div>
+    ),
+  ],
+  parameters: {
+    docs: {
+      description: {
+        story: 'Skeleton loading state in dark mode.',
+      },
+    },
+  },
+};
+
+export const Mobile: Story = {
+  args: {
+    showHeader: true,
+    showLabels: true,
+  },
+  parameters: {
+    viewport: {
+      defaultViewport: 'mobile1',
+    },
+    docs: {
+      description: {
+        story:
+          'Mobile layout with vertical stacking. Shows representative icons and uses animated arrows instead of beams.',
+      },
+    },
+  },
+  decorators: [
+    (Story) => (
+      <div className="min-h-screen w-full max-w-[375px] bg-background p-4">
+        <Story />
+      </div>
+    ),
+  ],
+};
+
+export const MobileDarkMode: Story = {
+  args: {
+    showHeader: true,
+    showLabels: true,
+  },
+  parameters: {
+    viewport: {
+      defaultViewport: 'mobile1',
+    },
+    docs: {
+      description: {
+        story: 'Mobile layout in dark mode.',
+      },
+    },
+  },
+  decorators: [
+    (Story) => (
+      <div className="dark min-h-screen w-full max-w-[375px] bg-zinc-950 p-4">
+        <Story />
+      </div>
+    ),
+  ],
+};
+
+export const MobileSkeleton: Story = {
+  render: () => <CrossChainVisualizationSkeleton />,
+  parameters: {
+    viewport: {
+      defaultViewport: 'mobile1',
+    },
+    docs: {
+      description: {
+        story: 'Mobile skeleton loading state.',
+      },
+    },
+  },
+  decorators: [
+    (Story) => (
+      <div className="min-h-screen w-full max-w-[375px] bg-background p-4">
+        <Story />
+      </div>
+    ),
+  ],
 };
