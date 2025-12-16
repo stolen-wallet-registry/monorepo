@@ -7,8 +7,7 @@
 import { useChainId } from 'wagmi';
 import { useLocation } from 'wouter';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';

@@ -11,7 +11,7 @@ import { Bug, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
 import type { Connection } from '@libp2p/interface';
 
-import { Button } from '@/components/ui/button';
+import { Button } from '@swr/ui';
 import { cn } from '@/lib/utils';
 import { getRelayPeerIds } from '@/lib/p2p/types';
 

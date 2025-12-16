@@ -1,13 +1,13 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
 import {
+  Button,
   Card,
   CardHeader,
   CardTitle,
   CardDescription,
   CardContent,
   CardFooter,
-} from '@/components/ui/card';
+} from '@swr/ui';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { logger } from '@/lib/logger';
 

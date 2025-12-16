@@ -11,9 +11,16 @@ import { ArrowLeft } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
 import type { Connection, Stream } from '@libp2p/interface';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@swr/ui';
 import { StepIndicator } from '@/components/composed/StepIndicator';
 import { P2PDebugPanel } from '@/components/dev/P2PDebugPanel';
 import {

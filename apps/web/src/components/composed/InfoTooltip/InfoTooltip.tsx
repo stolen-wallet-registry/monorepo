@@ -5,7 +5,7 @@
  */
 
 import { Info } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
 import { cn } from '@/lib/utils';
 
 export interface InfoTooltipProps {

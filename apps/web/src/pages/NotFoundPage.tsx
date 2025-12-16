@@ -5,8 +5,7 @@
 import { useLocation } from 'wouter';
 import { Home } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
 
 export function NotFoundPage() {
   const [, setLocation] = useLocation();

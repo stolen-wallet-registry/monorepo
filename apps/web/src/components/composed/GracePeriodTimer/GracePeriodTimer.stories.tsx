@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState, useEffect, useCallback } from 'react';
 import { GracePeriodTimer } from './GracePeriodTimer';
-import { Button } from '@/components/ui/button';
+import { Button } from '@swr/ui';
 import { formatTimeRemaining } from '@/lib/blocks';
 
 const meta: Meta<typeof GracePeriodTimer> = {

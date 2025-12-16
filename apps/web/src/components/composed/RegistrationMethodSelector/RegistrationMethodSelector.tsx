@@ -5,8 +5,7 @@
  * registration methods with descriptions of each.
  */
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge } from '@swr/ui';
 import { cn } from '@/lib/utils';
 import { Wallet, RefreshCw, Users } from 'lucide-react';
 import type { RegistrationType } from '@/stores/registrationStore';

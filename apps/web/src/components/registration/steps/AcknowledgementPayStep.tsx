@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription } from '@swr/ui';
 import {
   TransactionCard,
   type TransactionStatus,

@@ -10,7 +10,7 @@ import type { Libp2p } from 'libp2p';
 
 import { SignatureCard, type SignatureStatus } from '@/components/composed/SignatureCard';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription } from '@swr/ui';
 import { useSignEIP712 } from '@/hooks/useSignEIP712';
 import { useRegistrationHashStruct } from '@/hooks/useGenerateHashStruct';
 import { useContractNonce } from '@/hooks/useContractNonce';

@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription } from '@swr/ui';
 import { SignatureCard, type SignatureStatus } from '@/components/composed/SignatureCard';
 import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import { useRegistrationStore } from '@/stores/registrationStore';

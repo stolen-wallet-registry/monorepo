@@ -11,7 +11,7 @@ import * as React from 'react';
 import { forwardRef, useMemo } from 'react';
 import { Check, AlertCircle } from 'lucide-react';
 import { isAddress } from 'viem';
-import { Input } from '@/components/ui/input';
+import { Input } from '@swr/ui';
 import { cn } from '@/lib/utils';
 
 export type AddressType = 'ethereum' | 'solana' | 'bitcoin' | 'auto';

@@ -5,7 +5,7 @@
  * Used in SignatureCard and P2P payment steps.
  */
 
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@swr/ui';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { getChainShortName } from '@/lib/explorer';

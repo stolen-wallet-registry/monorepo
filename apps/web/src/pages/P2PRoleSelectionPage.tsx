@@ -9,8 +9,7 @@ import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft, User, HandHelping } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
 
 interface RoleCardProps {
   title: string;

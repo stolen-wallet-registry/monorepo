@@ -4,7 +4,7 @@ import { AppProviders } from '@/providers';
 import { Layout } from '@/components/layout';
 import { DevTools } from '@/components/dev';
 import { ErrorBoundary } from '@/components/composed/ErrorBoundary';
-import { Toaster } from '@/components/ui/sonner';
+import { Toaster } from '@swr/ui';
 import {
   HomePage,
   StandardRegistrationPage,

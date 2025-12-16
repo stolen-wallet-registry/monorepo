@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription } from '@swr/ui';
 import { PeerIdDisplay, PeerConnectForm } from '@/components/p2p';
 
 /**
