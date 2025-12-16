@@ -44,6 +44,7 @@ import {
   IconCircle,
   BridgeIcon,
   ChainalysisLogo,
+  SealTeamLogo,
   GroupContainer,
   RegistryHub,
   SectionTitle,
@@ -374,8 +375,8 @@ export function CrossChainVisualizationDesktop({
                 <IconCircle label="Chainalysis" size="xs">
                   <ChainalysisLogo className="text-blue-600" />
                 </IconCircle>
-                <IconCircle label="Security Firm" size="xs">
-                  <Shield className="size-4 text-green-500" />
+                <IconCircle label="SEAL Team" size="xs">
+                  <SealTeamLogo className="text-red-600" />
                 </IconCircle>
               </div>
             </GroupContainer>
@@ -458,6 +459,9 @@ export function CrossChainVisualizationDesktop({
               <div className="flex items-center gap-2">
                 <IconCircle label="Chainalysis" size="sm" pulse pulseDelay={PHASE_3_START + 1.4}>
                   <ChainalysisLogo className="text-blue-600" />
+                </IconCircle>
+                <IconCircle label="SEAL Team" size="sm" pulse pulseDelay={PHASE_3_START + 1.5}>
+                  <SealTeamLogo className="text-red-600" />
                 </IconCircle>
                 <IconCircle label="Security Firm" size="sm" pulse pulseDelay={PHASE_3_START + 1.6}>
                   <Shield className="size-5 text-green-500" />

@@ -16,7 +16,7 @@ import {
   TokenLINK,
 } from '@swr/ui';
 
-import { IconCircle, BridgeIcon, MobileSection, MobileRegistryHub } from './shared';
+import { IconCircle, BridgeIcon, MobileSection, MobileRegistryHub, SealTeamLogo } from './shared';
 
 import type { CrossChainVisualizationProps } from './types';
 
@@ -128,7 +128,10 @@ export function CrossChainVisualizationMobile({
             <IconCircle label="Kraken" size="sm" pulse pulseDelay={0.6}>
               <ExchangeKraken className="size-6" />
             </IconCircle>
-            <IconCircle label="Security" size="sm" pulse pulseDelay={0.9}>
+            <IconCircle label="SEAL Team" size="sm" pulse pulseDelay={0.9}>
+              <SealTeamLogo className="text-red-600" />
+            </IconCircle>
+            <IconCircle label="Security" size="sm" pulse pulseDelay={1.2}>
               <Shield className="size-5 text-green-500" />
             </IconCircle>
           </div>

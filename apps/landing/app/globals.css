@@ -4,3 +4,13 @@
 /* Tell Tailwind to scan landing page components */
 @source "../components/**/*.tsx";
 @source "./**/*.tsx";
+
+/* Smooth scroll behavior for anchor links */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Offset for sticky header when scrolling to anchor */
+:target {
+  scroll-margin-top: 80px;
+}

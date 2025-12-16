@@ -1,69 +1,41 @@
-import { Button } from '@swr/ui';
-import Link from 'next/link';
-
-import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler';
-
-/**
- * Landing page - placeholder structure.
- *
- * This is the marketing/SEO landing page. No Web3 functionality here.
- * Users click "Launch App" to go to the Vite app with wallet connection.
- *
- * Run `/execute-prp PRPs/07-landing-page-registry-navigation.md` to build out
- * the full landing page with all sections (Globe, Beams, Features, etc.).
- */
+import { Header } from '@/components/landing/Header';
+import { HeroSection } from '@/components/landing/HeroSection';
+import { CrossChainSection } from '@/components/landing/CrossChainSection';
+import { RegistriesSection } from '@/components/landing/RegistriesSection';
+import { OperatorsSection } from '@/components/landing/OperatorsSection';
+import { HowItWorksSection } from '@/components/landing/HowItWorksSection';
+import { MethodsSection } from '@/components/landing/MethodsSection';
+import { FooterCTA, Footer } from '@/components/landing/FooterCTA';
 
 /**
- * App URL for "Launch App" links.
- * Configured via NEXT_PUBLIC_APP_URL environment variable.
- * Falls back to localhost:5173 for development.
+ * Landing page - Marketing/SEO entry point for Stolen Wallet Registry.
+ *
+ * This is a static page (SSG) with no Web3 functionality.
+ * Users click "Launch App" to navigate to the Vite registration app.
+ *
+ * Sections:
+ * 1. Header - Sticky nav with theme toggle and Launch App
+ * 2. Hero - "Stolen {Wallet|Transaction} Registry" with rotating text, Globe
+ * 3. Cross-Chain - Data flow visualization showing multi-chain architecture
+ * 4. Registries - Three registry cards (Wallets, Transactions, Contracts)
+ * 5. Operators - Trusted Operator Program (Coming Soon)
+ * 6. How It Works - Two-phase registration explanation
+ * 7. Methods - Three registration method options
+ * 8. FooterCTA - Call to action with Launch App button
+ * 9. Footer - Simple copyright/info
  */
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5173';
-
 export default function LandingPage() {
   return (
     <main className="flex min-h-screen flex-col">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4">
-        <div className="text-xl font-bold">SWR</div>
-        <div className="flex items-center gap-3">
-          <AnimatedThemeToggler />
-          <Button asChild>
-            <Link href={APP_URL}>Launch App</Link>
-          </Button>
-        </div>
-      </header>
-
-      {/* Hero Section - Placeholder */}
-      <section className="flex flex-1 flex-col items-center justify-center px-4 py-24 text-center">
-        <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">Stolen Wallet Registry</h1>
-        <p className="mt-6 max-w-2xl text-lg text-muted-foreground">
-          A global, cross-chain registry for stolen wallets and fraudulent transactions. Register
-          compromised wallets, report fraud, and help protect the Web3 ecosystem.
-        </p>
-        <div className="mt-10 flex gap-4">
-          <Button asChild size="lg">
-            <Link href={APP_URL}>Launch App</Link>
-          </Button>
-          <Button variant="outline" size="lg" asChild>
-            <Link href="#how-it-works">Learn More</Link>
-          </Button>
-        </div>
-      </section>
-
-      {/* Placeholder sections - will be built out via PRP-07 */}
-      <section id="how-it-works" className="border-t border-border px-4 py-16 text-center">
-        <p className="text-sm text-muted-foreground">
-          Additional sections (Globe, Cross-Chain Viz, How It Works, etc.) coming soon.
-          <br />
-          Run the PRP-07 execute command to build them out.
-        </p>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-border px-6 py-8 text-center text-sm text-muted-foreground">
-        <p>Stolen Wallet Registry - A public good for Web3 security</p>
-      </footer>
+      <Header />
+      <HeroSection />
+      <CrossChainSection />
+      <RegistriesSection />
+      <OperatorsSection />
+      <HowItWorksSection />
+      <MethodsSection />
+      <FooterCTA />
+      <Footer />
     </main>
   );
 }

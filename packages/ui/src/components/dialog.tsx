@@ -38,6 +38,27 @@ function DialogOverlay({
   );
 }
 
+/**
+ * DialogContent renders the main content area of a dialog.
+ *
+ * **Accessibility:** For proper ARIA labeling, always include a `DialogTitle`
+ * and optionally a `DialogDescription` as children. Radix UI automatically
+ * connects these to `aria-labelledby` and `aria-describedby` attributes.
+ *
+ * @example
+ * ```tsx
+ * <Dialog>
+ *   <DialogTrigger>Open</DialogTrigger>
+ *   <DialogContent>
+ *     <DialogHeader>
+ *       <DialogTitle>Dialog Title</DialogTitle>
+ *       <DialogDescription>Optional description text.</DialogDescription>
+ *     </DialogHeader>
+ *     {content}
+ *   </DialogContent>
+ * </Dialog>
+ * ```
+ */
 function DialogContent({
   className,
   children,

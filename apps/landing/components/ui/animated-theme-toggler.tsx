@@ -1,11 +1,16 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useSyncExternalStore } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { flushSync } from 'react-dom';
 import { useTheme } from 'next-themes';
 
 import { cn } from '@swr/ui';
+
+// React 18+ idiomatic pattern for client-side detection
+const emptySubscribe = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 
 interface AnimatedThemeTogglerProps extends React.ComponentPropsWithoutRef<'button'> {
   duration?: number;
@@ -19,6 +24,10 @@ export function AnimatedThemeToggler({
 }: AnimatedThemeTogglerProps) {
   const { resolvedTheme, setTheme } = useTheme();
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Avoid hydration mismatch by detecting client vs server
+  const mounted = useSyncExternalStore(emptySubscribe, getClientSnapshot, getServerSnapshot);
+
   const isDark = resolvedTheme === 'dark';
 
   const toggleTheme = useCallback(async () => {
@@ -75,6 +84,23 @@ export function AnimatedThemeToggler({
     },
     [toggleTheme, onClick]
   );
+
+  // Render a placeholder during SSR/hydration to avoid flash
+  if (!mounted) {
+    return (
+      <button
+        type="button"
+        className={cn(
+          'flex size-10 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm',
+          className
+        )}
+        aria-label="Toggle theme"
+        disabled
+      >
+        <span className="size-5" />
+      </button>
+    );
+  }
 
   return (
     <button
