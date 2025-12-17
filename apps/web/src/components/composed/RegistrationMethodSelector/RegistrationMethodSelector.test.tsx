@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RegistrationMethodSelector } from './RegistrationMethodSelector';
@@ -6,7 +6,6 @@ import type { RegistrationType } from '@/stores/registrationStore';
 
 describe('RegistrationMethodSelector', () => {
   const defaultProps = {
-    selected: null as RegistrationType | null,
     onSelect: vi.fn<(type: RegistrationType) => void>(),
     p2pAvailable: true,
   };
@@ -43,13 +42,7 @@ describe('RegistrationMethodSelector', () => {
     });
   });
 
-  describe('selection', () => {
-    it('shows selected badge when a method is selected', () => {
-      render(<RegistrationMethodSelector {...defaultProps} selected="standard" />);
-
-      expect(screen.getByText('Selected')).toBeInTheDocument();
-    });
-
+  describe('interaction', () => {
     it('calls onSelect when clicking a method', async () => {
       const user = userEvent.setup();
       const onSelect = vi.fn();
@@ -67,7 +60,7 @@ describe('RegistrationMethodSelector', () => {
 
       const card = screen
         .getByText('Standard Registration')
-        .closest('[role="radio"]') as HTMLElement;
+        .closest('[role="button"]') as HTMLElement;
       card.focus();
       await user.keyboard('{Enter}');
 
@@ -81,7 +74,7 @@ describe('RegistrationMethodSelector', () => {
 
       const card = screen
         .getByText('Self-Relay Registration')
-        .closest('[role="radio"]') as HTMLElement;
+        .closest('[role="button"]') as HTMLElement;
       card.focus();
       await user.keyboard(' ');
 
@@ -122,34 +115,24 @@ describe('RegistrationMethodSelector', () => {
   });
 
   describe('accessibility', () => {
-    it('has radiogroup container with label', () => {
+    it('has group container with label', () => {
       render(<RegistrationMethodSelector {...defaultProps} />);
 
-      const radiogroup = screen.getByRole('radiogroup');
-      expect(radiogroup).toHaveAttribute('aria-label', 'Registration method');
-    });
-
-    it('sets aria-checked on selected card', () => {
-      render(<RegistrationMethodSelector {...defaultProps} selected="selfRelay" />);
-
-      const selfRelayCard = screen.getByText('Self-Relay Registration').closest('[role="radio"]');
-      expect(selfRelayCard).toHaveAttribute('aria-checked', 'true');
-
-      const standardCard = screen.getByText('Standard Registration').closest('[role="radio"]');
-      expect(standardCard).toHaveAttribute('aria-checked', 'false');
+      const group = screen.getByRole('group');
+      expect(group).toHaveAttribute('aria-label', 'Registration method');
     });
 
     it('sets aria-disabled on disabled card', () => {
       render(<RegistrationMethodSelector {...defaultProps} p2pAvailable={false} />);
 
-      const p2pCard = screen.getByText('P2P Relay Registration').closest('[role="radio"]');
+      const p2pCard = screen.getByText('P2P Relay Registration').closest('[role="button"]');
       expect(p2pCard).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('sets tabIndex -1 on disabled card', () => {
       render(<RegistrationMethodSelector {...defaultProps} p2pAvailable={false} />);
 
-      const p2pCard = screen.getByText('P2P Relay Registration').closest('[role="radio"]');
+      const p2pCard = screen.getByText('P2P Relay Registration').closest('[role="button"]');
       expect(p2pCard).toHaveAttribute('tabIndex', '-1');
     });
   });

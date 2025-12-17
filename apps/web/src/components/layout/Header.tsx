@@ -18,9 +18,13 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { href: '/', label: 'Register' },
-    { href: '/search', label: 'Search' },
+    { href: '/', label: 'Register', matchPaths: ['/', '/register', '/registration'] },
+    { href: '/search', label: 'Search', matchPaths: ['/search'] },
   ];
+
+  // Check if current location matches any of the paths for a nav item
+  const isActive = (matchPaths: string[]) =>
+    matchPaths.some((path) => location === path || location.startsWith(path + '/'));
 
   return (
     <header className="border-b border-border">
@@ -44,7 +48,7 @@ export function Header() {
                 className={cn(
                   'inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 py-2 cursor-pointer',
                   'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                  location === item.href
+                  isActive(item.matchPaths)
                     ? 'bg-accent text-accent-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
                 )}
@@ -83,7 +87,7 @@ export function Header() {
                 className={cn(
                   'inline-flex items-center rounded-md text-sm font-medium h-9 px-4 py-2 w-full cursor-pointer',
                   'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                  location === item.href
+                  isActive(item.matchPaths)
                     ? 'bg-accent text-accent-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
                 )}

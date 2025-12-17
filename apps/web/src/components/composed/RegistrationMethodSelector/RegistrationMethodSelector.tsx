@@ -21,9 +21,7 @@ export interface MethodConfig {
 }
 
 export interface RegistrationMethodSelectorProps {
-  /** Currently selected method */
-  selected: RegistrationType | null;
-  /** Callback when a method is selected */
+  /** Callback when a method is clicked */
   onSelect: (type: RegistrationType) => void;
   /** Whether P2P relay is available (has connected peer) */
   p2pAvailable?: boolean;
@@ -62,7 +60,6 @@ const DEFAULT_METHODS: MethodConfig[] = [
  * Displays registration method options as selectable cards.
  */
 export function RegistrationMethodSelector({
-  selected,
   onSelect,
   p2pAvailable = true,
   className,
@@ -76,20 +73,18 @@ export function RegistrationMethodSelector({
 
   return (
     <div
-      role="radiogroup"
+      role="group"
       aria-label="Registration method"
       className={cn('grid gap-4 md:grid-cols-3', className)}
     >
       {methods.map((method) => {
-        const isSelected = selected === method.type;
         const isDisabled = method.disabled;
 
         return (
           <Card
             key={method.type}
-            role="radio"
+            role="button"
             tabIndex={isDisabled ? -1 : 0}
-            aria-checked={isSelected}
             aria-disabled={isDisabled}
             onClick={() => !isDisabled && onSelect(method.type)}
             onKeyDown={(e) => {
@@ -100,22 +95,15 @@ export function RegistrationMethodSelector({
             }}
             className={cn(
               'h-full cursor-pointer transition-all',
-              isSelected && 'ring-2 ring-primary border-primary',
               isDisabled && 'opacity-50 cursor-not-allowed',
-              !isSelected && !isDisabled && 'hover:border-primary/50'
+              !isDisabled && 'hover:ring-2 hover:ring-primary hover:border-primary hover:shadow-lg'
             )}
           >
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <div
-                  className={cn(
-                    'p-2 rounded-lg',
-                    isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted'
-                  )}
-                >
+                <div className="p-2 rounded-lg bg-muted group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                   {method.icon}
                 </div>
-                {isSelected && <Badge variant="default">Selected</Badge>}
                 {isDisabled && method.disabledReason && (
                   <Badge variant="secondary">{method.disabledReason}</Badge>
                 )}
