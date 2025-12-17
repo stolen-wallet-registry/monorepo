@@ -17,21 +17,31 @@ import { truncateAddress } from '@/lib/address';
 const RECENT_SEARCHES_KEY = 'swr-recent-searches';
 const MAX_RECENT_SEARCHES = 5;
 
+// Cached snapshot for useSyncExternalStore (must return same reference if data unchanged)
+let cachedRecentSearches: string[] = [];
+let cachedRecentSearchesJson: string | null = null;
+
 /**
  * Gets recent searches from localStorage.
  * SSR-safe: returns empty array if localStorage is unavailable.
+ * Returns cached reference if data unchanged (required for useSyncExternalStore).
  */
 function getRecentSearches(): string[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') return cachedRecentSearches;
   try {
     const stored = localStorage.getItem(RECENT_SEARCHES_KEY);
-    if (stored) {
-      return JSON.parse(stored);
+    // Return cached if unchanged
+    if (stored === cachedRecentSearchesJson) {
+      return cachedRecentSearches;
     }
+    // Update cache
+    cachedRecentSearchesJson = stored;
+    cachedRecentSearches = stored ? JSON.parse(stored) : [];
+    return cachedRecentSearches;
   } catch {
     // Ignore localStorage errors
   }
-  return [];
+  return cachedRecentSearches;
 }
 
 /**

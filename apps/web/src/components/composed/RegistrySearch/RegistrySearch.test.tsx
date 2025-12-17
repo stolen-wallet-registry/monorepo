@@ -141,26 +141,26 @@ describe('RegistrySearchResult', () => {
   });
 
   describe('address display', () => {
-    it('truncates address in all status displays', () => {
+    it('displays full address in all status displays', () => {
       const { rerender } = renderWithProviders(
         <RegistrySearchResult address={sampleAddress} status="registered" />
       );
-      // Address should be truncated (0xd8dA...6045)
-      expect(screen.getByText('0xd8dA...6045')).toBeInTheDocument();
+      // Address should be displayed in full
+      expect(screen.getByText(sampleAddress)).toBeInTheDocument();
 
       rerender(
         <TooltipProvider>
           <RegistrySearchResult address={sampleAddress} status="pending" />
         </TooltipProvider>
       );
-      expect(screen.getByText('0xd8dA...6045')).toBeInTheDocument();
+      expect(screen.getByText(sampleAddress)).toBeInTheDocument();
 
       rerender(
         <TooltipProvider>
           <RegistrySearchResult address={sampleAddress} status="not-found" />
         </TooltipProvider>
       );
-      expect(screen.getByText('0xd8dA...6045')).toBeInTheDocument();
+      expect(screen.getByText(sampleAddress)).toBeInTheDocument();
     });
   });
 });

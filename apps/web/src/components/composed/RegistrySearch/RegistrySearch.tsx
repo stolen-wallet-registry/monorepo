@@ -128,33 +128,47 @@ export function RegistrySearch({
     <div className={cn('space-y-4', className)}>
       {/* Search Input */}
       <div className="space-y-2">
-        <InputGroup data-disabled={isLoading}>
-          <InputGroupAddon>
-            <Search className="h-4 w-4" />
-          </InputGroupAddon>
-          <InputGroupInput
-            value={inputValue}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              setInputValue(e.target.value);
-              if (validationError) setValidationError(null);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="Search wallet address (0x...)"
-            disabled={!!isLoading}
-            aria-invalid={!!showError}
-            aria-describedby={showError ? 'search-error' : undefined}
-            className={compact ? 'text-sm' : ''}
-          />
-          <InputGroupAddon align="inline-end">
+        <div className="flex gap-2">
+          <InputGroup data-disabled={isLoading} className="flex-1">
+            <InputGroupAddon>
+              <Search className="h-4 w-4" />
+            </InputGroupAddon>
+            <InputGroupInput
+              value={inputValue}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                setInputValue(e.target.value);
+                if (validationError) setValidationError(null);
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder="Search wallet address (0x...)"
+              disabled={!!isLoading}
+              aria-invalid={!!showError}
+              aria-describedby={showError ? 'search-error' : undefined}
+              className={compact ? 'text-sm' : ''}
+            />
+            <InputGroupAddon align="inline-end">
+              {inputValue && !isLoading ? (
+                <InputGroupButton size="icon-xs" onClick={handleClear} aria-label="Clear search">
+                  <X className="h-3 w-3" />
+                </InputGroupButton>
+              ) : null}
+            </InputGroupAddon>
+          </InputGroup>
+          <InputGroupButton
+            onClick={handleSearch}
+            disabled={!!isLoading || !inputValue.trim()}
+            className={compact ? 'h-9 px-3' : 'h-10 px-4'}
+          >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
-            ) : inputValue ? (
-              <InputGroupButton size="icon-xs" onClick={handleClear} aria-label="Clear search">
-                <X className="h-3 w-3" />
-              </InputGroupButton>
-            ) : null}
-          </InputGroupAddon>
-        </InputGroup>
+            ) : (
+              <>
+                <Search className="h-4 w-4 mr-2" />
+                Search
+              </>
+            )}
+          </InputGroupButton>
+        </div>
 
         {/* Validation Error */}
         {validationError && (

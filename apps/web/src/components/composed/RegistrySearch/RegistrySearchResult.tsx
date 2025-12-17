@@ -8,7 +8,6 @@
 import { Alert, AlertTitle, AlertDescription, Badge } from '@swr/ui';
 import { AlertCircle, Clock, CheckCircle2 } from 'lucide-react';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
-import { truncateAddress } from '@/lib/address';
 import { cn } from '@/lib/utils';
 import type { RegistrationData, AcknowledgementData } from '@/hooks';
 
@@ -49,8 +48,8 @@ export function RegistrySearchResult({
         </AlertTitle>
         <AlertDescription className="space-y-2">
           <p>
-            This wallet (<code className="text-xs">{truncateAddress(address)}</code>) has been
-            registered as stolen.
+            This wallet (<code className="text-xs break-all">{address}</code>) has been registered
+            as stolen.
           </p>
           {registrationData && (
             <div className="text-xs space-y-1 mt-2 pt-2 border-t border-destructive/20">
@@ -96,7 +95,7 @@ export function RegistrySearchResult({
         </AlertTitle>
         <AlertDescription className="space-y-2 text-yellow-800 dark:text-yellow-200">
           <p>
-            This wallet (<code className="text-xs">{truncateAddress(address)}</code>) has an
+            This wallet (<code className="text-xs break-all">{address}</code>) has an
             acknowledgement pending. Registration may complete soon.
           </p>
           {acknowledgementData && (
@@ -140,8 +139,8 @@ export function RegistrySearchResult({
       </AlertTitle>
       <AlertDescription className="text-green-800 dark:text-green-200">
         <p>
-          This wallet (<code className="text-xs">{truncateAddress(address)}</code>) is not in the
-          stolen wallet registry.
+          This wallet (<code className="text-xs break-all">{address}</code>) is not in the stolen
+          wallet registry.
         </p>
       </AlertDescription>
     </Alert>

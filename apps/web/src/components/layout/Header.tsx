@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { Search, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { Button } from '@swr/ui';
 
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler';
@@ -18,8 +18,8 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { href: '/', label: 'Register', icon: null },
-    { href: '/search', label: 'Search', icon: <Search className="h-4 w-4 mr-1.5" /> },
+    { href: '/', label: 'Register' },
+    { href: '/search', label: 'Search' },
   ];
 
   return (
@@ -38,21 +38,19 @@ export function Header() {
           {/* Desktop Navigation */}
           <nav className="hidden sm:flex items-center gap-1">
             {navItems.map((item) => (
-              <Button
+              <Link
                 key={item.href}
-                variant="ghost"
-                size="sm"
-                asChild
+                href={item.href}
                 className={cn(
-                  'text-muted-foreground hover:text-foreground',
-                  location === item.href && 'text-foreground bg-accent'
+                  'inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 py-2 cursor-pointer',
+                  'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  location === item.href
+                    ? 'bg-accent text-accent-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
                 )}
               >
-                <Link href={item.href}>
-                  {item.icon}
-                  {item.label}
-                </Link>
-              </Button>
+                {item.label}
+              </Link>
             ))}
           </nav>
         </div>
@@ -78,22 +76,20 @@ export function Header() {
         <nav className="sm:hidden border-t border-border p-2">
           <div className="flex flex-col gap-1">
             {navItems.map((item) => (
-              <Button
+              <Link
                 key={item.href}
-                variant="ghost"
-                size="sm"
-                asChild
-                className={cn(
-                  'w-full justify-start text-muted-foreground hover:text-foreground',
-                  location === item.href && 'text-foreground bg-accent'
-                )}
+                href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
+                className={cn(
+                  'inline-flex items-center rounded-md text-sm font-medium h-9 px-4 py-2 w-full cursor-pointer',
+                  'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  location === item.href
+                    ? 'bg-accent text-accent-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                )}
               >
-                <Link href={item.href}>
-                  {item.icon}
-                  {item.label}
-                </Link>
-              </Button>
+                {item.label}
+              </Link>
             ))}
           </div>
         </nav>
