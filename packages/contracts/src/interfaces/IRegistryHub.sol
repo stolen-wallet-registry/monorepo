@@ -30,7 +30,7 @@ interface IRegistryHub {
 
     /// @notice Emitted when the hub is paused or unpaused
     /// @param paused True if hub is now paused, false if unpaused
-    event HubPaused(bool indexed paused);
+    event HubPaused(bool paused);
 
     /// @notice Emitted when a subregistry is registered or updated
     /// @param registryType Identifier for the registry type

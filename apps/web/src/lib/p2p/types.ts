@@ -218,7 +218,7 @@ export const RELAY_SERVERS: Record<string, RelayConfig[]> = {
       //
       // Alternative: Set VITE_RELAY_MULTIADDR env var to override this value.
       multiaddr:
-        '/ip4/127.0.0.1/tcp/12312/ws/p2p/12D3KooWM2Y6DHz2sQVrQ4hABTyPzW8GwLWb7eqznMsVh4Nk3jtp',
+        '/ip4/127.0.0.1/tcp/12312/ws/p2p/12D3KooWJCJbTjCCnCTGNSENuGK6Pu1aRqjLEJ4P7vEtFofpSXt7',
       isDev: true,
     },
   ],
