@@ -35,7 +35,12 @@ export function FooterCTA() {
 
         <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
           <Button size="lg" asChild className="min-w-[160px]">
-            <a href={APP_URL} target="_blank" rel="noopener noreferrer">
+            <a
+              href={APP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Launch App (opens in new tab)"
+            >
               Launch App
             </a>
           </Button>
@@ -44,6 +49,7 @@ export function FooterCTA() {
               href="https://github.com/stolen-wallet-registry"
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="View on GitHub (opens in new tab)"
             >
               View on GitHub
             </a>

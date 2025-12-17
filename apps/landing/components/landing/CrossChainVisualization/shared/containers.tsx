@@ -210,7 +210,13 @@ export function MobileSection({
 // Mobile registry hub (no CAIP emission - without beams it lacks context)
 export function MobileRegistryHub({ showLabels = true }: { showLabels?: boolean }) {
   return (
-    <div className="relative flex w-full flex-col items-center gap-3 rounded-xl border border-border/50 bg-background/50 p-4 backdrop-blur-sm dark:border-border/70 dark:bg-background/60">
+    <div
+      className={cn(
+        'relative flex w-full flex-col items-center gap-3 rounded-xl border p-4 backdrop-blur-sm',
+        'border-border/50 dark:border-border/70',
+        'bg-background/50 dark:bg-background/60'
+      )}
+    >
       {showLabels && (
         <div className="flex items-center gap-1">
           <span className="text-sm font-bold text-foreground">Stolen Wallet Registry</span>

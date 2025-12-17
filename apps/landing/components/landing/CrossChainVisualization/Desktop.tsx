@@ -111,6 +111,47 @@ function StaticConnection({
   );
 }
 
+// Visually hidden but accessible to screen readers
+function ScreenReaderDescription() {
+  return (
+    <div
+      className="sr-only"
+      role="region"
+      aria-label="Cross-chain fraud reporting data flow description"
+    >
+      <h3>Cross-Chain Fraud Reporting Flow</h3>
+      <p>
+        This visualization shows how stolen wallet reports flow through the Stolen Wallet Registry
+        system across multiple blockchains.
+      </p>
+      <ol>
+        <li>
+          <strong>Step 1 - Report Fraud:</strong> Users report stolen wallets from any supported
+          blockchain including Ethereum and its Layer 2s (Optimism, Arbitrum, Polygon, zkSync,
+          Linea, Gnosis, Celo), EVM chains (BNB Chain, Avalanche, Fantom), non-EVM chains (Solana,
+          NEAR, Cosmos), and Bitcoin.
+        </li>
+        <li>
+          <strong>Step 2 - Cross-Chain Messaging:</strong> Reports are transmitted through
+          cross-chain messaging protocols (Chainlink CCIP, Wormhole, Hyperlane) to the central
+          registry. Trusted operators like Coinbase, Kraken, and security firms can also submit
+          reports directly.
+        </li>
+        <li>
+          <strong>Step 3 - Registry Settlement:</strong> All reports are consolidated on Base
+          blockchain using CAIP-10 chain-agnostic identifiers, enabling tracking of addresses from
+          any blockchain in a single registry.
+        </li>
+        <li>
+          <strong>Step 4 - React to Events:</strong> Exchanges (Coinbase, Kraken, Gemini, Binance),
+          wallets (MetaMask, Rainbow, Coinbase Wallet), and security services (Chainalysis, SEAL
+          Team) subscribe to registry events and receive real-time alerts to protect users.
+        </li>
+      </ol>
+    </div>
+  );
+}
+
 export function CrossChainVisualizationDesktop({
   className,
   showHeader = true,
@@ -169,7 +210,14 @@ export function CrossChainVisualizationDesktop({
 
   return (
     <TooltipProvider delayDuration={100}>
-      <div className={cn('flex flex-col items-center gap-6', className)}>
+      <div
+        className={cn('flex flex-col items-center gap-6', className)}
+        role="figure"
+        aria-label="Cross-chain fraud reporting visualization"
+      >
+        {/* Screen reader accessible description */}
+        <ScreenReaderDescription />
+
         {showHeader && (
           <div className="text-center">
             <h2 className="text-2xl font-bold text-foreground">One Data Registry, Every Chain.</h2>
@@ -192,6 +240,7 @@ export function CrossChainVisualizationDesktop({
         <div
           ref={containerRef}
           className="relative flex h-[500px] w-full max-w-[1200px] items-center justify-between px-2 md:h-[600px] md:px-4 lg:h-[650px]"
+          aria-hidden="true"
         >
           {/* LEFT SIDE: Networks */}
           <div className="flex w-44 flex-col items-center gap-2 md:w-52 md:gap-3 lg:w-60">
