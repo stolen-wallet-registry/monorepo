@@ -9,9 +9,10 @@ import { AlertTriangle, Clock, X } from 'lucide-react';
 interface MockConnectedWalletStatusProps {
   status: 'registered' | 'pending' | 'clean';
   address: string;
+  onDismiss?: () => void;
 }
 
-function MockConnectedWalletStatus({ status, address }: MockConnectedWalletStatusProps) {
+function MockConnectedWalletStatus({ status, address, onDismiss }: MockConnectedWalletStatusProps) {
   const truncatedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
 
   if (status === 'clean') {
@@ -36,6 +37,7 @@ function MockConnectedWalletStatus({ status, address }: MockConnectedWalletStatu
         <Button
           variant="ghost"
           size="sm"
+          onClick={onDismiss}
           className="absolute top-2 right-2 h-6 w-6 p-0"
           aria-label="Dismiss alert"
         >
@@ -61,6 +63,7 @@ function MockConnectedWalletStatus({ status, address }: MockConnectedWalletStatu
       <Button
         variant="ghost"
         size="sm"
+        onClick={onDismiss}
         className="absolute top-2 right-2 h-6 w-6 p-0 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-100 dark:hover:bg-yellow-900"
         aria-label="Dismiss alert"
       >
@@ -88,6 +91,7 @@ const meta: Meta<typeof MockConnectedWalletStatus> = {
       control: 'select',
       options: ['registered', 'pending', 'clean'],
     },
+    onDismiss: { action: 'dismissed' },
   },
   decorators: [
     (Story) => (

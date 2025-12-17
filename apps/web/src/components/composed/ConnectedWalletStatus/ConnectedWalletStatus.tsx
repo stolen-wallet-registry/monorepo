@@ -12,6 +12,7 @@ import { Alert, AlertTitle, AlertDescription, Button } from '@swr/ui';
 import { AlertTriangle, Clock, X } from 'lucide-react';
 import { useRegistryStatus } from '@/hooks';
 import { cn } from '@/lib/utils';
+import { truncateAddress } from '@/lib/address';
 
 const DISMISS_KEY = 'swr-wallet-status-dismissed';
 
@@ -23,16 +24,11 @@ export interface ConnectedWalletStatusProps {
 }
 
 /**
- * Truncates an address for display.
- */
-function truncateAddress(address: string): string {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-}
-
-/**
  * Gets dismissed addresses from localStorage.
+ * SSR-safe: returns empty set if localStorage is unavailable.
  */
 function getDismissedAddresses(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
   try {
     const stored = localStorage.getItem(DISMISS_KEY);
     if (stored) {
@@ -46,8 +42,10 @@ function getDismissedAddresses(): Set<string> {
 
 /**
  * Saves dismissed address to localStorage.
+ * SSR-safe: no-op if localStorage is unavailable.
  */
 function saveDismissedAddress(address: string): void {
+  if (typeof window === 'undefined') return;
   try {
     const dismissed = getDismissedAddresses();
     dismissed.add(address.toLowerCase());
@@ -83,10 +81,12 @@ export function ConnectedWalletStatus({
   const [sessionDismissed, setSessionDismissed] = useState(false);
 
   // Check if this address was previously dismissed (computed, not effect)
+  // SSR-safe: defaults to false on server, recomputes on client hydration
   const isDismissed = useMemo(() => {
     if (alwaysShow) return false;
     if (sessionDismissed) return true;
     if (!address) return false;
+    if (typeof window === 'undefined') return false;
     return getDismissedAddresses().has(address.toLowerCase());
   }, [address, alwaysShow, sessionDismissed]);
 

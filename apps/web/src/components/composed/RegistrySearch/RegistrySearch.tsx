@@ -5,7 +5,7 @@
  * Uses InputGroup for a composable search input with loading states.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { isAddress } from 'viem';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, Skeleton } from '@swr/ui';
 import { Search, X, Loader2 } from 'lucide-react';
@@ -56,15 +56,26 @@ export function RegistrySearch({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(!!defaultAddress && isAddress(defaultAddress));
 
+  // Track which address we've notified for to prevent duplicate callbacks
+  const lastNotifiedAddressRef = useRef<string | null>(null);
+
   const registryStatus = useRegistryStatus({
     address: searchAddress,
   });
 
-  // Notify parent when result changes
-  if (onResult && searchAddress && !registryStatus.isLoading && !registryStatus.isError) {
-    // Use a ref to track if we've already notified for this address
-    // to avoid infinite loops
-  }
+  // Notify parent when result changes (using effect to properly track notifications)
+  useEffect(() => {
+    if (
+      onResult &&
+      searchAddress &&
+      !registryStatus.isLoading &&
+      !registryStatus.isError &&
+      lastNotifiedAddressRef.current !== searchAddress
+    ) {
+      lastNotifiedAddressRef.current = searchAddress;
+      onResult(registryStatus);
+    }
+  }, [onResult, searchAddress, registryStatus]);
 
   const handleSearch = useCallback(() => {
     const trimmed = inputValue.trim();
@@ -87,12 +98,9 @@ export function RegistrySearch({
     setValidationError(null);
     setSearchAddress(trimmed as `0x${string}`);
     setHasSearched(true);
-
-    // Notify parent
-    if (onResult && !registryStatus.isLoading) {
-      onResult(registryStatus);
-    }
-  }, [inputValue, onResult, registryStatus]);
+    // Reset notification tracking so effect will fire for new address
+    lastNotifiedAddressRef.current = null;
+  }, [inputValue]);
 
   const handleClear = useCallback(() => {
     setInputValue('');

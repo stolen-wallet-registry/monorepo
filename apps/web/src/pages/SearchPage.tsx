@@ -5,21 +5,24 @@
  * Includes recent searches stored in localStorage.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useSyncExternalStore } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { isAddress } from 'viem';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@swr/ui';
 import { RegistrySearch } from '@/components/composed/RegistrySearch';
 import { ArrowRight, History, X } from 'lucide-react';
+import { truncateAddress } from '@/lib/address';
 
 const RECENT_SEARCHES_KEY = 'swr-recent-searches';
 const MAX_RECENT_SEARCHES = 5;
 
 /**
  * Gets recent searches from localStorage.
+ * SSR-safe: returns empty array if localStorage is unavailable.
  */
 function getRecentSearches(): string[] {
+  if (typeof window === 'undefined') return [];
   try {
     const stored = localStorage.getItem(RECENT_SEARCHES_KEY);
     if (stored) {
@@ -33,8 +36,10 @@ function getRecentSearches(): string[] {
 
 /**
  * Saves a search to recent searches.
+ * SSR-safe: no-op if localStorage is unavailable.
  */
 function saveRecentSearch(address: string): void {
+  if (typeof window === 'undefined') return;
   try {
     const recent = getRecentSearches().filter((a) => a.toLowerCase() !== address.toLowerCase());
     recent.unshift(address);
@@ -46,8 +51,10 @@ function saveRecentSearch(address: string): void {
 
 /**
  * Removes a search from recent searches.
+ * SSR-safe: no-op if localStorage is unavailable.
  */
 function removeRecentSearch(address: string): void {
+  if (typeof window === 'undefined') return;
   try {
     const recent = getRecentSearches().filter((a) => a.toLowerCase() !== address.toLowerCase());
     localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(recent));
@@ -56,18 +63,35 @@ function removeRecentSearch(address: string): void {
   }
 }
 
+// Track subscribers for external store pattern
+let recentSearchesListeners: Array<() => void> = [];
+
 /**
- * Truncates an address for display.
+ * Notifies all subscribers that recent searches changed.
  */
-function truncateAddress(address: string): string {
-  return `${address.slice(0, 10)}...${address.slice(-8)}`;
+function notifyRecentSearchesChange(): void {
+  recentSearchesListeners.forEach((listener) => listener());
+}
+
+/**
+ * Subscribe to recent searches changes (external store pattern).
+ */
+function subscribeToRecentSearches(listener: () => void): () => void {
+  recentSearchesListeners.push(listener);
+  return () => {
+    recentSearchesListeners = recentSearchesListeners.filter((l) => l !== listener);
+  };
 }
 
 export function SearchPage() {
   const [, setLocation] = useLocation();
   const { address: connectedAddress } = useAccount();
-  // Use lazy initialization to read from localStorage once on mount
-  const [recentSearches, setRecentSearches] = useState<string[]>(() => getRecentSearches());
+  // Use external store pattern for SSR-safe localStorage access
+  const recentSearches = useSyncExternalStore(
+    subscribeToRecentSearches,
+    getRecentSearches,
+    () => [] // Server snapshot - always empty
+  );
   const [searchAddress, setSearchAddress] = useState<string>('');
 
   // Handle search result - currently a no-op but available for future use
@@ -80,7 +104,7 @@ export function SearchPage() {
   const handleSearchAddress = useCallback((address: string) => {
     if (isAddress(address)) {
       saveRecentSearch(address);
-      setRecentSearches(getRecentSearches());
+      notifyRecentSearchesChange();
       setSearchAddress(address);
     }
   }, []);
@@ -89,15 +113,18 @@ export function SearchPage() {
   const handleRecentClick = useCallback((address: string) => {
     setSearchAddress(address);
     saveRecentSearch(address);
-    setRecentSearches(getRecentSearches());
+    notifyRecentSearchesChange();
   }, []);
 
   // Remove a recent search
-  const handleRemoveRecent = useCallback((address: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    removeRecentSearch(address);
-    setRecentSearches(getRecentSearches());
-  }, []);
+  const handleRemoveRecent = useCallback(
+    (address: string, e: React.MouseEvent | React.KeyboardEvent) => {
+      e.stopPropagation();
+      removeRecentSearch(address);
+      notifyRecentSearchesChange();
+    },
+    []
+  );
 
   return (
     <div className="w-full max-w-3xl mx-auto px-4 py-8 space-y-8">
@@ -139,9 +166,17 @@ export function SearchPage() {
             <ul className="space-y-2">
               {recentSearches.map((address) => (
                 <li key={address}>
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => handleRecentClick(address)}
-                    className="w-full flex items-center justify-between p-2 rounded-md hover:bg-muted transition-colors text-left group"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleRecentClick(address);
+                      }
+                    }}
+                    className="w-full flex items-center justify-between p-2 rounded-md hover:bg-muted transition-colors text-left group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     <code className="text-sm font-mono">{truncateAddress(address)}</code>
                     <div className="flex items-center gap-2">
@@ -154,7 +189,7 @@ export function SearchPage() {
                         <X className="h-3 w-3" />
                       </button>
                     </div>
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>

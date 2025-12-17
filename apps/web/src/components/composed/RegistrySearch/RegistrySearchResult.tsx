@@ -8,6 +8,8 @@
 import { Alert, AlertTitle, AlertDescription, Badge } from '@swr/ui';
 import { AlertCircle, Clock, CheckCircle2 } from 'lucide-react';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
+import { truncateAddress } from '@/lib/address';
+import { cn } from '@/lib/utils';
 import type { RegistrationData, AcknowledgementData } from '@/hooks';
 
 export type ResultStatus = 'registered' | 'pending' | 'not-found';
@@ -23,13 +25,6 @@ export interface RegistrySearchResultProps {
   acknowledgementData?: AcknowledgementData | null;
   /** Additional class names */
   className?: string;
-}
-
-/**
- * Truncates an address for display.
- */
-function truncateAddress(address: string): string {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
 /**
@@ -84,10 +79,10 @@ export function RegistrySearchResult({
   if (status === 'pending') {
     return (
       <Alert
-        className={
-          className +
-          ' border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20 text-yellow-900 dark:text-yellow-100'
-        }
+        className={cn(
+          'border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20 text-yellow-900 dark:text-yellow-100',
+          className
+        )}
       >
         <Clock className="h-4 w-4 text-yellow-600" />
         <AlertTitle className="flex items-center gap-2 text-yellow-900 dark:text-yellow-100">
@@ -128,10 +123,10 @@ export function RegistrySearchResult({
   // not-found state
   return (
     <Alert
-      className={
-        className +
-        ' border-green-500 bg-green-50 dark:bg-green-950/20 text-green-900 dark:text-green-100'
-      }
+      className={cn(
+        'border-green-500 bg-green-50 dark:bg-green-950/20 text-green-900 dark:text-green-100',
+        className
+      )}
     >
       <CheckCircle2 className="h-4 w-4 text-green-600" />
       <AlertTitle className="flex items-center gap-2 text-green-900 dark:text-green-100">

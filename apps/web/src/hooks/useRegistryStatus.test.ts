@@ -31,7 +31,7 @@ describe('useRegistryStatus', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as ReturnType<typeof useReadContracts>);
+    } as unknown as ReturnType<typeof useReadContracts>);
 
     const { result } = renderHook(() => useRegistryStatus({ address: sampleAddress }));
 
@@ -151,7 +151,7 @@ describe('useRegistryStatus', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as ReturnType<typeof useReadContracts>);
+    } as unknown as ReturnType<typeof useReadContracts>);
 
     const { result } = renderHook(() => useRegistryStatus({ address: undefined }));
 
@@ -193,7 +193,7 @@ describe('useRegistryStatus', () => {
       isError: false,
       error: null,
       refetch: mockRefetch,
-    } as ReturnType<typeof useReadContracts>);
+    } as unknown as ReturnType<typeof useReadContracts>);
 
     const { result } = renderHook(() => useRegistryStatus({ address: sampleAddress }));
 
