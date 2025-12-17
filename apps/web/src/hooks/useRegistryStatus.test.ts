@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useRegistryStatus } from './useRegistryStatus';
+import type { Address } from '@/lib/types/ethereum';
 
 // Mock wagmi hooks
 vi.mock('wagmi', () => ({
@@ -22,7 +23,7 @@ describe('useRegistryStatus', () => {
     vi.clearAllMocks();
   });
 
-  const sampleAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as `0x${string}`;
+  const sampleAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
 
   it('returns loading state initially', () => {
     mockUseReadContracts.mockReturnValue({

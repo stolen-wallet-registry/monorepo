@@ -20,6 +20,7 @@ import {
   TooltipContent,
 } from '@swr/ui';
 import { RegistrySearch, type SearchResult } from '@/components/composed/RegistrySearch';
+import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import {
   ArrowRight,
   History,
@@ -32,11 +33,15 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { truncateAddress } from '@/lib/address';
+import { getChainDisplayInfo } from '@/lib/chains';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
 
 const RECENT_SEARCHES_KEY = 'swr-recent-searches';
 const MAX_RECENT_SEARCHES = 5;
+
+/** Redact address for logging (privacy-preserving) */
+const redactAddress = (addr: string) => `...${addr.slice(-4)}`;
 
 /** Registry entry types */
 type RegistryType = 'wallet' | 'transaction' | 'contract';
@@ -57,16 +62,6 @@ interface RecentSearch {
   /** Timestamp of the search */
   timestamp: number;
 }
-
-/** Chain display info */
-const CHAIN_INFO: Record<number, { name: string; color: string }> = {
-  1: { name: 'Ethereum', color: 'bg-blue-500' },
-  10: { name: 'Optimism', color: 'bg-red-500' },
-  137: { name: 'Polygon', color: 'bg-purple-500' },
-  42161: { name: 'Arbitrum', color: 'bg-blue-400' },
-  8453: { name: 'Base', color: 'bg-blue-600' },
-  31337: { name: 'Localhost', color: 'bg-gray-500' },
-};
 
 /** Type display info */
 const TYPE_INFO: Record<RegistryType, { label: string; icon: typeof Wallet }> = {
@@ -155,7 +150,7 @@ function saveRecentSearch(search: Omit<RecentSearch, 'timestamp'>): void {
 
   try {
     logger.ui.debug('Saving recent search', {
-      address: search.address,
+      address: redactAddress(search.address),
       chainId: search.chainId,
       resultStatus: search.resultStatus,
     });
@@ -169,12 +164,16 @@ function saveRecentSearch(search: Omit<RecentSearch, 'timestamp'>): void {
     // Invalidate cache so next read gets fresh data
     cachedRecentSearchesJson = null;
     logger.ui.info('Recent search saved', {
-      address: search.address,
+      address: redactAddress(search.address),
       resultStatus: search.resultStatus,
       totalSearches: toSave.length,
     });
   } catch (error) {
-    logger.ui.error('Failed to save recent search', { address: search.address }, error as Error);
+    logger.ui.error(
+      'Failed to save recent search',
+      { address: redactAddress(search.address) },
+      error as Error
+    );
   }
 }
 
@@ -193,9 +192,16 @@ function updateRecentSearchResult(address: string, resultStatus: SearchResultSta
     localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(recent));
     // Invalidate cache so next read gets fresh data
     cachedRecentSearchesJson = null;
-    logger.ui.debug('Recent search result updated', { address, resultStatus });
+    logger.ui.debug('Recent search result updated', {
+      address: redactAddress(address),
+      resultStatus,
+    });
   } catch (error) {
-    logger.ui.error('Failed to update recent search result', { address }, error as Error);
+    logger.ui.error(
+      'Failed to update recent search result',
+      { address: redactAddress(address) },
+      error as Error
+    );
   }
 }
 
@@ -257,7 +263,7 @@ export function SearchPage() {
   // Handle when a search is initiated (save to recent searches with unknown status initially)
   const handleSearch = useCallback(
     (address: Address) => {
-      logger.ui.info('Search initiated from input', { address, chainId });
+      logger.ui.info('Search initiated from input', { address: redactAddress(address), chainId });
       saveRecentSearch({ address, chainId, type: 'wallet', resultStatus: 'unknown' });
       notifyRecentSearchesChange();
       setSearchAddress(address);
@@ -273,7 +279,7 @@ export function SearchPage() {
         ? 'pending'
         : 'clean';
     logger.ui.info('Search result received', {
-      address,
+      address: redactAddress(address),
       isRegistered: status.isRegistered,
       isPending: status.isPending,
       resultStatus,
@@ -285,7 +291,7 @@ export function SearchPage() {
   // Handle clicking "Check your wallet" quick action
   const handleQuickCheckWallet = useCallback(
     (address: Address) => {
-      logger.ui.info('Quick action: check wallet', { address });
+      logger.ui.info('Quick action: check wallet', { address: redactAddress(address) });
       saveRecentSearch({ address, chainId, type: 'wallet', resultStatus: 'unknown' });
       notifyRecentSearchesChange();
       setSearchAddress(address);
@@ -295,7 +301,10 @@ export function SearchPage() {
 
   // Handle clicking a recent search
   const handleRecentClick = useCallback((search: RecentSearch) => {
-    logger.ui.info('Recent search clicked', { address: search.address, chainId: search.chainId });
+    logger.ui.info('Recent search clicked', {
+      address: redactAddress(search.address),
+      chainId: search.chainId,
+    });
     setSearchAddress(search.address);
     saveRecentSearch({
       address: search.address,
@@ -310,7 +319,7 @@ export function SearchPage() {
   const handleRemoveRecent = useCallback(
     (address: string, e: React.MouseEvent | React.KeyboardEvent) => {
       e.stopPropagation();
-      logger.ui.info('Recent search removed', { address });
+      logger.ui.info('Recent search removed', { address: redactAddress(address) });
       removeRecentSearch(address);
       notifyRecentSearchesChange();
     },
@@ -357,10 +366,7 @@ export function SearchPage() {
           <CardContent>
             <ul className="space-y-2">
               {recentSearches.map((search) => {
-                const chainInfo = CHAIN_INFO[search.chainId] || {
-                  name: `Chain ${search.chainId}`,
-                  color: 'bg-gray-500',
-                };
+                const chainInfo = getChainDisplayInfo(search.chainId);
                 const type = search.type ?? 'wallet';
                 const typeInfo = TYPE_INFO[type];
                 const TypeIcon = typeInfo.icon;
@@ -410,8 +416,12 @@ export function SearchPage() {
                           </TooltipTrigger>
                           <TooltipContent>{typeInfo.label}</TooltipContent>
                         </Tooltip>
-                        {/* Address */}
-                        <code className="text-sm font-mono">{truncateAddress(search.address)}</code>
+                        {/* Address with copy button */}
+                        <ExplorerLink
+                          value={search.address}
+                          type="address"
+                          showDisabledIcon={false}
+                        />
                       </div>
                       <div className="flex items-center gap-2">
                         <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
