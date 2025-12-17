@@ -337,7 +337,8 @@ const TextAnimateBase = ({
   const shouldReduceMotion = useReducedMotion();
   const MotionComponent = useMemo(() => motion.create(Component), [Component]);
 
-  // Respect prefers-reduced-motion: render static content without animations
+  // Respect prefers-reduced-motion: plain text is naturally accessible without
+  // the aria-label/sr-only workarounds needed for animated segmented content
   if (shouldReduceMotion) {
     return <Component className={cn('whitespace-pre-wrap', className)}>{children}</Component>;
   }

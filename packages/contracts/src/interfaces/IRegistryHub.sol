@@ -1,0 +1,119 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+/// @title IRegistryHub
+/// @author Stolen Wallet Registry Team
+/// @notice Interface for the main Registry Hub that coordinates subregistries
+/// @dev The RegistryHub serves as the primary entry point for the fraud registry system.
+///      It delegates to specialized subregistries while providing unified query access.
+///      Designed with Ownable2Step for safe DAO ownership transfer in the future.
+interface IRegistryHub {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ERRORS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Thrown when attempting to operate while the hub is paused
+    error Hub__Paused();
+
+    /// @notice Thrown when attempting to interact with an unregistered subregistry
+    error Hub__InvalidRegistry();
+
+    /// @notice Thrown when the provided fee is insufficient
+    error Hub__InsufficientFee();
+
+    /// @notice Thrown when a fee withdrawal fails
+    error Hub__WithdrawalFailed();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // EVENTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Emitted when the hub is paused or unpaused
+    /// @param paused True if hub is now paused, false if unpaused
+    event HubPaused(bool indexed paused);
+
+    /// @notice Emitted when a subregistry is registered or updated
+    /// @param registryType Identifier for the registry type
+    /// @param registry Address of the subregistry contract
+    event RegistryUpdated(bytes32 indexed registryType, address indexed registry);
+
+    /// @notice Emitted when fees are withdrawn from the hub
+    /// @param to Recipient address
+    /// @param amount Amount withdrawn in wei
+    event FeesWithdrawn(address indexed to, uint256 amount);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Registry type identifier for stolen wallets
+    /// @dev keccak256("STOLEN_WALLET_REGISTRY")
+    function stolenWalletRegistryType() external pure returns (bytes32);
+
+    /// @notice Registry type identifier for fraudulent contracts (future)
+    /// @dev keccak256("FRAUDULENT_CONTRACT_REGISTRY")
+    function fraudulentContractRegistryType() external pure returns (bytes32);
+
+    /// @notice Registry type identifier for stolen transactions (future)
+    /// @dev keccak256("STOLEN_TRANSACTION_REGISTRY")
+    function stolenTransactionRegistryType() external pure returns (bytes32);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEW FUNCTIONS - Query Passthroughs
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Check if a wallet is registered as stolen
+    /// @dev Delegates to StolenWalletRegistry.isRegistered()
+    /// @param wallet The address to query
+    /// @return True if the wallet is registered as stolen
+    function isWalletRegistered(address wallet) external view returns (bool);
+
+    /// @notice Check if a wallet has a pending acknowledgement
+    /// @dev Delegates to StolenWalletRegistry.isPending()
+    /// @param wallet The address to query
+    /// @return True if there is a pending acknowledgement
+    function isWalletPending(address wallet) external view returns (bool);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEW FUNCTIONS - Hub State
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Check if the hub is currently paused
+    /// @return True if the hub is paused
+    function paused() external view returns (bool);
+
+    /// @notice Get the address of a subregistry by type
+    /// @param registryType The registry type identifier
+    /// @return The address of the subregistry (address(0) if not set)
+    function getRegistry(bytes32 registryType) external view returns (address);
+
+    /// @notice Get the fee manager contract address
+    /// @return The fee manager address
+    function feeManager() external view returns (address);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ADMIN FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Pause or unpause the hub
+    /// @dev Only callable by owner. When paused, new registrations are blocked.
+    /// @param _paused True to pause, false to unpause
+    function setPaused(bool _paused) external;
+
+    /// @notice Register or update a subregistry address
+    /// @dev Only callable by owner
+    /// @param registryType The registry type identifier
+    /// @param registry The subregistry contract address
+    function setRegistry(bytes32 registryType, address registry) external;
+
+    /// @notice Update the fee manager contract
+    /// @dev Only callable by owner
+    /// @param _feeManager The new fee manager address
+    function setFeeManager(address _feeManager) external;
+
+    /// @notice Withdraw accumulated fees to a specified address
+    /// @dev Only callable by owner
+    /// @param to The recipient address
+    /// @param amount The amount to withdraw in wei
+    function withdrawFees(address to, uint256 amount) external;
+}

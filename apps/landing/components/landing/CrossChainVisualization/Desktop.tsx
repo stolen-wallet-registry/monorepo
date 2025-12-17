@@ -115,6 +115,7 @@ function StaticConnection({
 function ScreenReaderDescription() {
   return (
     <div
+      id="cross-chain-viz-description"
       className="sr-only"
       role="region"
       aria-label="Cross-chain fraud reporting data flow description"
@@ -214,6 +215,7 @@ export function CrossChainVisualizationDesktop({
         className={cn('flex flex-col items-center gap-6', className)}
         role="figure"
         aria-label="Cross-chain fraud reporting visualization"
+        aria-describedby="cross-chain-viz-description"
       >
         {/* Screen reader accessible description */}
         <ScreenReaderDescription />
