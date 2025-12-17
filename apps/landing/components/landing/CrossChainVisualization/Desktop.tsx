@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
-import { Link2, Globe, Shield, Droplets, CircleDot } from 'lucide-react';
+import { Globe, Shield, Droplets, CircleDot } from 'lucide-react';
 import {
   AnimatedBeam,
   cn,
@@ -44,6 +44,7 @@ import {
   IconCircle,
   BridgeIcon,
   ChainalysisLogo,
+  HyperlaneLogo,
   SealTeamLogo,
   GroupContainer,
   RegistryHub,
@@ -103,10 +104,47 @@ function StaticConnection({
         d={pathD}
         stroke="currentColor"
         strokeWidth={1}
-        strokeOpacity={0.15}
         strokeDasharray="4 4"
+        className="opacity-15 dark:opacity-30"
       />
     </svg>
+  );
+}
+
+// Visually hidden but accessible to screen readers
+function ScreenReaderDescription() {
+  return (
+    <div id="cross-chain-viz-description" className="sr-only">
+      <h3>Cross-Chain Fraud Reporting Flow</h3>
+      <p>
+        This visualization shows how stolen wallet reports flow through the Stolen Wallet Registry
+        system across multiple blockchains.
+      </p>
+      <ol>
+        <li>
+          <strong>Step 1 - Report Fraud:</strong> Users report stolen wallets from any supported
+          blockchain including Ethereum and its Layer 2s (Optimism, Arbitrum, Polygon, zkSync,
+          Linea, Gnosis, Celo), EVM chains (BNB Chain, Avalanche, Fantom), non-EVM chains (Solana,
+          NEAR, Cosmos), and Bitcoin.
+        </li>
+        <li>
+          <strong>Step 2 - Cross-Chain Messaging:</strong> Reports are transmitted through
+          cross-chain messaging protocols (Chainlink CCIP, Wormhole, Hyperlane) to the central
+          registry. Trusted operators like Coinbase, Kraken, and security firms can also submit
+          reports directly.
+        </li>
+        <li>
+          <strong>Step 3 - Registry Settlement:</strong> All reports are consolidated on Base
+          blockchain using CAIP-10 chain-agnostic identifiers, enabling tracking of addresses from
+          any blockchain in a single registry.
+        </li>
+        <li>
+          <strong>Step 4 - React to Events:</strong> Exchanges (Coinbase, Kraken, Gemini, Binance),
+          wallets (MetaMask, Rainbow, Coinbase Wallet), and security services (Chainalysis, SEAL
+          Team) subscribe to registry events and receive real-time alerts to protect users.
+        </li>
+      </ol>
+    </div>
   );
 }
 
@@ -168,7 +206,15 @@ export function CrossChainVisualizationDesktop({
 
   return (
     <TooltipProvider delayDuration={100}>
-      <div className={cn('flex flex-col items-center gap-6', className)}>
+      <div
+        className={cn('flex flex-col items-center gap-6', className)}
+        role="figure"
+        aria-label="Cross-chain fraud reporting visualization"
+        aria-describedby="cross-chain-viz-description"
+      >
+        {/* Screen reader accessible description */}
+        <ScreenReaderDescription />
+
         {showHeader && (
           <div className="text-center">
             <h2 className="text-2xl font-bold text-foreground">One Data Registry, Every Chain.</h2>
@@ -191,6 +237,7 @@ export function CrossChainVisualizationDesktop({
         <div
           ref={containerRef}
           className="relative flex h-[500px] w-full max-w-[1200px] items-center justify-between px-2 md:h-[600px] md:px-4 lg:h-[650px]"
+          aria-hidden="true"
         >
           {/* LEFT SIDE: Networks */}
           <div className="flex w-44 flex-col items-center gap-2 md:w-52 md:gap-3 lg:w-60">
@@ -217,12 +264,12 @@ export function CrossChainVisualizationDesktop({
                   <NetworkArbitrumOne variant="branded" className="size-5" />
                 </IconCircle>
                 <IconCircle ref={zkSyncRef} label="zkSync Era" size="xs">
-                  <NetworkZksync variant="branded" className="size-5" />
+                  <NetworkZksync variant="mono" className="size-5" />
                 </IconCircle>
               </div>
               <div className="flex items-center gap-1">
                 <IconCircle ref={lineaRef} label="Linea" size="xs">
-                  <NetworkLinea variant="branded" className="size-5" />
+                  <NetworkLinea variant="mono" className="size-5" />
                 </IconCircle>
                 <IconCircle ref={ethHubRef} label="Ethereum" size="lg" className="mx-1">
                   <NetworkEthereum variant="branded" className="size-9" />
@@ -353,7 +400,7 @@ export function CrossChainVisualizationDesktop({
                   <Globe className="size-5 text-purple-500" />
                 </BridgeIcon>
                 <BridgeIcon label="Hyperlane">
-                  <Link2 className="size-5 text-cyan-500" />
+                  <HyperlaneLogo className="size-5" />
                 </BridgeIcon>
               </div>
             </GroupContainer>
@@ -373,7 +420,7 @@ export function CrossChainVisualizationDesktop({
                   <ExchangeKraken className="size-5" />
                 </IconCircle>
                 <IconCircle label="Chainalysis" size="xs">
-                  <ChainalysisLogo className="text-blue-600" />
+                  <ChainalysisLogo className="text-orange-500" />
                 </IconCircle>
                 <IconCircle label="SEAL Team" size="xs">
                   <SealTeamLogo className="text-red-600" />
@@ -458,7 +505,7 @@ export function CrossChainVisualizationDesktop({
             >
               <div className="flex items-center gap-2">
                 <IconCircle label="Chainalysis" size="sm" pulse pulseDelay={PHASE_3_START + 1.4}>
-                  <ChainalysisLogo className="text-blue-600" />
+                  <ChainalysisLogo className="text-orange-500" />
                 </IconCircle>
                 <IconCircle label="SEAL Team" size="sm" pulse pulseDelay={PHASE_3_START + 1.5}>
                   <SealTeamLogo className="text-red-600" />

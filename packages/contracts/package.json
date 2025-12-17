@@ -1,0 +1,18 @@
+{
+  "name": "@swr/contracts",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test",
+    "test:coverage": "forge coverage",
+    "test:gas": "forge test --gas-report",
+    "lint": "forge fmt --check",
+    "format": "forge fmt",
+    "clean": "forge clean",
+    "snapshot": "forge snapshot",
+    "anvil": "anvil --block-time 13",
+    "deploy:local": "forge script script/Deploy.s.sol --rpc-url localhost --broadcast",
+    "export-abi": "node scripts/export-abi.js"
+  }
+}

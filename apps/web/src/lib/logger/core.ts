@@ -135,6 +135,7 @@ export const logger: Logger = {
   wallet: createCategoryLogger('wallet'),
   contract: createCategoryLogger('contract'),
   signature: createCategoryLogger('signature'),
+  acknowledgement: createCategoryLogger('acknowledgement'),
   registration: createCategoryLogger('registration'),
   p2p: createCategoryLogger('p2p'),
   store: createCategoryLogger('store'),

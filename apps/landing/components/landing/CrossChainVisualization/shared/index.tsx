@@ -14,7 +14,7 @@ export {
 } from './constants';
 
 // Icon components
-export { BridgeIcon, ChainalysisLogo, IconCircle, SealTeamLogo } from './icons';
+export { BridgeIcon, ChainalysisLogo, HyperlaneLogo, IconCircle, SealTeamLogo } from './icons';
 
 // Container components
 export {

@@ -2,3 +2,7 @@ node_modules
 dist
 pnpm-lock.yaml
 *.sol
+
+# Foundry dependencies (installed via forge install)
+**/lib/forge-std
+**/lib/openzeppelin-contracts

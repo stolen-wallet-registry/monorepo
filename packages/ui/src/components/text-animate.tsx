@@ -2,7 +2,13 @@
 
 /* eslint-disable react-hooks/static-components -- MagicUI pattern: dynamic `as` prop requires runtime motion.create() */
 import { memo, useMemo, type ElementType } from 'react';
-import { AnimatePresence, motion, type MotionProps, type Variants } from 'motion/react';
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  type MotionProps,
+  type Variants,
+} from 'motion/react';
 
 import { cn } from '../lib/utils';
 
@@ -328,7 +334,14 @@ const TextAnimateBase = ({
   accessible = true,
   ...props
 }: TextAnimateProps) => {
+  const shouldReduceMotion = useReducedMotion();
   const MotionComponent = useMemo(() => motion.create(Component), [Component]);
+
+  // Respect prefers-reduced-motion: plain text is naturally accessible without
+  // the aria-label/sr-only workarounds needed for animated segmented content
+  if (shouldReduceMotion) {
+    return <Component className={cn('whitespace-pre-wrap', className)}>{children}</Component>;
+  }
 
   let segments: string[] = [];
   switch (by) {

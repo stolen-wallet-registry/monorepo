@@ -6,6 +6,7 @@
   "description": "libp2p circuit relay server for P2P wallet registration",
   "main": "src/index.mjs",
   "scripts": {
+    "setup-keys": "node scripts/setup-keys.mjs",
     "dev": "node src/index.mjs",
     "dev:debug": "DEBUG=libp2p* node src/index.mjs",
     "start": "node src/index.mjs",
@@ -17,9 +18,10 @@
     "@chainsafe/libp2p-noise": "^17.0.0",
     "@chainsafe/libp2p-yamux": "^8.0.1",
     "@libp2p/circuit-relay-v2": "^4.1.2",
+    "@libp2p/crypto": "^5.0.9",
     "@libp2p/dcutr": "^3.0.9",
     "@libp2p/identify": "^4.0.9",
-    "@libp2p/peer-id-factory": "^4.2.4",
+    "@libp2p/peer-id": "^6.0.4",
     "@libp2p/ping": "^3.0.9",
     "@libp2p/websockets": "^10.1.2",
     "libp2p": "^3.1.2"

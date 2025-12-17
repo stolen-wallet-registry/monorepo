@@ -303,6 +303,11 @@ describe('logger', () => {
       expect(logger.signature.info).toBeTypeOf('function');
     });
 
+    it('has acknowledgement category', () => {
+      expect(logger.acknowledgement).toBeDefined();
+      expect(logger.acknowledgement.info).toBeTypeOf('function');
+    });
+
     it('has registration category', () => {
       expect(logger.registration).toBeDefined();
       expect(logger.registration.info).toBeTypeOf('function');

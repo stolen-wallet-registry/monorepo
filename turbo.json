@@ -5,6 +5,15 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "out/**", ".next/**"]
     },
+    "forge:build": {
+      "dependsOn": [],
+      "outputs": ["out/**"],
+      "inputs": ["src/**", "test/**", "script/**", "foundry.toml"]
+    },
+    "forge:test": {
+      "dependsOn": ["forge:build"],
+      "outputs": []
+    },
     "dev": {
       "cache": false,
       "persistent": true

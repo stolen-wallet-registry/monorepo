@@ -33,7 +33,7 @@ function GlobeSkeleton() {
   );
 }
 
-export function HeroSection() {
+export function HeroSection(): React.JSX.Element {
   return (
     <section className="relative flex min-h-[85vh] flex-col items-center justify-center overflow-hidden px-4 py-16 text-center md:py-24">
       {/* Background gradient effect */}
@@ -42,16 +42,12 @@ export function HeroSection() {
       {/* Content container */}
       <div className="relative z-10 flex flex-col items-center">
         {/* Main headline with HyperText scramble effect */}
-        <HyperText
-          as="h1"
-          className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl"
-          duration={1200}
-          delay={300}
-          startOnView
-          animateOnHover
-        >
-          STOLEN WALLET REGISTRY
-        </HyperText>
+        {/* Note: Using h1 wrapper instead of as="h1" to avoid SSR hydration mismatch with motion.create */}
+        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
+          <HyperText duration={1200} delay={300} startOnView animateOnHover>
+            STOLEN WALLET REGISTRY
+          </HyperText>
+        </h1>
 
         {/* Rotating taglines with typewriter effect */}
         <div className="mt-6 h-12">
@@ -79,7 +75,12 @@ export function HeroSection() {
         {/* CTA Buttons */}
         <div className="relative z-10 mt-8 flex flex-col gap-4 sm:flex-row md:mt-12">
           <Button asChild size="lg" className="min-w-[140px]">
-            <a href={APP_URL} target="_blank" rel="noopener noreferrer">
+            <a
+              href={APP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Launch App (opens in new tab)"
+            >
               Launch App
             </a>
           </Button>

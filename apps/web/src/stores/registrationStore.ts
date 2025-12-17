@@ -65,7 +65,7 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
 
         setAcknowledgementHash: (hash) =>
           set((state) => {
-            logger.registration.info('Acknowledgement hash received', { hash });
+            logger.acknowledgement.info('Acknowledgement hash received', { hash });
             state.acknowledgementHash = hash;
           }),
 

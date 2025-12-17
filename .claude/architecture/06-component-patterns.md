@@ -152,3 +152,15 @@ it('calls onSelect when clicking', async () => {
 - `tabIndex={isDisabled ? -1 : 0}` for focus management
 - Keyboard handlers for Enter/Space
 - `aria-label` on icon-only buttons
+
+---
+
+## Custom Icons (web3icons-compatible)
+
+Custom icons not in `@web3icons/react` live in `apps/landing/.../shared/icons.tsx`.
+
+**Reference:** `ChainalysisLogo`, `SealTeamLogo`, `HyperlaneLogo`
+
+**Pattern:** Extract icon path from brand SVG, use `fill="currentColor"`, include `role="img"` + `<title>`. ViewBox should match path bounds (web3icons uses 24x24, but SVG scaling handles other sizes). Prefer `variant="mono"` for dark mode.
+
+**Multi-color brand icons:** Some brand icons (e.g., `HyperlaneLogo`) use fixed fills for specific brand colors rather than `currentColor`. The Hyperlane logo uses `fill="#D631B9"` for magenta paths and `className="fill-white dark:fill-white"` for white/light paths to maintain brand integrity across themes.

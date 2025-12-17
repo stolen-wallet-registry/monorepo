@@ -1,0 +1,9 @@
+# Foundry build artifacts
+/out
+/cache
+
+# Broadcast files (deployment records)
+/broadcast
+
+# Dependencies (restored via forge install)
+/lib

@@ -272,7 +272,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
       setSignature(sig);
       setSignatureStatus('success');
 
-      logger.registration.info('Acknowledgement signing complete, advancing to next step');
+      logger.acknowledgement.info('Acknowledgement signing complete, advancing to next step');
       // Clear any existing timeout before setting a new one
       if (completionTimeoutRef.current) {
         clearTimeout(completionTimeoutRef.current);

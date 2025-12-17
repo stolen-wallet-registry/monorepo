@@ -13,6 +13,10 @@ import type { ParsedSignature } from '@/lib/signatures';
 export interface AcknowledgementParams {
   deadline: bigint;
   nonce: bigint;
+  /**
+   * The wallet address being registered as stolen.
+   * Maps to `owner` parameter in the contract ABI.
+   */
   registeree: `0x${string}`;
   signature: ParsedSignature;
 }
@@ -71,7 +75,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
     const txHash = await writeContractAsync({
       address: contractAddress,
       abi: stolenWalletRegistryAbi,
-      functionName: 'acknowledgementOfRegistry',
+      functionName: 'acknowledge',
       args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
     });
 
