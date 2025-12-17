@@ -6,37 +6,68 @@ import { identify } from '@libp2p/identify';
 import { ping } from '@libp2p/ping';
 import { webSockets } from '@libp2p/websockets';
 import { createLibp2p } from 'libp2p';
+import { generateKeyPair, privateKeyFromProtobuf, privateKeyToProtobuf } from '@libp2p/crypto/keys';
+import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import * as PeerIdFactory from '@libp2p/peer-id-factory';
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-let keys;
-let peerId;
-
-// in order to maintain the same PeerId across restarts, you need have keys.json defined
 const keysPath = path.resolve(__dirname, '../keys.json');
-if (fs.existsSync(keysPath)) {
-  keys = JSON.parse(fs.readFileSync(keysPath, 'utf8'));
 
-  // Check if id.privkey is null or undefined
-  if (!keys.id || !keys.privKey || !keys.pubKey) {
-    throw new Error('one of id, privKey, pubKey not found or null in keys.json');
+let peerId;
+let privateKey;
+
+/**
+ * Load or generate Ed25519 keys for stable peer ID across restarts.
+ *
+ * libp2p 3.x uses Ed25519 keys (peer IDs start with "12D3KooW...").
+ * Old RSA keys (peer IDs start with "Qm...") are not compatible.
+ */
+async function loadOrGenerateKeys() {
+  if (fs.existsSync(keysPath)) {
+    try {
+      const keys = JSON.parse(fs.readFileSync(keysPath, 'utf8'));
+
+      // Check if this is Ed25519 format (12D3KooW prefix)
+      if (keys.id?.startsWith('12D3KooW') && keys.privKey) {
+        // Decode base64 private key and reconstruct peer ID
+        const privKeyBytes = Buffer.from(keys.privKey, 'base64');
+        privateKey = privateKeyFromProtobuf(privKeyBytes);
+        peerId = peerIdFromPrivateKey(privateKey);
+
+        console.log('Loaded Ed25519 keys from keys.json');
+        console.log('Peer ID:', peerId.toString());
+        return;
+      } else {
+        console.log('Found keys.json with RSA/invalid format, regenerating Ed25519 keys...');
+      }
+    } catch (err) {
+      console.log('Error reading keys.json, generating new keys:', err.message);
+    }
   }
 
-  peerId = await PeerIdFactory.createFromJSON({
-    id: keys.id,
-    privKey: keys.privKey,
-    pubKey: keys.pubKey,
-  });
+  // Generate new Ed25519 keys
+  console.log('Generating new Ed25519 keys...');
+  privateKey = await generateKeyPair('Ed25519');
+  peerId = peerIdFromPrivateKey(privateKey);
+
+  // Save to keys.json for persistence
+  const newKeys = {
+    id: peerId.toString(),
+    privKey: Buffer.from(privateKeyToProtobuf(privateKey)).toString('base64'),
+  };
+
+  fs.writeFileSync(keysPath, JSON.stringify(newKeys, null, 2));
+  console.log('Saved new Ed25519 keys to keys.json');
+  console.log('Peer ID:', peerId.toString());
 }
 
+await loadOrGenerateKeys();
+
 const server = await createLibp2p({
-  peerId,
+  privateKey,
   addresses: {
     listen: ['/ip4/0.0.0.0/tcp/12312/ws'],
   },
@@ -68,3 +99,12 @@ console.log(
   'Relay listening on multiaddr(s): ',
   server.getMultiaddrs().map((ma) => ma.toString())
 );
+
+// Print the multiaddr for frontend configuration
+const wsMultiaddr = server.getMultiaddrs().find(ma => ma.toString().includes('/ws/'));
+if (wsMultiaddr) {
+  console.log('\n=== Frontend Configuration ===');
+  console.log('Update apps/web/src/lib/p2p/types.ts with:');
+  console.log(`multiaddr: '${wsMultiaddr.toString()}'`);
+  console.log('==============================\n');
+}

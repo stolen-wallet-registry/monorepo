@@ -42,6 +42,10 @@ interface IRegistryHub {
     /// @param amount Amount withdrawn in wei
     event FeesWithdrawn(address indexed to, uint256 amount);
 
+    /// @notice Emitted when the fee manager is updated
+    /// @param feeManager New fee manager address
+    event FeeManagerUpdated(address indexed feeManager);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -101,19 +105,25 @@ interface IRegistryHub {
     function setPaused(bool _paused) external;
 
     /// @notice Register or update a subregistry address
-    /// @dev Only callable by owner
-    /// @param registryType The registry type identifier
-    /// @param registry The subregistry contract address
+    /// @dev Only callable by owner. Set to address(0) to unregister a subregistry.
+    ///      Implementations SHOULD validate the registry address implements ISubRegistry
+    ///      when setting a non-zero address.
+    /// @param registryType The registry type identifier (use constants like stolenWalletRegistryType())
+    /// @param registry The subregistry contract address (address(0) to unregister)
     function setRegistry(bytes32 registryType, address registry) external;
 
     /// @notice Update the fee manager contract
-    /// @dev Only callable by owner
-    /// @param _feeManager The new fee manager address
+    /// @dev Only callable by owner. Implementations MUST validate _feeManager != address(0)
+    ///      to prevent disabling fee collection. Emits FeeManagerUpdated event.
+    /// @param _feeManager The new fee manager address (must be non-zero)
     function setFeeManager(address _feeManager) external;
 
     /// @notice Withdraw accumulated fees to a specified address
-    /// @dev Only callable by owner
-    /// @param to The recipient address
-    /// @param amount The amount to withdraw in wei
+    /// @dev Only callable by owner. Implementations MUST validate:
+    ///      - `to` != address(0) to prevent burning fees
+    ///      - `amount` > 0 to prevent empty withdrawals
+    ///      - `amount` <= address(this).balance to ensure sufficient funds
+    /// @param to The recipient address (must be non-zero)
+    /// @param amount The amount to withdraw in wei (must be > 0 and <= balance)
     function withdrawFees(address to, uint256 amount) external;
 }

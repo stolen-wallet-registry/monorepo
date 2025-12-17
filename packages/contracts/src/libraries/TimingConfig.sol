@@ -62,20 +62,20 @@ library TimingConfig {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Generate random block offset for timing calculations
-    /// @dev Uses block.prevrandao (post-merge) combined with timestamp
+    /// @dev Uses block.prevrandao (post-merge) combined with timestamp and salt for entropy diversity
     /// @param maxOffset Maximum random offset value
     /// @return Random value in range [0, maxOffset)
     function getRandomBlockOffset(uint256 maxOffset) private view returns (uint256) {
         if (maxOffset == 0) return 0;
-        bytes32 seed = keccak256(abi.encodePacked(block.prevrandao, block.timestamp, msg.sender));
+        bytes32 seed = keccak256(abi.encodePacked(block.prevrandao, block.timestamp, msg.sender, "block"));
         return uint256(seed) % maxOffset;
     }
 
     /// @notice Generate random timestamp offset for signature deadlines
-    /// @dev Similar to block offset but for timestamp-based expiry
+    /// @dev Similar to block offset but uses different salt to prevent correlated randomness
     /// @return Random value in range [0, TIMESTAMP_JITTER)
     function getRandomTimestampOffset() private view returns (uint256) {
-        bytes32 seed = keccak256(abi.encodePacked(block.prevrandao, block.timestamp, msg.sender));
+        bytes32 seed = keccak256(abi.encodePacked(block.prevrandao, block.timestamp, msg.sender, "timestamp"));
         return uint256(seed) % TIMESTAMP_JITTER;
     }
 }

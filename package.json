@@ -27,6 +27,7 @@
     "anvil": "anvil --ipc /tmp/anvil.ipc --steps-tracing --block-time 13",
     "relay": "pnpm --filter @swr/relay dev",
     "relay:debug": "pnpm --filter @swr/relay dev:debug",
+    "relay:setup": "pnpm --filter @swr/relay setup-keys",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "changeset publish",

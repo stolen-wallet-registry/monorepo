@@ -114,12 +114,7 @@ function StaticConnection({
 // Visually hidden but accessible to screen readers
 function ScreenReaderDescription() {
   return (
-    <div
-      id="cross-chain-viz-description"
-      className="sr-only"
-      role="region"
-      aria-label="Cross-chain fraud reporting data flow description"
-    >
+    <div id="cross-chain-viz-description" className="sr-only">
       <h3>Cross-Chain Fraud Reporting Flow</h3>
       <p>
         This visualization shows how stolen wallet reports flow through the Stolen Wallet Registry
