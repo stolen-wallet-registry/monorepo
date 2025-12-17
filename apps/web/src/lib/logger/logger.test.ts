@@ -15,6 +15,7 @@ const TEST_CONFIG = {
     wallet: true,
     contract: true,
     signature: true,
+    acknowledgement: true,
     registration: true,
     p2p: true,
     store: true,
