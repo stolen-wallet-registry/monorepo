@@ -63,6 +63,9 @@ interface IStolenWalletRegistry {
     /// @notice Thrown when the wallet is already registered
     error AlreadyRegistered();
 
+    /// @notice Thrown when the owner address is the zero address
+    error InvalidOwner();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════

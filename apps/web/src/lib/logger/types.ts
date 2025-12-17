@@ -9,7 +9,8 @@ export type LogCategory =
   | 'wallet' // Wallet connection, disconnection, chain switching
   | 'contract' // Contract reads, writes, transaction receipts
   | 'signature' // EIP-712 signing, storage, validation
-  | 'registration' // Flow step transitions, ack/reg phases
+  | 'acknowledgement' // Acknowledgement phase (first step)
+  | 'registration' // Registration phase (second step)
   | 'p2p' // libp2p node lifecycle, peer connections
   | 'store' // Zustand state changes (noisy, off by default)
   | 'ui'; // Component lifecycle, user interactions

@@ -189,6 +189,18 @@ contract StolenWalletRegistryTest is Test {
         registry.acknowledge(deadline, nonce, owner, v, r, s);
     }
 
+    function test_Acknowledge_ZeroAddress() public {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = 0;
+
+        // Sign for zero address (will fail validation anyway, but test the explicit check)
+        (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(ownerPrivateKey, address(0), forwarder, nonce, deadline);
+
+        vm.prank(forwarder);
+        vm.expectRevert(IStolenWalletRegistry.InvalidOwner.selector);
+        registry.acknowledge(deadline, nonce, address(0), v, r, s);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // REGISTER TESTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -330,6 +342,18 @@ contract StolenWalletRegistryTest is Test {
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.Registration__InvalidSigner.selector);
         registry.register(deadline, nonce, owner, v, r, s);
+    }
+
+    function test_Register_ZeroAddress() public {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = 0;
+
+        // Sign for zero address (will fail validation anyway, but test the explicit check)
+        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, address(0), forwarder, nonce, deadline);
+
+        vm.prank(forwarder);
+        vm.expectRevert(IStolenWalletRegistry.InvalidOwner.selector);
+        registry.register(deadline, nonce, address(0), v, r, s);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

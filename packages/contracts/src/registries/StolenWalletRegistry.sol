@@ -58,6 +58,9 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
         external
         payable
     {
+        // Fail fast: reject zero address
+        if (owner == address(0)) revert InvalidOwner();
+
         // Validate signature deadline hasn't passed
         if (deadline <= block.timestamp) revert Acknowledgement__Expired();
 
@@ -88,6 +91,9 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
 
     /// @inheritdoc IStolenWalletRegistry
     function register(uint256 deadline, uint256 nonce, address owner, uint8 v, bytes32 r, bytes32 s) external payable {
+        // Fail fast: reject zero address
+        if (owner == address(0)) revert InvalidOwner();
+
         // Validate signature deadline hasn't passed
         if (deadline <= block.timestamp) revert Registration__SignatureExpired();
 

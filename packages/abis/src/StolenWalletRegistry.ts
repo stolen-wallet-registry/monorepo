@@ -424,6 +424,11 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'error',
+    name: 'InvalidOwner',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'InvalidShortString',
     inputs: [],
   },
