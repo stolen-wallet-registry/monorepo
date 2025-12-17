@@ -4,3 +4,6 @@
 
 # Broadcast files (deployment records)
 /broadcast
+
+# Dependencies (restored via forge install)
+/lib

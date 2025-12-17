@@ -10,62 +10,14 @@ import { generateKeyPair, privateKeyFromProtobuf, privateKeyToProtobuf } from '@
 import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 
 import fs from 'fs';
-import os from 'os';
 
-import { KEYS_PATH, KEYS_LOCK_PATH } from './config.mjs';
+import { KEYS_PATH, RELAY_PORT } from './config.mjs';
+import { verifyKeyIntegrity, writeFileSecurely, acquireLock, releaseLock } from './key-utils.mjs';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
 let peerId;
 let privateKey;
-
-/**
- * Verify that a private key produces the expected peer ID.
- */
-function verifyKeyIntegrity(privKeyBytes, expectedPeerId) {
-  try {
-    const privKey = privateKeyFromProtobuf(privKeyBytes);
-    const derivedPeerId = peerIdFromPrivateKey(privKey);
-    return derivedPeerId.toString() === expectedPeerId;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Write file atomically with restrictive permissions.
- */
-function writeFileSecurely(filePath, content) {
-  const tempPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tempPath, content, { mode: 0o600 });
-  fs.renameSync(tempPath, filePath);
-  if (os.platform() !== 'win32') {
-    fs.chmodSync(filePath, 0o600);
-  }
-}
-
-/**
- * Acquire a simple file lock to prevent race conditions.
- */
-function acquireLock() {
-  try {
-    fs.writeFileSync(KEYS_LOCK_PATH, String(process.pid), { flag: 'wx' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Release the file lock.
- */
-function releaseLock() {
-  try {
-    fs.unlinkSync(KEYS_LOCK_PATH);
-  } catch {
-    // Ignore - lock may not exist
-  }
-}
 
 /**
  * Load or generate Ed25519 keys for stable peer ID across restarts.
@@ -87,7 +39,11 @@ async function loadOrGenerateKeys() {
       console.log('Peer ID:', peerId.toString());
       return;
     } catch (err) {
-      throw new Error(`Invalid RELAY_PRIVATE_KEY: ${err.message}`);
+      throw new Error(
+        `Invalid RELAY_PRIVATE_KEY: ${err.message}\n` +
+          'Expected: base64-encoded Ed25519 private key protobuf.\n' +
+          'Generate one using: pnpm relay:setup'
+      );
     }
   }
 
@@ -166,7 +122,7 @@ await loadOrGenerateKeys();
 const server = await createLibp2p({
   privateKey,
   addresses: {
-    listen: ['/ip4/0.0.0.0/tcp/12312/ws'],
+    listen: [`/ip4/0.0.0.0/tcp/${RELAY_PORT}/ws`],
   },
   transports: [webSockets()],
   connectionEncrypters: [noise()],

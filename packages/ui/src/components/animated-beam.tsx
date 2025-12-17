@@ -136,9 +136,19 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
       <defs>
         {shouldReduceMotion ? (
           // Static gradient for users who prefer reduced motion
-          <linearGradient id={id} gradientUnits="userSpaceOnUse" x1="0%" y1="0%" x2="100%" y2="0%">
+          // Matches animated gradient's appearance: respects reverse prop, uses 4-stop fade pattern
+          <linearGradient
+            id={id}
+            gradientUnits="userSpaceOnUse"
+            x1={reverse ? '90%' : '10%'}
+            y1="0%"
+            x2={reverse ? '100%' : '0%'}
+            y2="0%"
+          >
+            <stop stopColor={gradientStartColor} stopOpacity="0" />
             <stop stopColor={gradientStartColor} />
-            <stop offset="100%" stopColor={gradientStopColor} />
+            <stop offset="32.5%" stopColor={gradientStopColor} />
+            <stop offset="100%" stopColor={gradientStopColor} stopOpacity="0" />
           </linearGradient>
         ) : (
           <motion.linearGradient
