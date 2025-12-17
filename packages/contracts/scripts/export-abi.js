@@ -7,9 +7,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const outDir = join(__dirname, '../out');
 const abiDir = join(__dirname, '../../abis/src');
 
+// Foundry flattens output - artifacts are at ContractName.sol/ContractName.json
 const contracts = [
   'RegistryHub.sol/RegistryHub.json',
-  'registries/StolenWalletRegistry.sol/StolenWalletRegistry.json',
+  'StolenWalletRegistry.sol/StolenWalletRegistry.json',
   'FeeManager.sol/FeeManager.json',
 ];
 

@@ -108,11 +108,10 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
         if (block.number < ack.startBlock) revert Registration__GracePeriodNotStarted();
 
         // Check registration window hasn't expired
-        if (block.number >= ack.expiryBlock) {
-            // Clean up expired acknowledgement before reverting
-            delete pendingAcknowledgements[owner];
-            revert Registration__ForwarderExpired();
-        }
+        // Note: Expired entries are NOT deleted here because revert rolls back state changes.
+        // The isPending() view function correctly returns false for expired entries.
+        // Expired entries are overwritten when a new acknowledgement is made.
+        if (block.number >= ack.expiryBlock) revert Registration__ForwarderExpired();
 
         // Increment nonce AFTER validation (fixes bug from original contract)
         nonces[owner]++;

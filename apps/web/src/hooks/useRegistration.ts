@@ -71,7 +71,7 @@ export function useRegistration(): UseRegistrationResult {
     const txHash = await writeContractAsync({
       address: contractAddress,
       abi: stolenWalletRegistryAbi,
-      functionName: 'walletRegistration',
+      functionName: 'register',
       args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
     });
 

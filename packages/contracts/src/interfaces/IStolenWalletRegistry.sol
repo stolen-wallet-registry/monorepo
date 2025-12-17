@@ -141,9 +141,12 @@ interface IStolenWalletRegistry {
     function nonces(address owner) external view returns (uint256);
 
     /// @notice Generate hash struct for EIP-712 signature
-    /// @dev Used by frontend to prepare typed data for signing
+    /// @dev Used by frontend to prepare typed data for signing.
+    ///      SECURITY: Uses msg.sender as the owner in the hash struct. This prevents
+    ///      malicious actors from creating valid signatures for wallets they don't control.
+    ///      The signer MUST be the wallet owner calling this function.
     /// @param forwarder The address that will submit the transaction
-    /// @param step 1 for acknowledgement, 2 for registration
+    /// @param step 1 for acknowledgement, any other value for registration
     /// @return deadline The signature expiry timestamp
     /// @return hashStruct The EIP-712 hash struct to sign
     function generateHashStruct(address forwarder, uint8 step)

@@ -25,6 +25,7 @@
     "storybook:landing": "pnpm --filter landing storybook",
     "build-storybook": "turbo build-storybook",
     "anvil": "anvil --ipc /tmp/anvil.ipc --steps-tracing --block-time 13",
+    "deploy:dev": "pnpm --filter @swr/contracts deploy:local",
     "relay": "pnpm --filter @swr/relay dev",
     "relay:debug": "pnpm --filter @swr/relay dev:debug",
     "relay:setup": "pnpm --filter @swr/relay setup-keys",

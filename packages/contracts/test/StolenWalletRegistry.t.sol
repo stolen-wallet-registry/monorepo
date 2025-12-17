@@ -423,6 +423,28 @@ contract StolenWalletRegistryTest is Test {
         assertEq(hashStruct, expectedHash, "Hash struct should match");
     }
 
+    function test_GenerateHashStruct_InvalidStep_DefaultsToRegistration() public {
+        // Any step value other than 1 defaults to registration typehash
+        // This is by design - see IStolenWalletRegistry.generateHashStruct docs
+        vm.prank(owner);
+        (, bytes32 hashStructStep0) = registry.generateHashStruct(forwarder, 0);
+
+        vm.prank(owner);
+        (, bytes32 hashStructStep2) = registry.generateHashStruct(forwarder, 2);
+
+        vm.prank(owner);
+        (, bytes32 hashStructStep255) = registry.generateHashStruct(forwarder, 255);
+
+        // All non-1 steps should produce same hash (registration typehash)
+        assertEq(hashStructStep0, hashStructStep2, "Step 0 and 2 should match");
+        assertEq(hashStructStep2, hashStructStep255, "Step 2 and 255 should match");
+
+        // Verify these are different from step 1 (acknowledgement)
+        vm.prank(owner);
+        (, bytes32 hashStructStep1) = registry.generateHashStruct(forwarder, 1);
+        assertTrue(hashStructStep1 != hashStructStep2, "Step 1 should differ from step 2");
+    }
+
     function test_GetDeadlines_Active() public {
         _doAcknowledgement(forwarder);
 

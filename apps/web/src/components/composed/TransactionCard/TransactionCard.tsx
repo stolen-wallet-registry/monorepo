@@ -128,7 +128,7 @@ export function TransactionCard({
         : 'Submitting to the network...';
     }
     if (isFailed) return 'Transaction failed';
-    return `Submit the ${typeLabel.toLowerCase()} transaction`;
+    return 'Ready to submit';
   };
 
   return (

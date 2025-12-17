@@ -71,7 +71,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
     const txHash = await writeContractAsync({
       address: contractAddress,
       abi: stolenWalletRegistryAbi,
-      functionName: 'acknowledgementOfRegistry',
+      functionName: 'acknowledge',
       args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
     });
 
