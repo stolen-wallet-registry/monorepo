@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { Alert, AlertTitle, AlertDescription, Button } from '@swr/ui';
 import { AlertTriangle, Clock, X } from 'lucide-react';
+import { truncateAddress } from '@/lib/address';
 
 /**
  * Mock version of ConnectedWalletStatus for Storybook.
@@ -13,7 +14,7 @@ interface MockConnectedWalletStatusProps {
 }
 
 function MockConnectedWalletStatus({ status, address, onDismiss }: MockConnectedWalletStatusProps) {
-  const truncatedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
+  const truncatedAddress = truncateAddress(address);
 
   if (status === 'clean') {
     return (

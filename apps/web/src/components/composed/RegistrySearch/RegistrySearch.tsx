@@ -143,7 +143,13 @@ export function RegistrySearch({
               placeholder="Search wallet address (0x...)"
               disabled={!!isLoading}
               aria-invalid={!!showError}
-              aria-describedby={showError ? 'search-error' : undefined}
+              aria-describedby={
+                validationError
+                  ? 'search-error-validation'
+                  : registryStatus.isError
+                    ? 'search-error-contract'
+                    : undefined
+              }
               className={compact ? 'text-sm' : ''}
             />
             <InputGroupAddon align="inline-end">
@@ -172,17 +178,24 @@ export function RegistrySearch({
 
         {/* Validation Error */}
         {validationError && (
-          <p id="search-error" className="text-sm text-destructive">
+          <p id="search-error-validation" className="text-sm text-destructive">
             {validationError}
           </p>
         )}
 
         {/* Contract Error */}
         {registryStatus.isError && registryStatus.error && (
-          <p id="search-error" className="text-sm text-destructive">
+          <p id="search-error-contract" className="text-sm text-destructive">
             Error querying registry: {registryStatus.error.message}
           </p>
         )}
+      </div>
+
+      {/* Screen reader announcements */}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {isLoading && 'Searching registry...'}
+        {showResult && `Search complete. Wallet is ${getResultStatus(registryStatus)}.`}
+        {showError && 'Search error occurred.'}
       </div>
 
       {/* Loading Skeleton */}

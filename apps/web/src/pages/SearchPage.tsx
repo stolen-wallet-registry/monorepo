@@ -17,8 +17,11 @@ import { truncateAddress } from '@/lib/address';
 const RECENT_SEARCHES_KEY = 'swr-recent-searches';
 const MAX_RECENT_SEARCHES = 5;
 
+// Stable empty array for server snapshot (must be same reference always)
+const EMPTY_SEARCHES: string[] = [];
+
 // Cached snapshot for useSyncExternalStore (must return same reference if data unchanged)
-let cachedRecentSearches: string[] = [];
+let cachedRecentSearches: string[] = EMPTY_SEARCHES;
 let cachedRecentSearchesJson: string | null = null;
 
 /**
@@ -93,6 +96,13 @@ function subscribeToRecentSearches(listener: () => void): () => void {
   };
 }
 
+/**
+ * Server snapshot - returns stable empty array reference.
+ */
+function getServerSnapshot(): string[] {
+  return EMPTY_SEARCHES;
+}
+
 export function SearchPage() {
   const [, setLocation] = useLocation();
   const { address: connectedAddress } = useAccount();
@@ -100,7 +110,7 @@ export function SearchPage() {
   const recentSearches = useSyncExternalStore(
     subscribeToRecentSearches,
     getRecentSearches,
-    () => [] // Server snapshot - always empty
+    getServerSnapshot
   );
   const [searchAddress, setSearchAddress] = useState<string>('');
 
@@ -193,7 +203,13 @@ export function SearchPage() {
                       <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                       <button
                         onClick={(e) => handleRemoveRecent(address, e)}
-                        className="h-6 w-6 flex items-center justify-center rounded-sm hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleRemoveRecent(address, e);
+                          }
+                        }}
+                        className="h-6 w-6 flex items-center justify-center rounded-sm hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
                         aria-label="Remove from recent searches"
                       >
                         <X className="h-3 w-3" />

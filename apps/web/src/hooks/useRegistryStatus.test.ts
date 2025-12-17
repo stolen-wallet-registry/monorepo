@@ -200,4 +200,26 @@ describe('useRegistryStatus', () => {
     result.current.refetch();
     expect(mockRefetch).toHaveBeenCalled();
   });
+
+  it('handles missing contract address gracefully', () => {
+    // The getContractAddress mock returns a valid address by default
+    // When contract is unavailable, useReadContracts would return no data
+    mockUseReadContracts.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useReadContracts>);
+
+    const { result } = renderHook(() => useRegistryStatus({ address: sampleAddress }));
+
+    // Verify hook doesn't crash and provides appropriate default state
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.isError).toBe(false);
+    expect(result.current.isRegistered).toBe(false);
+    expect(result.current.isPending).toBe(false);
+    expect(result.current.registrationData).toBeNull();
+    expect(result.current.acknowledgementData).toBeNull();
+  });
 });
