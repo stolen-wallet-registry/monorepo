@@ -5,19 +5,38 @@
  * Uses InputGroup for a composable search input with loading states.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { isAddress } from 'viem';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, Skeleton } from '@swr/ui';
-import { Search, X, Loader2 } from 'lucide-react';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+  Skeleton,
+  Button,
+} from '@swr/ui';
+import { Search, X, Loader2, Check, AlertCircle } from 'lucide-react';
 import { useRegistryStatus, type RegistryStatus } from '@/hooks';
 import { cn } from '@/lib/utils';
+import { logger } from '@/lib/logger';
+import type { Address } from '@/lib/types/ethereum';
 import { RegistrySearchResult, type ResultStatus } from './RegistrySearchResult';
+
+/** Result passed to onSearch callback */
+export interface SearchResult {
+  /** The searched address */
+  address: Address;
+  /** Registry status for the address */
+  status: RegistryStatus;
+}
 
 export interface RegistrySearchProps {
   /** Pre-fill address (optional) */
   defaultAddress?: string;
-  /** Called when search completes */
-  onResult?: (result: RegistryStatus) => void;
+  /** Called when a search is initiated with a valid address */
+  onSearch?: (address: Address) => void;
+  /** Called when search completes with result */
+  onResult?: (result: SearchResult) => void;
   /** Compact mode for header/navbar */
   compact?: boolean;
   /** Additional class names */
@@ -45,19 +64,27 @@ function getResultStatus(status: RegistryStatus): ResultStatus {
  */
 export function RegistrySearch({
   defaultAddress = '',
+  onSearch,
   onResult,
   compact = false,
   className,
 }: RegistrySearchProps) {
   const [inputValue, setInputValue] = useState(defaultAddress);
-  const [searchAddress, setSearchAddress] = useState<`0x${string}` | undefined>(
-    isAddress(defaultAddress) ? (defaultAddress as `0x${string}`) : undefined
+  const [searchAddress, setSearchAddress] = useState<Address | undefined>(
+    isAddress(defaultAddress) ? (defaultAddress as Address) : undefined
   );
   const [validationError, setValidationError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(!!defaultAddress && isAddress(defaultAddress));
 
   // Track which address we've notified for to prevent duplicate callbacks
   const lastNotifiedAddressRef = useRef<string | null>(null);
+
+  // Real-time address validation (null = empty/no state, true = valid, false = invalid)
+  const addressValidation = useMemo(() => {
+    const trimmed = inputValue.trim();
+    if (!trimmed) return null; // Empty = no validation state
+    return isAddress(trimmed);
+  }, [inputValue]);
 
   const registryStatus = useRegistryStatus({
     address: searchAddress,
@@ -73,15 +100,22 @@ export function RegistrySearch({
       lastNotifiedAddressRef.current !== searchAddress
     ) {
       lastNotifiedAddressRef.current = searchAddress;
-      onResult(registryStatus);
+      logger.ui.info('Search result ready', {
+        address: searchAddress,
+        isRegistered: registryStatus.isRegistered,
+        isPending: registryStatus.isPending,
+      });
+      onResult({ address: searchAddress, status: registryStatus });
     }
   }, [onResult, searchAddress, registryStatus]);
 
   const handleSearch = useCallback(() => {
     const trimmed = inputValue.trim();
+    logger.ui.debug('Search initiated', { inputValue: trimmed });
 
     // Validate address format
     if (!trimmed) {
+      logger.ui.debug('Search validation failed: empty input');
       setValidationError('Please enter a wallet address');
       setSearchAddress(undefined);
       setHasSearched(false);
@@ -89,20 +123,28 @@ export function RegistrySearch({
     }
 
     if (!isAddress(trimmed)) {
+      logger.ui.debug('Search validation failed: invalid address format', { input: trimmed });
       setValidationError('Invalid Ethereum address. Must be 0x followed by 40 hex characters.');
       setSearchAddress(undefined);
       setHasSearched(false);
       return;
     }
 
+    const validAddress = trimmed as Address;
+    logger.ui.info('Search started', { address: validAddress });
+
     setValidationError(null);
-    setSearchAddress(trimmed as `0x${string}`);
+    setSearchAddress(validAddress);
     setHasSearched(true);
     // Reset notification tracking so effect will fire for new address
     lastNotifiedAddressRef.current = null;
-  }, [inputValue]);
+
+    // Notify parent that search was initiated
+    onSearch?.(validAddress);
+  }, [inputValue, onSearch]);
 
   const handleClear = useCallback(() => {
+    logger.ui.debug('Search cleared');
     setInputValue('');
     setSearchAddress(undefined);
     setValidationError(null);
@@ -152,6 +194,17 @@ export function RegistrySearch({
               }
               className={compact ? 'text-sm' : ''}
             />
+            {/* Validation indicator */}
+            {addressValidation !== null && !isLoading && (
+              <InputGroupAddon align="inline-end">
+                {addressValidation ? (
+                  <Check className="h-4 w-4 text-green-500" aria-label="Valid address" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-destructive" aria-label="Invalid address" />
+                )}
+              </InputGroupAddon>
+            )}
+            {/* Clear button */}
             <InputGroupAddon align="inline-end">
               {inputValue && !isLoading ? (
                 <InputGroupButton size="icon-xs" onClick={handleClear} aria-label="Clear search">
@@ -160,20 +213,13 @@ export function RegistrySearch({
               ) : null}
             </InputGroupAddon>
           </InputGroup>
-          <InputGroupButton
+          <Button
             onClick={handleSearch}
             disabled={!!isLoading || !inputValue.trim()}
-            className={compact ? 'h-9 px-3' : 'h-10 px-4'}
+            size={compact ? 'sm' : 'default'}
           >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <>
-                <Search className="h-4 w-4 mr-2" />
-                Search
-              </>
-            )}
-          </InputGroupButton>
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>Search</span>}
+          </Button>
         </div>
 
         {/* Validation Error */}
