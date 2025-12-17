@@ -63,3 +63,12 @@ export {
 
 // Utility hooks
 export { useCopyToClipboard, type UseCopyToClipboardResult } from './useCopyToClipboard';
+
+// Registry status hook
+export {
+  useRegistryStatus,
+  type RegistryStatus,
+  type RegistrationData,
+  type AcknowledgementData,
+  type UseRegistryStatusOptions,
+} from './useRegistryStatus';

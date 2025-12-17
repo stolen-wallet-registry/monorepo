@@ -44,6 +44,17 @@ export const registryKeys = {
   registrations: () => [...registryKeys.all, 'registration'] as const,
   isRegistered: (address: `0x${string}`) =>
     [...registryKeys.registrations(), 'isRegistered', address] as const,
+  getRegistration: (address: `0x${string}`) =>
+    [...registryKeys.registrations(), 'getRegistration', address] as const,
+
+  /** Key for pending status queries */
+  pending: () => [...registryKeys.all, 'pending'] as const,
+  isPending: (address: `0x${string}`) => [...registryKeys.pending(), 'isPending', address] as const,
+  getAcknowledgement: (address: `0x${string}`) =>
+    [...registryKeys.pending(), 'getAcknowledgement', address] as const,
+
+  /** Combined status query (batched isRegistered + isPending + data) */
+  status: (address: `0x${string}`) => [...registryKeys.all, 'status', address] as const,
 } as const;
 
 /**
@@ -63,4 +74,8 @@ export const registryStaleTime = {
   hashStruct: 10_000,
   /** Registration status rarely changes - 60 seconds */
   isRegistered: 60_000,
+  /** Pending status - 30 seconds (changes during registration flow) */
+  isPending: 30_000,
+  /** Combined status query - 30 seconds */
+  status: 30_000,
 } as const;

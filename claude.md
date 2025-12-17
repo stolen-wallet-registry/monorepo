@@ -330,6 +330,36 @@ src/test/test-utils.tsx → Custom render with providers
 
 ---
 
+## Type Conventions
+
+### Ethereum Types (IMPORTANT)
+
+**Always use viem's exported types instead of inline type definitions.**
+
+```typescript
+// ✅ CORRECT - Import from our types module
+import type { Address, Hash, Hex } from '@/lib/types/ethereum';
+
+function transfer(to: Address, amount: bigint): Hash { ... }
+const searchAddress = useState<Address | undefined>();
+
+// ❌ WRONG - Don't use inline hex string types
+function transfer(to: `0x${string}`, amount: bigint): `0x${string}` { ... }
+const searchAddress = useState<`0x${string}` | undefined>();
+```
+
+**Available types from `@/lib/types/ethereum`:**
+
+| Type      | Use For                                    |
+| --------- | ------------------------------------------ |
+| `Address` | Ethereum addresses (42 chars, 0x-prefixed) |
+| `Hash`    | Transaction/block hashes (66 chars)        |
+| `Hex`     | Generic hex strings                        |
+
+**Also exported:** `isAddress`, `isHash`, `isHex` for runtime validation.
+
+---
+
 ## File Structure Reference
 
 ```text

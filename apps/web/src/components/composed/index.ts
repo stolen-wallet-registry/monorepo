@@ -27,3 +27,11 @@ export {
   type WalletSwitchPromptProps,
   type WalletStatus,
 } from './WalletSwitchPrompt';
+export {
+  RegistrySearch,
+  type RegistrySearchProps,
+  RegistrySearchResult,
+  type RegistrySearchResultProps,
+  type ResultStatus,
+} from './RegistrySearch';
+export { ConnectedWalletStatus, type ConnectedWalletStatusProps } from './ConnectedWalletStatus';

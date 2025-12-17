@@ -5,7 +5,7 @@ export { cn } from './lib/utils';
 export { Alert, AlertTitle, AlertDescription } from './components/alert';
 export { Badge } from './components/badge';
 export { badgeVariants } from './components/badge-variants';
-export { Button, buttonVariants, type ButtonProps } from './components/button';
+export { Button, buttonVariants } from './components/button';
 export {
   Card,
   CardHeader,
@@ -39,7 +39,16 @@ export {
   FormField,
 } from './components/form';
 export { Input } from './components/input';
+export {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupText,
+  InputGroupInput,
+  InputGroupTextarea,
+} from './components/input-group';
 export { Label } from './components/label';
+export { Textarea } from './components/textarea';
 export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from './components/popover';
 export { Progress } from './components/progress';
 export { ScrollArea, ScrollBar } from './components/scroll-area';
