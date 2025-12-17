@@ -35,19 +35,19 @@ import {
 import { truncateAddress } from '@/lib/address';
 import { getChainDisplayInfo } from '@/lib/chains';
 import { logger } from '@/lib/logger';
+import { redactAddress } from '@/lib/logger/formatters';
 import type { Address } from '@/lib/types/ethereum';
 
 const RECENT_SEARCHES_KEY = 'swr-recent-searches';
 const MAX_RECENT_SEARCHES = 5;
 
-/** Redact address for logging (privacy-preserving) */
-const redactAddress = (addr: string) => `...${addr.slice(-4)}`;
-
 /** Registry entry types */
 type RegistryType = 'wallet' | 'transaction' | 'contract';
+const VALID_TYPES: RegistryType[] = ['wallet', 'transaction', 'contract'];
 
 /** Search result status */
 type SearchResultStatus = 'registered' | 'pending' | 'clean' | 'unknown';
+const VALID_STATUSES: SearchResultStatus[] = ['registered', 'pending', 'clean', 'unknown'];
 
 /** Recent search entry with metadata */
 interface RecentSearch {
@@ -102,8 +102,10 @@ function normalizeRecentSearch(entry: unknown): RecentSearch | null {
   return {
     address: e.address as Address,
     chainId: typeof e.chainId === 'number' ? e.chainId : 31337,
-    type: (e.type as RegistryType) ?? 'wallet',
-    resultStatus: (e.resultStatus as SearchResultStatus) ?? 'unknown',
+    type: VALID_TYPES.includes(e.type as RegistryType) ? (e.type as RegistryType) : 'wallet',
+    resultStatus: VALID_STATUSES.includes(e.resultStatus as SearchResultStatus)
+      ? (e.resultStatus as SearchResultStatus)
+      : 'unknown',
     timestamp: typeof e.timestamp === 'number' ? e.timestamp : Date.now(),
   };
 }
@@ -216,6 +218,8 @@ function removeRecentSearch(address: string): void {
       (s) => s.address.toLowerCase() !== address.toLowerCase()
     );
     localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(recent));
+    // Invalidate cache so next read gets fresh data
+    cachedRecentSearchesJson = null;
   } catch {
     // Ignore localStorage errors
   }
