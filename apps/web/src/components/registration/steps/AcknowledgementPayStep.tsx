@@ -17,6 +17,7 @@ import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { useAcknowledgement } from '@/hooks/useAcknowledgement';
+import { useTransactionCost } from '@/hooks/useTransactionCost';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
@@ -68,6 +69,25 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   const storedSignature = registeree
     ? getSignature(registeree, chainId, SIGNATURE_STEP.ACKNOWLEDGEMENT)
     : null;
+
+  // Build transaction args for gas estimation (needs to be before early returns)
+  const transactionArgs =
+    storedSignature && registeree
+      ? ([
+          storedSignature.deadline,
+          storedSignature.nonce,
+          registeree,
+          parseSignature(storedSignature.signature).v,
+          parseSignature(storedSignature.signature).r,
+          parseSignature(storedSignature.signature).s,
+        ] as const)
+      : undefined;
+
+  // Get transaction cost estimate (must be called unconditionally - hooks rule)
+  const costEstimate = useTransactionCost({
+    step: 'acknowledgement',
+    args: transactionArgs,
+  });
 
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
@@ -226,7 +246,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         />
       )}
 
-      {/* Transaction card */}
+      {/* Transaction card with integrated cost estimate */}
       <TransactionCard
         type="acknowledgement"
         status={getStatus()}
@@ -234,6 +254,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         error={errorMessage}
         explorerUrl={explorerUrl}
         signedMessage={signedMessageData}
+        costEstimate={costEstimate}
         chainId={chainId}
         onSubmit={handleSubmit}
         onRetry={handleRetry}

@@ -6,6 +6,7 @@ import { DevTools } from '@/components/dev';
 import { ErrorBoundary } from '@/components/composed/ErrorBoundary';
 import { Toaster } from '@swr/ui';
 import {
+  RegistrySelectionPage,
   HomePage,
   SearchPage,
   StandardRegistrationPage,
@@ -22,7 +23,8 @@ function App() {
       <AppProviders>
         <Layout>
           <Switch>
-            <Route path="/" component={HomePage} />
+            <Route path="/" component={RegistrySelectionPage} />
+            <Route path="/register" component={HomePage} />
             <Route path="/search" component={SearchPage} />
             <Route path="/registration/standard" component={StandardRegistrationPage} />
             <Route path="/registration/self-relay" component={SelfRelayRegistrationPage} />

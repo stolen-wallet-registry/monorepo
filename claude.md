@@ -294,6 +294,47 @@ src/components/
 
 **NEVER modify this flow without security review.**
 
+### Error Handling: Contract → Frontend
+
+When adding custom errors to smart contracts, follow this process to ensure users see friendly messages:
+
+#### 1. Define Error in Solidity
+
+```solidity
+// interfaces/IMyContract.sol
+error MyContract__DescriptiveName();
+```
+
+#### 2. Compute Selector
+
+```bash
+cast sig 'MyContract__DescriptiveName()'
+# Output: 0xabcd1234
+```
+
+#### 3. Add to Frontend Error Map
+
+```typescript
+// apps/web/src/lib/errors/contractErrors.ts
+'0xabcd1234': {
+  name: 'MyContract__DescriptiveName',
+  message: 'What went wrong.',       // Past tense, factual
+  action: 'What user should do.',    // Imperative, optional
+},
+```
+
+#### Error Message Guidelines
+
+- `message`: What happened ("Your signature expired")
+- `action`: What to do ("Please sign again")
+- Keep combined length under 100 chars
+- Avoid technical jargon
+
+**Key Files:**
+
+- `apps/web/src/lib/errors/contractErrors.ts` - Error selector map
+- `apps/web/src/lib/utils.ts` - `sanitizeErrorMessage()` decoder integration
+
 ---
 
 ## Testing Philosophy

@@ -1,21 +1,22 @@
 /**
- * Home page - Registration method selection.
+ * Register page - Registration method selection.
  *
- * Entry point for users to choose their registration method.
+ * Entry point for users to choose their wallet registration method.
  */
 
-import { useLocation } from 'wouter';
+import { useLocation, Link } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { ArrowLeft } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@swr/ui';
 import { RegistrationMethodSelector } from '@/components/composed/RegistrationMethodSelector';
 import { useRegistrationStore, type RegistrationType } from '@/stores/registrationStore';
 
 export function HomePage() {
   const [, setLocation] = useLocation();
   const { isConnected } = useAccount();
-  const { registrationType, setRegistrationType } = useRegistrationStore();
+  const { setRegistrationType } = useRegistrationStore();
 
   const handleMethodSelect = (type: RegistrationType) => {
     setRegistrationType(type);
@@ -36,8 +37,16 @@ export function HomePage() {
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-8 space-y-8">
+      {/* Back link */}
+      <Button variant="outline" size="sm" asChild>
+        <Link href="/">
+          <ArrowLeft className="h-4 w-4" />
+          Back to Home
+        </Link>
+      </Button>
+
       <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold tracking-tight">Stolen Wallet Registry</h1>
+        <h1 className="text-4xl font-bold tracking-tight">Register Stolen Wallet</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
           Register your stolen wallet on-chain to help protect the Web3 ecosystem and enable
           recovery assistance.
@@ -63,11 +72,7 @@ export function HomePage() {
             </p>
           </div>
 
-          <RegistrationMethodSelector
-            selected={registrationType}
-            onSelect={handleMethodSelect}
-            p2pAvailable={true}
-          />
+          <RegistrationMethodSelector onSelect={handleMethodSelect} p2pAvailable={true} />
         </div>
       )}
     </div>

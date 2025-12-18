@@ -30,7 +30,8 @@ library TimingConfig {
     uint256 internal constant DEADLINE_BLOCKS = 50;
 
     /// @notice Maximum additional randomness for timestamps (in seconds)
-    uint256 internal constant TIMESTAMP_JITTER = 60;
+    /// @dev 30 minutes to match frontend session storage duration
+    uint256 internal constant TIMESTAMP_JITTER = 1800;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // INTERNAL FUNCTIONS

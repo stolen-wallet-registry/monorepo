@@ -13,7 +13,7 @@ import {
   type AcknowledgementMessage,
   type RegistrationMessage,
 } from '@/lib/signatures';
-import { getContractAddress } from '@/lib/contracts/addresses';
+import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
 
 export interface SignParams {
   owner: `0x${string}`;
@@ -57,7 +57,7 @@ export function useSignEIP712(): UseSignEIP712Result {
 
   let contractAddress: `0x${string}` | undefined;
   try {
-    contractAddress = getContractAddress(chainId);
+    contractAddress = getStolenWalletRegistryAddress(chainId);
   } catch {
     contractAddress = undefined;
   }

@@ -1,0 +1,155 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { IRegistryHub } from "./interfaces/IRegistryHub.sol";
+import { IStolenWalletRegistry } from "./interfaces/IStolenWalletRegistry.sol";
+import { IFeeManager } from "./interfaces/IFeeManager.sol";
+
+/// @title RegistryHub
+/// @author Stolen Wallet Registry Team
+/// @notice Central coordination point for fraud registry subregistries
+/// @dev Uses Ownable2Step for safe DAO ownership transfer.
+///      Supports optional FeeManager (address(0) = free registrations).
+contract RegistryHub is IRegistryHub, Ownable2Step {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    bytes32 public constant STOLEN_WALLET = keccak256("STOLEN_WALLET_REGISTRY");
+    bytes32 public constant FRAUDULENT_CONTRACT = keccak256("FRAUDULENT_CONTRACT_REGISTRY");
+    bytes32 public constant STOLEN_TRANSACTION = keccak256("STOLEN_TRANSACTION_REGISTRY");
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STATE
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Whether the hub is paused (blocks registrations)
+    bool public paused;
+
+    /// @notice Fee manager address (address(0) = no fees, free registrations)
+    address public feeManager;
+
+    /// @notice Mapping of registry type -> registry address
+    mapping(bytes32 => address) private subRegistries;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CONSTRUCTOR
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @param _owner Contract owner (deployer or DAO multisig)
+    /// @param _feeManager Fee manager address (address(0) for free registrations)
+    /// @param _stolenWalletRegistry Initial stolen wallet registry address
+    constructor(address _owner, address _feeManager, address _stolenWalletRegistry) Ownable(_owner) {
+        feeManager = _feeManager;
+        if (_stolenWalletRegistry != address(0)) {
+            subRegistries[STOLEN_WALLET] = _stolenWalletRegistry;
+            emit RegistryUpdated(STOLEN_WALLET, _stolenWalletRegistry);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MODIFIERS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    modifier whenNotPaused() {
+        if (paused) revert Hub__Paused();
+        _;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEW FUNCTIONS - Interface implementations
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @inheritdoc IRegistryHub
+    function stolenWalletRegistryType() external pure returns (bytes32) {
+        return STOLEN_WALLET;
+    }
+
+    /// @inheritdoc IRegistryHub
+    function fraudulentContractRegistryType() external pure returns (bytes32) {
+        return FRAUDULENT_CONTRACT;
+    }
+
+    /// @inheritdoc IRegistryHub
+    function stolenTransactionRegistryType() external pure returns (bytes32) {
+        return STOLEN_TRANSACTION;
+    }
+
+    /// @inheritdoc IRegistryHub
+    function getRegistry(bytes32 registryType) external view returns (address) {
+        return subRegistries[registryType];
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // QUERY PASSTHROUGHS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @inheritdoc IRegistryHub
+    function isWalletRegistered(address wallet) external view returns (bool) {
+        address registry = subRegistries[STOLEN_WALLET];
+        if (registry == address(0)) return false;
+        return IStolenWalletRegistry(registry).isRegistered(wallet);
+    }
+
+    /// @inheritdoc IRegistryHub
+    function isWalletPending(address wallet) external view returns (bool) {
+        address registry = subRegistries[STOLEN_WALLET];
+        if (registry == address(0)) return false;
+        return IStolenWalletRegistry(registry).isPending(wallet);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FEE HANDLING (OPTIONAL)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Get current fee in wei (0 if no fee manager configured)
+    function currentFeeWei() external view returns (uint256) {
+        if (feeManager == address(0)) return 0;
+        return IFeeManager(feeManager).currentFeeWei();
+    }
+
+    /// @notice Validate fee payment (skips if no fee manager)
+    /// @dev Call this in subregistry registration functions
+    function validateFee() internal view {
+        if (feeManager == address(0)) return; // No fee manager = free
+        uint256 requiredFee = IFeeManager(feeManager).currentFeeWei();
+        if (requiredFee == 0) return; // Zero fee = free
+        IFeeManager(feeManager).validateFee(msg.value);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ADMIN FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @inheritdoc IRegistryHub
+    function setPaused(bool _paused) external onlyOwner {
+        paused = _paused;
+        emit HubPaused(_paused);
+    }
+
+    /// @inheritdoc IRegistryHub
+    function setRegistry(bytes32 registryType, address registry) external onlyOwner {
+        subRegistries[registryType] = registry;
+        emit RegistryUpdated(registryType, registry);
+    }
+
+    /// @inheritdoc IRegistryHub
+    function setFeeManager(address _feeManager) external onlyOwner {
+        feeManager = _feeManager;
+        emit FeeManagerUpdated(_feeManager);
+    }
+
+    /// @inheritdoc IRegistryHub
+    function withdrawFees(address to, uint256 amount) external onlyOwner {
+        (bool success,) = to.call{ value: amount }("");
+        if (!success) revert Hub__WithdrawalFailed();
+        emit FeesWithdrawn(to, amount);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // RECEIVE ETH
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    receive() external payable { }
+}

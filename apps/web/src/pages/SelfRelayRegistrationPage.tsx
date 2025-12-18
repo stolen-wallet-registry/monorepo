@@ -11,6 +11,7 @@ import { ArrowLeft } from 'lucide-react';
 
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
 import { StepIndicator } from '@/components/composed/StepIndicator';
+import { ErrorBoundary, StepErrorFallback } from '@/components/composed/ErrorBoundary';
 import { StepRenderer } from '@/components/registration';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
@@ -80,10 +81,10 @@ export function SelfRelayRegistrationPage() {
         Back to Home
       </Button>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-stretch">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
         {/* Step Indicator Sidebar */}
         <aside aria-label="Registration steps">
-          <Card className="h-full">
+          <Card>
             <CardHeader>
               <CardTitle className="text-lg">Self-Relay Registration</CardTitle>
               <CardDescription>Sign with stolen wallet, pay with another</CardDescription>
@@ -98,15 +99,17 @@ export function SelfRelayRegistrationPage() {
           </Card>
         </aside>
 
-        {/* Main Content - min-height matches sidebar via items-stretch */}
-        <main>
-          <Card className="h-full flex flex-col">
+        {/* Main Content - min height matches sidebar, grows with content */}
+        <main className="self-stretch">
+          <Card className="flex flex-col h-full">
             <CardHeader>
               <CardTitle>{currentTitle}</CardTitle>
               <CardDescription>{currentDescription}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow flex flex-col justify-center">
-              <StepRenderer currentStep={step} onStepComplete={goToNextStep} />
+              <ErrorBoundary fallback={<StepErrorFallback />}>
+                <StepRenderer currentStep={step} onStepComplete={goToNextStep} />
+              </ErrorBoundary>
             </CardContent>
           </Card>
         </main>

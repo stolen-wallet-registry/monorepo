@@ -333,10 +333,10 @@ export function P2PRegistereeRegistrationPage() {
         Back to Home
       </Button>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-stretch">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
         {/* Step Indicator Sidebar */}
         <aside aria-label="Registration steps">
-          <Card className="h-full">
+          <Card>
             <CardHeader>
               <CardTitle className="text-lg">P2P Relay Registration</CardTitle>
               <CardDescription>Sign with stolen wallet, relayer pays gas</CardDescription>
@@ -351,8 +351,8 @@ export function P2PRegistereeRegistrationPage() {
           </Card>
         </aside>
 
-        {/* Main Content - min-height matches sidebar via items-stretch */}
-        <main className="flex flex-col gap-4">
+        {/* Main Content - stretches to fill grid row height */}
+        <main className="flex flex-col gap-4 self-stretch">
           {/* Protocol error alert */}
           {protocolError && (
             <Alert variant="destructive">
@@ -365,7 +365,7 @@ export function P2PRegistereeRegistrationPage() {
             </Alert>
           )}
 
-          <Card className="flex-grow flex flex-col">
+          <Card className="flex-grow flex flex-col h-full">
             <CardHeader>
               <CardTitle>{currentTitle}</CardTitle>
               <CardDescription>{currentDescription}</CardDescription>

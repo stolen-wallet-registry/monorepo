@@ -71,24 +71,3 @@ export function createFormErrorHandler(setError: (msg: string | null) => void) {
     setError(errorMessage);
   };
 }
-
-/**
- * Common error messages for signature operations.
- */
-export const SIGNATURE_ERRORS = {
-  MISSING_DATA: 'Missing required data for signing',
-  HASH_STRUCT_FAILED: 'Failed to load signing data. Please try again.',
-  USER_REJECTED: 'Signature request was rejected',
-  EXPIRED: 'Signature has expired. Please sign again.',
-  NETWORK_ERROR: 'Network error. Please check your connection and try again.',
-} as const;
-
-/**
- * Common error messages for contract operations.
- */
-export const CONTRACT_ERRORS = {
-  NOT_CONNECTED: 'Please connect your wallet to continue',
-  WRONG_NETWORK: 'Please switch to the correct network',
-  CONTRACT_NOT_FOUND: 'Contract not found on this network',
-  TRANSACTION_FAILED: 'Transaction failed. Please try again.',
-} as const;

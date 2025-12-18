@@ -17,6 +17,8 @@ import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistration } from '@/hooks/useRegistration';
+import { useFeeEstimate } from '@/hooks/useFeeEstimate';
+import { useTransactionCost } from '@/hooks/useTransactionCost';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
@@ -48,9 +50,10 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     address && expectedWallet && areAddressesEqual(address, expectedWallet)
   );
 
-  // Contract hook
+  // Contract hooks
   const { submitRegistration, hash, isPending, isConfirming, isConfirmed, isError, error, reset } =
     useRegistration();
+  const { data: feeData } = useFeeEstimate();
 
   // Local state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,6 +63,25 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   const storedSignature = registeree
     ? getSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION)
     : null;
+
+  // Build transaction args for gas estimation (needs to be before early returns)
+  const transactionArgs =
+    storedSignature && registeree
+      ? ([
+          storedSignature.deadline,
+          storedSignature.nonce,
+          registeree,
+          parseSignature(storedSignature.signature).v,
+          parseSignature(storedSignature.signature).r,
+          parseSignature(storedSignature.signature).s,
+        ] as const)
+      : undefined;
+
+  // Get transaction cost estimate (must be called unconditionally - hooks rule)
+  const costEstimate = useTransactionCost({
+    step: 'registration',
+    args: transactionArgs,
+  });
 
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
@@ -130,6 +152,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         nonce: storedSignature.nonce,
         registeree,
         signature: parsedSig,
+        feeWei: feeData?.feeWei,
       });
 
       logger.contract.info('Registration transaction submitted, waiting for confirmation');
@@ -219,7 +242,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         />
       )}
 
-      {/* Transaction card */}
+      {/* Transaction card with integrated cost estimate */}
       <TransactionCard
         type="registration"
         status={getStatus()}
@@ -227,6 +250,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         error={errorMessage}
         explorerUrl={explorerUrl}
         signedMessage={signedMessageData}
+        costEstimate={costEstimate}
         chainId={chainId}
         onSubmit={handleSubmit}
         onRetry={handleRetry}

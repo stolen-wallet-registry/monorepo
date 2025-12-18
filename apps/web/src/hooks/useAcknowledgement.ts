@@ -7,7 +7,7 @@
 
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
 import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
-import { getContractAddress } from '@/lib/contracts/addresses';
+import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
 import type { ParsedSignature } from '@/lib/signatures';
 
 export interface AcknowledgementParams {
@@ -42,7 +42,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
 
   let contractAddress: `0x${string}` | undefined;
   try {
-    contractAddress = getContractAddress(chainId);
+    contractAddress = getStolenWalletRegistryAddress(chainId);
   } catch {
     contractAddress = undefined;
   }

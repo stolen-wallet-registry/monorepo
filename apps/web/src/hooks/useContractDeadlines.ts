@@ -12,7 +12,7 @@
 
 import { useReadContract, useChainId } from 'wagmi';
 import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
-import { getContractAddress } from '@/lib/contracts/addresses';
+import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
 import { getBlockTime } from '@/lib/blocks';
 import { logger } from '@/lib/logger';
 
@@ -50,7 +50,7 @@ export function useContractDeadlines(
 
   let contractAddress: `0x${string}` | undefined;
   try {
-    contractAddress = getContractAddress(chainId);
+    contractAddress = getStolenWalletRegistryAddress(chainId);
   } catch {
     // Contract not configured for this chain
     contractAddress = undefined;

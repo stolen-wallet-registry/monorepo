@@ -4,6 +4,9 @@ pragma solidity ^0.8.24;
 import { Test, console2 } from "forge-std/Test.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
 import { IStolenWalletRegistry } from "../src/interfaces/IStolenWalletRegistry.sol";
+import { FeeManager } from "../src/FeeManager.sol";
+import { RegistryHub } from "../src/RegistryHub.sol";
+import { MockAggregator } from "./mocks/MockAggregator.sol";
 
 /// @title StolenWalletRegistryTest
 /// @notice Comprehensive unit and fuzz tests for StolenWalletRegistry
@@ -27,7 +30,8 @@ contract StolenWalletRegistryTest is Test {
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
     function setUp() public {
-        registry = new StolenWalletRegistry();
+        // Deploy registry without fee collection for base tests
+        registry = new StolenWalletRegistry(address(0), address(0));
 
         // Create test accounts with known private key for signing
         ownerPrivateKey = 0xA11CE;
@@ -577,5 +581,233 @@ contract StolenWalletRegistryTest is Test {
             vm.roll(expiryBlock + 1);
             vm.warp(block.timestamp + 1 hours);
         }
+    }
+}
+
+/// @title StolenWalletRegistryFeeTest
+/// @notice Tests for fee validation in StolenWalletRegistry
+contract StolenWalletRegistryFeeTest is Test {
+    StolenWalletRegistry public registry;
+    FeeManager public feeManager;
+    RegistryHub public hub;
+    MockAggregator public mockOracle;
+
+    // Test accounts
+    uint256 internal ownerPrivateKey;
+    address internal owner;
+    address internal forwarder;
+    address internal deployer;
+
+    // EIP-712 constants
+    bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH =
+        keccak256("AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)");
+    bytes32 private constant REGISTRATION_TYPEHASH =
+        keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
+    bytes32 private constant TYPE_HASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+
+    function setUp() public {
+        deployer = makeAddr("deployer");
+        ownerPrivateKey = 0xA11CE;
+        owner = vm.addr(ownerPrivateKey);
+        forwarder = makeAddr("forwarder");
+
+        vm.deal(owner, 10 ether);
+        vm.deal(forwarder, 10 ether);
+
+        // Deploy with fee collection enabled
+        vm.startPrank(deployer);
+        mockOracle = new MockAggregator(300_000_000_000); // $3000 ETH
+        feeManager = new FeeManager(deployer, address(mockOracle));
+        hub = new RegistryHub(deployer, address(feeManager), address(0));
+        registry = new StolenWalletRegistry(address(feeManager), address(hub));
+        hub.setRegistry(hub.STOLEN_WALLET(), address(registry));
+        vm.stopPrank();
+    }
+
+    function _getDomainSeparator() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(TYPE_HASH, keccak256("StolenWalletRegistry"), keccak256("4"), block.chainid, address(registry))
+        );
+    }
+
+    function _signAcknowledgement(
+        uint256 privateKey,
+        address _owner,
+        address _forwarder,
+        uint256 nonce,
+        uint256 deadline
+    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+        bytes32 structHash = keccak256(abi.encode(ACKNOWLEDGEMENT_TYPEHASH, _owner, _forwarder, nonce, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
+        (v, r, s) = vm.sign(privateKey, digest);
+    }
+
+    function _signRegistration(uint256 privateKey, address _owner, address _forwarder, uint256 nonce, uint256 deadline)
+        internal
+        view
+        returns (uint8 v, bytes32 r, bytes32 s)
+    {
+        bytes32 structHash = keccak256(abi.encode(REGISTRATION_TYPEHASH, _owner, _forwarder, nonce, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
+        (v, r, s) = vm.sign(privateKey, digest);
+    }
+
+    function _doAcknowledgement() internal {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = registry.nonces(owner);
+        (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(ownerPrivateKey, owner, forwarder, nonce, deadline);
+
+        vm.prank(forwarder);
+        registry.acknowledge(deadline, nonce, owner, v, r, s);
+    }
+
+    function _skipToRegistrationWindow() internal {
+        (,, uint256 startBlock,,,) = registry.getDeadlines(owner);
+        vm.roll(startBlock + 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FEE VALIDATION TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function test_Register_WithCorrectFee_Succeeds() public {
+        _doAcknowledgement();
+        _skipToRegistrationWindow();
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = registry.nonces(owner);
+        uint256 fee = feeManager.currentFeeWei();
+
+        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+
+        vm.prank(forwarder);
+        registry.register{ value: fee }(deadline, nonce, owner, v, r, s);
+
+        assertTrue(registry.isRegistered(owner));
+    }
+
+    function test_Register_WithInsufficientFee_Reverts() public {
+        _doAcknowledgement();
+        _skipToRegistrationWindow();
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = registry.nonces(owner);
+        uint256 fee = feeManager.currentFeeWei();
+        uint256 insufficientFee = fee - 1;
+
+        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+
+        vm.prank(forwarder);
+        vm.expectRevert(IStolenWalletRegistry.InsufficientFee.selector);
+        registry.register{ value: insufficientFee }(deadline, nonce, owner, v, r, s);
+    }
+
+    function test_Register_WithExcessFee_Succeeds() public {
+        _doAcknowledgement();
+        _skipToRegistrationWindow();
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = registry.nonces(owner);
+        uint256 fee = feeManager.currentFeeWei();
+        uint256 excessFee = fee * 2; // Double the required fee
+
+        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+
+        vm.prank(forwarder);
+        registry.register{ value: excessFee }(deadline, nonce, owner, v, r, s);
+
+        assertTrue(registry.isRegistered(owner));
+    }
+
+    function test_Register_NoFeeManager_Free() public {
+        // Deploy registry without fee manager
+        StolenWalletRegistry freeRegistry = new StolenWalletRegistry(address(0), address(0));
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = freeRegistry.nonces(owner);
+
+        // Sign for the free registry
+        bytes32 domainSep = keccak256(
+            abi.encode(
+                TYPE_HASH, keccak256("StolenWalletRegistry"), keccak256("4"), block.chainid, address(freeRegistry)
+            )
+        );
+        bytes32 structHash = keccak256(abi.encode(ACKNOWLEDGEMENT_TYPEHASH, owner, forwarder, nonce, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSep, structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
+
+        vm.prank(forwarder);
+        freeRegistry.acknowledge(deadline, nonce, owner, v, r, s);
+
+        // Skip to registration window
+        (,, uint256 startBlock,,,) = freeRegistry.getDeadlines(owner);
+        vm.roll(startBlock + 1);
+
+        // Register without fee
+        deadline = block.timestamp + 1 hours;
+        nonce = freeRegistry.nonces(owner);
+        structHash = keccak256(abi.encode(REGISTRATION_TYPEHASH, owner, forwarder, nonce, deadline));
+        digest = keccak256(abi.encodePacked("\x19\x01", domainSep, structHash));
+        (v, r, s) = vm.sign(ownerPrivateKey, digest);
+
+        vm.prank(forwarder);
+        freeRegistry.register(deadline, nonce, owner, v, r, s); // No value sent
+
+        assertTrue(freeRegistry.isRegistered(owner));
+    }
+
+    function test_Register_FeeForwardedToHub() public {
+        _doAcknowledgement();
+        _skipToRegistrationWindow();
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = registry.nonces(owner);
+        uint256 fee = feeManager.currentFeeWei();
+
+        uint256 hubBalanceBefore = address(hub).balance;
+
+        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+
+        vm.prank(forwarder);
+        registry.register{ value: fee }(deadline, nonce, owner, v, r, s);
+
+        uint256 hubBalanceAfter = address(hub).balance;
+        assertEq(hubBalanceAfter - hubBalanceBefore, fee, "Hub should receive full fee");
+    }
+
+    function test_Register_HubReceivesETH() public {
+        _doAcknowledgement();
+        _skipToRegistrationWindow();
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = registry.nonces(owner);
+        uint256 fee = feeManager.currentFeeWei();
+
+        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+
+        vm.prank(forwarder);
+        registry.register{ value: fee }(deadline, nonce, owner, v, r, s);
+
+        // Verify hub received ETH
+        assertEq(address(hub).balance, fee, "Hub balance should equal fee");
+
+        // Owner can withdraw from hub
+        vm.prank(deployer);
+        hub.withdrawFees(deployer, fee);
+        assertEq(deployer.balance, fee, "Deployer should receive withdrawn fee");
+    }
+
+    function test_Register_ZeroFeeWhenNoFeeManager() public {
+        // Deploy registry without fee manager
+        StolenWalletRegistry freeRegistry = new StolenWalletRegistry(address(0), address(0));
+
+        assertEq(freeRegistry.feeManager(), address(0));
+        assertEq(freeRegistry.registryHub(), address(0));
+    }
+
+    function test_Constructor_StoresFeeManagerAndHub() public view {
+        assertEq(registry.feeManager(), address(feeManager));
+        assertEq(registry.registryHub(), address(hub));
     }
 }

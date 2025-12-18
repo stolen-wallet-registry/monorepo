@@ -1,4 +1,5 @@
 // Pages barrel export
+export { RegistrySelectionPage } from './RegistrySelectionPage';
 export { HomePage } from './HomePage';
 export { SearchPage } from './SearchPage';
 export { StandardRegistrationPage } from './StandardRegistrationPage';
