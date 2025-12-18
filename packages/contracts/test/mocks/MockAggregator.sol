@@ -5,6 +5,8 @@ pragma solidity ^0.8.24;
 /// @notice Mock Chainlink price feed for testing
 /// @dev Allows setting arbitrary prices and timestamps for testing edge cases
 contract MockAggregator {
+    error OracleCallFailed();
+
     int256 public price;
     uint256 public updatedAt;
     bool public shouldRevert;
@@ -32,9 +34,7 @@ contract MockAggregator {
         view
         returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 _updatedAt, uint80 answeredInRound)
     {
-        if (shouldRevert) {
-            revert("MockAggregator: forced revert");
-        }
+        if (shouldRevert) revert OracleCallFailed();
         return (0, price, 0, updatedAt, 0);
     }
 
@@ -55,6 +55,7 @@ contract MockAggregator {
         view
         returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 _updatedAt, uint80 answeredInRound)
     {
+        if (shouldRevert) revert OracleCallFailed();
         return (0, price, 0, updatedAt, 0);
     }
 }

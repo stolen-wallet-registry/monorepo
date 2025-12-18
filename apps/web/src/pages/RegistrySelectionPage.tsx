@@ -62,7 +62,7 @@ export function RegistrySelectionPage() {
             description={registry.description}
             status={registry.status}
             icon={registry.icon}
-            onClick={registry.path ? () => setLocation(registry.path) : undefined}
+            onClick={registry.path ? () => setLocation(registry.path!) : undefined}
           />
         ))}
       </div>

@@ -94,7 +94,7 @@ export function RegistrationMethodSelector({
               }
             }}
             className={cn(
-              'h-full cursor-pointer transition-all',
+              'group h-full cursor-pointer transition-all',
               isDisabled && 'opacity-50 cursor-not-allowed',
               !isDisabled && 'hover:ring-2 hover:ring-primary hover:border-primary hover:shadow-lg'
             )}

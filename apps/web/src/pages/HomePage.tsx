@@ -38,12 +38,12 @@ export function HomePage() {
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-8 space-y-8">
       {/* Back link */}
-      <Link href="/">
-        <Button variant="outline" size="sm">
+      <Button variant="outline" size="sm" asChild>
+        <Link href="/">
           <ArrowLeft className="h-4 w-4" />
           Back to Home
-        </Button>
-      </Link>
+        </Link>
+      </Button>
 
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold tracking-tight">Register Stolen Wallet</h1>

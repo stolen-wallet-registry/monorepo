@@ -53,6 +53,19 @@ contract FeeManager is IFeeManager, Ownable2Step {
     // PRICE RESOLUTION
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @dev Converts Chainlink price to USD cents based on feed decimals
+    /// @param price Raw price from Chainlink (int256)
+    /// @return Price in USD cents
+    function _toCents(int256 price) internal view returns (uint256) {
+        // Chainlink ETH/USD typically returns 8 decimals
+        // To convert to cents (2 decimals), divide by 10^(decimals-2) = 10^6
+        uint8 feedDecimals = _priceFeed.decimals();
+        if (feedDecimals <= 2) {
+            return uint256(price) * 10 ** (2 - feedDecimals);
+        }
+        return uint256(price) / 10 ** (feedDecimals - 2);
+    }
+
     /// @inheritdoc IFeeManager
     /// @dev NOT a view function - opportunistically syncs fallback once per interval
     function getEthPriceUsdCents() public returns (uint256) {
@@ -72,9 +85,8 @@ contract FeeManager is IFeeManager, Ownable2Step {
                 return fallbackEthPriceUsdCents;
             }
 
-            // Chainlink ETH/USD returns 8 decimals, convert to cents
-            // e.g., 300000000000 (8 decimals) -> 300000 cents ($3000)
-            uint256 livePrice = uint256(price) / 1e6;
+            // Convert to cents using feed's decimals
+            uint256 livePrice = _toCents(price);
 
             // Opportunistic sync: update fallback if interval has passed
             // Cost: ~100 gas for read + ~10k gas for write (only when triggered)
@@ -102,7 +114,7 @@ contract FeeManager is IFeeManager, Ownable2Step {
             if (block.timestamp - updatedAt > stalePriceThreshold || price <= 0) {
                 return fallbackEthPriceUsdCents;
             }
-            return uint256(price) / 1e6;
+            return _toCents(price);
         } catch {
             return fallbackEthPriceUsdCents;
         }
@@ -148,7 +160,7 @@ contract FeeManager is IFeeManager, Ownable2Step {
         if (price <= 0) revert Fee__InvalidPrice();
         if (block.timestamp - updatedAt > stalePriceThreshold) revert Fee__StalePrice();
 
-        uint256 newPrice = uint256(price) / 1e6;
+        uint256 newPrice = _toCents(price);
         fallbackEthPriceUsdCents = newPrice;
         lastFallbackSync = block.timestamp;
         emit FallbackPriceRefreshed(newPrice);

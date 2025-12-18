@@ -21,14 +21,6 @@ contract RegistryHubTest is Test {
     address public user;
     address public recipient;
 
-    // EIP-712 constants
-    bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH =
-        keccak256("AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-    bytes32 private constant REGISTRATION_TYPEHASH =
-        keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-    bytes32 private constant TYPE_HASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-
     function setUp() public {
         owner = makeAddr("owner");
         user = makeAddr("user");
