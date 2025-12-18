@@ -32,11 +32,12 @@ contract RegistryHubTest is Test {
         // Deploy mock oracle with $3000 ETH price
         mockOracle = new MockAggregator(300_000_000_000);
 
-        // Deploy contracts
+        // Deploy contracts in correct order for fee collection
         vm.startPrank(owner);
-        walletRegistry = new StolenWalletRegistry();
         feeManager = new FeeManager(owner, address(mockOracle));
-        hub = new RegistryHub(owner, address(feeManager), address(walletRegistry));
+        hub = new RegistryHub(owner, address(feeManager), address(0));
+        walletRegistry = new StolenWalletRegistry(address(feeManager), address(hub));
+        hub.setRegistry(hub.STOLEN_WALLET(), address(walletRegistry));
         vm.stopPrank();
     }
 
@@ -173,7 +174,7 @@ contract RegistryHubTest is Test {
     }
 
     function test_SetRegistry_Success() public {
-        StolenWalletRegistry newRegistry = new StolenWalletRegistry();
+        StolenWalletRegistry newRegistry = new StolenWalletRegistry(address(feeManager), address(hub));
         bytes32 registryType = hub.STOLEN_WALLET();
 
         vm.expectEmit(true, true, true, true);

@@ -16,6 +16,10 @@ export default defineConfig([
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
+      parserOptions: {
+        // Required in monorepos to tell typescript-eslint which tsconfig to use
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
       // Allow underscore-prefixed unused variables

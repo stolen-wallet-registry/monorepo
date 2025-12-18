@@ -5,6 +5,7 @@ import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 import { IStolenWalletRegistry } from "../interfaces/IStolenWalletRegistry.sol";
+import { IFeeManager } from "../interfaces/IFeeManager.sol";
 import { TimingConfig } from "../libraries/TimingConfig.sol";
 
 /// @title StolenWalletRegistry
@@ -29,6 +30,16 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
         keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // IMMUTABLE STATE
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Fee manager address (address(0) = free registrations)
+    address public immutable feeManager;
+
+    /// @notice Registry hub address for fee forwarding
+    address public immutable registryHub;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // STATE
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -45,9 +56,14 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Initialize the registry with EIP-712 domain separator
+    /// @notice Initialize the registry with EIP-712 domain separator and fee configuration
     /// @dev Version "4" for frontend compatibility with existing signatures
-    constructor() EIP712("StolenWalletRegistry", "4") { }
+    /// @param _feeManager FeeManager contract address (address(0) for free registrations)
+    /// @param _registryHub RegistryHub contract address for fee forwarding
+    constructor(address _feeManager, address _registryHub) EIP712("StolenWalletRegistry", "4") {
+        feeManager = _feeManager;
+        registryHub = _registryHub;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
@@ -118,6 +134,18 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
         // The isPending() view function correctly returns false for expired entries.
         // Expired entries are overwritten when a new acknowledgement is made.
         if (block.number >= ack.expiryBlock) revert Registration__ForwarderExpired();
+
+        // Validate fee payment (if fee manager is configured)
+        if (feeManager != address(0)) {
+            uint256 requiredFee = IFeeManager(feeManager).currentFeeWei();
+            if (msg.value < requiredFee) revert InsufficientFee();
+        }
+
+        // Forward fee to RegistryHub (after validation, before state changes)
+        if (registryHub != address(0) && msg.value > 0) {
+            (bool success,) = registryHub.call{ value: msg.value }("");
+            if (!success) revert FeeForwardFailed();
+        }
 
         // Increment nonce AFTER validation (fixes bug from original contract)
         nonces[owner]++;

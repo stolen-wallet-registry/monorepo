@@ -2,6 +2,8 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { BaseError } from 'viem';
 
+import { decodeContractError } from './errors/contractErrors';
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -36,6 +38,12 @@ export function sanitizeErrorMessage(error: unknown): string {
   // Fallback to message-based detection
   const message = error instanceof Error ? error.message : String(error);
 
+  // Try to decode contract custom errors (e.g., "custom error 0xec5c97a6")
+  const decodedError = decodeContractError(message);
+  if (decodedError) {
+    return decodedError;
+  }
+
   if (message.includes('User rejected') || message.includes('user rejected')) {
     return 'Transaction was cancelled. Please try again when ready.';
   }
@@ -57,6 +65,9 @@ export function sanitizeErrorMessage(error: unknown): string {
 
   // Strip "Details: " prefix if the details just repeat the message
   sanitized = sanitized.replace(/\s*Details:\s*[^.]+\./gi, '');
+
+  // Strip "Raw Call Arguments:" section (contains long hex data that breaks UI)
+  sanitized = sanitized.replace(/\s*Raw Call Arguments:[\s\S]*$/i, '');
 
   // Clean up any double spaces or trailing punctuation issues
   sanitized = sanitized.replace(/\s+/g, ' ').trim();

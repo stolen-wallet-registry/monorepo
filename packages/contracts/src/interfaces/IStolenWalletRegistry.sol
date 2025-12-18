@@ -66,6 +66,12 @@ interface IStolenWalletRegistry {
     /// @notice Thrown when the owner address is the zero address
     error InvalidOwner();
 
+    /// @notice Thrown when the provided fee is less than required
+    error InsufficientFee();
+
+    /// @notice Thrown when fee forwarding to RegistryHub fails
+    error FeeForwardFailed();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -133,6 +139,16 @@ interface IStolenWalletRegistry {
     /// @param wallet The address to query
     /// @return data The acknowledgement data (zeroed struct if no pending acknowledgement)
     function getAcknowledgement(address wallet) external view returns (AcknowledgementData memory data);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEW FUNCTIONS - Fee Configuration
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Fee manager address (address(0) = free registrations)
+    function feeManager() external view returns (address);
+
+    /// @notice Registry hub address for fee forwarding
+    function registryHub() external view returns (address);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - Frontend Compatibility

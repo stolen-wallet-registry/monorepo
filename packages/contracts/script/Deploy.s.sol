@@ -38,11 +38,7 @@ contract Deploy is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // 1. Deploy StolenWalletRegistry (no dependencies)
-        StolenWalletRegistry registry = new StolenWalletRegistry();
-        console.log("StolenWalletRegistry:", address(registry));
-
-        // 2. Get price feed address (or deploy mock for local)
+        // 1. Get price feed address (or deploy mock for local)
         address priceFeed = getChainlinkFeed(chainId);
         if (priceFeed == address(0)) {
             // Local development: deploy mock aggregator
@@ -53,13 +49,21 @@ contract Deploy is Script {
             console.log("Using Chainlink feed:", priceFeed);
         }
 
-        // 3. Deploy FeeManager with price feed
+        // 2. Deploy FeeManager with price feed
         FeeManager feeManager = new FeeManager(deployer, priceFeed);
         console.log("FeeManager:", address(feeManager));
 
-        // 4. Deploy RegistryHub connecting everything
-        RegistryHub hub = new RegistryHub(deployer, address(feeManager), address(registry));
+        // 3. Deploy RegistryHub (with feeManager, no registry yet - will be set after)
+        RegistryHub hub = new RegistryHub(deployer, address(feeManager), address(0));
         console.log("RegistryHub:", address(hub));
+
+        // 4. Deploy StolenWalletRegistry with feeManager and registryHub for fee collection
+        StolenWalletRegistry registry = new StolenWalletRegistry(address(feeManager), address(hub));
+        console.log("StolenWalletRegistry:", address(registry));
+
+        // 5. Wire up hub to registry
+        hub.setRegistry(hub.STOLEN_WALLET(), address(registry));
+        console.log("RegistryHub wired to StolenWalletRegistry");
 
         vm.stopBroadcast();
 

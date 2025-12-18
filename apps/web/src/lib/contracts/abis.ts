@@ -6,3 +6,5 @@
 //   pnpm --filter @swr/contracts export-abi
 
 export { StolenWalletRegistryABI as stolenWalletRegistryAbi } from '@swr/abis';
+export { FeeManagerABI as feeManagerAbi } from '@swr/abis';
+export { RegistryHubABI as registryHubAbi } from '@swr/abis';

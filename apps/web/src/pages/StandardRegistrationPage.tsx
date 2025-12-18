@@ -99,10 +99,10 @@ export function StandardRegistrationPage() {
         Back to Home
       </Button>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-stretch">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
         {/* Step Indicator Sidebar */}
         <aside aria-label="Registration steps">
-          <Card className="h-full">
+          <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CardTitle className="text-lg">Standard Registration</CardTitle>
@@ -123,9 +123,9 @@ export function StandardRegistrationPage() {
           </Card>
         </aside>
 
-        {/* Main Content - min-height matches sidebar via items-stretch */}
-        <main>
-          <Card className="h-full flex flex-col">
+        {/* Main Content - min height matches sidebar, grows with content */}
+        <main className="self-stretch">
+          <Card className="flex flex-col h-full">
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CardTitle>{currentTitle}</CardTitle>

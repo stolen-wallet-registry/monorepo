@@ -7,7 +7,7 @@
 
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
 import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
-import { getContractAddress } from '@/lib/contracts/addresses';
+import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
 import type { ParsedSignature } from '@/lib/signatures';
 
 export interface RegistrationParams {
@@ -19,6 +19,11 @@ export interface RegistrationParams {
    */
   registeree: `0x${string}`;
   signature: ParsedSignature;
+  /**
+   * Protocol fee to send with the registration transaction.
+   * Obtained from useFeeEstimate hook.
+   */
+  feeWei?: bigint;
 }
 
 export interface UseRegistrationResult {
@@ -42,7 +47,7 @@ export function useRegistration(): UseRegistrationResult {
 
   let contractAddress: `0x${string}` | undefined;
   try {
-    contractAddress = getContractAddress(chainId);
+    contractAddress = getStolenWalletRegistryAddress(chainId);
   } catch {
     contractAddress = undefined;
   }
@@ -70,13 +75,14 @@ export function useRegistration(): UseRegistrationResult {
       throw new Error('Contract not configured for this chain');
     }
 
-    const { deadline, nonce, registeree, signature } = params;
+    const { deadline, nonce, registeree, signature, feeWei } = params;
 
     const txHash = await writeContractAsync({
       address: contractAddress,
       abi: stolenWalletRegistryAbi,
       functionName: 'register',
       args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
+      value: feeWei ?? 0n,
     });
 
     return txHash;

@@ -1,25 +1,63 @@
+import type { Address } from '@/lib/types/ethereum';
 import { localhost } from '@/lib/wagmi';
 import { sepolia } from 'wagmi/chains';
 
-// Contract addresses by chain ID
-export const CONTRACT_ADDRESSES: Record<number, `0x${string}`> = {
-  [localhost.id]: '0x5fbdb2315678afecb367f032d93f642f64180aa3', // Default Anvil deployment
-  [sepolia.id]: '0x0000000000000000000000000000000000000000', // TODO: Update with deployed address
-};
+// Contract addresses by contract name and chain ID
+// After running deploy script, update these addresses accordingly
+export const CONTRACT_ADDRESSES = {
+  stolenWalletRegistry: {
+    [localhost.id]: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as Address, // Fourth deployed
+    [sepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  feeManager: {
+    [localhost.id]: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address, // Second deployed
+    [sepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  registryHub: {
+    [localhost.id]: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' as Address, // Third deployed
+    [sepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+} as const;
+
+export type ContractName = keyof typeof CONTRACT_ADDRESSES;
 
 // Get contract address for a chain, with env override support
-export function getContractAddress(chainId: number): `0x${string}` {
-  // Check for env override first
-  if (chainId === localhost.id && import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST) {
-    return import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST as `0x${string}`;
-  }
-  if (chainId === sepolia.id && import.meta.env.VITE_CONTRACT_ADDRESS_SEPOLIA) {
-    return import.meta.env.VITE_CONTRACT_ADDRESS_SEPOLIA as `0x${string}`;
+export function getContractAddress(contract: ContractName, chainId: number): Address {
+  // Check for env override first (registry only for backward compat)
+  if (contract === 'stolenWalletRegistry') {
+    if (chainId === localhost.id && import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST) {
+      return import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST as Address;
+    }
+    if (chainId === sepolia.id && import.meta.env.VITE_CONTRACT_ADDRESS_SEPOLIA) {
+      return import.meta.env.VITE_CONTRACT_ADDRESS_SEPOLIA as Address;
+    }
   }
 
-  const address = CONTRACT_ADDRESSES[chainId];
+  // Check for contract-specific env overrides
+  const envKey = `VITE_${contract.toUpperCase()}_ADDRESS_${chainId}`;
+  const envValue = (import.meta.env as Record<string, string | undefined>)[envKey];
+  if (envValue) {
+    return envValue as Address;
+  }
+
+  const addresses = CONTRACT_ADDRESSES[contract];
+  const address = addresses[chainId as keyof typeof addresses];
   if (!address || address === '0x0000000000000000000000000000000000000000') {
-    throw new Error(`No contract address configured for chain ID ${chainId}`);
+    throw new Error(`No ${contract} address configured for chain ID ${chainId}`);
   }
   return address;
+}
+
+// Backward compatibility: get StolenWalletRegistry address
+export function getStolenWalletRegistryAddress(chainId: number): Address {
+  return getContractAddress('stolenWalletRegistry', chainId);
+}
+
+// Convenience getters for other contracts
+export function getFeeManagerAddress(chainId: number): Address {
+  return getContractAddress('feeManager', chainId);
+}
+
+export function getRegistryHubAddress(chainId: number): Address {
+  return getContractAddress('registryHub', chainId);
 }

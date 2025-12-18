@@ -48,10 +48,17 @@ contract IntegrationTest is Test {
         // 1. Deploy mock oracle
         mockOracle = new MockAggregator(300_000_000_000); // $3000 ETH
 
-        // 2. Deploy contracts
-        walletRegistry = new StolenWalletRegistry();
+        // 2. Deploy FeeManager
         feeManager = new FeeManager(deployer, address(mockOracle));
-        hub = new RegistryHub(deployer, address(feeManager), address(walletRegistry));
+
+        // 3. Deploy RegistryHub (with feeManager, no registry yet)
+        hub = new RegistryHub(deployer, address(feeManager), address(0));
+
+        // 4. Deploy StolenWalletRegistry with fee collection
+        walletRegistry = new StolenWalletRegistry(address(feeManager), address(hub));
+
+        // 5. Wire hub to registry
+        hub.setRegistry(hub.STOLEN_WALLET(), address(walletRegistry));
 
         vm.stopPrank();
     }
@@ -108,11 +115,12 @@ contract IntegrationTest is Test {
     function _doRegistration() internal {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(victim);
+        uint256 fee = feeManager.currentFeeWei();
 
         (uint8 v, bytes32 r, bytes32 s) = _signRegistration(victimPrivateKey, victim, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
-        walletRegistry.register(deadline, nonce, victim, v, r, s);
+        walletRegistry.register{ value: fee }(deadline, nonce, victim, v, r, s);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -291,13 +299,14 @@ contract IntegrationTest is Test {
         // Complete registration for victim2
         deadline = block.timestamp + 1 hours;
         nonce = walletRegistry.nonces(victim2);
+        uint256 fee = feeManager.currentFeeWei();
 
         structHash = keccak256(abi.encode(REGISTRATION_TYPEHASH, victim2, forwarder, nonce, deadline));
         digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
         (v, r, s) = vm.sign(victim2PrivateKey, digest);
 
         vm.prank(forwarder);
-        walletRegistry.register(deadline, nonce, victim2, v, r, s);
+        walletRegistry.register{ value: fee }(deadline, nonce, victim2, v, r, s);
 
         // Both should be registered
         assertTrue(hub.isWalletRegistered(victim));

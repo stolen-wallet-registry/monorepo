@@ -5,6 +5,7 @@
  * This is a content-only component - wrap in Card if needed for standalone use.
  */
 
+import { useState, useEffect } from 'react';
 import {
   Button,
   Alert,
@@ -13,13 +14,15 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
+  Skeleton,
 } from '@swr/ui';
+import type { TransactionCost } from '@/hooks/useTransactionCost';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
 import { truncateAddress } from '@/lib/address';
 import { getChainName, getChainShortName } from '@/lib/explorer';
-import { Check, AlertCircle, Loader2, FileSignature, Globe, Copy } from 'lucide-react';
+import { Check, AlertCircle, Loader2, FileSignature, Globe, Copy, RefreshCw } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 
 export type TransactionStatus = 'idle' | 'submitting' | 'pending' | 'confirmed' | 'failed';
@@ -40,6 +43,14 @@ export interface SignedMessageData {
   chainId?: number;
 }
 
+/** Cost estimate data for display */
+export interface CostEstimateData {
+  data: TransactionCost | null;
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
+}
+
 export interface TransactionCardProps {
   /** Type of transaction */
   type: 'acknowledgement' | 'registration';
@@ -53,6 +64,8 @@ export interface TransactionCardProps {
   explorerUrl?: string | null;
   /** Signed message data to display */
   signedMessage?: SignedMessageData | null;
+  /** Cost estimate data */
+  costEstimate?: CostEstimateData;
   /** Chain ID for network display */
   chainId?: number;
   /** Callback to submit transaction */
@@ -95,6 +108,7 @@ export function TransactionCard({
   error,
   explorerUrl,
   signedMessage,
+  costEstimate,
   chainId,
   onSubmit,
   onRetry,
@@ -102,6 +116,20 @@ export function TransactionCard({
   className,
 }: TransactionCardProps) {
   const { copied: signatureCopied, copy: copySignature } = useCopyToClipboard({ resetMs: 2000 });
+  const [refreshCooldown, setRefreshCooldown] = useState(false);
+
+  // Handle refresh cooldown timer
+  useEffect(() => {
+    if (!refreshCooldown) return;
+    const timer = setTimeout(() => setRefreshCooldown(false), 5000);
+    return () => clearTimeout(timer);
+  }, [refreshCooldown]);
+
+  const handleRefreshCost = () => {
+    if (refreshCooldown || !costEstimate?.refetch) return;
+    setRefreshCooldown(true);
+    costEstimate.refetch();
+  };
 
   const typeLabel = TYPE_LABELS[type];
   const statusConfig = STATUS_CONFIG[status];
@@ -259,6 +287,116 @@ export function TransactionCard({
         </p>
       )}
 
+      {/* Cost estimate section */}
+      {costEstimate && status === 'idle' && (
+        <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+          {costEstimate.isLoading && !costEstimate.data && (
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+              <Skeleton className="h-3 w-40" />
+            </div>
+          )}
+
+          {costEstimate.isError && !costEstimate.data && (
+            <p className="text-sm text-muted-foreground text-center">Unable to estimate costs</p>
+          )}
+
+          {costEstimate.data && (
+            <>
+              {/* Protocol Fee (registration only) */}
+              {costEstimate.data.protocolFee && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    Protocol Fee
+                    <InfoTooltip
+                      content="This fee supports public goods funding. On Optimism-based chains, it goes to the Optimism Retroactive Public Goods Fund. On other chains, it supports Protocol Guild for Ethereum core development."
+                      size="sm"
+                    />
+                  </span>
+                  <div className="text-right">
+                    <span className="font-medium">{costEstimate.data.protocolFee.usd}</span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({costEstimate.data.protocolFee.eth} ETH)
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Network Gas */}
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  Network Gas
+                  <InfoTooltip
+                    content="Standard network fee paid to validators for processing your transaction on the blockchain."
+                    size="sm"
+                  />
+                </span>
+                <div className="text-right">
+                  <span className="font-medium">{costEstimate.data.gasCost.usd}</span>
+                  <span className="text-xs text-muted-foreground ml-2">
+                    ({costEstimate.data.gasCost.eth} ETH)
+                  </span>
+                </div>
+              </div>
+
+              {/* Total (if protocol fee exists) */}
+              {costEstimate.data.protocolFee && (
+                <>
+                  <hr className="border-border" />
+                  <div className="flex justify-between items-center text-sm font-medium">
+                    <span>Total</span>
+                    <div className="text-right">
+                      <span>{costEstimate.data.total.usd}</span>
+                      <span className="text-xs text-muted-foreground ml-2 font-normal">
+                        ({costEstimate.data.total.eth} ETH)
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Footer */}
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-xs text-muted-foreground">
+                  ETH: {costEstimate.data.ethPriceUsd} • Gas: {costEstimate.data.gasCost.gwei} gwei
+                </p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={handleRefreshCost}
+                      disabled={refreshCooldown || costEstimate.isLoading}
+                      className={cn(
+                        'p-1.5 rounded-md border border-transparent',
+                        'text-muted-foreground hover:text-foreground',
+                        'hover:bg-muted hover:border-border',
+                        'active:scale-95 cursor-pointer',
+                        'transition-all duration-150',
+                        (refreshCooldown || costEstimate.isLoading) &&
+                          'opacity-40 cursor-not-allowed hover:bg-transparent hover:border-transparent active:scale-100'
+                      )}
+                      aria-label="Refresh cost estimate"
+                    >
+                      <RefreshCw
+                        className={cn('h-3.5 w-3.5', costEstimate.isLoading && 'animate-spin')}
+                      />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p className="text-xs">
+                      {refreshCooldown ? 'Please wait...' : 'Refresh estimate'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Transaction hash */}
       {hash && (
         <div className="rounded-lg bg-muted p-4">
@@ -286,7 +424,7 @@ export function TransactionCard({
       {isFailed && error && (
         <Alert variant="destructive" className="overflow-hidden">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          <AlertDescription className="break-words">{error}</AlertDescription>
+          <AlertDescription className="break-words break-all">{error}</AlertDescription>
         </Alert>
       )}
 

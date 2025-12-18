@@ -1,7 +1,18 @@
 export const StolenWalletRegistryABI = [
   {
     type: 'constructor',
-    inputs: [],
+    inputs: [
+      {
+        name: '_feeManager',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: '_registryHub',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
     stateMutability: 'nonpayable',
   },
   {
@@ -81,6 +92,19 @@ export const StolenWalletRegistryABI = [
         name: 'extensions',
         type: 'uint256[]',
         internalType: 'uint256[]',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'feeManager',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
       },
     ],
     stateMutability: 'view',
@@ -326,6 +350,19 @@ export const StolenWalletRegistryABI = [
     stateMutability: 'payable',
   },
   {
+    type: 'function',
+    name: 'registryHub',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
     type: 'event',
     name: 'EIP712DomainChanged',
     inputs: [],
@@ -416,6 +453,16 @@ export const StolenWalletRegistryABI = [
         internalType: 'bytes32',
       },
     ],
+  },
+  {
+    type: 'error',
+    name: 'FeeForwardFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'InsufficientFee',
+    inputs: [],
   },
   {
     type: 'error',
