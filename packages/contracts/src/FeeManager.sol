@@ -54,16 +54,22 @@ contract FeeManager is IFeeManager, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @dev Converts Chainlink price to USD cents based on feed decimals
+    /// @notice Assumes standard Chainlink ETH/USD feeds (8 decimals, price ~3×10¹¹)
+    ///         For exotic feeds with high decimals and small values, result may truncate to 0
     /// @param price Raw price from Chainlink (int256)
-    /// @return Price in USD cents
+    /// @return Price in USD cents (minimum 1 cent to prevent division by zero)
     function _toCents(int256 price) internal view returns (uint256) {
         // Chainlink ETH/USD typically returns 8 decimals
         // To convert to cents (2 decimals), divide by 10^(decimals-2) = 10^6
         uint8 feedDecimals = _priceFeed.decimals();
+        uint256 result;
         if (feedDecimals <= 2) {
-            return uint256(price) * 10 ** (2 - feedDecimals);
+            result = uint256(price) * 10 ** (2 - feedDecimals);
+        } else {
+            result = uint256(price) / 10 ** (feedDecimals - 2);
         }
-        return uint256(price) / 10 ** (feedDecimals - 2);
+        // Ensure minimum 1 cent to prevent division by zero in fee calculation
+        return result > 0 ? result : 1;
     }
 
     /// @inheritdoc IFeeManager
@@ -192,6 +198,8 @@ contract FeeManager is IFeeManager, Ownable2Step {
     }
 
     /// @inheritdoc IFeeManager
+    /// @notice Setting to 0 disables the oracle (all prices considered stale)
+    ///         Consider using reasonable minimum (e.g., 1 hour) for normal operation
     function setStalePriceThreshold(uint256 _stalePriceThreshold) external onlyOwner {
         uint256 oldThreshold = stalePriceThreshold;
         stalePriceThreshold = _stalePriceThreshold;
@@ -199,6 +207,8 @@ contract FeeManager is IFeeManager, Ownable2Step {
     }
 
     /// @inheritdoc IFeeManager
+    /// @notice Setting to 0 triggers sync on every getEthPriceUsdCents() call (higher gas)
+    ///         Consider using reasonable minimum (e.g., 1 hour) for normal operation
     function setFallbackSyncInterval(uint256 _fallbackSyncInterval) external onlyOwner {
         uint256 oldInterval = fallbackSyncInterval;
         fallbackSyncInterval = _fallbackSyncInterval;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test, console2 } from "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
