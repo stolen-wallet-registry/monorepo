@@ -208,19 +208,42 @@ export function HyperlaneLogo({
         fill="#D631B9"
       />
       <path d="M563.826 447H422V554H563.826L587 498.971L563.826 447Z" fill="#D631B9" />
-      {/* Front chevrons (white) */}
+      {/* Front chevrons (theme-aware: black in light, white in dark) */}
       <path
         d="M553.652 253H654.119C667.826 253 680.089 260.959 684.874 272.961L773.058 494.148C773.739 495.854 773.747 497.731 773.081 499.443L772.587 500.714L772.582 500.726L684.769 726.524C680.054 738.646 667.726 746.716 653.923 746.716H553.471C547.822 746.716 543.862 741.506 545.724 736.523L636.271 494.148L545.946 263.299C543.989 258.297 547.952 253 553.652 253Z"
-        className="fill-white dark:fill-white"
+        className="fill-black dark:fill-white"
       />
       <path
         d="M291.393 253H391.86C405.567 253 417.83 260.959 422.614 272.961L510.799 494.148C511.479 495.854 511.487 497.731 510.822 499.443L510.327 500.714L510.322 500.726L422.509 726.524C417.795 738.646 405.467 746.716 391.664 746.716H291.212C285.563 746.716 281.603 741.506 283.465 736.523L374.012 494.148L283.687 263.299C281.73 258.297 285.693 253 291.393 253Z"
-        className="fill-white dark:fill-white"
+        className="fill-black dark:fill-white"
       />
       <path
         d="M621.826 447H480V554H621.826L645 498.971L621.826 447Z"
-        className="fill-white dark:fill-white"
+        className="fill-black dark:fill-white"
       />
+    </svg>
+  );
+}
+
+// Wormhole Logo - official brand logo
+export function WormholeLogo({
+  className,
+  title = 'Wormhole',
+}: {
+  className?: string;
+  title?: string;
+}) {
+  const titleId = 'wormhole-logo-title';
+  return (
+    <svg
+      viewBox="0 0 255.4235 255.4555"
+      className={cn('size-5', className)}
+      fill="currentColor"
+      role="img"
+      aria-labelledby={titleId}
+    >
+      <title id={titleId}>{title}</title>
+      <path d="m197.9535,174.6565c-7.318,12.735-20.858,20.566-35.532,20.566h-23.731v-80.03l-34.251,59.483c-7.3188,12.734-20.8583,20.565-35.5323,20.565h-23.5661v-118.1051h47.4067v79.8281l45.9427-79.7915v-.0366h47.389v80.1581l49.785-86.5071c2.013-3.513,1.976-7.8676-.201-11.2891C212.7015,23.2333,171.9905-.6805,125.7365.0148,55.203,1.1126-.3641,57.8872.0018,128.4215c.3659,70.222,57.4151,127.034,127.7107,127.034s127.711-57.178,127.711-127.711c0-11.363-1.5-22.377-4.299-32.8796-.842-3.1836-5.087-3.7691-6.734-.9331l-46.455,80.7067.018.018Z" />
     </svg>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
-import { Globe, Shield, Droplets, CircleDot } from 'lucide-react';
+import { Shield, Droplets, CircleDot } from 'lucide-react';
 import {
   AnimatedBeam,
   cn,
@@ -46,6 +46,7 @@ import {
   ChainalysisLogo,
   HyperlaneLogo,
   SealTeamLogo,
+  WormholeLogo,
   GroupContainer,
   RegistryHub,
   SectionTitle,
@@ -397,7 +398,7 @@ export function CrossChainVisualizationDesktop({
                   <TokenLINK className="size-5" />
                 </BridgeIcon>
                 <BridgeIcon label="Wormhole">
-                  <Globe className="size-5 text-purple-500" />
+                  <WormholeLogo className="size-5 text-purple-500" />
                 </BridgeIcon>
                 <BridgeIcon label="Hyperlane">
                   <HyperlaneLogo className="size-5" />
