@@ -47,7 +47,8 @@ describe('useFeeEstimate logic', () => {
       // When feeWei = 0, we should get 0, not Infinity
       const feeUsdCents = 500;
       const feeEthNum = 0;
-      const fallbackEthPrice = feeEthNum > 0 ? Math.round((feeUsdCents / feeEthNum) * 100) : 0;
+      // Formula matches hook: feeEthNum > 0 ? Math.round(feeUsdCents / feeEthNum) : 0
+      const fallbackEthPrice = feeEthNum > 0 ? Math.round(feeUsdCents / feeEthNum) : 0;
 
       expect(fallbackEthPrice).toBe(0);
       expect(Number.isFinite(fallbackEthPrice)).toBe(true);

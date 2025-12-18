@@ -12,7 +12,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
 import { StepIndicator } from '@/components/composed/StepIndicator';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
-import { ErrorBoundary } from '@/components/composed/ErrorBoundary';
+import { ErrorBoundary, StepErrorFallback } from '@/components/composed/ErrorBoundary';
 import { StepRenderer } from '@/components/registration';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
@@ -135,7 +135,7 @@ export function StandardRegistrationPage() {
               <CardDescription>{currentDescription}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow flex flex-col justify-center">
-              <ErrorBoundary>
+              <ErrorBoundary fallback={<StepErrorFallback />}>
                 <StepRenderer currentStep={step} onStepComplete={goToNextStep} />
               </ErrorBoundary>
             </CardContent>

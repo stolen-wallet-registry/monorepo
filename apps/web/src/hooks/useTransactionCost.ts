@@ -108,11 +108,12 @@ export function useTransactionCost({
     const gas = gasEstimate.data;
 
     // Protocol fee only applies to registration
-    // Recalculate USD using real ETH price for consistency with gas/total
+    // Use BigInt arithmetic for precision: (wei * ethPriceUsdCents) / 1e18
+    const ethPriceUsdCentsBigInt = BigInt(fee.ethPriceUsdCents);
+    const WEI_PER_ETH = BigInt(1e18);
+
     const protocolFeeUsdCents =
-      step === 'registration'
-        ? Math.round(Number(formatEther(fee.feeWei)) * fee.ethPriceUsdCents)
-        : 0;
+      step === 'registration' ? Number((fee.feeWei * ethPriceUsdCentsBigInt) / WEI_PER_ETH) : 0;
 
     const protocolFee =
       step === 'registration'
@@ -123,10 +124,9 @@ export function useTransactionCost({
           }
         : null;
 
-    // Calculate total
+    // Calculate total using BigInt arithmetic for precision
     const totalWei = (protocolFee?.wei ?? 0n) + gas.gasCostWei;
-    const totalEthNum = Number(formatEther(totalWei));
-    const totalUsdCents = Math.round(totalEthNum * fee.ethPriceUsdCents);
+    const totalUsdCents = Number((totalWei * ethPriceUsdCentsBigInt) / WEI_PER_ETH);
 
     costData = {
       protocolFee,

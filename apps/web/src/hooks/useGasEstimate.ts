@@ -58,8 +58,10 @@ export interface UseGasEstimateResult {
 /** Polling interval for gas estimates (15 seconds - faster than fee polling) */
 const GAS_POLL_INTERVAL = 15_000;
 
-/** Gas buffer multiplier (add 20% for safety) */
-const GAS_BUFFER = 1.2;
+/** Gas buffer multiplier numerator (add 20% for safety) */
+const GAS_BUFFER_NUMERATOR = 120n;
+/** Gas buffer multiplier denominator */
+const GAS_BUFFER_DENOMINATOR = 100n;
 
 /**
  * Hook to estimate gas costs for registration transactions.
@@ -149,8 +151,8 @@ export function useGasEstimate({
   let gasEstimateResult: GasEstimate | null = null;
 
   if (gasEstimate && gasPrice && feeData) {
-    // Add safety buffer to gas estimate
-    const gasUnits = BigInt(Math.ceil(Number(gasEstimate) * GAS_BUFFER));
+    // Add safety buffer to gas estimate using bigint arithmetic to avoid precision loss
+    const gasUnits = (gasEstimate * GAS_BUFFER_NUMERATOR) / GAS_BUFFER_DENOMINATOR;
     const gasCostWei = gasUnits * gasPrice;
 
     // Convert gas cost to USD using ETH price from FeeManager

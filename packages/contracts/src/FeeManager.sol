@@ -73,7 +73,9 @@ contract FeeManager is IFeeManager, Ownable2Step {
     }
 
     /// @inheritdoc IFeeManager
-    /// @dev NOT a view function - opportunistically syncs fallback once per interval
+    /// @dev ⚠️ NOT a view function - opportunistically syncs fallback once per interval.
+    ///      This function MUTATES STATE when the sync interval has passed.
+    ///      If you need a pure read, use getEthPriceUsdCentsView() instead.
     function syncAndGetEthPriceUsdCents() public returns (uint256) {
         // Manual-only mode: no oracle configured
         if (address(_priceFeed) == address(0)) {
