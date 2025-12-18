@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { Globe, Shield, ChevronDown } from 'lucide-react';
+import { Shield, ChevronDown } from 'lucide-react';
 import {
   cn,
   TooltipProvider,
@@ -20,6 +20,7 @@ import {
   IconCircle,
   BridgeIcon,
   HyperlaneLogo,
+  WormholeLogo,
   MobileSection,
   MobileRegistryHub,
   SealTeamLogo,
@@ -105,7 +106,7 @@ export function CrossChainVisualizationMobile({
               <TokenLINK className="size-5" />
             </BridgeIcon>
             <BridgeIcon label="Wormhole">
-              <Globe className="size-5 text-purple-500" />
+              <WormholeLogo className="size-5 text-purple-500" />
             </BridgeIcon>
             <BridgeIcon label="Hyperlane">
               <HyperlaneLogo className="size-5" />

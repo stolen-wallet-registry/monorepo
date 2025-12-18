@@ -14,7 +14,14 @@ export {
 } from './constants';
 
 // Icon components
-export { BridgeIcon, ChainalysisLogo, HyperlaneLogo, IconCircle, SealTeamLogo } from './icons';
+export {
+  BridgeIcon,
+  ChainalysisLogo,
+  HyperlaneLogo,
+  IconCircle,
+  SealTeamLogo,
+  WormholeLogo,
+} from './icons';
 
 // Container components
 export {
