@@ -298,21 +298,21 @@ src/components/
 
 When adding custom errors to smart contracts, follow this process to ensure users see friendly messages:
 
-**1. Define Error in Solidity**
+#### 1. Define Error in Solidity
 
 ```solidity
 // interfaces/IMyContract.sol
 error MyContract__DescriptiveName();
 ```
 
-**2. Compute Selector**
+#### 2. Compute Selector
 
 ```bash
 cast sig 'MyContract__DescriptiveName()'
 # Output: 0xabcd1234
 ```
 
-**3. Add to Frontend Error Map**
+#### 3. Add to Frontend Error Map
 
 ```typescript
 // apps/web/src/lib/errors/contractErrors.ts
@@ -323,7 +323,7 @@ cast sig 'MyContract__DescriptiveName()'
 },
 ```
 
-**Error Message Guidelines:**
+#### Error Message Guidelines
 
 - `message`: What happened ("Your signature expired")
 - `action`: What to do ("Please sign again")

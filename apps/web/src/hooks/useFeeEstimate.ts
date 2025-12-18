@@ -11,6 +11,7 @@ import { feeManagerAbi } from '@/lib/contracts/abis';
 import { getFeeManagerAddress } from '@/lib/contracts/addresses';
 import { useEthPrice } from './useEthPrice';
 import { logger } from '@/lib/logger';
+import { formatCentsToUsd } from '@/lib/utils';
 
 export interface FeeEstimate {
   /** Fee amount in wei (native bigint) */
@@ -42,16 +43,6 @@ export interface UseFeeEstimateResult {
 
 /** Polling interval for fee estimates (30 seconds) */
 const FEE_POLL_INTERVAL = 30_000;
-
-/**
- * Format cents to USD string (e.g., 500 → "$5.00")
- */
-function formatCentsToUsd(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(cents / 100);
-}
 
 /**
  * Hook to get the current protocol fee from FeeManager.
@@ -129,8 +120,11 @@ export function useFeeEstimate(): UseFeeEstimateResult {
     const feeUsdCents = Number(data[1].result);
 
     // Use real ETH price from CoinGecko, fallback to calculated price from fee
-    const ethPriceUsdCents =
-      ethPrice.data?.usdCents ?? Math.round((feeUsdCents / Number(formatEther(feeWei))) * 100);
+    // Guard against division by zero if feeWei is 0
+    // Formula: feeUsdCents / feeEth = cents per ETH (already in cents, no * 100 needed)
+    const feeEthNum = Number(formatEther(feeWei));
+    const fallbackEthPrice = feeEthNum > 0 ? Math.round(feeUsdCents / feeEthNum) : 0;
+    const ethPriceUsdCents = ethPrice.data?.usdCents ?? fallbackEthPrice;
     const ethPriceUsd = ethPrice.data?.usdFormatted ?? formatCentsToUsd(ethPriceUsdCents);
 
     feeEstimate = {

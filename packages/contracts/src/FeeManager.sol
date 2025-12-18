@@ -74,7 +74,7 @@ contract FeeManager is IFeeManager, Ownable2Step {
 
     /// @inheritdoc IFeeManager
     /// @dev NOT a view function - opportunistically syncs fallback once per interval
-    function getEthPriceUsdCents() public returns (uint256) {
+    function syncAndGetEthPriceUsdCents() public returns (uint256) {
         // Manual-only mode: no oracle configured
         if (address(_priceFeed) == address(0)) {
             return fallbackEthPriceUsdCents;
@@ -178,6 +178,11 @@ contract FeeManager is IFeeManager, Ownable2Step {
 
     /// @inheritdoc IFeeManager
     function setBaseFee(uint256 _baseFeeUsdCents) external onlyOwner {
+        // Prevent overflow in currentFeeWei calculation: (baseFeeUsdCents * 1e18) / ethPrice
+        // Max safe value: type(uint256).max / 1e18 ≈ 1.15e59 (way beyond any realistic fee)
+        if (_baseFeeUsdCents > type(uint256).max / 1e18) {
+            revert Fee__InvalidPrice();
+        }
         uint256 oldFee = baseFeeUsdCents;
         baseFeeUsdCents = _baseFeeUsdCents;
         emit BaseFeeUpdated(oldFee, _baseFeeUsdCents);
@@ -207,7 +212,7 @@ contract FeeManager is IFeeManager, Ownable2Step {
     }
 
     /// @inheritdoc IFeeManager
-    /// @notice Setting to 0 triggers sync on every getEthPriceUsdCents() call (higher gas)
+    /// @notice Setting to 0 triggers sync on every syncAndGetEthPriceUsdCents() call (higher gas)
     ///         Consider using reasonable minimum (e.g., 1 hour) for normal operation
     function setFallbackSyncInterval(uint256 _fallbackSyncInterval) external onlyOwner {
         uint256 oldInterval = fallbackSyncInterval;

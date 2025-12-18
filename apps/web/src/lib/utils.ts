@@ -9,6 +9,16 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Format cents to USD string (e.g., 500 → "$5.00")
+ */
+export function formatCentsToUsd(cents: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(cents / 100);
+}
+
+/**
  * Sanitize error messages for user display.
  *
  * Logs full error details to console in development for debugging,

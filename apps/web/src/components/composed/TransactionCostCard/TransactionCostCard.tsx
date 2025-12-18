@@ -120,6 +120,7 @@ export function TransactionCostCard({
           className="h-8 w-8"
           onClick={() => refetch()}
           disabled={isLoading}
+          aria-label={isLoading ? 'Refreshing estimate' : 'Refresh estimate'}
           title="Refresh estimate"
         >
           {isLoading ? (

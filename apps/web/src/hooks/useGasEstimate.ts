@@ -13,6 +13,7 @@ import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
 import { useFeeEstimate } from './useFeeEstimate';
 import { logger } from '@/lib/logger';
+import { formatCentsToUsd } from '@/lib/utils';
 import type { Address } from '@/lib/types/ethereum';
 
 export interface GasEstimate {
@@ -59,16 +60,6 @@ const GAS_POLL_INTERVAL = 15_000;
 
 /** Gas buffer multiplier (add 20% for safety) */
 const GAS_BUFFER = 1.2;
-
-/**
- * Format cents to USD string
- */
-function formatCentsToUsd(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(cents / 100);
-}
 
 /**
  * Hook to estimate gas costs for registration transactions.

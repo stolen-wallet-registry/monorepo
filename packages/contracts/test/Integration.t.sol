@@ -22,7 +22,8 @@ contract IntegrationTest is Test {
     address public forwarder;
     uint256 internal victimPrivateKey;
 
-    // EIP-712 constants
+    // EIP-712 constants - version must match StolenWalletRegistry
+    string private constant DOMAIN_VERSION = "4";
     bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH =
         keccak256("AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)");
     bytes32 private constant REGISTRATION_TYPEHASH =
@@ -70,7 +71,11 @@ contract IntegrationTest is Test {
     function _getDomainSeparator() internal view returns (bytes32) {
         return keccak256(
             abi.encode(
-                TYPE_HASH, keccak256("StolenWalletRegistry"), keccak256("4"), block.chainid, address(walletRegistry)
+                TYPE_HASH,
+                keccak256("StolenWalletRegistry"),
+                keccak256(bytes(DOMAIN_VERSION)),
+                block.chainid,
+                address(walletRegistry)
             )
         );
     }

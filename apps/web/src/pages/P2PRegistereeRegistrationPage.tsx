@@ -351,7 +351,7 @@ export function P2PRegistereeRegistrationPage() {
           </Card>
         </aside>
 
-        {/* Main Content - min height matches sidebar, grows with content */}
+        {/* Main Content - stretches to fill grid row height */}
         <main className="flex flex-col gap-4 self-stretch">
           {/* Protocol error alert */}
           {protocolError && (

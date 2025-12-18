@@ -9,6 +9,7 @@ import { formatEther } from 'viem';
 import { useFeeEstimate } from './useFeeEstimate';
 import { useGasEstimate, type UseGasEstimateParams } from './useGasEstimate';
 import { logger } from '@/lib/logger';
+import { formatCentsToUsd } from '@/lib/utils';
 
 export interface TransactionCost {
   /** Protocol fee (only on registration) */
@@ -55,16 +56,6 @@ export interface UseTransactionCostResult {
   error: Error | null;
   /** Function to manually refetch all data */
   refetch: () => void;
-}
-
-/**
- * Format cents to USD string
- */
-function formatCentsToUsd(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(cents / 100);
 }
 
 /**

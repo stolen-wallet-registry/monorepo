@@ -116,9 +116,10 @@ interface IFeeManager {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Get current ETH price in USD cents (may trigger opportunistic sync)
-    /// @dev NOT a view function - syncs fallback if interval has passed
+    /// @dev NOT a view function - syncs fallback if interval has passed.
+    ///      Name reflects state mutation. Use getEthPriceUsdCentsView() for pure reads.
     /// @return ETH price in USD cents
-    function getEthPriceUsdCents() external returns (uint256);
+    function syncAndGetEthPriceUsdCents() external returns (uint256);
 
     /// @notice Anyone can sync fallback price from Chainlink
     /// @dev Useful when oracle recovers after being stale - enables self-healing

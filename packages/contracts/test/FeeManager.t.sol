@@ -179,7 +179,7 @@ contract FeeManagerTest is Test {
         mockOracle.setUpdatedAt(block.timestamp);
 
         // First call after interval passes - triggers sync
-        feeManager.getEthPriceUsdCents();
+        feeManager.syncAndGetEthPriceUsdCents();
         assertEq(feeManager.fallbackEthPriceUsdCents(), 300_000);
         assertEq(feeManager.lastFallbackSync(), block.timestamp);
 
@@ -189,13 +189,13 @@ contract FeeManagerTest is Test {
         // Call within interval - no sync
         vm.warp(block.timestamp + 12 hours);
         mockOracle.setUpdatedAt(block.timestamp); // Keep oracle fresh
-        feeManager.getEthPriceUsdCents();
+        feeManager.syncAndGetEthPriceUsdCents();
         assertEq(feeManager.fallbackEthPriceUsdCents(), 300_000); // Still old price
 
         // Call after interval - triggers sync
         vm.warp(block.timestamp + 13 hours); // Now > 1 day from last sync
         mockOracle.setUpdatedAt(block.timestamp); // Keep oracle fresh
-        feeManager.getEthPriceUsdCents();
+        feeManager.syncAndGetEthPriceUsdCents();
         assertEq(feeManager.fallbackEthPriceUsdCents(), 400_000); // New price synced
     }
 
@@ -205,7 +205,7 @@ contract FeeManagerTest is Test {
         mockOracle.setUpdatedAt(block.timestamp); // Keep oracle fresh
 
         // Trigger initial sync
-        feeManager.getEthPriceUsdCents();
+        feeManager.syncAndGetEthPriceUsdCents();
         uint256 firstSync = feeManager.lastFallbackSync();
 
         // Change price
@@ -214,7 +214,7 @@ contract FeeManagerTest is Test {
         // Multiple calls within interval - no new syncs
         vm.warp(block.timestamp + 6 hours);
         mockOracle.setUpdatedAt(block.timestamp); // Keep oracle fresh
-        feeManager.getEthPriceUsdCents();
+        feeManager.syncAndGetEthPriceUsdCents();
         assertEq(feeManager.lastFallbackSync(), firstSync); // Unchanged
         assertEq(feeManager.fallbackEthPriceUsdCents(), 300_000); // Old price
     }
@@ -227,7 +227,7 @@ contract FeeManagerTest is Test {
         vm.expectEmit(true, true, true, true);
         emit IFeeManager.FallbackPriceSynced(300_000);
 
-        feeManager.getEthPriceUsdCents();
+        feeManager.syncAndGetEthPriceUsdCents();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
