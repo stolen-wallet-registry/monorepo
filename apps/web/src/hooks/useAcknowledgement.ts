@@ -19,6 +19,11 @@ export interface AcknowledgementParams {
    */
   registeree: `0x${string}`;
   signature: ParsedSignature;
+  /**
+   * Protocol fee to send with the acknowledgement transaction.
+   * Obtained from useFeeEstimate hook.
+   */
+  feeWei?: bigint;
 }
 
 export interface UseAcknowledgementResult {
@@ -70,13 +75,14 @@ export function useAcknowledgement(): UseAcknowledgementResult {
       throw new Error('Contract not configured for this chain');
     }
 
-    const { deadline, nonce, registeree, signature } = params;
+    const { deadline, nonce, registeree, signature, feeWei } = params;
 
     const txHash = await writeContractAsync({
       address: contractAddress,
       abi: stolenWalletRegistryAbi,
       functionName: 'acknowledge',
       args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
+      value: feeWei ?? 0n,
     });
 
     return txHash;

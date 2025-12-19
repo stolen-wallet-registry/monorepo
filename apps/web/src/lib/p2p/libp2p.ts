@@ -26,6 +26,7 @@ import { peerIdFromString } from '@libp2p/peer-id';
 import { WebRTC } from '@multiformats/multiaddr-matcher';
 
 import { logger } from '@/lib/logger';
+import { useP2PStore } from '@/stores/p2pStore';
 import {
   getRelayServers,
   type ParsedStreamData,
@@ -33,6 +34,7 @@ import {
   safeJsonParse,
   ParsedStreamDataSchema,
 } from './types';
+import { getOrCreatePeerId } from './peerId';
 
 /**
  * Private/localhost address patterns to block in production.
@@ -120,16 +122,45 @@ export function libp2pDefaults(): Libp2pOptions {
   };
 }
 
+export interface SetupOptions {
+  /** Protocol handlers to register */
+  handlers: ProtocolHandler[];
+  /** Wallet address for persistent peer ID (optional - if not provided, random ID is generated) */
+  walletAddress?: string;
+}
+
 /**
  * Create and start a libp2p node with protocol handlers.
  *
- * @param handlers - Protocol handlers to register
+ * If walletAddress is provided, a persistent peer ID will be used (same wallet + browser = same ID).
+ * Otherwise, a random peer ID is generated each time.
+ *
+ * @param options - Setup options including handlers and optional wallet address
  * @returns Started libp2p node
  */
-export async function setup(handlers: ProtocolHandler[]): Promise<{ libp2p: Libp2p }> {
-  logger.p2p.info('Creating libp2p node');
+export async function setup(options: SetupOptions): Promise<{ libp2p: Libp2p }>;
+/**
+ * @deprecated Use setup({ handlers, walletAddress }) instead
+ */
+export async function setup(handlers: ProtocolHandler[]): Promise<{ libp2p: Libp2p }>;
+export async function setup(
+  optionsOrHandlers: SetupOptions | ProtocolHandler[]
+): Promise<{ libp2p: Libp2p }> {
+  // Handle both old array-style and new options-style calls
+  const { handlers, walletAddress } = Array.isArray(optionsOrHandlers)
+    ? { handlers: optionsOrHandlers, walletAddress: undefined }
+    : optionsOrHandlers;
 
-  const libp2p = await createLibp2p(libp2pDefaults());
+  logger.p2p.info('Creating libp2p node', { persistentId: !!walletAddress });
+
+  // Get persistent private key if wallet address provided
+  const config = libp2pDefaults();
+  if (walletAddress) {
+    const { privateKey } = await getOrCreatePeerId(walletAddress);
+    (config as { privateKey?: unknown }).privateKey = privateKey;
+  }
+
+  const libp2p = await createLibp2p(config);
 
   for (const h of handlers) {
     const { protocol, streamHandler } = h;
@@ -141,6 +172,7 @@ export async function setup(handlers: ProtocolHandler[]): Promise<{ libp2p: Libp
   logger.p2p.info('libp2p node created', {
     peerId: libp2p.peerId.toString(),
     multiaddrs: libp2p.getMultiaddrs().map((ma) => ma.toString()),
+    persistent: !!walletAddress,
   });
 
   return { libp2p };
@@ -232,6 +264,10 @@ export const passStreamData = async ({
 
     await stream.close();
     logger.p2p.debug('Stream data sent successfully');
+
+    // Successful message proves connection is alive - update store
+    // This overrides health check ping failures since we just communicated
+    useP2PStore.getState().setConnectedToPeer(true);
   } catch (error) {
     logger.p2p.error('Failed to send stream data', { protocols }, error as Error);
     throw error;
@@ -323,6 +359,9 @@ export const readStreamData = async (stream: Stream): Promise<ParsedStreamData> 
     success: data.success,
     message: data.message,
   });
+
+  // Successful receive proves connection is alive - update store
+  useP2PStore.getState().setConnectedToPeer(true);
 
   return data;
 };

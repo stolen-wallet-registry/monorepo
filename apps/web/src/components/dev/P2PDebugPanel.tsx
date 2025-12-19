@@ -2,18 +2,37 @@
  * P2P Debug Panel - displays libp2p node information.
  *
  * Shows multiaddresses, protocols, and active connections with streams.
- * Uses a getter function to access libp2p to avoid React serialization issues.
  * Collapsible to avoid cluttering the UI.
+ *
+ * Includes dev tools for testing connection states and reconnection flows.
+ *
+ * IMPORTANT: Uses a getter function (`getLibp2p`) instead of passing libp2p directly.
+ * libp2p uses a Proxy that throws MissingServiceError when unknown properties are accessed.
+ * React DevTools tries to serialize props (accessing `$typeof`, etc.), which crashes the app.
+ * Passing a getter function avoids this because functions aren't deeply inspected.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Bug, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
+import {
+  Bug,
+  ChevronDown,
+  ChevronRight,
+  RefreshCw,
+  Unplug,
+  WifiOff,
+  Trash2,
+  Key,
+  AlertTriangle,
+} from 'lucide-react';
 import type { Libp2p } from 'libp2p';
 import type { Connection } from '@libp2p/interface';
 
-import { Button } from '@swr/ui';
+import { Button, Separator } from '@swr/ui';
 import { cn } from '@/lib/utils';
 import { getRelayPeerIds } from '@/lib/p2p/types';
+import { clearStoredPeerId, hasStoredPeerId } from '@/lib/p2p/peerId';
+import { getPendingMessages, clearMessageQueue, type QueuedMessage } from '@/lib/p2p/messageQueue';
+import { logger } from '@/lib/logger';
 
 /** Cached relay peer IDs - computed once on first access, static thereafter */
 let relayPeerIdsCache: Set<string> | null = null;
@@ -53,6 +72,10 @@ interface P2PDebugPanelProps {
   defaultExpanded?: boolean;
   /** Additional CSS classes */
   className?: string;
+  /** Connected wallet address (for peer ID management) */
+  walletAddress?: string;
+  /** Callback to trigger connection lost state (for testing) */
+  onSimulateConnectionLost?: () => void;
 }
 
 /**
@@ -201,6 +224,8 @@ export function P2PDebugPanel({
   getLibp2p,
   defaultExpanded = false,
   className,
+  walletAddress,
+  onSimulateConnectionLost,
 }: P2PDebugPanelProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   // Store extracted debug info in state (plain serializable data)
@@ -212,6 +237,8 @@ export function P2PDebugPanel({
     connections: [],
   });
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const [pendingMessages, setPendingMessages] = useState<QueuedMessage[]>([]);
+  const [hasPeerId, setHasPeerId] = useState(false);
 
   // Lazy-load relay peer IDs once on client - they're static and won't change
   const relayPeerIdsRef = useRef<Set<string> | null>(null);
@@ -230,7 +257,11 @@ export function P2PDebugPanel({
     const relayIds = relayPeerIdsRef.current ?? new Set<string>();
     setDebugInfo(extractDebugInfo(libp2p, relayIds));
     setLastUpdated(Date.now());
-  }, [getLibp2p]);
+    setPendingMessages(getPendingMessages());
+    if (walletAddress) {
+      setHasPeerId(hasStoredPeerId(walletAddress));
+    }
+  }, [getLibp2p, walletAddress]);
 
   // Auto-refresh every 15 seconds when expanded
   // Note: Timer starts when panel is expanded, even if node isn't ready yet.
@@ -361,6 +392,178 @@ export function P2PDebugPanel({
                   Updated: {new Date(lastUpdated).toLocaleTimeString()}
                 </p>
               )}
+
+              {/* Dev Tools Section - shown directly, no nested toggle */}
+              <Separator className="my-2" />
+              <div className="space-y-3">
+                {/* Connection Controls */}
+                <div>
+                  <h4 className="text-xs font-medium text-muted-foreground mb-2">
+                    Connection Controls
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        const libp2p = getLibp2p();
+                        if (!libp2p) return;
+                        // Close all connections to relay servers
+                        const relayIds = relayPeerIdsRef.current ?? new Set<string>();
+                        libp2p.getConnections().forEach((conn) => {
+                          if (relayIds.has(conn.remotePeer.toString())) {
+                            conn.close().catch(() => {});
+                            logger.p2p.info('[DevTools] Closed relay connection', {
+                              peer: conn.remotePeer.toString(),
+                            });
+                          }
+                        });
+                        setTimeout(refresh, 100);
+                      }}
+                    >
+                      <Unplug className="h-3 w-3 mr-1" />
+                      Drop Relay
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        const libp2p = getLibp2p();
+                        if (!libp2p) return;
+                        // Close all non-relay connections
+                        const relayIds = relayPeerIdsRef.current ?? new Set<string>();
+                        libp2p.getConnections().forEach((conn) => {
+                          if (!relayIds.has(conn.remotePeer.toString())) {
+                            conn.close().catch(() => {});
+                            logger.p2p.info('[DevTools] Closed peer connection', {
+                              peer: conn.remotePeer.toString(),
+                            });
+                          }
+                        });
+                        setTimeout(refresh, 100);
+                      }}
+                    >
+                      <WifiOff className="h-3 w-3 mr-1" />
+                      Drop Peers
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        const libp2p = getLibp2p();
+                        if (!libp2p) return;
+                        // Close ALL connections
+                        libp2p.getConnections().forEach((conn) => {
+                          conn.close().catch(() => {});
+                        });
+                        logger.p2p.info('[DevTools] Dropped all connections');
+                        setTimeout(refresh, 100);
+                      }}
+                    >
+                      <Unplug className="h-3 w-3 mr-1" />
+                      Drop All
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Simulate Connection Lost */}
+                {onSimulateConnectionLost && (
+                  <div>
+                    <h4 className="text-xs font-medium text-muted-foreground mb-2">
+                      UI State Testing
+                    </h4>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        logger.p2p.info('[DevTools] Simulating connection lost');
+                        onSimulateConnectionLost();
+                      }}
+                    >
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      Trigger "Connection Lost"
+                    </Button>
+                  </div>
+                )}
+
+                {/* Message Queue */}
+                <div>
+                  <h4 className="text-xs font-medium text-muted-foreground mb-2">
+                    Message Queue ({pendingMessages.length})
+                  </h4>
+                  {pendingMessages.length > 0 ? (
+                    <div className="space-y-1 mb-2">
+                      {pendingMessages.map((msg) => (
+                        <div
+                          key={msg.id}
+                          className="rounded bg-muted/50 px-2 py-1 text-[10px] font-mono"
+                        >
+                          <span className="text-muted-foreground">{msg.protocols.join(', ')}</span>
+                          <span className="ml-2">retries: {msg.retries}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground mb-2">No pending messages</p>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      clearMessageQueue();
+                      logger.p2p.info('[DevTools] Cleared message queue');
+                      refresh();
+                    }}
+                    disabled={pendingMessages.length === 0}
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    Clear Queue
+                  </Button>
+                </div>
+
+                {/* Peer ID Management */}
+                {walletAddress && (
+                  <div>
+                    <h4 className="text-xs font-medium text-muted-foreground mb-2">
+                      Peer ID Storage
+                    </h4>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                      <span
+                        className={cn(
+                          'inline-block h-2 w-2 rounded-full',
+                          hasPeerId ? 'bg-green-500' : 'bg-gray-500'
+                        )}
+                      />
+                      {hasPeerId ? 'Stored in localStorage' : 'Not stored'}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            'This will clear your stored peer ID. You will get a new identity on next connection. Continue?'
+                          )
+                        ) {
+                          clearStoredPeerId(walletAddress);
+                          logger.p2p.info('[DevTools] Cleared stored peer ID');
+                          refresh();
+                        }
+                      }}
+                      disabled={!hasPeerId}
+                    >
+                      <Key className="h-3 w-3 mr-1" />
+                      Clear Stored Peer ID
+                    </Button>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>

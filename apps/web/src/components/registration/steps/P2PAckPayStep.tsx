@@ -14,6 +14,7 @@ import { SignatureDetails } from '@/components/composed/SignatureDetails';
 import { WaitingForData } from '@/components/p2p';
 import { Alert, AlertDescription, Button } from '@swr/ui';
 import { useAcknowledgement } from '@/hooks/useAcknowledgement';
+import { useFeeEstimate } from '@/hooks/useFeeEstimate';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
@@ -21,6 +22,7 @@ import type { Hash } from '@/lib/types/ethereum';
 import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
 import { useP2PStore } from '@/stores/p2pStore';
 import { logger } from '@/lib/logger';
+import { sanitizeErrorMessage } from '@/lib/utils';
 
 /** Maximum number of automatic retries for sending hash */
 const MAX_AUTO_RETRIES = 3;
@@ -32,14 +34,20 @@ export interface P2PAckPayStepProps {
   onComplete: () => void;
   /** The role in P2P flow */
   role: 'registeree' | 'relayer';
-  /** The libp2p node instance */
-  libp2p: Libp2p | null;
+  /**
+   * Getter for the libp2p node instance.
+   * IMPORTANT: Uses a getter function instead of passing libp2p directly.
+   * libp2p uses a Proxy that throws MissingServiceError when unknown properties are accessed.
+   * React DevTools tries to serialize props (accessing `$typeof`, etc.), which crashes the app.
+   * Passing a getter function avoids this because functions aren't deeply inspected.
+   */
+  getLibp2p: () => Libp2p | null;
 }
 
 /**
  * P2P step for acknowledgement payment.
  */
-export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) {
+export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProps) {
   const chainId = useChainId();
   const { address: relayerAddress } = useAccount();
   const { registeree } = useFormStore();
@@ -68,6 +76,9 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
     reset,
   } = useAcknowledgement();
 
+  // Get protocol fee
+  const { data: feeData } = useFeeEstimate();
+
   // Derive TransactionCard status
   const getStatus = (): TransactionStatus => {
     if (isConfirmed) return 'confirmed';
@@ -93,8 +104,9 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
       nonce: storedSig.nonce,
       registeree,
       signature: parsedSig,
+      feeWei: feeData?.feeWei,
     });
-  }, [storedSig, registeree, submitAcknowledgement]);
+  }, [storedSig, registeree, submitAcknowledgement, feeData?.feeWei]);
 
   // Cleanup retry timeout on unmount
   useEffect(() => {
@@ -116,6 +128,7 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
   // Relayer: Send tx hash to registeree after confirmation with retry logic
   useEffect(() => {
     const sendHash = async () => {
+      const libp2p = getLibp2p();
       if (role !== 'relayer' || !isConfirmed || !hash || !libp2p || !partnerPeerId || hasSentHash) {
         return;
       }
@@ -154,7 +167,7 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
     };
 
     sendHash();
-  }, [role, isConfirmed, hash, libp2p, partnerPeerId, hasSentHash, retryCount, onComplete]);
+  }, [role, isConfirmed, hash, getLibp2p, partnerPeerId, hasSentHash, retryCount, onComplete]);
 
   // Manual retry handler for user-initiated resend
   const handleResendHash = useCallback(() => {
@@ -238,7 +251,7 @@ export function P2PAckPayStep({ onComplete, role, libp2p }: P2PAckPayStepProps) 
             type="acknowledgement"
             status={getStatus()}
             hash={hash}
-            error={error?.message}
+            error={error ? sanitizeErrorMessage(error) : null}
             chainId={chainId}
             onSubmit={handleSubmit}
             onRetry={reset}

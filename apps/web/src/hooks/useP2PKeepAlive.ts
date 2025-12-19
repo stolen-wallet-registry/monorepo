@@ -22,8 +22,8 @@ const MAX_PING_LATENCY_MS = 5_000;
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 export interface UseP2PKeepAliveOptions {
-  /** The libp2p node instance */
-  libp2p: Libp2p | null;
+  /** Getter function for the libp2p node (avoids ref access during render) */
+  getLibp2p: () => Libp2p | null;
   /** Remote peer ID to keep alive */
   remotePeerId: string | null;
   /** Whether keep-alive is enabled */
@@ -61,7 +61,7 @@ export interface UseP2PKeepAliveResult {
  * ```
  */
 export function useP2PKeepAlive({
-  libp2p,
+  getLibp2p,
   remotePeerId,
   enabled = true,
   pingIntervalMs = DEFAULT_PING_INTERVAL_MS,
@@ -72,12 +72,27 @@ export function useP2PKeepAlive({
   const prevRemotePeerIdRef = useRef<string | null>(null);
   const connectionLostFiredRef = useRef(false);
 
+  // Use ref for callback to avoid effect re-runs when caller doesn't memoize
+  const onConnectionLostRef = useRef(onConnectionLost);
+  useEffect(() => {
+    onConnectionLostRef.current = onConnectionLost;
+  }, [onConnectionLost]);
+
+  // Use ref for getter to avoid effect re-runs
+  const getLibp2pRef = useRef(getLibp2p);
+  useEffect(() => {
+    getLibp2pRef.current = getLibp2p;
+  }, [getLibp2p]);
+
   // Use state for values returned during render
   const [lastPingLatency, setLastPingLatency] = useState<number | null>(null);
   const [isHealthy, setIsHealthy] = useState(true);
 
-  // Derive isActive from inputs (no need for state)
-  const isActive = enabled && !!libp2p && !!remotePeerId;
+  // Track whether node is available (updated via effect)
+  const [hasNode, setHasNode] = useState(false);
+
+  // Derive isActive from inputs
+  const isActive = enabled && hasNode && !!remotePeerId;
 
   // Parse peer ID once and memoize
   const parsedPeerId = useMemo((): PeerId | null => {
@@ -94,6 +109,7 @@ export function useP2PKeepAlive({
 
   // Ping function using libp2p's ping service
   const ping = useCallback(async (): Promise<number | null> => {
+    const libp2p = getLibp2pRef.current();
     if (!libp2p || !parsedPeerId) {
       return null;
     }
@@ -136,13 +152,19 @@ export function useP2PKeepAlive({
         // Only call onConnectionLost once per connection
         if (!connectionLostFiredRef.current) {
           connectionLostFiredRef.current = true;
-          onConnectionLost?.();
+          onConnectionLostRef.current?.();
         }
       }
 
       return null;
     }
-  }, [libp2p, parsedPeerId, remotePeerId, onConnectionLost]);
+  }, [parsedPeerId, remotePeerId]);
+
+  // Use ref for ping function to avoid effect re-runs
+  const pingRef = useRef(ping);
+  useEffect(() => {
+    pingRef.current = ping;
+  }, [ping]);
 
   // Set up periodic pinging
   useEffect(() => {
@@ -161,6 +183,11 @@ export function useP2PKeepAlive({
       }, 0);
     }
 
+    // Get current libp2p instance
+    const libp2p = getLibp2pRef.current();
+    const nodeAvailable = !!libp2p;
+    setHasNode(nodeAvailable);
+
     if (!enabled || !libp2p || !remotePeerId) {
       // Clear interval if disabled
       if (intervalRef.current) {
@@ -177,12 +204,12 @@ export function useP2PKeepAlive({
 
     // Ping immediately to establish baseline (deferred to avoid synchronous setState in effect)
     const initialPingTimeout = setTimeout(() => {
-      ping();
+      pingRef.current();
     }, 0);
 
-    // Set up interval
+    // Set up interval - use ref to avoid recreating interval when ping changes
     intervalRef.current = setInterval(() => {
-      ping();
+      pingRef.current();
     }, pingIntervalMs);
 
     return () => {
@@ -196,7 +223,8 @@ export function useP2PKeepAlive({
         logger.p2p.debug('Stopped P2P keep-alive', { remotePeerId });
       }
     };
-  }, [enabled, libp2p, remotePeerId, pingIntervalMs, ping]);
+    // Note: ping and getLibp2p excluded from deps - accessed via refs to prevent effect re-runs
+  }, [enabled, remotePeerId, pingIntervalMs]);
 
   return {
     isActive,

@@ -5,7 +5,7 @@
  * Relayer pays gas fees on behalf of the registeree.
  */
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
@@ -31,12 +31,13 @@ import {
   GracePeriodStep,
   SuccessStep,
 } from '@/components/registration/steps';
-import { WaitingForData } from '@/components/p2p';
+import { WaitingForData, ConnectionStatusBadge, ReconnectDialog } from '@/components/p2p';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
 import { useP2PKeepAlive } from '@/hooks/useP2PKeepAlive';
+import { useP2PConnectionHealth } from '@/hooks/useP2PConnectionHealth';
 import { setup, PROTOCOLS, readStreamData, type ProtocolHandler } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 
@@ -80,25 +81,42 @@ export function P2PRegistereeRegistrationPage() {
   const {
     partnerPeerId,
     setPeerId,
+    setPartnerPeerId,
     setConnectedToPeer,
     setInitialized,
     reset: resetP2P,
   } = useP2PStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
 
-  const [libp2p, setLibp2p] = useState<Libp2p | null>(null);
+  // Store libp2p in ref - NEVER pass libp2pRef.current directly as a prop!
+  // libp2p uses a Proxy that throws when React DevTools tries to serialize it.
+  // Always pass getLibp2p getter function instead.
+  const libp2pRef = useRef<Libp2p | null>(null);
+  // nodeReady triggers re-render when node initializes so components get the updated ref
+  const [, setNodeReady] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [protocolError, setProtocolError] = useState<string | null>(null);
+  const [showReconnectDialog, setShowReconnectDialog] = useState(false);
+
+  // Getter for libp2p - pass this to components, NOT libp2pRef.current
+  const getLibp2p = useCallback(() => libp2pRef.current, []);
 
   // Keep P2P connection alive throughout the session
   // Circuit relay connections timeout after ~2 minutes of inactivity
   useP2PKeepAlive({
-    libp2p,
+    getLibp2p,
     remotePeerId: partnerPeerId,
     onConnectionLost: () => {
       logger.p2p.warn('P2P connection lost');
       setProtocolError('Connection to relayer was lost. Please restart the registration process.');
+      setShowReconnectDialog(true);
     },
+  });
+
+  // Monitor connection health for both relay and peer
+  const { health: connectionHealth } = useP2PConnectionHealth({
+    getLibp2p,
+    remotePeerId: partnerPeerId,
   });
 
   // Use ref for goToNextStep to avoid recreating P2P node when step changes
@@ -110,12 +128,19 @@ export function P2PRegistereeRegistrationPage() {
   }, [goToNextStep]);
 
   // Initialize P2P node - only depends on connection state, not step navigation
+  // Uses AbortController to handle React Strict Mode double-invocation cleanly
   useEffect(() => {
-    let mounted = true;
+    const abortController = new AbortController();
     let node: Libp2p | null = null;
 
     const initP2P = async () => {
       if (!isConnected || !address) return;
+
+      // Check if already aborted (React Strict Mode cleanup)
+      if (abortController.signal.aborted) {
+        logger.p2p.debug('P2P init aborted before start (Strict Mode cleanup)');
+        return;
+      }
 
       try {
         logger.p2p.info('Initializing P2P node for registeree');
@@ -186,31 +211,37 @@ export function P2PRegistereeRegistrationPage() {
           { protocol: PROTOCOLS.REG_PAY, streamHandler: streamHandler(PROTOCOLS.REG_PAY) },
         ];
 
-        const { libp2p: p2pNode } = await setup(handlers);
-        node = p2pNode;
+        const { libp2p: p2pNode } = await setup({ handlers, walletAddress: address });
 
-        if (mounted) {
-          setLibp2p(p2pNode);
-          setPeerId(p2pNode.peerId.toString());
-          setFormValues({ registeree: address });
-          setInitialized(true);
-          setIsInitializing(false);
-          logger.p2p.info('P2P node initialized for registeree', {
-            peerId: p2pNode.peerId.toString(),
-          });
+        // Check if aborted during setup (React Strict Mode cleanup ran while awaiting)
+        if (abortController.signal.aborted) {
+          logger.p2p.debug('P2P init aborted after setup, stopping node');
+          await p2pNode.stop();
+          return;
         }
+
+        node = p2pNode;
+        libp2pRef.current = p2pNode;
+        setNodeReady(true); // Trigger re-render so components get the node
+        setPeerId(p2pNode.peerId.toString());
+        setFormValues({ registeree: address });
+        setInitialized(true);
+        setIsInitializing(false);
+        logger.p2p.info('P2P node initialized for registeree', {
+          peerId: p2pNode.peerId.toString(),
+        });
       } catch (err) {
+        // Ignore errors if aborted
+        if (abortController.signal.aborted) return;
         logger.p2p.error('Failed to initialize P2P', {}, err as Error);
-        if (mounted) {
-          setIsInitializing(false);
-        }
+        setIsInitializing(false);
       }
     };
 
     initP2P();
 
     return () => {
-      mounted = false;
+      abortController.abort();
       if (node) {
         const stopPromise = node.stop();
         if (stopPromise && typeof stopPromise.catch === 'function') {
@@ -249,19 +280,17 @@ export function P2PRegistereeRegistrationPage() {
   const handleBack = useCallback(() => {
     resetFlow();
     resetP2P();
-    if (libp2p) {
-      const stopPromise = libp2p.stop();
+    if (libp2pRef.current) {
+      const stopPromise = libp2pRef.current.stop();
       if (stopPromise && typeof stopPromise.catch === 'function') {
         stopPromise.catch(() => {
           logger.p2p.debug('Error stopping P2P node on back');
         });
       }
+      libp2pRef.current = null;
     }
     setLocation('/');
-  }, [resetFlow, resetP2P, libp2p, setLocation]);
-
-  // Getter for P2P debug panel - must be before early return
-  const getLibp2p = useMemo(() => () => libp2p, [libp2p]);
+  }, [resetFlow, resetP2P, setLocation]);
 
   if (!isConnected) {
     return null;
@@ -286,11 +315,15 @@ export function P2PRegistereeRegistrationPage() {
     switch (step) {
       case 'wait-for-connection':
         return (
-          <WaitForConnectionStep role="registeree" libp2p={libp2p} onComplete={goToNextStep} />
+          <WaitForConnectionStep
+            role="registeree"
+            getLibp2p={getLibp2p}
+            onComplete={goToNextStep}
+          />
         );
 
       case 'acknowledge-and-sign':
-        return <P2PAckSignStep libp2p={libp2p} />;
+        return <P2PAckSignStep getLibp2p={getLibp2p} />;
 
       case 'acknowledgement-payment':
         return (
@@ -304,7 +337,7 @@ export function P2PRegistereeRegistrationPage() {
         return <GracePeriodStep onComplete={goToNextStep} />;
 
       case 'register-and-sign':
-        return <P2PRegSignStep libp2p={libp2p} />;
+        return <P2PRegSignStep getLibp2p={getLibp2p} />;
 
       case 'registration-payment':
         return (
@@ -367,7 +400,15 @@ export function P2PRegistereeRegistrationPage() {
 
           <Card className="flex-grow flex flex-col h-full">
             <CardHeader>
-              <CardTitle>{currentTitle}</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>{currentTitle}</CardTitle>
+                {!isInitializing && (
+                  <ConnectionStatusBadge
+                    status={connectionHealth.status}
+                    health={connectionHealth}
+                  />
+                )}
+              </div>
               <CardDescription>{currentDescription}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow flex flex-col justify-center">
@@ -376,9 +417,23 @@ export function P2PRegistereeRegistrationPage() {
           </Card>
 
           {/* P2P Debug Panel - development only */}
-          <P2PDebugPanel getLibp2p={getLibp2p} />
+          <P2PDebugPanel getLibp2p={getLibp2p} walletAddress={address} />
         </main>
       </div>
+
+      {/* Reconnect dialog when connection is lost */}
+      <ReconnectDialog
+        open={showReconnectDialog}
+        onOpenChange={setShowReconnectDialog}
+        getLibp2p={getLibp2p}
+        currentPeerId={partnerPeerId}
+        partnerRole="relayer"
+        onReconnected={(peerId) => {
+          setPartnerPeerId(peerId);
+          setProtocolError(null);
+          setConnectedToPeer(true);
+        }}
+      />
     </div>
   );
 }

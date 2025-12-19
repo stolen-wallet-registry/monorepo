@@ -20,14 +20,14 @@ export interface WaitForConnectionStepProps {
   onComplete: () => void;
   /** The role in P2P flow */
   role: 'registeree' | 'relayer';
-  /** The libp2p node instance */
-  libp2p: Libp2p | null;
+  /** Getter for the libp2p node (avoids React serialization of Proxy) */
+  getLibp2p: () => Libp2p | null;
 }
 
 /**
  * Step for establishing P2P connection between registeree and relayer.
  */
-export function WaitForConnectionStep({ onComplete, role, libp2p }: WaitForConnectionStepProps) {
+export function WaitForConnectionStep({ onComplete, role, getLibp2p }: WaitForConnectionStepProps) {
   const { address } = useAccount();
   const { peerId, isInitialized, setPartnerPeerId, setConnectedToPeer } = useP2PStore();
   const [isConnecting, setIsConnecting] = useState(false);
@@ -36,6 +36,7 @@ export function WaitForConnectionStep({ onComplete, role, libp2p }: WaitForConne
   // Registeree connects to relayer
   const handleConnect = useCallback(
     async (remotePeerId: string) => {
+      const libp2p = getLibp2p();
       if (!libp2p) {
         setConnectionError('P2P node not initialized');
         return;
@@ -73,7 +74,7 @@ export function WaitForConnectionStep({ onComplete, role, libp2p }: WaitForConne
         setIsConnecting(false);
       }
     },
-    [libp2p, address, peerId, setPartnerPeerId, setConnectedToPeer, onComplete]
+    [getLibp2p, address, peerId, setPartnerPeerId, setConnectedToPeer, onComplete]
   );
 
   if (!isInitialized) {

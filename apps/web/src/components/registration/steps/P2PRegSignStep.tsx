@@ -20,8 +20,14 @@ import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 
 export interface P2PRegSignStepProps {
-  /** The libp2p node instance */
-  libp2p: Libp2p | null;
+  /**
+   * Getter for the libp2p node instance.
+   * IMPORTANT: Uses a getter function instead of passing libp2p directly.
+   * libp2p uses a Proxy that throws MissingServiceError when unknown properties are accessed.
+   * React DevTools tries to serialize props (accessing `$typeof`, etc.), which crashes the app.
+   * Passing a getter function avoids this because functions aren't deeply inspected.
+   */
+  getLibp2p: () => Libp2p | null;
   // Note: onComplete is intentionally not included here.
   // Step advancement is handled by the parent page via protocol handlers
   // when REG_REC is received from the relayer, ensuring reliable completion.
@@ -30,7 +36,7 @@ export interface P2PRegSignStepProps {
 /**
  * P2P step for registeree to sign registration and send to relayer.
  */
-export function P2PRegSignStep({ libp2p }: P2PRegSignStepProps) {
+export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
   const { registeree, relayer } = useFormStore();
@@ -72,6 +78,7 @@ export function P2PRegSignStep({ libp2p }: P2PRegSignStepProps) {
 
   // Handle signing and sending
   const handleSign = useCallback(async () => {
+    const libp2p = getLibp2p();
     if (
       !hashData ||
       !address ||
@@ -131,7 +138,7 @@ export function P2PRegSignStep({ libp2p }: P2PRegSignStepProps) {
   }, [
     hashData,
     address,
-    libp2p,
+    getLibp2p,
     partnerPeerId,
     registeree,
     relayer,
@@ -142,7 +149,7 @@ export function P2PRegSignStep({ libp2p }: P2PRegSignStepProps) {
   ]);
 
   const isLoading = isLoadingHash || isLoadingNonce;
-  const isReady = !isLoading && hashData && nonce !== undefined && libp2p && partnerPeerId;
+  const isReady = !isLoading && hashData && nonce !== undefined && getLibp2p() && partnerPeerId;
   const errorMessage = hashError?.message || nonceError?.message || signError?.message || sendError;
 
   // Build signature data for display
