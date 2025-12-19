@@ -253,8 +253,9 @@ export function useP2PConnectionHealth({
         const effectivePeerConnected = peerResult.connected || storeConnectedToPeer;
 
         const newRelayFailures = relayResult.connected ? 0 : prev.relayFailures + 1;
-        // Only increment peer failures if both ping failed AND store doesn't say connected
-        const newPeerFailures = effectivePeerConnected ? 0 : prev.peerFailures + 1;
+        // Always track ping failures - we need to detect disconnect even if store says connected
+        // The store provides "benefit of doubt" for UI status, but doesn't prevent failure detection
+        const newPeerFailures = peerResult.connected ? 0 : prev.peerFailures + 1;
 
         // Determine if we should fire disconnection callbacks
         // Only fire after consecutive failures, not on first check
@@ -264,11 +265,19 @@ export function useP2PConnectionHealth({
         // Fire callbacks once per disconnection event (only if we had a connection before)
         if (relayDisconnected && !relayDisconnectedFiredRef.current && prev.lastCheckAt !== null) {
           relayDisconnectedFiredRef.current = true;
+          logger.p2p.info('Relay disconnect detected', { relayFailures: newRelayFailures });
           setTimeout(() => onRelayDisconnectedRef.current?.(), 0);
         }
         if (peerDisconnected && !peerDisconnectedFiredRef.current && prev.lastCheckAt !== null) {
           peerDisconnectedFiredRef.current = true;
+          logger.p2p.info('Peer disconnect detected after consecutive ping failures', {
+            peerFailures: newPeerFailures,
+            remotePeerId,
+          });
           setTimeout(() => onPeerDisconnectedRef.current?.(), 0);
+          // Reset store to false - ping failures have proven the connection is lost
+          // This makes the store symmetric: true on success, false on proven disconnect
+          useP2PStore.getState().setConnectedToPeer(false);
         }
 
         // Reset fired flags if reconnected

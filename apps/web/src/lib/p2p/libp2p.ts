@@ -267,6 +267,7 @@ export const passStreamData = async ({
 
     // Successful message proves connection is alive - update store
     // This overrides health check ping failures since we just communicated
+    logger.p2p.debug('Marking peer as connected (message sent successfully)');
     useP2PStore.getState().setConnectedToPeer(true);
   } catch (error) {
     logger.p2p.error('Failed to send stream data', { protocols }, error as Error);
@@ -361,6 +362,7 @@ export const readStreamData = async (stream: Stream): Promise<ParsedStreamData> 
   });
 
   // Successful receive proves connection is alive - update store
+  logger.p2p.debug('Marking peer as connected (message received successfully)');
   useP2PStore.getState().setConnectedToPeer(true);
 
   return data;

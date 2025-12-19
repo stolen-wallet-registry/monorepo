@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils';
 import { getRelayPeerIds } from '@/lib/p2p/types';
 import { clearStoredPeerId, hasStoredPeerId } from '@/lib/p2p/peerId';
 import { getPendingMessages, clearMessageQueue, type QueuedMessage } from '@/lib/p2p/messageQueue';
+import { useP2PStore } from '@/stores/p2pStore';
 import { logger } from '@/lib/logger';
 
 /** Cached relay peer IDs - computed once on first access, static thereafter */
@@ -442,6 +443,8 @@ export function P2PDebugPanel({
                             });
                           }
                         });
+                        // Reset store's connected status for immediate UI feedback
+                        useP2PStore.getState().setConnectedToPeer(false);
                         setTimeout(refresh, 100);
                       }}
                     >
@@ -459,6 +462,8 @@ export function P2PDebugPanel({
                         libp2p.getConnections().forEach((conn) => {
                           conn.close().catch(() => {});
                         });
+                        // Reset store's connected status for immediate UI feedback
+                        useP2PStore.getState().setConnectedToPeer(false);
                         logger.p2p.info('[DevTools] Dropped all connections');
                         setTimeout(refresh, 100);
                       }}
