@@ -12,6 +12,7 @@ import { getFeeManagerAddress } from '@/lib/contracts/addresses';
 import { useEthPrice } from './useEthPrice';
 import { logger } from '@/lib/logger';
 import { formatCentsToUsd } from '@/lib/utils';
+import type { Address } from '@/lib/types/ethereum';
 
 export interface FeeEstimate {
   /** Fee amount in wei (native bigint) */
@@ -72,7 +73,7 @@ export function useFeeEstimate(): UseFeeEstimateResult {
   // Get real ETH price from CoinGecko
   const ethPrice = useEthPrice();
 
-  let feeManagerAddress: `0x${string}` | undefined;
+  let feeManagerAddress: Address | undefined;
   try {
     feeManagerAddress = getFeeManagerAddress(chainId);
   } catch {

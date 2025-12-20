@@ -47,6 +47,7 @@ import {
 } from '@/lib/p2p';
 import { storeSignature, SIGNATURE_STEP, type StoredSignature } from '@/lib/signatures';
 import { logger } from '@/lib/logger';
+import type { Hex } from '@/lib/types/ethereum';
 
 /**
  * Validate and check if signature data has all required fields.
@@ -83,7 +84,7 @@ async function processSignature(
 
   const sig = data.signature;
   const stored: StoredSignature = {
-    signature: sig.value as `0x${string}`,
+    signature: sig.value as Hex,
     deadline: BigInt(sig.deadline),
     nonce: BigInt(sig.nonce),
     address: sig.address,

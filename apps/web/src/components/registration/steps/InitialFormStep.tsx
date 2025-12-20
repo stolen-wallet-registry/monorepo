@@ -36,6 +36,7 @@ import { storeSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
+import type { Address, Hex } from '@/lib/types/ethereum';
 import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 
 export interface InitialFormStepProps {
@@ -72,7 +73,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
   const [showSignature, setShowSignature] = useState(false);
   const [signatureStatus, setSignatureStatus] = useState<SignatureStatus>('idle');
   const [signatureError, setSignatureError] = useState<string | null>(null);
-  const [signature, setSignature] = useState<`0x${string}` | null>(null);
+  const [signature, setSignature] = useState<Hex | null>(null);
 
   // Ref for timeout cleanup
   const completionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -113,7 +114,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
   // Use explicit type narrowing to ensure valid Ethereum address format
   const forwarderAddress = isSelfRelay
     ? isAddress(watchedRelayer)
-      ? (watchedRelayer as `0x${string}`)
+      ? (watchedRelayer as Address)
       : undefined
     : address;
 
@@ -140,7 +141,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     watchedRegisteree &&
     isAddress(watchedRelayer) &&
     isAddress(watchedRegisteree) &&
-    areAddressesEqual(watchedRelayer as `0x${string}`, watchedRegisteree as `0x${string}`);
+    areAddressesEqual(watchedRelayer as Address, watchedRegisteree as Address);
 
   /**
    * Handle form submission - show signature card.
@@ -180,8 +181,8 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
 
     // Save form values to store
     const formData = {
-      registeree: values.registeree as `0x${string}`,
-      relayer: (isSelfRelay ? values.relayer : values.registeree) as `0x${string}`,
+      registeree: values.registeree as Address,
+      relayer: (isSelfRelay ? values.relayer : values.registeree) as Address,
       supportNFT: values.supportNFT,
       walletNFT: values.walletNFT,
     };
@@ -222,7 +223,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     logger.contract.debug('Refetching hash struct for fresh deadline');
     const refetchResult = await refetchHashStruct();
     // Refetch returns raw contract data [deadline, hashStruct], transform if present
-    const rawData = refetchResult?.data as [bigint, `0x${string}`] | undefined;
+    const rawData = refetchResult?.data as [bigint, Hex] | undefined;
     const freshDeadline = rawData?.[0] ?? hashStructData?.deadline;
 
     if (freshDeadline === undefined) {
@@ -236,7 +237,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     setSignatureError(null);
 
     try {
-      const forwarder = isSelfRelay ? (form.getValues('relayer') as `0x${string}`) : address;
+      const forwarder = isSelfRelay ? (form.getValues('relayer') as Address) : address;
 
       logger.signature.info('Requesting EIP-712 acknowledgement signature', {
         owner: address,
@@ -311,7 +312,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
 
   // Show signature card after form submit
   if (showSignature) {
-    const forwarder = isSelfRelay ? (form.getValues('relayer') as `0x${string}`) : address;
+    const forwarder = isSelfRelay ? (form.getValues('relayer') as Address) : address;
 
     return (
       <div className="space-y-4">

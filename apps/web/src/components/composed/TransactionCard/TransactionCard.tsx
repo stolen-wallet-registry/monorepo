@@ -24,21 +24,22 @@ import { truncateAddress } from '@/lib/address';
 import { getChainName, getChainShortName } from '@/lib/explorer';
 import { Check, AlertCircle, Loader2, FileSignature, Globe, Copy, RefreshCw } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
+import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 export type TransactionStatus = 'idle' | 'submitting' | 'pending' | 'confirmed' | 'failed';
 
 /** Signed message data to display */
 export interface SignedMessageData {
   /** Wallet being registered */
-  registeree: `0x${string}`;
+  registeree: Address;
   /** Wallet that will submit transaction */
-  forwarder: `0x${string}`;
+  forwarder: Address;
   /** Signature nonce */
   nonce: bigint;
   /** Block deadline for signature validity */
   deadline: bigint;
   /** The actual signature */
-  signature: `0x${string}`;
+  signature: Hex;
   /** Chain ID where signature is valid */
   chainId?: number;
 }
@@ -57,7 +58,7 @@ export interface TransactionCardProps {
   /** Current transaction status */
   status: TransactionStatus;
   /** Transaction hash after submission */
-  hash?: `0x${string}` | null;
+  hash?: Hash | null;
   /** Error message if transaction failed */
   error?: string | null;
   /** Block explorer URL */

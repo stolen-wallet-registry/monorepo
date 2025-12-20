@@ -14,7 +14,7 @@ import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
 import { useFeeEstimate } from './useFeeEstimate';
 import { logger } from '@/lib/logger';
 import { formatCentsToUsd } from '@/lib/utils';
-import type { Address } from '@/lib/types/ethereum';
+import type { Address, Hex } from '@/lib/types/ethereum';
 
 export interface GasEstimate {
   /** Estimated gas units for the transaction */
@@ -35,7 +35,7 @@ export interface UseGasEstimateParams {
   /** Which function to estimate gas for */
   functionName: 'acknowledge' | 'register';
   /** Function arguments (must match the function signature) */
-  args: readonly [bigint, bigint, Address, number, `0x${string}`, `0x${string}`] | undefined;
+  args: readonly [bigint, bigint, Address, number, Hex, Hex] | undefined;
   /** Value to send with the transaction (for registration) */
   value?: bigint;
   /** Whether to enable the estimate (default: true) */

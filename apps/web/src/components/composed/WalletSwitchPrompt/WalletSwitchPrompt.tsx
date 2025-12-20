@@ -9,14 +9,15 @@ import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
 import { areAddressesEqual } from '@/lib/address';
 import { Wallet, ArrowRight, Check, AlertTriangle } from 'lucide-react';
+import type { Address } from '@/lib/types/ethereum';
 
 export type WalletStatus = 'correct' | 'wrong-wallet' | 'wrong-network' | 'disconnected';
 
 export interface WalletSwitchPromptProps {
   /** Currently connected wallet address */
-  currentAddress: `0x${string}` | null;
+  currentAddress: Address | null;
   /** Required wallet address for this step */
-  expectedAddress: `0x${string}`;
+  expectedAddress: Address;
   /** Label for the expected wallet (e.g., "Stolen Wallet", "Gas Wallet") */
   expectedLabel: string;
   /** Label for the current wallet (e.g., "Stolen Wallet", "Gas Wallet") */
@@ -33,8 +34,8 @@ export interface WalletSwitchPromptProps {
  * Determines wallet status based on current vs expected state.
  */
 function getWalletStatus(
-  currentAddress: `0x${string}` | null,
-  expectedAddress: `0x${string}`,
+  currentAddress: Address | null,
+  expectedAddress: Address,
   currentChainId?: number,
   expectedChainId?: number
 ): WalletStatus {

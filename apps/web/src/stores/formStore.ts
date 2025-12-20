@@ -3,17 +3,18 @@ import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { useShallow } from 'zustand/shallow';
 import { logger } from '@/lib/logger';
+import type { Address } from '@/lib/types/ethereum';
 
 export interface FormState {
-  registeree: `0x${string}` | null;
-  relayer: `0x${string}` | null;
+  registeree: Address | null;
+  relayer: Address | null;
   supportNFT: boolean;
   walletNFT: boolean;
 }
 
 export interface FormActions {
-  setRegisteree: (address: `0x${string}`) => void;
-  setRelayer: (address: `0x${string}`) => void;
+  setRegisteree: (address: Address) => void;
+  setRelayer: (address: Address) => void;
   setSupportNFT: (value: boolean) => void;
   setWalletNFT: (value: boolean) => void;
   setFormValues: (values: Partial<FormState>) => void;

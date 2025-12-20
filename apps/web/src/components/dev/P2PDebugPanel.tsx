@@ -229,6 +229,7 @@ export function P2PDebugPanel({
   onSimulateConnectionLost,
 }: P2PDebugPanelProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const { setConnectedToPeer } = useP2PStore();
   // Store extracted debug info in state (plain serializable data)
   // Initialize with empty state - will populate in useEffect to avoid SSR issues
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({
@@ -454,7 +455,7 @@ export function P2PDebugPanel({
                           }
                         });
                         // Reset store's connected status for immediate UI feedback
-                        useP2PStore.getState().setConnectedToPeer(false);
+                        setConnectedToPeer(false);
                         setTimeout(refresh, 100);
                       }}
                     >
@@ -478,7 +479,7 @@ export function P2PDebugPanel({
                           });
                         });
                         // Reset store's connected status for immediate UI feedback
-                        useP2PStore.getState().setConnectedToPeer(false);
+                        setConnectedToPeer(false);
                         logger.p2p.info('[DevTools] Dropped all connections');
                         setTimeout(refresh, 100);
                       }}

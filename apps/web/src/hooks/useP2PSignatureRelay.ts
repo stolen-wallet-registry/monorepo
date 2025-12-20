@@ -27,6 +27,7 @@ import { useFormStore } from '@/stores/formStore';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useP2PStore } from '@/stores/p2pStore';
 import { logger } from '@/lib/logger';
+import type { Hash, Hex } from '@/lib/types/ethereum';
 
 export type P2PRole = 'registeree' | 'relayer';
 
@@ -67,7 +68,7 @@ function isValidSignature(sig: unknown): sig is SignatureOverTheWire {
  * Ensures it's a properly formatted 0x-prefixed hex string.
  * Tx hashes should be 66 characters (0x + 64 hex chars).
  */
-function isValidTxHash(hash: unknown): hash is `0x${string}` {
+function isValidTxHash(hash: unknown): hash is Hash {
   return (
     typeof hash === 'string' &&
     hash.startsWith('0x') &&
@@ -131,7 +132,7 @@ export interface UseP2PSignatureRelayOptions {
    * Callback when a transaction hash is received (registeree only).
    * Should be memoized to avoid handler recreation.
    */
-  onTxHashReceived?: (hash: `0x${string}`, protocol: string) => void;
+  onTxHashReceived?: (hash: Hash, protocol: string) => void;
   /**
    * Callback when peer connection is established.
    * Should be memoized to avoid handler recreation.
@@ -186,12 +187,12 @@ export interface UseP2PSignatureRelayResult extends Omit<UseP2PConnectionResult,
    * Send acknowledgement transaction hash to registeree (relayer only).
    * @throws {Error} If connection fails or stream cannot be opened
    */
-  sendAckTxHash: (hash: `0x${string}`) => Promise<void>;
+  sendAckTxHash: (hash: Hash) => Promise<void>;
   /**
    * Send registration transaction hash to registeree (relayer only).
    * @throws {Error} If connection fails or stream cannot be opened
    */
-  sendRegTxHash: (hash: `0x${string}`) => Promise<void>;
+  sendRegTxHash: (hash: Hash) => Promise<void>;
   /**
    * Confirm acknowledgement signature received (relayer only).
    * @throws {Error} If connection fails or stream cannot be opened
@@ -350,7 +351,7 @@ export function useP2PSignatureRelay(
               // Store the signature for later use
               const sig = data.signature;
               const stored: StoredSignature = {
-                signature: sig.value as `0x${string}`,
+                signature: sig.value as Hex,
                 deadline: BigInt(sig.deadline),
                 nonce: BigInt(sig.nonce),
                 address: sig.address,
@@ -397,7 +398,7 @@ export function useP2PSignatureRelay(
               // Store the signature for later use
               const sig = data.signature;
               const stored: StoredSignature = {
-                signature: sig.value as `0x${string}`,
+                signature: sig.value as Hex,
                 deadline: BigInt(sig.deadline),
                 nonce: BigInt(sig.nonce),
                 address: sig.address,
@@ -595,7 +596,7 @@ export function useP2PSignatureRelay(
 
   // Relayer: Send acknowledgement tx hash
   const sendAckTxHash = useCallback(
-    async (hash: `0x${string}`) => {
+    async (hash: Hash) => {
       const connection = await getConnection();
       await passStreamData({
         connection,
@@ -609,7 +610,7 @@ export function useP2PSignatureRelay(
 
   // Relayer: Send registration tx hash
   const sendRegTxHash = useCallback(
-    async (hash: `0x${string}`) => {
+    async (hash: Hash) => {
       const connection = await getConnection();
       await passStreamData({
         connection,

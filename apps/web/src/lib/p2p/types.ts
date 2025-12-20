@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import type { P2PState } from '@/stores/p2pStore';
 import { logger } from '@/lib/logger';
+import type { Address, Hash } from '@/lib/types/ethereum';
 
 // ============================================================================
 // Zod Schemas for P2P Stream Data Validation
@@ -100,7 +101,7 @@ export interface SignatureOverTheWire {
   /** Chain ID where signature is valid */
   chainId: number;
   /** Signer's Ethereum address */
-  address: `0x${string}`;
+  address: Address;
   /** The signature value */
   value: string;
   /** Deadline as string (bigint serialized) */
@@ -114,9 +115,9 @@ export interface SignatureOverTheWire {
  */
 export interface FormStateOverTheWire {
   /** Address being registered as stolen */
-  registeree?: `0x${string}`;
+  registeree?: Address;
   /** Address paying for registration */
-  relayer?: `0x${string}`;
+  relayer?: Address;
 }
 
 /**
@@ -148,7 +149,7 @@ export interface ParsedStreamData {
   /** Signature data for relay */
   signature?: SignatureOverTheWire;
   /** Transaction hash after submission */
-  hash?: `0x${string}`;
+  hash?: Hash;
 }
 
 /**

@@ -10,12 +10,13 @@ import { AlertCircle, Clock, CheckCircle2 } from 'lucide-react';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
 import type { RegistrationData, AcknowledgementData } from '@/hooks';
+import type { Address } from '@/lib/types/ethereum';
 
 export type ResultStatus = 'registered' | 'pending' | 'not-found';
 
 export interface RegistrySearchResultProps {
   /** The address that was searched */
-  address: `0x${string}`;
+  address: Address;
   /** Status of the wallet */
   status: ResultStatus;
   /** Registration data (if registered) */

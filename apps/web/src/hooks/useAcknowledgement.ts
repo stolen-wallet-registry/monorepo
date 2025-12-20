@@ -9,6 +9,7 @@ import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagm
 import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
 import type { ParsedSignature } from '@/lib/signatures';
+import type { Address, Hash } from '@/lib/types/ethereum';
 
 export interface AcknowledgementParams {
   deadline: bigint;
@@ -17,7 +18,7 @@ export interface AcknowledgementParams {
    * The wallet address being registered as stolen.
    * Maps to `owner` parameter in the contract ABI.
    */
-  registeree: `0x${string}`;
+  registeree: Address;
   signature: ParsedSignature;
   /**
    * Protocol fee to send with the acknowledgement transaction.
@@ -27,8 +28,8 @@ export interface AcknowledgementParams {
 }
 
 export interface UseAcknowledgementResult {
-  submitAcknowledgement: (params: AcknowledgementParams) => Promise<`0x${string}`>;
-  hash: `0x${string}` | undefined;
+  submitAcknowledgement: (params: AcknowledgementParams) => Promise<Hash>;
+  hash: Hash | undefined;
   isPending: boolean;
   isConfirming: boolean;
   isConfirmed: boolean;
@@ -45,7 +46,7 @@ export interface UseAcknowledgementResult {
 export function useAcknowledgement(): UseAcknowledgementResult {
   const chainId = useChainId();
 
-  let contractAddress: `0x${string}` | undefined;
+  let contractAddress: Address | undefined;
   try {
     contractAddress = getStolenWalletRegistryAddress(chainId);
   } catch {
@@ -70,7 +71,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
     hash,
   });
 
-  const submitAcknowledgement = async (params: AcknowledgementParams): Promise<`0x${string}`> => {
+  const submitAcknowledgement = async (params: AcknowledgementParams): Promise<Hash> => {
     if (!contractAddress) {
       throw new Error('Contract not configured for this chain');
     }

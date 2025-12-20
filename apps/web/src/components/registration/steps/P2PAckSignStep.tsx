@@ -18,6 +18,7 @@ import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
 import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
+import type { Hex } from '@/lib/types/ethereum';
 
 export interface P2PAckSignStepProps {
   /**
@@ -43,7 +44,7 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
   const { partnerPeerId } = useP2PStore();
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [signature, setSignature] = useState<`0x${string}` | null>(null);
+  const [signature, setSignature] = useState<Hex | null>(null);
 
   // Get hash struct data for signing (deadline)
   const {
