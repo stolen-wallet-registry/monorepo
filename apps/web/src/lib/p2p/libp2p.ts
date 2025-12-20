@@ -157,6 +157,8 @@ export async function setup(
   const config = libp2pDefaults();
   if (walletAddress) {
     const { privateKey } = await getOrCreatePeerId(walletAddress);
+    // Type assertion: Libp2pOptions doesn't include privateKey in its type,
+    // but createLibp2p() accepts it for custom identity
     (config as { privateKey?: unknown }).privateKey = privateKey;
   }
 

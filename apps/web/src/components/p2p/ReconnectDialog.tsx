@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { RefreshCw, Link2 } from 'lucide-react';
+import { RefreshCw, Link2, Loader2 } from 'lucide-react';
 import type { Libp2p } from '@libp2p/interface';
 
 import {
@@ -54,7 +54,7 @@ export interface ReconnectDialogProps {
  * <ReconnectDialog
  *   open={showReconnect}
  *   onOpenChange={setShowReconnect}
- *   libp2p={libp2p}
+ *   getLibp2p={getLibp2p}
  *   currentPeerId={partnerPeerId}
  *   partnerRole="relayer"
  *   onReconnected={(peerId) => {
@@ -187,6 +187,7 @@ export function ReconnectDialog({
             <Button
               variant={mode === 'retry' ? 'default' : 'outline'}
               size="sm"
+              aria-pressed={mode === 'retry'}
               onClick={() => {
                 setMode('retry');
                 setError(null);
@@ -199,6 +200,7 @@ export function ReconnectDialog({
             <Button
               variant={mode === 'new' ? 'default' : 'outline'}
               size="sm"
+              aria-pressed={mode === 'new'}
               onClick={() => {
                 setMode('new');
                 setError(null);
@@ -258,7 +260,7 @@ export function ReconnectDialog({
             <Button onClick={handleConnectNew} disabled={isReconnecting || !newPeerId.trim()}>
               {isReconnecting ? (
                 <>
-                  <Link2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Connecting...
                 </>
               ) : (

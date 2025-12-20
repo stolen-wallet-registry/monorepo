@@ -92,7 +92,7 @@ class MessageQueue {
 
     const queuedMessage: QueuedMessage = {
       ...message,
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      id: `msg-${crypto.randomUUID()}`,
       retries: 0,
       createdAt: Date.now(),
     };
@@ -219,18 +219,19 @@ class MessageQueue {
           const errorMsg = err instanceof Error ? err.message : 'Unknown error';
           this.incrementRetries(message.id, errorMsg);
 
-          if (message.retries + 1 >= MAX_MESSAGE_RETRIES) {
+          // After incrementRetries, message.retries is already updated
+          if (message.retries >= MAX_MESSAGE_RETRIES) {
             this.remove(message.id);
             failed++;
             onMessageProcessed?.(message, false);
             logger.p2p.error('Queued message failed after max retries', {
               id: message.id,
-              retries: message.retries + 1,
+              retries: message.retries,
             });
           } else {
             logger.p2p.warn('Queued message send failed, will retry', {
               id: message.id,
-              retries: message.retries + 1,
+              retries: message.retries,
               error: errorMsg,
             });
           }
@@ -273,7 +274,7 @@ export async function sendWithRetry({
   streamData,
   maxRetries = MAX_MESSAGE_RETRIES,
   onQueued,
-  onFailed: _onFailed, // Reserved for future use when queue processing fails
+  onFailed,
   onSuccess,
 }: SendWithRetryOptions): Promise<void> {
   let lastError: Error | null = null;
@@ -326,6 +327,7 @@ export async function sendWithRetry({
     lastError: lastError?.message,
   });
   onQueued?.(queued);
+  onFailed?.(queued, lastError ?? new Error('All retries exhausted'));
 }
 
 /**

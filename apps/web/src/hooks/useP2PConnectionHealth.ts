@@ -113,8 +113,11 @@ export function useP2PConnectionHealth({
   const storeConnectedToPeer = useP2PStore((s) => s.connectedToPeer);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const relayDisconnectedFiredRef = useRef(false);
   const peerDisconnectedFiredRef = useRef(false);
+  // Track if store update is needed after setState (to avoid side effects inside updater)
+  const pendingStoreUpdateRef = useRef(false);
 
   // Use ref for getter to avoid effect re-runs
   const getLibp2pRef = useRef(getLibp2p);
@@ -124,9 +127,13 @@ export function useP2PConnectionHealth({
 
   // Use refs for callbacks to avoid effect re-runs
   const onRelayDisconnectedRef = useRef(onRelayDisconnected);
-  onRelayDisconnectedRef.current = onRelayDisconnected;
+  useEffect(() => {
+    onRelayDisconnectedRef.current = onRelayDisconnected;
+  }, [onRelayDisconnected]);
   const onPeerDisconnectedRef = useRef(onPeerDisconnected);
-  onPeerDisconnectedRef.current = onPeerDisconnected;
+  useEffect(() => {
+    onPeerDisconnectedRef.current = onPeerDisconnected;
+  }, [onPeerDisconnected]);
 
   // Get relay peer IDs for connection checks
   const relayPeerIds = useMemo(() => {
@@ -247,6 +254,9 @@ export function useP2PConnectionHealth({
       // Update health state
       // Note: storeConnectedToPeer is captured at render time and reflects the latest
       // store value. If passStreamData/readStreamData succeeded, this will be true.
+      // Reset pending store update flag before setState
+      pendingStoreUpdateRef.current = false;
+
       setHealth((prev) => {
         // Store says connected if we recently sent/received data successfully
         // This overrides ping failures since actual message passing proves connectivity
@@ -263,6 +273,7 @@ export function useP2PConnectionHealth({
         const peerDisconnected = remotePeerId && newPeerFailures >= MAX_FAILURES_BEFORE_DISCONNECT;
 
         // Fire callbacks once per disconnection event (only if we had a connection before)
+        // Note: Using setTimeout to defer side effects outside the updater
         if (relayDisconnected && !relayDisconnectedFiredRef.current && prev.lastCheckAt !== null) {
           relayDisconnectedFiredRef.current = true;
           logger.p2p.info('Relay disconnect detected', { relayFailures: newRelayFailures });
@@ -275,9 +286,8 @@ export function useP2PConnectionHealth({
             remotePeerId,
           });
           setTimeout(() => onPeerDisconnectedRef.current?.(), 0);
-          // Reset store to false - ping failures have proven the connection is lost
-          // This makes the store symmetric: true on success, false on proven disconnect
-          useP2PStore.getState().setConnectedToPeer(false);
+          // Mark that we need to update store after setState completes
+          pendingStoreUpdateRef.current = true;
         }
 
         // Reset fired flags if reconnected
@@ -306,6 +316,13 @@ export function useP2PConnectionHealth({
           lastCheckAt: Date.now(),
         };
       });
+
+      // Execute side effects after setState completes
+      if (pendingStoreUpdateRef.current) {
+        // Reset store to false - ping failures have proven the connection is lost
+        // This makes the store symmetric: true on success, false on proven disconnect
+        useP2PStore.getState().setConnectedToPeer(false);
+      }
 
       logger.p2p.debug('Health check complete', {
         relayConnected: relayResult.connected,
@@ -348,7 +365,6 @@ export function useP2PConnectionHealth({
 
     // Track if we've done at least one successful check
     let hasChecked = false;
-    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 
     // Health check that only runs if libp2p is available
     // If not available, schedules a quick retry
@@ -356,10 +372,19 @@ export function useP2PConnectionHealth({
       const libp2p = getLibp2pRef.current();
       if (libp2p) {
         hasChecked = true;
+        // Clear any pending retry timeout since we're now ready
+        if (retryTimeoutRef.current) {
+          clearTimeout(retryTimeoutRef.current);
+          retryTimeoutRef.current = null;
+        }
         checkHealthRef.current();
       } else if (!hasChecked) {
+        // Clear existing retry before scheduling new one to prevent accumulation
+        if (retryTimeoutRef.current) {
+          clearTimeout(retryTimeoutRef.current);
+        }
         // libp2p not ready yet - retry in 1 second
-        retryTimeout = setTimeout(doHealthCheck, 1000);
+        retryTimeoutRef.current = setTimeout(doHealthCheck, 1000);
       }
     };
 
@@ -371,8 +396,9 @@ export function useP2PConnectionHealth({
 
     return () => {
       clearTimeout(initialTimeout);
-      if (retryTimeout) {
-        clearTimeout(retryTimeout);
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
       }
       if (intervalRef.current) {
         clearInterval(intervalRef.current);

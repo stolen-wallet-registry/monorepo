@@ -4,7 +4,7 @@
  * Registeree signs registration and sends signature to relayer via P2P.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 import type { Libp2p } from 'libp2p';
 
@@ -45,6 +45,12 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
   const [sendError, setSendError] = useState<string | null>(null);
   const [signature, setSignature] = useState<`0x${string}` | null>(null);
 
+  // Use ref for getter to avoid callback re-creation when parent re-renders
+  const getLibp2pRef = useRef(getLibp2p);
+  useEffect(() => {
+    getLibp2pRef.current = getLibp2p;
+  }, [getLibp2p]);
+
   // Get hash struct data for signing (deadline)
   const {
     data: hashData,
@@ -78,7 +84,7 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
 
   // Handle signing and sending
   const handleSign = useCallback(async () => {
-    const libp2p = getLibp2p();
+    const libp2p = getLibp2pRef.current();
     if (
       !hashData ||
       !address ||
@@ -138,7 +144,6 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
   }, [
     hashData,
     address,
-    getLibp2p,
     partnerPeerId,
     registeree,
     relayer,

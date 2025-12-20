@@ -8,12 +8,15 @@
 import { privateKeyFromProtobuf, privateKeyToProtobuf, generateKeyPair } from '@libp2p/crypto/keys';
 import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import type { PeerId, PrivateKey } from '@libp2p/interface';
-import { fromString, toString } from 'uint8arrays';
+import { fromString, toString as uint8ToString } from 'uint8arrays';
 
 import { logger } from '@/lib/logger';
 
 /** Storage key prefix for peer ID keypairs */
 const STORAGE_KEY_PREFIX = 'swr-p2p-keypair-';
+
+/** SSR safety: check if we're in a browser environment */
+const isBrowser = typeof window !== 'undefined';
 
 export interface PersistentPeerIdResult {
   peerId: PeerId;
@@ -32,8 +35,8 @@ export interface PersistentPeerIdResult {
 export async function getOrCreatePeerId(walletAddress: string): Promise<PersistentPeerIdResult> {
   const storageKey = `${STORAGE_KEY_PREFIX}${walletAddress.toLowerCase()}`;
 
-  // Try to restore existing keypair
-  const stored = localStorage.getItem(storageKey);
+  // Try to restore existing keypair (SSR-safe)
+  const stored = isBrowser ? localStorage.getItem(storageKey) : null;
   if (stored) {
     try {
       const privateKeyBytes = fromString(stored, 'base64');
@@ -51,14 +54,18 @@ export async function getOrCreatePeerId(walletAddress: string): Promise<Persiste
       logger.p2p.warn('Failed to restore peer ID, generating new one', {
         error: err instanceof Error ? err.message : 'Unknown error',
       });
-      localStorage.removeItem(storageKey);
+      if (isBrowser) {
+        localStorage.removeItem(storageKey);
+      }
     }
   }
 
-  // Generate new keypair and persist
+  // Generate new keypair and persist (if in browser)
   const privateKey = await generateKeyPair('Ed25519');
   const privateKeyBytes = privateKeyToProtobuf(privateKey);
-  localStorage.setItem(storageKey, toString(privateKeyBytes, 'base64'));
+  if (isBrowser) {
+    localStorage.setItem(storageKey, uint8ToString(privateKeyBytes, 'base64'));
+  }
 
   const peerId = peerIdFromPrivateKey(privateKey);
 
@@ -78,6 +85,7 @@ export async function getOrCreatePeerId(walletAddress: string): Promise<Persiste
  * @param walletAddress - The wallet address to clear
  */
 export function clearStoredPeerId(walletAddress: string): void {
+  if (!isBrowser) return;
   const storageKey = `${STORAGE_KEY_PREFIX}${walletAddress.toLowerCase()}`;
   localStorage.removeItem(storageKey);
   logger.p2p.info('Cleared stored peer ID', {
@@ -92,6 +100,7 @@ export function clearStoredPeerId(walletAddress: string): void {
  * @returns true if a peer ID exists in storage
  */
 export function hasStoredPeerId(walletAddress: string): boolean {
+  if (!isBrowser) return false;
   const storageKey = `${STORAGE_KEY_PREFIX}${walletAddress.toLowerCase()}`;
   return localStorage.getItem(storageKey) !== null;
 }

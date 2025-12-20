@@ -208,7 +208,7 @@ export async function reconnectToPeer(
     result: {
       success: false,
       attempts: totalAttempts,
-      error: `Failed to reconnect to peer after ${totalAttempts - relayResult.attempts} attempts`,
+      error: `Failed to reconnect to peer after ${totalAttempts - relayResult.attempts} peer dial attempts (${totalAttempts} total including relay)`,
     },
   };
 }

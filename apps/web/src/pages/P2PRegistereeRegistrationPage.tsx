@@ -249,6 +249,11 @@ export function P2PRegistereeRegistrationPage() {
             logger.p2p.debug('Error stopping P2P node');
           });
         }
+        // Clear ref to prevent stale access
+        if (libp2pRef.current === node) {
+          libp2pRef.current = null;
+          setNodeReady(false);
+        }
       }
     };
     // Note: goToNextStep excluded from deps - accessed via ref to prevent node recreation
@@ -432,6 +437,9 @@ export function P2PRegistereeRegistrationPage() {
           setPartnerPeerId(peerId);
           setProtocolError(null);
           setConnectedToPeer(true);
+        }}
+        onCancel={() => {
+          logger.p2p.info('User cancelled reconnection dialog');
         }}
       />
     </div>

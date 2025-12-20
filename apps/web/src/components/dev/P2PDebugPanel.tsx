@@ -414,7 +414,12 @@ export function P2PDebugPanel({
                         const relayIds = relayPeerIdsRef.current ?? new Set<string>();
                         libp2p.getConnections().forEach((conn) => {
                           if (relayIds.has(conn.remotePeer.toString())) {
-                            conn.close().catch(() => {});
+                            conn.close().catch((err) => {
+                              logger.p2p.debug('[DevTools] Error closing relay connection', {
+                                peer: conn.remotePeer.toString(),
+                                error: err instanceof Error ? err.message : 'Unknown error',
+                              });
+                            });
                             logger.p2p.info('[DevTools] Closed relay connection', {
                               peer: conn.remotePeer.toString(),
                             });
@@ -437,7 +442,12 @@ export function P2PDebugPanel({
                         const relayIds = relayPeerIdsRef.current ?? new Set<string>();
                         libp2p.getConnections().forEach((conn) => {
                           if (!relayIds.has(conn.remotePeer.toString())) {
-                            conn.close().catch(() => {});
+                            conn.close().catch((err) => {
+                              logger.p2p.debug('[DevTools] Error closing peer connection', {
+                                peer: conn.remotePeer.toString(),
+                                error: err instanceof Error ? err.message : 'Unknown error',
+                              });
+                            });
                             logger.p2p.info('[DevTools] Closed peer connection', {
                               peer: conn.remotePeer.toString(),
                             });
@@ -460,7 +470,12 @@ export function P2PDebugPanel({
                         if (!libp2p) return;
                         // Close ALL connections
                         libp2p.getConnections().forEach((conn) => {
-                          conn.close().catch(() => {});
+                          conn.close().catch((err) => {
+                            logger.p2p.debug('[DevTools] Error closing connection', {
+                              peer: conn.remotePeer.toString(),
+                              error: err instanceof Error ? err.message : 'Unknown error',
+                            });
+                          });
                         });
                         // Reset store's connected status for immediate UI feedback
                         useP2PStore.getState().setConnectedToPeer(false);

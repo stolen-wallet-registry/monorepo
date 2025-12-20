@@ -99,10 +99,14 @@ export function ConnectionStatusBadge({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Badge variant="outline" className="gap-1.5 px-2 py-0.5 cursor-default">
+          <Badge
+            variant="outline"
+            className="gap-1.5 px-2 py-0.5 cursor-default"
+            aria-label={`Connection status: ${config.label}`}
+          >
             <span className={`relative flex ${size === 'sm' ? 'h-2 w-2' : 'h-2.5 w-2.5'}`}>
               <span
-                className={`absolute inline-flex h-full w-full rounded-full ${config.bgColor} ${status === 'healthy' ? 'animate-ping opacity-75' : ''}`}
+                className={`absolute inline-flex h-full w-full rounded-full ${config.bgColor} ${status === 'healthy' ? 'animate-ping opacity-75 motion-reduce:animate-none' : ''}`}
                 style={{ animationDuration: '3s' }}
               />
               <span
