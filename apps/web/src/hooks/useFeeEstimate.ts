@@ -76,7 +76,8 @@ export function useFeeEstimate(): UseFeeEstimateResult {
   let feeManagerAddress: Address | undefined;
   try {
     feeManagerAddress = getFeeManagerAddress(chainId);
-  } catch {
+  } catch (error) {
+    logger.contract.warn('FeeManager not configured for chain', { chainId, error });
     feeManagerAddress = undefined;
   }
 

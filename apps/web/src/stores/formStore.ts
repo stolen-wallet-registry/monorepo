@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { useShallow } from 'zustand/shallow';
+import { isAddress } from 'viem';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
 
@@ -80,10 +81,21 @@ export const useFormStore = create<FormState & FormActions>()(
 
           const state = persisted as Partial<FormState>;
 
+          // Validate addresses are properly formatted before restoring
+          // Corrupted localStorage data could cause type safety issues
+          const validRegisteree =
+            state.registeree && isAddress(state.registeree)
+              ? (state.registeree as Address)
+              : initialState.registeree;
+          const validRelayer =
+            state.relayer && isAddress(state.relayer)
+              ? (state.relayer as Address)
+              : initialState.relayer;
+
           // Ensure all required fields exist with fallbacks
           return {
-            registeree: state.registeree ?? initialState.registeree,
-            relayer: state.relayer ?? initialState.relayer,
+            registeree: validRegisteree,
+            relayer: validRelayer,
             supportNFT: state.supportNFT ?? initialState.supportNFT,
             walletNFT: state.walletNFT ?? initialState.walletNFT,
           };

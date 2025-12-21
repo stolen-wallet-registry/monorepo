@@ -1,7 +1,8 @@
 // Signature storage utilities
 // Stores EIP-712 signatures in sessionStorage (clears on tab close for security)
 
-import type { SignatureStep } from './eip712';
+import { isHex, isAddress } from 'viem';
+import { SIGNATURE_STEP, type SignatureStep } from './eip712';
 import type { Address, Hex } from '@/lib/types/ethereum';
 
 /** Signature session TTL in milliseconds (30 minutes) */
@@ -70,6 +71,13 @@ export function getSignature(
       return null;
     }
 
+    // Validate hex format for security-critical signature data
+    // Malformed but parseable data could cause issues downstream
+    if (!isHex(parsed.signature, { strict: true }) || !isAddress(parsed.address)) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+
     const signature: StoredSignature = {
       signature: parsed.signature as Hex,
       deadline: BigInt(parsed.deadline),
@@ -96,7 +104,7 @@ export function removeSignature(address: Address, chainId: number, step: Signatu
 
 // Clear all signatures for an address on a chain
 export function clearSignatures(address: Address, chainId: number): void {
-  const steps = [1, 2] as const;
+  const steps = Object.values(SIGNATURE_STEP);
   for (const step of steps) {
     removeSignature(address, chainId, step);
   }

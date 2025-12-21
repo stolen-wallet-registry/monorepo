@@ -80,6 +80,7 @@ export function WalletSwitchPrompt({
               type="address"
               href={null}
               showDisabledIcon={false}
+              aria-label={`Connected wallet address: ${expectedAddress}`}
             />
             <span className="text-xs">({expectedLabel})</span>
           </div>
@@ -104,6 +105,7 @@ export function WalletSwitchPrompt({
               type="address"
               href={null}
               showDisabledIcon={false}
+              aria-label={`Expected wallet address: ${expectedAddress}`}
             />
           </div>
         </AlertDescription>
@@ -124,11 +126,19 @@ export function WalletSwitchPrompt({
         <AlertDescription className="text-amber-600 dark:text-amber-400">
           Please switch to the correct network to continue.
           <div className="mt-2 flex items-center gap-2">
-            <Badge variant="outline" className="font-mono">
+            <Badge
+              variant="outline"
+              className="font-mono"
+              aria-label={`Current network: chain ${currentChainId}`}
+            >
               Chain {currentChainId}
             </Badge>
-            <ArrowRight className="h-4 w-4" />
-            <Badge variant="outline" className="font-mono border-amber-500">
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            <Badge
+              variant="outline"
+              className="font-mono border-amber-500"
+              aria-label={`Expected network: chain ${expectedChainId}`}
+            >
               Chain {expectedChainId}
             </Badge>
           </div>
@@ -164,11 +174,12 @@ export function WalletSwitchPrompt({
               type="address"
               href={null}
               showDisabledIcon={false}
+              aria-label={`Current wallet address: ${currentAddress}`}
             />
             {currentLabel && <span className="text-xs">({currentLabel})</span>}
           </div>
           <div className="flex items-center gap-2">
-            <ArrowRight className="h-4 w-4 mx-2" />
+            <ArrowRight className="h-4 w-4 mx-2" aria-hidden="true" />
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-xs uppercase tracking-wide opacity-70">Expected:</span>
@@ -177,6 +188,7 @@ export function WalletSwitchPrompt({
               type="address"
               href={null}
               showDisabledIcon={false}
+              aria-label={`Expected wallet address: ${expectedAddress}`}
             />
             <span className="text-xs">({expectedLabel})</span>
           </div>

@@ -7,6 +7,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { useAccount } from 'wagmi';
+import { isHex, isAddress } from 'viem';
 import type { Connection, Stream } from '@libp2p/interface';
 import {
   useP2PConnection,
@@ -40,17 +41,17 @@ function isValidSignature(sig: unknown): sig is SignatureOverTheWire {
 
   const s = sig as Record<string, unknown>;
 
-  // Check required string fields exist
-  if (typeof s.value !== 'string' || !s.value) return false;
-  // Validate address is 0x-prefixed hex string of correct length (42 chars)
-  if (
-    typeof s.address !== 'string' ||
-    !s.address.startsWith('0x') ||
-    s.address.length !== 42 ||
-    !/^0x[0-9a-fA-F]{40}$/.test(s.address)
-  ) {
+  // Validate signature value is 0x-prefixed hex string (typically 132 chars for ECDSA: 0x + 130 hex)
+  // Using viem's isHex with strict mode for proper validation
+  if (typeof s.value !== 'string' || !isHex(s.value, { strict: true })) {
     return false;
   }
+
+  // Validate address using viem's isAddress (handles checksumming, length, hex format)
+  if (typeof s.address !== 'string' || !isAddress(s.address)) {
+    return false;
+  }
+
   if (typeof s.keyRef !== 'string') return false;
 
   // Check chainId is a valid integer (not a float)
