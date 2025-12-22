@@ -50,8 +50,11 @@ describe('useRegistryStatus', () => {
           status: 'success',
           result: {
             registeredAt: 12345678n,
-            registeredBy: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
+            sourceChainId: 0,
+            bridgeId: 0,
             isSponsored: false,
+            crossChainMessageId:
+              '0x0000000000000000000000000000000000000000000000000000000000000000',
           },
         }, // getRegistration
         { status: 'success', result: { trustedForwarder: '0x0', startBlock: 0n, expiryBlock: 0n } }, // getAcknowledgement
@@ -72,8 +75,10 @@ describe('useRegistryStatus', () => {
     expect(result.current.isPending).toBe(false);
     expect(result.current.registrationData).toEqual({
       registeredAt: 12345678n,
-      registeredBy: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
+      sourceChainId: 0,
+      bridgeId: 0,
       isSponsored: false,
+      crossChainMessageId: '0x0000000000000000000000000000000000000000000000000000000000000000',
     });
   });
 
@@ -84,7 +89,14 @@ describe('useRegistryStatus', () => {
         { status: 'success', result: true }, // isPending
         {
           status: 'success',
-          result: { registeredAt: 0n, registeredBy: '0x0', isSponsored: false },
+          result: {
+            registeredAt: 0n,
+            sourceChainId: 0,
+            bridgeId: 0,
+            isSponsored: false,
+            crossChainMessageId:
+              '0x0000000000000000000000000000000000000000000000000000000000000000',
+          },
         }, // getRegistration
         {
           status: 'success',
@@ -123,7 +135,14 @@ describe('useRegistryStatus', () => {
         { status: 'success', result: false }, // isPending
         {
           status: 'success',
-          result: { registeredAt: 0n, registeredBy: '0x0', isSponsored: false },
+          result: {
+            registeredAt: 0n,
+            sourceChainId: 0,
+            bridgeId: 0,
+            isSponsored: false,
+            crossChainMessageId:
+              '0x0000000000000000000000000000000000000000000000000000000000000000',
+          },
         }, // getRegistration
         { status: 'success', result: { trustedForwarder: '0x0', startBlock: 0n, expiryBlock: 0n } }, // getAcknowledgement
       ],

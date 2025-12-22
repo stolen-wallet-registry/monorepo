@@ -155,10 +155,45 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
 
         // Persist registration permanently
         bool isSponsored = owner != msg.sender;
-        registeredWallets[owner] =
-            RegistrationData({ registeredAt: block.number, registeredBy: msg.sender, isSponsored: isSponsored });
+
+        registeredWallets[owner] = RegistrationData({
+            registeredAt: uint64(block.number),
+            sourceChainId: uint32(block.chainid), // Native registration uses current chain
+            bridgeId: uint8(BridgeId.NONE), // Native registration, no bridge
+            isSponsored: isSponsored,
+            crossChainMessageId: bytes32(0) // No bridge message for native
+        });
 
         emit WalletRegistered(owner, isSponsored);
+    }
+
+    /// @inheritdoc IStolenWalletRegistry
+    function registerFromHub(
+        address wallet,
+        uint32 sourceChainId,
+        bool isSponsored,
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    ) external {
+        // Only RegistryHub can call this function
+        if (msg.sender != registryHub) revert UnauthorizedCaller();
+
+        // Validate wallet address
+        if (wallet == address(0)) revert InvalidOwner();
+
+        // Prevent re-registration
+        if (registeredWallets[wallet].registeredAt != 0) revert AlreadyRegistered();
+
+        // Store the cross-chain registration
+        registeredWallets[wallet] = RegistrationData({
+            registeredAt: uint64(block.number),
+            sourceChainId: sourceChainId,
+            bridgeId: bridgeId,
+            isSponsored: isSponsored,
+            crossChainMessageId: crossChainMessageId
+        });
+
+        emit WalletRegistered(wallet, isSponsored);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

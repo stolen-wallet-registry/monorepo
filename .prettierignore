@@ -6,3 +6,4 @@ pnpm-lock.yaml
 # Foundry dependencies (installed via forge install)
 **/lib/forge-std
 **/lib/openzeppelin-contracts
+**/lib/hyperlane-monorepo

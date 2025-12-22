@@ -1,0 +1,3 @@
+[submodule "packages/contracts/lib/hyperlane-monorepo"]
+	path = packages/contracts/lib/hyperlane-monorepo
+	url = https://github.com/hyperlane-xyz/hyperlane-monorepo

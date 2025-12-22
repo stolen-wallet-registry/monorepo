@@ -72,6 +72,19 @@ export const RegistryHubABI = [
   },
   {
     type: 'function',
+    name: 'crossChainInbox',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'currentFeeWei',
     inputs: [],
     outputs: [
@@ -207,8 +220,54 @@ export const RegistryHubABI = [
   },
   {
     type: 'function',
+    name: 'registerFromSpoke',
+    inputs: [
+      {
+        name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'sourceChainId',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'isSponsored',
+        type: 'bool',
+        internalType: 'bool',
+      },
+      {
+        name: 'bridgeId',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+      {
+        name: 'crossChainMessageId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'renounceOwnership',
     inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setCrossChainInbox',
+    inputs: [
+      {
+        name: '_inbox',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -312,6 +371,44 @@ export const RegistryHubABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'event',
+    name: 'CrossChainInboxUpdated',
+    inputs: [
+      {
+        name: 'inbox',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'CrossChainRegistration',
+    inputs: [
+      {
+        name: 'wallet',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'sourceChainId',
+        type: 'uint32',
+        indexed: true,
+        internalType: 'uint32',
+      },
+      {
+        name: 'messageId',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
   },
   {
     type: 'event',
@@ -428,6 +525,11 @@ export const RegistryHubABI = [
   {
     type: 'error',
     name: 'Hub__Paused',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'Hub__UnauthorizedInbox',
     inputs: [],
   },
   {

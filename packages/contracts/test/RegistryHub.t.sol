@@ -6,7 +6,6 @@ import { RegistryHub } from "../src/RegistryHub.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
 import { IRegistryHub } from "../src/interfaces/IRegistryHub.sol";
-import { IStolenWalletRegistry } from "../src/interfaces/IStolenWalletRegistry.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 
 /// @title RegistryHubTest

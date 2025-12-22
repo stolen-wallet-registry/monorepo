@@ -12,18 +12,25 @@ import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
 import { registryStaleTime } from '@/lib/contracts/queryKeys';
 import { logger } from '@/lib/logger';
-import type { Address } from '@/lib/types/ethereum';
+import type { Address, Hex } from '@/lib/types/ethereum';
 
 /**
  * Registration data from the contract.
+ * @dev Updated for cross-chain support.
+ *      registeredBy and registrationMethod removed for privacy
+ *      (would reveal multi-wallet ownership or relayer relationships).
  */
 export interface RegistrationData {
-  /** Block number when registration was completed */
+  /** Block number when registration was completed (on hub chain) */
   registeredAt: bigint;
-  /** Address that submitted the registration transaction */
-  registeredBy: Address;
+  /** EIP-155 chain ID where user signed (0 for native hub registration) */
+  sourceChainId: number;
+  /** Bridge that delivered message (0=NONE for native) */
+  bridgeId: number;
   /** Whether registration was sponsored (paid by different wallet) */
   isSponsored: boolean;
+  /** Cross-chain message ID for explorer linking (0x0 for native) */
+  crossChainMessageId: Hex;
 }
 
 /**
@@ -149,13 +156,17 @@ export function useRegistryStatus({
   if (data?.[2]?.status === 'success' && isRegistered) {
     const result = data[2].result as {
       registeredAt: bigint;
-      registeredBy: Address;
+      sourceChainId: number;
+      bridgeId: number;
       isSponsored: boolean;
+      crossChainMessageId: Hex;
     };
     registrationData = {
       registeredAt: result.registeredAt,
-      registeredBy: result.registeredBy,
+      sourceChainId: result.sourceChainId,
+      bridgeId: result.bridgeId,
       isSponsored: result.isSponsored,
+      crossChainMessageId: result.crossChainMessageId,
     };
   }
 

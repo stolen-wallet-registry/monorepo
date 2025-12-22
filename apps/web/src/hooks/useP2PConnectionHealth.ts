@@ -417,6 +417,9 @@ export function useP2PConnectionHealth({
     // Set up interval - will start checking once libp2p is ready
     intervalRef.current = setInterval(doHealthCheck, intervalMs);
 
+    // Capture ref values for cleanup to avoid stale refs
+    const disconnectTimeouts = disconnectTimeoutsRef.current;
+
     return () => {
       clearTimeout(initialTimeout);
       if (retryTimeoutRef.current) {
@@ -428,10 +431,10 @@ export function useP2PConnectionHealth({
         intervalRef.current = null;
       }
       // Clear any pending disconnect callback timeouts
-      for (const timeoutId of disconnectTimeoutsRef.current) {
+      for (const timeoutId of disconnectTimeouts) {
         clearTimeout(timeoutId);
       }
-      disconnectTimeoutsRef.current.clear();
+      disconnectTimeouts.clear();
     };
     // Note: getLibp2p excluded from deps - accessed via ref
   }, [enabled, intervalMs, remotePeerId]);

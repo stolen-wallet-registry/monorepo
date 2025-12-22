@@ -236,18 +236,28 @@ export const StolenWalletRegistryABI = [
         components: [
           {
             name: 'registeredAt',
-            type: 'uint256',
-            internalType: 'uint256',
+            type: 'uint64',
+            internalType: 'uint64',
           },
           {
-            name: 'registeredBy',
-            type: 'address',
-            internalType: 'address',
+            name: 'sourceChainId',
+            type: 'uint32',
+            internalType: 'uint32',
+          },
+          {
+            name: 'bridgeId',
+            type: 'uint8',
+            internalType: 'uint8',
           },
           {
             name: 'isSponsored',
             type: 'bool',
             internalType: 'bool',
+          },
+          {
+            name: 'crossChainMessageId',
+            type: 'bytes32',
+            internalType: 'bytes32',
           },
         ],
       },
@@ -348,6 +358,39 @@ export const StolenWalletRegistryABI = [
     ],
     outputs: [],
     stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'registerFromHub',
+    inputs: [
+      {
+        name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'sourceChainId',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'isSponsored',
+        type: 'bool',
+        internalType: 'bool',
+      },
+      {
+        name: 'bridgeId',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+      {
+        name: 'crossChainMessageId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -514,5 +557,10 @@ export const StolenWalletRegistryABI = [
         internalType: 'string',
       },
     ],
+  },
+  {
+    type: 'error',
+    name: 'UnauthorizedCaller',
+    inputs: [],
   },
 ] as const;

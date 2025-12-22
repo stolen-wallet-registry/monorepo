@@ -58,10 +58,6 @@ export function RegistrySearchResult({
                 <span className="text-muted-foreground">Registered at block:</span>{' '}
                 {registrationData.registeredAt.toString()}
               </p>
-              <p className="flex items-center gap-1">
-                <span className="text-muted-foreground">Registered by:</span>{' '}
-                <ExplorerLink type="address" value={registrationData.registeredBy} />
-              </p>
               {registrationData.isSponsored && (
                 <p>
                   <Badge variant="outline" className="text-xs">
