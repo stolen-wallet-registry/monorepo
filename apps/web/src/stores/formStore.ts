@@ -67,7 +67,7 @@ export const useFormStore = create<FormState & FormActions>()(
 
         reset: () => {
           logger.store.debug('Form state reset');
-          set(initialState);
+          set(() => ({ ...initialState }));
         },
       })),
       {

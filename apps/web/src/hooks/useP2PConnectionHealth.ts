@@ -260,9 +260,12 @@ export function useP2PConnectionHealth({
       setHealth((prev) => {
         // Store says connected if we recently sent/received data successfully
         // This overrides ping failures since actual message passing proves connectivity
+        // If peer is connected via message pass, relay must also be working since
+        // circuit relay routes all messages through the relay server
+        const effectiveRelayConnected = relayResult.connected || storeConnectedToPeer;
         const effectivePeerConnected = peerResult.connected || storeConnectedToPeer;
 
-        const newRelayFailures = relayResult.connected ? 0 : prev.relayFailures + 1;
+        const newRelayFailures = effectiveRelayConnected ? 0 : prev.relayFailures + 1;
         // Always track ping failures - we need to detect disconnect even if store says connected
         // The store provides "benefit of doubt" for UI status, but doesn't prevent failure detection
         const newPeerFailures = peerResult.connected ? 0 : prev.peerFailures + 1;
@@ -291,7 +294,7 @@ export function useP2PConnectionHealth({
         }
 
         // Reset fired flags if reconnected
-        if (relayResult.connected) {
+        if (effectiveRelayConnected) {
           relayDisconnectedFiredRef.current = false;
         }
         if (effectivePeerConnected) {
@@ -299,14 +302,14 @@ export function useP2PConnectionHealth({
         }
 
         const status = computeStatus(
-          relayResult.connected,
+          effectiveRelayConnected,
           effectivePeerConnected,
           relayResult.latency,
           peerResult.latency
         );
 
         return {
-          relayConnected: relayResult.connected,
+          relayConnected: effectiveRelayConnected,
           peerConnected: effectivePeerConnected,
           lastRelayPing: relayResult.latency,
           lastPeerPing: peerResult.latency,
