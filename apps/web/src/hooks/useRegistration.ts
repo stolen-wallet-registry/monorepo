@@ -1,13 +1,15 @@
 /**
- * Hook to submit a registration transaction to the StolenWalletRegistry contract.
+ * Hook to submit a registration transaction to the registry contract.
  *
  * This is Phase 2 of the two-phase registration flow.
  * Must be called after the grace period has elapsed following acknowledgement.
+ *
+ * Chain-aware: Uses StolenWalletRegistry on hub chains, SpokeRegistry on spoke chains.
  */
 
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
-import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
-import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
+import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
+import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
 import type { ParsedSignature } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 
@@ -40,6 +42,7 @@ export interface UseRegistrationResult {
 
 /**
  * Hook for submitting registration transactions.
+ * Chain-aware: automatically selects correct contract and function.
  *
  * @returns Functions and state for registration submission
  */
@@ -47,8 +50,10 @@ export function useRegistration(): UseRegistrationResult {
   const chainId = useChainId();
 
   let contractAddress: Address | undefined;
+  let registryType: 'hub' | 'spoke' = 'hub';
   try {
-    contractAddress = getStolenWalletRegistryAddress(chainId);
+    contractAddress = getRegistryAddress(chainId);
+    registryType = getRegistryType(chainId);
   } catch {
     contractAddress = undefined;
   }
@@ -78,10 +83,14 @@ export function useRegistration(): UseRegistrationResult {
 
     const { deadline, nonce, registeree, signature, feeWei } = params;
 
+    // Select correct ABI and function name based on chain type
+    const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
+    const functionName = registryType === 'spoke' ? 'registerLocal' : 'register';
+
     const txHash = await writeContractAsync({
       address: contractAddress,
-      abi: stolenWalletRegistryAbi,
-      functionName: 'register',
+      abi,
+      functionName,
       args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
       value: feeWei ?? 0n,
     });

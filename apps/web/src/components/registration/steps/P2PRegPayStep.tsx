@@ -14,7 +14,7 @@ import { SignatureDetails } from '@/components/composed/SignatureDetails';
 import { WaitingForData } from '@/components/p2p';
 import { Alert, AlertDescription, Button } from '@swr/ui';
 import { useRegistration } from '@/hooks/useRegistration';
-import { useFeeEstimate } from '@/hooks/useFeeEstimate';
+import { useQuoteRegistration } from '@/hooks/useQuoteRegistration';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
@@ -68,8 +68,8 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
   const { submitRegistration, hash, isPending, isConfirming, isConfirmed, isError, error, reset } =
     useRegistration();
 
-  // Get protocol fee
-  const { data: feeData } = useFeeEstimate();
+  // Get protocol fee (chain-aware - works on hub and spoke)
+  const { feeWei } = useQuoteRegistration(registeree);
 
   // Derive TransactionCard status
   const getStatus = (): TransactionStatus => {
@@ -96,9 +96,9 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       nonce: storedSig.nonce,
       registeree,
       signature: parsedSig,
-      feeWei: feeData?.feeWei,
+      feeWei,
     });
-  }, [storedSig, registeree, submitRegistration, feeData?.feeWei]);
+  }, [storedSig, registeree, submitRegistration, feeWei]);
 
   // Cleanup retry timeout on unmount
   useEffect(() => {

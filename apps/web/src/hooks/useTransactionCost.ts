@@ -1,13 +1,18 @@
 /**
  * Hook that combines protocol fee and gas estimates for transaction cost display.
  *
+ * Chain-aware: Works on both hub and spoke chains.
  * - Acknowledgement step: Shows gas cost only (no protocol fee)
- * - Registration step: Shows $5 protocol fee + gas cost + total
+ * - Registration step: Shows protocol fee + gas cost + total
+ *   - Hub: protocol fee from FeeManager
+ *   - Spoke: bridge fee + registration fee from quoteRegistration
  */
 
 import { formatEther } from 'viem';
-import { useFeeEstimate } from './useFeeEstimate';
+import { useAccount } from 'wagmi';
+import { useQuoteRegistration } from './useQuoteRegistration';
 import { useGasEstimate, type UseGasEstimateParams } from './useGasEstimate';
+import { useEthPrice } from './useEthPrice';
 import { logger } from '@/lib/logger';
 import { formatCentsToUsd } from '@/lib/utils';
 
@@ -82,44 +87,53 @@ export function useTransactionCost({
   step,
   args,
 }: UseTransactionCostParams): UseTransactionCostResult {
-  const feeEstimate = useFeeEstimate();
+  const { address } = useAccount();
+
+  // Get ETH price for USD conversions
+  const ethPrice = useEthPrice();
+
+  // Get fee from quoteRegistration (works on both hub and spoke)
+  // On hub: returns registration fee
+  // On spoke: returns bridge fee + registration fee
+  const quoteResult = useQuoteRegistration(address);
 
   // Determine the value to send with the transaction
   // Registration sends the protocol fee, acknowledgement sends nothing
-  const value = step === 'registration' ? feeEstimate.data?.feeWei : undefined;
+  const value = step === 'registration' ? quoteResult.feeWei : undefined;
 
   const gasEstimate = useGasEstimate({
-    functionName: step === 'acknowledgement' ? 'acknowledge' : 'register',
+    step,
     args,
     value,
     enabled: !!args,
   });
 
   const refetch = () => {
-    feeEstimate.refetch();
+    quoteResult.refetch();
     gasEstimate.refetch();
+    ethPrice.refetch();
   };
 
   // Build combined cost data
   let costData: TransactionCost | null = null;
 
-  if (gasEstimate.data && feeEstimate.data) {
-    const fee = feeEstimate.data;
+  if (gasEstimate.data && ethPrice.data) {
     const gas = gasEstimate.data;
 
-    // Protocol fee only applies to registration
     // Use BigInt arithmetic for precision: (wei * ethPriceUsdCents) / 1e18
-    const ethPriceUsdCentsBigInt = BigInt(fee.ethPriceUsdCents);
+    const ethPriceUsdCentsBigInt = BigInt(ethPrice.data.usdCents);
     const WEI_PER_ETH = BigInt(1e18);
 
+    // Protocol fee only applies to registration step
+    const feeWei = quoteResult.feeWei ?? 0n;
     const protocolFeeUsdCents =
-      step === 'registration' ? Number((fee.feeWei * ethPriceUsdCentsBigInt) / WEI_PER_ETH) : 0;
+      step === 'registration' ? Number((feeWei * ethPriceUsdCentsBigInt) / WEI_PER_ETH) : 0;
 
     const protocolFee =
-      step === 'registration'
+      step === 'registration' && quoteResult.feeWei
         ? {
-            wei: fee.feeWei,
-            eth: fee.feeEth,
+            wei: quoteResult.feeWei,
+            eth: quoteResult.feeEth!,
             usd: formatCentsToUsd(protocolFeeUsdCents),
           }
         : null;
@@ -141,7 +155,7 @@ export function useTransactionCost({
         eth: formatEther(totalWei),
         usd: formatCentsToUsd(totalUsdCents),
       },
-      ethPriceUsd: fee.ethPriceUsd,
+      ethPriceUsd: ethPrice.data.usdFormatted,
     };
 
     logger.contract.debug('Transaction cost calculated', {
@@ -154,9 +168,9 @@ export function useTransactionCost({
 
   return {
     data: costData,
-    isLoading: feeEstimate.isLoading || gasEstimate.isLoading,
-    isError: feeEstimate.isError || gasEstimate.isError,
-    error: feeEstimate.error || gasEstimate.error,
+    isLoading: quoteResult.isLoading || gasEstimate.isLoading || ethPrice.isLoading,
+    isError: quoteResult.isError || gasEstimate.isError || ethPrice.isError,
+    error: quoteResult.error || gasEstimate.error || ethPrice.error,
     refetch,
   };
 }

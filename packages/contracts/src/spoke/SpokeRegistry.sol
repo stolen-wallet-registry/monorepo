@@ -56,7 +56,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     bytes32 public hubInbox;
 
     /// @notice Pending acknowledgements - temporary, deleted after registration
-    mapping(address => PendingAcknowledgement) private pendingAcknowledgements;
+    mapping(address => AcknowledgementData) private pendingAcknowledgements;
 
     /// @notice Nonces for replay protection
     mapping(address => uint256) public nonces;
@@ -133,13 +133,13 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         nonces[owner]++;
 
         // Store acknowledgement with randomized grace period timing
-        pendingAcknowledgements[owner] = PendingAcknowledgement({
+        pendingAcknowledgements[owner] = AcknowledgementData({
             trustedForwarder: msg.sender,
             startBlock: TimingConfig.getGracePeriodEndBlock(),
             expiryBlock: TimingConfig.getDeadlineBlock()
         });
 
-        emit AcknowledgementReceived(owner, msg.sender, owner != msg.sender);
+        emit WalletAcknowledged(owner, msg.sender, owner != msg.sender);
     }
 
     /// @inheritdoc ISpokeRegistry
@@ -166,7 +166,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         if (signer == address(0) || signer != owner) revert SpokeRegistry__InvalidSigner();
 
         // Load and validate acknowledgement exists with matching forwarder
-        PendingAcknowledgement memory ack = pendingAcknowledgements[owner];
+        AcknowledgementData memory ack = pendingAcknowledgements[owner];
         if (ack.trustedForwarder != msg.sender) revert SpokeRegistry__InvalidForwarder();
 
         // Check grace period has started
@@ -228,12 +228,12 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
 
     /// @inheritdoc ISpokeRegistry
     function isPending(address wallet) external view returns (bool) {
-        PendingAcknowledgement memory ack = pendingAcknowledgements[wallet];
+        AcknowledgementData memory ack = pendingAcknowledgements[wallet];
         return ack.trustedForwarder != address(0) && block.number < ack.expiryBlock;
     }
 
     /// @inheritdoc ISpokeRegistry
-    function getAcknowledgement(address wallet) external view returns (PendingAcknowledgement memory data) {
+    function getAcknowledgement(address wallet) external view returns (AcknowledgementData memory data) {
         return pendingAcknowledgements[wallet];
     }
 
@@ -261,6 +261,50 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         }
 
         return bridgeFee + registrationFee;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEW FUNCTIONS - Frontend Compatibility (matches StolenWalletRegistry)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @inheritdoc ISpokeRegistry
+    function generateHashStruct(address forwarder, uint8 step)
+        external
+        view
+        returns (uint256 deadline, bytes32 hashStruct)
+    {
+        deadline = TimingConfig.getSignatureDeadline();
+        bytes32 typehash = step == 1 ? ACKNOWLEDGEMENT_TYPEHASH : REGISTRATION_TYPEHASH;
+        hashStruct = keccak256(abi.encode(typehash, msg.sender, forwarder, nonces[msg.sender], deadline));
+    }
+
+    /// @inheritdoc ISpokeRegistry
+    function getDeadlines(address session)
+        external
+        view
+        returns (
+            uint256 currentBlock,
+            uint256 expiryBlock,
+            uint256 startBlock,
+            uint256 graceStartsAt,
+            uint256 timeLeft,
+            bool isExpired
+        )
+    {
+        AcknowledgementData memory ack = pendingAcknowledgements[session];
+        currentBlock = block.number;
+        expiryBlock = ack.expiryBlock;
+        startBlock = ack.startBlock;
+
+        if (ack.expiryBlock <= block.number) {
+            isExpired = true;
+            timeLeft = 0;
+            graceStartsAt = 0;
+        } else {
+            isExpired = false;
+            timeLeft = ack.expiryBlock - block.number;
+            graceStartsAt = ack.startBlock > block.number ? ack.startBlock - block.number : 0;
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

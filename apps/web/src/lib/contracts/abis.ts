@@ -5,6 +5,12 @@
 //   pnpm --filter @swr/contracts build
 //   pnpm --filter @swr/contracts export-abi
 
+// Hub contracts
 export { StolenWalletRegistryABI as stolenWalletRegistryAbi } from '@swr/abis';
 export { FeeManagerABI as feeManagerAbi } from '@swr/abis';
 export { RegistryHubABI as registryHubAbi } from '@swr/abis';
+export { CrossChainInboxABI as crossChainInboxAbi } from '@swr/abis';
+
+// Spoke contracts (cross-chain)
+export { SpokeRegistryABI as spokeRegistryAbi } from '@swr/abis';
+export { HyperlaneAdapterABI as hyperlaneAdapterAbi } from '@swr/abis';

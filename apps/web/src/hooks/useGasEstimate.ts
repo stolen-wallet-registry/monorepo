@@ -1,6 +1,7 @@
 /**
  * Hook to estimate gas costs for registration transactions.
  *
+ * Chain-aware: Uses correct ABI and function names for hub vs spoke.
  * Uses wagmi's useEstimateGas and useFeeData to calculate:
  * - Gas units needed for the transaction
  * - Current gas price
@@ -9,9 +10,9 @@
 
 import { useEstimateGas, useGasPrice, useChainId } from 'wagmi';
 import { formatEther, formatGwei, encodeFunctionData } from 'viem';
-import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
-import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
-import { useFeeEstimate } from './useFeeEstimate';
+import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
+import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
+import { useEthPrice } from './useEthPrice';
 import { logger } from '@/lib/logger';
 import { formatCentsToUsd } from '@/lib/utils';
 import type { Address, Hex } from '@/lib/types/ethereum';
@@ -32,8 +33,8 @@ export interface GasEstimate {
 }
 
 export interface UseGasEstimateParams {
-  /** Which function to estimate gas for */
-  functionName: 'acknowledge' | 'register';
+  /** Which step we're estimating for - maps to correct function based on chain */
+  step: 'acknowledgement' | 'registration';
   /** Function arguments (must match the function signature) */
   args: readonly [bigint, bigint, Address, number, Hex, Hex] | undefined;
   /** Value to send with the transaction (for registration) */
@@ -72,7 +73,7 @@ const GAS_BUFFER_DENOMINATOR = 100n;
  * @example
  * ```tsx
  * const { data, isLoading } = useGasEstimate({
- *   functionName: 'register',
+ *   step: 'registration',
  *   args: [deadline, nonce, owner, v, r, s],
  *   value: feeWei,
  * });
@@ -83,25 +84,42 @@ const GAS_BUFFER_DENOMINATOR = 100n;
  * ```
  */
 export function useGasEstimate({
-  functionName,
+  step,
   args,
   value,
   enabled = true,
 }: UseGasEstimateParams): UseGasEstimateResult {
   const chainId = useChainId();
-  const { data: feeData } = useFeeEstimate();
+  const ethPrice = useEthPrice();
 
+  // Determine registry type and get correct address/ABI
   let contractAddress: Address | undefined;
+  let registryType: 'hub' | 'spoke' = 'hub';
   try {
-    contractAddress = getStolenWalletRegistryAddress(chainId);
+    contractAddress = getRegistryAddress(chainId);
+    registryType = getRegistryType(chainId);
   } catch {
     contractAddress = undefined;
   }
 
+  const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
+
+  // Map step to correct function name based on chain type
+  // Hub: acknowledge / register
+  // Spoke: acknowledgeLocal / registerLocal
+  const functionName =
+    registryType === 'spoke'
+      ? step === 'acknowledgement'
+        ? 'acknowledgeLocal'
+        : 'registerLocal'
+      : step === 'acknowledgement'
+        ? 'acknowledge'
+        : 'register';
+
   // Build call data for gas estimation
   const callData = args
     ? encodeFunctionData({
-        abi: stolenWalletRegistryAbi,
+        abi,
         functionName,
         args,
       })
@@ -150,14 +168,14 @@ export function useGasEstimate({
   // Transform data into GasEstimate
   let gasEstimateResult: GasEstimate | null = null;
 
-  if (gasEstimate && gasPrice && feeData) {
+  if (gasEstimate && gasPrice && ethPrice.data) {
     // Add safety buffer to gas estimate using bigint arithmetic to avoid precision loss
     const gasUnits = (gasEstimate * GAS_BUFFER_NUMERATOR) / GAS_BUFFER_DENOMINATOR;
     const gasCostWei = gasUnits * gasPrice;
 
-    // Convert gas cost to USD using ETH price from FeeManager
+    // Convert gas cost to USD using ETH price from CoinGecko
     const gasCostEthNum = Number(formatEther(gasCostWei));
-    const gasCostUsdCents = Math.round(gasCostEthNum * feeData.ethPriceUsdCents);
+    const gasCostUsdCents = Math.round(gasCostEthNum * ethPrice.data.usdCents);
 
     gasEstimateResult = {
       gasUnits,
@@ -169,7 +187,9 @@ export function useGasEstimate({
     };
 
     logger.contract.debug('Gas estimate updated', {
+      step,
       functionName,
+      registryType,
       gasUnits: gasUnits.toString(),
       gasPriceGwei: gasEstimateResult.gasPriceGwei,
       gasCostUsd: gasEstimateResult.gasCostUsd,
@@ -178,7 +198,7 @@ export function useGasEstimate({
 
   return {
     data: gasEstimateResult,
-    isLoading: isEstimating || isPriceLoading,
+    isLoading: isEstimating || isPriceLoading || ethPrice.isLoading,
     isError: isEstimateError || isPriceError,
     error: (estimateError || priceError) as Error | null,
     refetch,

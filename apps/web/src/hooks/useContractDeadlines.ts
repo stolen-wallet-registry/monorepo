@@ -1,5 +1,5 @@
 /**
- * Hook to read grace period deadlines from the StolenWalletRegistry contract.
+ * Hook to read grace period deadlines from the registry contract.
  *
  * Returns deadline information for a registered/pending wallet including:
  * - Current block number
@@ -8,11 +8,13 @@
  * - Grace period blocks
  * - Deadline block
  * - Whether the registration has expired
+ *
+ * Chain-aware: Works with both StolenWalletRegistry (hub) and SpokeRegistry (spoke).
  */
 
 import { useReadContract, useChainId } from 'wagmi';
-import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
-import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
+import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
+import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
 import { getBlockTime } from '@/lib/blocks';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
@@ -50,16 +52,21 @@ export function useContractDeadlines(
   const refetchInterval = Math.max(blockTimeMs, 2000); // At least 2 seconds
 
   let contractAddress: Address | undefined;
+  let registryType: 'hub' | 'spoke' = 'hub';
   try {
-    contractAddress = getStolenWalletRegistryAddress(chainId);
+    contractAddress = getRegistryAddress(chainId);
+    registryType = getRegistryType(chainId);
   } catch {
     // Contract not configured for this chain
     contractAddress = undefined;
   }
 
+  // Both contracts have identical getDeadlines() function after normalization
+  const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
+
   const result = useReadContract({
     address: contractAddress,
-    abi: stolenWalletRegistryAbi,
+    abi,
     functionName: 'getDeadlines',
     args: registereeAddress ? [registereeAddress] : undefined,
     query: {

@@ -237,4 +237,11 @@ interface IStolenWalletRegistry {
             uint256 timeLeft,
             bool isExpired
         );
+
+    /// @notice Quote total cost for registration
+    /// @dev On hub chain, returns only the registration fee (no bridge fee).
+    ///      This matches SpokeRegistry.quoteRegistration() interface for frontend compatibility.
+    /// @param owner The wallet being registered (unused on hub, included for interface compatibility)
+    /// @return Total fee required in native token
+    function quoteRegistration(address owner) external view returns (uint256);
 }

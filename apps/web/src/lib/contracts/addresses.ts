@@ -1,20 +1,24 @@
 import type { Address } from '@/lib/types/ethereum';
-import { localhost } from '@/lib/wagmi';
+import { localhost, anvilHub } from '@/lib/wagmi';
 import { sepolia } from 'wagmi/chains';
+import { isSpokeChain, getSpokeAddress } from './crosschain-addresses';
 
 // Contract addresses by contract name and chain ID
 // After running deploy script, update these addresses accordingly
 export const CONTRACT_ADDRESSES = {
   stolenWalletRegistry: {
     [localhost.id]: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as Address, // Fourth deployed
+    [anvilHub.id]: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as Address, // Same as localhost for hub
     [sepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
   },
   feeManager: {
     [localhost.id]: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address, // Second deployed
+    [anvilHub.id]: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address,
     [sepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
   },
   registryHub: {
     [localhost.id]: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' as Address, // Third deployed
+    [anvilHub.id]: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' as Address,
     [sepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;
@@ -61,3 +65,32 @@ export function getFeeManagerAddress(chainId: number): Address {
 export function getRegistryHubAddress(chainId: number): Address {
   return getContractAddress('registryHub', chainId);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UNIFIED REGISTRY ADDRESS (Hub or Spoke depending on chain)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type RegistryType = 'hub' | 'spoke';
+
+/**
+ * Get the appropriate registry address for the current chain.
+ * - Hub chains: returns StolenWalletRegistry address
+ * - Spoke chains: returns SpokeRegistry address
+ */
+export function getRegistryAddress(chainId: number): Address {
+  if (isSpokeChain(chainId)) {
+    return getSpokeAddress('spokeRegistry', chainId);
+  }
+  return getStolenWalletRegistryAddress(chainId);
+}
+
+/**
+ * Determine which registry type to use for a chain.
+ * Used for selecting correct ABI and function names.
+ */
+export function getRegistryType(chainId: number): RegistryType {
+  return isSpokeChain(chainId) ? 'spoke' : 'hub';
+}
+
+// Re-export cross-chain helpers for convenience
+export { isSpokeChain, isHubChain } from './crosschain-addresses';

@@ -157,7 +157,7 @@ contract CrossChainIntegrationTest is Test {
         // STEP 2: Wait for grace period
         // ═════════════════════════════════════════════════════════════════════
 
-        ISpokeRegistry.PendingAcknowledgement memory ack = spokeRegistry.getAcknowledgement(victim);
+        ISpokeRegistry.AcknowledgementData memory ack = spokeRegistry.getAcknowledgement(victim);
         vm.roll(ack.startBlock + 1);
 
         // ═════════════════════════════════════════════════════════════════════
@@ -243,7 +243,7 @@ contract CrossChainIntegrationTest is Test {
         // STEP 2: Wait for grace period
         // ═════════════════════════════════════════════════════════════════════
 
-        ISpokeRegistry.PendingAcknowledgement memory ack = spokeRegistry.getAcknowledgement(victim);
+        ISpokeRegistry.AcknowledgementData memory ack = spokeRegistry.getAcknowledgement(victim);
         vm.roll(ack.startBlock + 1);
 
         // ═════════════════════════════════════════════════════════════════════

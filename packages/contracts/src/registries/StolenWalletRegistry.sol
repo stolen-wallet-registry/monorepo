@@ -265,4 +265,13 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
             graceStartsAt = ack.startBlock > block.number ? ack.startBlock - block.number : 0;
         }
     }
+
+    /// @inheritdoc IStolenWalletRegistry
+    function quoteRegistration(address) external view returns (uint256) {
+        // On hub chain, only registration fee applies (no bridge fee)
+        if (feeManager == address(0)) {
+            return 0;
+        }
+        return IFeeManager(feeManager).currentFeeWei();
+    }
 }

@@ -13,10 +13,11 @@ interface ISpokeRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Data stored for a pending acknowledgement
+    /// @dev Renamed from PendingAcknowledgement to match StolenWalletRegistry for frontend compatibility
     /// @param trustedForwarder Address authorized to complete the registration
     /// @param startBlock Block number when grace period ends
     /// @param expiryBlock Block number when registration window closes
-    struct PendingAcknowledgement {
+    struct AcknowledgementData {
         address trustedForwarder;
         uint256 startBlock;
         uint256 expiryBlock;
@@ -27,10 +28,11 @@ interface ISpokeRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when acknowledgement is received on spoke
+    /// @dev Renamed from AcknowledgementReceived to match StolenWalletRegistry for frontend compatibility
     /// @param owner The wallet being registered as stolen
     /// @param forwarder The address authorized to complete registration
     /// @param isSponsored True if forwarder is different from owner
-    event AcknowledgementReceived(address indexed owner, address indexed forwarder, bool indexed isSponsored);
+    event WalletAcknowledged(address indexed owner, address indexed forwarder, bool indexed isSponsored);
 
     /// @notice Emitted when registration is sent to hub via bridge
     /// @param owner The wallet being registered as stolen
@@ -111,7 +113,7 @@ interface ISpokeRegistry {
     /// @notice Get acknowledgement data for a wallet
     /// @param wallet The address to query
     /// @return data The acknowledgement data
-    function getAcknowledgement(address wallet) external view returns (PendingAcknowledgement memory data);
+    function getAcknowledgement(address wallet) external view returns (AcknowledgementData memory data);
 
     /// @notice Get current nonce for owner
     /// @param owner The address to query
@@ -130,4 +132,41 @@ interface ISpokeRegistry {
     /// @notice Get the hub inbox address (bytes32 for cross-chain)
     /// @return The CrossChainInbox address on the hub
     function hubInbox() external view returns (bytes32);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEW FUNCTIONS - Frontend Compatibility (matches StolenWalletRegistry)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Generate hash struct for EIP-712 signature
+    /// @dev Matches StolenWalletRegistry.generateHashStruct() for frontend compatibility.
+    ///      SECURITY: Uses msg.sender as the owner in the hash struct.
+    /// @param forwarder The address that will submit the transaction
+    /// @param step 1 for acknowledgement, any other value for registration
+    /// @return deadline The signature expiry timestamp
+    /// @return hashStruct The EIP-712 hash struct to sign
+    function generateHashStruct(address forwarder, uint8 step)
+        external
+        view
+        returns (uint256 deadline, bytes32 hashStruct);
+
+    /// @notice Get grace period timing information for a pending acknowledgement
+    /// @dev Matches StolenWalletRegistry.getDeadlines() for frontend compatibility
+    /// @param session The wallet address to query
+    /// @return currentBlock Current block number
+    /// @return expiryBlock Block when registration window closes
+    /// @return startBlock Block when grace period ends (registration can begin)
+    /// @return graceStartsAt Blocks remaining until grace period ends (0 if already passed)
+    /// @return timeLeft Blocks remaining until registration expires (0 if expired)
+    /// @return isExpired True if the registration window has closed
+    function getDeadlines(address session)
+        external
+        view
+        returns (
+            uint256 currentBlock,
+            uint256 expiryBlock,
+            uint256 startBlock,
+            uint256 graceStartsAt,
+            uint256 timeLeft,
+            bool isExpired
+        );
 }

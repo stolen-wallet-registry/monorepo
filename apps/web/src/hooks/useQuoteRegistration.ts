@@ -1,32 +1,36 @@
 /**
- * Hook to read the current nonce for an address from the registry contract.
+ * Hook to get the registration fee from the registry contract.
  *
- * The nonce is used for replay protection in EIP-712 signatures.
- * Each signature must use the current nonce, which increments after each successful use.
- *
- * Chain-aware: Works with both StolenWalletRegistry (hub) and SpokeRegistry (spoke).
+ * Chain-aware: Uses quoteRegistration() on both hub and spoke.
+ * - Hub: returns registration fee only
+ * - Spoke: returns bridge fee + registration fee
  */
 
-import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
+import { useReadContract, useChainId } from 'wagmi';
+import { formatEther } from 'viem';
 import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
 import type { Address } from '@/lib/types/ethereum';
 
-export interface UseContractNonceResult {
-  nonce: bigint | undefined;
+export interface UseQuoteRegistrationResult {
+  /** Fee in wei */
+  feeWei: bigint | undefined;
+  /** Fee in ETH (formatted) */
+  feeEth: string | undefined;
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
-  refetch: UseReadContractReturnType['refetch'];
+  refetch: () => void;
 }
 
 /**
- * Reads the current nonce for an owner address from the contract.
+ * Get the total registration fee for the current chain.
  *
- * @param ownerAddress - The address to get the nonce for
- * @returns The current nonce value
+ * @param ownerAddress - The wallet being registered (needed for nonce in quote)
  */
-export function useContractNonce(ownerAddress: Address | undefined): UseContractNonceResult {
+export function useQuoteRegistration(
+  ownerAddress: Address | undefined
+): UseQuoteRegistrationResult {
   const chainId = useChainId();
 
   let contractAddress: Address | undefined;
@@ -38,23 +42,22 @@ export function useContractNonce(ownerAddress: Address | undefined): UseContract
     contractAddress = undefined;
   }
 
-  // Both contracts have identical nonces() function
   const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
 
   const result = useReadContract({
     address: contractAddress,
     abi,
-    functionName: 'nonces',
+    functionName: 'quoteRegistration',
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
       enabled: !!ownerAddress && !!contractAddress,
-      // Nonce doesn't change frequently, longer stale time is fine
       staleTime: 30_000, // 30 seconds
     },
   });
 
   return {
-    nonce: result.data,
+    feeWei: result.data as bigint | undefined,
+    feeEth: result.data ? formatEther(result.data as bigint) : undefined,
     isLoading: result.isLoading,
     isError: result.isError,
     error: result.error,

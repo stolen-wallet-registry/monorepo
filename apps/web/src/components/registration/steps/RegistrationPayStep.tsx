@@ -17,7 +17,7 @@ import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistration } from '@/hooks/useRegistration';
-import { useFeeEstimate } from '@/hooks/useFeeEstimate';
+import { useQuoteRegistration } from '@/hooks/useQuoteRegistration';
 import { useTransactionCost } from '@/hooks/useTransactionCost';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
@@ -53,7 +53,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // Contract hooks
   const { submitRegistration, hash, isPending, isConfirming, isConfirmed, isError, error, reset } =
     useRegistration();
-  const { data: feeData } = useFeeEstimate();
+  const { feeWei } = useQuoteRegistration(registeree);
 
   // Local state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -152,7 +152,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         nonce: storedSignature.nonce,
         registeree,
         signature: parsedSig,
-        feeWei: feeData?.feeWei,
+        feeWei,
       });
 
       logger.contract.info('Registration transaction submitted, waiting for confirmation');

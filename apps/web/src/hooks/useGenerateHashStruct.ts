@@ -1,13 +1,15 @@
 /**
- * Hook to read deadline and hash struct from the StolenWalletRegistry contract.
+ * Hook to read deadline and hash struct from the registry contract.
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  * The hash struct returned can be used for verification but is typically not needed client-side.
+ *
+ * Chain-aware: Works with both StolenWalletRegistry (hub) and SpokeRegistry (spoke).
  */
 
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
-import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
-import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
+import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
+import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
 import { SIGNATURE_STEP, type SignatureStep } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 
@@ -38,15 +40,20 @@ export function useGenerateHashStruct(
   const chainId = useChainId();
 
   let contractAddress: Address | undefined;
+  let registryType: 'hub' | 'spoke' = 'hub';
   try {
-    contractAddress = getStolenWalletRegistryAddress(chainId);
+    contractAddress = getRegistryAddress(chainId);
+    registryType = getRegistryType(chainId);
   } catch {
     contractAddress = undefined;
   }
 
+  // Both contracts have identical generateHashStruct() function after normalization
+  const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
+
   const result = useReadContract({
     address: contractAddress,
-    abi: stolenWalletRegistryAbi,
+    abi,
     functionName: 'generateHashStruct',
     args: forwarderAddress ? [forwarderAddress, step] : undefined,
     query: {

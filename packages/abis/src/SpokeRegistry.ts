@@ -1,23 +1,49 @@
-export const StolenWalletRegistryABI = [
+export const SpokeRegistryABI = [
   {
     type: 'constructor',
     inputs: [
+      {
+        name: '_owner',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: '_bridgeAdapter',
+        type: 'address',
+        internalType: 'address',
+      },
       {
         name: '_feeManager',
         type: 'address',
         internalType: 'address',
       },
       {
-        name: '_registryHub',
-        type: 'address',
-        internalType: 'address',
+        name: '_hubChainId',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: '_hubInbox',
+        type: 'bytes32',
+        internalType: 'bytes32',
       },
     ],
     stateMutability: 'nonpayable',
   },
   {
+    type: 'receive',
+    stateMutability: 'payable',
+  },
+  {
     type: 'function',
-    name: 'acknowledge',
+    name: 'acceptOwnership',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'acknowledgeLocal',
     inputs: [
       {
         name: 'deadline',
@@ -52,6 +78,19 @@ export const StolenWalletRegistryABI = [
     ],
     outputs: [],
     stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'bridgeAdapter',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -150,9 +189,9 @@ export const StolenWalletRegistryABI = [
     ],
     outputs: [
       {
-        name: '',
+        name: 'data',
         type: 'tuple',
-        internalType: 'struct IStolenWalletRegistry.AcknowledgementData',
+        internalType: 'struct ISpokeRegistry.AcknowledgementData',
         components: [
           {
             name: 'trustedForwarder',
@@ -220,46 +259,26 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'getRegistration',
-    inputs: [
-      {
-        name: 'wallet',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
+    name: 'hubChainId',
+    inputs: [],
     outputs: [
       {
         name: '',
-        type: 'tuple',
-        internalType: 'struct IStolenWalletRegistry.RegistrationData',
-        components: [
-          {
-            name: 'registeredAt',
-            type: 'uint64',
-            internalType: 'uint64',
-          },
-          {
-            name: 'sourceChainId',
-            type: 'uint32',
-            internalType: 'uint32',
-          },
-          {
-            name: 'bridgeId',
-            type: 'uint8',
-            internalType: 'uint8',
-          },
-          {
-            name: 'isSponsored',
-            type: 'bool',
-            internalType: 'bool',
-          },
-          {
-            name: 'crossChainMessageId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-        ],
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'hubInbox',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
       },
     ],
     stateMutability: 'view',
@@ -267,25 +286,6 @@ export const StolenWalletRegistryABI = [
   {
     type: 'function',
     name: 'isPending',
-    inputs: [
-      {
-        name: 'wallet',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
-    outputs: [
-      {
-        name: '',
-        type: 'bool',
-        internalType: 'bool',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'isRegistered',
     inputs: [
       {
         name: 'wallet',
@@ -323,10 +323,36 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
+    name: 'owner',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'pendingOwner',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'quoteRegistration',
     inputs: [
       {
-        name: '',
+        name: 'owner',
         type: 'address',
         internalType: 'address',
       },
@@ -342,7 +368,7 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'register',
+    name: 'registerLocal',
     inputs: [
       {
         name: 'deadline',
@@ -380,30 +406,22 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'registerFromHub',
+    name: 'renounceOwnership',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setHubConfig',
     inputs: [
       {
-        name: 'wallet',
-        type: 'address',
-        internalType: 'address',
-      },
-      {
-        name: 'sourceChainId',
+        name: '_hubChainId',
         type: 'uint32',
         internalType: 'uint32',
       },
       {
-        name: 'isSponsored',
-        type: 'bool',
-        internalType: 'bool',
-      },
-      {
-        name: 'bridgeId',
-        type: 'uint8',
-        internalType: 'uint8',
-      },
-      {
-        name: 'crossChainMessageId',
+        name: '_hubInbox',
         type: 'bytes32',
         internalType: 'bytes32',
       },
@@ -413,21 +431,134 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'registryHub',
+    name: 'spokeChainId',
     inputs: [],
     outputs: [
       {
         name: '',
-        type: 'address',
-        internalType: 'address',
+        type: 'uint32',
+        internalType: 'uint32',
       },
     ],
     stateMutability: 'view',
   },
   {
+    type: 'function',
+    name: 'transferOwnership',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'withdrawFees',
+    inputs: [
+      {
+        name: 'to',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'amount',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
     type: 'event',
     name: 'EIP712DomainChanged',
     inputs: [],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'HubConfigUpdated',
+    inputs: [
+      {
+        name: 'hubChainId',
+        type: 'uint32',
+        indexed: true,
+        internalType: 'uint32',
+      },
+      {
+        name: 'hubInbox',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'OwnershipTransferStarted',
+    inputs: [
+      {
+        name: 'previousOwner',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'newOwner',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'OwnershipTransferred',
+    inputs: [
+      {
+        name: 'previousOwner',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'newOwner',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'RegistrationSentToHub',
+    inputs: [
+      {
+        name: 'owner',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'messageId',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'destinationChain',
+        type: 'uint32',
+        indexed: false,
+        internalType: 'uint32',
+      },
+    ],
     anonymous: false,
   },
   {
@@ -454,40 +585,6 @@ export const StolenWalletRegistryABI = [
       },
     ],
     anonymous: false,
-  },
-  {
-    type: 'event',
-    name: 'WalletRegistered',
-    inputs: [
-      {
-        name: 'owner',
-        type: 'address',
-        indexed: true,
-        internalType: 'address',
-      },
-      {
-        name: 'isSponsored',
-        type: 'bool',
-        indexed: true,
-        internalType: 'bool',
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: 'error',
-    name: 'Acknowledgement__Expired',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'Acknowledgement__InvalidSigner',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'AlreadyRegistered',
-    inputs: [],
   },
   {
     type: 'error',
@@ -518,57 +615,94 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'error',
-    name: 'FeeForwardFailed',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'InsufficientFee',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'InvalidBridgeId',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'InvalidNonce',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'InvalidOwner',
-    inputs: [],
-  },
-  {
-    type: 'error',
     name: 'InvalidShortString',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'Registration__ForwarderExpired',
+    name: 'OwnableInvalidOwner',
+    inputs: [
+      {
+        name: 'owner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+  },
+  {
+    type: 'error',
+    name: 'OwnableUnauthorizedAccount',
+    inputs: [
+      {
+        name: 'account',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__BridgeFailed',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'Registration__GracePeriodNotStarted',
+    name: 'SpokeRegistry__ForwarderExpired',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'Registration__InvalidForwarder',
+    name: 'SpokeRegistry__GracePeriodNotStarted',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'Registration__InvalidSigner',
+    name: 'SpokeRegistry__HubNotConfigured',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'Registration__SignatureExpired',
+    name: 'SpokeRegistry__InsufficientFee',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__InvalidForwarder',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__InvalidNonce',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__InvalidOwner',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__InvalidSigner',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__RefundFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__SignatureExpired',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__WithdrawalFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__ZeroAddress',
     inputs: [],
   },
   {
@@ -581,10 +715,5 @@ export const StolenWalletRegistryABI = [
         internalType: 'string',
       },
     ],
-  },
-  {
-    type: 'error',
-    name: 'UnauthorizedCaller',
-    inputs: [],
   },
 ] as const;

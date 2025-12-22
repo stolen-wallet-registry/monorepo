@@ -15,6 +15,8 @@ export {
   type UseGenerateHashStructResult,
 } from './useGenerateHashStruct';
 
+export { useQuoteRegistration, type UseQuoteRegistrationResult } from './useQuoteRegistration';
+
 // Contract write hooks
 export {
   useAcknowledgement,

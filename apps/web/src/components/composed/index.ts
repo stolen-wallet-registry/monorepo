@@ -35,3 +35,4 @@ export {
   type ResultStatus,
 } from './RegistrySearch';
 export { ConnectedWalletStatus, type ConnectedWalletStatusProps } from './ConnectedWalletStatus';
+export { ChainIndicator, type ChainIndicatorProps } from './ChainIndicator';

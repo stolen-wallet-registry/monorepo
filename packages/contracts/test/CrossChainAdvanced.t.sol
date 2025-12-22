@@ -175,7 +175,7 @@ contract CrossChainAdvancedTest is Test {
         vm.prank(victim1);
         spoke2Registry.acknowledgeLocal(deadline, nonce, victim1, v, r, s);
 
-        ISpokeRegistry.PendingAcknowledgement memory ack = spoke2Registry.getAcknowledgement(victim1);
+        ISpokeRegistry.AcknowledgementData memory ack = spoke2Registry.getAcknowledgement(victim1);
         vm.roll(ack.startBlock + 1);
 
         nonce = spoke2Registry.nonces(victim1);
@@ -213,7 +213,7 @@ contract CrossChainAdvancedTest is Test {
         vm.prank(victim1);
         spoke1Registry.acknowledgeLocal(deadline, nonce, victim1, v, r, s);
 
-        ISpokeRegistry.PendingAcknowledgement memory ack = spoke1Registry.getAcknowledgement(victim1);
+        ISpokeRegistry.AcknowledgementData memory ack = spoke1Registry.getAcknowledgement(victim1);
         vm.roll(ack.startBlock + 1);
 
         // Registration
@@ -256,7 +256,7 @@ contract CrossChainAdvancedTest is Test {
         vm.prank(victim1);
         spoke1Registry.acknowledgeLocal(deadline, nonce, victim1, v, r, s);
 
-        ISpokeRegistry.PendingAcknowledgement memory ack = spoke1Registry.getAcknowledgement(victim1);
+        ISpokeRegistry.AcknowledgementData memory ack = spoke1Registry.getAcknowledgement(victim1);
         vm.roll(ack.startBlock + 1);
 
         nonce = spoke1Registry.nonces(victim1);
@@ -297,7 +297,7 @@ contract CrossChainAdvancedTest is Test {
         vm.prank(victim1);
         spoke1Registry.acknowledgeLocal(deadline, nonce, victim1, v, r, s);
 
-        ISpokeRegistry.PendingAcknowledgement memory ack = spoke1Registry.getAcknowledgement(victim1);
+        ISpokeRegistry.AcknowledgementData memory ack = spoke1Registry.getAcknowledgement(victim1);
         vm.roll(ack.startBlock + 1);
 
         nonce = spoke1Registry.nonces(victim1);
@@ -430,7 +430,7 @@ contract CrossChainAdvancedTest is Test {
         vm.prank(victim1);
         spoke1Registry.acknowledgeLocal(deadline, nonce, victim1, v, r, s);
 
-        ISpokeRegistry.PendingAcknowledgement memory ack = spoke1Registry.getAcknowledgement(victim1);
+        ISpokeRegistry.AcknowledgementData memory ack = spoke1Registry.getAcknowledgement(victim1);
         vm.roll(ack.startBlock + 1);
 
         nonce = spoke1Registry.nonces(victim1);
@@ -456,7 +456,7 @@ contract CrossChainAdvancedTest is Test {
         vm.prank(victim1);
         spoke1Registry.acknowledgeLocal(deadline, nonce, victim1, v, r, s);
 
-        ISpokeRegistry.PendingAcknowledgement memory ack = spoke1Registry.getAcknowledgement(victim1);
+        ISpokeRegistry.AcknowledgementData memory ack = spoke1Registry.getAcknowledgement(victim1);
         vm.roll(ack.startBlock + 1);
 
         nonce = spoke1Registry.nonces(victim1);
@@ -513,7 +513,7 @@ contract CrossChainAdvancedTest is Test {
         spokeRegistry.acknowledgeLocal(deadline, nonce, victim, v, r, s);
 
         // Wait for grace period
-        ISpokeRegistry.PendingAcknowledgement memory ack = spokeRegistry.getAcknowledgement(victim);
+        ISpokeRegistry.AcknowledgementData memory ack = spokeRegistry.getAcknowledgement(victim);
         vm.roll(ack.startBlock + 1);
 
         // Registration
