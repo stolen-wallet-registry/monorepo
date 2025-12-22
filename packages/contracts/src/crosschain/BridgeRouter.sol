@@ -57,6 +57,9 @@ contract BridgeRouter is Ownable2Step {
     /// @notice Thrown when refund transfer fails
     error BridgeRouter__RefundFailed();
 
+    /// @notice Thrown when route configuration is invalid (e.g., enabled=true with adapter=address(0))
+    error BridgeRouter__InvalidRouteConfig();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -206,6 +209,8 @@ contract BridgeRouter is Ownable2Step {
     /// @param recipientInbox CrossChainInbox address on destination
     /// @param enabled Whether route is enabled
     function setRoute(uint32 domain, address adapter, bytes32 recipientInbox, bool enabled) external onlyOwner {
+        // Prevent enabling a route with no adapter configured
+        if (enabled && adapter == address(0)) revert BridgeRouter__InvalidRouteConfig();
         routes[domain] = RouteConfig({ adapter: adapter, recipientInbox: recipientInbox, enabled: enabled });
         emit RouteUpdated(domain, adapter, recipientInbox, enabled);
     }

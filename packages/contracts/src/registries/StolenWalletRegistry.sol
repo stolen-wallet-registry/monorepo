@@ -141,30 +141,26 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
             if (msg.value < requiredFee) revert InsufficientFee();
         }
 
-        // Forward fee to RegistryHub (after validation, before state changes)
+        // State changes (CEI: effects before interactions)
+        nonces[owner]++;
+        delete pendingAcknowledgements[owner];
+
+        bool isSponsored = owner != msg.sender;
+        registeredWallets[owner] = RegistrationData({
+            registeredAt: uint64(block.number),
+            sourceChainId: uint32(block.chainid),
+            bridgeId: uint8(BridgeId.NONE),
+            isSponsored: isSponsored,
+            crossChainMessageId: bytes32(0)
+        });
+
+        emit WalletRegistered(owner, isSponsored);
+
+        // Forward fee to RegistryHub (external call last)
         if (registryHub != address(0) && msg.value > 0) {
             (bool success,) = registryHub.call{ value: msg.value }("");
             if (!success) revert FeeForwardFailed();
         }
-
-        // Increment nonce AFTER validation (fixes bug from original contract)
-        nonces[owner]++;
-
-        // Clean up acknowledgement - no longer needed
-        delete pendingAcknowledgements[owner];
-
-        // Persist registration permanently
-        bool isSponsored = owner != msg.sender;
-
-        registeredWallets[owner] = RegistrationData({
-            registeredAt: uint64(block.number),
-            sourceChainId: uint32(block.chainid), // Native registration uses current chain
-            bridgeId: uint8(BridgeId.NONE), // Native registration, no bridge
-            isSponsored: isSponsored,
-            crossChainMessageId: bytes32(0) // No bridge message for native
-        });
-
-        emit WalletRegistered(owner, isSponsored);
     }
 
     /// @inheritdoc IStolenWalletRegistry

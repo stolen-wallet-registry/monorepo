@@ -137,7 +137,7 @@ contract CrossChainMessageTest is Test {
     }
 
     function test_DecodeRegistration_TruncatedData_Reverts() public {
-        // Create truncated payload (missing last field - only 224 bytes instead of 256)
+        // Create truncated payload (missing registrationHash field - 7 fields = 224 bytes, requires 256)
         bytes memory truncatedPayload = abi.encode(
             CrossChainMessage.MESSAGE_VERSION,
             CrossChainMessage.MSG_TYPE_REGISTRATION,

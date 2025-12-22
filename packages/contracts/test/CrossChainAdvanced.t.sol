@@ -13,6 +13,8 @@ import { IStolenWalletRegistry } from "../src/interfaces/IStolenWalletRegistry.s
 import { SpokeRegistry } from "../src/spoke/SpokeRegistry.sol";
 import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
 import { ISpokeRegistry } from "../src/interfaces/ISpokeRegistry.sol";
+import { IRegistryHub } from "../src/interfaces/IRegistryHub.sol";
+import { ICrossChainInbox } from "../src/interfaces/ICrossChainInbox.sol";
 
 // Libraries
 import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
@@ -191,7 +193,7 @@ contract CrossChainAdvancedTest is Test {
         bytes32 sender = CrossChainMessage.addressToBytes32(address(spoke2Registry));
 
         vm.chainId(HUB_DOMAIN);
-        vm.expectRevert(); // StolenWalletRegistry__AlreadyRegistered
+        vm.expectRevert(IStolenWalletRegistry.AlreadyRegistered.selector);
         hubMailbox.simulateReceive(address(inbox), SPOKE2_DOMAIN, sender, messageBody);
     }
 
@@ -235,7 +237,7 @@ contract CrossChainAdvancedTest is Test {
         assertTrue(hubRegistry.isRegistered(victim1));
 
         // Try to replay same message - should revert
-        vm.expectRevert(); // Already registered
+        vm.expectRevert(IStolenWalletRegistry.AlreadyRegistered.selector);
         hubMailbox.simulateReceive(address(inbox), SPOKE1_DOMAIN, sender, messageBody);
     }
 
@@ -276,7 +278,7 @@ contract CrossChainAdvancedTest is Test {
         hub.setPaused(true);
 
         // Try to deliver - should revert
-        vm.expectRevert(); // Hub__Paused
+        vm.expectRevert(IRegistryHub.Hub__Paused.selector);
         hubMailbox.simulateReceive(address(inbox), SPOKE1_DOMAIN, sender, messageBody);
     }
 
@@ -317,7 +319,7 @@ contract CrossChainAdvancedTest is Test {
         inbox.setTrustedSource(SPOKE1_DOMAIN, sender, false);
 
         // Try to deliver - should revert
-        vm.expectRevert(); // UntrustedSource
+        vm.expectRevert(ICrossChainInbox.CrossChainInbox__UntrustedSource.selector);
         hubMailbox.simulateReceive(address(inbox), SPOKE1_DOMAIN, sender, messageBody);
     }
 
@@ -341,7 +343,7 @@ contract CrossChainAdvancedTest is Test {
         bytes32 sender = CrossChainMessage.addressToBytes32(address(spoke1Registry));
 
         vm.chainId(HUB_DOMAIN);
-        vm.expectRevert(); // UnsupportedVersion
+        vm.expectRevert(CrossChainMessage.CrossChainMessage__UnsupportedVersion.selector);
         hubMailbox.simulateReceive(address(inbox), SPOKE1_DOMAIN, sender, invalidMessage);
     }
 
@@ -361,7 +363,7 @@ contract CrossChainAdvancedTest is Test {
         bytes32 sender = CrossChainMessage.addressToBytes32(address(spoke1Registry));
 
         vm.chainId(HUB_DOMAIN);
-        vm.expectRevert(); // InvalidMessageType
+        vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageType.selector);
         hubMailbox.simulateReceive(address(inbox), SPOKE1_DOMAIN, sender, invalidMessage);
     }
 
@@ -439,7 +441,7 @@ contract CrossChainAdvancedTest is Test {
         vm.deal(victim1, fee - 1); // Not enough
 
         vm.prank(victim1);
-        vm.expectRevert(); // InsufficientFee
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InsufficientFee.selector);
         spoke1Registry.registerLocal{ value: fee - 1 }(deadline, nonce, victim1, v, r, s);
     }
 
@@ -484,7 +486,7 @@ contract CrossChainAdvancedTest is Test {
 
         // Try to call registerFromSpoke directly (not from inbox)
         vm.prank(address(0x999));
-        vm.expectRevert(); // Hub__UnauthorizedInbox
+        vm.expectRevert(IRegistryHub.Hub__UnauthorizedInbox.selector);
         hub.registerFromSpoke(victim1, SPOKE1_DOMAIN, false, 1, bytes32(0));
     }
 

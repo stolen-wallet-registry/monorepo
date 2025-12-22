@@ -36,6 +36,9 @@ interface ICrossChainInbox {
     /// @notice Thrown when message format is invalid
     error CrossChainInbox__InvalidMessage();
 
+    /// @notice Thrown when a zero address is provided for a required parameter
+    error CrossChainInbox__ZeroAddress();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════

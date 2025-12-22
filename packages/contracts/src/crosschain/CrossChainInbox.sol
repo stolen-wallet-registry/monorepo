@@ -46,6 +46,8 @@ contract CrossChainInbox is IMessageRecipient, ICrossChainInbox, Ownable2Step {
     /// @param _registryHub RegistryHub contract address on this chain
     /// @param _owner Initial owner address
     constructor(address _mailbox, address _registryHub, address _owner) Ownable(_owner) {
+        if (_mailbox == address(0)) revert CrossChainInbox__ZeroAddress();
+        if (_registryHub == address(0)) revert CrossChainInbox__ZeroAddress();
         mailbox = _mailbox;
         registryHub = _registryHub;
     }

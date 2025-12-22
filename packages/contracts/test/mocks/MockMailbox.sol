@@ -68,7 +68,9 @@ contract MockMailbox is IMailbox {
 
     // Helper to simulate receiving a message
     function simulateReceive(address recipient, uint32 origin, bytes32 sender, bytes calldata messageBody) external {
-        bytes32 messageId = keccak256(abi.encodePacked(origin, sender, messageBody));
+        // Align with dispatch() pattern - include messageCount for consistent ID generation
+        messageCount++;
+        bytes32 messageId = keccak256(abi.encodePacked(messageCount, origin, sender, messageBody));
         deliveredMessages[messageId] = true;
 
         // Call the recipient's handle function

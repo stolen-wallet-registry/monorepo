@@ -58,7 +58,7 @@ contract HyperlaneAdapterTest is Test {
 
     function test_SetDomainSupport_OnlyOwner() public {
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         adapter.setDomainSupport(999, true);
     }
 
@@ -172,7 +172,7 @@ contract HyperlaneAdapterTest is Test {
 
     function test_SetGasAmount_OnlyOwner() public {
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         adapter.setGasAmount(HUB_DOMAIN, 300_000);
     }
 

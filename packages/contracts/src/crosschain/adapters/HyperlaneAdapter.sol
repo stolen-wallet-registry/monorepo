@@ -47,6 +47,12 @@ contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
     /// @notice Thrown when refund transfer fails
     error HyperlaneAdapter__RefundFailed();
 
+    /// @notice Thrown when a zero address is provided for a required parameter
+    error HyperlaneAdapter__ZeroAddress();
+
+    /// @notice Thrown when too many domains are provided in batch operation
+    error HyperlaneAdapter__TooManyDomains();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -65,6 +71,8 @@ contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
     /// @param _mailbox Hyperlane Mailbox address on this chain
     /// @param _gasPaymaster Hyperlane InterchainGasPaymaster address
     constructor(address _owner, address _mailbox, address _gasPaymaster) Ownable(_owner) {
+        if (_mailbox == address(0)) revert HyperlaneAdapter__ZeroAddress();
+        if (_gasPaymaster == address(0)) revert HyperlaneAdapter__ZeroAddress();
         mailbox = IMailbox(_mailbox);
         gasPaymaster = IInterchainGasPaymaster(_gasPaymaster);
     }
@@ -150,8 +158,10 @@ contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
     }
 
     /// @notice Batch add supported domains
-    /// @param domains Array of Hyperlane domain IDs to enable
+    /// @dev Limited to 100 domains per call to prevent DoS via gas exhaustion
+    /// @param domains Array of Hyperlane domain IDs to enable (max 100)
     function addDomains(uint32[] calldata domains) external onlyOwner {
+        if (domains.length > 100) revert HyperlaneAdapter__TooManyDomains();
         for (uint256 i = 0; i < domains.length; i++) {
             supportedDomains[domains[i]] = true;
             emit DomainSupportUpdated(domains[i], true);

@@ -78,6 +78,12 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     /// @notice Thrown when refund fails
     error SpokeRegistry__RefundFailed();
 
+    /// @notice Thrown when withdrawal fails
+    error SpokeRegistry__WithdrawalFailed();
+
+    /// @notice Thrown when a zero address is provided for a required parameter
+    error SpokeRegistry__ZeroAddress();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
@@ -91,6 +97,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         EIP712("StolenWalletRegistry", "4")
         Ownable(_owner)
     {
+        if (_bridgeAdapter == address(0)) revert SpokeRegistry__ZeroAddress();
         spokeChainId = uint32(block.chainid);
         bridgeAdapter = _bridgeAdapter;
         feeManager = _feeManager;
@@ -274,7 +281,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     /// @param amount Amount to withdraw
     function withdrawFees(address to, uint256 amount) external onlyOwner {
         (bool success,) = to.call{ value: amount }("");
-        if (!success) revert SpokeRegistry__RefundFailed();
+        if (!success) revert SpokeRegistry__WithdrawalFailed();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

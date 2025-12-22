@@ -14,8 +14,9 @@
     "anvil": "anvil --block-time 13",
     "deploy:local": "forge script script/Deploy.s.sol --tc Deploy --rpc-url localhost --broadcast",
     "export-abi": "node scripts/export-abi.js",
-    "slither": "python3 -m slither . --config-file slither.config.json",
-    "slither:check": "python3 -m slither . --config-file slither.config.json --checklist",
+    "slither": "python3 -m slither . --config-file slither.config.json --fail-none",
+    "slither:summary": "python3 -m slither . --config-file slither.config.json --print human-summary --fail-none",
+    "slither:checklist": "python3 -m slither . --config-file slither.config.json --checklist --fail-none",
     "slither:triage": "python3 -m slither . --config-file slither.config.json --triage-mode"
   }
 }

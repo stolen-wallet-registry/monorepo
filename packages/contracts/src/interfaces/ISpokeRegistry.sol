@@ -124,7 +124,7 @@ interface ISpokeRegistry {
     function quoteRegistration(address owner) external view returns (uint256);
 
     /// @notice Get the hub chain domain ID
-    /// @return The Hyperlane domain ID of the hub chain
+    /// @return The Hyperlane domain ID of the hub chain (may differ from EIP-155 chain ID)
     function hubChainId() external view returns (uint32);
 
     /// @notice Get the hub inbox address (bytes32 for cross-chain)
