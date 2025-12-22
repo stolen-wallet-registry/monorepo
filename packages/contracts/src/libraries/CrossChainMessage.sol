@@ -47,6 +47,9 @@ library CrossChainMessage {
     /// @notice Thrown when message version is not supported
     error CrossChainMessage__UnsupportedVersion();
 
+    /// @notice Thrown when message data is too short (must be at least 256 bytes)
+    error CrossChainMessage__InvalidMessageLength();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ENCODING
     // ═══════════════════════════════════════════════════════════════════════════
@@ -73,11 +76,14 @@ library CrossChainMessage {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Decode registration payload from cross-chain message
-    /// @dev Validates version and message type before decoding.
+    /// @dev Validates length, version, and message type before decoding.
     ///      Decodes directly from calldata slices to avoid stack-too-deep.
     /// @param data Encoded message bytes from bridge
     /// @return payload The decoded registration data
     function decodeRegistration(bytes calldata data) internal pure returns (RegistrationPayload memory payload) {
+        // Validate minimum length (8 fields × 32 bytes = 256 bytes)
+        if (data.length < 256) revert CrossChainMessage__InvalidMessageLength();
+
         // Validate header first (each abi.encode slot is 32 bytes)
         uint8 version = abi.decode(data[0:32], (uint8));
         if (version != MESSAGE_VERSION) revert CrossChainMessage__UnsupportedVersion();

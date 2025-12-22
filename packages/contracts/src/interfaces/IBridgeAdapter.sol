@@ -6,6 +6,14 @@ pragma solidity ^0.8.24;
 /// @notice ERC-7786 aligned interface for cross-chain bridge adapters
 /// @dev Provides a standardized interface for sending messages across chains.
 ///      Each bridge implementation (Hyperlane, CCIP, Wormhole) implements this interface.
+///
+///      Maximum Payload Sizes (implementation-specific):
+///      - Hyperlane: ~64KB (practical limit, varies by ISM configuration)
+///      - CCIP: 256KB (Chainlink documented limit)
+///      - Wormhole: ~10KB (VAA size limits)
+///
+///      For SWR registration messages, payloads are typically 256 bytes (see CrossChainMessage.sol),
+///      well within all bridge limits.
 interface IBridgeAdapter {
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS

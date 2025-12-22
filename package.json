@@ -20,6 +20,7 @@
     "forge:install": "cd packages/contracts && forge install",
     "forge:update": "cd packages/contracts && forge update",
     "forge:clean": "cd packages/contracts && forge clean",
+    "forge:slither": "pnpm --filter @swr/contracts slither",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
     "check": "turbo lint typecheck test && pnpm format:check && pnpm syncpack:check && pnpm knip",

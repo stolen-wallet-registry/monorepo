@@ -72,9 +72,19 @@ contract MockMailbox is IMailbox {
         deliveredMessages[messageId] = true;
 
         // Call the recipient's handle function
-        (bool success,) =
+        (bool success, bytes memory returnData) =
             recipient.call(abi.encodeWithSignature("handle(uint32,bytes32,bytes)", origin, sender, messageBody));
-        require(success, "MockMailbox: handle failed");
+
+        // Forward the actual revert reason for better test debugging
+        if (!success) {
+            if (returnData.length > 0) {
+                // Forward the actual revert data
+                assembly {
+                    revert(add(returnData, 32), mload(returnData))
+                }
+            }
+            revert("MockMailbox: handle failed");
+        }
 
         emit Process(origin, sender, recipient);
         emit ProcessId(messageId);

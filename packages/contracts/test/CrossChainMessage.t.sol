@@ -136,6 +136,30 @@ contract CrossChainMessageTest is Test {
         decoder.decode(invalidPayload);
     }
 
+    function test_DecodeRegistration_TruncatedData_Reverts() public {
+        // Create truncated payload (missing last field - only 224 bytes instead of 256)
+        bytes memory truncatedPayload = abi.encode(
+            CrossChainMessage.MESSAGE_VERSION,
+            CrossChainMessage.MSG_TYPE_REGISTRATION,
+            address(0x1234),
+            uint32(1),
+            false,
+            uint256(0),
+            uint64(0)
+            // Missing: bytes32 registrationHash
+        );
+
+        vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector);
+        decoder.decode(truncatedPayload);
+    }
+
+    function test_DecodeRegistration_EmptyData_Reverts() public {
+        bytes memory emptyPayload = "";
+
+        vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector);
+        decoder.decode(emptyPayload);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // UTILITY TESTS
     // ═══════════════════════════════════════════════════════════════════════════

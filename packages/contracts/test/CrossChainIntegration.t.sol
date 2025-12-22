@@ -7,6 +7,7 @@ import { Test } from "forge-std/Test.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
 import { CrossChainInbox } from "../src/crosschain/CrossChainInbox.sol";
+import { ICrossChainInbox } from "../src/interfaces/ICrossChainInbox.sol";
 import { IStolenWalletRegistry } from "../src/interfaces/IStolenWalletRegistry.sol";
 
 // Spoke contracts
@@ -43,9 +44,10 @@ contract CrossChainIntegrationTest is Test {
     address relayer = address(0x3);
     uint256 victimPk = 0xA11CE;
 
-    // Chain IDs
-    uint32 constant HUB_DOMAIN = 84_532; // Base Sepolia
-    uint32 constant SPOKE_DOMAIN = 11_155_420; // Optimism Sepolia
+    // Chain IDs and Hyperlane Domains
+    uint32 constant HUB_DOMAIN = 84_532; // Base Sepolia Hyperlane domain
+    uint32 constant SPOKE_DOMAIN = 11_155_420; // Optimism Sepolia Hyperlane domain
+    uint32 constant HUB_CHAIN_ID = 84_532; // EIP-155 chain ID (same as domain for Base Sepolia)
     uint32 constant SPOKE_CHAIN_ID = 11_155_420; // EIP-155 chain ID
 
     function setUp() public {
@@ -103,7 +105,7 @@ contract CrossChainIntegrationTest is Test {
         // ═══════════════════════════════════════════════════════════════════════
 
         // Switch back to hub chain for inbox configuration
-        vm.chainId(HUB_DOMAIN);
+        vm.chainId(HUB_CHAIN_ID);
 
         // Configure inbox to trust spoke registry
         bytes32 spokeRegistryBytes = CrossChainMessage.addressToBytes32(address(spokeRegistry));
@@ -188,7 +190,7 @@ contract CrossChainIntegrationTest is Test {
         bytes32 sender = CrossChainMessage.addressToBytes32(address(spokeRegistry));
 
         // Switch to hub chain
-        vm.chainId(HUB_DOMAIN);
+        vm.chainId(HUB_CHAIN_ID);
 
         // Simulate message receipt (from Hyperlane relayer)
         hubMailbox.simulateReceive(address(inbox), SPOKE_DOMAIN, sender, messageBody);
@@ -269,7 +271,7 @@ contract CrossChainIntegrationTest is Test {
         bytes memory messageBody = spokeMailbox.lastMessage();
         bytes32 sender = CrossChainMessage.addressToBytes32(address(spokeRegistry));
 
-        vm.chainId(HUB_DOMAIN);
+        vm.chainId(HUB_CHAIN_ID);
         hubMailbox.simulateReceive(address(inbox), SPOKE_DOMAIN, sender, messageBody);
 
         IStolenWalletRegistry.RegistrationData memory data = hubRegistry.getRegistration(victim);
@@ -294,8 +296,8 @@ contract CrossChainIntegrationTest is Test {
         bytes memory messageBody = payload.encodeRegistration();
         bytes32 untrustedSender = bytes32(uint256(1)); // Not trusted
 
-        vm.chainId(HUB_DOMAIN);
-        vm.expectRevert(); // Should revert with UntrustedSource
+        vm.chainId(HUB_CHAIN_ID);
+        vm.expectRevert(ICrossChainInbox.CrossChainInbox__UntrustedSource.selector);
         hubMailbox.simulateReceive(address(inbox), 999, untrustedSender, messageBody);
     }
 
@@ -312,7 +314,7 @@ contract CrossChainIntegrationTest is Test {
         bytes memory messageBody = payload.encodeRegistration();
         bytes32 sender = CrossChainMessage.addressToBytes32(address(spokeRegistry));
 
-        vm.chainId(HUB_DOMAIN);
+        vm.chainId(HUB_CHAIN_ID);
 
         // Try to call handle directly (not from mailbox)
         vm.prank(address(0x999));

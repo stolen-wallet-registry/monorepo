@@ -13,6 +13,9 @@
     "snapshot": "forge snapshot",
     "anvil": "anvil --block-time 13",
     "deploy:local": "forge script script/Deploy.s.sol --tc Deploy --rpc-url localhost --broadcast",
-    "export-abi": "node scripts/export-abi.js"
+    "export-abi": "node scripts/export-abi.js",
+    "slither": "python3 -m slither . --config-file slither.config.json",
+    "slither:check": "python3 -m slither . --config-file slither.config.json --checklist",
+    "slither:triage": "python3 -m slither . --config-file slither.config.json --triage-mode"
   }
 }

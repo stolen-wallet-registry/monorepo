@@ -97,6 +97,9 @@ interface IStolenWalletRegistry {
     /// @notice Thrown when caller is not authorized (not RegistryHub for cross-chain registration)
     error UnauthorizedCaller();
 
+    /// @notice Thrown when an invalid bridge ID is provided
+    error InvalidBridgeId();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════

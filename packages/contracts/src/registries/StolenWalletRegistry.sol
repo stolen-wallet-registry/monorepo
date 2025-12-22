@@ -181,6 +181,9 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
         // Validate wallet address
         if (wallet == address(0)) revert InvalidOwner();
 
+        // Validate bridge ID (must be a valid BridgeId enum value: 0-3)
+        if (bridgeId > uint8(BridgeId.WORMHOLE)) revert InvalidBridgeId();
+
         // Prevent re-registration
         if (registeredWallets[wallet].registeredAt != 0) revert AlreadyRegistered();
 
