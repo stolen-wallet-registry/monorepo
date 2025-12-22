@@ -209,8 +209,10 @@ contract BridgeRouter is Ownable2Step {
     /// @param recipientInbox CrossChainInbox address on destination
     /// @param enabled Whether route is enabled
     function setRoute(uint32 domain, address adapter, bytes32 recipientInbox, bool enabled) external onlyOwner {
-        // Prevent enabling a route with no adapter configured
-        if (enabled && adapter == address(0)) revert BridgeRouter__InvalidRouteConfig();
+        // Prevent enabling a route with missing adapter or inbox
+        if (enabled && (adapter == address(0) || recipientInbox == bytes32(0))) {
+            revert BridgeRouter__InvalidRouteConfig();
+        }
         routes[domain] = RouteConfig({ adapter: adapter, recipientInbox: recipientInbox, enabled: enabled });
         emit RouteUpdated(domain, adapter, recipientInbox, enabled);
     }

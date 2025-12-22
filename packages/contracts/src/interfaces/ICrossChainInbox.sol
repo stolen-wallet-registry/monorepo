@@ -39,6 +39,9 @@ interface ICrossChainInbox {
     /// @notice Thrown when a zero address is provided for a required parameter
     error CrossChainInbox__ZeroAddress();
 
+    /// @notice Thrown when payload sourceChainId doesn't match Hyperlane origin domain
+    error CrossChainInbox__SourceChainMismatch();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════

@@ -280,6 +280,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     /// @param to Treasury address
     /// @param amount Amount to withdraw
     function withdrawFees(address to, uint256 amount) external onlyOwner {
+        if (to == address(0)) revert SpokeRegistry__ZeroAddress();
         (bool success,) = to.call{ value: amount }("");
         if (!success) revert SpokeRegistry__WithdrawalFailed();
     }

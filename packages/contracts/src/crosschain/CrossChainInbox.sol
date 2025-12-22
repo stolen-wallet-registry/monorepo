@@ -80,6 +80,11 @@ contract CrossChainInbox is IMessageRecipient, ICrossChainInbox, Ownable2Step {
         // Decode the registration payload
         CrossChainMessage.RegistrationPayload memory payload = CrossChainMessage.decodeRegistration(_messageBody);
 
+        // Defense in depth: verify payload sourceChainId matches Hyperlane origin
+        if (payload.sourceChainId != _origin) {
+            revert CrossChainInbox__SourceChainMismatch();
+        }
+
         // Generate message ID from payload hash
         bytes32 messageId = keccak256(_messageBody);
 
