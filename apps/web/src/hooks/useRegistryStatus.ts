@@ -12,6 +12,7 @@ import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
 import { registryStaleTime } from '@/lib/contracts/queryKeys';
 import { logger } from '@/lib/logger';
+import type { Address } from '@/lib/types/ethereum';
 
 /**
  * Registration data from the contract.
@@ -20,7 +21,7 @@ export interface RegistrationData {
   /** Block number when registration was completed */
   registeredAt: bigint;
   /** Address that submitted the registration transaction */
-  registeredBy: `0x${string}`;
+  registeredBy: Address;
   /** Whether registration was sponsored (paid by different wallet) */
   isSponsored: boolean;
 }
@@ -30,7 +31,7 @@ export interface RegistrationData {
  */
 export interface AcknowledgementData {
   /** Address authorized to submit registration */
-  trustedForwarder: `0x${string}`;
+  trustedForwarder: Address;
   /** Block when grace period starts */
   startBlock: bigint;
   /** Block when acknowledgement expires */
@@ -64,7 +65,7 @@ export interface RegistryStatus {
  */
 export interface UseRegistryStatusOptions {
   /** Address to query (undefined skips query) */
-  address?: `0x${string}`;
+  address?: Address;
   /** Enable automatic refetch interval (ms) or false to disable */
   refetchInterval?: number | false;
 }
@@ -96,7 +97,7 @@ export function useRegistryStatus({
 }: UseRegistryStatusOptions): RegistryStatus {
   const chainId = useChainId();
 
-  let contractAddress: `0x${string}` | undefined;
+  let contractAddress: Address | undefined;
   try {
     contractAddress = getStolenWalletRegistryAddress(chainId);
   } catch {
@@ -148,7 +149,7 @@ export function useRegistryStatus({
   if (data?.[2]?.status === 'success' && isRegistered) {
     const result = data[2].result as {
       registeredAt: bigint;
-      registeredBy: `0x${string}`;
+      registeredBy: Address;
       isSponsored: boolean;
     };
     registrationData = {
@@ -162,7 +163,7 @@ export function useRegistryStatus({
   let acknowledgementData: AcknowledgementData | null = null;
   if (data?.[3]?.status === 'success' && isPending) {
     const result = data[3].result as {
-      trustedForwarder: `0x${string}`;
+      trustedForwarder: Address;
       startBlock: bigint;
       expiryBlock: bigint;
     };

@@ -40,14 +40,20 @@ export function PeerIdDisplay({ peerId, isLoading }: PeerIdDisplayProps) {
 
     if (success) {
       logger.p2p.info('Peer ID copied to clipboard', { peerId });
-      toast.success('Copied!', {
-        description: `Peer ID: ${truncateMiddle(peerId, 15, 15)}`,
-        duration: 2000,
-      });
+      // Defer toast to escape React's render cycle (avoids flushSync warning from sonner)
+      setTimeout(() => {
+        toast.success('Copied!', {
+          description: `Peer ID: ${truncateMiddle(peerId, 15, 15)}`,
+          duration: 2000,
+        });
+      }, 0);
     } else {
-      toast.error('Copy Failed', {
-        description: 'Could not copy to clipboard',
-      });
+      logger.p2p.warn('Failed to copy peer ID to clipboard');
+      setTimeout(() => {
+        toast.error('Copy Failed', {
+          description: 'Could not copy to clipboard',
+        });
+      }, 0);
     }
   };
 

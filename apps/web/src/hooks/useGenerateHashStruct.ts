@@ -9,10 +9,11 @@ import { useReadContract, useChainId, type UseReadContractReturnType } from 'wag
 import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
 import { SIGNATURE_STEP, type SignatureStep } from '@/lib/signatures';
+import type { Address, Hash } from '@/lib/types/ethereum';
 
 export interface HashStructData {
   deadline: bigint;
-  hashStruct: `0x${string}`;
+  hashStruct: Hash;
 }
 
 export interface UseGenerateHashStructResult {
@@ -31,12 +32,12 @@ export interface UseGenerateHashStructResult {
  * @returns The deadline and hash struct for the EIP-712 message
  */
 export function useGenerateHashStruct(
-  forwarderAddress: `0x${string}` | undefined,
+  forwarderAddress: Address | undefined,
   step: SignatureStep
 ): UseGenerateHashStructResult {
   const chainId = useChainId();
 
-  let contractAddress: `0x${string}` | undefined;
+  let contractAddress: Address | undefined;
   try {
     contractAddress = getStolenWalletRegistryAddress(chainId);
   } catch {
@@ -77,7 +78,7 @@ export function useGenerateHashStruct(
  * Helper to get hash struct for acknowledgement step.
  */
 export function useAcknowledgementHashStruct(
-  forwarderAddress: `0x${string}` | undefined
+  forwarderAddress: Address | undefined
 ): UseGenerateHashStructResult {
   return useGenerateHashStruct(forwarderAddress, SIGNATURE_STEP.ACKNOWLEDGEMENT);
 }
@@ -86,7 +87,7 @@ export function useAcknowledgementHashStruct(
  * Helper to get hash struct for registration step.
  */
 export function useRegistrationHashStruct(
-  forwarderAddress: `0x${string}` | undefined
+  forwarderAddress: Address | undefined
 ): UseGenerateHashStructResult {
   return useGenerateHashStruct(forwarderAddress, SIGNATURE_STEP.REGISTRATION);
 }

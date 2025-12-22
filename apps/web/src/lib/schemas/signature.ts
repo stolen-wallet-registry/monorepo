@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod';
+import type { Hex, Hash } from '@/lib/types/ethereum';
 
 /**
  * Schema for validating hex strings (0x prefixed).
@@ -21,7 +22,7 @@ export const hexStringSchema = z
  */
 export const signatureSchema = hexStringSchema.refine((val) => val.length === 132, {
   message: 'Signature must be 65 bytes (132 hex characters including 0x prefix)',
-}) as z.ZodType<`0x${string}`>;
+}) as z.ZodType<Hex>;
 
 /**
  * Schema for validating transaction hashes.
@@ -30,7 +31,7 @@ export const signatureSchema = hexStringSchema.refine((val) => val.length === 13
  */
 export const txHashSchema = hexStringSchema.refine((val) => val.length === 66, {
   message: 'Transaction hash must be 32 bytes (66 hex characters including 0x prefix)',
-}) as z.ZodType<`0x${string}`>;
+}) as z.ZodType<Hash>;
 
 /**
  * Type for a validated signature.

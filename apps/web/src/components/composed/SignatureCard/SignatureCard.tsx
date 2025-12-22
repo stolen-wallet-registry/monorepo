@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { SIGNATURE_TTL_MS } from '@/lib/signatures';
 import { Check, AlertCircle, Loader2, Copy, Clock } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
+import type { Hex } from '@/lib/types/ethereum';
 
 /** Signature session TTL in minutes (derived from single source of truth) */
 const SIGNATURE_TTL_MINUTES = SIGNATURE_TTL_MS / 60000;
@@ -33,7 +34,7 @@ export interface SignatureCardProps {
   /** Error message if signing failed */
   error?: string | null;
   /** The signature after signing */
-  signature?: `0x${string}` | null;
+  signature?: Hex | null;
   /** Callback to initiate signing */
   onSign: () => void;
   /** Callback to retry after error */

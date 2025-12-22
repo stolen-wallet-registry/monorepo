@@ -6,6 +6,7 @@
  */
 
 import { config } from './wagmi';
+import type { Address, Hash } from '@/lib/types/ethereum';
 
 /**
  * Find a chain by ID from wagmi config.
@@ -21,7 +22,7 @@ function findChain(chainId: number) {
  * @param txHash - The transaction hash
  * @returns The explorer URL or null if no explorer configured
  */
-export function getExplorerTxUrl(chainId: number, txHash: `0x${string}`): string | null {
+export function getExplorerTxUrl(chainId: number, txHash: Hash): string | null {
   const chain = findChain(chainId);
   const baseUrl = chain?.blockExplorers?.default?.url?.replace(/\/$/, '');
   if (!baseUrl) return null;
@@ -35,7 +36,7 @@ export function getExplorerTxUrl(chainId: number, txHash: `0x${string}`): string
  * @param address - The address
  * @returns The explorer URL or null if no explorer configured
  */
-export function getExplorerAddressUrl(chainId: number, address: `0x${string}`): string | null {
+export function getExplorerAddressUrl(chainId: number, address: Address): string | null {
   const chain = findChain(chainId);
   const baseUrl = chain?.blockExplorers?.default?.url?.replace(/\/$/, '');
   if (!baseUrl) return null;

@@ -10,12 +10,13 @@ import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { getChainShortName } from '@/lib/explorer';
 import { cn } from '@/lib/utils';
+import type { Address } from '@/lib/types/ethereum';
 
 export interface SignatureDetailsData {
   /** Wallet being registered */
-  registeree: `0x${string}`;
+  registeree: Address;
   /** Wallet that will submit transaction (pays gas) */
-  forwarder: `0x${string}`;
+  forwarder: Address;
   /** Signature nonce */
   nonce: bigint;
   /** Block deadline for signature validity */

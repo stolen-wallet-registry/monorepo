@@ -15,6 +15,7 @@ import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
 import { getBlockTime } from '@/lib/blocks';
 import { logger } from '@/lib/logger';
+import type { Address } from '@/lib/types/ethereum';
 
 export interface DeadlineData {
   currentBlock: bigint;
@@ -40,7 +41,7 @@ export interface UseContractDeadlinesResult {
  * @returns Deadline data including current block, start, expiry, and expired status
  */
 export function useContractDeadlines(
-  registereeAddress: `0x${string}` | undefined
+  registereeAddress: Address | undefined
 ): UseContractDeadlinesResult {
   const chainId = useChainId();
 
@@ -48,7 +49,7 @@ export function useContractDeadlines(
   const blockTimeMs = getBlockTime(chainId) * 1000;
   const refetchInterval = Math.max(blockTimeMs, 2000); // At least 2 seconds
 
-  let contractAddress: `0x${string}` | undefined;
+  let contractAddress: Address | undefined;
   try {
     contractAddress = getStolenWalletRegistryAddress(chainId);
   } catch {

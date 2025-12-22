@@ -13,6 +13,7 @@ import { useState, useCallback } from 'react';
 import { ExternalLink, Copy, Check } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
 import { cn } from '@/lib/utils';
+import type { Hex } from '@/lib/types/ethereum';
 
 /**
  * Type of blockchain identifier.
@@ -51,7 +52,7 @@ function inferType(value: string): ExplorerLinkType {
 
 export interface ExplorerLinkProps {
   /** The hash or address to display */
-  value: `0x${string}`;
+  value: Hex;
   /** Type of value - inferred from length if not provided */
   type?: ExplorerLinkType;
   /** Explorer URL (if null/undefined, shows disabled icon) */

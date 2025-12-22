@@ -1,21 +1,23 @@
 // Signature storage utilities
 // Stores EIP-712 signatures in sessionStorage (clears on tab close for security)
 
-import type { SignatureStep } from './eip712';
+import { isHex, isAddress } from 'viem';
+import { SIGNATURE_STEP, type SignatureStep } from './eip712';
+import type { Address, Hex } from '@/lib/types/ethereum';
 
 /** Signature session TTL in milliseconds (30 minutes) */
 export const SIGNATURE_TTL_MS = 30 * 60 * 1000;
 
 // Storage key format: swr_sig_{address}_{chainId}_{step}
-function getStorageKey(address: `0x${string}`, chainId: number, step: SignatureStep): string {
+function getStorageKey(address: Address, chainId: number, step: SignatureStep): string {
   return `swr_sig_${address.toLowerCase()}_${chainId}_${step}`;
 }
 
 export interface StoredSignature {
-  signature: `0x${string}`;
+  signature: Hex;
   deadline: bigint;
   nonce: bigint;
-  address: `0x${string}`;
+  address: Address;
   chainId: number;
   step: SignatureStep;
   storedAt: number; // timestamp
@@ -49,7 +51,7 @@ export function storeSignature(sig: StoredSignature): void {
 
 // Retrieve a signature (returns null if not found or expired)
 export function getSignature(
-  address: `0x${string}`,
+  address: Address,
   chainId: number,
   step: SignatureStep
 ): StoredSignature | null {
@@ -69,11 +71,18 @@ export function getSignature(
       return null;
     }
 
+    // Validate hex format for security-critical signature data
+    // Malformed but parseable data could cause issues downstream
+    if (!isHex(parsed.signature, { strict: true }) || !isAddress(parsed.address)) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+
     const signature: StoredSignature = {
-      signature: parsed.signature as `0x${string}`,
+      signature: parsed.signature as Hex,
       deadline: BigInt(parsed.deadline),
       nonce: BigInt(parsed.nonce),
-      address: parsed.address as `0x${string}`,
+      address: parsed.address as Address,
       chainId: parsed.chainId,
       step: parsed.step as SignatureStep,
       storedAt: parsed.storedAt,
@@ -88,18 +97,14 @@ export function getSignature(
 }
 
 // Remove a signature
-export function removeSignature(
-  address: `0x${string}`,
-  chainId: number,
-  step: SignatureStep
-): void {
+export function removeSignature(address: Address, chainId: number, step: SignatureStep): void {
   const key = getStorageKey(address, chainId, step);
   sessionStorage.removeItem(key);
 }
 
 // Clear all signatures for an address on a chain
-export function clearSignatures(address: `0x${string}`, chainId: number): void {
-  const steps = [1, 2] as const;
+export function clearSignatures(address: Address, chainId: number): void {
+  const steps = Object.values(SIGNATURE_STEP);
   for (const step of steps) {
     removeSignature(address, chainId, step);
   }

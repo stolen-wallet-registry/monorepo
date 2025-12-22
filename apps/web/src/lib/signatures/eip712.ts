@@ -2,6 +2,7 @@
 // Matches contract: StolenWalletRegistry.sol version 4
 
 import type { TypedDataDomain } from 'viem';
+import type { Address } from '@/lib/types/ethereum';
 
 // EIP-712 Domain configuration
 export const EIP712_DOMAIN_NAME = 'StolenWalletRegistry';
@@ -30,10 +31,7 @@ export const EIP712_TYPES = {
 } as const;
 
 // Get EIP-712 domain for a specific chain and contract
-export function getEIP712Domain(
-  chainId: number,
-  verifyingContract: `0x${string}`
-): TypedDataDomain {
+export function getEIP712Domain(chainId: number, verifyingContract: Address): TypedDataDomain {
   return {
     name: EIP712_DOMAIN_NAME,
     version: EIP712_DOMAIN_VERSION,
@@ -44,15 +42,15 @@ export function getEIP712Domain(
 
 // Message types for signing
 export interface AcknowledgementMessage {
-  owner: `0x${string}`;
-  forwarder: `0x${string}`;
+  owner: Address;
+  forwarder: Address;
   nonce: bigint;
   deadline: bigint;
 }
 
 export interface RegistrationMessage {
-  owner: `0x${string}`;
-  forwarder: `0x${string}`;
+  owner: Address;
+  forwarder: Address;
   nonce: bigint;
   deadline: bigint;
 }
@@ -68,7 +66,7 @@ export type SignatureStep = (typeof SIGNATURE_STEP)[keyof typeof SIGNATURE_STEP]
 // Build typed data for acknowledgement signature
 export function buildAcknowledgementTypedData(
   chainId: number,
-  contractAddress: `0x${string}`,
+  contractAddress: Address,
   message: AcknowledgementMessage
 ) {
   return {
@@ -82,7 +80,7 @@ export function buildAcknowledgementTypedData(
 // Build typed data for registration signature
 export function buildRegistrationTypedData(
   chainId: number,
-  contractAddress: `0x${string}`,
+  contractAddress: Address,
   message: RegistrationMessage
 ) {
   return {

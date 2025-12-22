@@ -3,6 +3,7 @@ import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { useShallow } from 'zustand/shallow';
 import { logger } from '@/lib/logger';
+import type { Hash } from '@/lib/types/ethereum';
 
 export type RegistrationType = 'standard' | 'selfRelay' | 'p2pRelay';
 
@@ -22,15 +23,15 @@ export type RegistrationStep =
 export interface RegistrationState {
   registrationType: RegistrationType;
   step: RegistrationStep | null;
-  acknowledgementHash: `0x${string}` | null;
-  registrationHash: `0x${string}` | null;
+  acknowledgementHash: Hash | null;
+  registrationHash: Hash | null;
 }
 
 export interface RegistrationActions {
   setRegistrationType: (type: RegistrationType) => void;
   setStep: (step: RegistrationStep) => void;
-  setAcknowledgementHash: (hash: `0x${string}`) => void;
-  setRegistrationHash: (hash: `0x${string}`) => void;
+  setAcknowledgementHash: (hash: Hash) => void;
+  setRegistrationHash: (hash: Hash) => void;
   reset: () => void;
 }
 

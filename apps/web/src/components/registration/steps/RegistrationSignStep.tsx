@@ -19,6 +19,7 @@ import { storeSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
+import type { Hex } from '@/lib/types/ethereum';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 export interface RegistrationSignStepProps {
@@ -49,7 +50,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
   // Local state
   const [signatureStatus, setSignatureStatus] = useState<SignatureStatus>('idle');
   const [signatureError, setSignatureError] = useState<string | null>(null);
-  const [signature, setSignature] = useState<`0x${string}` | null>(null);
+  const [signature, setSignature] = useState<Hex | null>(null);
   const [shouldAdvance, setShouldAdvance] = useState(false);
 
   // Ref to track onComplete for cleanup
@@ -126,7 +127,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
     logger.contract.debug('Refetching hash struct for fresh registration deadline');
     const refetchResult = await refetchHashStruct();
     // Refetch returns raw contract data [deadline, hashStruct], transform if present
-    const rawData = refetchResult?.data as [bigint, `0x${string}`] | undefined;
+    const rawData = refetchResult?.data as [bigint, Hex] | undefined;
     const freshDeadline = rawData?.[0] ?? hashStructData?.deadline;
 
     if (freshDeadline === undefined) {

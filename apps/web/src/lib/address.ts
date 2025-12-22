@@ -3,6 +3,7 @@
  */
 
 import { getAddress, isAddress } from 'viem';
+import type { Address } from '@/lib/types/ethereum';
 
 /**
  * Truncates an Ethereum address for display purposes.
@@ -32,7 +33,7 @@ export function isValidEthereumAddress(address: string): boolean {
  * @returns Checksummed address
  * @throws Error if address is invalid
  */
-export function formatAddress(address: string): `0x${string}` {
+export function formatAddress(address: string): Address {
   return getAddress(address);
 }
 
@@ -54,6 +55,6 @@ export function areAddressesEqual(
 /**
  * Type guard to check if value is a valid address string.
  */
-export function isAddressString(value: unknown): value is `0x${string}` {
+export function isAddressString(value: unknown): value is Address {
   return typeof value === 'string' && isValidEthereumAddress(value);
 }

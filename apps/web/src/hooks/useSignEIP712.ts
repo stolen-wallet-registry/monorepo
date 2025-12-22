@@ -14,10 +14,11 @@ import {
   type RegistrationMessage,
 } from '@/lib/signatures';
 import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
+import type { Address, Hex } from '@/lib/types/ethereum';
 
 export interface SignParams {
-  owner: `0x${string}`;
-  forwarder: `0x${string}`;
+  owner: Address;
+  forwarder: Address;
   nonce: bigint;
   deadline: bigint;
 }
@@ -36,8 +37,8 @@ function toBaseMessage(params: SignParams) {
 }
 
 export interface UseSignEIP712Result {
-  signAcknowledgement: (params: SignParams) => Promise<`0x${string}`>;
-  signRegistration: (params: SignParams) => Promise<`0x${string}`>;
+  signAcknowledgement: (params: SignParams) => Promise<Hex>;
+  signRegistration: (params: SignParams) => Promise<Hex>;
   isPending: boolean;
   isError: boolean;
   error: Error | null;
@@ -55,7 +56,7 @@ export function useSignEIP712(): UseSignEIP712Result {
 
   const { signTypedDataAsync, isPending, isError, error, reset } = useSignTypedData();
 
-  let contractAddress: `0x${string}` | undefined;
+  let contractAddress: Address | undefined;
   try {
     contractAddress = getStolenWalletRegistryAddress(chainId);
   } catch {
@@ -67,7 +68,7 @@ export function useSignEIP712(): UseSignEIP712Result {
    * @throws Error if validation fails
    * @returns The validated contract address
    */
-  const validateSigningPreconditions = (): `0x${string}` => {
+  const validateSigningPreconditions = (): Address => {
     if (!address) {
       throw new Error('Wallet not connected');
     }
@@ -80,7 +81,7 @@ export function useSignEIP712(): UseSignEIP712Result {
   /**
    * Sign an acknowledgement message (Phase 1).
    */
-  const signAcknowledgement = async (params: SignParams): Promise<`0x${string}`> => {
+  const signAcknowledgement = async (params: SignParams): Promise<Hex> => {
     const validatedAddress = validateSigningPreconditions();
     const message: AcknowledgementMessage = toBaseMessage(params);
     const typedData = buildAcknowledgementTypedData(chainId, validatedAddress, message);
@@ -98,7 +99,7 @@ export function useSignEIP712(): UseSignEIP712Result {
   /**
    * Sign a registration message (Phase 2).
    */
-  const signRegistration = async (params: SignParams): Promise<`0x${string}`> => {
+  const signRegistration = async (params: SignParams): Promise<Hex> => {
     const validatedAddress = validateSigningPreconditions();
     const message: RegistrationMessage = toBaseMessage(params);
     const typedData = buildRegistrationTypedData(chainId, validatedAddress, message);

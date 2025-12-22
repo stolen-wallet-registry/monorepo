@@ -6,18 +6,19 @@
 
 import { z } from 'zod';
 import { isAddress, getAddress } from 'viem';
+import type { Address } from '@/lib/types/ethereum';
 
 /**
  * Schema for validating and checksumming Ethereum addresses.
  *
  * - Validates using viem's isAddress
  * - Transforms to checksummed format via getAddress
- * - Output type is `0x${string}` for compatibility with viem/wagmi
+ * - Output type is Address for compatibility with viem/wagmi
  */
 export const ethereumAddressSchema = z
   .string()
   .refine((val) => isAddress(val), { message: 'Invalid Ethereum address' })
-  .transform((val) => getAddress(val) as `0x${string}`);
+  .transform((val) => getAddress(val) as Address);
 
 /**
  * Schema for optional Ethereum address (empty string or valid address).

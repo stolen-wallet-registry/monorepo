@@ -3,14 +3,15 @@
  */
 
 import { hexToSignature } from 'viem';
+import type { Hex } from '@/lib/types/ethereum';
 
 /**
  * Parsed signature components for contract calls.
  */
 export interface ParsedSignature {
   v: number;
-  r: `0x${string}`;
-  s: `0x${string}`;
+  r: Hex;
+  s: Hex;
 }
 
 /**
@@ -20,7 +21,7 @@ export interface ParsedSignature {
  * @param signature - The full signature hex string
  * @returns Parsed signature components
  */
-export function parseSignature(signature: `0x${string}`): ParsedSignature {
+export function parseSignature(signature: Hex): ParsedSignature {
   const { v, r, s } = hexToSignature(signature);
   return {
     v: Number(v),
@@ -77,7 +78,7 @@ export function getStepName(step: 1 | 2): string {
  * Validates signature format (basic check).
  * Full validation happens on-chain via ECDSA.
  */
-export function isValidSignatureFormat(signature: unknown): signature is `0x${string}` {
+export function isValidSignatureFormat(signature: unknown): signature is Hex {
   if (typeof signature !== 'string') return false;
   if (!signature.startsWith('0x')) return false;
   // EIP-712 signatures should be 65 bytes (130 hex chars + 0x)

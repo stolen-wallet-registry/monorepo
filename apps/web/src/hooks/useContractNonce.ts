@@ -8,6 +8,7 @@
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
 import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
+import type { Address } from '@/lib/types/ethereum';
 
 export interface UseContractNonceResult {
   nonce: bigint | undefined;
@@ -23,10 +24,10 @@ export interface UseContractNonceResult {
  * @param ownerAddress - The address to get the nonce for
  * @returns The current nonce value
  */
-export function useContractNonce(ownerAddress: `0x${string}` | undefined): UseContractNonceResult {
+export function useContractNonce(ownerAddress: Address | undefined): UseContractNonceResult {
   const chainId = useChainId();
 
-  let contractAddress: `0x${string}` | undefined;
+  let contractAddress: Address | undefined;
   try {
     contractAddress = getStolenWalletRegistryAddress(chainId);
   } catch {

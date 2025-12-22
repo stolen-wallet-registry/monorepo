@@ -19,6 +19,7 @@
  */
 
 import type { SignatureStep } from '@/lib/signatures';
+import type { Address } from '@/lib/types/ethereum';
 
 /**
  * Query key factory for StolenWalletRegistry contract reads.
@@ -29,32 +30,32 @@ export const registryKeys = {
 
   /** Key for nonce queries */
   nonces: () => [...registryKeys.all, 'nonce'] as const,
-  nonce: (address: `0x${string}`) => [...registryKeys.nonces(), address] as const,
+  nonce: (address: Address) => [...registryKeys.nonces(), address] as const,
 
   /** Key for deadline queries */
   deadlines: () => [...registryKeys.all, 'deadlines'] as const,
-  deadline: (address: `0x${string}`) => [...registryKeys.deadlines(), address] as const,
+  deadline: (address: Address) => [...registryKeys.deadlines(), address] as const,
 
   /** Key for hash struct queries (includes step) */
   hashStructs: () => [...registryKeys.all, 'hashStruct'] as const,
-  hashStruct: (forwarder: `0x${string}`, step: SignatureStep) =>
+  hashStruct: (forwarder: Address, step: SignatureStep) =>
     [...registryKeys.hashStructs(), forwarder, step] as const,
 
   /** Key for registration status queries */
   registrations: () => [...registryKeys.all, 'registration'] as const,
-  isRegistered: (address: `0x${string}`) =>
+  isRegistered: (address: Address) =>
     [...registryKeys.registrations(), 'isRegistered', address] as const,
-  getRegistration: (address: `0x${string}`) =>
+  getRegistration: (address: Address) =>
     [...registryKeys.registrations(), 'getRegistration', address] as const,
 
   /** Key for pending status queries */
   pending: () => [...registryKeys.all, 'pending'] as const,
-  isPending: (address: `0x${string}`) => [...registryKeys.pending(), 'isPending', address] as const,
-  getAcknowledgement: (address: `0x${string}`) =>
+  isPending: (address: Address) => [...registryKeys.pending(), 'isPending', address] as const,
+  getAcknowledgement: (address: Address) =>
     [...registryKeys.pending(), 'getAcknowledgement', address] as const,
 
   /** Combined status query (batched isRegistered + isPending + data) */
-  status: (address: `0x${string}`) => [...registryKeys.all, 'status', address] as const,
+  status: (address: Address) => [...registryKeys.all, 'status', address] as const,
 } as const;
 
 /**

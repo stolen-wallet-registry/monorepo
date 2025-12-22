@@ -19,8 +19,6 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@swr/abis": "workspace:*",
-    "@swr/ui": "workspace:*",
     "@chainsafe/libp2p-noise": "^17.0.0",
     "@chainsafe/libp2p-yamux": "^8.0.1",
     "@hookform/resolvers": "^5.2.2",
@@ -47,6 +45,8 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@rainbow-me/rainbowkit": "^2.2.10",
+    "@swr/abis": "workspace:*",
+    "@swr/ui": "workspace:*",
     "@tailwindcss/vite": "^4.1.17",
     "@tanstack/react-query": "^5.90.12",
     "class-variance-authority": "^0.7.1",
@@ -68,7 +68,9 @@
     "wagmi": "^2.19.5",
     "wouter": "^3.8.1",
     "zod": "^4.1.13",
-    "zustand": "^5.0.9"
+    "zustand": "^5.0.9",
+    "@libp2p/crypto": "^5.0.9",
+    "@libp2p/peer-id-factory": "^4.2.4"
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^4.1.3",

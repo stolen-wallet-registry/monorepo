@@ -242,7 +242,8 @@ describe('signature storage', () => {
     });
 
     it('does not affect signatures for other addresses', () => {
-      const otherAddress = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as `0x${string}`;
+      // Use all-lowercase address (valid non-checksummed format accepted by viem)
+      const otherAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb0' as `0x${string}`;
 
       storeSignature(createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT));
       storeSignature(

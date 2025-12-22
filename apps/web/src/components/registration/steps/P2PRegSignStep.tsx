@@ -4,7 +4,7 @@
  * Registeree signs registration and sends signature to relayer via P2P.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 import type { Libp2p } from 'libp2p';
 
@@ -18,10 +18,17 @@ import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
 import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
+import type { Hex } from '@/lib/types/ethereum';
 
 export interface P2PRegSignStepProps {
-  /** The libp2p node instance */
-  libp2p: Libp2p | null;
+  /**
+   * Getter for the libp2p node instance.
+   * IMPORTANT: Uses a getter function instead of passing libp2p directly.
+   * libp2p uses a Proxy that throws MissingServiceError when unknown properties are accessed.
+   * React DevTools tries to serialize props (accessing `$typeof`, etc.), which crashes the app.
+   * Passing a getter function avoids this because functions aren't deeply inspected.
+   */
+  getLibp2p: () => Libp2p | null;
   // Note: onComplete is intentionally not included here.
   // Step advancement is handled by the parent page via protocol handlers
   // when REG_REC is received from the relayer, ensuring reliable completion.
@@ -30,14 +37,20 @@ export interface P2PRegSignStepProps {
 /**
  * P2P step for registeree to sign registration and send to relayer.
  */
-export function P2PRegSignStep({ libp2p }: P2PRegSignStepProps) {
+export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
   const { registeree, relayer } = useFormStore();
   const { partnerPeerId } = useP2PStore();
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [signature, setSignature] = useState<`0x${string}` | null>(null);
+  const [signature, setSignature] = useState<Hex | null>(null);
+
+  // Use ref for getter to avoid callback re-creation when parent re-renders
+  const getLibp2pRef = useRef(getLibp2p);
+  useEffect(() => {
+    getLibp2pRef.current = getLibp2p;
+  }, [getLibp2p]);
 
   // Get hash struct data for signing (deadline)
   const {
@@ -72,6 +85,7 @@ export function P2PRegSignStep({ libp2p }: P2PRegSignStepProps) {
 
   // Handle signing and sending
   const handleSign = useCallback(async () => {
+    const libp2p = getLibp2pRef.current();
     if (
       !hashData ||
       !address ||
@@ -131,7 +145,6 @@ export function P2PRegSignStep({ libp2p }: P2PRegSignStepProps) {
   }, [
     hashData,
     address,
-    libp2p,
     partnerPeerId,
     registeree,
     relayer,
@@ -142,7 +155,7 @@ export function P2PRegSignStep({ libp2p }: P2PRegSignStepProps) {
   ]);
 
   const isLoading = isLoadingHash || isLoadingNonce;
-  const isReady = !isLoading && hashData && nonce !== undefined && libp2p && partnerPeerId;
+  const isReady = !isLoading && hashData && nonce !== undefined && getLibp2p() && partnerPeerId;
   const errorMessage = hashError?.message || nonceError?.message || signError?.message || sendError;
 
   // Build signature data for display
