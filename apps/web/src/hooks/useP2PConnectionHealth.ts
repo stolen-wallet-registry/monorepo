@@ -118,6 +118,10 @@ export function useP2PConnectionHealth({
   const peerDisconnectedFiredRef = useRef(false);
   // Track if store update is needed after setState (to avoid side effects inside updater)
   const pendingStoreUpdateRef = useRef(false);
+  // Guard against concurrent health checks (use ref, not state, to avoid dep cycles)
+  const isCheckingRef = useRef(false);
+  // Track disconnect callback timeouts for cleanup on unmount
+  const disconnectTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   // Use ref for getter to avoid effect re-runs
   const getLibp2pRef = useRef(getLibp2p);
@@ -237,6 +241,12 @@ export function useP2PConnectionHealth({
       return;
     }
 
+    // Skip if already checking (prevents concurrent checks from interval + manual trigger)
+    if (isCheckingRef.current) {
+      return;
+    }
+
+    isCheckingRef.current = true;
     setIsChecking(true);
 
     try {
@@ -277,10 +287,15 @@ export function useP2PConnectionHealth({
 
         // Fire callbacks once per disconnection event (only if we had a connection before)
         // Note: Using setTimeout to defer side effects outside the updater
+        // Timeouts are tracked in disconnectTimeoutsRef for cleanup on unmount
         if (relayDisconnected && !relayDisconnectedFiredRef.current && prev.lastCheckAt !== null) {
           relayDisconnectedFiredRef.current = true;
           logger.p2p.info('Relay disconnect detected', { relayFailures: newRelayFailures });
-          setTimeout(() => onRelayDisconnectedRef.current?.(), 0);
+          const timeoutId = setTimeout(() => {
+            disconnectTimeoutsRef.current.delete(timeoutId);
+            onRelayDisconnectedRef.current?.();
+          }, 0);
+          disconnectTimeoutsRef.current.add(timeoutId);
         }
         if (peerDisconnected && !peerDisconnectedFiredRef.current && prev.lastCheckAt !== null) {
           peerDisconnectedFiredRef.current = true;
@@ -288,7 +303,11 @@ export function useP2PConnectionHealth({
             peerFailures: newPeerFailures,
             remotePeerId,
           });
-          setTimeout(() => onPeerDisconnectedRef.current?.(), 0);
+          const timeoutId = setTimeout(() => {
+            disconnectTimeoutsRef.current.delete(timeoutId);
+            onPeerDisconnectedRef.current?.();
+          }, 0);
+          disconnectTimeoutsRef.current.add(timeoutId);
           // Mark that we need to update store after setState completes
           pendingStoreUpdateRef.current = true;
         }
@@ -334,6 +353,7 @@ export function useP2PConnectionHealth({
         peerLatency: peerResult.latency,
       });
     } finally {
+      isCheckingRef.current = false;
       setIsChecking(false);
     }
   }, [
@@ -407,6 +427,11 @@ export function useP2PConnectionHealth({
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+      // Clear any pending disconnect callback timeouts
+      for (const timeoutId of disconnectTimeoutsRef.current) {
+        clearTimeout(timeoutId);
+      }
+      disconnectTimeoutsRef.current.clear();
     };
     // Note: getLibp2p excluded from deps - accessed via ref
   }, [enabled, intervalMs, remotePeerId]);
