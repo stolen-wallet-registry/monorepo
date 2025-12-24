@@ -53,7 +53,10 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // Contract hooks
   const { submitRegistration, hash, isPending, isConfirming, isConfirmed, isError, error, reset } =
     useRegistration();
-  const { feeWei } = useQuoteRegistration(registeree);
+  const { feeWei, isLoading: isFeeLoading } = useQuoteRegistration(registeree);
+
+  // Determine if submission should be disabled
+  const isFeeReady = !isFeeLoading && feeWei !== undefined;
 
   // Local state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -130,6 +133,14 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         registeree,
       });
       setLocalError('Missing signature data. Please go back and sign again.');
+      return;
+    }
+
+    if (feeWei === undefined) {
+      logger.contract.error('Cannot submit registration - fee quote unavailable', {
+        registeree,
+      });
+      setLocalError('Unable to determine registration fee. Please try again.');
       return;
     }
 
@@ -254,13 +265,18 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         chainId={chainId}
         onSubmit={handleSubmit}
         onRetry={handleRetry}
-        disabled={!isCorrectWallet}
+        disabled={!isCorrectWallet || !isFeeReady}
       />
 
-      {/* Disabled state message when wrong wallet */}
-      {!isCorrectWallet && getStatus() === 'idle' && (
+      {/* Disabled state messages */}
+      {getStatus() === 'idle' && !isCorrectWallet && (
         <p className="text-sm text-muted-foreground text-center">
           Switch to the correct wallet above to submit the transaction.
+        </p>
+      )}
+      {getStatus() === 'idle' && isCorrectWallet && !isFeeReady && (
+        <p className="text-sm text-muted-foreground text-center">
+          {isFeeLoading ? 'Loading fee quote...' : 'Unable to fetch fee. Please try again.'}
         </p>
       )}
     </div>

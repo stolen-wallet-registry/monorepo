@@ -98,8 +98,12 @@ export function useGasEstimate({
   try {
     contractAddress = getRegistryAddress(chainId);
     registryType = getRegistryType(chainId);
-  } catch {
+  } catch (error) {
     contractAddress = undefined;
+    logger.contract.debug('Failed to resolve registry address', {
+      chainId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;

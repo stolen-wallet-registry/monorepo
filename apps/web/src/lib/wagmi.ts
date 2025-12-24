@@ -38,7 +38,7 @@ export const localhost = anvilHub;
 export const isCrossChainMode = import.meta.env.VITE_CROSSCHAIN === 'true';
 
 // Build chains array based on mode
-const getChains = () => {
+const getChains = (): readonly [Chain, ...Chain[]] => {
   if (isCrossChainMode) {
     return [anvilHub, anvilSpoke, sepolia] as const;
   }

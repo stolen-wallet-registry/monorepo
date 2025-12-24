@@ -267,7 +267,14 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
     }
 
     /// @inheritdoc IStolenWalletRegistry
-    function quoteRegistration(address) external view returns (uint256) {
+    /// @param /* wallet */ Unused on hub chain (kept for spoke interface compatibility where fee may vary)
+    function quoteRegistration(
+        address /* wallet */
+    )
+        external
+        view
+        returns (uint256)
+    {
         // On hub chain, only registration fee applies (no bridge fee)
         if (feeManager == address(0)) {
             return 0;

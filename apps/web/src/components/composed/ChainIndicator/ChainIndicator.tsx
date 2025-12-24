@@ -7,7 +7,8 @@
 
 import { useChainId, useAccount } from 'wagmi';
 import { Badge } from '@swr/ui';
-import { anvilHub, anvilSpoke, isCrossChainMode } from '@/lib/wagmi';
+import { isCrossChainMode } from '@/lib/wagmi';
+import { isHubChain, isSpokeChain } from '@/lib/chains/config';
 import { cn } from '@/lib/utils';
 
 export interface ChainIndicatorProps {
@@ -47,13 +48,13 @@ export function ChainIndicator({ className, forceShow = false }: ChainIndicatorP
   if (!isConnected) {
     return (
       <Badge variant="outline" className={cn('text-muted-foreground', className)}>
-        Not Connected
+        <span aria-label="Wallet connection status">Not Connected</span>
       </Badge>
     );
   }
 
-  // Hub chain
-  if (chainId === anvilHub.id) {
+  // Hub chain (Base mainnet, Base Sepolia, Anvil Hub)
+  if (isHubChain(chainId)) {
     return (
       <Badge variant="default" className={cn('bg-blue-500 hover:bg-blue-600', className)}>
         Hub Chain
@@ -61,8 +62,8 @@ export function ChainIndicator({ className, forceShow = false }: ChainIndicatorP
     );
   }
 
-  // Spoke chain
-  if (chainId === anvilSpoke.id) {
+  // Spoke chain (any non-hub chain)
+  if (isSpokeChain(chainId)) {
     return (
       <Badge
         variant="secondary"
@@ -73,7 +74,7 @@ export function ChainIndicator({ className, forceShow = false }: ChainIndicatorP
     );
   }
 
-  // Unknown chain (e.g., testnet)
+  // Fallback for unknown chains (shouldn't happen since isSpokeChain returns true for non-hub)
   return (
     <Badge variant="outline" className={cn('text-muted-foreground', className)}>
       Chain {chainId}

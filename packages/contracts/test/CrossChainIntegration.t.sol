@@ -318,7 +318,7 @@ contract CrossChainIntegrationTest is Test {
 
         // Try to call handle directly (not from mailbox)
         vm.prank(address(0x999));
-        vm.expectRevert();
+        vm.expectRevert(ICrossChainInbox.CrossChainInbox__OnlyBridge.selector);
         inbox.handle(SPOKE_DOMAIN, sender, messageBody);
     }
 

@@ -84,6 +84,9 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     /// @notice Thrown when a zero address is provided for a required parameter
     error SpokeRegistry__ZeroAddress();
 
+    /// @notice Thrown when hub config has invalid parameter combination
+    error SpokeRegistry__InvalidHubConfig();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
@@ -312,9 +315,15 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Update hub chain configuration
+    /// @dev If hubChainId is non-zero, hubInbox must also be non-zero.
+    ///      To unconfigure, set both to zero: setHubConfig(0, bytes32(0))
     /// @param _hubChainId Hub chain Hyperlane domain ID
     /// @param _hubInbox CrossChainInbox address on hub
     function setHubConfig(uint32 _hubChainId, bytes32 _hubInbox) external onlyOwner {
+        // Validate: if chainId is set, inbox must also be set
+        if (_hubChainId != 0 && _hubInbox == bytes32(0)) {
+            revert SpokeRegistry__InvalidHubConfig();
+        }
         hubChainId = _hubChainId;
         hubInbox = _hubInbox;
         emit HubConfigUpdated(_hubChainId, _hubInbox);

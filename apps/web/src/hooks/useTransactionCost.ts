@@ -130,10 +130,10 @@ export function useTransactionCost({
       step === 'registration' ? Number((feeWei * ethPriceUsdCentsBigInt) / WEI_PER_ETH) : 0;
 
     const protocolFee =
-      step === 'registration' && quoteResult.feeWei
+      step === 'registration' && quoteResult.feeWei != null
         ? {
             wei: quoteResult.feeWei,
-            eth: quoteResult.feeEth!,
+            eth: quoteResult.feeEth ?? formatEther(quoteResult.feeWei),
             usd: formatCentsToUsd(protocolFeeUsdCents),
           }
         : null;

@@ -30,5 +30,6 @@ export function getHubChainId(chainId: number): number | undefined {
   if (chainId === 31338) return 31337; // Anvil Spoke → Anvil Hub
 
   // Unknown spoke - default to Base mainnet
+  console.warn(`[chains/config] Unknown spoke chain ${chainId}, defaulting to Base mainnet`);
   return 8453;
 }

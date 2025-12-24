@@ -1,5 +1,5 @@
 import type { Address } from '@/lib/types/ethereum';
-import { localhost, anvilHub } from '@/lib/wagmi';
+import { anvilHub } from '@/lib/wagmi';
 import { sepolia } from 'wagmi/chains';
 import { isSpokeChain, getSpokeAddress } from './crosschain-addresses';
 
@@ -7,18 +7,15 @@ import { isSpokeChain, getSpokeAddress } from './crosschain-addresses';
 // After running deploy script, update these addresses accordingly
 export const CONTRACT_ADDRESSES = {
   stolenWalletRegistry: {
-    [localhost.id]: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as Address, // Fourth deployed
-    [anvilHub.id]: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as Address, // Same as localhost for hub
+    [anvilHub.id]: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as Address, // Fourth deployed
     [sepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
   },
   feeManager: {
-    [localhost.id]: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address, // Second deployed
-    [anvilHub.id]: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address,
+    [anvilHub.id]: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address, // Second deployed
     [sepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
   },
   registryHub: {
-    [localhost.id]: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' as Address, // Third deployed
-    [anvilHub.id]: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' as Address,
+    [anvilHub.id]: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' as Address, // Third deployed
     [sepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;
@@ -29,7 +26,7 @@ export type ContractName = keyof typeof CONTRACT_ADDRESSES;
 export function getContractAddress(contract: ContractName, chainId: number): Address {
   // Check for env override first (registry only for backward compat)
   if (contract === 'stolenWalletRegistry') {
-    if (chainId === localhost.id && import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST) {
+    if (chainId === anvilHub.id && import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST) {
       return import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST as Address;
     }
     if (chainId === sepolia.id && import.meta.env.VITE_CONTRACT_ADDRESS_SEPOLIA) {

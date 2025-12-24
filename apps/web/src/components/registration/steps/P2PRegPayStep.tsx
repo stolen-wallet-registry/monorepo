@@ -86,6 +86,13 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       return;
     }
 
+    if (feeWei === undefined) {
+      logger.p2p.error('Cannot submit registration - fee quote unavailable', {
+        registeree,
+      });
+      return;
+    }
+
     logger.p2p.info('Relayer submitting REG transaction');
 
     // Parse signature to v, r, s components

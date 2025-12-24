@@ -29,7 +29,7 @@ export interface UseQuoteRegistrationResult {
  * @param ownerAddress - The wallet being registered (needed for nonce in quote)
  */
 export function useQuoteRegistration(
-  ownerAddress: Address | undefined
+  ownerAddress: Address | null | undefined
 ): UseQuoteRegistrationResult {
   const chainId = useChainId();
 
@@ -44,13 +44,16 @@ export function useQuoteRegistration(
 
   const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
 
+  // Convert null to undefined for wagmi compatibility
+  const normalizedAddress = ownerAddress ?? undefined;
+
   const result = useReadContract({
     address: contractAddress,
     abi,
     functionName: 'quoteRegistration',
-    args: ownerAddress ? [ownerAddress] : undefined,
+    args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {
-      enabled: !!ownerAddress && !!contractAddress,
+      enabled: !!normalizedAddress && !!contractAddress,
       staleTime: 30_000, // 30 seconds
     },
   });
