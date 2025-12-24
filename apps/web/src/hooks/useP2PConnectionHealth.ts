@@ -8,13 +8,13 @@
  */
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import type { Libp2p, Connection } from '@libp2p/interface';
-import type { Ping } from '@libp2p/ping';
-import { peerIdFromString } from '@libp2p/peer-id';
+import type { Libp2p } from '@libp2p/interface';
 
 import { logger } from '@/lib/logger';
 import { getRelayServers, extractPeerIdFromMultiaddr } from '@/lib/p2p/types';
 import { useP2PStore } from '@/stores/p2pStore';
+import { checkRelayConnection, checkPeerConnection } from '@/hooks/p2pConnectionHealthChecks';
+import { computeHealthUpdate } from '@/hooks/p2pConnectionHealthState';
 
 /** Health check interval in milliseconds (30 seconds) */
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
@@ -151,88 +151,10 @@ export function useP2PConnectionHealth({
     }
   }, []);
 
-  // Check if connected to any relay server
-  const checkRelayConnection = useCallback(
-    (connections: Connection[]): { connected: boolean; latency: number | null } => {
-      if (!relayPeerIds.length) {
-        return { connected: false, latency: null };
-      }
-
-      // Check if we have an open connection to any relay
-      const relayConnection = connections.find((conn) =>
-        relayPeerIds.some((relayId) => conn.remotePeer.toString() === relayId)
-      );
-
-      if (relayConnection && relayConnection.status === 'open') {
-        return { connected: true, latency: null };
-      }
-
-      return { connected: false, latency: null };
-    },
-    [relayPeerIds]
-  );
-
-  // Check peer connection with ping
-  const checkPeerConnection = useCallback(
-    async (
-      node: Libp2p,
-      peerId: string
-    ): Promise<{ connected: boolean; latency: number | null }> => {
-      try {
-        const parsedPeerId = peerIdFromString(peerId);
-        const pingService = (node.services as { ping?: Ping }).ping;
-
-        if (!pingService) {
-          logger.p2p.warn('Ping service not available for health check');
-          return { connected: false, latency: null };
-        }
-
-        const startTime = performance.now();
-        await pingService.ping(parsedPeerId);
-        const latency = Math.round(performance.now() - startTime);
-
-        return { connected: true, latency };
-      } catch {
-        return { connected: false, latency: null };
-      }
-    },
-    []
-  );
-
-  // Compute overall status from individual checks
-  const computeStatus = useCallback(
-    (
-      relayConnected: boolean,
-      peerConnected: boolean,
-      relayLatency: number | null,
-      peerLatency: number | null
-    ): ConnectionStatus => {
-      // Disconnected if relay is down (can't communicate at all)
-      if (!relayConnected) {
-        return 'disconnected';
-      }
-
-      // If we're supposed to have a peer, check peer status
-      if (remotePeerId) {
-        if (!peerConnected) {
-          return 'disconnected';
-        }
-
-        // Check for high latency (degraded)
-        if (peerLatency && peerLatency > DEGRADED_LATENCY_MS) {
-          return 'degraded';
-        }
-      }
-
-      // Check relay latency
-      if (relayLatency && relayLatency > DEGRADED_LATENCY_MS) {
-        return 'degraded';
-      }
-
-      return 'healthy';
-    },
-    [remotePeerId]
-  );
+  const relayIdsRef = useRef(relayPeerIds);
+  useEffect(() => {
+    relayIdsRef.current = relayPeerIds;
+  }, [relayPeerIds]);
 
   // Main health check function
   const checkHealth = useCallback(async (): Promise<void> => {
@@ -253,7 +175,7 @@ export function useP2PConnectionHealth({
       const connections = libp2p.getConnections();
 
       // Check relay connection
-      const relayResult = checkRelayConnection(connections);
+      const relayResult = checkRelayConnection(connections, relayIdsRef.current);
 
       // Check peer connection if peer ID provided
       let peerResult = { connected: false, latency: null as number | null };
@@ -268,39 +190,43 @@ export function useP2PConnectionHealth({
       pendingStoreUpdateRef.current = false;
 
       setHealth((prev) => {
-        // Store says connected if we recently sent/received data successfully
-        // This overrides ping failures since actual message passing proves connectivity
-        // If peer is connected via message pass, relay must also be working since
-        // circuit relay routes all messages through the relay server
-        const effectiveRelayConnected = relayResult.connected || storeConnectedToPeer;
-        const effectivePeerConnected = peerResult.connected || storeConnectedToPeer;
-
-        const newRelayFailures = effectiveRelayConnected ? 0 : prev.relayFailures + 1;
-        // Always track ping failures - we need to detect disconnect even if store says connected
-        // The store provides "benefit of doubt" for UI status, but doesn't prevent failure detection
-        const newPeerFailures = peerResult.connected ? 0 : prev.peerFailures + 1;
-
-        // Determine if we should fire disconnection callbacks
-        // Only fire after consecutive failures, not on first check
-        const relayDisconnected = newRelayFailures >= MAX_FAILURES_BEFORE_DISCONNECT;
-        const peerDisconnected = remotePeerId && newPeerFailures >= MAX_FAILURES_BEFORE_DISCONNECT;
+        const update = computeHealthUpdate({
+          prev,
+          relay: relayResult,
+          peer: peerResult,
+          storeConnectedToPeer,
+          hasRemotePeer: !!remotePeerId,
+          now: Date.now(),
+          maxFailuresBeforeDisconnect: MAX_FAILURES_BEFORE_DISCONNECT,
+          degradedLatencyMs: DEGRADED_LATENCY_MS,
+        });
 
         // Fire callbacks once per disconnection event (only if we had a connection before)
         // Note: Using setTimeout to defer side effects outside the updater
         // Timeouts are tracked in disconnectTimeoutsRef for cleanup on unmount
-        if (relayDisconnected && !relayDisconnectedFiredRef.current && prev.lastCheckAt !== null) {
+        if (
+          update.relayDisconnected &&
+          !relayDisconnectedFiredRef.current &&
+          prev.lastCheckAt !== null
+        ) {
           relayDisconnectedFiredRef.current = true;
-          logger.p2p.info('Relay disconnect detected', { relayFailures: newRelayFailures });
+          logger.p2p.info('Relay disconnect detected', {
+            relayFailures: update.next.relayFailures,
+          });
           const timeoutId = setTimeout(() => {
             disconnectTimeoutsRef.current.delete(timeoutId);
             onRelayDisconnectedRef.current?.();
           }, 0);
           disconnectTimeoutsRef.current.add(timeoutId);
         }
-        if (peerDisconnected && !peerDisconnectedFiredRef.current && prev.lastCheckAt !== null) {
+        if (
+          update.peerDisconnected &&
+          !peerDisconnectedFiredRef.current &&
+          prev.lastCheckAt !== null
+        ) {
           peerDisconnectedFiredRef.current = true;
           logger.p2p.info('Peer disconnect detected after consecutive ping failures', {
-            peerFailures: newPeerFailures,
+            peerFailures: update.next.peerFailures,
             remotePeerId,
           });
           const timeoutId = setTimeout(() => {
@@ -313,30 +239,14 @@ export function useP2PConnectionHealth({
         }
 
         // Reset fired flags if reconnected
-        if (effectiveRelayConnected) {
+        if (update.resetRelayDisconnectedFlag) {
           relayDisconnectedFiredRef.current = false;
         }
-        if (effectivePeerConnected) {
+        if (update.resetPeerDisconnectedFlag) {
           peerDisconnectedFiredRef.current = false;
         }
 
-        const status = computeStatus(
-          effectiveRelayConnected,
-          effectivePeerConnected,
-          relayResult.latency,
-          peerResult.latency
-        );
-
-        return {
-          relayConnected: effectiveRelayConnected,
-          peerConnected: effectivePeerConnected,
-          lastRelayPing: relayResult.latency,
-          lastPeerPing: peerResult.latency,
-          status,
-          relayFailures: newRelayFailures,
-          peerFailures: newPeerFailures,
-          lastCheckAt: Date.now(),
-        };
+        return update.next;
       });
 
       // Execute side effects after setState completes
@@ -356,13 +266,7 @@ export function useP2PConnectionHealth({
       isCheckingRef.current = false;
       setIsChecking(false);
     }
-  }, [
-    remotePeerId,
-    checkRelayConnection,
-    checkPeerConnection,
-    computeStatus,
-    storeConnectedToPeer,
-  ]);
+  }, [remotePeerId, storeConnectedToPeer]);
 
   // Use ref for checkHealth to avoid effect re-runs
   const checkHealthRef = useRef(checkHealth);

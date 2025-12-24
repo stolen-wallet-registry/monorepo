@@ -20,7 +20,7 @@ export function isSpokeChain(chainId: number): boolean {
   return !isHubChain(chainId);
 }
 
-/** Get the hub chain ID for any spoke. Returns undefined if already on hub. */
+/** Get the hub chain ID for any spoke. Returns undefined if already on hub or unknown. */
 export function getHubChainId(chainId: number): number | undefined {
   if (isHubChain(chainId)) return undefined;
 
@@ -29,7 +29,7 @@ export function getHubChainId(chainId: number): number | undefined {
   if (chainId === 11155420) return 84532; // Optimism Sepolia → Base Sepolia
   if (chainId === 31338) return 31337; // Anvil Spoke → Anvil Hub
 
-  // Unknown spoke - default to Base mainnet
-  console.warn(`[chains/config] Unknown spoke chain ${chainId}, defaulting to Base mainnet`);
-  return 8453;
+  // Unknown spoke - callers must handle explicitly
+  console.warn(`[chains/config] Unknown spoke chain ${chainId}, no hub mapping found`);
+  return undefined;
 }

@@ -12,6 +12,7 @@ import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis'
 import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
 import { SIGNATURE_STEP, type SignatureStep } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
+import { logger } from '@/lib/logger';
 
 export interface HashStructData {
   deadline: bigint;
@@ -44,8 +45,19 @@ export function useGenerateHashStruct(
   try {
     contractAddress = getRegistryAddress(chainId);
     registryType = getRegistryType(chainId);
-  } catch {
+    logger.contract.debug('Registry address resolved for hash struct', {
+      chainId,
+      contractAddress,
+      registryType,
+      step,
+    });
+  } catch (error) {
     contractAddress = undefined;
+    logger.contract.error('Failed to resolve registry address for hash struct', {
+      chainId,
+      step,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   // Both contracts have identical generateHashStruct() function after normalization
@@ -63,6 +75,24 @@ export function useGenerateHashStruct(
       staleTime: 10_000, // 10 seconds
     },
   });
+
+  // Log contract read result for debugging
+  if (result.isError) {
+    logger.contract.error('generateHashStruct call failed', {
+      chainId,
+      contractAddress,
+      registryType,
+      forwarderAddress,
+      step,
+      error: result.error?.message,
+    });
+  } else if (result.data) {
+    logger.contract.debug('generateHashStruct call succeeded', {
+      chainId,
+      contractAddress,
+      deadline: result.data[0]?.toString(),
+    });
+  }
 
   // Transform the raw array result into a typed object
   const transformedData: HashStructData | undefined = result.data

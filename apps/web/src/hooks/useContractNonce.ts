@@ -11,6 +11,7 @@ import { useReadContract, useChainId, type UseReadContractReturnType } from 'wag
 import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
 import type { Address } from '@/lib/types/ethereum';
+import { logger } from '@/lib/logger';
 
 export interface UseContractNonceResult {
   nonce: bigint | undefined;
@@ -34,8 +35,19 @@ export function useContractNonce(ownerAddress: Address | undefined): UseContract
   try {
     contractAddress = getRegistryAddress(chainId);
     registryType = getRegistryType(chainId);
-  } catch {
+    logger.contract.debug('Registry address resolved for nonce', {
+      chainId,
+      contractAddress,
+      registryType,
+      ownerAddress,
+    });
+  } catch (error) {
     contractAddress = undefined;
+    logger.contract.error('Failed to resolve registry address for nonce', {
+      chainId,
+      ownerAddress,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   // Both contracts have identical nonces() function
