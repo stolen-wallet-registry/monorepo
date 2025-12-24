@@ -12,6 +12,7 @@ import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis'
 import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
 import type { ParsedSignature } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
+import { logger } from '@/lib/logger';
 
 export interface RegistrationParams {
   deadline: bigint;
@@ -54,8 +55,17 @@ export function useRegistration(): UseRegistrationResult {
   try {
     contractAddress = getRegistryAddress(chainId);
     registryType = getRegistryType(chainId);
-  } catch {
+    logger.contract.debug('useRegistration: Registry address resolved', {
+      chainId,
+      contractAddress,
+      registryType,
+    });
+  } catch (error) {
     contractAddress = undefined;
+    logger.contract.error('useRegistration: Failed to resolve registry address', {
+      chainId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   const {
@@ -78,6 +88,7 @@ export function useRegistration(): UseRegistrationResult {
 
   const submitRegistration = async (params: RegistrationParams): Promise<Hash> => {
     if (!contractAddress) {
+      logger.contract.error('useRegistration: No contract address configured', { chainId });
       throw new Error('Contract not configured for this chain');
     }
 
@@ -87,15 +98,43 @@ export function useRegistration(): UseRegistrationResult {
     const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
     const functionName = registryType === 'spoke' ? 'registerLocal' : 'register';
 
-    const txHash = await writeContractAsync({
-      address: contractAddress,
-      abi,
+    logger.registration.info('Submitting registration transaction', {
+      chainId,
+      registryType,
+      contractAddress,
       functionName,
-      args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
-      value: feeWei ?? 0n,
+      registeree,
+      deadline: deadline.toString(),
+      nonce: nonce.toString(),
+      feeWei: feeWei?.toString() ?? '0',
     });
 
-    return txHash;
+    try {
+      const txHash = await writeContractAsync({
+        address: contractAddress,
+        abi,
+        functionName,
+        args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
+        value: feeWei ?? 0n,
+      });
+
+      logger.registration.info('Registration transaction submitted', {
+        txHash,
+        registeree,
+        chainId,
+        registryType,
+      });
+
+      return txHash;
+    } catch (error) {
+      logger.registration.error('Registration transaction failed', {
+        chainId,
+        registeree,
+        registryType,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   };
 
   return {

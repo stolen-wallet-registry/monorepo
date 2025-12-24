@@ -56,9 +56,19 @@ export function useContractDeadlines(
   try {
     contractAddress = getRegistryAddress(chainId);
     registryType = getRegistryType(chainId);
-  } catch {
-    // Contract not configured for this chain
+    logger.contract.debug('useContractDeadlines: Registry address resolved', {
+      chainId,
+      contractAddress,
+      registryType,
+      registereeAddress,
+    });
+  } catch (error) {
     contractAddress = undefined;
+    logger.contract.error('useContractDeadlines: Failed to resolve registry address', {
+      chainId,
+      registereeAddress,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   // Both contracts have identical getDeadlines() function after normalization

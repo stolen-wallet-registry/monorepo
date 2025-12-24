@@ -12,6 +12,7 @@ import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis'
 import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
 import type { ParsedSignature } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
+import { logger } from '@/lib/logger';
 
 export interface AcknowledgementParams {
   deadline: bigint;
@@ -54,8 +55,17 @@ export function useAcknowledgement(): UseAcknowledgementResult {
   try {
     contractAddress = getRegistryAddress(chainId);
     registryType = getRegistryType(chainId);
-  } catch {
+    logger.contract.debug('useAcknowledgement: Registry address resolved', {
+      chainId,
+      contractAddress,
+      registryType,
+    });
+  } catch (error) {
     contractAddress = undefined;
+    logger.contract.error('useAcknowledgement: Failed to resolve registry address', {
+      chainId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   const {
@@ -78,6 +88,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
 
   const submitAcknowledgement = async (params: AcknowledgementParams): Promise<Hash> => {
     if (!contractAddress) {
+      logger.contract.error('useAcknowledgement: No contract address configured', { chainId });
       throw new Error('Contract not configured for this chain');
     }
 
@@ -87,15 +98,41 @@ export function useAcknowledgement(): UseAcknowledgementResult {
     const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
     const functionName = registryType === 'spoke' ? 'acknowledgeLocal' : 'acknowledge';
 
-    const txHash = await writeContractAsync({
-      address: contractAddress,
-      abi,
+    logger.registration.info('Submitting acknowledgement transaction', {
+      chainId,
+      registryType,
+      contractAddress,
       functionName,
-      args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
-      value: feeWei ?? 0n,
+      registeree,
+      deadline: deadline.toString(),
+      nonce: nonce.toString(),
+      feeWei: feeWei?.toString() ?? '0',
     });
 
-    return txHash;
+    try {
+      const txHash = await writeContractAsync({
+        address: contractAddress,
+        abi,
+        functionName,
+        args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
+        value: feeWei ?? 0n,
+      });
+
+      logger.registration.info('Acknowledgement transaction submitted', {
+        txHash,
+        registeree,
+        chainId,
+      });
+
+      return txHash;
+    } catch (error) {
+      logger.registration.error('Acknowledgement transaction failed', {
+        chainId,
+        registeree,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   };
 
   return {
