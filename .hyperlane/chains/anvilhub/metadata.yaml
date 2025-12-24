@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../schema.json
+blocks:
+  confirmations: 1
+  estimateBlockTime: 5
+  reorgPeriod: 1
+chainId: 31337
+displayName: AnvilHub
+domainId: 31337
+isTestnet: true
+name: anvilhub
+nativeToken:
+  decimals: 18
+  name: Ether
+  symbol: ETH
+protocol: ethereum
+rpcUrls:
+  - http: http://localhost:8545
+technicalStack: opstack
