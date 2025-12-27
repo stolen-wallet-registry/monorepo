@@ -3,6 +3,9 @@
  *
  * Local addresses come from `pnpm deploy:crosschain`.
  * Testnet/mainnet addresses added after deployment.
+ *
+ * IMPORTANT: These are deterministic addresses based on Account 0 nonces.
+ * Hyperlane infrastructure is deployed by Account 9 (separate nonce space).
  */
 
 import type { Address } from '@/lib/types/ethereum';
@@ -13,48 +16,74 @@ export { isHubChain, isSpokeChain, getHubChainId } from '@/lib/chains/config';
 import { isSpokeChain } from '@/lib/chains/config';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CROSS-CHAIN CONTRACT ADDRESSES
+// HYPERLANE INFRASTRUCTURE (deployed by Account 9 via `hyperlane core deploy`)
 // ═══════════════════════════════════════════════════════════════════════════
-// Hub cross-chain contracts (deployed AFTER core contracts):
-//   5: MockMailbox       → 0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6
-//   6: CrossChainInbox   → 0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
+// These addresses come from .hyperlane/chains/*/addresses.yaml
+// Pre-loaded in anvil state via `pnpm anvil:crosschain`
 //
-// Spoke contracts:
-//   0: MockMailbox       → 0x5FbDB2315678afecb367f032d93F642f64180aa3
-//   1: MockGasPaymaster  → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-//   2: HyperlaneAdapter  → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
-//   3: (setDomainSupport tx)
-//   4: MockAggregator    → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
-//   5: FeeManager        → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
-//   6: SpokeRegistry     → 0x0165878A594ca255338adfa4d48449f69242Eb8F
+// Account 9: 0xa0Ee7A142d267C1f36714E4a8F75612F20a79720
+// Private Key: 0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6
+//
+// Mailbox addresses will be populated after running Hyperlane setup.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Hub chain cross-chain contracts (deployed after core) */
-export const HUB_CROSSCHAIN_ADDRESSES = {
-  mockMailbox: {
-    [anvilHub.id]: '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6' as Address,
-  },
-  crossChainInbox: {
-    [anvilHub.id]: '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318' as Address,
+/** Hyperlane Mailbox addresses (from Hyperlane CLI deployment with Account 9) */
+export const HYPERLANE_ADDRESSES = {
+  mailbox: {
+    [anvilHub.id]: '0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84' as Address,
+    [anvilSpoke.id]: '0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84' as Address,
   },
 } as const;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// HUB CHAIN CONTRACTS (31337) - Account 0 nonces
+// ═══════════════════════════════════════════════════════════════════════════
+// Deployed via `pnpm deploy:crosschain` using Account 0
+//
+// Nonce order:
+//   0: MockAggregator       → 0x5FbDB2315678afecb367f032d93F642f64180aa3
+//   1: FeeManager           → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+//   2: RegistryHub          → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+//   3: StolenWalletRegistry → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+//   4: (setRegistry tx)
+//   5: CrossChainInbox      → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
+//   6: (setCrossChainInbox tx)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Hub chain cross-chain contracts */
+export const HUB_CROSSCHAIN_ADDRESSES = {
+  crossChainInbox: {
+    [anvilHub.id]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
+  },
+} as const;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SPOKE CHAIN CONTRACTS (31338) - Account 0 nonces
+// ═══════════════════════════════════════════════════════════════════════════
+// Deployed via `pnpm deploy:crosschain` using Account 0
+//
+// Nonce order:
+//   0: MockGasPaymaster     → 0x5FbDB2315678afecb367f032d93F642f64180aa3
+//   1: HyperlaneAdapter     → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+//   2: (setDomainSupport tx)
+//   3: MockAggregator       → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+//   4: FeeManager           → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
+//   5: SpokeRegistry        → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
+// ═══════════════════════════════════════════════════════════════════════════
+
 /** Spoke chain contracts */
 export const SPOKE_ADDRESSES = {
-  mockMailbox: {
+  mockGasPaymaster: {
     [anvilSpoke.id]: '0x5FbDB2315678afecb367f032d93F642f64180aa3' as Address,
   },
-  mockGasPaymaster: {
+  hyperlaneAdapter: {
     [anvilSpoke.id]: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address,
   },
-  hyperlaneAdapter: {
-    [anvilSpoke.id]: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' as Address,
-  },
   feeManager: {
-    [anvilSpoke.id]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
+    [anvilSpoke.id]: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9' as Address,
   },
   spokeRegistry: {
-    [anvilSpoke.id]: '0x0165878A594ca255338adfa4d48449f69242Eb8F' as Address,
+    [anvilSpoke.id]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
   },
 } as const;
 
@@ -74,4 +103,14 @@ export function getSpokeAddress(contract: keyof typeof SPOKE_ADDRESSES, chainId:
 export function getSpokeRegistryAddress(chainId: number): Address | null {
   if (!isSpokeChain(chainId)) return null;
   return getSpokeAddress('spokeRegistry', chainId);
+}
+
+export function getHyperlaneMailbox(chainId: number): Address {
+  const address = HYPERLANE_ADDRESSES.mailbox[chainId as keyof typeof HYPERLANE_ADDRESSES.mailbox];
+  if (!address || address === '0x0000000000000000000000000000000000000000') {
+    throw new Error(
+      `Hyperlane Mailbox not configured for chain ID ${chainId}. Run Hyperlane setup first.`
+    );
+  }
+  return address;
 }
