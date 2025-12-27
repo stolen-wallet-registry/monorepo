@@ -267,9 +267,12 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
     }
 
     /// @inheritdoc IStolenWalletRegistry
-    /// @param /* wallet */ Unused on hub chain (kept for spoke interface compatibility where fee may vary)
+    /// @notice Returns the registration fee for a wallet.
+    /// @dev The wallet parameter is unused on hub chain but required for interface
+    ///      compatibility with SpokeRegistry where fees may vary per-wallet (due to
+    ///      nonce-dependent message size affecting bridge costs).
     function quoteRegistration(
-        address /* wallet */
+        address /* wallet - unused on hub, required for spoke interface */
     )
         external
         view

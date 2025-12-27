@@ -92,7 +92,8 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @param _owner Contract owner
-    /// @param _bridgeAdapter Bridge adapter address for cross-chain messaging
+    /// @param _bridgeAdapter Bridge adapter address for cross-chain messaging.
+    ///        Must implement IBridgeAdapter. Validated at runtime on first message send.
     /// @param _feeManager Fee manager address (address(0) for free registrations)
     /// @param _hubChainId Hub chain Hyperlane domain ID
     /// @param _hubInbox CrossChainInbox address on hub
@@ -100,6 +101,8 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         EIP712("StolenWalletRegistry", "4")
         Ownable(_owner)
     {
+        // Note: We validate non-zero here but defer interface validation to runtime.
+        // This avoids constructor complexity while still failing fast on first use.
         if (_bridgeAdapter == address(0)) revert SpokeRegistry__ZeroAddress();
         spokeChainId = uint32(block.chainid);
         bridgeAdapter = _bridgeAdapter;

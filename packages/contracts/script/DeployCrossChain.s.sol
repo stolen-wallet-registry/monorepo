@@ -78,8 +78,11 @@ contract DeployCrossChain is DeployBase {
         address deployer = vm.addr(deployerPrivateKey);
 
         // Read Hyperlane Mailbox addresses from environment
+        // These must be set in packages/contracts/.env after running hyperlane:deploy
         address hubMailbox = vm.envAddress("HUB_MAILBOX");
+        require(hubMailbox != address(0), "HUB_MAILBOX env var must be set to a non-zero address");
         address spokeMailbox = vm.envAddress("SPOKE_MAILBOX");
+        require(spokeMailbox != address(0), "SPOKE_MAILBOX env var must be set to a non-zero address");
 
         console2.log("=== CROSS-CHAIN DEPLOYMENT (Real Hyperlane) ===");
         console2.log("Deployer:", deployer);
@@ -153,9 +156,8 @@ contract DeployCrossChain is DeployBase {
 
         // nonce 5: Deploy SpokeRegistry
         bytes32 hubInboxBytes = CrossChainMessage.addressToBytes32(crossChainInbox);
-        spokeRegistry = address(
-            new SpokeRegistry(deployer, hyperlaneAdapter, spokeFeeManager, HUB_CHAIN_ID, hubInboxBytes)
-        );
+        spokeRegistry =
+            address(new SpokeRegistry(deployer, hyperlaneAdapter, spokeFeeManager, HUB_CHAIN_ID, hubInboxBytes));
         console2.log("SpokeRegistry:", spokeRegistry);
 
         vm.stopBroadcast();

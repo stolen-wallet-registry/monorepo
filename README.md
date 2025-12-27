@@ -100,16 +100,19 @@ Import the default Anvil account for testing:
 
 For testing the full cross-chain registration flow where users register on a spoke chain and messages relay to the hub chain.
 
-**Terminal 1: Start Both Anvil Nodes**
+**Terminal 1: Start Both Anvil Nodes + Hyperlane Relayer**
 
 ```bash
 pnpm anvil:crosschain
 ```
 
-This starts two Anvil instances:
+This starts:
 
-- **Hub** (blue): localhost:8545, chain ID 31337
-- **Spoke** (green): localhost:8546, chain ID 31338
+- **Hub** (blue): localhost:8545, chain ID 31337 — loads Hyperlane state
+- **Spoke** (green): localhost:8546, chain ID 31338 — loads Hyperlane state
+- **Relayer** (yellow): Hyperlane message relayer between chains
+
+The Hyperlane infrastructure is pre-loaded from `.anvil-state/` (see "Saving Dev State" section).
 
 **Terminal 2: Deploy Cross-Chain Contracts**
 
@@ -119,16 +122,27 @@ pnpm deploy:crosschain
 
 Deploys to both chains:
 
-| Chain         | Contract                   | Address                                    |
-| ------------- | -------------------------- | ------------------------------------------ |
-| Hub (31337)   | MockMailbox                | 0x5FbDB2315678afecb367f032d93F642f64180aa3 |
-| Hub (31337)   | RegistryHub                | 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 |
-| Hub (31337)   | StolenWalletRegistry       | 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 |
-| Hub (31337)   | CrossChainInbox            | 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 |
-| Spoke (31338) | MockMailbox                | 0x5FbDB2315678afecb367f032d93F642f64180aa3 |
-| Spoke (31338) | MockInterchainGasPaymaster | 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 |
-| Spoke (31338) | HyperlaneAdapter           | 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 |
-| Spoke (31338) | SpokeRegistry              | 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 |
+**Hyperlane Infrastructure (pre-loaded in state):**
+
+| Chain         | Contract | Address                                    |
+| ------------- | -------- | ------------------------------------------ |
+| Hub (31337)   | Mailbox  | 0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84 |
+| Spoke (31338) | Mailbox  | 0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84 |
+
+**Our Contracts (deployed fresh each time):**
+
+| Chain         | Contract             | Address                                    |
+| ------------- | -------------------- | ------------------------------------------ |
+| Hub (31337)   | MockAggregator       | 0x5FbDB2315678afecb367f032d93F642f64180aa3 |
+| Hub (31337)   | FeeManager           | 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 |
+| Hub (31337)   | RegistryHub          | 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 |
+| Hub (31337)   | StolenWalletRegistry | 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 |
+| Hub (31337)   | CrossChainInbox      | 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707 |
+| Spoke (31338) | MockGasPaymaster     | 0x5FbDB2315678afecb367f032d93F642f64180aa3 |
+| Spoke (31338) | HyperlaneAdapter     | 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 |
+| Spoke (31338) | MockAggregator       | 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 |
+| Spoke (31338) | FeeManager           | 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 |
+| Spoke (31338) | SpokeRegistry        | 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707 |
 
 **Terminal 3: Start Frontend (Cross-Chain Mode)**
 
@@ -166,6 +180,42 @@ The same Anvil private key works on both chains (both have 10,000 ETH):
 2. Register a stolen wallet via SpokeRegistry
 3. The Hyperlane relayer delivers the message to Hub
 4. Switch to **Hub Chain** (31337) to verify registration
+
+---
+
+### Saving Dev State (One-Time Setup)
+
+For external infrastructure like Hyperlane that doesn't change, you can save anvil state to avoid redeploying every time. This is useful when you want to iterate on your own contracts while keeping external dependencies stable.
+
+**How it works:**
+
+1. Start anvil with `--dump-state` flag (saves JSON state on exit)
+2. Deploy external contracts (e.g., Hyperlane)
+3. Ctrl+C to exit anvil (state saves automatically)
+4. Future runs use `--load-state` to restore
+
+**Example: Setting up Hyperlane state**
+
+```bash
+# Terminal 1 - Hub (saves state on exit)
+mkdir -p .anvil-state
+anvil --port 8545 --chain-id 31337 --block-time 12 --dump-state .anvil-state/hub.json
+
+# Terminal 2 - Spoke (saves state on exit)
+anvil --port 8546 --chain-id 31338 --block-time 12 --dump-state .anvil-state/spoke.json
+```
+
+Deploy your external contracts, then Ctrl+C both anvil processes. State files are saved to `.anvil-state/`.
+
+**Loading saved state:**
+
+```bash
+anvil --port 8545 --chain-id 31337 --block-time 12 --load-state .anvil-state/hub.json
+```
+
+The `--load-state` flag loads the saved state but does NOT save on exit, so your own contract deployments won't pollute the base state.
+
+**Important:** Do NOT use the `anvil_dumpState` RPC method—it produces hex-encoded gzip which is incompatible with `--load-state`. Always use the `--dump-state` CLI flag.
 
 ---
 

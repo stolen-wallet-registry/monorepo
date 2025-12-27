@@ -122,6 +122,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
         txHash,
         registeree,
         chainId,
+        registryType,
       });
 
       return txHash;

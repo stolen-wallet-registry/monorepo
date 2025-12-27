@@ -23,6 +23,8 @@ import { isSpokeChain } from '@/lib/chains/config';
 //
 // Account 9: 0xa0Ee7A142d267C1f36714E4a8F75612F20a79720
 // Private Key: 0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6
+// ⚠️  PUBLIC Anvil test key - DO NOT use in production!
+// See: https://book.getfoundry.sh/reference/anvil/
 //
 // Mailbox addresses will be populated after running Hyperlane setup.
 // ═══════════════════════════════════════════════════════════════════════════

@@ -167,6 +167,7 @@ export function useGasEstimate({
   const refetch = () => {
     refetchEstimate();
     refetchPrice();
+    ethPrice.refetch();
   };
 
   // Transform data into GasEstimate

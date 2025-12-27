@@ -88,9 +88,12 @@ export function useQuoteRegistration(
     });
   }
 
+  // Runtime validation - contract may return unexpected types
+  const feeWei = typeof result.data === 'bigint' ? result.data : undefined;
+
   return {
-    feeWei: result.data as bigint | undefined,
-    feeEth: result.data ? formatEther(result.data as bigint) : undefined,
+    feeWei,
+    feeEth: feeWei !== undefined ? formatEther(feeWei) : undefined,
     isLoading: result.isLoading,
     isError: result.isError,
     error: result.error,

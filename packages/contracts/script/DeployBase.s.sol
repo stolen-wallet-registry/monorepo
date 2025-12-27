@@ -88,6 +88,12 @@ contract MockAggregator {
         updatedAt = block.timestamp;
     }
 
+    /// @notice Update the mock price (useful for testing price changes)
+    function setPrice(int256 _price) external {
+        price = _price;
+        updatedAt = block.timestamp;
+    }
+
     function latestRoundData()
         external
         view

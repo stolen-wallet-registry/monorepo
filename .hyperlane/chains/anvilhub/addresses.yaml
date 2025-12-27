@@ -1,3 +1,11 @@
+# Hyperlane infrastructure addresses for AnvilHub local test chain
+# Generated from: hyperlane core deploy (via pnpm hyperlane:deploy)
+# Deployer: Account 9 (0xa0Ee7A142d267C1f36714E4a8F75612F20a79720)
+# Chain ID: 31337 (Hyperlane domain: 31337)
+#
+# These addresses are pre-loaded in anvil state via `pnpm anvil:crosschain`
+# Regenerate by running hyperlane:deploy after starting fresh anvil nodes
+
 domainRoutingIsmFactory: "0xe1Aa25618fA0c7A1CFDab5d6B456af611873b629"
 interchainAccountRouter: "0x2a264F26859166C5BF3868A54593eE716AeBC848"
 mailbox: "0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84"

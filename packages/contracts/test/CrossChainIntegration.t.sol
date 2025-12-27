@@ -42,7 +42,11 @@ contract CrossChainIntegrationTest is Test {
     address owner = address(0x1);
     address victim = address(0x2);
     address relayer = address(0x3);
-    uint256 victimPk = 0xA11CE;
+
+    /// @dev Test-only private key for victim signatures. Not a real key.
+    /// Using 0xA11CE as a memorable hex value (reads like "ALICE")
+    uint256 constant VICTIM_PRIVATE_KEY = 0xA11CE;
+    uint256 victimPk = VICTIM_PRIVATE_KEY;
 
     // Chain IDs and Hyperlane Domains
     uint32 constant HUB_DOMAIN = 84_532; // Base Sepolia Hyperlane domain

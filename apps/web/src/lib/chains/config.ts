@@ -5,6 +5,8 @@
  * Spoke = Everything else (bridges to hub)
  */
 
+import { logger } from '@/lib/logger';
+
 /** Base chain IDs - the only hub chains */
 const HUB_CHAIN_IDS = [
   8453, // Base mainnet
@@ -30,6 +32,6 @@ export function getHubChainId(chainId: number): number | undefined {
   if (chainId === 31338) return 31337; // Anvil Spoke → Anvil Hub
 
   // Unknown spoke - callers must handle explicitly
-  console.warn(`[chains/config] Unknown spoke chain ${chainId}, no hub mapping found`);
+  logger.wallet.warn('Unknown spoke chain, no hub mapping found', { chainId });
   return undefined;
 }
