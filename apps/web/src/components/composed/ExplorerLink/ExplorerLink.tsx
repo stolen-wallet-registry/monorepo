@@ -9,7 +9,7 @@
  * - Type-aware labels for addresses, transactions, and contracts
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { ExternalLink, Copy, Check } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
 import { cn } from '@/lib/utils';
@@ -124,6 +124,16 @@ export function ExplorerLink({
   className,
 }: ExplorerLinkProps) {
   const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Cleanup timeout on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   // Determine type from prop or infer from value length
   const resolvedType = type ?? inferType(value);
@@ -138,7 +148,7 @@ export function ExplorerLink({
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      timeoutRef.current = setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
     }

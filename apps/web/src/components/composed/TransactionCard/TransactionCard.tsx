@@ -404,11 +404,13 @@ export function TransactionCard({
       {isConfirmed && (
         <div className="rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 p-3 text-center">
           <p className="text-sm text-green-700 dark:text-green-300">
-            {type === 'acknowledgement'
-              ? 'Acknowledgement recorded. Grace period has begun.'
-              : isHubConfirmed
-                ? 'Registration confirmed on hub chain. Your wallet is now permanently registered.'
-                : 'Registration complete. Your wallet has been registered.'}
+            {type === 'acknowledgement' && 'Acknowledgement recorded. Grace period has begun.'}
+            {type === 'registration' &&
+              isHubConfirmed &&
+              'Registration confirmed on hub chain. Your wallet is now permanently registered.'}
+            {type === 'registration' &&
+              !isHubConfirmed &&
+              'Registration complete. Your wallet has been registered.'}
           </p>
         </div>
       )}

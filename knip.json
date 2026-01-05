@@ -10,7 +10,12 @@
       "project": ["src/**/*.{ts,tsx}"]
     }
   },
-  "ignore": ["**/*.stories.tsx", "**/*.test.tsx", "**/*.d.ts", "apps/web/src/**/index.ts"],
+  "ignore": [
+    "**/*.stories.{ts,tsx}",
+    "**/*.test.{ts,tsx}",
+    "**/*.d.ts",
+    "apps/web/src/**/index.{ts,tsx}"
+  ],
   "ignoreDependencies": ["tailwindcss"],
   "ignoreBinaries": ["anvil", "eslint"]
 }

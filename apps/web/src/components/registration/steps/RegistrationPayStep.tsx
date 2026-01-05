@@ -392,7 +392,12 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         </p>
       )}
       {getStatus() === 'idle' && isCorrectWallet && !isFeeReady && (
-        <p className="text-sm text-muted-foreground text-center">
+        <p
+          className="text-sm text-muted-foreground text-center"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           {isFeeLoading ? 'Loading fee quote...' : 'Unable to fetch fee. Please try again.'}
         </p>
       )}

@@ -65,8 +65,8 @@ export function CrossChainRelayProgress({
     >
       <div className="flex items-center gap-3">
         <div className="relative">
-          <Globe className="h-5 w-5 text-blue-500 animate-pulse" />
-          <div className="absolute inset-0 animate-ping">
+          <Globe className="h-5 w-5 text-blue-500 motion-safe:animate-pulse" />
+          <div className="absolute inset-0 motion-safe:animate-ping">
             <Globe className="h-5 w-5 text-blue-400 opacity-30" />
           </div>
         </div>
@@ -105,20 +105,8 @@ export function CrossChainRelayProgress({
 
       {/* Progress bar (indeterminate pulse) */}
       <div className="h-1.5 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-gradient-to-r from-blue-400 via-blue-500 to-blue-400 rounded-full"
-          style={{
-            width: '40%',
-            animation: 'indeterminate 1.5s ease-in-out infinite',
-          }}
-        />
+        <div className="h-full w-[40%] bg-gradient-to-r from-blue-400 via-blue-500 to-blue-400 rounded-full animate-indeterminate" />
       </div>
-      <style>{`
-        @keyframes indeterminate {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(350%); }
-        }
-      `}</style>
     </div>
   );
 }

@@ -113,7 +113,8 @@ export const BRIDGE_EXPLORERS: Record<BridgeProvider, BridgeExplorerConfig> = {
     name: 'Hyperlane Explorer',
     baseUrl: 'https://explorer.hyperlane.xyz',
     searchByTxUrl: (txHash) => `https://explorer.hyperlane.xyz/?search=${txHash}`,
-    messageUrl: (messageId) => `https://explorer.hyperlane.xyz/message/${messageId}`,
+    // Message ID lookup uses search interface for consistency
+    messageUrl: (messageId) => `https://explorer.hyperlane.xyz/?search=${messageId}`,
     // Exclude local anvil chains - no Hyperlane explorer for local dev
     excludedChains: [31337, 31338],
   },
@@ -126,7 +127,8 @@ export const BRIDGE_EXPLORERS: Record<BridgeProvider, BridgeExplorerConfig> = {
   ccip: {
     name: 'CCIP Explorer',
     baseUrl: 'https://ccip.chain.link',
-    searchByTxUrl: (txHash) => `https://ccip.chain.link/tx/${txHash}`,
+    // CCIP uses query param for search
+    searchByTxUrl: (txHash) => `https://ccip.chain.link/?search=${txHash}`,
     excludedChains: [31337, 31338],
   },
 };

@@ -152,7 +152,7 @@ export const Refreshing: Story = {
 /**
  * Error state - unable to estimate.
  */
-export const Error: Story = {
+export const ErrorState: Story = {
   args: {
     costEstimate: null,
     isError: true,

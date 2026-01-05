@@ -7,3 +7,24 @@
 @source "./providers/**/*.tsx";
 
 /* App-specific styles can be added below */
+
+/* Indeterminate progress bar animation for cross-chain relay */
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+.animate-indeterminate {
+  animation: indeterminate 1.5s ease-in-out infinite;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .animate-indeterminate {
+    animation: none;
+  }
+}

@@ -38,7 +38,7 @@ export const Default: Story = {
 export const Connecting: Story = {
   args: {
     onConnect: async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     },
     isConnecting: true,
   },
@@ -55,24 +55,13 @@ export const ConnectionError: Story = {
 };
 
 /**
- * Form with validation error (after submitting invalid peer ID).
- * Note: Validation happens on submit, so this shows the form state
- * after attempting to connect with an invalid ID.
+ * Form with connection error from parent (e.g., peer unreachable).
+ * Note: Form validation errors appear inline after submission.
+ * This story shows the error prop passed from parent after connection fails.
  */
-export const ValidationError: Story = {
+export const WithError: Story = {
   args: {
     onConnect: async () => {},
-  },
-  render: (args) => {
-    // This story simulates what happens after validation fails
-    // In real usage, the validation error appears after form submission
-    return (
-      <div className="space-y-4">
-        <p className="text-xs text-muted-foreground mb-2">
-          Enter an invalid peer ID and click connect to see validation error
-        </p>
-        <PeerConnectForm {...args} />
-      </div>
-    );
+    error: 'Invalid Peer ID. Please check and try again.',
   },
 };
