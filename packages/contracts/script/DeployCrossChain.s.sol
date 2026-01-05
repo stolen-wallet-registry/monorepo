@@ -173,9 +173,14 @@ contract DeployCrossChain is DeployBase {
         vm.selectFork(hubForkId);
         vm.startBroadcast(deployerPrivateKey);
 
-        bytes32 spokeRegistryBytes = CrossChainMessage.addressToBytes32(spokeRegistry);
-        CrossChainInbox(crossChainInbox).setTrustedSource(SPOKE_CHAIN_ID, spokeRegistryBytes, true);
-        console2.log("Trusted source configured: SpokeRegistry on chain", SPOKE_CHAIN_ID);
+        // IMPORTANT: Trust the HyperlaneAdapter, NOT the SpokeRegistry!
+        // When SpokeRegistry calls adapter.sendMessage(), the adapter calls mailbox.dispatch().
+        // Hyperlane records the `msg.sender` of dispatch() as the origin sender.
+        // So from the hub's perspective, messages come FROM the HyperlaneAdapter address.
+        bytes32 hyperlaneAdapterBytes = CrossChainMessage.addressToBytes32(hyperlaneAdapter);
+        CrossChainInbox(crossChainInbox).setTrustedSource(SPOKE_CHAIN_ID, hyperlaneAdapterBytes, true);
+        console2.log("Trusted source configured: HyperlaneAdapter on chain", SPOKE_CHAIN_ID);
+        console2.log("  HyperlaneAdapter address:", hyperlaneAdapter);
 
         vm.stopBroadcast();
 
@@ -205,7 +210,8 @@ contract DeployCrossChain is DeployBase {
         console2.log("  SpokeRegistry:            ", spokeRegistry);
         console2.log("");
         console2.log("Trust Relationships:");
-        console2.log("  CrossChainInbox trusts SpokeRegistry from chain 31338");
+        console2.log("  CrossChainInbox trusts HyperlaneAdapter from chain 31338");
+        console2.log("  (Adapter is the msg.sender when calling mailbox.dispatch())");
         console2.log("");
         console2.log("Next steps:");
         console2.log("  1. Start dev server: pnpm dev:crosschain");

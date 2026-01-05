@@ -4,7 +4,6 @@
  * Displays confirmation after successful registration.
  */
 
-import { useChainId } from 'wagmi';
 import { useLocation } from 'wouter';
 
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
@@ -12,22 +11,43 @@ import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { clearAllSignatures } from '@/lib/signatures';
-import { getExplorerTxUrl, getExplorerAddressUrl } from '@/lib/explorer';
+import {
+  getExplorerTxUrl,
+  getExplorerAddressUrl,
+  getChainName,
+  getBridgeMessageUrl,
+  getBridgeMessageByIdUrl,
+  getBridgeExplorerName,
+} from '@/lib/explorer';
+import { isSpokeChain, getHubChainId } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
-import { CheckCircle2, Home, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Home, RefreshCw, ArrowRight, ExternalLink } from 'lucide-react';
 
 /**
  * Success step - shows confirmation after registration.
  */
 export function SuccessStep() {
   const [, setLocation] = useLocation();
-  const chainId = useChainId();
   const {
     acknowledgementHash,
+    acknowledgementChainId,
     registrationHash,
+    registrationChainId,
+    bridgeMessageId,
     reset: resetRegistration,
   } = useRegistrationStore();
   const { registeree, reset: resetForm } = useFormStore();
+
+  // Determine if this was a cross-chain registration
+  const isCrossChain = registrationChainId ? isSpokeChain(registrationChainId) : false;
+  const hubChainId = registrationChainId ? getHubChainId(registrationChainId) : undefined;
+
+  // Get bridge explorer URL - prefer direct message ID link if available
+  const bridgeExplorerUrl = bridgeMessageId
+    ? getBridgeMessageByIdUrl(bridgeMessageId)
+    : registrationHash && registrationChainId
+      ? getBridgeMessageUrl(registrationHash, registrationChainId)
+      : null;
 
   /**
    * Reset all state and go home.
@@ -58,11 +78,15 @@ export function SuccessStep() {
     setLocation('/');
   };
 
-  // Get explorer URLs
-  const ackExplorerUrl = acknowledgementHash
-    ? getExplorerTxUrl(chainId, acknowledgementHash)
-    : null;
-  const regExplorerUrl = registrationHash ? getExplorerTxUrl(chainId, registrationHash) : null;
+  // Get explorer URLs using stored chain IDs
+  const ackExplorerUrl =
+    acknowledgementHash && acknowledgementChainId
+      ? getExplorerTxUrl(acknowledgementChainId, acknowledgementHash)
+      : null;
+  const regExplorerUrl =
+    registrationHash && registrationChainId
+      ? getExplorerTxUrl(registrationChainId, registrationHash)
+      : null;
 
   return (
     <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/50">
@@ -80,13 +104,24 @@ export function SuccessStep() {
 
       <CardContent className="space-y-6">
         {/* Registered wallet */}
-        {registeree && (
+        {registeree && hubChainId && (
           <div className="rounded-lg bg-white dark:bg-gray-900 border p-4">
             <p className="text-sm font-medium text-muted-foreground mb-2">Registered Wallet</p>
             <ExplorerLink
               value={registeree}
               type="address"
-              href={getExplorerAddressUrl(chainId, registeree)}
+              href={getExplorerAddressUrl(hubChainId, registeree)}
+              truncate={false}
+            />
+          </div>
+        )}
+        {registeree && !hubChainId && registrationChainId && (
+          <div className="rounded-lg bg-white dark:bg-gray-900 border p-4">
+            <p className="text-sm font-medium text-muted-foreground mb-2">Registered Wallet</p>
+            <ExplorerLink
+              value={registeree}
+              type="address"
+              href={getExplorerAddressUrl(registrationChainId, registeree)}
               truncate={false}
             />
           </div>
@@ -96,17 +131,58 @@ export function SuccessStep() {
         <div className="space-y-3">
           <p className="text-sm font-medium text-muted-foreground">Transaction History</p>
 
-          {acknowledgementHash && (
+          {acknowledgementHash && acknowledgementChainId && (
             <div className="rounded-lg bg-white dark:bg-gray-900 border p-3">
-              <p className="text-sm font-medium mb-1">Acknowledgement</p>
+              <p className="text-sm font-medium mb-1">
+                Acknowledgement
+                <span className="text-xs text-muted-foreground ml-2">
+                  ({getChainName(acknowledgementChainId)})
+                </span>
+              </p>
               <ExplorerLink value={acknowledgementHash} href={ackExplorerUrl} />
             </div>
           )}
 
-          {registrationHash && (
+          {registrationHash && registrationChainId && (
             <div className="rounded-lg bg-white dark:bg-gray-900 border p-3">
-              <p className="text-sm font-medium mb-1">Registration</p>
+              <p className="text-sm font-medium mb-1">
+                Registration
+                <span className="text-xs text-muted-foreground ml-2">
+                  ({getChainName(registrationChainId)})
+                </span>
+              </p>
               <ExplorerLink value={registrationHash} href={regExplorerUrl} />
+            </div>
+          )}
+
+          {/* Cross-chain bridge info */}
+          {isCrossChain && hubChainId && registrationHash && registrationChainId && (
+            <div className="rounded-lg bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                  Cross-Chain Message
+                </p>
+                {bridgeExplorerUrl && (
+                  <a
+                    href={bridgeExplorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 hover:underline"
+                  >
+                    View on {getBridgeExplorerName()}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-sm text-purple-600 dark:text-purple-400">
+                <span>{getChainName(registrationChainId)}</span>
+                <ArrowRight className="h-3 w-3" />
+                <span>{getChainName(hubChainId)}</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Your registration was relayed from {getChainName(registrationChainId)} to{' '}
+                {getChainName(hubChainId)} via {getBridgeExplorerName().replace(' Explorer', '')}.
+              </p>
             </div>
           )}
         </div>

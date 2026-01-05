@@ -1,7 +1,8 @@
 /**
  * Transaction content component for blockchain transaction submission.
  *
- * Displays transaction status, signed message preview, and links to block explorer.
+ * Displays transaction status, signed message preview, cost breakdown, and links to block explorer.
+ * Cost breakdown includes: Protocol Fee, Bridge Fee (spoke chains only, e.g., "Hyperlane Fee"), Network Gas.
  * This is a content-only component - wrap in Card if needed for standalone use.
  */
 
@@ -26,7 +27,15 @@ import { Check, AlertCircle, Loader2, FileSignature, Globe, Copy, RefreshCw } fr
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
-export type TransactionStatus = 'idle' | 'submitting' | 'pending' | 'confirmed' | 'failed';
+export type TransactionStatus =
+  | 'idle'
+  | 'submitting'
+  | 'pending'
+  | 'confirmed'
+  | 'failed'
+  // Cross-chain states (spoke → hub)
+  | 'relaying' // Spoke tx confirmed, waiting for hub delivery
+  | 'hub-confirmed'; // Hub chain shows wallet as registered
 
 /** Signed message data to display */
 export interface SignedMessageData {
@@ -52,6 +61,15 @@ export interface CostEstimateData {
   refetch: () => void;
 }
 
+export interface CrossChainProgress {
+  /** Time elapsed since relay started (ms) */
+  elapsedTime: number;
+  /** Target hub chain name for display */
+  hubChainName?: string;
+  /** Bridge name (e.g., "Hyperlane") */
+  bridgeName?: string;
+}
+
 export interface TransactionCardProps {
   /** Type of transaction */
   type: 'acknowledgement' | 'registration';
@@ -69,6 +87,8 @@ export interface TransactionCardProps {
   costEstimate?: CostEstimateData;
   /** Chain ID for network display */
   chainId?: number;
+  /** Cross-chain relay progress (for spoke chain registrations) */
+  crossChainProgress?: CrossChainProgress;
   /** Callback to submit transaction */
   onSubmit: () => void;
   /** Callback to retry after failure */
@@ -96,6 +116,9 @@ const STATUS_CONFIG = {
   pending: { label: 'Pending', variant: 'default' as const },
   confirmed: { label: 'Confirmed', variant: 'default' as const },
   failed: { label: 'Failed', variant: 'destructive' as const },
+  // Cross-chain states
+  relaying: { label: 'Relaying', variant: 'default' as const },
+  'hub-confirmed': { label: 'Confirmed', variant: 'default' as const },
 };
 
 /**
@@ -111,6 +134,7 @@ export function TransactionCard({
   signedMessage,
   costEstimate,
   chainId,
+  crossChainProgress,
   onSubmit,
   onRetry,
   disabled = false,
@@ -134,10 +158,12 @@ export function TransactionCard({
 
   const typeLabel = TYPE_LABELS[type];
   const statusConfig = STATUS_CONFIG[status];
-  const isConfirmed = status === 'confirmed';
+  const isConfirmed = status === 'confirmed' || status === 'hub-confirmed';
   const isSubmitting = status === 'submitting';
   const isPending = status === 'pending';
   const isFailed = status === 'failed';
+  const isRelaying = status === 'relaying';
+  const isHubConfirmed = status === 'hub-confirmed';
 
   // Resolve chainId from props or signedMessage
   const resolvedChainId = chainId ?? signedMessage?.chainId;
@@ -149,6 +175,12 @@ export function TransactionCard({
   };
 
   const getDescription = () => {
+    if (isHubConfirmed) return 'Registration confirmed on hub chain';
+    if (isRelaying) {
+      const hubName = crossChainProgress?.hubChainName ?? 'hub chain';
+      const bridgeName = crossChainProgress?.bridgeName ?? 'bridge';
+      return `Relaying to ${hubName} via ${bridgeName}...`;
+    }
     if (isConfirmed) return 'Transaction confirmed on-chain';
     if (isPending) return 'Waiting for block confirmation...';
     if (isSubmitting) {
@@ -158,6 +190,15 @@ export function TransactionCard({
     }
     if (isFailed) return 'Transaction failed';
     return 'Ready to submit';
+  };
+
+  // Format elapsed time for display
+  const formatElapsedTime = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}m ${remainingSeconds}s`;
   };
 
   return (
@@ -326,6 +367,25 @@ export function TransactionCard({
                 </div>
               )}
 
+              {/* Bridge Fee (spoke chains only during registration) */}
+              {costEstimate.data.bridgeFee && costEstimate.data.bridgeName && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    {costEstimate.data.bridgeName} Fee
+                    <InfoTooltip
+                      content={`Fee for relaying your registration to the hub chain via ${costEstimate.data.bridgeName}. This covers cross-chain message delivery.`}
+                      size="sm"
+                    />
+                  </span>
+                  <div className="text-right">
+                    <span className="font-medium">{costEstimate.data.bridgeFee.usd}</span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({costEstimate.data.bridgeFee.eth} ETH)
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Network Gas */}
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground flex items-center gap-1">
@@ -343,8 +403,8 @@ export function TransactionCard({
                 </div>
               </div>
 
-              {/* Total (if protocol fee exists) */}
-              {costEstimate.data.protocolFee && (
+              {/* Total (if any fees besides gas) */}
+              {(costEstimate.data.protocolFee || costEstimate.data.bridgeFee) && (
                 <>
                   <hr className="border-border" />
                   <div className="flex justify-between items-center text-sm font-medium">
@@ -421,6 +481,54 @@ export function TransactionCard({
         </div>
       )}
 
+      {/* Cross-chain relay progress */}
+      {isRelaying && crossChainProgress && (
+        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Globe className="h-5 w-5 text-blue-500 animate-pulse" />
+              <div className="absolute inset-0 animate-ping">
+                <Globe className="h-5 w-5 text-blue-400 opacity-30" />
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                Cross-Chain Relay in Progress
+              </p>
+              <p className="text-xs text-blue-600 dark:text-blue-400">
+                {crossChainProgress.bridgeName ?? 'Bridge'} is delivering your registration to{' '}
+                {crossChainProgress.hubChainName ?? 'the hub chain'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-blue-600 dark:text-blue-400">
+              Elapsed: {formatElapsedTime(crossChainProgress.elapsedTime)}
+            </span>
+            <span className="text-blue-500 dark:text-blue-500 flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Polling hub chain...
+            </span>
+          </div>
+          {/* Progress bar (indeterminate pulse) */}
+          <div className="h-1.5 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-blue-400 via-blue-500 to-blue-400 rounded-full"
+              style={{
+                width: '40%',
+                animation: 'indeterminate 1.5s ease-in-out infinite',
+              }}
+            />
+          </div>
+          <style>{`
+            @keyframes indeterminate {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(350%); }
+            }
+          `}</style>
+        </div>
+      )}
+
       {/* Error message */}
       {isFailed && error && (
         <Alert variant="destructive" className="overflow-hidden">
@@ -457,7 +565,9 @@ export function TransactionCard({
           <p className="text-sm text-green-700 dark:text-green-300">
             {type === 'acknowledgement'
               ? 'Acknowledgement recorded. Grace period has begun.'
-              : 'Registration complete. Your wallet has been registered.'}
+              : isHubConfirmed
+                ? 'Registration confirmed on hub chain. Your wallet is now permanently registered.'
+                : 'Registration complete. Your wallet has been registered.'}
           </p>
         </div>
       )}

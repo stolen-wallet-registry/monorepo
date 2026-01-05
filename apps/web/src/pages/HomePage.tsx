@@ -17,6 +17,7 @@ export function HomePage() {
   const [, setLocation] = useLocation();
   const { isConnected } = useAccount();
   const { setRegistrationType } = useRegistrationStore();
+  const p2pAvailable = Boolean(import.meta.env.VITE_RELAY_MULTIADDR);
 
   const handleMethodSelect = (type: RegistrationType) => {
     setRegistrationType(type);
@@ -72,7 +73,7 @@ export function HomePage() {
             </p>
           </div>
 
-          <RegistrationMethodSelector onSelect={handleMethodSelect} p2pAvailable={true} />
+          <RegistrationMethodSelector onSelect={handleMethodSelect} p2pAvailable={p2pAvailable} />
         </div>
       )}
     </div>

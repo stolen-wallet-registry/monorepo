@@ -5,42 +5,40 @@
  * - Acknowledgement step: Shows gas cost only (no protocol fee)
  * - Registration step: Shows protocol fee + gas cost + total
  *   - Hub: protocol fee from FeeManager
- *   - Spoke: bridge fee + registration fee from quoteRegistration
+ *   - Spoke: bridge fee + registration fee (with breakdown)
  */
 
-import { formatEther } from 'viem';
-import { useAccount } from 'wagmi';
-import { useQuoteRegistration } from './useQuoteRegistration';
+import { useAccount, useChainId } from 'wagmi';
+import { useQuoteFeeBreakdown } from './useQuoteFeeBreakdown';
 import { useGasEstimate, type UseGasEstimateParams } from './useGasEstimate';
 import { useEthPrice } from './useEthPrice';
 import { logger } from '@/lib/logger';
-import { formatCentsToUsd } from '@/lib/utils';
+import { formatCentsToUsd, formatEthConsistent } from '@/lib/utils';
+import type { FeeLineItem } from '@/lib/types/fees';
 
 export interface TransactionCost {
-  /** Protocol fee (only on registration) */
-  protocolFee: {
-    wei: bigint;
-    eth: string;
-    usd: string;
-  } | null;
+  /** Protocol/registration fee (only on registration) */
+  protocolFee: FeeLineItem | null;
+
+  /** Cross-chain bridge fee (spoke chains only, null on hub) */
+  bridgeFee: FeeLineItem | null;
+
+  /** Bridge name ("Hyperlane", "CCIP", etc.) - null on hub */
+  bridgeName: string | null;
 
   /** Network gas cost */
-  gasCost: {
-    wei: bigint;
-    eth: string;
-    usd: string;
+  gasCost: FeeLineItem & {
     gwei: string; // Gas price in gwei
   };
 
-  /** Total cost (fee + gas) */
-  total: {
-    wei: bigint;
-    eth: string;
-    usd: string;
-  };
+  /** Total cost (all fees + gas) */
+  total: FeeLineItem;
 
   /** Current ETH price in USD (formatted, e.g., "$3,500.00") */
   ethPriceUsd: string;
+
+  /** True if this is a cross-chain transaction (spoke → hub) */
+  isCrossChain: boolean;
 }
 
 export interface UseTransactionCostParams {
@@ -88,18 +86,40 @@ export function useTransactionCost({
   args,
 }: UseTransactionCostParams): UseTransactionCostResult {
   const { address } = useAccount();
+  const chainId = useChainId();
 
   // Get ETH price for USD conversions
   const ethPrice = useEthPrice();
 
-  // Get fee from quoteRegistration (works on both hub and spoke)
-  // On hub: returns registration fee
-  // On spoke: returns bridge fee + registration fee
-  const quoteResult = useQuoteRegistration(address);
+  logger.contract.debug('useTransactionCost: Fetching fee breakdown', {
+    step,
+    address,
+    chainId,
+    hasArgs: !!args,
+  });
+
+  // Get fee breakdown (works on both hub and spoke)
+  // On hub: returns { bridgeFee: null, registrationFee, total, bridgeName: null, isCrossChain: false }
+  // On spoke: returns { bridgeFee, registrationFee, total, bridgeName: "Hyperlane", isCrossChain: true }
+  const breakdownResult = useQuoteFeeBreakdown(address);
+
+  // Log fee breakdown result when it changes
+  if (breakdownResult.data) {
+    logger.contract.info('useTransactionCost: Fee breakdown received', {
+      bridgeFee: breakdownResult.data.bridgeFee?.usd ?? 'N/A',
+      bridgeFeeWei: breakdownResult.raw?.bridgeFee?.toString() ?? '0',
+      registrationFee: breakdownResult.data.registrationFee?.usd ?? 'N/A',
+      registrationFeeWei: breakdownResult.raw?.registrationFee?.toString() ?? '0',
+      totalFee: breakdownResult.data.total?.usd ?? 'N/A',
+      totalFeeWei: breakdownResult.raw?.total?.toString() ?? '0',
+      bridgeName: breakdownResult.data.bridgeName ?? 'N/A',
+      isCrossChain: breakdownResult.data.isCrossChain,
+    });
+  }
 
   // Determine the value to send with the transaction
-  // Registration sends the protocol fee, acknowledgement sends nothing
-  const value = step === 'registration' ? quoteResult.feeWei : undefined;
+  // Registration sends the total fee, acknowledgement sends nothing
+  const value = step === 'registration' ? breakdownResult.raw?.total : undefined;
 
   const gasEstimate = useGasEstimate({
     step,
@@ -109,7 +129,7 @@ export function useTransactionCost({
   });
 
   const refetch = () => {
-    quoteResult.refetch();
+    breakdownResult.refetch();
     gasEstimate.refetch();
     ethPrice.refetch();
   };
@@ -119,31 +139,29 @@ export function useTransactionCost({
 
   if (gasEstimate.data && ethPrice.data) {
     const gas = gasEstimate.data;
+    const breakdown = breakdownResult.data;
 
     // Use BigInt arithmetic for precision: (wei * ethPriceUsdCents) / 1e18
     const ethPriceUsdCentsBigInt = BigInt(ethPrice.data.usdCents);
     const WEI_PER_ETH = BigInt(1e18);
 
-    // Protocol fee only applies to registration step
-    const feeWei = quoteResult.feeWei ?? 0n;
-    const protocolFeeUsdCents =
-      step === 'registration' ? Number((feeWei * ethPriceUsdCentsBigInt) / WEI_PER_ETH) : 0;
-
+    // Protocol fee (registration fee) only applies to registration step
     const protocolFee =
-      step === 'registration' && quoteResult.feeWei != null
-        ? {
-            wei: quoteResult.feeWei,
-            eth: quoteResult.feeEth ?? formatEther(quoteResult.feeWei),
-            usd: formatCentsToUsd(protocolFeeUsdCents),
-          }
-        : null;
+      step === 'registration' && breakdown?.registrationFee ? breakdown.registrationFee : null;
 
-    // Calculate total using BigInt arithmetic for precision
-    const totalWei = (protocolFee?.wei ?? 0n) + gas.gasCostWei;
+    // Bridge fee only applies to registration step on spoke chains
+    const bridgeFee = step === 'registration' && breakdown?.bridgeFee ? breakdown.bridgeFee : null;
+
+    // Calculate total: protocol fee + bridge fee + gas
+    const protocolFeeWei = protocolFee?.wei ?? 0n;
+    const bridgeFeeWei = bridgeFee?.wei ?? 0n;
+    const totalWei = protocolFeeWei + bridgeFeeWei + gas.gasCostWei;
     const totalUsdCents = Number((totalWei * ethPriceUsdCentsBigInt) / WEI_PER_ETH);
 
     costData = {
       protocolFee,
+      bridgeFee,
+      bridgeName: breakdown?.bridgeName ?? null,
       gasCost: {
         wei: gas.gasCostWei,
         eth: gas.gasCostEth,
@@ -152,25 +170,35 @@ export function useTransactionCost({
       },
       total: {
         wei: totalWei,
-        eth: formatEther(totalWei),
+        eth: formatEthConsistent(totalWei),
         usd: formatCentsToUsd(totalUsdCents),
       },
       ethPriceUsd: ethPrice.data.usdFormatted,
+      isCrossChain: breakdown?.isCrossChain ?? false,
     };
 
-    logger.contract.debug('Transaction cost calculated', {
+    logger.contract.info('useTransactionCost: Final cost calculated', {
       step,
+      chainId,
       protocolFee: protocolFee?.usd ?? 'N/A',
+      protocolFeeEth: protocolFee?.eth ?? 'N/A',
+      bridgeFee: bridgeFee?.usd ?? 'N/A',
+      bridgeFeeEth: bridgeFee?.eth ?? 'N/A',
+      bridgeName: costData.bridgeName ?? 'N/A',
       gasCost: costData.gasCost.usd,
+      gasCostEth: costData.gasCost.eth,
       total: costData.total.usd,
+      totalEth: costData.total.eth,
+      ethPriceUsd: costData.ethPriceUsd,
+      isCrossChain: costData.isCrossChain,
     });
   }
 
   return {
     data: costData,
-    isLoading: quoteResult.isLoading || gasEstimate.isLoading || ethPrice.isLoading,
-    isError: quoteResult.isError || gasEstimate.isError || ethPrice.isError,
-    error: quoteResult.error || gasEstimate.error || ethPrice.error,
+    isLoading: breakdownResult.isLoading || gasEstimate.isLoading || ethPrice.isLoading,
+    isError: breakdownResult.isError || gasEstimate.isError || ethPrice.isError,
+    error: breakdownResult.error || gasEstimate.error || ethPrice.error,
     refetch,
   };
 }

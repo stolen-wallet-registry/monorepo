@@ -30,6 +30,13 @@ export const anvilSpoke: Chain = {
 // Legacy alias for backward compatibility
 export const localhost = anvilHub;
 
+// Single source of truth for RPC URLs (public only).
+const RPC_URLS: Record<number, string> = {
+  [anvilHub.id]: 'http://127.0.0.1:8545',
+  [anvilSpoke.id]: 'http://127.0.0.1:8546',
+  [sepolia.id]: 'https://rpc.sepolia.org',
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // CROSS-CHAIN MODE
 // ═══════════════════════════════════════════════════════════════════════════
@@ -52,39 +59,17 @@ const getChains = (): readonly [Chain, ...Chain[]] => {
 // WalletConnect project ID (optional)
 const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
 
-/**
- * Get Sepolia RPC URL from environment or use public fallback.
- * In production, VITE_SEPOLIA_RPC_URL should be set to Alchemy/Infura.
- *
- * Example .env:
- *   VITE_SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
- */
-function getSepoliaRpcUrl(): string {
-  const envUrl = import.meta.env.VITE_SEPOLIA_RPC_URL;
-  if (envUrl) {
-    return envUrl;
-  }
-  // Warn in production if using public fallback
-  if (import.meta.env.PROD) {
-    console.warn(
-      '[wagmi] VITE_SEPOLIA_RPC_URL not set. Using public RPC which may be rate-limited. ' +
-        'Set VITE_SEPOLIA_RPC_URL to an Alchemy/Infura endpoint for production.'
-    );
-  }
-  return 'https://rpc.sepolia.org';
-}
-
 // Build transports based on mode
 const getTransports = () => {
   const base = {
-    [anvilHub.id]: http('http://127.0.0.1:8545'),
-    [sepolia.id]: http(getSepoliaRpcUrl()),
+    [anvilHub.id]: http(RPC_URLS[anvilHub.id]),
+    [sepolia.id]: http(RPC_URLS[sepolia.id]),
   };
 
   if (isCrossChainMode) {
     return {
       ...base,
-      [anvilSpoke.id]: http('http://127.0.0.1:8546'),
+      [anvilSpoke.id]: http(RPC_URLS[anvilSpoke.id]),
     };
   }
 

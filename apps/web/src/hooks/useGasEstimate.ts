@@ -14,7 +14,7 @@ import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis'
 import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
 import { useEthPrice } from './useEthPrice';
 import { logger } from '@/lib/logger';
-import { formatCentsToUsd } from '@/lib/utils';
+import { formatCentsToUsd, formatEthConsistent } from '@/lib/utils';
 import type { Address, Hex } from '@/lib/types/ethereum';
 
 export interface GasEstimate {
@@ -187,7 +187,7 @@ export function useGasEstimate({
       gasPriceWei: gasPrice,
       gasPriceGwei: formatGwei(gasPrice),
       gasCostWei,
-      gasCostEth: formatEther(gasCostWei),
+      gasCostEth: formatEthConsistent(gasCostWei),
       gasCostUsd: formatCentsToUsd(gasCostUsdCents),
     };
 

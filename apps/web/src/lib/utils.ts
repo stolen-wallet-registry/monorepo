@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { BaseError } from 'viem';
+import { BaseError, formatEther } from 'viem';
 
 import { decodeContractError } from './errors/contractErrors';
 
@@ -16,6 +16,42 @@ export function formatCentsToUsd(cents: number): string {
     style: 'currency',
     currency: 'USD',
   }).format(cents / 100);
+}
+
+/**
+ * Format wei to ETH string with consistent decimal places.
+ *
+ * Shows up to 18 significant decimals, but trims to a readable length
+ * while maintaining alignment in fee displays.
+ *
+ * @param wei - Amount in wei (bigint)
+ * @param maxDecimals - Maximum decimal places to show (default: 8)
+ * @returns Formatted ETH string (e.g., "0.00142857")
+ */
+export function formatEthConsistent(wei: bigint, maxDecimals: number = 8): string {
+  const ethStr = formatEther(wei);
+  const [whole, decimal = ''] = ethStr.split('.');
+
+  if (!decimal) {
+    return whole;
+  }
+
+  // Pad with zeros to ensure consistent display
+  const paddedDecimal = decimal.padEnd(maxDecimals, '0').slice(0, maxDecimals);
+
+  // Trim trailing zeros but keep at least 4 decimal places for small values
+  const minDecimals = 4;
+  let trimmed = paddedDecimal;
+
+  // Find last non-zero digit
+  let lastNonZero = trimmed.length - 1;
+  while (lastNonZero >= minDecimals && trimmed[lastNonZero] === '0') {
+    lastNonZero--;
+  }
+
+  trimmed = trimmed.slice(0, Math.max(lastNonZero + 1, minDecimals));
+
+  return `${whole}.${trimmed}`;
 }
 
 /**

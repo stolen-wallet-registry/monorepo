@@ -368,6 +368,47 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'quoteFeeBreakdown',
+    inputs: [
+      {
+        name: 'owner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: 'breakdown',
+        type: 'tuple',
+        internalType: 'struct ISpokeRegistry.FeeBreakdown',
+        components: [
+          {
+            name: 'bridgeFee',
+            type: 'uint256',
+            internalType: 'uint256',
+          },
+          {
+            name: 'registrationFee',
+            type: 'uint256',
+            internalType: 'uint256',
+          },
+          {
+            name: 'total',
+            type: 'uint256',
+            internalType: 'uint256',
+          },
+          {
+            name: 'bridgeName',
+            type: 'string',
+            internalType: 'string',
+          },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'registerLocal',
     inputs: [
       {

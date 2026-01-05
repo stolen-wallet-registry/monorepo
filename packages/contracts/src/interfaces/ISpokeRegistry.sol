@@ -23,6 +23,19 @@ interface ISpokeRegistry {
         uint256 expiryBlock;
     }
 
+    /// @notice Breakdown of fees for cross-chain registration
+    /// @dev Bridge-agnostic: bridgeName comes from IBridgeAdapter.bridgeName()
+    /// @param bridgeFee Cross-chain message fee from the configured bridge adapter
+    /// @param registrationFee Protocol fee from FeeManager (0 if no fee manager)
+    /// @param total Combined fee required (bridgeFee + registrationFee)
+    /// @param bridgeName Human-readable name of the bridge ("Hyperlane", "CCIP", "Wormhole", etc.)
+    struct FeeBreakdown {
+        uint256 bridgeFee;
+        uint256 registrationFee;
+        uint256 total;
+        string bridgeName;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -124,6 +137,13 @@ interface ISpokeRegistry {
     /// @param owner The wallet being registered (for nonce lookup)
     /// @return Total fee required in native token
     function quoteRegistration(address owner) external view returns (uint256);
+
+    /// @notice Get detailed fee breakdown for registration
+    /// @dev Returns separate line items for UI display with bridge identification.
+    ///      Bridge-agnostic: works with any adapter implementing IBridgeAdapter.
+    /// @param owner The wallet being registered (for nonce lookup in payload sizing)
+    /// @return breakdown Structured fee data including bridge name
+    function quoteFeeBreakdown(address owner) external view returns (FeeBreakdown memory breakdown);
 
     /// @notice Get the hub chain domain ID
     /// @return The Hyperlane domain ID of the hub chain (may differ from EIP-155 chain ID)

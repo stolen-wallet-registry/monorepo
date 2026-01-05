@@ -338,4 +338,49 @@ contract CrossChainIntegrationTest is Test {
         assertTrue(hub.isWalletRegistered(victim));
         assertFalse(hub.isWalletPending(victim));
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FEE BREAKDOWN TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function test_quoteFeeBreakdown_ReturnsCorrectBreakdown() public {
+        vm.chainId(SPOKE_CHAIN_ID);
+
+        ISpokeRegistry.FeeBreakdown memory breakdown = spokeRegistry.quoteFeeBreakdown(victim);
+
+        // Bridge fee should be non-zero (from MockInterchainGasPaymaster)
+        assertGt(breakdown.bridgeFee, 0, "Bridge fee should be non-zero");
+
+        // Registration fee should be 0 since no fee manager is configured
+        assertEq(breakdown.registrationFee, 0, "Registration fee should be 0 without fee manager");
+
+        // Total should equal bridgeFee + registrationFee
+        assertEq(breakdown.total, breakdown.bridgeFee + breakdown.registrationFee, "Total should equal sum");
+
+        // Bridge name should be "Hyperlane"
+        assertEq(breakdown.bridgeName, "Hyperlane", "Bridge name should be Hyperlane");
+    }
+
+    function test_quoteFeeBreakdown_MatchesQuoteRegistration() public {
+        vm.chainId(SPOKE_CHAIN_ID);
+
+        uint256 totalFromQuote = spokeRegistry.quoteRegistration(victim);
+        ISpokeRegistry.FeeBreakdown memory breakdown = spokeRegistry.quoteFeeBreakdown(victim);
+
+        assertEq(breakdown.total, totalFromQuote, "Breakdown total should match quoteRegistration");
+    }
+
+    function test_quoteFeeBreakdown_DifferentUsers() public {
+        vm.chainId(SPOKE_CHAIN_ID);
+
+        // First user
+        ISpokeRegistry.FeeBreakdown memory breakdown1 = spokeRegistry.quoteFeeBreakdown(victim);
+
+        // Different user (should have same fees since no fee manager configured)
+        ISpokeRegistry.FeeBreakdown memory breakdown2 = spokeRegistry.quoteFeeBreakdown(relayer);
+
+        // Fees should be the same (no user-specific pricing)
+        assertEq(breakdown1.bridgeFee, breakdown2.bridgeFee, "Bridge fees should match");
+        assertEq(breakdown1.total, breakdown2.total, "Totals should match");
+    }
 }

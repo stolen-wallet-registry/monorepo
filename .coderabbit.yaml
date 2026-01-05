@@ -82,6 +82,10 @@ reviews:
     - "!**/coverage/**"
     - "!**/.next/**"
     - "!**/node_modules/**"
+    - "!.anvil-state/**"
+    - "!.hyperlane/**"
+    - "!packages/abis/src/**"
+    - "!packages/contracts/.gas-snapshot"
 
   auto_review:
     enabled: true

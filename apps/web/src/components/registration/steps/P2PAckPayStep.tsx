@@ -120,10 +120,10 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
   // Relayer: Store acknowledgement hash when confirmed (for grace period display)
   useEffect(() => {
     if (role === 'relayer' && isConfirmed && hash && !acknowledgementHash) {
-      setAcknowledgementHash(hash as Hash);
-      logger.p2p.info('Relayer stored ACK hash for grace period display', { hash });
+      setAcknowledgementHash(hash as Hash, chainId);
+      logger.p2p.info('Relayer stored ACK hash for grace period display', { hash, chainId });
     }
-  }, [role, isConfirmed, hash, acknowledgementHash, setAcknowledgementHash]);
+  }, [role, isConfirmed, hash, acknowledgementHash, setAcknowledgementHash, chainId]);
 
   // Relayer: Send tx hash to registeree after confirmation with retry logic
   useEffect(() => {

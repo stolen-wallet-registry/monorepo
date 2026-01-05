@@ -5,6 +5,7 @@ import {
   getPreviousStep,
   STEP_SEQUENCES,
 } from './registrationStore';
+import type { Hash } from '@/lib/types/ethereum';
 
 describe('registrationStore', () => {
   beforeEach(() => {
@@ -60,22 +61,26 @@ describe('registrationStore', () => {
   });
 
   describe('setAcknowledgementHash', () => {
-    it('stores acknowledgement transaction hash', () => {
+    it('stores acknowledgement transaction hash and chain ID', () => {
       const { setAcknowledgementHash } = useRegistrationStore.getState();
       const hash = '0x123abc';
+      const chainId = 31337;
 
-      setAcknowledgementHash(hash as `0x${string}`);
+      setAcknowledgementHash(hash as Hash, chainId);
       expect(useRegistrationStore.getState().acknowledgementHash).toBe(hash);
+      expect(useRegistrationStore.getState().acknowledgementChainId).toBe(chainId);
     });
   });
 
   describe('setRegistrationHash', () => {
-    it('stores registration transaction hash', () => {
+    it('stores registration transaction hash and chain ID', () => {
       const { setRegistrationHash } = useRegistrationStore.getState();
       const hash = '0x456def';
+      const chainId = 31338;
 
-      setRegistrationHash(hash as `0x${string}`);
+      setRegistrationHash(hash as Hash, chainId);
       expect(useRegistrationStore.getState().registrationHash).toBe(hash);
+      expect(useRegistrationStore.getState().registrationChainId).toBe(chainId);
     });
   });
 
@@ -84,8 +89,8 @@ describe('registrationStore', () => {
       const store = useRegistrationStore.getState();
       store.setRegistrationType('p2pRelay');
       store.setStep('success');
-      store.setAcknowledgementHash('0x123' as `0x${string}`);
-      store.setRegistrationHash('0x456' as `0x${string}`);
+      store.setAcknowledgementHash('0x123' as Hash, 31337);
+      store.setRegistrationHash('0x456' as Hash, 31338);
 
       store.reset();
 
@@ -93,7 +98,9 @@ describe('registrationStore', () => {
       expect(state.registrationType).toBe('standard');
       expect(state.step).toBeNull(); // step is null until type is explicitly selected
       expect(state.acknowledgementHash).toBeNull();
+      expect(state.acknowledgementChainId).toBeNull();
       expect(state.registrationHash).toBeNull();
+      expect(state.registrationChainId).toBeNull();
     });
   });
 });

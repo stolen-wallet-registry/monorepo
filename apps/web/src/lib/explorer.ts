@@ -84,3 +84,117 @@ export function getChainShortName(chainId: number): string {
   // Default: use chain name (wagmi names are typically short enough)
   return chain.name;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CROSS-CHAIN BRIDGE EXPLORERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Supported bridge providers */
+export type BridgeProvider = 'hyperlane' | 'wormhole' | 'ccip';
+
+/** Bridge explorer configuration */
+interface BridgeExplorerConfig {
+  name: string;
+  /** Base URL for the explorer */
+  baseUrl: string;
+  /** URL pattern for searching by origin tx hash */
+  searchByTxUrl: (txHash: Hash) => string;
+  /** URL pattern for message ID (if supported) */
+  messageUrl?: (messageId: string) => string;
+  /** Chains this explorer supports (empty = all chains) */
+  supportedChains?: number[];
+  /** Chains to exclude (e.g., local dev chains) */
+  excludedChains?: number[];
+}
+
+/** Bridge explorer configurations */
+const BRIDGE_EXPLORERS: Record<BridgeProvider, BridgeExplorerConfig> = {
+  hyperlane: {
+    name: 'Hyperlane Explorer',
+    baseUrl: 'https://explorer.hyperlane.xyz',
+    searchByTxUrl: (txHash) => `https://explorer.hyperlane.xyz/?search=${txHash}`,
+    messageUrl: (messageId) => `https://explorer.hyperlane.xyz/message/${messageId}`,
+    // Exclude local anvil chains - no Hyperlane explorer for local dev
+    excludedChains: [31337, 31338],
+  },
+  wormhole: {
+    name: 'Wormhole Explorer',
+    baseUrl: 'https://wormholescan.io',
+    searchByTxUrl: (txHash) => `https://wormholescan.io/#/tx/${txHash}`,
+    excludedChains: [31337, 31338],
+  },
+  ccip: {
+    name: 'CCIP Explorer',
+    baseUrl: 'https://ccip.chain.link',
+    searchByTxUrl: (txHash) => `https://ccip.chain.link/tx/${txHash}`,
+    excludedChains: [31337, 31338],
+  },
+};
+
+/**
+ * Get the current bridge provider for cross-chain messaging.
+ * This could be made dynamic based on chain or config in the future.
+ */
+export function getBridgeProvider(): BridgeProvider {
+  // Currently using Hyperlane for all cross-chain messaging
+  // This could read from env or chain config in the future
+  return 'hyperlane';
+}
+
+/**
+ * Get the bridge explorer name.
+ */
+export function getBridgeExplorerName(provider?: BridgeProvider): string {
+  const p = provider ?? getBridgeProvider();
+  return BRIDGE_EXPLORERS[p].name;
+}
+
+/**
+ * Get the bridge explorer URL for a cross-chain message by origin transaction hash.
+ *
+ * @param originTxHash - The transaction hash on the origin (spoke) chain
+ * @param originChainId - The origin chain ID (to check if explorer is supported)
+ * @param provider - Optional bridge provider override
+ * @returns The explorer URL or null if not supported for this chain
+ */
+export function getBridgeMessageUrl(
+  originTxHash: Hash,
+  originChainId?: number,
+  provider?: BridgeProvider
+): string | null {
+  const p = provider ?? getBridgeProvider();
+  const config = BRIDGE_EXPLORERS[p];
+
+  // Check if this chain is excluded (e.g., local dev)
+  if (originChainId && config.excludedChains?.includes(originChainId)) {
+    return null;
+  }
+
+  // Check if this chain is in the supported list (if specified)
+  if (originChainId && config.supportedChains && !config.supportedChains.includes(originChainId)) {
+    return null;
+  }
+
+  return config.searchByTxUrl(originTxHash);
+}
+
+/**
+ * Get the bridge explorer URL for a message by its ID.
+ *
+ * @param messageId - The cross-chain message ID
+ * @param provider - Optional bridge provider override
+ * @returns The explorer URL or null if message URLs not supported
+ */
+export function getBridgeMessageByIdUrl(
+  messageId: string,
+  provider?: BridgeProvider
+): string | null {
+  const p = provider ?? getBridgeProvider();
+  const config = BRIDGE_EXPLORERS[p];
+
+  if (!config.messageUrl) {
+    return null;
+  }
+
+  return config.messageUrl(messageId);
+}

@@ -5,7 +5,17 @@
  * registration methods with descriptions of each.
  */
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge } from '@swr/ui';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Badge,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@swr/ui';
 import { cn } from '@/lib/utils';
 import { Wallet, RefreshCw, Users } from 'lucide-react';
 import type { RegistrationType } from '@/stores/registrationStore';
@@ -64,11 +74,13 @@ export function RegistrationMethodSelector({
   p2pAvailable = true,
   className,
 }: RegistrationMethodSelectorProps) {
+  const p2pUnavailableMessage =
+    'Relay node not deployed yet. P2P relay is disabled in this deployment.';
   const methods = DEFAULT_METHODS.map((method) => ({
     ...method,
     disabled: method.type === 'p2pRelay' && !p2pAvailable,
     disabledReason:
-      method.type === 'p2pRelay' && !p2pAvailable ? 'No helper peer available' : undefined,
+      method.type === 'p2pRelay' && !p2pAvailable ? 'P2P Relay Unavailable' : undefined,
   }));
 
   return (
@@ -104,8 +116,20 @@ export function RegistrationMethodSelector({
                 <div className="p-2 rounded-lg bg-muted group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                   {method.icon}
                 </div>
-                {isDisabled && method.disabledReason && (
-                  <Badge variant="secondary">{method.disabledReason}</Badge>
+                {isDisabled && method.disabledReason && method.type === 'p2pRelay' ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="secondary">{method.disabledReason}</Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs">
+                      {p2pUnavailableMessage}
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  isDisabled &&
+                  method.disabledReason && (
+                    <Badge variant="secondary">{method.disabledReason}</Badge>
+                  )
                 )}
               </div>
               <CardTitle className="text-lg mt-2">{method.title}</CardTitle>

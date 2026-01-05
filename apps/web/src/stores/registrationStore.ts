@@ -24,14 +24,21 @@ export interface RegistrationState {
   registrationType: RegistrationType;
   step: RegistrationStep | null;
   acknowledgementHash: Hash | null;
+  /** Chain ID where acknowledgement was submitted */
+  acknowledgementChainId: number | null;
   registrationHash: Hash | null;
+  /** Chain ID where registration was submitted (spoke chain for cross-chain) */
+  registrationChainId: number | null;
+  /** Cross-chain bridge message ID (e.g., Hyperlane messageId) */
+  bridgeMessageId: Hash | null;
 }
 
 export interface RegistrationActions {
   setRegistrationType: (type: RegistrationType) => void;
   setStep: (step: RegistrationStep) => void;
-  setAcknowledgementHash: (hash: Hash) => void;
-  setRegistrationHash: (hash: Hash) => void;
+  setAcknowledgementHash: (hash: Hash, chainId: number) => void;
+  setRegistrationHash: (hash: Hash, chainId: number) => void;
+  setBridgeMessageId: (messageId: Hash) => void;
   reset: () => void;
 }
 
@@ -39,7 +46,10 @@ const initialState: RegistrationState = {
   registrationType: 'standard',
   step: null,
   acknowledgementHash: null,
+  acknowledgementChainId: null,
   registrationHash: null,
+  registrationChainId: null,
+  bridgeMessageId: null,
 };
 
 export const useRegistrationStore = create<RegistrationState & RegistrationActions>()(
@@ -64,16 +74,24 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
             state.step = step;
           }),
 
-        setAcknowledgementHash: (hash) =>
+        setAcknowledgementHash: (hash, chainId) =>
           set((state) => {
-            logger.acknowledgement.info('Acknowledgement hash received', { hash });
+            logger.acknowledgement.info('Acknowledgement hash received', { hash, chainId });
             state.acknowledgementHash = hash;
+            state.acknowledgementChainId = chainId;
           }),
 
-        setRegistrationHash: (hash) =>
+        setRegistrationHash: (hash, chainId) =>
           set((state) => {
-            logger.registration.info('Registration hash received', { hash });
+            logger.registration.info('Registration hash received', { hash, chainId });
             state.registrationHash = hash;
+            state.registrationChainId = chainId;
+          }),
+
+        setBridgeMessageId: (messageId) =>
+          set((state) => {
+            logger.registration.info('Bridge message ID received', { messageId });
+            state.bridgeMessageId = messageId;
           }),
 
         reset: () => {
@@ -97,7 +115,11 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
             registrationType: state.registrationType ?? initialState.registrationType,
             step: state.step ?? initialState.step,
             acknowledgementHash: state.acknowledgementHash ?? initialState.acknowledgementHash,
+            acknowledgementChainId:
+              state.acknowledgementChainId ?? initialState.acknowledgementChainId,
             registrationHash: state.registrationHash ?? initialState.registrationHash,
+            registrationChainId: state.registrationChainId ?? initialState.registrationChainId,
+            bridgeMessageId: state.bridgeMessageId ?? initialState.bridgeMessageId,
           };
         },
       }
@@ -200,16 +222,20 @@ export const useRegistrationStep = () =>
   );
 
 /**
- * Select transaction hashes.
- * Use when component needs both acknowledgement and registration tx hashes.
+ * Select transaction hashes, chain IDs, and bridge message ID.
+ * Use when component needs acknowledgement, registration, and cross-chain info.
  */
 export const useRegistrationTxHashes = () =>
   useRegistrationStore(
     useShallow((s) => ({
       acknowledgementHash: s.acknowledgementHash,
+      acknowledgementChainId: s.acknowledgementChainId,
       registrationHash: s.registrationHash,
+      registrationChainId: s.registrationChainId,
+      bridgeMessageId: s.bridgeMessageId,
       setAcknowledgementHash: s.setAcknowledgementHash,
       setRegistrationHash: s.setRegistrationHash,
+      setBridgeMessageId: s.setBridgeMessageId,
     }))
   );
 

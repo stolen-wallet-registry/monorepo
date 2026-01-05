@@ -7,7 +7,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'wouter';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
 import type { Stream } from '@libp2p/interface';
@@ -70,12 +70,14 @@ const STEP_TITLES: Partial<Record<RegistrationStep, string>> = {
 export function P2PRegistereeRegistrationPage() {
   const [, setLocation] = useLocation();
   const { isConnected, address } = useAccount();
+  const chainId = useChainId();
   const {
     registrationType,
     step,
     setRegistrationType,
     setAcknowledgementHash,
     setRegistrationHash,
+    setBridgeMessageId,
   } = useRegistrationStore();
   const { setFormValues } = useFormStore();
   const {
@@ -174,7 +176,7 @@ export function P2PRegistereeRegistrationPage() {
                 case PROTOCOLS.ACK_PAY:
                   // Acknowledgement tx hash received
                   if (data.hash) {
-                    setAcknowledgementHash(data.hash);
+                    setAcknowledgementHash(data.hash, chainId);
                   }
                   goToNextStepRef.current();
                   break;
@@ -186,9 +188,16 @@ export function P2PRegistereeRegistrationPage() {
                   break;
 
                 case PROTOCOLS.REG_PAY:
-                  // Registration tx hash received
+                  // Registration tx hash (and optional bridge message ID) received
                   if (data.hash) {
-                    setRegistrationHash(data.hash);
+                    setRegistrationHash(data.hash, chainId);
+                  }
+                  // Store bridge message ID if provided (for cross-chain explorer links)
+                  if (data.messageId) {
+                    setBridgeMessageId(data.messageId);
+                    logger.p2p.info('Received bridge message ID from relayer', {
+                      messageId: data.messageId,
+                    });
                   }
                   goToNextStepRef.current();
                   break;
@@ -260,12 +269,14 @@ export function P2PRegistereeRegistrationPage() {
   }, [
     isConnected,
     address,
+    chainId,
     setPeerId,
     setFormValues,
     setConnectedToPeer,
     setInitialized,
     setAcknowledgementHash,
     setRegistrationHash,
+    setBridgeMessageId,
   ]);
 
   // Initialize registration type on mount

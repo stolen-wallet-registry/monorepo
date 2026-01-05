@@ -269,6 +269,38 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         return bridgeFee + registrationFee;
     }
 
+    /// @inheritdoc ISpokeRegistry
+    function quoteFeeBreakdown(address owner) external view returns (ISpokeRegistry.FeeBreakdown memory) {
+        // Build payload for accurate quote
+        CrossChainMessage.RegistrationPayload memory payload = CrossChainMessage.RegistrationPayload({
+            wallet: owner,
+            sourceChainId: spokeChainId,
+            isSponsored: false,
+            nonce: nonces[owner],
+            timestamp: uint64(block.timestamp),
+            registrationHash: bytes32(0)
+        });
+
+        bytes memory encodedPayload = payload.encodeRegistration();
+
+        // Get bridge fee and name from adapter
+        uint256 bridgeFee = IBridgeAdapter(bridgeAdapter).quoteMessage(hubChainId, encodedPayload);
+        string memory bridgeName = IBridgeAdapter(bridgeAdapter).bridgeName();
+
+        // Get registration fee from fee manager
+        uint256 registrationFee = 0;
+        if (feeManager != address(0)) {
+            registrationFee = IFeeManager(feeManager).currentFeeWei();
+        }
+
+        return ISpokeRegistry.FeeBreakdown({
+            bridgeFee: bridgeFee,
+            registrationFee: registrationFee,
+            total: bridgeFee + registrationFee,
+            bridgeName: bridgeName
+        });
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - Frontend Compatibility (matches StolenWalletRegistry)
     // ═══════════════════════════════════════════════════════════════════════════

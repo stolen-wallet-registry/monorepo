@@ -86,7 +86,7 @@ describe('RegistrationMethodSelector', () => {
     it('disables P2P option when not available', () => {
       render(<RegistrationMethodSelector {...defaultProps} p2pAvailable={false} />);
 
-      expect(screen.getByText('No helper peer available')).toBeInTheDocument();
+      expect(screen.getByText('P2P Relay Unavailable')).toBeInTheDocument();
     });
 
     it('does not call onSelect for disabled P2P method', async () => {
