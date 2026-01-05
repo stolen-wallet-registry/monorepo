@@ -148,6 +148,10 @@ export function ExplorerLink({
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
+      // Clear any existing timeout before creating a new one (handles rapid clicks)
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
       timeoutRef.current = setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
@@ -222,12 +226,7 @@ export function ExplorerLink({
         showDisabledIcon && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span
-                className="cursor-not-allowed"
-                tabIndex={0}
-                role="img"
-                aria-label="No explorer available"
-              >
+              <span className="cursor-not-allowed" role="img" aria-label="No explorer available">
                 <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
               </span>
             </TooltipTrigger>

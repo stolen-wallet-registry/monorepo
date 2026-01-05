@@ -162,9 +162,12 @@ export function getBridgeExplorerName(provider?: BridgeProvider): string {
  * Get the bridge explorer URL for a cross-chain message by origin transaction hash.
  *
  * @param originTxHash - The transaction hash on the origin (spoke) chain
- * @param originChainId - The origin chain ID (to check if explorer is supported)
+ * @param originChainId - Optional origin chain ID for chain validation. When provided,
+ *   the function checks if the chain is excluded or not in the supported list.
+ *   When omitted, chain validation is skipped and a URL is always generated.
+ *   This allows URL generation without chain context (e.g., for display purposes).
  * @param provider - Optional bridge provider override
- * @returns The explorer URL or null if not supported for this chain
+ * @returns The explorer URL or null if chain is excluded/unsupported
  */
 export function getBridgeMessageUrl(
   originTxHash: Hash,
