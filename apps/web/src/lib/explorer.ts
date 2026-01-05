@@ -107,8 +107,8 @@ interface BridgeExplorerConfig {
   excludedChains?: number[];
 }
 
-/** Bridge explorer configurations */
-const BRIDGE_EXPLORERS: Record<BridgeProvider, BridgeExplorerConfig> = {
+/** Bridge explorer configurations (exported for testability) */
+export const BRIDGE_EXPLORERS: Record<BridgeProvider, BridgeExplorerConfig> = {
   hyperlane: {
     name: 'Hyperlane Explorer',
     baseUrl: 'https://explorer.hyperlane.xyz',
@@ -130,6 +130,13 @@ const BRIDGE_EXPLORERS: Record<BridgeProvider, BridgeExplorerConfig> = {
     excludedChains: [31337, 31338],
   },
 };
+
+/**
+ * Get list of supported bridge providers for testability.
+ */
+export function getSupportedBridgeProviders(): BridgeProvider[] {
+  return Object.keys(BRIDGE_EXPLORERS) as BridgeProvider[];
+}
 
 /**
  * Get the current bridge provider for cross-chain messaging.

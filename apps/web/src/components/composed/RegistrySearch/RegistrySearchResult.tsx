@@ -53,22 +53,19 @@ export function RegistrySearchResult({
             as stolen.
           </p>
           {registrationData && (
-            <>
-              <div className="-mx-4 mt-3 border-t border-destructive/20" />
-              <div className="text-xs space-y-1 pt-2">
+            <div className="w-full text-xs space-y-1 mt-3 pt-3 border-t border-destructive/20">
+              <p>
+                <span className="text-muted-foreground">Registered at block:</span>{' '}
+                {registrationData.registeredAt.toString()}
+              </p>
+              {registrationData.isSponsored && (
                 <p>
-                  <span className="text-muted-foreground">Registered at block:</span>{' '}
-                  {registrationData.registeredAt.toString()}
+                  <Badge variant="outline" className="text-xs">
+                    Sponsored Registration
+                  </Badge>
                 </p>
-                {registrationData.isSponsored && (
-                  <p>
-                    <Badge variant="outline" className="text-xs">
-                      Sponsored Registration
-                    </Badge>
-                  </p>
-                )}
-              </div>
-            </>
+              )}
+            </div>
           )}
         </AlertDescription>
       </Alert>
@@ -99,23 +96,20 @@ export function RegistrySearchResult({
             acknowledgement pending. Registration may complete soon.
           </p>
           {acknowledgementData && (
-            <>
-              <div className="-mx-4 mt-3 border-t border-yellow-300 dark:border-yellow-700" />
-              <div className="text-xs space-y-1 pt-2">
-                <p className="flex items-center gap-1">
-                  <span className="text-yellow-600 dark:text-yellow-400">Trusted forwarder:</span>{' '}
-                  <ExplorerLink type="address" value={acknowledgementData.trustedForwarder} />
-                </p>
-                <p>
-                  <span className="text-yellow-600 dark:text-yellow-400">Grace period starts:</span>{' '}
-                  Block {acknowledgementData.startBlock.toString()}
-                </p>
-                <p>
-                  <span className="text-yellow-600 dark:text-yellow-400">Expires:</span> Block{' '}
-                  {acknowledgementData.expiryBlock.toString()}
-                </p>
-              </div>
-            </>
+            <div className="w-full text-xs space-y-1 mt-3 pt-3 border-t border-yellow-300 dark:border-yellow-700">
+              <p className="flex items-center gap-1">
+                <span className="text-yellow-600 dark:text-yellow-400">Trusted forwarder:</span>{' '}
+                <ExplorerLink type="address" value={acknowledgementData.trustedForwarder} />
+              </p>
+              <p>
+                <span className="text-yellow-600 dark:text-yellow-400">Grace period starts:</span>{' '}
+                Block {acknowledgementData.startBlock.toString()}
+              </p>
+              <p>
+                <span className="text-yellow-600 dark:text-yellow-400">Expires:</span> Block{' '}
+                {acknowledgementData.expiryBlock.toString()}
+              </p>
+            </div>
           )}
         </AlertDescription>
       </Alert>

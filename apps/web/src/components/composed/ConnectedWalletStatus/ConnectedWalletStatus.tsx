@@ -99,8 +99,8 @@ export function ConnectedWalletStatus({
     chainId: getHubChainIdForEnvironment(),
   });
 
-  // Debug logging for troubleshooting (using info level since debug may be filtered in browser)
-  logger.wallet.info('ConnectedWalletStatus state', {
+  // Debug logging for troubleshooting
+  logger.wallet.debug('ConnectedWalletStatus state', {
     address,
     isConnected,
     isRegistered,

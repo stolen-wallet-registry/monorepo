@@ -123,11 +123,17 @@ export function P2PRegistereeRegistrationPage() {
 
   // Use ref for goToNextStep to avoid recreating P2P node when step changes
   const goToNextStepRef = useRef(goToNextStep);
+  // Use ref for chainId to avoid stale closure in protocol handlers
+  const chainIdRef = useRef(chainId);
 
-  // Update ref in effect to avoid updating during render (React Compiler rule)
+  // Update refs in effect to avoid updating during render (React Compiler rule)
   useEffect(() => {
     goToNextStepRef.current = goToNextStep;
   }, [goToNextStep]);
+
+  useEffect(() => {
+    chainIdRef.current = chainId;
+  }, [chainId]);
 
   // Initialize P2P node - only depends on connection state, not step navigation
   // Uses AbortController to handle React Strict Mode double-invocation cleanly
@@ -175,8 +181,9 @@ export function P2PRegistereeRegistrationPage() {
 
                 case PROTOCOLS.ACK_PAY:
                   // Acknowledgement tx hash received - use relayer's chainId if provided
+                  // Use chainIdRef.current to avoid stale closure when network changes
                   if (data.hash) {
-                    setAcknowledgementHash(data.hash, data.txChainId ?? chainId);
+                    setAcknowledgementHash(data.hash, data.txChainId ?? chainIdRef.current);
                   }
                   goToNextStepRef.current();
                   break;
@@ -190,8 +197,9 @@ export function P2PRegistereeRegistrationPage() {
                 case PROTOCOLS.REG_PAY:
                   // Registration tx hash (and optional bridge message ID) received
                   // Use relayer's chainId if provided for correct explorer links
+                  // Use chainIdRef.current to avoid stale closure when network changes
                   if (data.hash) {
-                    setRegistrationHash(data.hash, data.txChainId ?? chainId);
+                    setRegistrationHash(data.hash, data.txChainId ?? chainIdRef.current);
                   }
                   // Store bridge message ID if provided (for cross-chain explorer links)
                   if (data.messageId) {

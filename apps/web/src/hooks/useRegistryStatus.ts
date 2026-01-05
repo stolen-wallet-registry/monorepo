@@ -115,8 +115,8 @@ export function useRegistryStatus({
     contractAddress = undefined;
   }
 
-  // Debug logging (info level so it shows in browser console)
-  logger.contract.info('useRegistryStatus query config', {
+  // Debug logging
+  logger.contract.debug('useRegistryStatus query config', {
     address,
     overrideChainId,
     connectedChainId,
@@ -204,7 +204,7 @@ export function useRegistryStatus({
 
   // Log status for debugging
   if (enabled && !isLoading && !isError) {
-    logger.contract.info('Registry status result', {
+    logger.contract.debug('Registry status result', {
       address,
       isRegistered,
       isPending,

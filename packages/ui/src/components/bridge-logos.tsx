@@ -4,6 +4,7 @@
  * These are official brand logos for cross-chain bridge protocols.
  */
 
+import { useId } from 'react';
 import { cn } from '../lib/utils';
 
 export interface BridgeLogoProps {
@@ -15,7 +16,7 @@ export interface BridgeLogoProps {
  * Hyperlane Logo - official brand logo
  */
 export function HyperlaneLogo({ className, title = 'Hyperlane' }: BridgeLogoProps) {
-  const titleId = 'hyperlane-logo-title';
+  const titleId = useId();
   return (
     <svg
       viewBox="0 0 1000 1000"
@@ -56,7 +57,7 @@ export function HyperlaneLogo({ className, title = 'Hyperlane' }: BridgeLogoProp
  * Wormhole Logo - official brand logo
  */
 export function WormholeLogo({ className, title = 'Wormhole' }: BridgeLogoProps) {
-  const titleId = 'wormhole-logo-title';
+  const titleId = useId();
   return (
     <svg
       viewBox="0 0 255.4235 255.4555"

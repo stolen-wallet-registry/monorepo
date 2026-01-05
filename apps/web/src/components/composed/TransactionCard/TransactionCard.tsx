@@ -15,15 +15,16 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-  Skeleton,
 } from '@swr/ui';
 import type { TransactionCost } from '@/hooks/useTransactionCost';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
+import { CostBreakdownTable } from '@/components/composed/CostBreakdownTable';
+import { CrossChainRelayProgress } from '@/components/composed/CrossChainRelayProgress';
 import { cn } from '@/lib/utils';
 import { truncateAddress } from '@/lib/address';
 import { getChainName, getChainShortName } from '@/lib/explorer';
-import { Check, AlertCircle, Loader2, FileSignature, Globe, Copy, RefreshCw } from 'lucide-react';
+import { Check, AlertCircle, Loader2, FileSignature, Globe, Copy } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
@@ -196,15 +197,6 @@ export function TransactionCard({
     return 'Ready to submit';
   };
 
-  // Format elapsed time for display
-  const formatElapsedTime = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
-    if (seconds < 60) return `${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds}s`;
-  };
-
   return (
     <div className={cn('space-y-4', className)}>
       {/* Status header */}
@@ -335,131 +327,13 @@ export function TransactionCard({
 
       {/* Cost estimate section */}
       {costEstimate && status === 'idle' && (
-        <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
-          {costEstimate.isLoading && !costEstimate.data && (
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-4 w-32" />
-              </div>
-              <Skeleton className="h-3 w-40" />
-            </div>
-          )}
-
-          {costEstimate.isError && !costEstimate.data && (
-            <p className="text-sm text-muted-foreground text-center">Unable to estimate costs</p>
-          )}
-
-          {costEstimate.data && (
-            <>
-              {/* Protocol Fee (registration only) */}
-              {costEstimate.data.protocolFee && (
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    Protocol Fee
-                    <InfoTooltip
-                      content="This fee supports public goods funding. On Optimism-based chains, it goes to the Optimism Retroactive Public Goods Fund. On other chains, it supports Protocol Guild for Ethereum core development."
-                      size="sm"
-                    />
-                  </span>
-                  <div className="text-right">
-                    <span className="font-medium">{costEstimate.data.protocolFee.usd}</span>
-                    <span className="text-xs text-muted-foreground ml-2">
-                      ({costEstimate.data.protocolFee.eth} ETH)
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Bridge Fee (spoke chains only during registration) */}
-              {costEstimate.data.bridgeFee && costEstimate.data.bridgeName && (
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    {costEstimate.data.bridgeName} Fee
-                    <InfoTooltip
-                      content={`Fee for relaying your registration to the hub chain via ${costEstimate.data.bridgeName}. This covers cross-chain message delivery.`}
-                      size="sm"
-                    />
-                  </span>
-                  <div className="text-right">
-                    <span className="font-medium">{costEstimate.data.bridgeFee.usd}</span>
-                    <span className="text-xs text-muted-foreground ml-2">
-                      ({costEstimate.data.bridgeFee.eth} ETH)
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Network Gas */}
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground flex items-center gap-1">
-                  Network Gas
-                  <InfoTooltip
-                    content="Standard network fee paid to validators for processing your transaction on the blockchain."
-                    size="sm"
-                  />
-                </span>
-                <div className="text-right">
-                  <span className="font-medium">{costEstimate.data.gasCost.usd}</span>
-                  <span className="text-xs text-muted-foreground ml-2">
-                    ({costEstimate.data.gasCost.eth} ETH)
-                  </span>
-                </div>
-              </div>
-
-              {/* Total (if any fees besides gas) */}
-              {(costEstimate.data.protocolFee || costEstimate.data.bridgeFee) && (
-                <>
-                  <hr className="border-border" />
-                  <div className="flex justify-between items-center text-sm font-medium">
-                    <span>Total</span>
-                    <div className="text-right">
-                      <span>{costEstimate.data.total.usd}</span>
-                      <span className="text-xs text-muted-foreground ml-2 font-normal">
-                        ({costEstimate.data.total.eth} ETH)
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Footer */}
-              <div className="flex items-center justify-between pt-1">
-                <p className="text-xs text-muted-foreground">
-                  ETH: {costEstimate.data.ethPriceUsd} • Gas: {costEstimate.data.gasCost.gwei} gwei
-                </p>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={handleRefreshCost}
-                      disabled={refreshCooldown || costEstimate.isLoading}
-                      className={cn(
-                        'p-1.5 rounded-md border border-transparent',
-                        'text-muted-foreground hover:text-foreground',
-                        'hover:bg-muted hover:border-border',
-                        'active:scale-95 cursor-pointer',
-                        'transition-all duration-150',
-                        (refreshCooldown || costEstimate.isLoading) &&
-                          'opacity-40 cursor-not-allowed hover:bg-transparent hover:border-transparent active:scale-100'
-                      )}
-                      aria-label="Refresh cost estimate"
-                    >
-                      <RefreshCw
-                        className={cn('h-3.5 w-3.5', costEstimate.isLoading && 'animate-spin')}
-                      />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    <p className="text-xs">
-                      {refreshCooldown ? 'Please wait...' : 'Refresh estimate'}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </>
-          )}
-        </div>
+        <CostBreakdownTable
+          costEstimate={costEstimate.data}
+          isLoading={costEstimate.isLoading}
+          isError={costEstimate.isError}
+          onRefresh={handleRefreshCost}
+          isRefreshCooldown={refreshCooldown}
+        />
       )}
 
       {/* Transaction hash */}
@@ -487,68 +361,13 @@ export function TransactionCard({
 
       {/* Cross-chain relay progress */}
       {isRelaying && crossChainProgress && (
-        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 p-4 space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Globe className="h-5 w-5 text-blue-500 animate-pulse" />
-              <div className="absolute inset-0 animate-ping">
-                <Globe className="h-5 w-5 text-blue-400 opacity-30" />
-              </div>
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                Cross-Chain Relay in Progress
-              </p>
-              <p className="text-xs text-blue-600 dark:text-blue-400">
-                {crossChainProgress.bridgeName ?? 'Bridge'} is delivering your registration to{' '}
-                {crossChainProgress.hubChainName ?? 'the hub chain'}
-              </p>
-            </div>
-          </div>
-
-          {/* Message ID with explorer link */}
-          {crossChainProgress.messageId && (
-            <div className="rounded bg-blue-100 dark:bg-blue-900 p-2">
-              <p className="text-xs text-blue-600 dark:text-blue-400 mb-1">Message ID</p>
-              <ExplorerLink
-                value={crossChainProgress.messageId}
-                type="message"
-                href={crossChainProgress.explorerUrl}
-              />
-            </div>
-          )}
-
-          <div
-            className="flex items-center justify-between text-xs"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-          >
-            <span className="text-blue-600 dark:text-blue-400">
-              Elapsed: {formatElapsedTime(crossChainProgress.elapsedTime)}
-            </span>
-            <span className="text-blue-500 dark:text-blue-500 flex items-center gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-              Polling hub chain...
-            </span>
-          </div>
-          {/* Progress bar (indeterminate pulse) */}
-          <div className="h-1.5 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-blue-400 via-blue-500 to-blue-400 rounded-full"
-              style={{
-                width: '40%',
-                animation: 'indeterminate 1.5s ease-in-out infinite',
-              }}
-            />
-          </div>
-          <style>{`
-            @keyframes indeterminate {
-              0% { transform: translateX(-100%); }
-              100% { transform: translateX(350%); }
-            }
-          `}</style>
-        </div>
+        <CrossChainRelayProgress
+          elapsedTime={crossChainProgress.elapsedTime}
+          hubChainName={crossChainProgress.hubChainName}
+          bridgeName={crossChainProgress.bridgeName}
+          messageId={crossChainProgress.messageId}
+          explorerUrl={crossChainProgress.explorerUrl}
+        />
       )}
 
       {/* Error message */}

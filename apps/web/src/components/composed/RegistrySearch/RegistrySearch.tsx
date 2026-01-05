@@ -87,10 +87,13 @@ export function RegistrySearch({
     return isAddress(trimmed);
   }, [inputValue]);
 
+  // Memoize hub chain ID (reads env vars which are constant at runtime)
+  const hubChainId = useMemo(() => getHubChainIdForEnvironment(), []);
+
   // Always query the hub chain for unified registry (cross-chain registrations settle there)
   const registryStatus = useRegistryStatus({
     address: searchAddress,
-    chainId: getHubChainIdForEnvironment(),
+    chainId: hubChainId,
   });
 
   // Notify parent when result changes (using effect to properly track notifications)

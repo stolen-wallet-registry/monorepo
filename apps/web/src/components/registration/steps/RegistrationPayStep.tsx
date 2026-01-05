@@ -121,6 +121,10 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     if (messageId) {
       logger.registration.info('Stored bridge message ID for explorer link', { messageId });
       setBridgeMessageId(messageId);
+    } else {
+      logger.registration.debug('Could not extract bridge message ID from receipt', {
+        logCount: receipt.logs.length,
+      });
     }
   }, [isCrossChain, receipt, setBridgeMessageId]);
 

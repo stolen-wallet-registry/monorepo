@@ -81,7 +81,11 @@ export function useCrossChainConfirmation({
     if (hubChainId) {
       hubRegistryAddress = getStolenWalletRegistryAddress(hubChainId);
     }
-  } catch {
+  } catch (err) {
+    logger.registration.warn('Failed to get hub registry address', {
+      hubChainId,
+      error: err instanceof Error ? err.message : String(err),
+    });
     hubRegistryAddress = undefined;
   }
 

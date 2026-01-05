@@ -163,3 +163,59 @@ export const FailedWithLongError: Story = {
     onRetry: () => console.log('Retry clicked'),
   },
 };
+
+// ===== Cross-Chain States =====
+
+/**
+ * Cross-chain relay in progress (spoke tx confirmed, waiting for hub).
+ */
+export const Relaying: Story = {
+  args: {
+    type: 'registration',
+    status: 'relaying',
+    hash: sampleHash,
+    explorerUrl: 'https://optimistic.etherscan.io/tx/' + sampleHash,
+    chainId: 10, // Optimism
+    crossChainProgress: {
+      elapsedTime: 15000, // 15 seconds
+      hubChainName: 'Base',
+      bridgeName: 'Hyperlane',
+    },
+    onSubmit: () => {},
+  },
+};
+
+/**
+ * Cross-chain relay with message ID and explorer link.
+ */
+export const RelayingWithMessageId: Story = {
+  args: {
+    type: 'registration',
+    status: 'relaying',
+    hash: sampleHash,
+    explorerUrl: 'https://optimistic.etherscan.io/tx/' + sampleHash,
+    chainId: 10, // Optimism
+    crossChainProgress: {
+      elapsedTime: 45000, // 45 seconds
+      hubChainName: 'Base',
+      bridgeName: 'Hyperlane',
+      messageId: sampleHash,
+      explorerUrl: 'https://explorer.hyperlane.xyz/message/' + sampleHash,
+    },
+    onSubmit: () => {},
+  },
+};
+
+/**
+ * Hub chain confirmed - cross-chain registration complete.
+ */
+export const HubConfirmed: Story = {
+  args: {
+    type: 'registration',
+    status: 'hub-confirmed',
+    hash: sampleHash,
+    explorerUrl: 'https://basescan.org/tx/' + sampleHash,
+    chainId: 8453, // Base
+    onSubmit: () => {},
+  },
+};

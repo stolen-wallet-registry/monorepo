@@ -8,7 +8,7 @@
  *   - Spoke: bridge fee + registration fee (with breakdown)
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 import { useQuoteFeeBreakdown } from './useQuoteFeeBreakdown';
 import { useGasEstimate, type UseGasEstimateParams } from './useGasEstimate';
@@ -117,10 +117,10 @@ export function useTransactionCost({
   // Track previous values to avoid duplicate logs
   const prevCostRef = useRef<string | null>(null);
 
-  // Build combined cost data
-  let costData: TransactionCost | null = null;
+  // Build combined cost data - memoized to stabilize reference
+  const costData = useMemo((): TransactionCost | null => {
+    if (!gasEstimate.data || !ethPrice.data) return null;
 
-  if (gasEstimate.data && ethPrice.data) {
     const gas = gasEstimate.data;
     const breakdown = breakdownResult.data;
 
@@ -141,7 +141,7 @@ export function useTransactionCost({
     const totalWei = protocolFeeWei + bridgeFeeWei + gas.gasCostWei;
     const totalUsdCents = Number((totalWei * ethPriceUsdCentsBigInt) / WEI_PER_ETH);
 
-    costData = {
+    return {
       protocolFee,
       bridgeFee,
       bridgeName: breakdown?.bridgeName ?? null,
@@ -159,7 +159,7 @@ export function useTransactionCost({
       ethPriceUsd: ethPrice.data.usdFormatted,
       isCrossChain: breakdown?.isCrossChain ?? false,
     };
-  }
+  }, [gasEstimate.data, ethPrice.data, breakdownResult.data, step]);
 
   // Log cost changes in effect to avoid excessive render-time logging
   useEffect(() => {

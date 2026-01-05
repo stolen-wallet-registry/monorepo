@@ -22,6 +22,12 @@ import type { Address, Hash, Hex } from '@/lib/types/ethereum';
  * - 'contract': Smart contract address (same format as address, semantic distinction)
  * - 'block': Block hash (66 chars, same as transaction)
  * - 'token': Token contract address (same format as address)
+ * - 'message': Cross-chain message ID (66 chars, same as transaction)
+ *
+ * NOTE: 'message' type must be explicitly specified via the type prop.
+ * Auto-inference cannot distinguish message IDs from transaction hashes
+ * since both are 66 chars. Without explicit type, message IDs will be
+ * inferred as 'transaction' and display transaction-specific labels.
  */
 export type ExplorerLinkType =
   | 'address'
