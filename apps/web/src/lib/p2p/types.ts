@@ -66,6 +66,8 @@ export const ParsedStreamDataSchema = z
     hash: txHashSchema.optional(),
     /** Bridge message ID for cross-chain explorer links (e.g., Hyperlane messageId) */
     messageId: txHashSchema.optional(),
+    /** Chain ID where the transaction was submitted (for correct explorer links in cross-chain P2P) */
+    txChainId: z.number().int().positive().optional(),
   })
   .strict(); // Reject unknown keys for security
 
@@ -154,6 +156,8 @@ export interface ParsedStreamData {
   hash?: Hash;
   /** Bridge message ID for cross-chain explorer links (e.g., Hyperlane messageId) */
   messageId?: Hash;
+  /** Chain ID where the transaction was submitted (for correct explorer links in cross-chain P2P) */
+  txChainId?: number;
 }
 
 /**

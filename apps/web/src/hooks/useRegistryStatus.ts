@@ -75,6 +75,8 @@ export interface UseRegistryStatusOptions {
   address?: Address;
   /** Enable automatic refetch interval (ms) or false to disable */
   refetchInterval?: number | false;
+  /** Override chain ID to query (defaults to connected chain) */
+  chainId?: number;
 }
 
 /**
@@ -101,8 +103,10 @@ export interface UseRegistryStatusOptions {
 export function useRegistryStatus({
   address,
   refetchInterval = false,
+  chainId: overrideChainId,
 }: UseRegistryStatusOptions): RegistryStatus {
-  const chainId = useChainId();
+  const connectedChainId = useChainId();
+  const chainId = overrideChainId ?? connectedChainId;
 
   let contractAddress: Address | undefined;
   try {
@@ -110,6 +114,15 @@ export function useRegistryStatus({
   } catch {
     contractAddress = undefined;
   }
+
+  // Debug logging (info level so it shows in browser console)
+  logger.contract.info('useRegistryStatus query config', {
+    address,
+    overrideChainId,
+    connectedChainId,
+    resolvedChainId: chainId,
+    contractAddress,
+  });
 
   const enabled = !!address && !!contractAddress;
 
@@ -120,24 +133,28 @@ export function useRegistryStatus({
         abi: stolenWalletRegistryAbi,
         functionName: 'isRegistered',
         args: [address!],
+        chainId,
       },
       {
         address: contractAddress!,
         abi: stolenWalletRegistryAbi,
         functionName: 'isPending',
         args: [address!],
+        chainId,
       },
       {
         address: contractAddress!,
         abi: stolenWalletRegistryAbi,
         functionName: 'getRegistration',
         args: [address!],
+        chainId,
       },
       {
         address: contractAddress!,
         abi: stolenWalletRegistryAbi,
         functionName: 'getAcknowledgement',
         args: [address!],
+        chainId,
       },
     ],
     query: {
@@ -187,7 +204,7 @@ export function useRegistryStatus({
 
   // Log status for debugging
   if (enabled && !isLoading && !isError) {
-    logger.contract.debug('Registry status query', {
+    logger.contract.info('Registry status result', {
       address,
       isRegistered,
       isPending,

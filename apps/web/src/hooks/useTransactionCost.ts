@@ -8,6 +8,7 @@
  *   - Spoke: bridge fee + registration fee (with breakdown)
  */
 
+import { useEffect, useRef } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 import { useQuoteFeeBreakdown } from './useQuoteFeeBreakdown';
 import { useGasEstimate, type UseGasEstimateParams } from './useGasEstimate';
@@ -91,31 +92,10 @@ export function useTransactionCost({
   // Get ETH price for USD conversions
   const ethPrice = useEthPrice();
 
-  logger.contract.debug('useTransactionCost: Fetching fee breakdown', {
-    step,
-    address,
-    chainId,
-    hasArgs: !!args,
-  });
-
   // Get fee breakdown (works on both hub and spoke)
   // On hub: returns { bridgeFee: null, registrationFee, total, bridgeName: null, isCrossChain: false }
   // On spoke: returns { bridgeFee, registrationFee, total, bridgeName: "Hyperlane", isCrossChain: true }
   const breakdownResult = useQuoteFeeBreakdown(address);
-
-  // Log fee breakdown result when it changes
-  if (breakdownResult.data) {
-    logger.contract.info('useTransactionCost: Fee breakdown received', {
-      bridgeFee: breakdownResult.data.bridgeFee?.usd ?? 'N/A',
-      bridgeFeeWei: breakdownResult.raw?.bridgeFee?.toString() ?? '0',
-      registrationFee: breakdownResult.data.registrationFee?.usd ?? 'N/A',
-      registrationFeeWei: breakdownResult.raw?.registrationFee?.toString() ?? '0',
-      totalFee: breakdownResult.data.total?.usd ?? 'N/A',
-      totalFeeWei: breakdownResult.raw?.total?.toString() ?? '0',
-      bridgeName: breakdownResult.data.bridgeName ?? 'N/A',
-      isCrossChain: breakdownResult.data.isCrossChain,
-    });
-  }
 
   // Determine the value to send with the transaction
   // Registration sends the total fee, acknowledgement sends nothing
@@ -133,6 +113,9 @@ export function useTransactionCost({
     gasEstimate.refetch();
     ethPrice.refetch();
   };
+
+  // Track previous values to avoid duplicate logs
+  const prevCostRef = useRef<string | null>(null);
 
   // Build combined cost data
   let costData: TransactionCost | null = null;
@@ -176,14 +159,23 @@ export function useTransactionCost({
       ethPriceUsd: ethPrice.data.usdFormatted,
       isCrossChain: breakdown?.isCrossChain ?? false,
     };
+  }
+
+  // Log cost changes in effect to avoid excessive render-time logging
+  useEffect(() => {
+    if (!costData) return;
+
+    const costKey = `${costData.total.usd}-${step}-${chainId}`;
+    if (costKey === prevCostRef.current) return;
+    prevCostRef.current = costKey;
 
     logger.contract.info('useTransactionCost: Final cost calculated', {
       step,
       chainId,
-      protocolFee: protocolFee?.usd ?? 'N/A',
-      protocolFeeEth: protocolFee?.eth ?? 'N/A',
-      bridgeFee: bridgeFee?.usd ?? 'N/A',
-      bridgeFeeEth: bridgeFee?.eth ?? 'N/A',
+      protocolFee: costData.protocolFee?.usd ?? 'N/A',
+      protocolFeeEth: costData.protocolFee?.eth ?? 'N/A',
+      bridgeFee: costData.bridgeFee?.usd ?? 'N/A',
+      bridgeFeeEth: costData.bridgeFee?.eth ?? 'N/A',
       bridgeName: costData.bridgeName ?? 'N/A',
       gasCost: costData.gasCost.usd,
       gasCostEth: costData.gasCost.eth,
@@ -192,7 +184,7 @@ export function useTransactionCost({
       ethPriceUsd: costData.ethPriceUsd,
       isCrossChain: costData.isCrossChain,
     });
-  }
+  }, [costData, step, chainId]);
 
   return {
     data: costData,

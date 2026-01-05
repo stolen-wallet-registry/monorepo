@@ -11,8 +11,10 @@ import { useAccount } from 'wagmi';
 import { Alert, AlertTitle, AlertDescription, Button } from '@swr/ui';
 import { AlertTriangle, Clock, X } from 'lucide-react';
 import { useRegistryStatus } from '@/hooks';
+import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { cn } from '@/lib/utils';
 import { truncateAddress } from '@/lib/address';
+import { logger } from '@/lib/logger';
 
 const DISMISS_KEY = 'swr-wallet-status-dismissed';
 
@@ -90,10 +92,24 @@ export function ConnectedWalletStatus({
     return getDismissedAddresses().has(address.toLowerCase());
   }, [address, alwaysShow, sessionDismissed]);
 
-  // Query registry status for connected wallet
-  const { isRegistered, isPending, isLoading, isError } = useRegistryStatus({
+  // Query registry status for connected wallet (always query hub for unified registry)
+  const { isRegistered, isPending, isLoading, isError, error } = useRegistryStatus({
     address: isConnected ? address : undefined,
     refetchInterval: 60_000, // Check every minute
+    chainId: getHubChainIdForEnvironment(),
+  });
+
+  // Debug logging for troubleshooting (using info level since debug may be filtered in browser)
+  logger.wallet.info('ConnectedWalletStatus state', {
+    address,
+    isConnected,
+    isRegistered,
+    isPending,
+    isLoading,
+    isError,
+    error: error?.message,
+    isDismissed,
+    hubChainId: getHubChainIdForEnvironment(),
   });
 
   const handleDismiss = useCallback(() => {
@@ -109,7 +125,13 @@ export function ConnectedWalletStatus({
   // - Wallet is clean (not registered and not pending)
   // - Dismissed (unless alwaysShow)
   if (!isConnected || !address) return null;
-  if (isLoading || isError) return null;
+  if (isLoading || isError) {
+    if (isError)
+      logger.wallet.warn('ConnectedWalletStatus query error, hiding alert', {
+        error: error?.message,
+      });
+    return null;
+  }
   if (!isRegistered && !isPending) return null;
   if (isDismissed && !alwaysShow) return null;
 

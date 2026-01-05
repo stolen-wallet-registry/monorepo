@@ -27,8 +27,7 @@ export type CrossChainStatus =
   | 'waiting' // Spoke tx confirmed, waiting to start polling
   | 'polling' // Actively polling hub chain
   | 'confirmed' // Hub chain shows wallet as registered
-  | 'timeout' // Max polling time exceeded
-  | 'error'; // Error during polling
+  | 'timeout'; // Max polling time exceeded (transient errors handled via timeout)
 
 export interface UseCrossChainConfirmationOptions {
   /** The wallet address being registered */

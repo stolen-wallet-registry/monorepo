@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { RegistrySearchResult } from './RegistrySearchResult';
+import type { Address } from '@/lib/types/ethereum';
 
 /**
  * RegistrySearchResult displays the status of a searched wallet address.
@@ -31,8 +32,8 @@ const meta: Meta<typeof RegistrySearchResult> = {
 export default meta;
 type Story = StoryObj<typeof RegistrySearchResult>;
 
-const sampleAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as `0x${string}`;
-const sampleForwarder = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as `0x${string}`;
+const sampleAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
+const sampleForwarder = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address;
 
 // Mock registration data for stories
 const mockRegistrationData = {

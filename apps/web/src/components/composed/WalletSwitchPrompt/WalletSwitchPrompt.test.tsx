@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { WalletSwitchPrompt } from './WalletSwitchPrompt';
+import type { Address } from '@/lib/types/ethereum';
 
 describe('WalletSwitchPrompt', () => {
-  const stolenWallet = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as `0x${string}`;
-  const gasWallet = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as `0x${string}`;
+  const stolenWallet = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
+  const gasWallet = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address;
 
   describe('correct wallet', () => {
     it('shows success message when correct wallet connected', () => {
@@ -178,7 +179,7 @@ describe('WalletSwitchPrompt', () => {
 
   describe('address comparison', () => {
     it('handles case-insensitive address comparison', () => {
-      const lowerCase = stolenWallet.toLowerCase() as `0x${string}`;
+      const lowerCase = stolenWallet.toLowerCase() as Address;
       render(
         <WalletSwitchPrompt
           currentAddress={lowerCase}

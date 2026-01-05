@@ -21,37 +21,24 @@ export function formatCentsToUsd(cents: number): string {
 /**
  * Format wei to ETH string with consistent decimal places.
  *
- * Shows up to 18 significant decimals, but trims to a readable length
- * while maintaining alignment in fee displays.
+ * Always shows exactly `decimals` places for proper alignment in fee displays.
  *
  * @param wei - Amount in wei (bigint)
- * @param maxDecimals - Maximum decimal places to show (default: 8)
+ * @param decimals - Number of decimal places to show (default: 8)
  * @returns Formatted ETH string (e.g., "0.00142857")
  */
-export function formatEthConsistent(wei: bigint, maxDecimals: number = 8): string {
+export function formatEthConsistent(wei: bigint, decimals: number = 8): string {
   const ethStr = formatEther(wei);
   const [whole, decimal = ''] = ethStr.split('.');
 
-  if (!decimal) {
+  if (decimals === 0) {
     return whole;
   }
 
-  // Pad with zeros to ensure consistent display
-  const paddedDecimal = decimal.padEnd(maxDecimals, '0').slice(0, maxDecimals);
+  // Always pad/truncate to exact decimal places for alignment
+  const paddedDecimal = decimal.padEnd(decimals, '0').slice(0, decimals);
 
-  // Trim trailing zeros but keep at least 4 decimal places for small values
-  const minDecimals = 4;
-  let trimmed = paddedDecimal;
-
-  // Find last non-zero digit
-  let lastNonZero = trimmed.length - 1;
-  while (lastNonZero >= minDecimals && trimmed[lastNonZero] === '0') {
-    lastNonZero--;
-  }
-
-  trimmed = trimmed.slice(0, Math.max(lastNonZero + 1, minDecimals));
-
-  return `${whole}.${trimmed}`;
+  return `${whole}.${paddedDecimal}`;
 }
 
 /**

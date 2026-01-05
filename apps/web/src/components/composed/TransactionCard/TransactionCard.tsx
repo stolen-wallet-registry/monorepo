@@ -68,6 +68,10 @@ export interface CrossChainProgress {
   hubChainName?: string;
   /** Bridge name (e.g., "Hyperlane") */
   bridgeName?: string;
+  /** Cross-chain message ID (for explorer link) */
+  messageId?: Hash;
+  /** Bridge explorer URL for the message */
+  explorerUrl?: string | null;
 }
 
 export interface TransactionCardProps {
@@ -501,12 +505,30 @@ export function TransactionCard({
               </p>
             </div>
           </div>
-          <div className="flex items-center justify-between text-xs">
+
+          {/* Message ID with explorer link */}
+          {crossChainProgress.messageId && (
+            <div className="rounded bg-blue-100 dark:bg-blue-900 p-2">
+              <p className="text-xs text-blue-600 dark:text-blue-400 mb-1">Message ID</p>
+              <ExplorerLink
+                value={crossChainProgress.messageId}
+                type="message"
+                href={crossChainProgress.explorerUrl}
+              />
+            </div>
+          )}
+
+          <div
+            className="flex items-center justify-between text-xs"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             <span className="text-blue-600 dark:text-blue-400">
               Elapsed: {formatElapsedTime(crossChainProgress.elapsedTime)}
             </span>
             <span className="text-blue-500 dark:text-blue-500 flex items-center gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
               Polling hub chain...
             </span>
           </div>

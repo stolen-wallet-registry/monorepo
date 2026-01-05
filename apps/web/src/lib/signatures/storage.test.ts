@@ -8,9 +8,10 @@ import {
   type StoredSignature,
 } from './storage';
 import { SIGNATURE_STEP } from './eip712';
+import type { Address, Hex } from '@/lib/types/ethereum';
 
 describe('signature storage', () => {
-  const testAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as `0x${string}`;
+  const testAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
   const testChainId = 1;
 
   const createTestSignature = (
@@ -18,7 +19,7 @@ describe('signature storage', () => {
     overrides: Partial<StoredSignature> = {}
   ): StoredSignature => ({
     signature:
-      '0x1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8538dde03fc8b4c6d7f2c13c82e5c34d0e5f8b1c0b5e2f3a4b5c6d7e8f9a0b1c21b' as `0x${string}`,
+      '0x1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8538dde03fc8b4c6d7f2c13c82e5c34d0e5f8b1c0b5e2f3a4b5c6d7e8f9a0b1c21b' as Hex,
     deadline: 12345678n,
     nonce: 42n,
     address: testAddress,
@@ -83,8 +84,8 @@ describe('signature storage', () => {
       storeSignature(original);
 
       // Try retrieving with different cases
-      const lowercaseAddress = testAddress.toLowerCase() as `0x${string}`;
-      const uppercaseAddress = testAddress.toUpperCase() as `0x${string}`;
+      const lowercaseAddress = testAddress.toLowerCase() as Address;
+      const uppercaseAddress = testAddress.toUpperCase() as Address;
 
       const retrieved1 = getSignature(
         lowercaseAddress,
@@ -104,7 +105,7 @@ describe('signature storage', () => {
     });
 
     it('stores with lowercase key even when given mixed case address', () => {
-      const mixedCaseAddress = '0xD8Da6bf26964af9d7EeD9e03e53415d37aa96045' as `0x${string}`;
+      const mixedCaseAddress = '0xD8Da6bf26964af9d7EeD9e03e53415d37aa96045' as Address;
       const original = createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT, {
         address: mixedCaseAddress,
       });
@@ -218,7 +219,7 @@ describe('signature storage', () => {
     });
 
     it('removes a signature regardless of address case', () => {
-      const upperAddress = testAddress.toUpperCase() as `0x${string}`;
+      const upperAddress = testAddress.toUpperCase() as Address;
 
       storeSignature(
         createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT, { address: upperAddress })
@@ -243,7 +244,7 @@ describe('signature storage', () => {
 
     it('does not affect signatures for other addresses', () => {
       // Use all-lowercase address (valid non-checksummed format accepted by viem)
-      const otherAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb0' as `0x${string}`;
+      const otherAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb0' as Address;
 
       storeSignature(createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT));
       storeSignature(
@@ -275,7 +276,7 @@ describe('signature storage', () => {
     });
 
     it('clears signatures regardless of address case', () => {
-      const upperAddress = testAddress.toUpperCase() as `0x${string}`;
+      const upperAddress = testAddress.toUpperCase() as Address;
 
       storeSignature(
         createTestSignature(SIGNATURE_STEP.ACKNOWLEDGEMENT, { address: upperAddress })

@@ -2,10 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TransactionCard } from './TransactionCard';
+import type { Hash } from '@/lib/types/ethereum';
 
 describe('TransactionCard', () => {
-  const sampleHash =
-    '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' as `0x${string}`;
+  const sampleHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' as Hash;
 
   const defaultProps = {
     type: 'acknowledgement' as const,

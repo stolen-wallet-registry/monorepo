@@ -40,13 +40,12 @@ contract CrossChainIntegrationTest is Test {
 
     // Actors
     address owner = address(0x1);
-    address victim = address(0x2);
+    address victim; // Derived from VICTIM_PRIVATE_KEY in setUp()
     address relayer = address(0x3);
 
     /// @dev Test-only private key for victim signatures. Not a real key.
     /// Using 0xA11CE as a memorable hex value (reads like "ALICE")
     uint256 constant VICTIM_PRIVATE_KEY = 0xA11CE;
-    uint256 victimPk = VICTIM_PRIVATE_KEY;
 
     // Chain IDs and Hyperlane Domains
     uint32 constant HUB_DOMAIN = 84_532; // Base Sepolia Hyperlane domain
@@ -56,7 +55,7 @@ contract CrossChainIntegrationTest is Test {
 
     function setUp() public {
         // Create victim address from private key
-        victim = vm.addr(victimPk);
+        victim = vm.addr(VICTIM_PRIVATE_KEY);
 
         // ═══════════════════════════════════════════════════════════════════════
         // DEPLOY HUB CONTRACTS (Base Sepolia)
@@ -149,7 +148,7 @@ contract CrossChainIntegrationTest is Test {
         );
 
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(victimPk, digest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VICTIM_PRIVATE_KEY, digest);
 
         // Submit acknowledgement
         vm.prank(victim);
@@ -174,7 +173,7 @@ contract CrossChainIntegrationTest is Test {
         bytes32 regTypeHash = keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
         structHash = keccak256(abi.encode(regTypeHash, victim, victim, nonce, deadline));
         digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        (v, r, s) = vm.sign(victimPk, digest);
+        (v, r, s) = vm.sign(VICTIM_PRIVATE_KEY, digest);
 
         // Get quote for registration
         uint256 fee = spokeRegistry.quoteRegistration(victim);
@@ -237,7 +236,7 @@ contract CrossChainIntegrationTest is Test {
         );
 
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(victimPk, digest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VICTIM_PRIVATE_KEY, digest);
 
         // Relayer submits acknowledgement
         vm.prank(relayer);
@@ -260,7 +259,7 @@ contract CrossChainIntegrationTest is Test {
         bytes32 regTypeHash = keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
         structHash = keccak256(abi.encode(regTypeHash, victim, relayer, nonce, deadline));
         digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        (v, r, s) = vm.sign(victimPk, digest);
+        (v, r, s) = vm.sign(VICTIM_PRIVATE_KEY, digest);
 
         uint256 fee = spokeRegistry.quoteRegistration(victim);
         vm.deal(relayer, fee);

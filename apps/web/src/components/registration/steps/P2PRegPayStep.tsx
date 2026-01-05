@@ -54,7 +54,8 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
   const { address: relayerAddress } = useAccount();
   const { registeree } = useFormStore();
   const { partnerPeerId } = useP2PStore();
-  const { registrationHash, setRegistrationHash, setBridgeMessageId } = useRegistrationStore();
+  const { registrationHash, registrationChainId, setRegistrationHash, setBridgeMessageId } =
+    useRegistrationStore();
   const [hasSentHash, setHasSentHash] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -174,8 +175,9 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
         await passStreamData({
           connection,
           protocols: [PROTOCOLS.REG_PAY],
-          // Convert null to undefined for optional field
-          streamData: { hash, messageId: messageId ?? undefined },
+          // Include chainId so registeree uses correct explorer links
+          // Convert null to undefined for optional fields
+          streamData: { hash, messageId: messageId ?? undefined, txChainId: chainId },
         });
 
         setHasSentHash(true);
@@ -205,6 +207,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     role,
     isConfirmed,
     hash,
+    chainId,
     receipt,
     isCrossChain,
     getLibp2p,
@@ -246,11 +249,12 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
 
         {registrationHash ? (
           // TransactionCard hides submit button when status='confirmed' - onSubmit is unused but required by interface
+          // Use registrationChainId from store (sent by relayer) for correct explorer links
           <TransactionCard
             type="registration"
             status="confirmed"
             hash={registrationHash}
-            chainId={chainId}
+            chainId={registrationChainId ?? chainId}
             onSubmit={() => undefined}
           />
         ) : (

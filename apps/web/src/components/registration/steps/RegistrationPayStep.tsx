@@ -26,7 +26,7 @@ import {
 } from '@/hooks/useCrossChainConfirmation';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
-import { getExplorerTxUrl, getChainName } from '@/lib/explorer';
+import { getExplorerTxUrl, getChainName, getBridgeMessageByIdUrl } from '@/lib/explorer';
 import { getHubChainId } from '@/lib/chains/config';
 import { extractBridgeMessageId } from '@/lib/bridge/messageId';
 import { logger } from '@/lib/logger';
@@ -44,7 +44,8 @@ export interface RegistrationPayStepProps {
 export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
-  const { registrationType, setRegistrationHash, setBridgeMessageId } = useRegistrationStore();
+  const { registrationType, bridgeMessageId, setRegistrationHash, setBridgeMessageId } =
+    useRegistrationStore();
   const { registeree, relayer } = useFormStore();
 
   const isSelfRelay = registrationType === 'selfRelay';
@@ -152,6 +153,8 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
           elapsedTime: crossChainConfirmation.elapsedTime,
           hubChainName: hubChainId ? getChainName(hubChainId) : undefined,
           bridgeName: costEstimate.data?.bridgeName ?? 'Hyperlane',
+          messageId: bridgeMessageId ?? undefined,
+          explorerUrl: bridgeMessageId ? getBridgeMessageByIdUrl(bridgeMessageId) : null,
         }
       : undefined;
 

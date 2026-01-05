@@ -101,6 +101,8 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         EIP712("StolenWalletRegistry", "4")
         Ownable(_owner)
     {
+        // Validate owner explicitly (Ownable allows zero but we want to fail fast)
+        if (_owner == address(0)) revert SpokeRegistry__ZeroAddress();
         // Note: We validate non-zero here but defer interface validation to runtime.
         // This avoids constructor complexity while still failing fast on first use.
         if (_bridgeAdapter == address(0)) revert SpokeRegistry__ZeroAddress();

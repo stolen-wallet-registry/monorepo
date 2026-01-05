@@ -163,19 +163,23 @@ export function getBridgeMessageUrl(
   provider?: BridgeProvider
 ): string | null {
   const p = provider ?? getBridgeProvider();
-  const config = BRIDGE_EXPLORERS[p];
+  const explorerConfig = BRIDGE_EXPLORERS[p];
 
   // Check if this chain is excluded (e.g., local dev)
-  if (originChainId && config.excludedChains?.includes(originChainId)) {
+  if (originChainId && explorerConfig.excludedChains?.includes(originChainId)) {
     return null;
   }
 
   // Check if this chain is in the supported list (if specified)
-  if (originChainId && config.supportedChains && !config.supportedChains.includes(originChainId)) {
+  if (
+    originChainId &&
+    explorerConfig.supportedChains &&
+    !explorerConfig.supportedChains.includes(originChainId)
+  ) {
     return null;
   }
 
-  return config.searchByTxUrl(originTxHash);
+  return explorerConfig.searchByTxUrl(originTxHash);
 }
 
 /**
@@ -190,11 +194,11 @@ export function getBridgeMessageByIdUrl(
   provider?: BridgeProvider
 ): string | null {
   const p = provider ?? getBridgeProvider();
-  const config = BRIDGE_EXPLORERS[p];
+  const explorerConfig = BRIDGE_EXPLORERS[p];
 
-  if (!config.messageUrl) {
+  if (!explorerConfig.messageUrl) {
     return null;
   }
 
-  return config.messageUrl(messageId);
+  return explorerConfig.messageUrl(messageId);
 }

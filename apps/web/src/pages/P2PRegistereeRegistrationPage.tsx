@@ -174,9 +174,9 @@ export function P2PRegistereeRegistrationPage() {
                   break;
 
                 case PROTOCOLS.ACK_PAY:
-                  // Acknowledgement tx hash received
+                  // Acknowledgement tx hash received - use relayer's chainId if provided
                   if (data.hash) {
-                    setAcknowledgementHash(data.hash, chainId);
+                    setAcknowledgementHash(data.hash, data.txChainId ?? chainId);
                   }
                   goToNextStepRef.current();
                   break;
@@ -189,8 +189,9 @@ export function P2PRegistereeRegistrationPage() {
 
                 case PROTOCOLS.REG_PAY:
                   // Registration tx hash (and optional bridge message ID) received
+                  // Use relayer's chainId if provided for correct explorer links
                   if (data.hash) {
-                    setRegistrationHash(data.hash, chainId);
+                    setRegistrationHash(data.hash, data.txChainId ?? chainId);
                   }
                   // Store bridge message ID if provided (for cross-chain explorer links)
                   if (data.messageId) {

@@ -100,6 +100,9 @@ interface IStolenWalletRegistry {
     /// @notice Thrown when an invalid bridge ID is provided
     error InvalidBridgeId();
 
+    /// @notice Thrown when source chain ID is invalid (e.g., zero for cross-chain registration)
+    error InvalidChainId();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════

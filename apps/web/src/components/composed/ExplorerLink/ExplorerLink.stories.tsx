@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { ExplorerLink } from './ExplorerLink';
+import type { Address as AddressType, Hash } from '@/lib/types/ethereum';
 
 const meta = {
   title: 'Composed/ExplorerLink',
@@ -45,7 +46,7 @@ const sampleAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
  */
 export const TransactionHash: Story = {
   args: {
-    value: sampleTxHash as `0x${string}`,
+    value: sampleTxHash as Hash,
     href: `https://etherscan.io/tx/${sampleTxHash}`,
   },
 };
@@ -57,7 +58,7 @@ export const TransactionHash: Story = {
  */
 export const Address: Story = {
   args: {
-    value: sampleAddress as `0x${string}`,
+    value: sampleAddress as AddressType,
     href: `https://etherscan.io/address/${sampleAddress}`,
   },
 };
@@ -68,7 +69,7 @@ export const Address: Story = {
  */
 export const ContractAddress: Story = {
   args: {
-    value: sampleAddress as `0x${string}`,
+    value: sampleAddress as AddressType,
     type: 'contract',
     href: `https://etherscan.io/address/${sampleAddress}`,
   },
@@ -80,7 +81,7 @@ export const ContractAddress: Story = {
  */
 export const TokenAddress: Story = {
   args: {
-    value: sampleAddress as `0x${string}`,
+    value: sampleAddress as AddressType,
     type: 'token',
     href: `https://etherscan.io/token/${sampleAddress}`,
   },
@@ -92,7 +93,7 @@ export const TokenAddress: Story = {
  */
 export const NoLink: Story = {
   args: {
-    value: sampleTxHash as `0x${string}`,
+    value: sampleTxHash as Hash,
     href: null,
   },
 };
@@ -103,7 +104,7 @@ export const NoLink: Story = {
  */
 export const NoLinkNoIcon: Story = {
   args: {
-    value: sampleTxHash as `0x${string}`,
+    value: sampleTxHash as Hash,
     href: null,
     showDisabledIcon: false,
   },
@@ -115,7 +116,7 @@ export const NoLinkNoIcon: Story = {
  */
 export const NotTruncated: Story = {
   args: {
-    value: sampleTxHash as `0x${string}`,
+    value: sampleTxHash as Hash,
     href: `https://etherscan.io/tx/${sampleTxHash}`,
     truncate: false,
   },
@@ -127,7 +128,7 @@ export const NotTruncated: Story = {
  */
 export const NoCopyButton: Story = {
   args: {
-    value: sampleAddress as `0x${string}`,
+    value: sampleAddress as AddressType,
     href: `https://etherscan.io/address/${sampleAddress}`,
     showCopyButton: false,
   },
@@ -140,7 +141,7 @@ export const NoCopyButton: Story = {
 export const MultipleAddresses: Story = {
   name: 'Multiple Addresses',
   args: {
-    value: sampleAddress as `0x${string}`,
+    value: sampleAddress as AddressType,
   },
   render: () => (
     <div className="space-y-4 p-4 bg-muted rounded-lg">
@@ -151,14 +152,14 @@ export const MultipleAddresses: Story = {
         <div className="flex items-center gap-4">
           <span className="text-sm w-24">Address:</span>
           <ExplorerLink
-            value={sampleAddress as `0x${string}`}
+            value={sampleAddress as AddressType}
             href={`https://etherscan.io/address/${sampleAddress}`}
           />
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm w-24">Tx Hash:</span>
           <ExplorerLink
-            value={sampleTxHash as `0x${string}`}
+            value={sampleTxHash as Hash}
             href={`https://etherscan.io/tx/${sampleTxHash}`}
           />
         </div>

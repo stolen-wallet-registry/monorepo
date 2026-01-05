@@ -75,6 +75,9 @@ export { TypingAnimation } from './components/typing-animation';
 export { HyperText } from './components/hyper-text';
 export { AnimatedBeam, type AnimatedBeamProps } from './components/animated-beam';
 
+// Bridge logos
+export { HyperlaneLogo, WormholeLogo, type BridgeLogoProps } from './components/bridge-logos';
+
 // Web3 Icons (named exports from @web3icons/react)
 // Next.js App Router doesn't support "export *" in client boundaries
 export {

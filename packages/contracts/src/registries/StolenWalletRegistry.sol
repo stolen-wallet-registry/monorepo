@@ -146,6 +146,10 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
         delete pendingAcknowledgements[owner];
 
         bool isSponsored = owner != msg.sender;
+
+        // Validate chain ID fits in uint32 (all current EVM chains do, but defensive)
+        require(block.chainid <= type(uint32).max, "chain id too large");
+
         registeredWallets[owner] = RegistrationData({
             registeredAt: uint64(block.number),
             sourceChainId: uint32(block.chainid),
@@ -176,6 +180,9 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
 
         // Validate wallet address
         if (wallet == address(0)) revert InvalidOwner();
+
+        // Validate source chain ID (cross-chain registrations must have valid chain ID)
+        if (sourceChainId == 0) revert InvalidChainId();
 
         // Validate bridge ID (must be a valid BridgeId enum value: 0-3)
         if (bridgeId > uint8(BridgeId.WORMHOLE)) revert InvalidBridgeId();

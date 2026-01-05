@@ -23,7 +23,13 @@ import type { Address, Hash, Hex } from '@/lib/types/ethereum';
  * - 'block': Block hash (66 chars, same as transaction)
  * - 'token': Token contract address (same format as address)
  */
-export type ExplorerLinkType = 'address' | 'transaction' | 'contract' | 'block' | 'token';
+export type ExplorerLinkType =
+  | 'address'
+  | 'transaction'
+  | 'contract'
+  | 'block'
+  | 'token'
+  | 'message';
 
 /**
  * Human-readable labels for each type.
@@ -34,6 +40,7 @@ const TYPE_LABELS: Record<ExplorerLinkType, { copy: string; view: string }> = {
   contract: { copy: 'Copy contract address', view: 'View contract on explorer' },
   block: { copy: 'Copy block hash', view: 'View block on explorer' },
   token: { copy: 'Copy token address', view: 'View token on explorer' },
+  message: { copy: 'Copy message ID', view: 'View message on explorer' },
 };
 
 /**

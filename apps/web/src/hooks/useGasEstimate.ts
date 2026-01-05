@@ -2,7 +2,7 @@
  * Hook to estimate gas costs for registration transactions.
  *
  * Chain-aware: Uses correct ABI and function names for hub vs spoke.
- * Uses wagmi's useEstimateGas and useFeeData to calculate:
+ * Uses wagmi's useEstimateGas and useGasPrice to calculate:
  * - Gas units needed for the transaction
  * - Current gas price
  * - Total gas cost in ETH and USD
@@ -93,13 +93,18 @@ export function useGasEstimate({
   const ethPrice = useEthPrice();
 
   // Determine registry type and get correct address/ABI
+  // Both calls must succeed or we reset to defaults to avoid mismatch
   let contractAddress: Address | undefined;
   let registryType: 'hub' | 'spoke' = 'hub';
   try {
-    contractAddress = getRegistryAddress(chainId);
-    registryType = getRegistryType(chainId);
+    const resolvedAddress = getRegistryAddress(chainId);
+    const resolvedType = getRegistryType(chainId);
+    // Only assign after both succeed
+    contractAddress = resolvedAddress;
+    registryType = resolvedType;
   } catch (error) {
     contractAddress = undefined;
+    registryType = 'hub';
     logger.contract.debug('Failed to resolve registry address', {
       chainId,
       error: error instanceof Error ? error.message : String(error),
@@ -204,8 +209,8 @@ export function useGasEstimate({
   return {
     data: gasEstimateResult,
     isLoading: isEstimating || isPriceLoading || ethPrice.isLoading,
-    isError: isEstimateError || isPriceError,
-    error: (estimateError || priceError) as Error | null,
+    isError: isEstimateError || isPriceError || ethPrice.isError,
+    error: (estimateError || priceError || ethPrice.error) as Error | null,
     refetch,
   };
 }

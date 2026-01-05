@@ -141,7 +141,8 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
         await passStreamData({
           connection,
           protocols: [PROTOCOLS.ACK_PAY],
-          streamData: { hash },
+          // Include chainId so registeree uses correct explorer links
+          streamData: { hash, txChainId: chainId },
         });
 
         setHasSentHash(true);
@@ -167,7 +168,17 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     };
 
     sendHash();
-  }, [role, isConfirmed, hash, getLibp2p, partnerPeerId, hasSentHash, retryCount, onComplete]);
+  }, [
+    role,
+    isConfirmed,
+    hash,
+    chainId,
+    getLibp2p,
+    partnerPeerId,
+    hasSentHash,
+    retryCount,
+    onComplete,
+  ]);
 
   // Manual retry handler for user-initiated resend
   const handleResendHash = useCallback(() => {
