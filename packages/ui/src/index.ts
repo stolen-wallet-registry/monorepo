@@ -90,6 +90,15 @@ export { TypingAnimation } from './components/typing-animation';
 export { HyperText } from './components/hyper-text';
 export { AnimatedBeam, type AnimatedBeamProps } from './components/animated-beam';
 
+// Explorer link
+export {
+  ExplorerLink,
+  getExplorerAddressUrl,
+  getExplorerTxUrl,
+  type ExplorerLinkProps,
+  type ExplorerLinkType,
+} from './components/explorer-link';
+
 // Bridge logos
 export { HyperlaneLogo, WormholeLogo, type BridgeLogoProps } from './components/bridge-logos';
 

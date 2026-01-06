@@ -49,8 +49,8 @@ export function HomePage() {
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold tracking-tight">Register Stolen Wallet</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          Register your stolen wallet on-chain to help protect the Web3 ecosystem and enable
-          recovery assistance.
+          Register your stolen wallet on-chain to strengthen fraud prevention and enable recovery
+          assistance.
         </p>
       </div>
 

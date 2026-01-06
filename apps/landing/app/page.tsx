@@ -10,7 +10,7 @@ import { FooterCTA, Footer } from '@/components/landing/FooterCTA';
 /**
  * Landing page - Marketing/SEO entry point for Stolen Wallet Registry.
  *
- * This is a static page (SSG) with no Web3 functionality.
+ * This is a static page (SSG) with no on-chain functionality.
  * Users click "Launch App" to navigate to the Vite registration app.
  *
  * Sections:

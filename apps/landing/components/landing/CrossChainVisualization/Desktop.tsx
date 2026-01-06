@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useReducer, useCallback } from 'react';
 import { Shield, Droplets, CircleDot } from 'lucide-react';
 import {
   AnimatedBeam,
@@ -38,10 +38,7 @@ import {
 
 import {
   BEAM_DURATION,
-  PHASE_1_START,
-  PHASE_2_START,
-  PHASE_3_START,
-  getRepeatDelay,
+  CYCLE_PAUSE,
   IconCircle,
   BridgeIcon,
   ChainalysisLogo,
@@ -51,9 +48,178 @@ import {
   GroupContainer,
   RegistryHub,
   SectionTitle,
+  Caip10Emission,
 } from './shared';
 
 import type { CrossChainVisualizationProps } from './types';
+
+// ===== STATE MACHINE FOR BEAM ANIMATION =====
+
+type StepName =
+  | 'idle'
+  | 'rf_networkToBridges' // Report Fraud: network → bridges
+  | 'rf_bridgesToHub' // Report Fraud: bridges → hub
+  | 'rf_hubToListeners' // Report Fraud: hub → all listeners
+  | 'to_operatorToHub' // Trusted Operators: operator → hub
+  | 'to_hubToListeners'; // Trusted Operators: hub → listeners
+
+interface AnimationState {
+  currentStep: StepName;
+  activeBeams: Set<string>;
+  pulseListeners: boolean;
+  triggerEmission: boolean;
+  selectedNetwork: number; // 0-3 for random network selection
+  completedListenerCount: number;
+}
+
+type AnimationAction =
+  | { type: 'START_CYCLE'; flow: 'reportFraud' | 'trustedOperators'; networkIndex: number }
+  | { type: 'BEAM_COMPLETE'; beamId: string }
+  | { type: 'CYCLE_COMPLETE' }
+  | { type: 'RESET_TRIGGERS' };
+
+const initialState: AnimationState = {
+  currentStep: 'idle',
+  activeBeams: new Set(),
+  pulseListeners: false,
+  triggerEmission: false,
+  selectedNetwork: 0,
+  completedListenerCount: 0,
+};
+
+// Timing helper for logs
+const getTimestamp = () => {
+  const now = new Date();
+  return `${now.getMinutes()}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+};
+
+function animationReducer(state: AnimationState, action: AnimationAction): AnimationState {
+  const ts = getTimestamp();
+
+  switch (action.type) {
+    case 'START_CYCLE': {
+      const { flow, networkIndex } = action;
+
+      if (flow === 'reportFraud') {
+        const networkBeams = ['ethEcosystem', 'evmChains', 'nonEvm', 'btc'];
+        const activeBeam = networkBeams[networkIndex];
+        console.log(`[${ts}] 🚀 Report Fraud → LEFT beam: ${activeBeam}`);
+        return {
+          ...state,
+          currentStep: 'rf_networkToBridges',
+          activeBeams: new Set([activeBeam]),
+          pulseListeners: false,
+          triggerEmission: false,
+          selectedNetwork: networkIndex,
+          completedListenerCount: 0,
+        };
+      } else {
+        console.log(`[${ts}] 🚀 Trusted Operators → operatorToHub`);
+        return {
+          ...state,
+          currentStep: 'to_operatorToHub',
+          activeBeams: new Set(['operatorToHub']),
+          pulseListeners: false,
+          triggerEmission: false,
+          selectedNetwork: 0,
+          completedListenerCount: 0,
+        };
+      }
+    }
+
+    case 'BEAM_COMPLETE': {
+      const { beamId: completedBeam } = action;
+
+      // Handle network beam completion -> trigger bridges to hub
+      if (
+        ['ethEcosystem', 'evmChains', 'nonEvm', 'btc'].includes(completedBeam) &&
+        state.currentStep === 'rf_networkToBridges'
+      ) {
+        console.log(
+          `[${ts}] ✅ LEFT beam done (${completedBeam}) → activating MIDDLE beam: bridgesToHub`
+        );
+        return {
+          ...state,
+          currentStep: 'rf_bridgesToHub',
+          activeBeams: new Set(['bridgesToHub']),
+        };
+      }
+
+      // Handle bridges to hub completion -> trigger all listeners
+      if (completedBeam === 'bridgesToHub' && state.currentStep === 'rf_bridgesToHub') {
+        console.log(`[${ts}] ✅ MIDDLE beam done → activating RIGHT beams + EMISSION`);
+        return {
+          ...state,
+          currentStep: 'rf_hubToListeners',
+          activeBeams: new Set(['exchanges', 'wallets', 'security']),
+          pulseListeners: true,
+          triggerEmission: true,
+        };
+      }
+
+      // Handle operator to hub completion -> trigger all listeners
+      if (completedBeam === 'operatorToHub' && state.currentStep === 'to_operatorToHub') {
+        console.log(`[${ts}] ✅ OPERATOR beam done → activating RIGHT beams + EMISSION`);
+        return {
+          ...state,
+          currentStep: 'to_hubToListeners',
+          activeBeams: new Set(['exchanges', 'wallets', 'security']),
+          pulseListeners: true,
+          triggerEmission: true,
+        };
+      }
+
+      // Handle listener beam completion
+      if (
+        ['exchanges', 'wallets', 'security'].includes(completedBeam) &&
+        (state.currentStep === 'rf_hubToListeners' || state.currentStep === 'to_hubToListeners')
+      ) {
+        const newCount = state.completedListenerCount + 1;
+        console.log(
+          `[${ts}] ✅ RIGHT beam done (${completedBeam}) - ${newCount}/3 listeners complete`
+        );
+        if (newCount >= 3) {
+          console.log(`[${ts}] 🏁 CYCLE COMPLETE → idle (waiting ${CYCLE_PAUSE}s)`);
+          return {
+            ...state,
+            currentStep: 'idle',
+            activeBeams: new Set(),
+            completedListenerCount: 0,
+          };
+        }
+        return {
+          ...state,
+          completedListenerCount: newCount,
+        };
+      }
+
+      // Ignore stale beam completions (beam finished after state moved on)
+      return state;
+    }
+
+    case 'RESET_TRIGGERS': {
+      return {
+        ...state,
+        pulseListeners: false,
+        triggerEmission: false,
+      };
+    }
+
+    case 'CYCLE_COMPLETE': {
+      return {
+        ...state,
+        currentStep: 'idle',
+        activeBeams: new Set(),
+        pulseListeners: false,
+        triggerEmission: false,
+        completedListenerCount: 0,
+      };
+    }
+
+    default:
+      return state;
+  }
+}
 
 // Static connection line using ResizeObserver
 function StaticConnection({
@@ -158,6 +324,61 @@ export function CrossChainVisualizationDesktop({
   const containerRef = useRef<HTMLDivElement>(null);
   const hubRef = useRef<HTMLDivElement>(null);
   const hubLogoRef = useRef<HTMLDivElement>(null);
+
+  // Animation state machine
+  const [state, dispatch] = useReducer(animationReducer, initialState);
+
+  // Memoized handlers for beam completion
+  const handleBeamComplete = useCallback((beamId: string) => {
+    dispatch({ type: 'BEAM_COMPLETE', beamId });
+  }, []);
+
+  // Track if we've started to prevent StrictMode double-fire
+  const hasStartedRef = useRef(false);
+
+  // Helper to create START_CYCLE action with random values
+  const createStartCycleAction = useCallback((): AnimationAction => {
+    const flow = Math.random() > 0.5 ? 'reportFraud' : 'trustedOperators';
+    const networkIndex = Math.floor(Math.random() * 4);
+    return { type: 'START_CYCLE', flow, networkIndex };
+  }, []);
+
+  // Start animation cycle and manage timing
+  useEffect(() => {
+    if (hasStartedRef.current) return;
+    hasStartedRef.current = true;
+
+    const ts = getTimestamp();
+    console.log(`[${ts}] 🎬 Component mounted, starting first cycle in 500ms`);
+    const action = createStartCycleAction();
+    const initialTimeout = setTimeout(() => {
+      dispatch(action);
+    }, 500);
+
+    return () => clearTimeout(initialTimeout);
+  }, [createStartCycleAction]);
+
+  // When cycle goes idle, start a new cycle after pause
+  useEffect(() => {
+    if (state.currentStep === 'idle' && hasStartedRef.current) {
+      const action = createStartCycleAction();
+      const pauseTimeout = setTimeout(() => {
+        dispatch(action);
+      }, CYCLE_PAUSE * 1000);
+
+      return () => clearTimeout(pauseTimeout);
+    }
+  }, [state.currentStep, createStartCycleAction]);
+
+  // Reset triggers after animation has time to detect transition
+  useEffect(() => {
+    if (state.pulseListeners || state.triggerEmission) {
+      const resetTimeout = setTimeout(() => {
+        dispatch({ type: 'RESET_TRIGGERS' });
+      }, 500); // Was 100ms - increased to give React effects time to detect transition
+      return () => clearTimeout(resetTimeout);
+    }
+  }, [state.pulseListeners, state.triggerEmission]);
 
   // ETH L1 and L2s - core (close to ETH)
   const ethHubRef = useRef<HTMLDivElement>(null);
@@ -432,14 +653,17 @@ export function CrossChainVisualizationDesktop({
           </div>
 
           {/* CENTER: Registry Hub */}
-          <RegistryHub
-            ref={hubRef}
-            logoRef={hubLogoRef}
-            leftAnchorRef={hubLeftAnchorRef}
-            rightAnchorRef={hubRightAnchorRef}
-            bottomAnchorRef={hubBottomAnchorRef}
-            showLabels={showLabels}
-          />
+          <div className="relative">
+            <Caip10Emission triggerEmission={state.triggerEmission} />
+            <RegistryHub
+              ref={hubRef}
+              logoRef={hubLogoRef}
+              leftAnchorRef={hubLeftAnchorRef}
+              rightAnchorRef={hubRightAnchorRef}
+              bottomAnchorRef={hubBottomAnchorRef}
+              showLabels={showLabels}
+            />
+          </div>
 
           {/* RIGHT SIDE: Consumers */}
           <div className="flex w-36 flex-col items-center gap-4 md:w-44 md:gap-5 lg:w-48 lg:gap-6">
@@ -458,16 +682,16 @@ export function CrossChainVisualizationDesktop({
               labelTooltip="Centralized exchanges that can block withdrawals to flagged wallets, freeze suspicious deposits, and prevent stolen funds from being liquidated."
             >
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <IconCircle label="Coinbase" size="sm" pulse pulseDelay={PHASE_3_START}>
+                <IconCircle label="Coinbase" size="sm" triggerPulse={state.pulseListeners}>
                   <ExchangeCoinbase className="size-6" />
                 </IconCircle>
-                <IconCircle label="Kraken" size="sm" pulse pulseDelay={PHASE_3_START}>
+                <IconCircle label="Kraken" size="sm" triggerPulse={state.pulseListeners}>
                   <ExchangeKraken className="size-6" />
                 </IconCircle>
-                <IconCircle label="Gemini" size="sm" pulse pulseDelay={PHASE_3_START}>
+                <IconCircle label="Gemini" size="sm" triggerPulse={state.pulseListeners}>
                   <ExchangeGemini className="size-6" />
                 </IconCircle>
-                <IconCircle label="Binance" size="sm" pulse pulseDelay={PHASE_3_START}>
+                <IconCircle label="Binance" size="sm" triggerPulse={state.pulseListeners}>
                   <ExchangeBinance className="size-6" />
                 </IconCircle>
               </div>
@@ -481,13 +705,13 @@ export function CrossChainVisualizationDesktop({
               labelTooltip="Self-custody wallets that can warn users before sending to flagged addresses or display alerts about compromised wallets in their contact lists."
             >
               <div className="flex items-center gap-2">
-                <IconCircle label="MetaMask" size="sm" pulse pulseDelay={PHASE_3_START}>
+                <IconCircle label="MetaMask" size="sm" triggerPulse={state.pulseListeners}>
                   <WalletMetamask className="size-6" />
                 </IconCircle>
-                <IconCircle label="Rainbow" size="sm" pulse pulseDelay={PHASE_3_START}>
+                <IconCircle label="Rainbow" size="sm" triggerPulse={state.pulseListeners}>
                   <WalletRainbow className="size-6" />
                 </IconCircle>
-                <IconCircle label="Coinbase Wallet" size="sm" pulse pulseDelay={PHASE_3_START}>
+                <IconCircle label="Coinbase Wallet" size="sm" triggerPulse={state.pulseListeners}>
                   <WalletCoinbase className="size-6" />
                 </IconCircle>
               </div>
@@ -501,36 +725,34 @@ export function CrossChainVisualizationDesktop({
               labelTooltip="Security firms and blockchain forensics companies that monitor stolen wallet reports to enhance their threat intelligence and help recover stolen assets."
             >
               <div className="flex items-center gap-2">
-                <IconCircle label="Chainalysis" size="sm" pulse pulseDelay={PHASE_3_START}>
+                <IconCircle label="Chainalysis" size="sm" triggerPulse={state.pulseListeners}>
                   <ChainalysisLogo className="text-orange-500" />
                 </IconCircle>
-                <IconCircle label="SEAL Team" size="sm" pulse pulseDelay={PHASE_3_START}>
+                <IconCircle label="SEAL Team" size="sm" triggerPulse={state.pulseListeners}>
                   <SealTeamLogo className="text-red-600" />
                 </IconCircle>
-                <IconCircle label="Security Firm" size="sm" pulse pulseDelay={PHASE_3_START}>
+                <IconCircle label="Security Firm" size="sm" triggerPulse={state.pulseListeners}>
                   <Shield className="size-5 text-green-500" />
                 </IconCircle>
               </div>
             </GroupContainer>
           </div>
 
-          {/* ===== ANIMATED BEAMS ===== */}
-          {/* Beams connect to edge anchors - no manual offsets needed */}
+          {/* ===== ANIMATED BEAMS (State Machine Controlled) ===== */}
 
-          {/* PHASE 1: Network containers → Bridges (from right edge to left edge) */}
-          {/* Staggered start (0.2s apart), all sync to same cycle via repeatDelay */}
+          {/* PHASE 1: Network containers → Bridges (one fires per cycle) - ALL PURPLE */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={ethRightAnchorRef}
             toRef={bridgesLeftAnchorRef}
             curvature={-25}
             duration={BEAM_DURATION}
-            delay={PHASE_1_START}
-            repeatDelay={getRepeatDelay(PHASE_1_START)}
-            gradientStartColor="#627eea"
+            gradientStartColor="#9945ff"
             gradientStopColor="#9945ff"
-            pathColor="#627eea"
-            pathOpacity={0.15}
+            pathColor="#9945ff"
+            pathOpacity={0.3}
+            isActive={state.activeBeams.has('ethEcosystem')}
+            onComplete={() => handleBeamComplete('ethEcosystem')}
           />
           <AnimatedBeam
             containerRef={containerRef}
@@ -538,12 +760,12 @@ export function CrossChainVisualizationDesktop({
             toRef={bridgesLeftAnchorRef}
             curvature={0}
             duration={BEAM_DURATION}
-            delay={PHASE_1_START + 0.2}
-            repeatDelay={getRepeatDelay(PHASE_1_START + 0.2)}
-            gradientStartColor="#f0b90b"
+            gradientStartColor="#9945ff"
             gradientStopColor="#9945ff"
-            pathColor="#f0b90b"
-            pathOpacity={0.15}
+            pathColor="#9945ff"
+            pathOpacity={0.3}
+            isActive={state.activeBeams.has('evmChains')}
+            onComplete={() => handleBeamComplete('evmChains')}
           />
           <AnimatedBeam
             containerRef={containerRef}
@@ -551,12 +773,12 @@ export function CrossChainVisualizationDesktop({
             toRef={bridgesLeftAnchorRef}
             curvature={20}
             duration={BEAM_DURATION}
-            delay={PHASE_1_START + 0.4}
-            repeatDelay={getRepeatDelay(PHASE_1_START + 0.4)}
             gradientStartColor="#9945ff"
             gradientStopColor="#9945ff"
             pathColor="#9945ff"
-            pathOpacity={0.15}
+            pathOpacity={0.3}
+            isActive={state.activeBeams.has('nonEvm')}
+            onComplete={() => handleBeamComplete('nonEvm')}
           />
           <AnimatedBeam
             containerRef={containerRef}
@@ -564,62 +786,60 @@ export function CrossChainVisualizationDesktop({
             toRef={bridgesLeftAnchorRef}
             curvature={40}
             duration={BEAM_DURATION}
-            delay={PHASE_1_START + 0.6}
-            repeatDelay={getRepeatDelay(PHASE_1_START + 0.6)}
-            gradientStartColor="#f7931a"
+            gradientStartColor="#9945ff"
             gradientStopColor="#9945ff"
-            pathColor="#f7931a"
-            pathOpacity={0.15}
+            pathColor="#9945ff"
+            pathOpacity={0.3}
+            isActive={state.activeBeams.has('btc')}
+            onComplete={() => handleBeamComplete('btc')}
           />
 
-          {/* PHASE 2: Bridges → Base Hub (from right edge to left edge) */}
-          {/* Fires when Phase 1 beams reach bridges */}
+          {/* PHASE 2: Bridges → Hub (Report Fraud flow) */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={bridgesRightAnchorRef}
             toRef={hubLeftAnchorRef}
             curvature={0}
             duration={BEAM_DURATION}
-            delay={PHASE_2_START}
-            repeatDelay={getRepeatDelay(PHASE_2_START)}
             gradientStartColor="#9945ff"
             gradientStopColor="#0052ff"
             pathColor="#9945ff"
-            pathOpacity={0.2}
+            pathOpacity={0.35}
             pathWidth={3}
+            isActive={state.activeBeams.has('bridgesToHub')}
+            onComplete={() => handleBeamComplete('bridgesToHub')}
           />
 
-          {/* Operators → Hub (fires slightly after Phase 2 starts) */}
+          {/* Operators → Hub (Trusted Operators flow) */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={operatorsTopAnchorRef}
             toRef={hubLeftAnchorRef}
             curvature={30}
             duration={BEAM_DURATION}
-            delay={PHASE_2_START + 0.3}
-            repeatDelay={getRepeatDelay(PHASE_2_START + 0.3)}
             gradientStartColor="#22c55e"
             gradientStopColor="#0052ff"
             pathColor="#22c55e"
-            pathOpacity={0.2}
+            pathOpacity={0.35}
             pathWidth={3}
+            isActive={state.activeBeams.has('operatorToHub')}
+            onComplete={() => handleBeamComplete('operatorToHub')}
           />
 
-          {/* PHASE 3: Hub → Consumer containers - ALL SIMULTANEOUS */}
-          {/* When data reaches hub, ALL consumers react at the same time */}
+          {/* PHASE 3: Hub → Consumer containers (all fire simultaneously) - ALL BLUE */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={hubRightAnchorRef}
             toRef={exchangesLeftAnchorRef}
             curvature={-20}
             duration={BEAM_DURATION}
-            delay={PHASE_3_START}
-            repeatDelay={getRepeatDelay(PHASE_3_START)}
             gradientStartColor="#0052ff"
             gradientStopColor="#0052ff"
             pathColor="#0052ff"
-            pathOpacity={0.2}
+            pathOpacity={0.35}
             pathWidth={3}
+            isActive={state.activeBeams.has('exchanges')}
+            onComplete={() => handleBeamComplete('exchanges')}
           />
           <AnimatedBeam
             containerRef={containerRef}
@@ -627,13 +847,13 @@ export function CrossChainVisualizationDesktop({
             toRef={walletsLeftAnchorRef}
             curvature={20}
             duration={BEAM_DURATION}
-            delay={PHASE_3_START}
-            repeatDelay={getRepeatDelay(PHASE_3_START)}
             gradientStartColor="#0052ff"
-            gradientStopColor="#e2761b"
-            pathColor="#e2761b"
-            pathOpacity={0.2}
+            gradientStopColor="#0052ff"
+            pathColor="#0052ff"
+            pathOpacity={0.35}
             pathWidth={3}
+            isActive={state.activeBeams.has('wallets')}
+            onComplete={() => handleBeamComplete('wallets')}
           />
           <AnimatedBeam
             containerRef={containerRef}
@@ -641,13 +861,13 @@ export function CrossChainVisualizationDesktop({
             toRef={securityLeftAnchorRef}
             curvature={40}
             duration={BEAM_DURATION}
-            delay={PHASE_3_START}
-            repeatDelay={getRepeatDelay(PHASE_3_START)}
             gradientStartColor="#0052ff"
-            gradientStopColor="#22c55e"
-            pathColor="#22c55e"
-            pathOpacity={0.2}
+            gradientStopColor="#0052ff"
+            pathColor="#0052ff"
+            pathOpacity={0.35}
             pathWidth={3}
+            isActive={state.activeBeams.has('security')}
+            onComplete={() => handleBeamComplete('security')}
           />
         </div>
       </div>

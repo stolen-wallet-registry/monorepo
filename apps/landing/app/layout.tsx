@@ -19,13 +19,13 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Stolen Wallet Registry - Cross-Chain Fraud Detection',
   description:
-    'Register compromised wallets, report fraudulent transactions, and catalog malicious contracts. A global, cross-chain registry for Web3 fraud prevention.',
+    'Register compromised wallets, report fraudulent transactions, and catalog malicious contracts. A global, cross-chain registry for fraud prevention and safer on-chain activity.',
   keywords: [
     'stolen wallet',
     'crypto fraud',
     'blockchain security',
     'cross-chain registry',
-    'Web3 security',
+    'fraud prevention',
     'wallet recovery',
   ],
   openGraph: {

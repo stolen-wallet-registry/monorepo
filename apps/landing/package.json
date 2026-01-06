@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .next",
     "storybook": "storybook dev -p 6008",
     "build-storybook": "storybook build"
   },

@@ -4,8 +4,6 @@ import React, { forwardRef } from 'react';
 import { Info } from 'lucide-react';
 import { cn, NetworkBase, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
 
-import { Caip10Emission } from './emission';
-
 // Reusable info icon with tooltip - reduces duplication across components
 const InfoTooltip = ({
   content,
@@ -135,8 +133,7 @@ export const RegistryHub = forwardRef<
     ref
   ) => (
     <div ref={ref} className={cn('relative z-20 flex flex-col items-center', className)}>
-      {/* CAIP-10 Emission Animation - positioned above title */}
-      <Caip10Emission />
+      {/* CAIP-10 Emission is rendered by parent (Desktop.tsx) with controlled trigger */}
       {/* Title ABOVE logo with info icon */}
       {showLabels && (
         <div className="mb-3 flex items-center gap-1">

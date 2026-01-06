@@ -25,6 +25,10 @@ export interface AnimatedBeamProps {
   startYOffset?: number;
   endXOffset?: number;
   endYOffset?: number;
+  /** Controls if beam is visible and animating. When false, beam is hidden. (default: true) */
+  isActive?: boolean;
+  /** Callback fired when animation cycle completes. Only fires when isActive is controlled. */
+  onComplete?: () => void;
 }
 
 export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
@@ -39,13 +43,15 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   repeatDelay = 0,
   pathColor = 'gray',
   pathWidth = 2,
-  pathOpacity = 0.2,
+  pathOpacity = 0.4,
   gradientStartColor = '#ffaa40',
   gradientStopColor = '#9c40ff',
   startXOffset = 0,
   startYOffset = 0,
   endXOffset = 0,
   endYOffset = 0,
+  isActive = true,
+  onComplete,
 }) => {
   const id = useId();
   // Respect user's reduced motion preference for accessibility
@@ -122,6 +128,7 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
       viewBox={`0 0 ${svgDimensions.width} ${svgDimensions.height}`}
       aria-hidden="true"
     >
+      {/* Static path (track) - always visible */}
       <path
         d={pathD}
         stroke={pathColor}
@@ -129,13 +136,16 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
         strokeOpacity={pathOpacity}
         strokeLinecap="round"
       />
-      <path
-        d={pathD}
-        strokeWidth={pathWidth}
-        stroke={`url(#${id})`}
-        strokeOpacity="1"
-        strokeLinecap="round"
-      />
+      {/* Animated gradient path - only visible when active */}
+      {isActive && (
+        <path
+          d={pathD}
+          strokeWidth={pathWidth}
+          stroke={`url(#${id})`}
+          strokeOpacity="1"
+          strokeLinecap="round"
+        />
+      )}
       <defs>
         {shouldReduceMotion ? (
           // Static gradient for users who prefer reduced motion
@@ -164,19 +174,25 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
               y1: '0%',
               y2: '0%',
             }}
-            animate={{
-              x1: gradientCoordinates.x1,
-              x2: gradientCoordinates.x2,
-              y1: gradientCoordinates.y1,
-              y2: gradientCoordinates.y2,
-            }}
+            animate={
+              isActive
+                ? {
+                    x1: gradientCoordinates.x1,
+                    x2: gradientCoordinates.x2,
+                    y1: gradientCoordinates.y1,
+                    y2: gradientCoordinates.y2,
+                  }
+                : undefined
+            }
             transition={{
               delay,
               duration,
               ease: [0.16, 1, 0.3, 1], // https://easings.net/#easeOutExpo
-              repeat: Infinity,
+              // When onComplete is provided, run once; otherwise loop forever
+              repeat: onComplete ? 0 : Infinity,
               repeatDelay,
             }}
+            onAnimationComplete={onComplete}
           >
             <stop stopColor={gradientStartColor} stopOpacity="0"></stop>
             <stop stopColor={gradientStartColor}></stop>
