@@ -41,6 +41,7 @@ import {
   PHASE_1_START,
   PHASE_2_START,
   PHASE_3_START,
+  getRepeatDelay,
   IconCircle,
   BridgeIcon,
   ChainalysisLogo,
@@ -460,13 +461,13 @@ export function CrossChainVisualizationDesktop({
                 <IconCircle label="Coinbase" size="sm" pulse pulseDelay={PHASE_3_START}>
                   <ExchangeCoinbase className="size-6" />
                 </IconCircle>
-                <IconCircle label="Kraken" size="sm" pulse pulseDelay={PHASE_3_START + 0.2}>
+                <IconCircle label="Kraken" size="sm" pulse pulseDelay={PHASE_3_START}>
                   <ExchangeKraken className="size-6" />
                 </IconCircle>
-                <IconCircle label="Gemini" size="sm" pulse pulseDelay={PHASE_3_START + 0.4}>
+                <IconCircle label="Gemini" size="sm" pulse pulseDelay={PHASE_3_START}>
                   <ExchangeGemini className="size-6" />
                 </IconCircle>
-                <IconCircle label="Binance" size="sm" pulse pulseDelay={PHASE_3_START + 0.6}>
+                <IconCircle label="Binance" size="sm" pulse pulseDelay={PHASE_3_START}>
                   <ExchangeBinance className="size-6" />
                 </IconCircle>
               </div>
@@ -480,18 +481,13 @@ export function CrossChainVisualizationDesktop({
               labelTooltip="Self-custody wallets that can warn users before sending to flagged addresses or display alerts about compromised wallets in their contact lists."
             >
               <div className="flex items-center gap-2">
-                <IconCircle label="MetaMask" size="sm" pulse pulseDelay={PHASE_3_START + 0.8}>
+                <IconCircle label="MetaMask" size="sm" pulse pulseDelay={PHASE_3_START}>
                   <WalletMetamask className="size-6" />
                 </IconCircle>
-                <IconCircle label="Rainbow" size="sm" pulse pulseDelay={PHASE_3_START + 1.0}>
+                <IconCircle label="Rainbow" size="sm" pulse pulseDelay={PHASE_3_START}>
                   <WalletRainbow className="size-6" />
                 </IconCircle>
-                <IconCircle
-                  label="Coinbase Wallet"
-                  size="sm"
-                  pulse
-                  pulseDelay={PHASE_3_START + 1.2}
-                >
+                <IconCircle label="Coinbase Wallet" size="sm" pulse pulseDelay={PHASE_3_START}>
                   <WalletCoinbase className="size-6" />
                 </IconCircle>
               </div>
@@ -505,13 +501,13 @@ export function CrossChainVisualizationDesktop({
               labelTooltip="Security firms and blockchain forensics companies that monitor stolen wallet reports to enhance their threat intelligence and help recover stolen assets."
             >
               <div className="flex items-center gap-2">
-                <IconCircle label="Chainalysis" size="sm" pulse pulseDelay={PHASE_3_START + 1.4}>
+                <IconCircle label="Chainalysis" size="sm" pulse pulseDelay={PHASE_3_START}>
                   <ChainalysisLogo className="text-orange-500" />
                 </IconCircle>
-                <IconCircle label="SEAL Team" size="sm" pulse pulseDelay={PHASE_3_START + 1.5}>
+                <IconCircle label="SEAL Team" size="sm" pulse pulseDelay={PHASE_3_START}>
                   <SealTeamLogo className="text-red-600" />
                 </IconCircle>
-                <IconCircle label="Security Firm" size="sm" pulse pulseDelay={PHASE_3_START + 1.6}>
+                <IconCircle label="Security Firm" size="sm" pulse pulseDelay={PHASE_3_START}>
                   <Shield className="size-5 text-green-500" />
                 </IconCircle>
               </div>
@@ -522,6 +518,7 @@ export function CrossChainVisualizationDesktop({
           {/* Beams connect to edge anchors - no manual offsets needed */}
 
           {/* PHASE 1: Network containers → Bridges (from right edge to left edge) */}
+          {/* Staggered start (0.2s apart), all sync to same cycle via repeatDelay */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={ethRightAnchorRef}
@@ -529,6 +526,7 @@ export function CrossChainVisualizationDesktop({
             curvature={-25}
             duration={BEAM_DURATION}
             delay={PHASE_1_START}
+            repeatDelay={getRepeatDelay(PHASE_1_START)}
             gradientStartColor="#627eea"
             gradientStopColor="#9945ff"
             pathColor="#627eea"
@@ -540,7 +538,8 @@ export function CrossChainVisualizationDesktop({
             toRef={bridgesLeftAnchorRef}
             curvature={0}
             duration={BEAM_DURATION}
-            delay={PHASE_1_START + 0.3}
+            delay={PHASE_1_START + 0.2}
+            repeatDelay={getRepeatDelay(PHASE_1_START + 0.2)}
             gradientStartColor="#f0b90b"
             gradientStopColor="#9945ff"
             pathColor="#f0b90b"
@@ -552,7 +551,8 @@ export function CrossChainVisualizationDesktop({
             toRef={bridgesLeftAnchorRef}
             curvature={20}
             duration={BEAM_DURATION}
-            delay={PHASE_1_START + 0.6}
+            delay={PHASE_1_START + 0.4}
+            repeatDelay={getRepeatDelay(PHASE_1_START + 0.4)}
             gradientStartColor="#9945ff"
             gradientStopColor="#9945ff"
             pathColor="#9945ff"
@@ -564,7 +564,8 @@ export function CrossChainVisualizationDesktop({
             toRef={bridgesLeftAnchorRef}
             curvature={40}
             duration={BEAM_DURATION}
-            delay={PHASE_1_START + 0.9}
+            delay={PHASE_1_START + 0.6}
+            repeatDelay={getRepeatDelay(PHASE_1_START + 0.6)}
             gradientStartColor="#f7931a"
             gradientStopColor="#9945ff"
             pathColor="#f7931a"
@@ -572,6 +573,7 @@ export function CrossChainVisualizationDesktop({
           />
 
           {/* PHASE 2: Bridges → Base Hub (from right edge to left edge) */}
+          {/* Fires when Phase 1 beams reach bridges */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={bridgesRightAnchorRef}
@@ -579,6 +581,7 @@ export function CrossChainVisualizationDesktop({
             curvature={0}
             duration={BEAM_DURATION}
             delay={PHASE_2_START}
+            repeatDelay={getRepeatDelay(PHASE_2_START)}
             gradientStartColor="#9945ff"
             gradientStopColor="#0052ff"
             pathColor="#9945ff"
@@ -586,14 +589,15 @@ export function CrossChainVisualizationDesktop({
             pathWidth={3}
           />
 
-          {/* Operators → Hub (from right edge to hub left - horizontal) */}
+          {/* Operators → Hub (fires slightly after Phase 2 starts) */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={operatorsTopAnchorRef}
             toRef={hubLeftAnchorRef}
             curvature={30}
             duration={BEAM_DURATION}
-            delay={PHASE_1_START + 0.5}
+            delay={PHASE_2_START + 0.3}
+            repeatDelay={getRepeatDelay(PHASE_2_START + 0.3)}
             gradientStartColor="#22c55e"
             gradientStopColor="#0052ff"
             pathColor="#22c55e"
@@ -601,7 +605,8 @@ export function CrossChainVisualizationDesktop({
             pathWidth={3}
           />
 
-          {/* PHASE 3: Hub → Consumer containers (from right edge to left edge) */}
+          {/* PHASE 3: Hub → Consumer containers - ALL SIMULTANEOUS */}
+          {/* When data reaches hub, ALL consumers react at the same time */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={hubRightAnchorRef}
@@ -609,6 +614,7 @@ export function CrossChainVisualizationDesktop({
             curvature={-20}
             duration={BEAM_DURATION}
             delay={PHASE_3_START}
+            repeatDelay={getRepeatDelay(PHASE_3_START)}
             gradientStartColor="#0052ff"
             gradientStopColor="#0052ff"
             pathColor="#0052ff"
@@ -621,7 +627,8 @@ export function CrossChainVisualizationDesktop({
             toRef={walletsLeftAnchorRef}
             curvature={20}
             duration={BEAM_DURATION}
-            delay={PHASE_3_START + 0.3}
+            delay={PHASE_3_START}
+            repeatDelay={getRepeatDelay(PHASE_3_START)}
             gradientStartColor="#0052ff"
             gradientStopColor="#e2761b"
             pathColor="#e2761b"
@@ -634,7 +641,8 @@ export function CrossChainVisualizationDesktop({
             toRef={securityLeftAnchorRef}
             curvature={40}
             duration={BEAM_DURATION}
-            delay={PHASE_3_START + 0.6}
+            delay={PHASE_3_START}
+            repeatDelay={getRepeatDelay(PHASE_3_START)}
             gradientStartColor="#0052ff"
             gradientStopColor="#22c55e"
             pathColor="#22c55e"

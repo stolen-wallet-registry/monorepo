@@ -53,6 +53,9 @@ importers:
       '@emotion/is-prop-valid':
         specifier: ^1.4.0
         version: 1.4.0
+      '@swr/abis':
+        specifier: workspace:*
+        version: link:../../packages/abis
       '@swr/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -514,6 +517,9 @@ importers:
       typescript-eslint:
         specifier: ^8.46.4
         version: 8.49.0(eslint@9.39.1(jiti@2.6.1))(typescript@5.9.3)
+      viem:
+        specifier: ^2.41.2
+        version: 2.41.2(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.13)
       vite:
         specifier: ^7.2.4
         version: 7.2.7(@types/node@24.10.2)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(yaml@2.8.2)

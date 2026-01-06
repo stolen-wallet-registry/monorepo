@@ -1,9 +1,27 @@
-// Animation timing - 3 phases
-export const BEAM_DURATION = 3;
+// Animation timing - sequential phases with pause
+// Each beam animates for BEAM_DURATION, then waits until the cycle restarts
+export const BEAM_DURATION = 2; // Each beam animation duration
+export const PHASE_GAP = 0.5; // Gap between phases
+export const CYCLE_PAUSE = 2.5; // Pause before restart
+
+// Phase timing (sequential, not overlapping)
 export const PHASE_1_START = 0; // Networks → Bridges
-export const PHASE_2_START = 1.5; // Bridges → Base
-export const PHASE_3_START = 2.5; // Base → Consumers
-export const EMIT_DELAY = PHASE_2_START + 0.8; // When CAIP-10 emission appears
+export const PHASE_1_END = BEAM_DURATION; // 2s
+
+export const PHASE_2_START = PHASE_1_END + PHASE_GAP; // 2.5s - Bridges → Hub
+export const PHASE_2_END = PHASE_2_START + BEAM_DURATION; // 4.5s
+
+export const PHASE_3_START = PHASE_2_END + PHASE_GAP; // 5s - Hub → ALL Consumers (simultaneous)
+export const PHASE_3_END = PHASE_3_START + BEAM_DURATION; // 7s
+
+// Total cycle = animation time + pause
+export const TOTAL_CYCLE = PHASE_3_END + CYCLE_PAUSE; // 9.5s
+
+// Helper: calculate repeatDelay so all beams restart together
+export const getRepeatDelay = (phaseStart: number) => TOTAL_CYCLE - phaseStart - BEAM_DURATION;
+
+// CAIP-10 emission appears when data reaches the hub
+export const EMIT_DELAY = PHASE_2_END; // When beam reaches hub (4.5s)
 
 // Chain color and icon mapping for CAIP emissions
 // Dark mode uses higher opacity backgrounds and lighter text colors for visibility

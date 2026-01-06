@@ -5,6 +5,7 @@ import { Suspense, lazy } from 'react';
 import { Button, HyperText, TypingAnimation, Skeleton } from '@swr/ui';
 
 import { ErrorBoundary } from '@/components/ui/error-boundary';
+import { RegistrySearchPreview } from './RegistrySearchPreview';
 
 const Globe = lazy(() => import('./Globe').then((mod) => ({ default: mod.Globe })));
 
@@ -71,6 +72,9 @@ export function HeroSection(): React.JSX.Element {
             </Suspense>
           </ErrorBoundary>
         </div>
+
+        {/* Registry Search Preview */}
+        <RegistrySearchPreview className="mt-8 w-full max-w-md md:mt-12" />
 
         {/* CTA Buttons */}
         <div className="relative z-10 mt-8 flex flex-col gap-4 sm:flex-row md:mt-12">

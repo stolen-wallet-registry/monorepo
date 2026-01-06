@@ -1,6 +1,21 @@
 // Utilities
 export { cn } from './lib/utils';
 
+// Registry utilities
+export {
+  queryRegistryStatus,
+  queryRegistryStatusSimple,
+  getResultStatus,
+  getStatusLabel,
+  getStatusDescription,
+  formatBlockAsTime,
+  isWalletCompromised,
+  type RegistrationData,
+  type AcknowledgementData,
+  type RegistryStatusResult,
+  type ResultStatus,
+} from './lib/registry';
+
 // Components
 export { Alert, AlertTitle, AlertDescription } from './components/alert';
 export { Badge } from './components/badge';
