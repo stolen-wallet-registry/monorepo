@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { ExplorerLink } from './ExplorerLink';
+import { ExplorerLink } from '.';
 import type { Address as AddressType, Hash } from '@/lib/types/ethereum';
 
 const meta = {

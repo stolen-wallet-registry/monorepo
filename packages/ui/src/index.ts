@@ -1,6 +1,19 @@
 // Utilities
 export { cn } from './lib/utils';
 
+// Viem utilities (re-exported for convenience)
+export { isAddress } from 'viem';
+
+// Chain configuration
+export {
+  LOCAL_DEV_CHAINS,
+  CHAIN_EXPLORERS,
+  isLocalDevChain,
+  getExplorerAddressUrl,
+  getExplorerTxUrl,
+  getExplorerName,
+} from './lib/chains';
+
 // Registry utilities
 export {
   queryRegistryStatus,
@@ -90,11 +103,9 @@ export { TypingAnimation } from './components/typing-animation';
 export { HyperText } from './components/hyper-text';
 export { AnimatedBeam, type AnimatedBeamProps } from './components/animated-beam';
 
-// Explorer link
+// Explorer link (URL helpers exported from ./lib/chains above)
 export {
   ExplorerLink,
-  getExplorerAddressUrl,
-  getExplorerTxUrl,
   type ExplorerLinkProps,
   type ExplorerLinkType,
 } from './components/explorer-link';

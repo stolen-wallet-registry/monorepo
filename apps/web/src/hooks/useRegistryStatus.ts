@@ -82,6 +82,16 @@ export function useRegistryStatus({
     contractAddress = undefined;
   }
 
+  // Warn when configuration is missing for the requested chainId
+  if (!client) {
+    logger.contract.warn('useRegistryStatus: Public client unavailable for chainId', { chainId });
+  }
+  if (!contractAddress) {
+    logger.contract.warn('useRegistryStatus: Contract address not configured for chainId', {
+      chainId,
+    });
+  }
+
   // Debug logging
   logger.contract.debug('useRegistryStatus query config', {
     address,
@@ -125,8 +135,10 @@ export function useRegistryStatus({
     });
   }
 
-  // Discard promise return to match expected void signature
-  const refetch = () => void queryRefetch();
+  // Wrap queryRefetch to match expected void return signature
+  const refetch: () => void = () => {
+    queryRefetch();
+  };
 
   return {
     isRegistered: data?.isRegistered ?? false,

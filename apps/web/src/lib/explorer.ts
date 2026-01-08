@@ -89,6 +89,8 @@ export function getChainShortName(chainId: number): string {
 // CROSS-CHAIN BRIDGE EXPLORERS
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { LOCAL_DEV_CHAINS } from '@swr/ui';
+
 /** Supported bridge providers */
 export type BridgeProvider = 'hyperlane' | 'wormhole' | 'ccip';
 
@@ -102,9 +104,9 @@ interface BridgeExplorerConfig {
   /** URL pattern for message ID (if supported) */
   messageUrl?: (messageId: string) => string;
   /** Chains this explorer supports (empty = all chains) */
-  supportedChains?: number[];
+  supportedChains?: readonly number[];
   /** Chains to exclude (e.g., local dev chains) */
-  excludedChains?: number[];
+  excludedChains?: readonly number[];
 }
 
 /** Bridge explorer configurations (exported for testability) */
@@ -115,21 +117,20 @@ export const BRIDGE_EXPLORERS: Record<BridgeProvider, BridgeExplorerConfig> = {
     searchByTxUrl: (txHash) => `https://explorer.hyperlane.xyz/?search=${txHash}`,
     // Message ID lookup uses search interface for consistency
     messageUrl: (messageId) => `https://explorer.hyperlane.xyz/?search=${messageId}`,
-    // Exclude local anvil chains - no Hyperlane explorer for local dev
-    excludedChains: [31337, 31338],
+    excludedChains: LOCAL_DEV_CHAINS,
   },
   wormhole: {
     name: 'Wormhole Explorer',
     baseUrl: 'https://wormholescan.io',
     searchByTxUrl: (txHash) => `https://wormholescan.io/#/tx/${txHash}`,
-    excludedChains: [31337, 31338],
+    excludedChains: LOCAL_DEV_CHAINS,
   },
   ccip: {
     name: 'CCIP Explorer',
     baseUrl: 'https://ccip.chain.link',
-    // CCIP uses query param for search
-    searchByTxUrl: (txHash) => `https://ccip.chain.link/?search=${txHash}`,
-    excludedChains: [31337, 31338],
+    // CCIP uses path-based routing for message lookup
+    searchByTxUrl: (txHash) => `https://ccip.chain.link/msg/${txHash}`,
+    excludedChains: LOCAL_DEV_CHAINS,
   },
 };
 

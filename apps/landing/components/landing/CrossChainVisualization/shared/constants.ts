@@ -110,7 +110,7 @@ export function getChainConfig(caipAddress: string): { bg: string; text: string;
   return { bg: 'bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400', icon: '📍' };
 }
 
-// Full CAIP-10 address examples (accounts) - valid format with checksummed addresses
+// Full CAIP-10 address examples (accounts) - valid format for visualization purposes
 export const CAIP10_ADDRESSES = [
   'eip155:1:0x742d35Cc6634C0532925a3b844Bc454e4438f44e', // Ethereum (42 chars)
   'eip155:8453:0x1a2b3c4d5e6f7890abcdef1234567890abcdef12', // Base

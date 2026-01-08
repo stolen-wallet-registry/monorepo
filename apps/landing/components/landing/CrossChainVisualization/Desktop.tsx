@@ -56,14 +56,20 @@ import type { CrossChainVisualizationProps } from './types';
 // Dev mode flag - set to true for testing beam animations
 const DEV_MODE = false;
 
-// Global timing tracker for logging (only used in DEV_MODE)
-let cycleStartTime = 0;
+// Simple log for reducer (no timing) - reducer is pure and can't access refs
 const log = (msg: string, data?: object) => {
   if (!DEV_MODE) return;
-  const now = performance.now();
-  const elapsed = cycleStartTime ? `@${(now - cycleStartTime).toFixed(0)}ms` : '@0ms';
-  console.log(`[Beam ${elapsed}] ${msg}`, data || '');
+  console.log(`[Beam] ${msg}`, data || '');
 };
+
+// Logging helper factory with timing - for component code with ref access
+const createTimedLogger =
+  (startTimeRef: React.MutableRefObject<number>) => (msg: string, data?: object) => {
+    if (!DEV_MODE) return;
+    const now = performance.now();
+    const elapsed = startTimeRef.current ? `@${(now - startTimeRef.current).toFixed(0)}ms` : '@0ms';
+    console.log(`[Beam ${elapsed}] ${msg}`, data || '');
+  };
 
 // ===== STATE MACHINE FOR BEAM ANIMATION =====
 // CENTRALIZED TIMING: Desktop.tsx manages ALL timing via useEffect watching currentStep.
@@ -147,8 +153,7 @@ function animationReducer(state: AnimationState, action: AnimationAction): Anima
 
     case 'START_CYCLE': {
       const { flow, networkIndex } = action;
-      cycleStartTime = performance.now(); // Reset timing on cycle start
-      log('START_CYCLE', { flow, networkIndex });
+      // Note: timing is managed via cycleStartTimeRef in the component
 
       if (flow === 'reportFraud') {
         const activeBeam = NETWORK_BEAMS[networkIndex];
@@ -346,6 +351,10 @@ export function CrossChainVisualizationDesktop({
   const hubRef = useRef<HTMLDivElement>(null);
   const hubLogoRef = useRef<HTMLDivElement>(null);
 
+  // Animation timing ref - moved from module scope for Fast Refresh safety
+  const cycleStartTimeRef = useRef(0);
+  const timedLog = createTimedLogger(cycleStartTimeRef);
+
   // Animation state machine
   const [state, dispatch] = useReducer(animationReducer, initialState);
 
@@ -403,18 +412,18 @@ export function CrossChainVisualizationDesktop({
   // Manual trigger functions for dev - use runAnimationSequence for precise timing
   const triggerReportFraud = useCallback(
     (networkIndex = 0) => {
-      cycleStartTime = performance.now();
-      log('=== REPORT FRAUD ===', { networkIndex });
+      cycleStartTimeRef.current = performance.now();
+      timedLog('=== REPORT FRAUD ===', { networkIndex });
       runAnimationSequence(REPORT_FRAUD_STEPS, networkIndex);
     },
-    [runAnimationSequence]
+    [runAnimationSequence, timedLog]
   );
 
   const triggerTrustedOperators = useCallback(() => {
-    cycleStartTime = performance.now();
-    log('=== TRUSTED OPERATORS ===');
+    cycleStartTimeRef.current = performance.now();
+    timedLog('=== TRUSTED OPERATORS ===');
     runAnimationSequence(TRUSTED_OPS_STEPS);
-  }, [runAnimationSequence]);
+  }, [runAnimationSequence, timedLog]);
 
   // Alternate between flows - track last flow used
   const lastFlowRef = useRef<'reportFraud' | 'trustedOperators'>('trustedOperators');
@@ -443,6 +452,11 @@ export function CrossChainVisualizationDesktop({
 
     return () => {
       hasStartedRef.current = false; // Reset for Fast Refresh
+      // Clean up any pending animation timers to prevent firing after unmount
+      if (activeTimerRef.current) {
+        clearTimeout(activeTimerRef.current);
+        activeTimerRef.current = null;
+      }
     };
   }, [startNextCycle, autoPlay]);
 

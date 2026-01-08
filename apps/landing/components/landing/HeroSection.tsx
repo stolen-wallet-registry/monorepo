@@ -38,7 +38,7 @@ export function HeroSection(): React.JSX.Element {
   return (
     <section className="relative flex min-h-[calc(100vh-5rem)] flex-col items-center justify-start overflow-hidden px-4 pt-4 pb-8 text-center">
       {/* Background gradient effect */}
-      <div className="pointer-events-none absolute inset-0 bg-linear-to-b from-transparent via-transparent to-background/80" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/80" />
 
       {/* Content container */}
       <div className="relative z-10 flex flex-col items-center">

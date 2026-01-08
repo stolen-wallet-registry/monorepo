@@ -19,8 +19,6 @@ export interface AnimatedBeamProps {
   gradientStopColor?: string;
   delay?: number;
   duration?: number;
-  /** Delay between animation cycles (default: 0) */
-  repeatDelay?: number;
   startXOffset?: number;
   startYOffset?: number;
   endXOffset?: number;
@@ -40,7 +38,6 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   reverse = false,
   duration: durationProp,
   delay = 0,
-  repeatDelay = 0,
   pathColor = 'gray',
   pathWidth = 2,
   pathOpacity = 0.4,
@@ -210,7 +207,6 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
               ease: 'linear',
               // Animation plays once per activation cycle. Parent manages timing externally.
               repeat: 0,
-              repeatDelay,
             }}
           >
             <stop stopColor={gradientStartColor} stopOpacity="0"></stop>

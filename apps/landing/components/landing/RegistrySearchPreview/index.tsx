@@ -22,6 +22,7 @@ import {
   getResultStatus,
   getStatusLabel,
   getStatusDescription,
+  isAddress,
   type RegistryStatusResult,
   type ResultStatus,
 } from '@swr/ui';
@@ -35,13 +36,6 @@ import {
 
 interface RegistrySearchPreviewProps {
   className?: string;
-}
-
-/**
- * Validates if a string is a valid Ethereum address.
- */
-function isValidAddress(address: string): boolean {
-  return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
 /**
@@ -88,7 +82,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
       return;
     }
 
-    if (!isValidAddress(trimmed)) {
+    if (!isAddress(trimmed)) {
       setError('Invalid address format. Must be 0x followed by 40 hex characters.');
       setResult(null);
       return;
