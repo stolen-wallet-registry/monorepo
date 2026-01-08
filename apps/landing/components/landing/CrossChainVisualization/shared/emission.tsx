@@ -12,26 +12,36 @@ import {
   truncateCaip,
 } from './constants';
 
-interface Emission {
+export interface Emission {
   id: number;
   value: string;
   type: 'address' | 'transaction';
 }
 
-interface Caip10EmissionProps {
+export interface Caip10EmissionProps {
   /** Event-driven emission trigger. When transitions to true, adds new emission. */
   triggerEmission?: boolean;
 }
 
-const MAX_EMISSIONS = 3;
-const EMISSION_LIFETIME = 4000; // Auto-remove after 4 seconds
+export const MAX_EMISSIONS = 3;
+export const EMISSION_LIFETIME = 4000; // Auto-remove after 4 seconds
 
 // CAIP Emission Animation Component - stacking emissions with limit
 export function Caip10Emission({ triggerEmission }: Caip10EmissionProps) {
   const [emissions, setEmissions] = useState<Emission[]>([]);
   const emissionCounter = useRef(0);
   const prevTriggerRef = useRef(triggerEmission);
+  const timeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const isControlled = triggerEmission !== undefined;
+
+  // Cleanup all pending timeouts on unmount
+  useEffect(() => {
+    const timeouts = timeoutsRef.current;
+    return () => {
+      timeouts.forEach((id) => clearTimeout(id));
+      timeouts.clear();
+    };
+  }, []);
 
   const addEmission = useCallback(() => {
     const id = emissionCounter.current++;
@@ -44,9 +54,11 @@ export function Caip10Emission({ triggerEmission }: Caip10EmissionProps) {
     });
 
     // Auto-remove this emission after lifetime
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       setEmissions((prev) => prev.filter((e) => e.id !== id));
+      timeoutsRef.current.delete(timeoutId);
     }, EMISSION_LIFETIME);
+    timeoutsRef.current.add(timeoutId);
   }, []);
 
   // Handle event-driven trigger
@@ -78,7 +90,7 @@ export function Caip10Emission({ triggerEmission }: Caip10EmissionProps) {
 
   return (
     <div
-      className="pointer-events-none absolute bottom-full left-1/2 mb-4 flex -translate-x-1/2 flex-col gap-2"
+      className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end gap-2"
       aria-hidden="true"
     >
       <AnimatePresence mode="popLayout">
@@ -89,10 +101,10 @@ export function Caip10Emission({ triggerEmission }: Caip10EmissionProps) {
             <motion.div
               key={emission.id}
               layout
-              initial={{ opacity: 0, y: 20, scale: 0.8 }}
+              initial={{ opacity: 0, y: 30, scale: 0.8 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
+              exit={{ opacity: 0, y: -20, scale: 0.8 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
               className="whitespace-nowrap text-center"
             >
               <span

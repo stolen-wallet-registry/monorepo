@@ -13,9 +13,15 @@ vi.mock('wagmi', () => ({
   }),
 }));
 
-// Mock contract addresses
+// Mock contract addresses with controllable behavior
+let mockContractAddress: string | null = '0x5fbdb2315678afecb367f032d93f642f64180aa3';
 vi.mock('@/lib/contracts/addresses', () => ({
-  getStolenWalletRegistryAddress: () => '0x5fbdb2315678afecb367f032d93f642f64180aa3',
+  getStolenWalletRegistryAddress: () => {
+    if (mockContractAddress === null) {
+      throw new Error('No contract for this chain');
+    }
+    return mockContractAddress;
+  },
 }));
 
 // Mock the shared queryRegistryStatus function
@@ -49,6 +55,8 @@ function createWrapper() {
 describe('useRegistryStatus', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset controllable mock to default
+    mockContractAddress = '0x5fbdb2315678afecb367f032d93f642f64180aa3';
   });
 
   const sampleAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
@@ -222,33 +230,20 @@ describe('useRegistryStatus', () => {
     });
   });
 
-  it('handles missing contract address gracefully', async () => {
-    // Override the mock to throw for this test
-    vi.doMock('@/lib/contracts/addresses', () => ({
-      getStolenWalletRegistryAddress: () => {
-        throw new Error('No contract for this chain');
-      },
-    }));
-
-    // With the default mock returning a valid address, the hook should work normally
-    mockQueryRegistryStatus.mockResolvedValue({
-      isRegistered: false,
-      isPending: false,
-      registrationData: null,
-      acknowledgementData: null,
-    });
+  it('handles missing contract address gracefully', () => {
+    // Set mock to throw (simulates unsupported chain)
+    mockContractAddress = null;
 
     const { result } = renderHook(() => useRegistryStatus({ address: sampleAddress }), {
       wrapper: createWrapper(),
     });
 
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    // Verify hook doesn't crash and provides appropriate default state
-    expect(result.current.isError).toBe(false);
+    // Should not be loading when disabled (no contract address)
+    expect(result.current.isLoading).toBe(false);
     expect(result.current.isRegistered).toBe(false);
     expect(result.current.isPending).toBe(false);
+
+    // Verify queryRegistryStatus was never called (query disabled)
+    expect(mockQueryRegistryStatus).not.toHaveBeenCalled();
   });
 });

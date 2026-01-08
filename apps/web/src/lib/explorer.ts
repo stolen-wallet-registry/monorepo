@@ -178,13 +178,13 @@ export function getBridgeMessageUrl(
   const explorerConfig = BRIDGE_EXPLORERS[p];
 
   // Check if this chain is excluded (e.g., local dev)
-  if (originChainId && explorerConfig.excludedChains?.includes(originChainId)) {
+  if (originChainId !== undefined && explorerConfig.excludedChains?.includes(originChainId)) {
     return null;
   }
 
   // Check if this chain is in the supported list (if specified)
   if (
-    originChainId &&
+    originChainId !== undefined &&
     explorerConfig.supportedChains &&
     !explorerConfig.supportedChains.includes(originChainId)
   ) {

@@ -1,27 +1,50 @@
-// Animation timing - sequential phases with pause
-// Each beam animates for BEAM_DURATION, then waits until the cycle restarts
-export const BEAM_DURATION = 2; // Each beam animation duration
-export const PHASE_GAP = 0.5; // Gap between phases
-export const CYCLE_PAUSE = 2.5; // Pause before restart
+/**
+ * BEAM ANIMATION TIMING
+ *
+ * Two flows trigger the beam chain:
+ *
+ * FLOW 1: Report Fraud (from left side)
+ * =====================================
+ * 1. Beam fires from one network group (Ethereum/EVM/Non-EVM/Bitcoin) → Cross-Chain Messaging
+ * 2. Beam fires from Cross-Chain Messaging → Registry Hub (Base)
+ * 3. When beam hits hub:
+ *    a) CAIP-10 emission bubbles up above registry
+ *    b) Beams pulse to all listeners (Exchanges/Wallets/Security)
+ *
+ * FLOW 2: Trusted Operators
+ * =========================
+ * 1. Beam fires from Trusted Operators → Registry Hub (Base)
+ * 2. When beam hits hub:
+ *    a) CAIP-10 emission bubbles up above registry
+ *    b) Beams pulse to all listeners (Exchanges/Wallets/Security)
+ *
+ * Timing: Beams flow continuously with NO pause between phases.
+ * Only a brief pause between complete cycles for visual clarity.
+ */
 
-// Phase timing (sequential, not overlapping)
-export const PHASE_1_START = 0; // Networks → Bridges
-export const PHASE_1_END = BEAM_DURATION; // 2s
+// Animation timing - continuous flow, minimal gaps
+export const BEAM_DURATION = 3; // Animation duration in seconds
+export const PHASE_GAP = 0; // No gap between phases - immediate trigger on completion
+export const CYCLE_PAUSE = 0.5; // Brief pause between cycles (0.5s)
 
-export const PHASE_2_START = PHASE_1_END + PHASE_GAP; // 2.5s - Bridges → Hub
-export const PHASE_2_END = PHASE_2_START + BEAM_DURATION; // 4.5s
+// Phase timing (sequential, triggered by onComplete - not time-based)
+export const PHASE_1_START = 0; // Networks → Bridges (or Operators → Hub)
+export const PHASE_1_END = BEAM_DURATION;
 
-export const PHASE_3_START = PHASE_2_END + PHASE_GAP; // 5s - Hub → ALL Consumers (simultaneous)
-export const PHASE_3_END = PHASE_3_START + BEAM_DURATION; // 7s
+export const PHASE_2_START = PHASE_1_END + PHASE_GAP; // Bridges → Hub
+export const PHASE_2_END = PHASE_2_START + BEAM_DURATION;
+
+export const PHASE_3_START = PHASE_2_END + PHASE_GAP; // Hub → ALL Listeners (simultaneous)
+export const PHASE_3_END = PHASE_3_START + BEAM_DURATION;
 
 // Total cycle = animation time + pause
-export const TOTAL_CYCLE = PHASE_3_END + CYCLE_PAUSE; // 9.5s
+export const TOTAL_CYCLE = PHASE_3_END + CYCLE_PAUSE;
 
 // Helper: calculate repeatDelay so all beams restart together
 export const getRepeatDelay = (phaseStart: number) => TOTAL_CYCLE - phaseStart - BEAM_DURATION;
 
 // CAIP-10 emission appears when data reaches the hub
-export const EMIT_DELAY = PHASE_2_END; // When beam reaches hub (4.5s)
+export const EMIT_DELAY = PHASE_2_END; // When beam reaches hub
 
 // Chain color and icon mapping for CAIP emissions
 // Dark mode uses higher opacity backgrounds and lighter text colors for visibility

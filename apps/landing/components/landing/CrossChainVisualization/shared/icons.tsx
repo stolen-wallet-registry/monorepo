@@ -49,6 +49,7 @@ export const IconCircle = forwardRef<
     useEffect(() => {
       // Only trigger when transitioning from false to true
       if (triggerPulse && !prevTriggerRef.current && scope.current) {
+        // Delay pulse until beam reaches the icon (BEAM_DURATION seconds)
         animate(
           scope.current,
           {
@@ -58,7 +59,7 @@ export const IconCircle = forwardRef<
               '0 0 0 0 rgba(34, 197, 94, 0)',
             ],
           },
-          { duration: 1.5 }
+          { duration: 1.5, delay: BEAM_DURATION }
         );
       }
       prevTriggerRef.current = triggerPulse;

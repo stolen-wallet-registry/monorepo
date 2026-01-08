@@ -74,7 +74,9 @@ export function HeroSection(): React.JSX.Element {
         </div>
 
         {/* Registry Search Preview - Wider */}
-        <RegistrySearchPreview className="mt-16 w-full max-w-xl sm:mt-20" />
+        <ErrorBoundary fallback={<div className="mt-16 w-full max-w-xl sm:mt-20" />}>
+          <RegistrySearchPreview className="mt-16 w-full max-w-xl sm:mt-20" />
+        </ErrorBoundary>
 
         {/* CTA Buttons */}
         <div className="relative z-10 mt-3 flex flex-col gap-3 sm:mt-4 sm:flex-row">

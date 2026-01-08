@@ -53,7 +53,21 @@ import {
 
 import type { CrossChainVisualizationProps } from './types';
 
+// Dev mode flag - set to true for testing beam animations
+const DEV_MODE = false;
+
+// Global timing tracker for logging (only used in DEV_MODE)
+let cycleStartTime = 0;
+const log = (msg: string, data?: object) => {
+  if (!DEV_MODE) return;
+  const now = performance.now();
+  const elapsed = cycleStartTime ? `@${(now - cycleStartTime).toFixed(0)}ms` : '@0ms';
+  console.log(`[Beam ${elapsed}] ${msg}`, data || '');
+};
+
 // ===== STATE MACHINE FOR BEAM ANIMATION =====
+// CENTRALIZED TIMING: Desktop.tsx manages ALL timing via useEffect watching currentStep.
+// AnimatedBeam's onComplete is NOT used - timing is deterministic via setTimeout.
 
 type StepName =
   | 'idle'
@@ -69,13 +83,12 @@ interface AnimationState {
   pulseListeners: boolean;
   triggerEmission: boolean;
   selectedNetwork: number; // 0-3 for random network selection
-  completedListenerCount: number;
 }
 
 type AnimationAction =
   | { type: 'START_CYCLE'; flow: 'reportFraud' | 'trustedOperators'; networkIndex: number }
-  | { type: 'BEAM_COMPLETE'; beamId: string }
-  | { type: 'CYCLE_COMPLETE' }
+  | { type: 'SET_STEP'; step: StepName; networkIndex?: number } // Direct step setting - bypasses React effects
+  | { type: 'NEXT_STEP' } // Legacy - kept for compatibility
   | { type: 'RESET_TRIGGERS' };
 
 const initialState: AnimationState = {
@@ -84,26 +97,62 @@ const initialState: AnimationState = {
   pulseListeners: false,
   triggerEmission: false,
   selectedNetwork: 0,
-  completedListenerCount: 0,
 };
 
-// Timing helper for logs
-const getTimestamp = () => {
-  const now = new Date();
-  return `${now.getMinutes()}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
-};
+// Define the step transitions for each flow
+const NETWORK_BEAMS = ['ethEcosystem', 'evmChains', 'nonEvm', 'btc'] as const;
+
+// Animation step sequences for each flow
+const REPORT_FRAUD_STEPS: StepName[] = [
+  'rf_networkToBridges',
+  'rf_bridgesToHub',
+  'rf_hubToListeners',
+];
+const TRUSTED_OPS_STEPS: StepName[] = ['to_operatorToHub', 'to_hubToListeners'];
+
+// Compute active beams based on step name
+function getActiveBeamsForStep(step: StepName, networkIndex: number): Set<string> {
+  switch (step) {
+    case 'rf_networkToBridges':
+      return new Set([NETWORK_BEAMS[networkIndex]]);
+    case 'rf_bridgesToHub':
+      return new Set(['bridgesToHub']);
+    case 'rf_hubToListeners':
+    case 'to_hubToListeners':
+      return new Set(['exchanges', 'wallets', 'security']);
+    case 'to_operatorToHub':
+      return new Set(['operatorToHub']);
+    case 'idle':
+    default:
+      return new Set();
+  }
+}
 
 function animationReducer(state: AnimationState, action: AnimationAction): AnimationState {
-  const ts = getTimestamp();
-
   switch (action.type) {
+    case 'SET_STEP': {
+      // Direct step setting - used by runAnimationSequence for precise timing
+      const { step, networkIndex = state.selectedNetwork } = action;
+      const isListenerStep = step === 'rf_hubToListeners' || step === 'to_hubToListeners';
+
+      return {
+        ...state,
+        currentStep: step,
+        activeBeams: getActiveBeamsForStep(step, networkIndex),
+        selectedNetwork: networkIndex,
+        pulseListeners: isListenerStep,
+        triggerEmission: isListenerStep,
+      };
+    }
+
     case 'START_CYCLE': {
       const { flow, networkIndex } = action;
+      cycleStartTime = performance.now(); // Reset timing on cycle start
+      log('START_CYCLE', { flow, networkIndex });
 
       if (flow === 'reportFraud') {
-        const networkBeams = ['ethEcosystem', 'evmChains', 'nonEvm', 'btc'];
-        const activeBeam = networkBeams[networkIndex];
-        console.log(`[${ts}] 🚀 Report Fraud → LEFT beam: ${activeBeam}`);
+        const activeBeam = NETWORK_BEAMS[networkIndex];
+        log('→ rf_networkToBridges', { activeBeam });
         return {
           ...state,
           currentStep: 'rf_networkToBridges',
@@ -111,10 +160,9 @@ function animationReducer(state: AnimationState, action: AnimationAction): Anima
           pulseListeners: false,
           triggerEmission: false,
           selectedNetwork: networkIndex,
-          completedListenerCount: 0,
         };
       } else {
-        console.log(`[${ts}] 🚀 Trusted Operators → operatorToHub`);
+        log('→ to_operatorToHub');
         return {
           ...state,
           currentStep: 'to_operatorToHub',
@@ -122,79 +170,63 @@ function animationReducer(state: AnimationState, action: AnimationAction): Anima
           pulseListeners: false,
           triggerEmission: false,
           selectedNetwork: 0,
-          completedListenerCount: 0,
         };
       }
     }
 
-    case 'BEAM_COMPLETE': {
-      const { beamId: completedBeam } = action;
+    case 'NEXT_STEP': {
+      // Centralized step progression - no dependency on beam callbacks
+      const { currentStep } = state;
+      log('NEXT_STEP from', { currentStep });
 
-      // Handle network beam completion -> trigger bridges to hub
-      if (
-        ['ethEcosystem', 'evmChains', 'nonEvm', 'btc'].includes(completedBeam) &&
-        state.currentStep === 'rf_networkToBridges'
-      ) {
-        console.log(
-          `[${ts}] ✅ LEFT beam done (${completedBeam}) → activating MIDDLE beam: bridgesToHub`
-        );
-        return {
-          ...state,
-          currentStep: 'rf_bridgesToHub',
-          activeBeams: new Set(['bridgesToHub']),
-        };
-      }
+      switch (currentStep) {
+        case 'rf_networkToBridges':
+          log('→ rf_bridgesToHub');
+          return {
+            ...state,
+            currentStep: 'rf_bridgesToHub',
+            activeBeams: new Set(['bridgesToHub']),
+          };
 
-      // Handle bridges to hub completion -> trigger all listeners
-      if (completedBeam === 'bridgesToHub' && state.currentStep === 'rf_bridgesToHub') {
-        console.log(`[${ts}] ✅ MIDDLE beam done → activating RIGHT beams + EMISSION`);
-        return {
-          ...state,
-          currentStep: 'rf_hubToListeners',
-          activeBeams: new Set(['exchanges', 'wallets', 'security']),
-          pulseListeners: true,
-          triggerEmission: true,
-        };
-      }
+        case 'rf_bridgesToHub':
+          log('→ rf_hubToListeners (+ pulse + emission)');
+          return {
+            ...state,
+            currentStep: 'rf_hubToListeners',
+            activeBeams: new Set(['exchanges', 'wallets', 'security']),
+            pulseListeners: true,
+            triggerEmission: true,
+          };
 
-      // Handle operator to hub completion -> trigger all listeners
-      if (completedBeam === 'operatorToHub' && state.currentStep === 'to_operatorToHub') {
-        console.log(`[${ts}] ✅ OPERATOR beam done → activating RIGHT beams + EMISSION`);
-        return {
-          ...state,
-          currentStep: 'to_hubToListeners',
-          activeBeams: new Set(['exchanges', 'wallets', 'security']),
-          pulseListeners: true,
-          triggerEmission: true,
-        };
-      }
-
-      // Handle listener beam completion
-      if (
-        ['exchanges', 'wallets', 'security'].includes(completedBeam) &&
-        (state.currentStep === 'rf_hubToListeners' || state.currentStep === 'to_hubToListeners')
-      ) {
-        const newCount = state.completedListenerCount + 1;
-        console.log(
-          `[${ts}] ✅ RIGHT beam done (${completedBeam}) - ${newCount}/3 listeners complete`
-        );
-        if (newCount >= 3) {
-          console.log(`[${ts}] 🏁 CYCLE COMPLETE → idle (waiting ${CYCLE_PAUSE}s)`);
+        case 'rf_hubToListeners':
+          log('→ idle (cycle complete)');
           return {
             ...state,
             currentStep: 'idle',
             activeBeams: new Set(),
-            completedListenerCount: 0,
           };
-        }
-        return {
-          ...state,
-          completedListenerCount: newCount,
-        };
-      }
 
-      // Ignore stale beam completions (beam finished after state moved on)
-      return state;
+        case 'to_operatorToHub':
+          log('→ to_hubToListeners (+ pulse + emission)');
+          return {
+            ...state,
+            currentStep: 'to_hubToListeners',
+            activeBeams: new Set(['exchanges', 'wallets', 'security']),
+            pulseListeners: true,
+            triggerEmission: true,
+          };
+
+        case 'to_hubToListeners':
+          log('→ idle (cycle complete)');
+          return {
+            ...state,
+            currentStep: 'idle',
+            activeBeams: new Set(),
+          };
+
+        default:
+          return state;
+      }
     }
 
     case 'RESET_TRIGGERS': {
@@ -202,17 +234,6 @@ function animationReducer(state: AnimationState, action: AnimationAction): Anima
         ...state,
         pulseListeners: false,
         triggerEmission: false,
-      };
-    }
-
-    case 'CYCLE_COMPLETE': {
-      return {
-        ...state,
-        currentStep: 'idle',
-        activeBeams: new Set(),
-        pulseListeners: false,
-        triggerEmission: false,
-        completedListenerCount: 0,
       };
     }
 
@@ -328,57 +349,127 @@ export function CrossChainVisualizationDesktop({
   // Animation state machine
   const [state, dispatch] = useReducer(animationReducer, initialState);
 
-  // Memoized handlers for beam completion
-  const handleBeamComplete = useCallback((beamId: string) => {
-    dispatch({ type: 'BEAM_COMPLETE', beamId });
-  }, []);
+  // Dev mode controls
+  const [autoPlay, setAutoPlay] = useState(!DEV_MODE); // Auto-play disabled in dev by default
+  const [fastMode, setFastMode] = useState(false); // Fast beams for testing
+  const effectiveBeamDuration = fastMode ? 0.3 : BEAM_DURATION; // 300ms in fast mode
 
   // Track if we've started to prevent StrictMode double-fire
   const hasStartedRef = useRef(false);
 
-  // Helper to create START_CYCLE action with random values
-  const createStartCycleAction = useCallback((): AnimationAction => {
-    const flow = Math.random() > 0.5 ? 'reportFraud' : 'trustedOperators';
-    const networkIndex = Math.floor(Math.random() * 4);
-    return { type: 'START_CYCLE', flow, networkIndex };
-  }, []);
+  // ===== CENTRALIZED TIMING =====
+  // Timer chain started SYNCHRONOUSLY on trigger - bypasses React's effect scheduling entirely
+  const activeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Start animation cycle and manage timing
+  // Runs the entire animation sequence with precise timing
+  // networkIndex is used for rf_networkToBridges to select which network beam fires
+  const runAnimationSequence = useCallback(
+    (steps: StepName[], networkIndex = 0) => {
+      // Clear any existing animation
+      if (activeTimerRef.current) {
+        clearTimeout(activeTimerRef.current);
+      }
+
+      let stepIndex = 0;
+      const totalSteps = steps.length;
+
+      const executeStep = () => {
+        if (stepIndex >= totalSteps) {
+          log('SET_STEP → idle');
+          dispatch({ type: 'SET_STEP', step: 'idle' });
+          return;
+        }
+
+        const currentStep = steps[stepIndex];
+        log(`SET_STEP → ${currentStep}`);
+
+        // Dispatch state change for this step (networkIndex only matters for first rf_ step)
+        dispatch({ type: 'SET_STEP', step: currentStep, networkIndex });
+
+        stepIndex++;
+
+        // Schedule next step after BEAM_DURATION
+        activeTimerRef.current = setTimeout(() => {
+          executeStep();
+        }, effectiveBeamDuration * 1000);
+      };
+
+      // Start IMMEDIATELY - no waiting for React effects
+      executeStep();
+    },
+    [effectiveBeamDuration]
+  );
+
+  // Manual trigger functions for dev - use runAnimationSequence for precise timing
+  const triggerReportFraud = useCallback(
+    (networkIndex = 0) => {
+      cycleStartTime = performance.now();
+      log('=== REPORT FRAUD ===', { networkIndex });
+      runAnimationSequence(REPORT_FRAUD_STEPS, networkIndex);
+    },
+    [runAnimationSequence]
+  );
+
+  const triggerTrustedOperators = useCallback(() => {
+    cycleStartTime = performance.now();
+    log('=== TRUSTED OPERATORS ===');
+    runAnimationSequence(TRUSTED_OPS_STEPS);
+  }, [runAnimationSequence]);
+
+  // Alternate between flows - track last flow used
+  const lastFlowRef = useRef<'reportFraud' | 'trustedOperators'>('trustedOperators');
+
+  // Start next animation cycle - alternates between flows
+  const startNextCycle = useCallback(() => {
+    if (lastFlowRef.current === 'trustedOperators') {
+      // Do report fraud with random network
+      lastFlowRef.current = 'reportFraud';
+      const networkIndex = Math.floor(Math.random() * 4);
+      triggerReportFraud(networkIndex);
+    } else {
+      // Do trusted operators
+      lastFlowRef.current = 'trustedOperators';
+      triggerTrustedOperators();
+    }
+  }, [triggerReportFraud, triggerTrustedOperators]);
+
+  // Start animation on mount (only when autoPlay is enabled)
   useEffect(() => {
+    if (!autoPlay) return;
     if (hasStartedRef.current) return;
     hasStartedRef.current = true;
+    // Start immediately
+    startNextCycle();
 
-    const ts = getTimestamp();
-    console.log(`[${ts}] 🎬 Component mounted, starting first cycle in 500ms`);
-    const action = createStartCycleAction();
-    const initialTimeout = setTimeout(() => {
-      dispatch(action);
-    }, 500);
+    return () => {
+      hasStartedRef.current = false; // Reset for Fast Refresh
+    };
+  }, [startNextCycle, autoPlay]);
 
-    return () => clearTimeout(initialTimeout);
-  }, [createStartCycleAction]);
-
-  // When cycle goes idle, start a new cycle after pause
+  // When cycle goes idle, start a new cycle after brief pause
   useEffect(() => {
+    if (!autoPlay) return;
     if (state.currentStep === 'idle' && hasStartedRef.current) {
-      const action = createStartCycleAction();
       const pauseTimeout = setTimeout(() => {
-        dispatch(action);
+        startNextCycle();
       }, CYCLE_PAUSE * 1000);
 
-      return () => clearTimeout(pauseTimeout);
+      return () => {
+        clearTimeout(pauseTimeout);
+      };
     }
-  }, [state.currentStep, createStartCycleAction]);
+  }, [state.currentStep, startNextCycle, autoPlay]);
 
   // Reset triggers after animation has time to detect transition
   useEffect(() => {
     if (state.pulseListeners || state.triggerEmission) {
+      const resetDelay = fastMode ? 100 : 500;
       const resetTimeout = setTimeout(() => {
         dispatch({ type: 'RESET_TRIGGERS' });
-      }, 500); // Was 100ms - increased to give React effects time to detect transition
+      }, resetDelay);
       return () => clearTimeout(resetTimeout);
     }
-  }, [state.pulseListeners, state.triggerEmission]);
+  }, [state.pulseListeners, state.triggerEmission, fastMode]);
 
   // ETH L1 and L2s - core (close to ETH)
   const ethHubRef = useRef<HTMLDivElement>(null);
@@ -652,9 +743,12 @@ export function CrossChainVisualizationDesktop({
             </GroupContainer>
           </div>
 
-          {/* CENTER: Registry Hub */}
-          <div className="relative">
-            <Caip10Emission triggerEmission={state.triggerEmission} />
+          {/* CENTER: Registry Hub - positioned above center for better beam alignment */}
+          <div className="relative flex flex-col items-center justify-center -mt-24">
+            {/* Emission container - positioned above the title */}
+            <div className="relative mb-2 flex min-h-[80px] items-end justify-center">
+              <Caip10Emission triggerEmission={state.triggerEmission} />
+            </div>
             <RegistryHub
               ref={hubRef}
               logoRef={hubLogoRef}
@@ -740,58 +834,59 @@ export function CrossChainVisualizationDesktop({
 
           {/* ===== ANIMATED BEAMS (State Machine Controlled) ===== */}
 
-          {/* PHASE 1: Network containers → Bridges (one fires per cycle) - ALL PURPLE */}
+          {/* PHASE 1: Network containers → Bridges (one fires per cycle) - ALL TEAL */}
+          {/* NOTE: No onComplete props - timing is managed centrally via stepTimerRef */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={ethRightAnchorRef}
             toRef={bridgesLeftAnchorRef}
             curvature={-25}
-            duration={BEAM_DURATION}
-            gradientStartColor="#9945ff"
-            gradientStopColor="#9945ff"
-            pathColor="#9945ff"
-            pathOpacity={0.3}
+            duration={effectiveBeamDuration}
+            gradientStartColor="#14b8a6"
+            gradientStopColor="#5eead4"
+            pathColor="#14b8a6"
+            pathOpacity={0.2}
+            pathWidth={3}
             isActive={state.activeBeams.has('ethEcosystem')}
-            onComplete={() => handleBeamComplete('ethEcosystem')}
           />
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={evmRightAnchorRef}
             toRef={bridgesLeftAnchorRef}
             curvature={0}
-            duration={BEAM_DURATION}
-            gradientStartColor="#9945ff"
-            gradientStopColor="#9945ff"
-            pathColor="#9945ff"
-            pathOpacity={0.3}
+            duration={effectiveBeamDuration}
+            gradientStartColor="#14b8a6"
+            gradientStopColor="#5eead4"
+            pathColor="#14b8a6"
+            pathOpacity={0.2}
+            pathWidth={3}
             isActive={state.activeBeams.has('evmChains')}
-            onComplete={() => handleBeamComplete('evmChains')}
           />
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={nonEvmRightAnchorRef}
             toRef={bridgesLeftAnchorRef}
             curvature={20}
-            duration={BEAM_DURATION}
-            gradientStartColor="#9945ff"
-            gradientStopColor="#9945ff"
-            pathColor="#9945ff"
-            pathOpacity={0.3}
+            duration={effectiveBeamDuration}
+            gradientStartColor="#14b8a6"
+            gradientStopColor="#5eead4"
+            pathColor="#14b8a6"
+            pathOpacity={0.2}
+            pathWidth={3}
             isActive={state.activeBeams.has('nonEvm')}
-            onComplete={() => handleBeamComplete('nonEvm')}
           />
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={btcRightAnchorRef}
             toRef={bridgesLeftAnchorRef}
             curvature={40}
-            duration={BEAM_DURATION}
-            gradientStartColor="#9945ff"
-            gradientStopColor="#9945ff"
-            pathColor="#9945ff"
-            pathOpacity={0.3}
+            duration={effectiveBeamDuration}
+            gradientStartColor="#22c55e"
+            gradientStopColor="#4ade80"
+            pathColor="#22c55e"
+            pathOpacity={0.2}
+            pathWidth={3}
             isActive={state.activeBeams.has('btc')}
-            onComplete={() => handleBeamComplete('btc')}
           />
 
           {/* PHASE 2: Bridges → Hub (Report Fraud flow) */}
@@ -800,30 +895,28 @@ export function CrossChainVisualizationDesktop({
             fromRef={bridgesRightAnchorRef}
             toRef={hubLeftAnchorRef}
             curvature={0}
-            duration={BEAM_DURATION}
-            gradientStartColor="#9945ff"
-            gradientStopColor="#0052ff"
-            pathColor="#9945ff"
-            pathOpacity={0.35}
-            pathWidth={3}
+            duration={effectiveBeamDuration}
+            gradientStartColor="#14b8a6"
+            gradientStopColor="#3b82f6"
+            pathColor="#14b8a6"
+            pathOpacity={0.25}
+            pathWidth={4}
             isActive={state.activeBeams.has('bridgesToHub')}
-            onComplete={() => handleBeamComplete('bridgesToHub')}
           />
 
-          {/* Operators → Hub (Trusted Operators flow) */}
+          {/* Operators → Hub (Trusted Operators flow) - Amber color */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={operatorsTopAnchorRef}
             toRef={hubLeftAnchorRef}
             curvature={30}
-            duration={BEAM_DURATION}
-            gradientStartColor="#22c55e"
-            gradientStopColor="#0052ff"
-            pathColor="#22c55e"
-            pathOpacity={0.35}
-            pathWidth={3}
+            duration={effectiveBeamDuration}
+            gradientStartColor="#f59e0b"
+            gradientStopColor="#fbbf24"
+            pathColor="#f59e0b"
+            pathOpacity={0.25}
+            pathWidth={4}
             isActive={state.activeBeams.has('operatorToHub')}
-            onComplete={() => handleBeamComplete('operatorToHub')}
           />
 
           {/* PHASE 3: Hub → Consumer containers (all fire simultaneously) - ALL BLUE */}
@@ -832,44 +925,95 @@ export function CrossChainVisualizationDesktop({
             fromRef={hubRightAnchorRef}
             toRef={exchangesLeftAnchorRef}
             curvature={-20}
-            duration={BEAM_DURATION}
-            gradientStartColor="#0052ff"
-            gradientStopColor="#0052ff"
-            pathColor="#0052ff"
-            pathOpacity={0.35}
+            duration={effectiveBeamDuration}
+            gradientStartColor="#3b82f6"
+            gradientStopColor="#60a5fa"
+            pathColor="#3b82f6"
+            pathOpacity={0.25}
             pathWidth={3}
             isActive={state.activeBeams.has('exchanges')}
-            onComplete={() => handleBeamComplete('exchanges')}
           />
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={hubRightAnchorRef}
             toRef={walletsLeftAnchorRef}
             curvature={20}
-            duration={BEAM_DURATION}
-            gradientStartColor="#0052ff"
-            gradientStopColor="#0052ff"
-            pathColor="#0052ff"
-            pathOpacity={0.35}
+            duration={effectiveBeamDuration}
+            gradientStartColor="#3b82f6"
+            gradientStopColor="#60a5fa"
+            pathColor="#3b82f6"
+            pathOpacity={0.25}
             pathWidth={3}
             isActive={state.activeBeams.has('wallets')}
-            onComplete={() => handleBeamComplete('wallets')}
           />
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={hubRightAnchorRef}
             toRef={securityLeftAnchorRef}
             curvature={40}
-            duration={BEAM_DURATION}
-            gradientStartColor="#0052ff"
-            gradientStopColor="#0052ff"
-            pathColor="#0052ff"
-            pathOpacity={0.35}
+            duration={effectiveBeamDuration}
+            gradientStartColor="#3b82f6"
+            gradientStopColor="#60a5fa"
+            pathColor="#3b82f6"
+            pathOpacity={0.25}
             pathWidth={3}
             isActive={state.activeBeams.has('security')}
-            onComplete={() => handleBeamComplete('security')}
           />
         </div>
+
+        {/* DEV CONTROLS - Only visible in development, below visualization */}
+        {DEV_MODE && (
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 rounded-lg border border-dashed border-yellow-500/50 bg-yellow-50/50 p-2 dark:bg-yellow-950/10">
+            <span className="text-xs font-semibold text-yellow-700 dark:text-yellow-400">DEV</span>
+            <span className="text-xs text-muted-foreground">
+              <code className="rounded bg-muted px-1 font-mono text-[10px]">
+                {state.currentStep}
+              </code>
+            </span>
+            <button
+              type="button"
+              onClick={() => triggerReportFraud(0)}
+              className="rounded bg-purple-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-purple-600"
+            >
+              ETH→
+            </button>
+            <button
+              type="button"
+              onClick={() => triggerReportFraud(1)}
+              className="rounded bg-purple-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-purple-600"
+            >
+              EVM→
+            </button>
+            <button
+              type="button"
+              onClick={() => triggerTrustedOperators()}
+              className="rounded bg-green-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-green-600"
+            >
+              Operators→
+            </button>
+            <label className="flex items-center gap-1 text-[10px]">
+              <input
+                type="checkbox"
+                checked={fastMode}
+                onChange={(e) => setFastMode(e.target.checked)}
+                className="size-2.5"
+              />
+              Fast
+            </label>
+            <label className="flex items-center gap-1 text-[10px]">
+              <input
+                type="checkbox"
+                checked={autoPlay}
+                onChange={(e) => {
+                  setAutoPlay(e.target.checked);
+                  if (e.target.checked) hasStartedRef.current = false;
+                }}
+                className="size-2.5"
+              />
+              Auto
+            </label>
+          </div>
+        )}
       </div>
     </TooltipProvider>
   );

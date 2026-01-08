@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     title: 'Stolen Wallet Registry',
-    description: 'A global registry for stolen wallets and fraudulent transactions.',
+    description: 'Cross-chain fraud detection and prevention for safer on-chain activity.',
     type: 'website',
     url: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stolenwalletregistry.com',
     siteName: 'Stolen Wallet Registry',

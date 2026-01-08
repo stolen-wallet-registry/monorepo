@@ -101,8 +101,8 @@ export function useRegistryStatus({
     error,
     refetch: queryRefetch,
   } = useQuery({
-    // Only use status key when address is defined, otherwise use disabled placeholder
-    queryKey: address ? registryKeys.status(address) : ['registry', 'status', 'disabled'],
+    // Include chainId in query key to prevent cache collisions across chains
+    queryKey: address ? registryKeys.status(address, chainId) : ['registry', 'status', 'disabled'],
     queryFn: async () => {
       if (!client || !contractAddress || !address) {
         throw new Error('Missing required parameters');
@@ -125,10 +125,8 @@ export function useRegistryStatus({
     });
   }
 
-  // Wrap refetch to match expected signature
-  const refetch = () => {
-    queryRefetch();
-  };
+  // Discard promise return to match expected void signature
+  const refetch = () => void queryRefetch();
 
   return {
     isRegistered: data?.isRegistered ?? false,

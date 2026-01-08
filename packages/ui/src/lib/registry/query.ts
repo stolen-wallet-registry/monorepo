@@ -9,6 +9,7 @@
 import {
   createPublicClient,
   http,
+  isAddress,
   type PublicClient,
   type Address,
   type Abi,
@@ -169,10 +170,17 @@ export async function queryRegistryStatusSimple(
     );
   }
 
+  if (!isAddress(address)) {
+    throw new Error(`Invalid address: ${address}`);
+  }
+  if (!isAddress(contractAddress)) {
+    throw new Error(`Invalid contract address: ${contractAddress}`);
+  }
+
   const client = createPublicClient({
     chain,
     transport: http(rpcUrl),
   });
 
-  return queryRegistryStatus(client, address as Address, contractAddress as Address, abi);
+  return queryRegistryStatus(client, address, contractAddress, abi);
 }

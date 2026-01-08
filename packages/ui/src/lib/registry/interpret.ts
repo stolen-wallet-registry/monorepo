@@ -61,6 +61,16 @@ export function getStatusDescription(status: ResultStatus): string {
 export function formatBlockAsTime(blockNumber: bigint, currentBlock?: bigint): string {
   if (currentBlock !== undefined) {
     const blocksDiff = currentBlock - blockNumber;
+
+    // Handle future blocks (negative difference)
+    if (blocksDiff < 0n) {
+      const futureSeconds = Math.abs(Number(blocksDiff) * 12);
+      if (futureSeconds < 60) return `in ~${futureSeconds}s`;
+      if (futureSeconds < 3600) return `in ~${Math.floor(futureSeconds / 60)}m`;
+      if (futureSeconds < 86400) return `in ~${Math.floor(futureSeconds / 3600)}h`;
+      return `in ~${Math.floor(futureSeconds / 86400)}d`;
+    }
+
     const secondsDiff = Number(blocksDiff) * 12; // ~12 sec per block
 
     if (secondsDiff < 60) return `${secondsDiff}s ago`;

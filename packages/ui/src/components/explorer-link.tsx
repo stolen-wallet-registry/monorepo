@@ -243,19 +243,22 @@ export function ExplorerLink({
 }
 
 /**
+ * Supported chain explorers mapping.
+ */
+const CHAIN_EXPLORERS: Record<number, string> = {
+  1: 'https://etherscan.io',
+  8453: 'https://basescan.org',
+  84532: 'https://sepolia.basescan.org',
+  10: 'https://optimistic.etherscan.io',
+  42161: 'https://arbiscan.io',
+  137: 'https://polygonscan.com',
+};
+
+/**
  * Get block explorer URL for an address on a given chain.
  */
 export function getExplorerAddressUrl(chainId: number, address: string): string | null {
-  const explorers: Record<number, string> = {
-    1: 'https://etherscan.io',
-    8453: 'https://basescan.org',
-    84532: 'https://sepolia.basescan.org',
-    10: 'https://optimistic.etherscan.io',
-    42161: 'https://arbiscan.io',
-    137: 'https://polygonscan.com',
-  };
-
-  const baseUrl = explorers[chainId];
+  const baseUrl = CHAIN_EXPLORERS[chainId];
   if (!baseUrl) return null;
   return `${baseUrl}/address/${address}`;
 }
@@ -264,16 +267,7 @@ export function getExplorerAddressUrl(chainId: number, address: string): string 
  * Get block explorer URL for a transaction on a given chain.
  */
 export function getExplorerTxUrl(chainId: number, txHash: string): string | null {
-  const explorers: Record<number, string> = {
-    1: 'https://etherscan.io',
-    8453: 'https://basescan.org',
-    84532: 'https://sepolia.basescan.org',
-    10: 'https://optimistic.etherscan.io',
-    42161: 'https://arbiscan.io',
-    137: 'https://polygonscan.com',
-  };
-
-  const baseUrl = explorers[chainId];
+  const baseUrl = CHAIN_EXPLORERS[chainId];
   if (!baseUrl) return null;
   return `${baseUrl}/tx/${txHash}`;
 }

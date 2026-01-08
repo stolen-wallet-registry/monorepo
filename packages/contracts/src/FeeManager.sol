@@ -64,8 +64,12 @@ contract FeeManager is IFeeManager, Ownable2Step {
         uint8 feedDecimals = _priceFeed.decimals();
         uint256 result;
         if (feedDecimals <= 2) {
+            // casting to 'uint256' is safe because Chainlink ETH/USD price is always positive
+            // forge-lint: disable-next-line(unsafe-typecast)
             result = uint256(price) * 10 ** (2 - feedDecimals);
         } else {
+            // casting to 'uint256' is safe because Chainlink ETH/USD price is always positive
+            // forge-lint: disable-next-line(unsafe-typecast)
             result = uint256(price) / 10 ** (feedDecimals - 2);
         }
         // Ensure minimum 1 cent to prevent division by zero in fee calculation

@@ -8,13 +8,16 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Search, Loader2, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { Search, Loader2, AlertTriangle, CheckCircle, Clock, HelpCircle } from 'lucide-react';
 import {
   Button,
   Input,
   ExplorerLink,
   getExplorerAddressUrl,
   TooltipProvider,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
   queryRegistryStatusSimple,
   getResultStatus,
   getStatusLabel,
@@ -44,7 +47,7 @@ function isValidAddress(address: string): boolean {
 /**
  * Get background color class based on status.
  */
-function getResultBgClass(status: ResultStatus): string {
+export function getResultBgClass(status: ResultStatus): string {
   switch (status) {
     case 'registered':
       return 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900';
@@ -81,11 +84,13 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
 
     if (!trimmed) {
       setError('Please enter a wallet address');
+      setResult(null);
       return;
     }
 
     if (!isValidAddress(trimmed)) {
       setError('Invalid address format. Must be 0x followed by 40 hex characters.');
+      setResult(null);
       return;
     }
 
@@ -135,7 +140,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
     <TooltipProvider>
       <div className={className}>
         {/* Search Form */}
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleSubmit} className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -148,22 +153,49 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
               placeholder="Search wallet address (0x...)"
               className="pl-10 font-mono text-sm"
               disabled={isLoading}
+              aria-label="Wallet address to search"
             />
           </div>
-          <Button type="submit" disabled={isLoading || !inputValue.trim()}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground"
+                tabIndex={-1}
+              >
+                <HelpCircle className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs text-center">
+              <p>
+                Enter any wallet address to check if it&apos;s been reported as stolen in our
+                registry.
+              </p>
+            </TooltipContent>
+          </Tooltip>
+          <Button
+            type="submit"
+            disabled={isLoading || !inputValue.trim()}
+            aria-label={isLoading ? 'Searching registry' : 'Search registry'}
+          >
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
           </Button>
         </form>
 
         {/* Example Buttons - Centered */}
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-          <span className="text-xs text-muted-foreground">Eamples:</span>
+        <div
+          className="mt-2 flex flex-wrap items-center justify-center gap-2"
+          role="group"
+          aria-label="Example addresses to search"
+        >
+          <span className="text-xs text-muted-foreground">Examples:</span>
           <Button
             variant="outline"
             size="sm"
             onClick={() => handleExampleClick(EXAMPLE_REGISTERED_ADDRESS)}
             disabled={isLoading}
             className="h-7 px-3 text-xs"
+            aria-label="Search example stolen wallet address"
           >
             Stolen Wallet
           </Button>
@@ -173,6 +205,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
             onClick={() => handleExampleClick(EXAMPLE_CLEAN_ADDRESS)}
             disabled={isLoading}
             className="h-7 px-3 text-xs"
+            aria-label="Search example clean wallet address"
           >
             Clean Wallet
           </Button>

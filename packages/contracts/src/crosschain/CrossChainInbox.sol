@@ -59,8 +59,12 @@ contract CrossChainInbox is IMessageRecipient, ICrossChainInbox, Ownable2Step {
 
     /// @dev Restricts function to Hyperlane mailbox only
     modifier onlyMailbox() {
-        if (msg.sender != mailbox) revert CrossChainInbox__OnlyBridge();
+        _requireMailbox();
         _;
+    }
+
+    function _requireMailbox() internal view {
+        if (msg.sender != mailbox) revert CrossChainInbox__OnlyBridge();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

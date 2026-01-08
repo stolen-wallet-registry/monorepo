@@ -56,13 +56,21 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     modifier whenNotPaused() {
-        if (paused) revert Hub__Paused();
+        _requireNotPaused();
         _;
     }
 
     modifier onlyCrossChainInbox() {
-        if (msg.sender != crossChainInbox) revert Hub__UnauthorizedInbox();
+        _requireCrossChainInbox();
         _;
+    }
+
+    function _requireNotPaused() internal view {
+        if (paused) revert Hub__Paused();
+    }
+
+    function _requireCrossChainInbox() internal view {
+        if (msg.sender != crossChainInbox) revert Hub__UnauthorizedInbox();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

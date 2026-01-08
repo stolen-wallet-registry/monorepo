@@ -1,6 +1,6 @@
 'use client';
 
-import { type RefObject, useEffect, useId, useState } from 'react';
+import { type RefObject, useEffect, useId, useState, useRef } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 
 import { cn } from '../lib/utils';
@@ -27,7 +27,7 @@ export interface AnimatedBeamProps {
   endYOffset?: number;
   /** Controls if beam is visible and animating. When false, beam is hidden. (default: true) */
   isActive?: boolean;
-  /** Callback fired when animation cycle completes. Only fires when isActive is controlled. */
+  /** @deprecated - Timing should be managed externally. This prop is preserved for backwards compatibility. */
   onComplete?: () => void;
 }
 
@@ -51,9 +51,11 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   endXOffset = 0,
   endYOffset = 0,
   isActive = true,
-  onComplete,
+  onComplete: _onComplete,
 }) => {
+  // Note: _onComplete is preserved for backwards compatibility but timing should be managed externally
   const id = useId();
+
   // Respect user's reduced motion preference for accessibility
   const shouldReduceMotion = useReducedMotion();
   // Memoize random duration to prevent animation resets on parent re-renders
@@ -62,17 +64,32 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   const [pathD, setPathD] = useState('');
   const [svgDimensions, setSvgDimensions] = useState({ width: 0, height: 0 });
 
-  // Calculate the gradient coordinates based on the reverse prop
+  // Track animation cycles - increment counter when isActive transitions false→true
+  // Using state instead of ref to trigger proper re-render with new key
+  const [activationCount, setActivationCount] = useState(0);
+  const wasActiveRef = useRef(isActive);
+
+  useEffect(() => {
+    if (isActive && !wasActiveRef.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActivationCount((c) => c + 1);
+    }
+    wasActiveRef.current = isActive;
+  }, [isActive]);
+
+  // Gradient travels exactly 100% (the visible path length) over the duration
+  // This ensures beam exits exactly when timer fires for next step
+  // x1 = tail (trailing edge), x2 = head (leading edge), gradient width = 10%
   const gradientCoordinates = reverse
     ? {
-        x1: ['90%', '-10%'],
-        x2: ['100%', '0%'],
+        x1: ['100%', '0%'], // tail: end → start
+        x2: ['110%', '10%'], // head: 10% ahead of tail
         y1: ['0%', '0%'],
         y2: ['0%', '0%'],
       }
     : {
-        x1: ['10%', '110%'],
-        x2: ['0%', '100%'],
+        x1: ['0%', '100%'], // tail: start → end
+        x2: ['10%', '110%'], // head: 10% ahead of tail
         y1: ['0%', '0%'],
         y2: ['0%', '0%'],
       };
@@ -165,12 +182,14 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
           </linearGradient>
         ) : (
           <motion.linearGradient
+            key={activationCount}
             className="transform-gpu"
             id={id}
             gradientUnits={'userSpaceOnUse'}
             initial={{
-              x1: '0%',
-              x2: '0%',
+              // Match first keyframe position so animation starts immediately visible
+              x1: reverse ? '100%' : '0%',
+              x2: reverse ? '110%' : '10%',
               y1: '0%',
               y2: '0%',
             }}
@@ -187,12 +206,12 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
             transition={{
               delay,
               duration,
-              ease: [0.16, 1, 0.3, 1], // https://easings.net/#easeOutExpo
-              // When onComplete is provided, run once; otherwise loop forever
-              repeat: onComplete ? 0 : Infinity,
+              // Linear easing - beam moves at constant speed, immediately visible
+              ease: 'linear',
+              // Animation plays once per activation cycle. Parent manages timing externally.
+              repeat: 0,
               repeatDelay,
             }}
-            onAnimationComplete={onComplete}
           >
             <stop stopColor={gradientStartColor} stopOpacity="0"></stop>
             <stop stopColor={gradientStartColor}></stop>

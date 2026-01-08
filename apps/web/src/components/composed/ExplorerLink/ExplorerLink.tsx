@@ -226,8 +226,11 @@ export function ExplorerLink({
         showDisabledIcon && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="cursor-not-allowed" role="img" aria-label="No explorer available">
-                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
+              <span className="cursor-not-allowed">
+                <ExternalLink
+                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40"
+                  aria-hidden="true"
+                />
               </span>
             </TooltipTrigger>
             <TooltipContent side="top">
