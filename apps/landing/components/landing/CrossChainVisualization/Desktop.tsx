@@ -295,9 +295,17 @@ export function CrossChainVisualizationDesktop({
   const hubRef = useRef<HTMLDivElement>(null);
   const hubLogoRef = useRef<HTMLDivElement>(null);
 
+  // Track client-side mount to avoid SSR/hydration issues
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   // Animation timing ref - moved from module scope for Fast Refresh safety
   const cycleStartTimeRef = useRef(0);
-  const timedLog = createTimedLogger(cycleStartTimeRef);
+  // Memoize logger to prevent infinite loops from dependency array changes
+  const timedLogRef = useRef(createTimedLogger(cycleStartTimeRef));
+  const timedLog = timedLogRef.current;
 
   // Animation state machine
   const [state, dispatch] = useReducer(animationReducer, initialState);
@@ -386,8 +394,9 @@ export function CrossChainVisualizationDesktop({
     }
   }, [triggerReportFraud, triggerTrustedOperators]);
 
-  // Start animation on mount (only when autoPlay is enabled)
+  // Start animation on mount (only when autoPlay is enabled and client-side mounted)
   useEffect(() => {
+    if (!isMounted) return; // Wait for client-side hydration
     if (!autoPlay) return;
     if (hasStartedRef.current) return;
     hasStartedRef.current = true;
@@ -402,7 +411,7 @@ export function CrossChainVisualizationDesktop({
         activeTimerRef.current = null;
       }
     };
-  }, [startNextCycle, autoPlay]);
+  }, [isMounted, startNextCycle, autoPlay]);
 
   // When cycle goes idle, start a new cycle after brief pause
   useEffect(() => {
