@@ -21,7 +21,7 @@ forge script script/Deploy.s.sol --rpc-url localhost --broadcast
 
 ## Contract Architecture
 
-```
+```text
 src/
 ├── RegistryHub.sol                 # Main entry point on hub chain
 ├── FeeManager.sol                  # Dynamic USD-based fee calculation

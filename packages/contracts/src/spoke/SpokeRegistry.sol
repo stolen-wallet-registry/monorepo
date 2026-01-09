@@ -121,6 +121,14 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         // Note: We validate non-zero here but defer interface validation to runtime.
         // This avoids constructor complexity while still failing fast on first use.
         if (_bridgeAdapter == address(0)) revert SpokeRegistry__ZeroAddress();
+
+        // Validate timing parameters to prevent misconfiguration
+        // deadlineBlocks must be > graceBlocks because both use randomization:
+        // if equal, deadline could end before grace period due to random offsets
+        require(_graceBlocks > 0, "graceBlocks must be positive");
+        require(_deadlineBlocks > 0, "deadlineBlocks must be positive");
+        require(_deadlineBlocks > _graceBlocks, "deadline must be > grace");
+
         spokeChainId = uint32(block.chainid);
         bridgeAdapter = _bridgeAdapter;
         feeManager = _feeManager;

@@ -156,7 +156,8 @@ contract DeployCrossChain is DeployBase {
 
         // nonce 5: Deploy SpokeRegistry (with chain-specific timing)
         bytes32 hubInboxBytes = CrossChainMessage.addressToBytes32(crossChainInbox);
-        (uint256 spokeGraceBlocks, uint256 spokeDeadlineBlocks) = getTimingConfig(SPOKE_CHAIN_ID);
+        // Use block.chainid to ensure timing matches the actual chain we're deploying to
+        (uint256 spokeGraceBlocks, uint256 spokeDeadlineBlocks) = getTimingConfig(block.chainid);
         console2.log("Timing Config - Grace Blocks:", spokeGraceBlocks);
         console2.log("Timing Config - Deadline Blocks:", spokeDeadlineBlocks);
         spokeRegistry = address(

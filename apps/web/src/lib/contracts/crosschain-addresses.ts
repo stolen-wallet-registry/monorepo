@@ -119,8 +119,10 @@ export const SPOKE_ADDRESSES = {
 export function getSpokeAddress(contract: keyof typeof SPOKE_ADDRESSES, chainId: number): Address {
   const addresses = SPOKE_ADDRESSES[contract];
   const address = addresses[chainId as keyof typeof addresses];
-  if (!address) {
-    throw new Error(`No ${contract} address configured for spoke chain ID ${chainId}`);
+  if (!address || address === '0x0000000000000000000000000000000000000000') {
+    throw new Error(
+      `No ${contract} address configured for spoke chain ID ${chainId}. Deploy contracts first.`
+    );
   }
   return address;
 }
