@@ -1,5 +1,5 @@
 # CodeRabbit Configuration
-# Balanced profile: Focus on bugs, security, a11y - skip minor style nitpicks
+# Balanced profile: Focus on bugs, security, technical issues - skip minor style nitpicks
 
 language: en-US
 
@@ -16,10 +16,12 @@ reviews:
       instructions: |
         React 19 + TypeScript component review:
         - Check for React 19 compatibility (ref handling, use hooks)
-        - Verify accessibility (keyboard navigation, ARIA attributes, focus management)
         - Ensure SSR safety (no localStorage/window access during render)
         - Flag missing error boundaries for async components
         - Check for proper TypeScript types (avoid `any`)
+        - Focus on bugs, logic errors, memory leaks, and performance issues
+        - SKIP detailed accessibility suggestions (aria-labels, screen reader concerns)
+        - Only flag accessibility issues that are actual bugs (e.g., broken keyboard nav)
 
     - path: "**/signatures/**"
       instructions: |
@@ -43,9 +45,8 @@ reviews:
       instructions: |
         Storybook stories. Focus on:
         - Coverage of component states and variants
-        - Accessibility in example usage
         - Proper args typing
-        Skip: Minor style issues, import ordering
+        Skip: Minor style issues, import ordering, accessibility suggestions
 
     - path: "**/stores/**"
       instructions: |
@@ -82,6 +83,10 @@ reviews:
     - "!**/coverage/**"
     - "!**/.next/**"
     - "!**/node_modules/**"
+    - "!.anvil-state/**"
+    - "!.hyperlane/**"
+    - "!packages/abis/src/**"
+    - "!packages/contracts/.gas-snapshot"
 
   auto_review:
     enabled: true

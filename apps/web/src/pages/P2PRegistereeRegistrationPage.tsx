@@ -7,7 +7,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'wouter';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
 import type { Stream } from '@libp2p/interface';
@@ -70,12 +70,14 @@ const STEP_TITLES: Partial<Record<RegistrationStep, string>> = {
 export function P2PRegistereeRegistrationPage() {
   const [, setLocation] = useLocation();
   const { isConnected, address } = useAccount();
+  const chainId = useChainId();
   const {
     registrationType,
     step,
     setRegistrationType,
     setAcknowledgementHash,
     setRegistrationHash,
+    setBridgeMessageId,
   } = useRegistrationStore();
   const { setFormValues } = useFormStore();
   const {
@@ -121,11 +123,17 @@ export function P2PRegistereeRegistrationPage() {
 
   // Use ref for goToNextStep to avoid recreating P2P node when step changes
   const goToNextStepRef = useRef(goToNextStep);
+  // Use ref for chainId to avoid stale closure in protocol handlers
+  const chainIdRef = useRef(chainId);
 
-  // Update ref in effect to avoid updating during render (React Compiler rule)
+  // Update refs in effect to avoid updating during render (React Compiler rule)
   useEffect(() => {
     goToNextStepRef.current = goToNextStep;
   }, [goToNextStep]);
+
+  useEffect(() => {
+    chainIdRef.current = chainId;
+  }, [chainId]);
 
   // Initialize P2P node - only depends on connection state, not step navigation
   // Uses AbortController to handle React Strict Mode double-invocation cleanly
@@ -172,9 +180,10 @@ export function P2PRegistereeRegistrationPage() {
                   break;
 
                 case PROTOCOLS.ACK_PAY:
-                  // Acknowledgement tx hash received
+                  // Acknowledgement tx hash received - use relayer's chainId if provided
+                  // Use chainIdRef.current to avoid stale closure when network changes
                   if (data.hash) {
-                    setAcknowledgementHash(data.hash);
+                    setAcknowledgementHash(data.hash, data.txChainId ?? chainIdRef.current);
                   }
                   goToNextStepRef.current();
                   break;
@@ -186,9 +195,18 @@ export function P2PRegistereeRegistrationPage() {
                   break;
 
                 case PROTOCOLS.REG_PAY:
-                  // Registration tx hash received
+                  // Registration tx hash (and optional bridge message ID) received
+                  // Use relayer's chainId if provided for correct explorer links
+                  // Use chainIdRef.current to avoid stale closure when network changes
                   if (data.hash) {
-                    setRegistrationHash(data.hash);
+                    setRegistrationHash(data.hash, data.txChainId ?? chainIdRef.current);
+                  }
+                  // Store bridge message ID if provided (for cross-chain explorer links)
+                  if (data.messageId) {
+                    setBridgeMessageId(data.messageId);
+                    logger.p2p.info('Received bridge message ID from relayer', {
+                      messageId: data.messageId,
+                    });
                   }
                   goToNextStepRef.current();
                   break;
@@ -260,12 +278,14 @@ export function P2PRegistereeRegistrationPage() {
   }, [
     isConnected,
     address,
+    chainId,
     setPeerId,
     setFormValues,
     setConnectedToPeer,
     setInitialized,
     setAcknowledgementHash,
     setRegistrationHash,
+    setBridgeMessageId,
   ]);
 
   // Initialize registration type on mount

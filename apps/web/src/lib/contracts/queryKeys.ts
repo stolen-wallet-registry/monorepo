@@ -55,7 +55,10 @@ export const registryKeys = {
     [...registryKeys.pending(), 'getAcknowledgement', address] as const,
 
   /** Combined status query (batched isRegistered + isPending + data) */
-  status: (address: Address) => [...registryKeys.all, 'status', address] as const,
+  status: (address: Address, chainId?: number) =>
+    chainId !== undefined
+      ? ([...registryKeys.all, 'status', chainId, address] as const)
+      : ([...registryKeys.all, 'status', address] as const),
 } as const;
 
 /**

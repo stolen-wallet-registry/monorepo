@@ -9,6 +9,19 @@ pragma solidity ^0.8.24;
 ///      separated by a randomized time delay.
 interface IStolenWalletRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
+    // ENUMS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Bridge identifier enum
+    /// @dev Indicates which bridge delivered a cross-chain registration (NONE for native)
+    enum BridgeId {
+        NONE, // 0 - Native registration (no bridge)
+        HYPERLANE, // 1 - Hyperlane bridge
+        CCIP, // 2 - Chainlink CCIP
+        WORMHOLE // 3 - Wormhole bridge
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // STRUCTS
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -23,13 +36,22 @@ interface IStolenWalletRegistry {
     }
 
     /// @notice Data stored for a completed registration
-    /// @param registeredAt Block number when registration was finalized
-    /// @param registeredBy Address that submitted the registration (owner or forwarder)
+    /// @dev Packed into 2 storage slots for gas efficiency
+    ///      Privacy: registeredBy and registrationMethod removed to avoid revealing
+    ///      multi-wallet ownership or relayer relationships.
+    /// @param registeredAt Block number on hub when registration was finalized (uint64)
+    /// @param sourceChainId EIP-155 chain ID where user signed (0 or hubChainId = native)
+    /// @param bridgeId Which bridge delivered the message (BridgeId enum, NONE for native)
     /// @param isSponsored True if a third party paid gas on behalf of owner
+    /// @param crossChainMessageId Bridge message ID for explorer linking (0x0 for native)
     struct RegistrationData {
-        uint256 registeredAt;
-        address registeredBy;
-        bool isSponsored;
+        // === Slot 1 (packed - 14 bytes used) ===
+        uint64 registeredAt; // Block number on hub (8 bytes)
+        uint32 sourceChainId; // EIP-155 chain ID (4 bytes)
+        uint8 bridgeId; // BridgeId enum (1 byte)
+        bool isSponsored; // Third party paid gas (1 byte)
+        // === Slot 2 ===
+        bytes32 crossChainMessageId; // Bridge message ID (0x0 for native)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -72,6 +94,15 @@ interface IStolenWalletRegistry {
     /// @notice Thrown when fee forwarding to RegistryHub fails
     error FeeForwardFailed();
 
+    /// @notice Thrown when caller is not authorized (not RegistryHub for cross-chain registration)
+    error UnauthorizedCaller();
+
+    /// @notice Thrown when an invalid bridge ID is provided
+    error InvalidBridgeId();
+
+    /// @notice Thrown when source chain ID is invalid (e.g., zero for cross-chain registration)
+    error InvalidChainId();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -90,6 +121,22 @@ interface IStolenWalletRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Register a wallet from a cross-chain spoke registration
+    /// @dev Only callable by the RegistryHub contract. Used for cross-chain registrations
+    ///      where the two-phase flow already completed on the spoke chain.
+    /// @param wallet The wallet address to register as stolen
+    /// @param sourceChainId EIP-155 chain ID where registration originated
+    /// @param isSponsored True if a third party paid gas on behalf of owner
+    /// @param bridgeId Which bridge delivered the message (BridgeId enum)
+    /// @param crossChainMessageId Bridge message ID for explorer linking
+    function registerFromHub(
+        address wallet,
+        uint32 sourceChainId,
+        bool isSponsored,
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    ) external;
 
     /// @notice Phase 1: Submit acknowledgement of intent to register a wallet as stolen
     /// @dev Creates a trusted forwarder relationship and starts the grace period.
@@ -193,4 +240,11 @@ interface IStolenWalletRegistry {
             uint256 timeLeft,
             bool isExpired
         );
+
+    /// @notice Quote total cost for registration
+    /// @dev On hub chain, returns only the registration fee (no bridge fee).
+    ///      This matches SpokeRegistry.quoteRegistration() interface for frontend compatibility.
+    /// @param owner The wallet being registered (unused on hub, included for interface compatibility)
+    /// @return Total fee required in native token
+    function quoteRegistration(address owner) external view returns (uint256);
 }

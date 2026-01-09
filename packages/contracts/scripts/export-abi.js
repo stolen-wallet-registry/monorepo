@@ -9,9 +9,14 @@ const abiDir = join(__dirname, '../../abis/src');
 
 // Foundry flattens output - artifacts are at ContractName.sol/ContractName.json
 const contracts = [
+  // Core hub contracts
   'RegistryHub.sol/RegistryHub.json',
   'StolenWalletRegistry.sol/StolenWalletRegistry.json',
   'FeeManager.sol/FeeManager.json',
+  // Cross-chain contracts
+  'CrossChainInbox.sol/CrossChainInbox.json',
+  'SpokeRegistry.sol/SpokeRegistry.json',
+  'HyperlaneAdapter.sol/HyperlaneAdapter.json',
 ];
 
 mkdirSync(abiDir, { recursive: true });

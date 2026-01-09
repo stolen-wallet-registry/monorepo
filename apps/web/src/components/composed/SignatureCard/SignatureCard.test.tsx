@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SignatureCard, type SignatureData } from './SignatureCard';
 import { SIGNATURE_TTL_MS } from '@/lib/signatures';
+import type { Hex } from '@/lib/types/ethereum';
 
 describe('SignatureCard', () => {
   const sampleData: SignatureData = {
@@ -77,7 +78,7 @@ describe('SignatureCard', () => {
 
   describe('success state', () => {
     const signature =
-      '0x1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8538dde03fc8b4c6d7f2c13c82e5c34d0e5f8b1c0b5e2f3a4b5c6d7e8f9a0b1c21b' as `0x${string}`;
+      '0x1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8538dde03fc8b4c6d7f2c13c82e5c34d0e5f8b1c0b5e2f3a4b5c6d7e8f9a0b1c21b' as Hex;
 
     it('shows signature preview on success', () => {
       render(<SignatureCard {...defaultProps} status="success" signature={signature} />);

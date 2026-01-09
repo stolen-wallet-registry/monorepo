@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { RegistrySearchResult } from './RegistrySearchResult';
 import { TooltipProvider } from '@swr/ui';
+import type { Address } from '@/lib/types/ethereum';
 
 // Wrap component with required providers
 function renderWithProviders(ui: React.ReactElement) {
@@ -9,20 +10,25 @@ function renderWithProviders(ui: React.ReactElement) {
 }
 
 describe('RegistrySearchResult', () => {
-  const sampleAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as `0x${string}`;
-  const sampleForwarder = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as `0x${string}`;
+  const sampleAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
+  const sampleForwarder = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address;
 
   describe('registered status', () => {
+    const mockRegistrationData = {
+      registeredAt: 12345678n,
+      sourceChainId: 0,
+      bridgeId: 0,
+      isSponsored: false,
+      crossChainMessageId:
+        '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
+    };
+
     it('displays registered alert with destructive styling', () => {
       renderWithProviders(
         <RegistrySearchResult
           address={sampleAddress}
           status="registered"
-          registrationData={{
-            registeredAt: 12345678n,
-            registeredBy: sampleForwarder,
-            isSponsored: false,
-          }}
+          registrationData={mockRegistrationData}
         />
       );
 
@@ -36,17 +42,12 @@ describe('RegistrySearchResult', () => {
         <RegistrySearchResult
           address={sampleAddress}
           status="registered"
-          registrationData={{
-            registeredAt: 12345678n,
-            registeredBy: sampleForwarder,
-            isSponsored: false,
-          }}
+          registrationData={mockRegistrationData}
         />
       );
 
       expect(screen.getByText('Registered at block:')).toBeInTheDocument();
       expect(screen.getByText('12345678')).toBeInTheDocument();
-      expect(screen.getByText('Registered by:')).toBeInTheDocument();
     });
 
     it('shows sponsored badge when registration was sponsored', () => {
@@ -54,11 +55,7 @@ describe('RegistrySearchResult', () => {
         <RegistrySearchResult
           address={sampleAddress}
           status="registered"
-          registrationData={{
-            registeredAt: 12345678n,
-            registeredBy: sampleForwarder,
-            isSponsored: true,
-          }}
+          registrationData={{ ...mockRegistrationData, isSponsored: true }}
         />
       );
 

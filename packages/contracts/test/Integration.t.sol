@@ -5,7 +5,6 @@ import { Test, console2 } from "forge-std/Test.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
-import { IRegistryHub } from "../src/interfaces/IRegistryHub.sol";
 import { IStolenWalletRegistry } from "../src/interfaces/IStolenWalletRegistry.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 
@@ -171,9 +170,11 @@ contract IntegrationTest is Test {
 
         // Get registration data
         IStolenWalletRegistry.RegistrationData memory data = walletRegistry.getRegistration(victim);
-        assertEq(data.registeredBy, forwarder);
-        assertTrue(data.isSponsored);
         assertGt(data.registeredAt, 0);
+        assertEq(data.sourceChainId, uint32(block.chainid)); // Native registration uses current chain
+        assertEq(data.bridgeId, uint8(IStolenWalletRegistry.BridgeId.NONE)); // No bridge for native
+        assertTrue(data.isSponsored);
+        assertEq(data.crossChainMessageId, bytes32(0)); // No bridge message for native
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

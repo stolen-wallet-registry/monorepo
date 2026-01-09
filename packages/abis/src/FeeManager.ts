@@ -76,19 +76,6 @@ export const FeeManagerABI = [
   },
   {
     type: 'function',
-    name: 'getEthPriceUsdCents',
-    inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-    ],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
     name: 'getEthPriceUsdCentsView',
     inputs: [],
     outputs: [
@@ -243,6 +230,19 @@ export const FeeManagerABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'syncAndGetEthPriceUsdCents',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',

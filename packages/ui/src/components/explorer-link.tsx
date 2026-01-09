@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Explorer link component for displaying blockchain hashes/addresses with links.
  *
@@ -9,11 +11,11 @@
  * - Type-aware labels for addresses, transactions, and contracts
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { ExternalLink, Copy, Check } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
-import { cn } from '@/lib/utils';
-import type { Hex } from '@/lib/types/ethereum';
+import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
+import { cn } from '../lib/utils';
+import type { Address, Hash, Hex } from 'viem';
 
 /**
  * Type of blockchain identifier.
@@ -22,8 +24,20 @@ import type { Hex } from '@/lib/types/ethereum';
  * - 'contract': Smart contract address (same format as address, semantic distinction)
  * - 'block': Block hash (66 chars, same as transaction)
  * - 'token': Token contract address (same format as address)
+ * - 'message': Cross-chain message ID (66 chars, same as transaction)
+ *
+ * NOTE: 'message' type must be explicitly specified via the type prop.
+ * Auto-inference cannot distinguish message IDs from transaction hashes
+ * since both are 66 chars. Without explicit type, message IDs will be
+ * inferred as 'transaction' and display transaction-specific labels.
  */
-export type ExplorerLinkType = 'address' | 'transaction' | 'contract' | 'block' | 'token';
+export type ExplorerLinkType =
+  | 'address'
+  | 'transaction'
+  | 'contract'
+  | 'block'
+  | 'token'
+  | 'message';
 
 /**
  * Human-readable labels for each type.
@@ -34,12 +48,16 @@ const TYPE_LABELS: Record<ExplorerLinkType, { copy: string; view: string }> = {
   contract: { copy: 'Copy contract address', view: 'View contract on explorer' },
   block: { copy: 'Copy block hash', view: 'View block on explorer' },
   token: { copy: 'Copy token address', view: 'View token on explorer' },
+  message: { copy: 'Copy message ID', view: 'View message on explorer' },
 };
 
 /**
  * Infer type from value length if not explicitly provided.
  * - 42 chars (0x + 40 hex) = address
  * - 66 chars (0x + 64 hex) = transaction hash
+ *
+ * For other lengths, defaults to 'transaction' as a fallback.
+ * Callers should pass explicit `type` prop for non-standard lengths.
  */
 function inferType(value: string): ExplorerLinkType {
   // Transaction hashes are 66 chars (0x + 64 hex chars)
@@ -47,12 +65,16 @@ function inferType(value: string): ExplorerLinkType {
     return 'transaction';
   }
   // Addresses are 42 chars (0x + 40 hex chars)
-  return 'address';
+  if (value.length === 42) {
+    return 'address';
+  }
+  // Fallback for unexpected lengths - callers should pass explicit type prop
+  return 'transaction';
 }
 
 export interface ExplorerLinkProps {
-  /** The hash or address to display */
-  value: Hex;
+  /** The hash or address to display (accepts Address, Hash, or generic Hex) */
+  value: Address | Hash | Hex;
   /** Type of value - inferred from length if not provided */
   type?: ExplorerLinkType;
   /** Explorer URL (if null/undefined, shows disabled icon) */
@@ -111,6 +133,16 @@ export function ExplorerLink({
   className,
 }: ExplorerLinkProps) {
   const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Cleanup timeout on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   // Determine type from prop or infer from value length
   const resolvedType = type ?? inferType(value);
@@ -125,7 +157,12 @@ export function ExplorerLink({
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      // Clear any existing timeout before creating a new one (handles rapid clicks)
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = undefined;
+      }
+      timeoutRef.current = setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
     }
@@ -199,12 +236,7 @@ export function ExplorerLink({
         showDisabledIcon && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span
-                className="cursor-not-allowed"
-                tabIndex={0}
-                role="img"
-                aria-label="No explorer available"
-              >
+              <span className="cursor-not-allowed" role="img" aria-label="No explorer available">
                 <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
               </span>
             </TooltipTrigger>

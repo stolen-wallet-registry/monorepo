@@ -141,24 +141,65 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
             if (msg.value < requiredFee) revert InsufficientFee();
         }
 
-        // Forward fee to RegistryHub (after validation, before state changes)
+        // State changes (CEI: effects before interactions)
+        nonces[owner]++;
+        delete pendingAcknowledgements[owner];
+
+        bool isSponsored = owner != msg.sender;
+
+        // Validate chain ID fits in uint32 (all current EVM chains do, but defensive)
+        require(block.chainid <= type(uint32).max, "chain id too large");
+
+        registeredWallets[owner] = RegistrationData({
+            registeredAt: uint64(block.number),
+            sourceChainId: uint32(block.chainid),
+            bridgeId: uint8(BridgeId.NONE),
+            isSponsored: isSponsored,
+            crossChainMessageId: bytes32(0)
+        });
+
+        emit WalletRegistered(owner, isSponsored);
+
+        // Forward fee to RegistryHub (external call last)
         if (registryHub != address(0) && msg.value > 0) {
             (bool success,) = registryHub.call{ value: msg.value }("");
             if (!success) revert FeeForwardFailed();
         }
+    }
 
-        // Increment nonce AFTER validation (fixes bug from original contract)
-        nonces[owner]++;
+    /// @inheritdoc IStolenWalletRegistry
+    function registerFromHub(
+        address wallet,
+        uint32 sourceChainId,
+        bool isSponsored,
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    ) external {
+        // Only RegistryHub can call this function
+        if (msg.sender != registryHub) revert UnauthorizedCaller();
 
-        // Clean up acknowledgement - no longer needed
-        delete pendingAcknowledgements[owner];
+        // Validate wallet address
+        if (wallet == address(0)) revert InvalidOwner();
 
-        // Persist registration permanently
-        bool isSponsored = owner != msg.sender;
-        registeredWallets[owner] =
-            RegistrationData({ registeredAt: block.number, registeredBy: msg.sender, isSponsored: isSponsored });
+        // Validate source chain ID (cross-chain registrations must have valid chain ID)
+        if (sourceChainId == 0) revert InvalidChainId();
 
-        emit WalletRegistered(owner, isSponsored);
+        // Validate bridge ID (must be a valid BridgeId enum value: 0-3)
+        if (bridgeId > uint8(BridgeId.WORMHOLE)) revert InvalidBridgeId();
+
+        // Prevent re-registration
+        if (registeredWallets[wallet].registeredAt != 0) revert AlreadyRegistered();
+
+        // Store the cross-chain registration
+        registeredWallets[wallet] = RegistrationData({
+            registeredAt: uint64(block.number),
+            sourceChainId: sourceChainId,
+            bridgeId: bridgeId,
+            isSponsored: isSponsored,
+            crossChainMessageId: crossChainMessageId
+        });
+
+        emit WalletRegistered(wallet, isSponsored);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -230,5 +271,24 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
             timeLeft = ack.expiryBlock - block.number;
             graceStartsAt = ack.startBlock > block.number ? ack.startBlock - block.number : 0;
         }
+    }
+
+    /// @inheritdoc IStolenWalletRegistry
+    /// @notice Returns the registration fee for a wallet.
+    /// @dev The wallet parameter is unused on hub chain but required for interface
+    ///      compatibility with SpokeRegistry where fees may vary per-wallet (due to
+    ///      nonce-dependent message size affecting bridge costs).
+    function quoteRegistration(
+        address /* wallet - unused on hub, required for spoke interface */
+    )
+        external
+        view
+        returns (uint256)
+    {
+        // On hub chain, only registration fee applies (no bridge fee)
+        if (feeManager == address(0)) {
+            return 0;
+        }
+        return IFeeManager(feeManager).currentFeeWei();
     }
 }

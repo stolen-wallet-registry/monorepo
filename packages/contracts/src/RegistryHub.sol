@@ -30,6 +30,9 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
     /// @notice Fee manager address (address(0) = no fees, free registrations)
     address public feeManager;
 
+    /// @notice Cross-chain inbox address (address(0) = cross-chain disabled)
+    address public crossChainInbox;
+
     /// @notice Mapping of registry type -> registry address
     mapping(bytes32 => address) private subRegistries;
 
@@ -53,8 +56,21 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     modifier whenNotPaused() {
-        if (paused) revert Hub__Paused();
+        _requireNotPaused();
         _;
+    }
+
+    modifier onlyCrossChainInbox() {
+        _requireCrossChainInbox();
+        _;
+    }
+
+    function _requireNotPaused() internal view {
+        if (paused) revert Hub__Paused();
+    }
+
+    function _requireCrossChainInbox() internal view {
+        if (msg.sender != crossChainInbox) revert Hub__UnauthorizedInbox();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -119,6 +135,28 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // CROSS-CHAIN REGISTRATION
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @inheritdoc IRegistryHub
+    function registerFromSpoke(
+        address wallet,
+        uint32 sourceChainId,
+        bool isSponsored,
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    ) external onlyCrossChainInbox whenNotPaused {
+        // Route to StolenWalletRegistry for storage
+        address registry = subRegistries[STOLEN_WALLET];
+        if (registry == address(0)) revert Hub__InvalidRegistry();
+
+        IStolenWalletRegistry(registry)
+            .registerFromHub(wallet, sourceChainId, isSponsored, bridgeId, crossChainMessageId);
+
+        emit CrossChainRegistration(wallet, sourceChainId, crossChainMessageId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -138,6 +176,12 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
     function setFeeManager(address _feeManager) external onlyOwner {
         feeManager = _feeManager;
         emit FeeManagerUpdated(_feeManager);
+    }
+
+    /// @inheritdoc IRegistryHub
+    function setCrossChainInbox(address _inbox) external onlyOwner {
+        crossChainInbox = _inbox;
+        emit CrossChainInboxUpdated(_inbox);
     }
 
     /// @inheritdoc IRegistryHub

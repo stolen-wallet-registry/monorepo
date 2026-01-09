@@ -10,12 +10,13 @@ import {
   type AcknowledgementMessage,
   type RegistrationMessage,
 } from './eip712';
+import type { Address } from '@/lib/types/ethereum';
 
 describe('EIP-712 typed data', () => {
   const testChainId = 1;
-  const testContract = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as `0x${string}`;
-  const testOwner = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as `0x${string}`;
-  const testForwarder = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as `0x${string}`;
+  const testContract = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as Address;
+  const testOwner = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
+  const testForwarder = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address;
 
   describe('constants', () => {
     it('has correct domain name matching contract', () => {

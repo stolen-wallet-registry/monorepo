@@ -60,6 +60,7 @@ storybook-static/
 
 # libp2p
 .libp2p/
+apps/relay/keys.json
 
 # Misc
 *.bak

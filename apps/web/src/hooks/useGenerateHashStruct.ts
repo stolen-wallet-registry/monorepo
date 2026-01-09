@@ -1,15 +1,18 @@
 /**
- * Hook to read deadline and hash struct from the StolenWalletRegistry contract.
+ * Hook to read deadline and hash struct from the registry contract.
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  * The hash struct returned can be used for verification but is typically not needed client-side.
+ *
+ * Chain-aware: Works with both StolenWalletRegistry (hub) and SpokeRegistry (spoke).
  */
 
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
-import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
-import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
+import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
+import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
 import { SIGNATURE_STEP, type SignatureStep } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
+import { logger } from '@/lib/logger';
 
 export interface HashStructData {
   deadline: bigint;
@@ -38,15 +41,31 @@ export function useGenerateHashStruct(
   const chainId = useChainId();
 
   let contractAddress: Address | undefined;
+  let registryType: 'hub' | 'spoke' = 'hub';
   try {
-    contractAddress = getStolenWalletRegistryAddress(chainId);
-  } catch {
+    contractAddress = getRegistryAddress(chainId);
+    registryType = getRegistryType(chainId);
+    logger.contract.debug('Registry address resolved for hash struct', {
+      chainId,
+      contractAddress,
+      registryType,
+      step,
+    });
+  } catch (error) {
     contractAddress = undefined;
+    logger.contract.error('Failed to resolve registry address for hash struct', {
+      chainId,
+      step,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
+
+  // Both contracts have identical generateHashStruct() function after normalization
+  const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
 
   const result = useReadContract({
     address: contractAddress,
-    abi: stolenWalletRegistryAbi,
+    abi,
     functionName: 'generateHashStruct',
     args: forwarderAddress ? [forwarderAddress, step] : undefined,
     query: {
@@ -56,6 +75,24 @@ export function useGenerateHashStruct(
       staleTime: 10_000, // 10 seconds
     },
   });
+
+  // Log contract read result for debugging
+  if (result.isError) {
+    logger.contract.error('generateHashStruct call failed', {
+      chainId,
+      contractAddress,
+      registryType,
+      forwarderAddress,
+      step,
+      error: result.error?.message,
+    });
+  } else if (result.data) {
+    logger.contract.debug('generateHashStruct call succeeded', {
+      chainId,
+      contractAddress,
+      deadline: result.data[0]?.toString(),
+    });
+  }
 
   // Transform the raw array result into a typed object
   const transformedData: HashStructData | undefined = result.data

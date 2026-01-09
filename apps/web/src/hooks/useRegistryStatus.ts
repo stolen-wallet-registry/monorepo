@@ -1,55 +1,31 @@
 /**
  * Hook to query registry status for a wallet address.
  *
- * Batches multiple contract calls to efficiently determine if a wallet is:
- * - Already registered as stolen
- * - Pending registration (acknowledgement submitted, awaiting registration)
- * - Clean (not in registry)
+ * Uses the shared queryRegistryStatus function from @swr/ui
+ * with wagmi's client management and TanStack Query caching.
  */
 
-import { useReadContracts, useChainId } from 'wagmi';
+import { useQuery } from '@tanstack/react-query';
+import { usePublicClient, useChainId } from 'wagmi';
+import {
+  queryRegistryStatus,
+  type RegistrationData,
+  type AcknowledgementData,
+  type RegistryStatusResult,
+} from '@swr/ui';
 import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
-import { registryStaleTime } from '@/lib/contracts/queryKeys';
+import { registryStaleTime, registryKeys } from '@/lib/contracts/queryKeys';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
 
-/**
- * Registration data from the contract.
- */
-export interface RegistrationData {
-  /** Block number when registration was completed */
-  registeredAt: bigint;
-  /** Address that submitted the registration transaction */
-  registeredBy: Address;
-  /** Whether registration was sponsored (paid by different wallet) */
-  isSponsored: boolean;
-}
+// Re-export types for backward compatibility
+export type { RegistrationData, AcknowledgementData, RegistryStatusResult };
 
 /**
- * Acknowledgement data from the contract.
+ * Combined registry status for a wallet (extended with loading/error states).
  */
-export interface AcknowledgementData {
-  /** Address authorized to submit registration */
-  trustedForwarder: Address;
-  /** Block when grace period starts */
-  startBlock: bigint;
-  /** Block when acknowledgement expires */
-  expiryBlock: bigint;
-}
-
-/**
- * Combined registry status for a wallet.
- */
-export interface RegistryStatus {
-  /** Whether the wallet is registered as stolen */
-  isRegistered: boolean;
-  /** Whether the wallet has a pending acknowledgement */
-  isPending: boolean;
-  /** Registration details (if registered) */
-  registrationData: RegistrationData | null;
-  /** Acknowledgement details (if pending) */
-  acknowledgementData: AcknowledgementData | null;
+export interface RegistryStatus extends RegistryStatusResult {
   /** Loading state */
   isLoading: boolean;
   /** Error state */
@@ -68,16 +44,15 @@ export interface UseRegistryStatusOptions {
   address?: Address;
   /** Enable automatic refetch interval (ms) or false to disable */
   refetchInterval?: number | false;
+  /** Override chain ID to query (defaults to connected chain) */
+  chainId?: number;
 }
 
 /**
  * Queries registry status for a wallet address.
  *
- * Uses batched contract reads for efficiency:
- * - isRegistered() - boolean check
- * - isPending() - boolean check
- * - getRegistration() - full registration data
- * - getAcknowledgement() - full acknowledgement data
+ * Uses shared queryRegistryStatus for the actual contract calls,
+ * wrapped with TanStack Query for caching and wagmi for the client.
  *
  * @example
  * ```tsx
@@ -86,7 +61,7 @@ export interface UseRegistryStatusOptions {
  * });
  *
  * if (isLoading) return <Spinner />;
- * if (isRegistered) return <Alert variant="destructive">Wallet is registered as stolen</Alert>;
+ * if (isRegistered) return <Alert variant="destructive">Wallet is stolen</Alert>;
  * if (isPending) return <Alert variant="warning">Registration pending</Alert>;
  * return <Alert variant="success">Wallet is clean</Alert>;
  * ```
@@ -94,8 +69,11 @@ export interface UseRegistryStatusOptions {
 export function useRegistryStatus({
   address,
   refetchInterval = false,
+  chainId: overrideChainId,
 }: UseRegistryStatusOptions): RegistryStatus {
-  const chainId = useChainId();
+  const connectedChainId = useChainId();
+  const chainId = overrideChainId ?? connectedChainId;
+  const client = usePublicClient({ chainId });
 
   let contractAddress: Address | undefined;
   try {
@@ -104,92 +82,71 @@ export function useRegistryStatus({
     contractAddress = undefined;
   }
 
-  const enabled = !!address && !!contractAddress;
-
-  const { data, isLoading, isError, error, refetch } = useReadContracts({
-    contracts: [
-      {
-        address: contractAddress!,
-        abi: stolenWalletRegistryAbi,
-        functionName: 'isRegistered',
-        args: [address!],
-      },
-      {
-        address: contractAddress!,
-        abi: stolenWalletRegistryAbi,
-        functionName: 'isPending',
-        args: [address!],
-      },
-      {
-        address: contractAddress!,
-        abi: stolenWalletRegistryAbi,
-        functionName: 'getRegistration',
-        args: [address!],
-      },
-      {
-        address: contractAddress!,
-        abi: stolenWalletRegistryAbi,
-        functionName: 'getAcknowledgement',
-        args: [address!],
-      },
-    ],
-    query: {
-      enabled,
-      staleTime: registryStaleTime.status,
-      refetchInterval,
-    },
-  });
-
-  // Transform contract results into typed data
-  const isRegistered = data?.[0]?.status === 'success' ? (data[0].result as boolean) : false;
-  const isPending = data?.[1]?.status === 'success' ? (data[1].result as boolean) : false;
-
-  // Registration data (only valid if isRegistered is true)
-  let registrationData: RegistrationData | null = null;
-  if (data?.[2]?.status === 'success' && isRegistered) {
-    const result = data[2].result as {
-      registeredAt: bigint;
-      registeredBy: Address;
-      isSponsored: boolean;
-    };
-    registrationData = {
-      registeredAt: result.registeredAt,
-      registeredBy: result.registeredBy,
-      isSponsored: result.isSponsored,
-    };
+  // Warn when configuration is missing for the requested chainId
+  if (!client) {
+    logger.contract.warn('useRegistryStatus: Public client unavailable for chainId', { chainId });
   }
-
-  // Acknowledgement data (only valid if isPending is true)
-  let acknowledgementData: AcknowledgementData | null = null;
-  if (data?.[3]?.status === 'success' && isPending) {
-    const result = data[3].result as {
-      trustedForwarder: Address;
-      startBlock: bigint;
-      expiryBlock: bigint;
-    };
-    acknowledgementData = {
-      trustedForwarder: result.trustedForwarder,
-      startBlock: result.startBlock,
-      expiryBlock: result.expiryBlock,
-    };
-  }
-
-  // Log status for debugging
-  if (enabled && !isLoading && !isError) {
-    logger.contract.debug('Registry status query', {
-      address,
-      isRegistered,
-      isPending,
-      hasRegistrationData: !!registrationData,
-      hasAcknowledgementData: !!acknowledgementData,
+  if (!contractAddress) {
+    logger.contract.warn('useRegistryStatus: Contract address not configured for chainId', {
+      chainId,
     });
   }
 
+  // Debug logging
+  logger.contract.debug('useRegistryStatus query config', {
+    address,
+    overrideChainId,
+    connectedChainId,
+    resolvedChainId: chainId,
+    contractAddress,
+    hasClient: !!client,
+  });
+
+  const enabled = !!address && !!contractAddress && !!client;
+
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch: queryRefetch,
+  } = useQuery({
+    // Include chainId in query key to prevent cache collisions across chains
+    queryKey: address ? registryKeys.status(address, chainId) : ['registry', 'status', 'disabled'],
+    queryFn: async () => {
+      if (!client || !contractAddress || !address) {
+        throw new Error('Missing required parameters');
+      }
+      return queryRegistryStatus(client, address, contractAddress, stolenWalletRegistryAbi);
+    },
+    enabled,
+    staleTime: registryStaleTime.status,
+    refetchInterval: refetchInterval || undefined,
+  });
+
+  // Log status for debugging
+  if (enabled && !isLoading && !isError && data) {
+    logger.contract.debug('Registry status result', {
+      address,
+      isRegistered: data.isRegistered,
+      isPending: data.isPending,
+      hasRegistrationData: !!data.registrationData,
+      hasAcknowledgementData: !!data.acknowledgementData,
+    });
+  }
+
+  // Wrap queryRefetch to match expected void return signature
+  // Guard against calling when params are missing to prevent queryFn from throwing
+  const refetch: () => void = () => {
+    if (!enabled) return;
+    void queryRefetch();
+  };
+
   return {
-    isRegistered,
-    isPending,
-    registrationData,
-    acknowledgementData,
+    isRegistered: data?.isRegistered ?? false,
+    isPending: data?.isPending ?? false,
+    registrationData: data?.registrationData ?? null,
+    acknowledgementData: data?.acknowledgementData ?? null,
     isLoading,
     isError,
     error: error ?? null,

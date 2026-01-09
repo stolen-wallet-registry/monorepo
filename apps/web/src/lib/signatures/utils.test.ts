@@ -6,13 +6,14 @@ import {
   getStepName,
   isValidSignatureFormat,
 } from './utils';
+import type { Hex } from '@/lib/types/ethereum';
 
 describe('signature utilities', () => {
   // Proper 65-byte EIP-712 signature format:
   // r (32 bytes) + s (32 bytes) + v (1 byte)
   // v should be 27 (0x1b) or 28 (0x1c)
   const validSignature =
-    '0x1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8538dde03fc8b4c6d7f2c13c82e5c34d0e5f8b1c0b5e2f3a4b5c6d7e8f9a0b1c21b' as `0x${string}`;
+    '0x1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8538dde03fc8b4c6d7f2c13c82e5c34d0e5f8b1c0b5e2f3a4b5c6d7e8f9a0b1c21b' as Hex;
 
   describe('parseSignature', () => {
     it('parses a valid signature into v, r, s components', () => {
@@ -31,7 +32,7 @@ describe('signature utilities', () => {
     });
 
     it('throws for invalid signature format', () => {
-      expect(() => parseSignature('0x1234' as `0x${string}`)).toThrow();
+      expect(() => parseSignature('0x1234' as Hex)).toThrow();
     });
   });
 

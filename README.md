@@ -32,53 +32,194 @@ Contracts: Foundry, Solidity 0.8.21, OpenZeppelin
 
 ## Development
 
-Full local development requires three components running: smart contracts (Anvil), the frontend, and optionally the relay server for P2P testing.
+Full local development requires smart contracts (Anvil), the frontend, and optionally the relay server for P2P testing. There are two development modes:
+
+1. **Standard Development** — Single Anvil chain for basic registration testing
+2. **Cross-Chain Development** — Two Anvil chains (Hub + Spoke) for cross-chain flow testing
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - pnpm 9+
 - [Foundry](https://book.getfoundry.sh/getting-started/installation) (for smart contracts)
 
-### 1. Smart Contracts
-
-The contracts currently live in a separate repository and will be integrated into this monorepo in a future phase.
-
-**Repository:** [stolen-wallet-registry-contracts](https://github.com/stolen-wallet-registry/stolen-wallet-registry-contracts)
-
 ```bash
-# Clone the contracts repo (outside the monorepo)
-git clone https://github.com/stolen-wallet-registry/stolen-wallet-registry-contracts.git
-cd stolen-wallet-registry-contracts
-
-# Install dependencies and build
+# Install dependencies
 pnpm install
-forge build
-
-# Deploy contracts to local Anvil (after starting Anvil - see below)
-pnpm deploy:dev
 ```
 
-### 2. Local Anvil Node
+---
 
-Start a local Ethereum node. The `--block-time 13` flag is required for the grace period timer to work correctly.
+### Standard Development (Single Chain)
+
+For testing basic wallet registration flows on a single chain.
+
+**Terminal 1: Start Anvil**
 
 ```bash
-# From the monorepo root
 pnpm anvil
 ```
 
 This runs: `anvil --ipc /tmp/anvil.ipc --steps-tracing --block-time 13`
 
-### 3. Frontend
+**Terminal 2: Deploy Contracts**
 
 ```bash
-# From the monorepo root
-pnpm install
-pnpm dev          # Start Vite dev server (port 5173)
+pnpm deploy:dev
 ```
 
-Other useful commands:
+Deploys RegistryHub and StolenWalletRegistry to localhost:8545 (chain ID 31337).
+
+**Terminal 3: Start Frontend**
+
+```bash
+pnpm dev
+```
+
+Open http://localhost:5173 and connect MetaMask to "Localhost 8545".
+
+#### MetaMask Setup (Standard)
+
+MetaMask typically auto-detects localhost:8545, but if needed:
+
+| Field        | Value                 |
+| ------------ | --------------------- |
+| Network Name | Anvil Hub             |
+| RPC URL      | http://127.0.0.1:8545 |
+| Chain ID     | 31337                 |
+| Symbol       | ETH                   |
+
+Import the default Anvil account for testing:
+
+- Private Key: `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`
+- This gives you 10,000 ETH for testing
+
+---
+
+### Cross-Chain Development (Hub + Spoke)
+
+For testing the full cross-chain registration flow where users register on a spoke chain and messages relay to the hub chain.
+
+**Terminal 1: Start Both Anvil Nodes + Hyperlane Relayer**
+
+```bash
+pnpm anvil:crosschain
+```
+
+This starts:
+
+- **Hub** (blue): localhost:8545, chain ID 31337 — loads Hyperlane state
+- **Spoke** (green): localhost:8546, chain ID 31338 — loads Hyperlane state
+- **Relayer** (yellow): Hyperlane message relayer between chains
+
+The Hyperlane infrastructure is pre-loaded from `.anvil-state/` (see "Saving Dev State" section).
+
+**Terminal 2: Deploy Cross-Chain Contracts**
+
+```bash
+pnpm deploy:crosschain
+```
+
+Deploys to both chains:
+
+**Hyperlane Infrastructure (pre-loaded in state):**
+
+| Chain         | Contract | Address                                    |
+| ------------- | -------- | ------------------------------------------ |
+| Hub (31337)   | Mailbox  | 0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84 |
+| Spoke (31338) | Mailbox  | 0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84 |
+
+**Our Contracts (deployed fresh each time):**
+
+| Chain         | Contract             | Address                                    |
+| ------------- | -------------------- | ------------------------------------------ |
+| Hub (31337)   | MockAggregator       | 0x5FbDB2315678afecb367f032d93F642f64180aa3 |
+| Hub (31337)   | FeeManager           | 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 |
+| Hub (31337)   | RegistryHub          | 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 |
+| Hub (31337)   | StolenWalletRegistry | 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 |
+| Hub (31337)   | CrossChainInbox      | 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707 |
+| Spoke (31338) | MockGasPaymaster     | 0x5FbDB2315678afecb367f032d93F642f64180aa3 |
+| Spoke (31338) | HyperlaneAdapter     | 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 |
+| Spoke (31338) | MockAggregator       | 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 |
+| Spoke (31338) | FeeManager           | 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 |
+| Spoke (31338) | SpokeRegistry        | 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707 |
+
+**Terminal 3: Start Frontend (Cross-Chain Mode)**
+
+```bash
+pnpm dev:crosschain
+```
+
+This sets `VITE_CROSSCHAIN=true`, enabling the spoke chain in the wallet connection UI. A chain indicator badge appears showing whether you're on Hub or Spoke.
+
+#### MetaMask Setup (Cross-Chain)
+
+You need both networks configured. The Hub chain is the same as standard development. Add the Spoke chain:
+
+**Add Spoke Network to MetaMask:**
+
+1. Open MetaMask → Networks → Add Network → Add a network manually
+2. Enter these values:
+
+| Field        | Value                 |
+| ------------ | --------------------- |
+| Network Name | Anvil Spoke           |
+| RPC URL      | http://127.0.0.1:8546 |
+| Chain ID     | 31338                 |
+| Symbol       | ETH                   |
+
+3. Click Save
+
+The same Anvil private key works on both chains (both have 10,000 ETH):
+
+- Private Key: `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`
+
+#### Cross-Chain Testing Flow
+
+1. Connect wallet to **Spoke Chain** (31338)
+2. Register a stolen wallet via SpokeRegistry
+3. The Hyperlane relayer delivers the message to Hub
+4. Switch to **Hub Chain** (31337) to verify registration
+
+---
+
+### Saving Dev State (One-Time Setup)
+
+For external infrastructure like Hyperlane that doesn't change, you can save anvil state to avoid redeploying every time. This is useful when you want to iterate on your own contracts while keeping external dependencies stable.
+
+**How it works:**
+
+1. Start anvil with `--dump-state` flag (saves JSON state on exit)
+2. Deploy external contracts (e.g., Hyperlane)
+3. Ctrl+C to exit anvil (state saves automatically)
+4. Future runs use `--load-state` to restore
+
+**Example: Setting up Hyperlane state**
+
+```bash
+# Terminal 1 - Hub (saves state on exit)
+mkdir -p .anvil-state
+anvil --port 8545 --chain-id 31337 --block-time 12 --dump-state .anvil-state/hub.json
+
+# Terminal 2 - Spoke (saves state on exit)
+anvil --port 8546 --chain-id 31338 --block-time 12 --dump-state .anvil-state/spoke.json
+```
+
+Deploy your external contracts, then Ctrl+C both anvil processes. State files are saved to `.anvil-state/`.
+
+**Loading saved state:**
+
+```bash
+anvil --port 8545 --chain-id 31337 --block-time 12 --load-state .anvil-state/hub.json
+```
+
+The `--load-state` flag loads the saved state but does NOT save on exit, so your own contract deployments won't pollute the base state.
+
+**Important:** Do NOT use the `anvil_dumpState` RPC method—it produces hex-encoded gzip which is incompatible with `--load-state`. Always use the `--dump-state` CLI flag.
+
+---
+
+### Other Commands
 
 ```bash
 pnpm storybook    # Component development (port 6006)
@@ -86,19 +227,18 @@ pnpm test         # Run tests
 pnpm test:watch   # Run tests in watch mode
 pnpm typecheck    # TypeScript check
 pnpm lint         # ESLint
+pnpm format       # Prettier
 ```
 
-### 4. Relay Server (for P2P Registration)
+### Relay Server (for P2P Registration)
 
 The relay server enables P2P registration where a helper can pay gas on behalf of a user with a drained wallet. Only needed when testing P2P relay functionality.
 
 **Location:** `apps/relay/`
 
 ```bash
-# From the monorepo root
 pnpm relay              # Run relay server
-
-pnpm relay:debug        # Run with debug logging (verbose libp2p output)
+pnpm relay:debug        # Run with debug logging
 ```
 
 ## Project Structure

@@ -5,6 +5,7 @@ import { Suspense, lazy } from 'react';
 import { Button, HyperText, TypingAnimation, Skeleton } from '@swr/ui';
 
 import { ErrorBoundary } from '@/components/ui/error-boundary';
+import { RegistrySearchPreview } from './RegistrySearchPreview';
 
 const Globe = lazy(() => import('./Globe').then((mod) => ({ default: mod.Globe })));
 
@@ -18,7 +19,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5173';
  * Emphasizes coordination, global nature, and key use cases.
  */
 const TAGLINES = [
-  'A coordination tool for Web3 security.',
+  'A coordination tool for fraud response.',
   'Global. Borderless. On-chain.',
   'Lost your seed phrase? Register the wallet.',
   'Signed a malicious message? Report it.',
@@ -27,7 +28,7 @@ const TAGLINES = [
 
 function GlobeSkeleton() {
   return (
-    <div className="relative mx-auto aspect-square w-full max-w-[350px] sm:max-w-[400px]">
+    <div className="relative mx-auto aspect-square w-full max-w-[280px] sm:max-w-[320px]">
       <Skeleton className="size-full rounded-full" />
     </div>
   );
@@ -35,7 +36,7 @@ function GlobeSkeleton() {
 
 export function HeroSection(): React.JSX.Element {
   return (
-    <section className="relative flex min-h-[85vh] flex-col items-center justify-center overflow-hidden px-4 py-16 text-center md:py-24">
+    <section className="relative flex min-h-[calc(100vh-5rem)] flex-col items-center justify-start overflow-hidden px-4 pt-4 pb-8 text-center">
       {/* Background gradient effect */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/80" />
 
@@ -43,17 +44,17 @@ export function HeroSection(): React.JSX.Element {
       <div className="relative z-10 flex flex-col items-center">
         {/* Main headline with HyperText scramble effect */}
         {/* Note: Using h1 wrapper instead of as="h1" to avoid SSR hydration mismatch with motion.create */}
-        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl lg:text-6xl">
           <HyperText duration={1200} delay={300} startOnView animateOnHover>
             STOLEN WALLET REGISTRY
           </HyperText>
         </h1>
 
         {/* Rotating taglines with typewriter effect */}
-        <div className="mt-6 h-12">
+        <div className="mt-2 h-7 sm:mt-3 sm:h-8">
           <TypingAnimation
             words={TAGLINES}
-            className="text-lg text-muted-foreground sm:text-xl md:text-2xl"
+            className="text-base text-muted-foreground sm:text-lg md:text-xl"
             typeSpeed={40}
             deleteSpeed={25}
             pauseDelay={2500}
@@ -64,7 +65,7 @@ export function HeroSection(): React.JSX.Element {
         </div>
 
         {/* Globe visualization */}
-        <div className="relative mt-8 h-[250px] w-full max-w-[350px] overflow-hidden sm:h-[300px] sm:max-w-[400px] md:mt-12 md:h-[400px]">
+        <div className="relative mt-2 h-[200px] w-full max-w-[280px] sm:mt-4 sm:h-[240px] sm:max-w-[300px] md:h-[280px] md:max-w-[340px]">
           <ErrorBoundary fallback={<GlobeSkeleton />}>
             <Suspense fallback={<GlobeSkeleton />}>
               <Globe className="opacity-90" />
@@ -72,8 +73,19 @@ export function HeroSection(): React.JSX.Element {
           </ErrorBoundary>
         </div>
 
+        {/* Registry Search Preview - Wider */}
+        <ErrorBoundary
+          fallback={
+            <div className="mt-16 w-full max-w-xl sm:mt-20">
+              <Skeleton className="h-28 w-full rounded-lg" />
+            </div>
+          }
+        >
+          <RegistrySearchPreview className="mt-16 w-full max-w-xl sm:mt-20" />
+        </ErrorBoundary>
+
         {/* CTA Buttons */}
-        <div className="relative z-10 mt-8 flex flex-col gap-4 sm:flex-row md:mt-12">
+        <div className="relative z-10 mt-3 flex flex-col gap-3 sm:mt-4 sm:flex-row">
           <Button asChild size="lg" className="min-w-[140px]">
             <a
               href={APP_URL}

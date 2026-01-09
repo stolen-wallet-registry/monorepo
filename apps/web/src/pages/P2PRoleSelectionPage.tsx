@@ -96,7 +96,7 @@ export function P2PRoleSelectionPage() {
             'Share your Peer ID with the registeree',
             'Receive their signatures via P2P',
             'Submit transactions and pay gas fees',
-            'Help protect the Web3 community',
+            'Help protect on-chain activity',
           ]}
           onClick={() => setLocation('/registration/p2p-relay/relayer')}
         />

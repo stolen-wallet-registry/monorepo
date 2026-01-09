@@ -15,6 +15,10 @@ export {
   type UseGenerateHashStructResult,
 } from './useGenerateHashStruct';
 
+export { useQuoteRegistration, type UseQuoteRegistrationResult } from './useQuoteRegistration';
+
+export { useQuoteFeeBreakdown, type UseQuoteFeeBreakdownResult } from './useQuoteFeeBreakdown';
+
 // Contract write hooks
 export {
   useAcknowledgement,
@@ -80,3 +84,12 @@ export {
   type AcknowledgementData,
   type UseRegistryStatusOptions,
 } from './useRegistryStatus';
+
+// Cross-chain confirmation
+export {
+  useCrossChainConfirmation,
+  needsCrossChainConfirmation,
+  type CrossChainStatus,
+  type UseCrossChainConfirmationOptions,
+  type UseCrossChainConfirmationResult,
+} from './useCrossChainConfirmation';

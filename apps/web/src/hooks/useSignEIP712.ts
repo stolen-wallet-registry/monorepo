@@ -13,8 +13,9 @@ import {
   type AcknowledgementMessage,
   type RegistrationMessage,
 } from '@/lib/signatures';
-import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
+import { getRegistryAddress } from '@/lib/contracts/addresses';
 import type { Address, Hex } from '@/lib/types/ethereum';
+import { logger } from '@/lib/logger';
 
 export interface SignParams {
   owner: Address;
@@ -58,9 +59,17 @@ export function useSignEIP712(): UseSignEIP712Result {
 
   let contractAddress: Address | undefined;
   try {
-    contractAddress = getStolenWalletRegistryAddress(chainId);
-  } catch {
+    contractAddress = getRegistryAddress(chainId);
+    logger.signature.debug('useSignEIP712: Registry address resolved', {
+      chainId,
+      contractAddress,
+    });
+  } catch (error) {
     contractAddress = undefined;
+    logger.signature.error('useSignEIP712: Failed to resolve registry address', {
+      chainId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   /**
@@ -86,14 +95,37 @@ export function useSignEIP712(): UseSignEIP712Result {
     const message: AcknowledgementMessage = toBaseMessage(params);
     const typedData = buildAcknowledgementTypedData(chainId, validatedAddress, message);
 
-    const signature = await signTypedDataAsync({
-      domain: typedData.domain,
-      types: typedData.types,
-      primaryType: typedData.primaryType,
-      message: typedData.message,
+    logger.signature.info('Requesting acknowledgement signature', {
+      chainId,
+      contractAddress: validatedAddress,
+      owner: params.owner,
+      forwarder: params.forwarder,
+      nonce: params.nonce.toString(),
+      deadline: params.deadline.toString(),
     });
 
-    return signature;
+    try {
+      const signature = await signTypedDataAsync({
+        domain: typedData.domain,
+        types: typedData.types,
+        primaryType: typedData.primaryType,
+        message: typedData.message,
+      });
+
+      logger.signature.info('Acknowledgement signature received', {
+        signatureLength: signature.length,
+        owner: params.owner,
+      });
+
+      return signature;
+    } catch (error) {
+      logger.signature.error('Acknowledgement signature failed', {
+        chainId,
+        owner: params.owner,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   };
 
   /**
@@ -104,14 +136,37 @@ export function useSignEIP712(): UseSignEIP712Result {
     const message: RegistrationMessage = toBaseMessage(params);
     const typedData = buildRegistrationTypedData(chainId, validatedAddress, message);
 
-    const signature = await signTypedDataAsync({
-      domain: typedData.domain,
-      types: typedData.types,
-      primaryType: typedData.primaryType,
-      message: typedData.message,
+    logger.signature.info('Requesting registration signature', {
+      chainId,
+      contractAddress: validatedAddress,
+      owner: params.owner,
+      forwarder: params.forwarder,
+      nonce: params.nonce.toString(),
+      deadline: params.deadline.toString(),
     });
 
-    return signature;
+    try {
+      const signature = await signTypedDataAsync({
+        domain: typedData.domain,
+        types: typedData.types,
+        primaryType: typedData.primaryType,
+        message: typedData.message,
+      });
+
+      logger.signature.info('Registration signature received', {
+        signatureLength: signature.length,
+        owner: params.owner,
+      });
+
+      return signature;
+    } catch (error) {
+      logger.signature.error('Registration signature failed', {
+        chainId,
+        owner: params.owner,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   };
 
   return {

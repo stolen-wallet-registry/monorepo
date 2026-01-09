@@ -16,7 +16,8 @@ const CHAIN_COLORS: Record<number, string> = {
   42161: 'bg-blue-400', // Arbitrum
   8453: 'bg-blue-600', // Base
   11155111: 'bg-purple-400', // Sepolia
-  31337: 'bg-gray-500', // Localhost
+  31337: 'bg-blue-500', // Anvil Hub (local)
+  31338: 'bg-green-500', // Anvil Spoke (local)
 };
 
 const DEFAULT_COLOR = 'bg-gray-500';

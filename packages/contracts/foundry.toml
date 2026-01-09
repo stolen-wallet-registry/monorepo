@@ -8,6 +8,7 @@ solc = "0.8.24"
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "forge-std/=lib/forge-std/src/",
+    "@hyperlane-xyz/core/=lib/hyperlane-monorepo/solidity/",
 ]
 
 # Dependencies: Run `forge install` after clone

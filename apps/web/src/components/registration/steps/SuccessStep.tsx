@@ -4,30 +4,89 @@
  * Displays confirmation after successful registration.
  */
 
-import { useChainId } from 'wagmi';
 import { useLocation } from 'wouter';
 
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  HyperlaneLogo,
+  NetworkEthereum,
+  NetworkBase,
+  NetworkOptimism,
+} from '@swr/ui';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { clearAllSignatures } from '@/lib/signatures';
-import { getExplorerTxUrl, getExplorerAddressUrl } from '@/lib/explorer';
+import {
+  getExplorerTxUrl,
+  getExplorerAddressUrl,
+  getChainName,
+  getBridgeMessageUrl,
+  getBridgeMessageByIdUrl,
+} from '@/lib/explorer';
+import { isSpokeChain, getHubChainId } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
-import { CheckCircle2, Home, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Home, RefreshCw, ArrowRight } from 'lucide-react';
+
+/**
+ * Get chain icon component for a given chain ID.
+ * Wrapped in a circular background for visibility.
+ */
+function ChainIcon({ chainId }: { chainId: number }) {
+  const icon = (() => {
+    switch (chainId) {
+      case 8453: // Base mainnet
+      case 84532: // Base Sepolia
+        return <NetworkBase className="size-3" />;
+      case 10: // Optimism mainnet
+      case 11155420: // Optimism Sepolia
+        return <NetworkOptimism className="size-3" />;
+      default:
+        // Fallback to Ethereum for local/unknown chains
+        return <NetworkEthereum className="size-3" />;
+    }
+  })();
+
+  return (
+    <span className="inline-flex items-center justify-center size-5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+      {icon}
+    </span>
+  );
+}
 
 /**
  * Success step - shows confirmation after registration.
  */
 export function SuccessStep() {
   const [, setLocation] = useLocation();
-  const chainId = useChainId();
   const {
     acknowledgementHash,
+    acknowledgementChainId,
     registrationHash,
+    registrationChainId,
+    bridgeMessageId,
     reset: resetRegistration,
   } = useRegistrationStore();
   const { registeree, reset: resetForm } = useFormStore();
+
+  // Determine if this was a cross-chain registration
+  const isCrossChain = registrationChainId ? isSpokeChain(registrationChainId) : false;
+  const hubChainId = registrationChainId ? getHubChainId(registrationChainId) : undefined;
+
+  // Get bridge explorer URL - prefer direct message ID link if available
+  const bridgeExplorerUrl = bridgeMessageId
+    ? getBridgeMessageByIdUrl(bridgeMessageId)
+    : registrationHash && registrationChainId
+      ? getBridgeMessageUrl(registrationHash, registrationChainId)
+      : null;
 
   /**
    * Reset all state and go home.
@@ -58,11 +117,15 @@ export function SuccessStep() {
     setLocation('/');
   };
 
-  // Get explorer URLs
-  const ackExplorerUrl = acknowledgementHash
-    ? getExplorerTxUrl(chainId, acknowledgementHash)
-    : null;
-  const regExplorerUrl = registrationHash ? getExplorerTxUrl(chainId, registrationHash) : null;
+  // Get explorer URLs using stored chain IDs
+  const ackExplorerUrl =
+    acknowledgementHash && acknowledgementChainId
+      ? getExplorerTxUrl(acknowledgementChainId, acknowledgementHash)
+      : null;
+  const regExplorerUrl =
+    registrationHash && registrationChainId
+      ? getExplorerTxUrl(registrationChainId, registrationHash)
+      : null;
 
   return (
     <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/50">
@@ -79,14 +142,20 @@ export function SuccessStep() {
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {/* Registered wallet */}
+        {/* Registered wallet - prefer hubChainId, fallback to registrationChainId, then null */}
         {registeree && (
           <div className="rounded-lg bg-white dark:bg-gray-900 border p-4">
             <p className="text-sm font-medium text-muted-foreground mb-2">Registered Wallet</p>
             <ExplorerLink
               value={registeree}
               type="address"
-              href={getExplorerAddressUrl(chainId, registeree)}
+              href={
+                hubChainId
+                  ? getExplorerAddressUrl(hubChainId, registeree)
+                  : registrationChainId
+                    ? getExplorerAddressUrl(registrationChainId, registeree)
+                    : null
+              }
               truncate={false}
             />
           </div>
@@ -96,17 +165,60 @@ export function SuccessStep() {
         <div className="space-y-3">
           <p className="text-sm font-medium text-muted-foreground">Transaction History</p>
 
-          {acknowledgementHash && (
+          {acknowledgementHash && acknowledgementChainId && (
             <div className="rounded-lg bg-white dark:bg-gray-900 border p-3">
-              <p className="text-sm font-medium mb-1">Acknowledgement</p>
+              <p className="text-sm font-medium mb-1">
+                Acknowledgement
+                <span className="text-xs text-muted-foreground ml-2">
+                  ({getChainName(acknowledgementChainId)})
+                </span>
+              </p>
               <ExplorerLink value={acknowledgementHash} href={ackExplorerUrl} />
             </div>
           )}
 
-          {registrationHash && (
+          {registrationHash && registrationChainId && (
             <div className="rounded-lg bg-white dark:bg-gray-900 border p-3">
-              <p className="text-sm font-medium mb-1">Registration</p>
+              <p className="text-sm font-medium mb-1">
+                Registration
+                <span className="text-xs text-muted-foreground ml-2">
+                  ({getChainName(registrationChainId)})
+                </span>
+              </p>
               <ExplorerLink value={registrationHash} href={regExplorerUrl} />
+            </div>
+          )}
+
+          {/* Cross-chain bridge info */}
+          {isCrossChain && hubChainId && registrationHash && registrationChainId && (
+            <div className="rounded-lg bg-teal-50 dark:bg-teal-950 border border-teal-200 dark:border-teal-800 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-sm font-medium">Cross-Chain Message</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center justify-center size-5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 cursor-help">
+                      <HyperlaneLogo className="size-3" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Relayed via Hyperlane</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              {bridgeMessageId && (
+                <ExplorerLink value={bridgeMessageId} type="message" href={bridgeExplorerUrl} />
+              )}
+              <div className="flex items-center gap-2 text-sm text-teal-600 dark:text-teal-400 mt-2">
+                <ChainIcon chainId={registrationChainId} />
+                <span>{getChainName(registrationChainId)}</span>
+                <ArrowRight className="h-3 w-3" />
+                <ChainIcon chainId={hubChainId} />
+                <span>{getChainName(hubChainId)}</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Registration submitted on {getChainName(registrationChainId)}, settled on{' '}
+                {getChainName(hubChainId)}.
+              </p>
             </div>
           )}
         </div>

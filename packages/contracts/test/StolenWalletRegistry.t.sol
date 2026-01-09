@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test, console2 } from "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
 import { IStolenWalletRegistry } from "../src/interfaces/IStolenWalletRegistry.sol";
 import { FeeManager } from "../src/FeeManager.sol";
@@ -234,9 +234,11 @@ contract StolenWalletRegistryTest is Test {
 
         // Verify registration data
         IStolenWalletRegistry.RegistrationData memory reg = registry.getRegistration(owner);
-        assertEq(reg.registeredAt, block.number, "Registered at current block");
-        assertEq(reg.registeredBy, forwarder, "Registered by forwarder");
+        assertEq(reg.registeredAt, uint64(block.number), "Registered at current block");
+        assertEq(reg.sourceChainId, uint32(block.chainid), "Source chain is current chain");
+        assertEq(reg.bridgeId, uint8(IStolenWalletRegistry.BridgeId.NONE), "No bridge for native");
         assertTrue(reg.isSponsored, "Should be sponsored");
+        assertEq(reg.crossChainMessageId, bytes32(0), "No bridge message for native");
     }
 
     function test_Register_SelfRelay() public {

@@ -53,14 +53,10 @@ export function RegistrySearchResult({
             as stolen.
           </p>
           {registrationData && (
-            <div className="text-xs space-y-1 mt-2 pt-2 border-t border-destructive/20">
+            <div className="w-full text-xs space-y-1 mt-3 pt-3 border-t border-destructive/20">
               <p>
                 <span className="text-muted-foreground">Registered at block:</span>{' '}
                 {registrationData.registeredAt.toString()}
-              </p>
-              <p className="flex items-center gap-1">
-                <span className="text-muted-foreground">Registered by:</span>{' '}
-                <ExplorerLink type="address" value={registrationData.registeredBy} />
               </p>
               {registrationData.isSponsored && (
                 <p>
@@ -100,7 +96,7 @@ export function RegistrySearchResult({
             acknowledgement pending. Registration may complete soon.
           </p>
           {acknowledgementData && (
-            <div className="text-xs space-y-1 mt-2 pt-2 border-t border-yellow-300 dark:border-yellow-700">
+            <div className="w-full text-xs space-y-1 mt-3 pt-3 border-t border-yellow-300 dark:border-yellow-700">
               <p className="flex items-center gap-1">
                 <span className="text-yellow-600 dark:text-yellow-400">Trusted forwarder:</span>{' '}
                 <ExplorerLink type="address" value={acknowledgementData.trustedForwarder} />

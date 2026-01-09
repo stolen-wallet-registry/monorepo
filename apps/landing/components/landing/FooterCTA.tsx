@@ -30,7 +30,7 @@ export function FooterCTA() {
           startOnView
           once
         >
-          Join the global effort to make Web3 safer for everyone.
+          Join the global effort to make on-chain activity safer for everyone.
         </TextAnimate>
 
         <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
@@ -64,7 +64,7 @@ export function Footer() {
   return (
     <footer className="border-t border-border/50 px-6 py-8 text-center">
       <p className="text-sm text-muted-foreground">
-        Stolen Wallet Registry - A public good for Web3 security
+        Stolen Wallet Registry - A public good for fraud prevention
       </p>
       <p className="mt-2 text-xs text-muted-foreground">
         Built with transparency. Open source. Cross-chain.

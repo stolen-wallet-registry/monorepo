@@ -3,6 +3,7 @@
  *
  * Displays estimated transaction costs including:
  * - Protocol fee (only for registration)
+ * - Bridge fee (spoke chains only, with dynamic bridge name like "Hyperlane Fee")
  * - Network gas cost
  * - Total cost
  * - Current ETH price
@@ -142,11 +143,20 @@ export function TransactionCostCard({
               <CostRow label="Protocol Fee" usd={data.protocolFee.usd} eth={data.protocolFee.eth} />
             )}
 
+            {/* Bridge Fee (only on spoke chains during registration) */}
+            {data.bridgeFee && data.bridgeName && (
+              <CostRow
+                label={`${data.bridgeName} Fee`}
+                usd={data.bridgeFee.usd}
+                eth={data.bridgeFee.eth}
+              />
+            )}
+
             {/* Network Gas */}
             <CostRow label="Network Gas" usd={data.gasCost.usd} eth={data.gasCost.eth} />
 
-            {/* Divider and Total (only if there's a protocol fee) */}
-            {data.protocolFee && (
+            {/* Divider and Total (only if there's any fee besides gas) */}
+            {(data.protocolFee || data.bridgeFee) && (
               <>
                 <hr className="border-border" />
                 <CostRow

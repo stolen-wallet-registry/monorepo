@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useState, useEffect, useRef } from 'react';
-import { useAccount, useChainId } from 'wagmi';
+import { useAccount, useChainId, useWaitForTransactionReceipt } from 'wagmi';
 import type { Libp2p } from 'libp2p';
 
 import { TransactionCard, type TransactionStatus } from '@/components/composed/TransactionCard';
@@ -14,13 +14,15 @@ import { SignatureDetails } from '@/components/composed/SignatureDetails';
 import { WaitingForData } from '@/components/p2p';
 import { Alert, AlertDescription, Button } from '@swr/ui';
 import { useRegistration } from '@/hooks/useRegistration';
-import { useFeeEstimate } from '@/hooks/useFeeEstimate';
+import { useQuoteRegistration } from '@/hooks/useQuoteRegistration';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import type { Hash } from '@/lib/types/ethereum';
 import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
 import { useP2PStore } from '@/stores/p2pStore';
+import { extractBridgeMessageId } from '@/lib/bridge/messageId';
+import { needsCrossChainConfirmation } from '@/hooks/useCrossChainConfirmation';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 
@@ -52,7 +54,8 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
   const { address: relayerAddress } = useAccount();
   const { registeree } = useFormStore();
   const { partnerPeerId } = useP2PStore();
-  const { registrationHash, setRegistrationHash } = useRegistrationStore();
+  const { registrationHash, registrationChainId, setRegistrationHash, setBridgeMessageId } =
+    useRegistrationStore();
   const [hasSentHash, setHasSentHash] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -68,8 +71,17 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
   const { submitRegistration, hash, isPending, isConfirming, isConfirmed, isError, error, reset } =
     useRegistration();
 
-  // Get protocol fee
-  const { data: feeData } = useFeeEstimate();
+  // Get protocol fee (chain-aware - works on hub and spoke)
+  const { feeWei } = useQuoteRegistration(registeree);
+
+  // Get transaction receipt for bridge message ID extraction (relayer only)
+  const { data: receipt } = useWaitForTransactionReceipt({
+    hash,
+    query: { enabled: role === 'relayer' && !!hash },
+  });
+
+  // Check if cross-chain (for message ID extraction)
+  const isCrossChain = needsCrossChainConfirmation(chainId);
 
   // Derive TransactionCard status
   const getStatus = (): TransactionStatus => {
@@ -86,6 +98,13 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       return;
     }
 
+    if (feeWei === undefined) {
+      logger.p2p.error('Cannot submit registration - fee quote unavailable', {
+        registeree,
+      });
+      return;
+    }
+
     logger.p2p.info('Relayer submitting REG transaction');
 
     // Parse signature to v, r, s components
@@ -96,9 +115,9 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       nonce: storedSig.nonce,
       registeree,
       signature: parsedSig,
-      feeWei: feeData?.feeWei,
+      feeWei,
     });
-  }, [storedSig, registeree, submitRegistration, feeData?.feeWei]);
+  }, [storedSig, registeree, submitRegistration, feeWei]);
 
   // Cleanup retry timeout on unmount
   useEffect(() => {
@@ -112,12 +131,12 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
   // Relayer: Store registration hash when confirmed (for success step display)
   useEffect(() => {
     if (role === 'relayer' && isConfirmed && hash && !registrationHash) {
-      setRegistrationHash(hash as Hash);
-      logger.p2p.info('Relayer stored REG hash for success display', { hash });
+      setRegistrationHash(hash as Hash, chainId);
+      logger.p2p.info('Relayer stored REG hash for success display', { hash, chainId });
     }
-  }, [role, isConfirmed, hash, registrationHash, setRegistrationHash]);
+  }, [role, isConfirmed, hash, registrationHash, setRegistrationHash, chainId]);
 
-  // Relayer: Send tx hash to registeree after confirmation with retry logic
+  // Relayer: Send tx hash (and bridge message ID if cross-chain) to registeree after confirmation
   useEffect(() => {
     const sendHash = async () => {
       const libp2p = getLibp2p();
@@ -125,19 +144,44 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
         return;
       }
 
+      // For cross-chain, wait for receipt to extract message ID
+      // For local chain, proceed without waiting
+      if (isCrossChain && !receipt) {
+        logger.p2p.debug('Waiting for receipt to extract bridge message ID');
+        return;
+      }
+
       try {
         setSendError(null);
-        logger.p2p.info('Attempting to send REG tx hash', { hash, attempt: retryCount + 1 });
+
+        // Extract bridge message ID if cross-chain
+        let messageId: Hash | null = null;
+        if (isCrossChain && receipt?.logs) {
+          messageId = extractBridgeMessageId(receipt.logs);
+          if (messageId) {
+            logger.p2p.info('Extracted bridge message ID for P2P', { messageId });
+            // Store locally for relayer's success step too
+            setBridgeMessageId(messageId);
+          }
+        }
+
+        logger.p2p.info('Attempting to send REG tx hash', {
+          hash,
+          messageId,
+          attempt: retryCount + 1,
+        });
 
         const connection = await getPeerConnection({ libp2p, remotePeerId: partnerPeerId });
         await passStreamData({
           connection,
           protocols: [PROTOCOLS.REG_PAY],
-          streamData: { hash },
+          // Include chainId so registeree uses correct explorer links
+          // Convert null to undefined for optional fields
+          streamData: { hash, messageId: messageId ?? undefined, txChainId: chainId },
         });
 
         setHasSentHash(true);
-        logger.p2p.info('Sent REG tx hash to registeree', { hash });
+        logger.p2p.info('Sent REG tx hash to registeree', { hash, messageId });
         onComplete();
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to send hash';
@@ -159,7 +203,20 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     };
 
     sendHash();
-  }, [role, isConfirmed, hash, getLibp2p, partnerPeerId, hasSentHash, retryCount, onComplete]);
+  }, [
+    role,
+    isConfirmed,
+    hash,
+    chainId,
+    receipt,
+    isCrossChain,
+    getLibp2p,
+    partnerPeerId,
+    hasSentHash,
+    retryCount,
+    onComplete,
+    setBridgeMessageId,
+  ]);
 
   // Manual retry handler for user-initiated resend
   const handleResendHash = useCallback(() => {
@@ -192,11 +249,12 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
 
         {registrationHash ? (
           // TransactionCard hides submit button when status='confirmed' - onSubmit is unused but required by interface
+          // Use registrationChainId from store (sent by relayer) for correct explorer links
           <TransactionCard
             type="registration"
             status="confirmed"
             hash={registrationHash}
-            chainId={chainId}
+            chainId={registrationChainId ?? chainId}
             onSubmit={() => undefined}
           />
         ) : (

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test, console2 } from "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { IFeeManager } from "../src/interfaces/IFeeManager.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
@@ -416,6 +416,7 @@ contract FeeManagerTest is Test {
     function testFuzz_FeeCalculation(uint256 baseFee, int256 ethPrice) public {
         // Bound inputs to reasonable ranges
         baseFee = bound(baseFee, 1, 100_000); // $0.01 to $1000
+        // forge-lint: disable-next-line(unsafe-typecast)
         ethPrice = int256(bound(uint256(ethPrice), 10_000_000_000, 10_000_000_000_000)); // $100 to $100,000
 
         mockOracle.setPrice(ethPrice);
@@ -424,6 +425,7 @@ contract FeeManagerTest is Test {
         feeManager.setBaseFee(baseFee);
 
         uint256 fee = feeManager.currentFeeWei();
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint256 expectedPrice = uint256(ethPrice) / 1e6;
         uint256 expectedFee = (baseFee * 1e18) / expectedPrice;
 

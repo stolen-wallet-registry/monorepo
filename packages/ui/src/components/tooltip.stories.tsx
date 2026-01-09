@@ -111,7 +111,7 @@ export const HelpTooltip: Story = {
         <TooltipTrigger asChild>
           <button
             type="button"
-            className="inline-flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            className="inline-flex items-center justify-center focus:outline-0 focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
             aria-label="What is the grace period?"
           >
             <HelpCircleIcon className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -135,7 +135,7 @@ export const StatusTooltip: Story = {
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive cursor-help focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive cursor-help focus:outline-0 focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="View wallet status details"
         >
           Compromised

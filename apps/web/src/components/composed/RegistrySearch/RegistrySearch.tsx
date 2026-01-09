@@ -17,6 +17,7 @@ import {
 } from '@swr/ui';
 import { Search, X, Loader2, Check, AlertCircle } from 'lucide-react';
 import { useRegistryStatus, type RegistryStatus } from '@/hooks';
+import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
@@ -86,8 +87,13 @@ export function RegistrySearch({
     return isAddress(trimmed);
   }, [inputValue]);
 
+  // Memoize hub chain ID (reads env vars which are constant at runtime)
+  const hubChainId = useMemo(() => getHubChainIdForEnvironment(), []);
+
+  // Always query the hub chain for unified registry (cross-chain registrations settle there)
   const registryStatus = useRegistryStatus({
     address: searchAddress,
+    chainId: hubChainId,
   });
 
   // Notify parent when result changes (using effect to properly track notifications)

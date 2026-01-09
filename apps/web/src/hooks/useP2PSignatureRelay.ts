@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useMemo } from 'react';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import { isHex, isAddress } from 'viem';
 import type { Connection, Stream } from '@libp2p/interface';
 import {
@@ -267,6 +267,7 @@ export function useP2PSignatureRelay(
   } = options;
 
   const { address } = useAccount();
+  const chainId = useChainId();
 
   // Form store for registeree/relayer addresses
   const { setFormValues } = useFormStore();
@@ -456,7 +457,7 @@ export function useP2PSignatureRelay(
 
               // Validate tx hash before storing/propagating
               if (isValidTxHash(data.hash)) {
-                setAcknowledgementHash(data.hash);
+                setAcknowledgementHash(data.hash, chainId);
                 onTxHashReceived?.(data.hash, PROTOCOLS.ACK_PAY);
               } else if (data.hash) {
                 logger.p2p.warn('Received malformed ACK payment hash', { hash: data.hash });
@@ -496,7 +497,7 @@ export function useP2PSignatureRelay(
 
               // Validate tx hash before storing/propagating
               if (isValidTxHash(data.hash)) {
-                setRegistrationHash(data.hash);
+                setRegistrationHash(data.hash, chainId);
                 onTxHashReceived?.(data.hash, PROTOCOLS.REG_PAY);
               } else if (data.hash) {
                 logger.p2p.warn('Received malformed REG payment hash', { hash: data.hash });
@@ -516,6 +517,7 @@ export function useP2PSignatureRelay(
   }, [
     role,
     address,
+    chainId,
     setFormValues,
     setPartnerPeerId,
     setConnectedToPeer,

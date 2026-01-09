@@ -1,6 +1,34 @@
 // Utilities
 export { cn } from './lib/utils';
 
+// Viem utilities (re-exported for convenience)
+export { isAddress } from 'viem';
+
+// Chain configuration
+export {
+  LOCAL_DEV_CHAINS,
+  CHAIN_EXPLORERS,
+  isLocalDevChain,
+  getExplorerAddressUrl,
+  getExplorerTxUrl,
+  getExplorerName,
+} from './lib/chains';
+
+// Registry utilities
+export {
+  queryRegistryStatus,
+  queryRegistryStatusSimple,
+  getResultStatus,
+  getStatusLabel,
+  getStatusDescription,
+  formatBlockAsTime,
+  isWalletCompromised,
+  type RegistrationData,
+  type AcknowledgementData,
+  type RegistryStatusResult,
+  type ResultStatus,
+} from './lib/registry';
+
 // Components
 export { Alert, AlertTitle, AlertDescription } from './components/alert';
 export { Badge } from './components/badge';
@@ -74,6 +102,16 @@ export { TextAnimate } from './components/text-animate';
 export { TypingAnimation } from './components/typing-animation';
 export { HyperText } from './components/hyper-text';
 export { AnimatedBeam, type AnimatedBeamProps } from './components/animated-beam';
+
+// Explorer link (URL helpers exported from ./lib/chains above)
+export {
+  ExplorerLink,
+  type ExplorerLinkProps,
+  type ExplorerLinkType,
+} from './components/explorer-link';
+
+// Bridge logos
+export { HyperlaneLogo, WormholeLogo, type BridgeLogoProps } from './components/bridge-logos';
 
 // Web3 Icons (named exports from @web3icons/react)
 // Next.js App Router doesn't support "export *" in client boundaries

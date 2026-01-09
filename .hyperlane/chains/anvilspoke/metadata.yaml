@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=../schema.json
+chainId: 31338
+displayName: AnvilSpoke
+domainId: 31338
+isTestnet: true
+name: anvilspoke
+nativeToken:
+  decimals: 18
+  name: Ether
+  symbol: ETH
+protocol: ethereum
+rpcUrls:
+  - http: http://localhost:8546
+technicalStack: opstack

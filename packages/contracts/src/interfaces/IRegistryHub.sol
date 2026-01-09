@@ -24,6 +24,9 @@ interface IRegistryHub {
     /// @notice Thrown when a fee withdrawal fails
     error Hub__WithdrawalFailed();
 
+    /// @notice Thrown when caller is not authorized CrossChainInbox
+    error Hub__UnauthorizedInbox();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -45,6 +48,16 @@ interface IRegistryHub {
     /// @notice Emitted when the fee manager is updated
     /// @param feeManager New fee manager address
     event FeeManagerUpdated(address indexed feeManager);
+
+    /// @notice Emitted when the cross-chain inbox is updated
+    /// @param inbox New CrossChainInbox address
+    event CrossChainInboxUpdated(address indexed inbox);
+
+    /// @notice Emitted when a wallet is registered via cross-chain message
+    /// @param wallet The wallet address registered as stolen
+    /// @param sourceChainId EIP-155 chain ID where registration originated
+    /// @param messageId Bridge message identifier for tracking
+    event CrossChainRegistration(address indexed wallet, uint32 indexed sourceChainId, bytes32 messageId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
@@ -95,6 +108,30 @@ interface IRegistryHub {
     /// @return The fee manager address
     function feeManager() external view returns (address);
 
+    /// @notice Get the cross-chain inbox contract address
+    /// @return The CrossChainInbox address
+    function crossChainInbox() external view returns (address);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CROSS-CHAIN FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Register a wallet from a spoke chain via cross-chain message
+    /// @dev Only callable by the CrossChainInbox contract.
+    ///      Routes the registration to StolenWalletRegistry.registerFromHub().
+    /// @param wallet The wallet address to register as stolen
+    /// @param sourceChainId EIP-155 chain ID where registration originated
+    /// @param isSponsored True if a third party paid gas
+    /// @param bridgeId Which bridge delivered the message
+    /// @param crossChainMessageId Bridge message ID for explorer linking
+    function registerFromSpoke(
+        address wallet,
+        uint32 sourceChainId,
+        bool isSponsored,
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    ) external;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -117,6 +154,11 @@ interface IRegistryHub {
     ///      to prevent disabling fee collection. Emits FeeManagerUpdated event.
     /// @param _feeManager The new fee manager address (must be non-zero)
     function setFeeManager(address _feeManager) external;
+
+    /// @notice Update the cross-chain inbox contract
+    /// @dev Only callable by owner. Set to address(0) to disable cross-chain registrations.
+    /// @param _inbox The new CrossChainInbox address
+    function setCrossChainInbox(address _inbox) external;
 
     /// @notice Withdraw accumulated fees to a specified address
     /// @dev Only callable by owner. Implementations MUST validate:

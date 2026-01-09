@@ -1,0 +1,5 @@
+{
+  "framework": "nextjs",
+  "installCommand": "pnpm -w install",
+  "buildCommand": "pnpm -w --filter landing build"
+}

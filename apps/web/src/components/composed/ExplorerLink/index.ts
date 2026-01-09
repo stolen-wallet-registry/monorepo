@@ -1,1 +1,8 @@
-export { ExplorerLink, type ExplorerLinkProps } from './ExplorerLink';
+// Re-export from shared UI package
+export {
+  ExplorerLink,
+  getExplorerAddressUrl,
+  getExplorerTxUrl,
+  type ExplorerLinkProps,
+  type ExplorerLinkType,
+} from '@swr/ui';

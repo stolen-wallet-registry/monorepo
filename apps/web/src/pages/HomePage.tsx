@@ -17,6 +17,7 @@ export function HomePage() {
   const [, setLocation] = useLocation();
   const { isConnected } = useAccount();
   const { setRegistrationType } = useRegistrationStore();
+  const p2pAvailable = Boolean(import.meta.env.VITE_RELAY_MULTIADDR);
 
   const handleMethodSelect = (type: RegistrationType) => {
     setRegistrationType(type);
@@ -48,8 +49,8 @@ export function HomePage() {
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold tracking-tight">Register Stolen Wallet</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          Register your stolen wallet on-chain to help protect the Web3 ecosystem and enable
-          recovery assistance.
+          Register your stolen wallet on-chain to strengthen fraud prevention and enable recovery
+          assistance.
         </p>
       </div>
 
@@ -72,7 +73,7 @@ export function HomePage() {
             </p>
           </div>
 
-          <RegistrationMethodSelector onSelect={handleMethodSelect} p2pAvailable={true} />
+          <RegistrationMethodSelector onSelect={handleMethodSelect} p2pAvailable={p2pAvailable} />
         </div>
       )}
     </div>

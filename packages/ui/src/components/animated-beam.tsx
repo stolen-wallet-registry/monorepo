@@ -1,6 +1,6 @@
 'use client';
 
-import { type RefObject, useEffect, useId, useState } from 'react';
+import { type RefObject, useEffect, useId, useState, useRef } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 
 import { cn } from '../lib/utils';
@@ -23,6 +23,8 @@ export interface AnimatedBeamProps {
   startYOffset?: number;
   endXOffset?: number;
   endYOffset?: number;
+  /** Controls if beam is visible and animating. When false, beam is hidden. (default: true) */
+  isActive?: boolean;
 }
 
 export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
@@ -36,15 +38,17 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   delay = 0,
   pathColor = 'gray',
   pathWidth = 2,
-  pathOpacity = 0.2,
+  pathOpacity = 0.4,
   gradientStartColor = '#ffaa40',
   gradientStopColor = '#9c40ff',
   startXOffset = 0,
   startYOffset = 0,
   endXOffset = 0,
   endYOffset = 0,
+  isActive = true,
 }) => {
   const id = useId();
+
   // Respect user's reduced motion preference for accessibility
   const shouldReduceMotion = useReducedMotion();
   // Memoize random duration to prevent animation resets on parent re-renders
@@ -53,17 +57,32 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   const [pathD, setPathD] = useState('');
   const [svgDimensions, setSvgDimensions] = useState({ width: 0, height: 0 });
 
-  // Calculate the gradient coordinates based on the reverse prop
+  // Track animation cycles - increment counter when isActive transitions false→true
+  // Using state instead of ref to trigger proper re-render with new key
+  const [activationCount, setActivationCount] = useState(0);
+  const wasActiveRef = useRef(isActive);
+
+  useEffect(() => {
+    if (isActive && !wasActiveRef.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: detecting prop transition to trigger re-render
+      setActivationCount((c) => c + 1);
+    }
+    wasActiveRef.current = isActive;
+  }, [isActive]);
+
+  // Gradient travels exactly 100% (the visible path length) over the duration
+  // This ensures beam exits exactly when timer fires for next step
+  // x1 = tail (trailing edge), x2 = head (leading edge), gradient width = 10%
   const gradientCoordinates = reverse
     ? {
-        x1: ['90%', '-10%'],
-        x2: ['100%', '0%'],
+        x1: ['100%', '0%'], // tail: end → start
+        x2: ['110%', '10%'], // head: 10% ahead of tail
         y1: ['0%', '0%'],
         y2: ['0%', '0%'],
       }
     : {
-        x1: ['10%', '110%'],
-        x2: ['0%', '100%'],
+        x1: ['0%', '100%'], // tail: start → end
+        x2: ['10%', '110%'], // head: 10% ahead of tail
         y1: ['0%', '0%'],
         y2: ['0%', '0%'],
       };
@@ -119,6 +138,7 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
       viewBox={`0 0 ${svgDimensions.width} ${svgDimensions.height}`}
       aria-hidden="true"
     >
+      {/* Static path (track) - always visible */}
       <path
         d={pathD}
         stroke={pathColor}
@@ -126,13 +146,16 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
         strokeOpacity={pathOpacity}
         strokeLinecap="round"
       />
-      <path
-        d={pathD}
-        strokeWidth={pathWidth}
-        stroke={`url(#${id})`}
-        strokeOpacity="1"
-        strokeLinecap="round"
-      />
+      {/* Animated gradient path - only visible when active */}
+      {isActive && (
+        <path
+          d={pathD}
+          strokeWidth={pathWidth}
+          stroke={`url(#${id})`}
+          strokeOpacity="1"
+          strokeLinecap="round"
+        />
+      )}
       <defs>
         {shouldReduceMotion ? (
           // Static gradient for users who prefer reduced motion
@@ -152,27 +175,34 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
           </linearGradient>
         ) : (
           <motion.linearGradient
+            key={activationCount}
             className="transform-gpu"
             id={id}
             gradientUnits={'userSpaceOnUse'}
             initial={{
-              x1: '0%',
-              x2: '0%',
+              // Match first keyframe position so animation starts immediately visible
+              x1: reverse ? '100%' : '0%',
+              x2: reverse ? '110%' : '10%',
               y1: '0%',
               y2: '0%',
             }}
-            animate={{
-              x1: gradientCoordinates.x1,
-              x2: gradientCoordinates.x2,
-              y1: gradientCoordinates.y1,
-              y2: gradientCoordinates.y2,
-            }}
+            animate={
+              isActive
+                ? {
+                    x1: gradientCoordinates.x1,
+                    x2: gradientCoordinates.x2,
+                    y1: gradientCoordinates.y1,
+                    y2: gradientCoordinates.y2,
+                  }
+                : undefined
+            }
             transition={{
               delay,
               duration,
-              ease: [0.16, 1, 0.3, 1], // https://easings.net/#easeOutExpo
-              repeat: Infinity,
-              repeatDelay: 0,
+              // Linear easing - beam moves at constant speed, immediately visible
+              ease: 'linear',
+              // Animation plays once per activation cycle. Parent manages timing externally.
+              repeat: 0,
             }}
           >
             <stop stopColor={gradientStartColor} stopOpacity="0"></stop>

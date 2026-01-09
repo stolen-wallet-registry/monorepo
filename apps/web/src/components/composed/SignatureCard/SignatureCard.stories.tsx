@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { SignatureCard } from './SignatureCard';
+import type { Address, Hex } from '@/lib/types/ethereum';
 
 const meta: Meta<typeof SignatureCard> = {
   title: 'Composed/SignatureCard',
@@ -25,14 +26,14 @@ export default meta;
 type Story = StoryObj<typeof SignatureCard>;
 
 const sampleData = {
-  registeree: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as `0x${string}`,
-  forwarder: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as `0x${string}`,
+  registeree: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address,
+  forwarder: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address,
   nonce: 0n,
   deadline: 12345678n,
 };
 
 const sampleSignature =
-  '0x1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8538dde03fc8b4c6d7f2c13c82e5c34d0e5f8b1c0b5e2f3a4b5c6d7e8f9a0b1c21b' as `0x${string}`;
+  '0x1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8538dde03fc8b4c6d7f2c13c82e5c34d0e5f8b1c0b5e2f3a4b5c6d7e8f9a0b1c21b' as Hex;
 
 /**
  * Ready to sign acknowledgement.

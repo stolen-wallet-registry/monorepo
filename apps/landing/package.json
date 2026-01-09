@@ -9,11 +9,13 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .next",
     "storybook": "storybook dev -p 6008",
     "build-storybook": "storybook build"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "^1.4.0",
+    "@swr/abis": "workspace:*",
     "@swr/ui": "workspace:*",
     "cobe": "^0.6.3",
     "lucide-react": "^0.556.0",

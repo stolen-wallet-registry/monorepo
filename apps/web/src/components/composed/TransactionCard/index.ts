@@ -4,4 +4,5 @@ export {
   type TransactionStatus,
   type SignedMessageData,
   type CostEstimateData,
+  type CrossChainProgress,
 } from './TransactionCard';
