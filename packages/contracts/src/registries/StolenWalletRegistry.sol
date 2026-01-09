@@ -76,9 +76,9 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
         // Validate timing parameters to prevent misconfiguration
         // deadlineBlocks must be > graceBlocks because both use randomization:
         // if equal, deadline could end before grace period due to random offsets
-        require(_graceBlocks > 0, "graceBlocks must be positive");
-        require(_deadlineBlocks > 0, "deadlineBlocks must be positive");
-        require(_deadlineBlocks > _graceBlocks, "deadline must be > grace");
+        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks <= _graceBlocks) {
+            revert InvalidTimingConfig();
+        }
 
         feeManager = _feeManager;
         registryHub = _registryHub;

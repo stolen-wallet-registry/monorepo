@@ -103,6 +103,9 @@ interface IStolenWalletRegistry {
     /// @notice Thrown when source chain ID is invalid (e.g., zero for cross-chain registration)
     error InvalidChainId();
 
+    /// @notice Thrown when timing configuration is invalid (graceBlocks=0, deadlineBlocks=0, or deadline <= grace)
+    error InvalidTimingConfig();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════

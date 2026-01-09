@@ -125,9 +125,9 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         // Validate timing parameters to prevent misconfiguration
         // deadlineBlocks must be > graceBlocks because both use randomization:
         // if equal, deadline could end before grace period due to random offsets
-        require(_graceBlocks > 0, "graceBlocks must be positive");
-        require(_deadlineBlocks > 0, "deadlineBlocks must be positive");
-        require(_deadlineBlocks > _graceBlocks, "deadline must be > grace");
+        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks <= _graceBlocks) {
+            revert SpokeRegistry__InvalidTimingConfig();
+        }
 
         spokeChainId = uint32(block.chainid);
         bridgeAdapter = _bridgeAdapter;

@@ -46,7 +46,7 @@ export function FooterCTA() {
           </Button>
           <Button size="lg" variant="outline" asChild className="min-w-[160px]">
             <a
-              href="https://github.com/stolen-wallet-registry"
+              href="https://github.com/stolen-wallet-registry/monorepo"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="View on GitHub (opens in new tab)"

@@ -100,6 +100,116 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
     action: 'Please try again.',
   },
 
+  '0x87b5e90b': {
+    name: 'InvalidTimingConfig',
+    message: 'Invalid timing configuration detected.',
+    action: 'Please contact support.',
+  },
+
+  '0x5c427cd9': {
+    name: 'UnauthorizedCaller',
+    message: 'Unauthorized operation attempted.',
+    action: 'Please contact support.',
+  },
+
+  '0xb91e5870': {
+    name: 'InvalidBridgeId',
+    message: 'Invalid bridge configuration.',
+    action: 'Please contact support.',
+  },
+
+  '0x7a47c9a2': {
+    name: 'InvalidChainId',
+    message: 'Invalid chain configuration.',
+    action: 'Please contact support.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ISpokeRegistry errors (11)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  '0xe08eb492': {
+    name: 'SpokeRegistry__InvalidTimingConfig',
+    message: 'Invalid timing configuration detected.',
+    action: 'Please contact support.',
+  },
+
+  '0x7a15c36a': {
+    name: 'SpokeRegistry__InvalidNonce',
+    message: 'Transaction nonce mismatch.',
+    action: 'Please refresh the page and try again.',
+  },
+
+  '0x36a83b56': {
+    name: 'SpokeRegistry__SignatureExpired',
+    message: 'Your signature has expired.',
+    action: 'Please sign again to continue.',
+  },
+
+  '0x8baa579f': {
+    name: 'SpokeRegistry__InvalidSigner',
+    message: 'Signature verification failed.',
+    action: 'Ensure you are signing with the wallet you want to register.',
+  },
+
+  '0x6e67e4e2': {
+    name: 'SpokeRegistry__InvalidForwarder',
+    message: 'Wrong wallet connected for this registration.',
+    action: 'Switch to your gas wallet to submit this transaction.',
+  },
+
+  '0x86f63dce': {
+    name: 'SpokeRegistry__ForwarderExpired',
+    message: 'Your registration window has expired.',
+    action: 'Please start the registration process again from the beginning.',
+  },
+
+  '0x9ab3c3ae': {
+    name: 'SpokeRegistry__GracePeriodNotStarted',
+    message: 'The grace period has not ended yet.',
+    action: 'Please wait for the countdown to complete before registering.',
+  },
+
+  '0xf4d678b8': {
+    name: 'SpokeRegistry__InsufficientFee',
+    message: 'Insufficient fee for cross-chain registration.',
+    action: 'Ensure you have enough ETH for registration and bridge fees.',
+  },
+
+  '0x664e4519': {
+    name: 'SpokeRegistry__InvalidOwner',
+    message: 'Invalid wallet address provided.',
+    action: 'Please check the address and try again.',
+  },
+
+  '0x0cc5729a': {
+    name: 'SpokeRegistry__BridgeFailed',
+    message: 'Cross-chain message failed to send.',
+    action: 'Please try again. If the issue persists, the bridge may be temporarily unavailable.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IBridgeAdapter errors (3)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  '0x2c460928': {
+    name: 'BridgeAdapter__InsufficientFee',
+    message: 'Insufficient fee for cross-chain message.',
+    action: 'Ensure you have enough ETH for the bridge fee.',
+  },
+
+  '0x3c8f137c': {
+    name: 'BridgeAdapter__UnsupportedChain',
+    message: 'This chain is not supported for cross-chain registration.',
+    action: 'Please switch to a supported network.',
+  },
+
+  '0xb8aa6394': {
+    name: 'BridgeAdapter__PayloadTooLarge',
+    message: 'Registration data exceeds bridge limits.',
+    action: 'Please contact support.',
+  },
+
   // ═══════════════════════════════════════════════════════════════════════════
   // IFeeManager errors (4)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -154,6 +264,46 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
     name: 'Hub__WithdrawalFailed',
     message: 'Fee withdrawal failed.',
     action: 'Please try again.',
+  },
+
+  '0x8791d1d6': {
+    name: 'Hub__UnauthorizedInbox',
+    message: 'Cross-chain message from unauthorized source.',
+    action: 'Please contact support.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ICrossChainInbox errors (5)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  '0x7d60d71c': {
+    name: 'CrossChainInbox__UntrustedSource',
+    message: 'Cross-chain message from untrusted source.',
+    action: 'Please contact support.',
+  },
+
+  '0xaea84e78': {
+    name: 'CrossChainInbox__OnlyBridge',
+    message: 'Only bridge can deliver cross-chain messages.',
+    action: 'Please contact support.',
+  },
+
+  '0x23e92f31': {
+    name: 'CrossChainInbox__InvalidMessage',
+    message: 'Invalid cross-chain message received.',
+    action: 'Please try again or contact support.',
+  },
+
+  '0x6d50853e': {
+    name: 'CrossChainInbox__ZeroAddress',
+    message: 'Invalid address in cross-chain message.',
+    action: 'Please contact support.',
+  },
+
+  '0x249d64fe': {
+    name: 'CrossChainInbox__SourceChainMismatch',
+    message: 'Cross-chain message from unexpected chain.',
+    action: 'Please contact support.',
   },
 };
 

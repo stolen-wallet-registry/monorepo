@@ -84,6 +84,9 @@ interface ISpokeRegistry {
     /// @notice Thrown when bridge message fails
     error SpokeRegistry__BridgeFailed();
 
+    /// @notice Thrown when timing configuration is invalid (graceBlocks=0, deadlineBlocks=0, or deadline <= grace)
+    error SpokeRegistry__InvalidTimingConfig();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════

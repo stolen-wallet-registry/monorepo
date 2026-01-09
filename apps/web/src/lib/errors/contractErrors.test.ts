@@ -4,8 +4,9 @@ import { decodeContractError, getContractErrorInfo, CONTRACT_ERROR_MAP } from '.
 
 describe('contractErrors', () => {
   describe('CONTRACT_ERROR_MAP', () => {
-    it('contains all 20 expected errors', () => {
-      expect(Object.keys(CONTRACT_ERROR_MAP)).toHaveLength(20);
+    it('contains expected minimum errors', () => {
+      // Should have at least 40 errors (all contract interfaces covered)
+      expect(Object.keys(CONTRACT_ERROR_MAP).length).toBeGreaterThanOrEqual(40);
     });
 
     it('all selectors are lowercase 4-byte hex', () => {
@@ -148,7 +149,7 @@ Version: viem@2.41.2`;
     // If a contract error signature changes, these will catch it
 
     const expectedSelectors: Record<string, string> = {
-      // IStolenWalletRegistry
+      // IStolenWalletRegistry - User-facing
       InvalidNonce: '0x756688fe',
       Acknowledgement__Expired: '0x66af96ee',
       Acknowledgement__InvalidSigner: '0xb4c67c0a',
@@ -161,16 +162,42 @@ Version: viem@2.41.2`;
       InvalidOwner: '0x49e27cff',
       InsufficientFee: '0x025dbdd4',
       FeeForwardFailed: '0x4073ee10',
-      // IFeeManager
+      InvalidTimingConfig: '0x87b5e90b',
+      UnauthorizedCaller: '0x5c427cd9',
+      InvalidBridgeId: '0xb91e5870',
+      InvalidChainId: '0x7a47c9a2',
+      // IFeeManager - User-facing
       Fee__Insufficient: '0xb05591b8',
       Fee__InvalidPrice: '0x3add2ca9',
       Fee__NoOracle: '0x1d3997c8',
       Fee__StalePrice: '0x82599075',
-      // IRegistryHub
+      // IRegistryHub - User-facing
       Hub__Paused: '0x719cea76',
       Hub__InvalidRegistry: '0xbf7c72a6',
       Hub__InsufficientFee: '0xba85f0bb',
       Hub__WithdrawalFailed: '0x066df40f',
+      Hub__UnauthorizedInbox: '0x8791d1d6',
+      // ISpokeRegistry - User-facing
+      SpokeRegistry__InvalidTimingConfig: '0xe08eb492',
+      SpokeRegistry__InvalidNonce: '0x7a15c36a',
+      SpokeRegistry__SignatureExpired: '0x36a83b56',
+      SpokeRegistry__InvalidSigner: '0x8baa579f',
+      SpokeRegistry__InvalidForwarder: '0x6e67e4e2',
+      SpokeRegistry__ForwarderExpired: '0x86f63dce',
+      SpokeRegistry__GracePeriodNotStarted: '0x9ab3c3ae',
+      SpokeRegistry__InsufficientFee: '0xf4d678b8',
+      SpokeRegistry__InvalidOwner: '0x664e4519',
+      SpokeRegistry__BridgeFailed: '0x0cc5729a',
+      // IBridgeAdapter - User-facing
+      BridgeAdapter__InsufficientFee: '0x2c460928',
+      BridgeAdapter__UnsupportedChain: '0x3c8f137c',
+      BridgeAdapter__PayloadTooLarge: '0xb8aa6394',
+      // ICrossChainInbox - User-facing
+      CrossChainInbox__UntrustedSource: '0x7d60d71c',
+      CrossChainInbox__OnlyBridge: '0xaea84e78',
+      CrossChainInbox__InvalidMessage: '0x23e92f31',
+      CrossChainInbox__ZeroAddress: '0x6d50853e',
+      CrossChainInbox__SourceChainMismatch: '0x249d64fe',
     };
 
     it.each(Object.entries(expectedSelectors))(
