@@ -73,10 +73,25 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
     constructor(address _feeManager, address _registryHub, uint256 _graceBlocks, uint256 _deadlineBlocks)
         EIP712("StolenWalletRegistry", "4")
     {
-        // Validate timing parameters to prevent misconfiguration
-        // deadlineBlocks must be > graceBlocks because both use randomization:
-        // if equal, deadline could end before grace period due to random offsets
-        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks <= _graceBlocks) {
+        // Validate fee configuration consistency:
+        // If feeManager is set, registryHub must also be set to forward fees.
+        // Otherwise, register() could accept fees that can never be forwarded.
+        // Note: feeManager=0 with registryHub!=0 is valid (free registrations with hub).
+        if (_feeManager != address(0) && _registryHub == address(0)) {
+            revert InvalidTimingConfig(); // Reusing error for config issues
+        }
+
+        // Validate timing parameters to prevent misconfiguration.
+        // Both grace period and deadline use randomization in TimingConfig.sol:
+        //   - Grace end:   block.number + random(0, graceBlocks) + graceBlocks
+        //                  Range: [current + graceBlocks, current + 2*graceBlocks - 1]
+        //   - Deadline:    block.number + random(0, deadlineBlocks) + deadlineBlocks
+        //                  Range: [current + deadlineBlocks, current + 2*deadlineBlocks - 1]
+        //
+        // Worst case: grace period ends at maximum (2*graceBlocks - 1), deadline at minimum (deadlineBlocks)
+        // To ensure deadline always > grace end: deadlineBlocks > 2*graceBlocks - 1
+        // Simplified: deadlineBlocks >= 2*graceBlocks
+        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks) {
             revert InvalidTimingConfig();
         }
 

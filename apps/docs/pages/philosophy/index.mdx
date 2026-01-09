@@ -1,0 +1,92 @@
+# Philosophy
+
+The guiding principles behind the Stolen Wallet Registry.
+
+## The Problem
+
+Crypto fraud is rampant, and the data about it is siloed:
+
+- **Exchanges** maintain internal fraud databases they don't share
+- **Victims** have no standardized way to report stolen wallets
+- **Security firms** publish reports but data isn't machine-readable
+- **Wallets** can't warn users about known malicious contracts
+
+The result? Stolen funds flow freely between chains and off-ramps because there's no coordinated, on-chain source of truth.
+
+## The Solution
+
+A **decentralized, cross-chain registry** that:
+
+1. **Gives victims agency** - Register your own wallet as stolen, even without funds
+2. **Breaks down silos** - Shared data benefits the entire ecosystem
+3. **Provides transparency** - On-chain, verifiable, permanent records
+4. **Enables coordination** - Exchanges, wallets, and dApps can all read from one source
+
+## Core Principles
+
+### Victim-First Design
+
+The registry exists to help victims. Every design decision prioritizes:
+
+- **Accessibility** - Register without funds via relay mechanisms
+- **Security** - Two-phase process prevents phishing
+- **Permanence** - Once registered, a wallet stays registered
+
+### Decentralization
+
+- **On-chain storage** - No central database to censor
+- **DAO governance** - Operator approval and dispute resolution
+- **Open data** - Anyone can read, query, and integrate
+
+### Minimal Trust
+
+- **Self-attestation** - You prove you own what you're registering
+- **Cryptographic signatures** - EIP-712 typed data
+- **Public verification** - All registrations are on-chain
+
+### Pragmatic Progress
+
+- **Start with wallets** - Highest trust signal (owner signature)
+- **Add contracts** - Operator submissions with review
+- **Defer transactions** - Complex trust model, solve later
+
+## What This Is Not
+
+### Not a Blacklist Service
+
+The registry provides **data**, not **enforcement**. It's up to integrators to decide how to use it:
+
+- An exchange might flag transactions from registered wallets
+- A wallet might warn users before interacting with registered contracts
+- A dApp might refuse connections from registered addresses
+
+The registry doesn't make these decisions. It provides information.
+
+### Not a Recovery Service
+
+Registering a wallet doesn't recover stolen funds. It:
+
+- Creates a public record of the theft
+- Helps prevent further damage (the thief can't easily off-ramp)
+- Contributes to ecosystem-wide fraud intelligence
+
+### Not a Guarantee
+
+Registration doesn't guarantee:
+
+- Funds will be recovered
+- The thief will be caught
+- All exchanges will honor the registration
+
+It's one tool in the broader fight against crypto fraud.
+
+## The Vision
+
+A world where:
+
+1. **Victims have a voice** - Immediate, free, permanent way to report theft
+2. **Fraud data flows freely** - Breaking down corporate silos
+3. **Attackers face friction** - Off-ramping stolen funds becomes harder
+4. **The ecosystem learns** - Patterns emerge from aggregated data
+
+[Read the full Manifesto](/philosophy/manifesto) | [Governance Model](/philosophy/governance)

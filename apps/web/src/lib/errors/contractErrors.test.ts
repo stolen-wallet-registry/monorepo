@@ -3,10 +3,64 @@ import { describe, it, expect } from 'vitest';
 import { decodeContractError, getContractErrorInfo, CONTRACT_ERROR_MAP } from './contractErrors';
 
 describe('contractErrors', () => {
+  // Expected selectors from contract interfaces - used for coverage validation
+  const expectedSelectors: Record<string, string> = {
+    // IStolenWalletRegistry errors (16)
+    InvalidNonce: '0x756688fe',
+    Acknowledgement__Expired: '0x66af96ee',
+    Acknowledgement__InvalidSigner: '0xb4c67c0a',
+    Registration__SignatureExpired: '0x5a2eae05',
+    Registration__InvalidSigner: '0x21ae99f4',
+    Registration__InvalidForwarder: '0x5fd8c8bb',
+    Registration__ForwarderExpired: '0xec5c97a6',
+    Registration__GracePeriodNotStarted: '0x6d2d2de4',
+    AlreadyRegistered: '0x3a81d6fc',
+    InvalidOwner: '0x49e27cff',
+    InsufficientFee: '0x025dbdd4',
+    FeeForwardFailed: '0x4073ee10',
+    InvalidTimingConfig: '0x87b5e90b',
+    UnauthorizedCaller: '0x5c427cd9',
+    InvalidBridgeId: '0xb91e5870',
+    InvalidChainId: '0x7a47c9a2',
+    // ISpokeRegistry errors (10)
+    SpokeRegistry__InvalidTimingConfig: '0xe08eb492',
+    SpokeRegistry__InvalidNonce: '0x7a15c36a',
+    SpokeRegistry__SignatureExpired: '0x36a83b56',
+    SpokeRegistry__InvalidSigner: '0x8baa579f',
+    SpokeRegistry__InvalidForwarder: '0x6e67e4e2',
+    SpokeRegistry__ForwarderExpired: '0x86f63dce',
+    SpokeRegistry__GracePeriodNotStarted: '0x9ab3c3ae',
+    SpokeRegistry__InsufficientFee: '0xf4d678b8',
+    SpokeRegistry__InvalidOwner: '0x664e4519',
+    SpokeRegistry__BridgeFailed: '0x0cc5729a',
+    // IBridgeAdapter errors (3)
+    BridgeAdapter__InsufficientFee: '0x2c460928',
+    BridgeAdapter__UnsupportedChain: '0x3c8f137c',
+    BridgeAdapter__PayloadTooLarge: '0xb8aa6394',
+    // IFeeManager errors (4)
+    Fee__Insufficient: '0xb05591b8',
+    Fee__InvalidPrice: '0x3add2ca9',
+    Fee__NoOracle: '0x1d3997c8',
+    Fee__StalePrice: '0x82599075',
+    // IRegistryHub errors (5)
+    Hub__Paused: '0x719cea76',
+    Hub__InvalidRegistry: '0xbf7c72a6',
+    Hub__InsufficientFee: '0xba85f0bb',
+    Hub__WithdrawalFailed: '0x066df40f',
+    Hub__UnauthorizedInbox: '0x8791d1d6',
+    // ICrossChainInbox errors (5)
+    CrossChainInbox__UntrustedSource: '0x7d60d71c',
+    CrossChainInbox__OnlyBridge: '0xaea84e78',
+    CrossChainInbox__InvalidMessage: '0x23e92f31',
+    CrossChainInbox__ZeroAddress: '0x6d50853e',
+    CrossChainInbox__SourceChainMismatch: '0x249d64fe',
+  };
+
   describe('CONTRACT_ERROR_MAP', () => {
-    it('contains expected minimum errors', () => {
-      // Should have at least 40 errors (all contract interfaces covered)
-      expect(Object.keys(CONTRACT_ERROR_MAP).length).toBeGreaterThanOrEqual(40);
+    it('contains at least all expected errors', () => {
+      // Self-maintaining: threshold tracks the curated expectedSelectors list
+      const expectedCount = Object.keys(expectedSelectors).length;
+      expect(Object.keys(CONTRACT_ERROR_MAP).length).toBeGreaterThanOrEqual(expectedCount);
     });
 
     it('all selectors are lowercase 4-byte hex', () => {
@@ -144,69 +198,27 @@ Version: viem@2.41.2`;
     });
   });
 
-  describe('error selector verification', () => {
-    // These tests verify our selectors match the actual contract errors
-    // If a contract error signature changes, these will catch it
-
-    const expectedSelectors: Record<string, string> = {
-      // IStolenWalletRegistry - User-facing
-      InvalidNonce: '0x756688fe',
-      Acknowledgement__Expired: '0x66af96ee',
-      Acknowledgement__InvalidSigner: '0xb4c67c0a',
-      Registration__SignatureExpired: '0x5a2eae05',
-      Registration__InvalidSigner: '0x21ae99f4',
-      Registration__InvalidForwarder: '0x5fd8c8bb',
-      Registration__ForwarderExpired: '0xec5c97a6',
-      Registration__GracePeriodNotStarted: '0x6d2d2de4',
-      AlreadyRegistered: '0x3a81d6fc',
-      InvalidOwner: '0x49e27cff',
-      InsufficientFee: '0x025dbdd4',
-      FeeForwardFailed: '0x4073ee10',
-      InvalidTimingConfig: '0x87b5e90b',
-      UnauthorizedCaller: '0x5c427cd9',
-      InvalidBridgeId: '0xb91e5870',
-      InvalidChainId: '0x7a47c9a2',
-      // IFeeManager - User-facing
-      Fee__Insufficient: '0xb05591b8',
-      Fee__InvalidPrice: '0x3add2ca9',
-      Fee__NoOracle: '0x1d3997c8',
-      Fee__StalePrice: '0x82599075',
-      // IRegistryHub - User-facing
-      Hub__Paused: '0x719cea76',
-      Hub__InvalidRegistry: '0xbf7c72a6',
-      Hub__InsufficientFee: '0xba85f0bb',
-      Hub__WithdrawalFailed: '0x066df40f',
-      Hub__UnauthorizedInbox: '0x8791d1d6',
-      // ISpokeRegistry - User-facing
-      SpokeRegistry__InvalidTimingConfig: '0xe08eb492',
-      SpokeRegistry__InvalidNonce: '0x7a15c36a',
-      SpokeRegistry__SignatureExpired: '0x36a83b56',
-      SpokeRegistry__InvalidSigner: '0x8baa579f',
-      SpokeRegistry__InvalidForwarder: '0x6e67e4e2',
-      SpokeRegistry__ForwarderExpired: '0x86f63dce',
-      SpokeRegistry__GracePeriodNotStarted: '0x9ab3c3ae',
-      SpokeRegistry__InsufficientFee: '0xf4d678b8',
-      SpokeRegistry__InvalidOwner: '0x664e4519',
-      SpokeRegistry__BridgeFailed: '0x0cc5729a',
-      // IBridgeAdapter - User-facing
-      BridgeAdapter__InsufficientFee: '0x2c460928',
-      BridgeAdapter__UnsupportedChain: '0x3c8f137c',
-      BridgeAdapter__PayloadTooLarge: '0xb8aa6394',
-      // ICrossChainInbox - User-facing
-      CrossChainInbox__UntrustedSource: '0x7d60d71c',
-      CrossChainInbox__OnlyBridge: '0xaea84e78',
-      CrossChainInbox__InvalidMessage: '0x23e92f31',
-      CrossChainInbox__ZeroAddress: '0x6d50853e',
-      CrossChainInbox__SourceChainMismatch: '0x249d64fe',
-    };
+  describe('expected selector coverage', () => {
+    // Verify CONTRACT_ERROR_MAP has entries for all expected selectors.
+    // Note: This does NOT verify selectors match compiled ABIs - it only ensures
+    // the curated expectedSelectors list is covered in CONTRACT_ERROR_MAP.
+    // If contract error signatures change, update expectedSelectors manually.
 
     it.each(Object.entries(expectedSelectors))(
-      '%s has correct selector %s',
+      '%s has entry in CONTRACT_ERROR_MAP with selector %s',
       (errorName, expectedSelector) => {
         const info = CONTRACT_ERROR_MAP[expectedSelector];
         expect(info).toBeDefined();
         expect(info.name).toBe(errorName);
       }
     );
+
+    it('has no duplicate selectors (object literal guard)', () => {
+      // JavaScript object literals silently override duplicate keys.
+      // This test verifies the source of truth (expectedSelectors) has unique values.
+      const selectors = Object.values(expectedSelectors);
+      const uniqueSelectors = new Set(selectors);
+      expect(uniqueSelectors.size).toBe(selectors.length);
+    });
   });
 });

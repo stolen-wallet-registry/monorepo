@@ -1,0 +1,239 @@
+# Governance
+
+How the Stolen Wallet Registry is governed and how operators are approved.
+
+## Governance Model
+
+The registry uses a **phased governance approach** that evolves with the protocol's maturity.
+
+### Phase 1: Individual Submissions (Current)
+
+- Only individual wallet owners can register
+- No operator functionality enabled
+- Single owner controls contract upgrades
+- Focus on proving core functionality
+
+### Phase 2: DAO Ownership
+
+- Transfer ownership to a DAO
+- DAO votes on protocol parameters
+- Ownable2Step pattern ensures safe transfer
+- Emergency multisig for critical issues
+
+### Phase 3: Operator Approvals
+
+- DAO can approve operators
+- Operators gain batch submission rights
+- Different trust levels per subregistry
+- Operator staking/slashing (TBD)
+
+### Phase 4: Dispute Resolution
+
+- Mechanism to challenge entries
+- Arbitration for gaming accusations
+- Removal of fraudulent entries
+- Appeals process
+
+## Operators
+
+### What is an Operator?
+
+An operator is a **DAO-approved entity** with special permissions to submit data to the registry. Examples:
+
+- **Exchanges** (Coinbase, Kraken, Binance)
+- **Security firms** (Chainalysis, TRM Labs)
+- **Wallet providers** (MetaMask, Rainbow)
+- **Protocol teams** with fraud data
+
+### Operator Capabilities
+
+| Capability              | Stolen Wallet | Stolen Transaction | Fraudulent Contract |
+| ----------------------- | ------------- | ------------------ | ------------------- |
+| Single submission       | Yes           | Yes                | Yes                 |
+| Batch submission        | Yes           | Yes                | Yes                 |
+| Removal requests        | Via DAO       | Via DAO            | Via DAO             |
+| Paymaster (gas sponsor) | Yes           | Yes                | No                  |
+
+### Operator Approval Process
+
+1. **Application** - Entity submits application to DAO
+2. **Due diligence** - Community reviews legitimacy
+3. **Vote** - DAO token holders vote
+4. **Onboarding** - If approved, added to OperatorRegistry
+5. **Probation** - Initial period with limited permissions
+
+### Operator Responsibilities
+
+Approved operators must:
+
+- Submit accurate data in good faith
+- Respond to dispute challenges
+- Maintain security of submission keys
+- Not abuse batch submission privileges
+- Follow community guidelines
+
+### Operator Penalties
+
+Operators who violate guidelines may face:
+
+- Temporary suspension
+- Permanent removal
+- Slashing of staked tokens (future)
+- Public disclosure of violation
+
+## Operator-as-Paymaster
+
+A key feature enabling **gasless registration** for users.
+
+### How It Works
+
+1. User visits an operator's website (e.g., coinbase.com)
+2. User signs EIP-712 acknowledgement message
+3. Operator's Paymaster contract pays the gas
+4. Registration completes without user paying
+
+### Benefits
+
+| Stakeholder   | Benefit                          |
+| ------------- | -------------------------------- |
+| **Users**     | Free registration, no ETH needed |
+| **Operators** | Access to fraud data they funded |
+| **Ecosystem** | More registrations, better data  |
+
+### Implementation
+
+```
+User signs → Operator's frontend → Paymaster pays → Registry updated
+```
+
+Uses EIP-4337 Account Abstraction for gas sponsorship.
+
+## Dispute Resolution
+
+### Types of Disputes
+
+1. **False registration** - Legitimate wallet marked as stolen
+2. **Gaming attempt** - Malicious transaction registration
+3. **Operator error** - Batch includes incorrect address
+4. **Operator malice** - Intentional bad data submission
+
+### Dispute Process
+
+```
+┌─────────────────┐
+│ Dispute Filed   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Evidence Period │  ← Both parties submit evidence
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Community Vote  │  ← DAO members review
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    │         │
+    ▼         ▼
+┌───────┐  ┌───────┐
+│Upheld │  │Removed│
+└───────┘  └───────┘
+```
+
+### Dispute Bond
+
+To prevent frivolous disputes:
+
+- Disputer must stake tokens
+- If dispute succeeds, bond returned + reward
+- If dispute fails, bond forfeited
+
+### Removal Mechanism
+
+If a dispute succeeds:
+
+- Entry is marked as `removed`
+- Original registration event still on-chain (immutable)
+- New event indicates removal
+- Integrators should check both
+
+## DAO Structure
+
+### Token Governance
+
+- Governance token for voting
+- Delegation supported
+- Quadratic voting for fairness (TBD)
+- Snapshot for off-chain signaling
+
+### Proposals
+
+| Type              | Quorum | Approval | Timelock |
+| ----------------- | ------ | -------- | -------- |
+| Parameter change  | 10%    | 50%+1    | 48 hours |
+| Operator approval | 15%    | 60%+1    | 72 hours |
+| Operator removal  | 10%    | 50%+1    | 24 hours |
+| Emergency action  | 5%     | 66%+1    | 0 hours  |
+
+### Treasury
+
+- Registration fees accumulate in treasury
+- DAO votes on fund allocation
+- Public goods funding (Protocol Guild, RetroPGF)
+- Development grants
+- Security audits
+
+## Security Considerations
+
+### Ownership Transfer
+
+The registry uses **Ownable2Step** pattern:
+
+1. Current owner proposes new owner
+2. New owner must accept ownership
+3. Prevents accidental transfers
+4. Safe for DAO transition
+
+### Emergency Powers
+
+For critical security issues:
+
+- Multisig can pause registrations
+- Cannot modify existing entries
+- Time-limited pause (max 7 days)
+- DAO vote required to extend
+
+### Upgrade Path
+
+- UUPS proxy pattern (future)
+- DAO must approve upgrades
+- Timelock on implementation changes
+- Audit required for each upgrade
+
+## Roadmap
+
+### Now
+
+- Individual submissions only
+- Single owner (founder)
+- No operators
+
+### Q2 2025
+
+- DAO formation
+- Governance token launch
+- Transfer ownership to DAO
+
+### Q3 2025
+
+- Operator approval system
+- First operator onboarding
+- Dispute resolution v1
+
+### Q4 2025
+
+- Operator-as-Paymaster
+- Cross-chain governance
+- Full decentralization

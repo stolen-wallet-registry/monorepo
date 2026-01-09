@@ -1,0 +1,278 @@
+# Etherscan Walkthrough
+
+Register a stolen wallet directly through Etherscan (or Basescan) without using the web app.
+
+## When to Use
+
+Use Etherscan registration when:
+
+- The web app is unavailable
+- You prefer interacting with contracts directly
+- You want to verify exactly what you're signing
+- You're integrating programmatically
+
+## Prerequisites
+
+- Web3 wallet with sufficient ETH
+- The contract address on your network
+- Basic familiarity with Etherscan's "Write Contract" interface
+
+## Contract Addresses
+
+| Network          | Address | Explorer                                                                   |
+| ---------------- | ------- | -------------------------------------------------------------------------- |
+| Base Sepolia     | `0x...` | [Base Sepolia Scan](https://sepolia.basescan.org/address/0x...)            |
+| Optimism Sepolia | `0x...` | [Optimism Sepolia Scan](https://sepolia-optimism.etherscan.io/address/0x...) |
+
+_Note: Replace with actual deployed addresses_
+
+## Step 1: Get Your Signature Parameters
+
+Before interacting with the contract, you need to generate the required values.
+
+### Option A: Use the App's Signature Generator
+
+1. Go to the web app
+2. Start a registration (any method)
+3. Before signing, open browser dev tools (F12)
+4. Find the typed data in the console logs
+5. Copy the `deadline`, `nonce`, and other values
+
+### Option B: Query the Contract
+
+Read from the contract to get your current nonce and deadline:
+
+1. Go to the contract on Etherscan
+2. Click "Read Contract"
+3. Find `nonces(address)` and enter your address
+4. Note your current nonce
+5. Find `generateHashStruct(address, uint8)`
+   - Enter your address and `1` for acknowledgement
+   - Note the deadline from the result
+
+## Step 2: Generate EIP-712 Signature
+
+You need to sign an EIP-712 typed data message. This can be done with:
+
+### Using ethers.js
+
+```javascript
+const domain = {
+  name: 'StolenWalletRegistry',
+  version: '4',
+  chainId: 8453, // Base
+  verifyingContract: '0x...', // Contract address
+};
+
+const types = {
+  AcknowledgementOfRegistry: [
+    { name: 'owner', type: 'address' },
+    { name: 'forwarder', type: 'address' },
+    { name: 'nonce', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+  ],
+};
+
+const message = {
+  owner: '0xYourWalletAddress',
+  forwarder: '0xYourWalletAddress', // Same for standard registration
+  nonce: 0, // Your current nonce
+  deadline: 1234567890, // From generateHashStruct
+};
+
+const signature = await signer.signTypedData(domain, types, message);
+```
+
+### Using viem
+
+```typescript
+import { signTypedData } from 'viem/wallet';
+
+const signature = await signTypedData(walletClient, {
+  domain: {
+    name: 'StolenWalletRegistry',
+    version: '4',
+    chainId: 8453n,
+    verifyingContract: '0x...',
+  },
+  types: {
+    AcknowledgementOfRegistry: [
+      { name: 'owner', type: 'address' },
+      { name: 'forwarder', type: 'address' },
+      { name: 'nonce', type: 'uint256' },
+      { name: 'deadline', type: 'uint256' },
+    ],
+  },
+  primaryType: 'AcknowledgementOfRegistry',
+  message: {
+    owner: '0xYourWalletAddress',
+    forwarder: '0xYourWalletAddress',
+    nonce: 0n,
+    deadline: 1234567890n,
+  },
+});
+```
+
+### Using cast (Foundry)
+
+```bash
+cast wallet sign-typed-data \
+  --private-key $PRIVATE_KEY \
+  --domain "StolenWalletRegistry,4,8453,0x..." \
+  --type "AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)" \
+  --message "owner:0x...,forwarder:0x...,nonce:0,deadline:1234567890"
+```
+
+## Step 3: Submit Acknowledgement on Etherscan
+
+1. Go to the contract on Etherscan
+2. Click "Write Contract"
+3. Connect your wallet
+4. Find `acknowledgementOfRegistry` function
+5. Enter the parameters:
+
+| Parameter   | Value                              |
+| ----------- | ---------------------------------- |
+| `_owner`    | Your wallet address                |
+| `_deadline` | Deadline from step 1               |
+| `_v`        | Signature v value (27 or 28)       |
+| `_r`        | Signature r value (first 32 bytes) |
+| `_s`        | Signature s value (last 32 bytes)  |
+
+### Extracting v, r, s from Signature
+
+```javascript
+// From a 65-byte signature
+const r = '0x' + signature.slice(2, 66);
+const s = '0x' + signature.slice(66, 130);
+const v = parseInt(signature.slice(130, 132), 16);
+```
+
+6. Click "Write"
+7. Confirm the transaction
+
+## Step 4: Wait for Grace Period
+
+After the acknowledgement transaction is mined:
+
+1. Check the transaction for the emitted event
+2. Find `startBlock` and `expiryBlock` values
+3. Wait until the current block number is >= `startBlock`
+4. You have until `expiryBlock` to complete registration
+
+You can monitor blocks at [Basescan](https://basescan.org) or via:
+
+```bash
+cast block-number --rpc-url https://mainnet.base.org
+```
+
+## Step 5: Generate Registration Signature
+
+Similar to step 2, but use `Registration` type:
+
+```javascript
+const types = {
+  Registration: [
+    { name: 'owner', type: 'address' },
+    { name: 'forwarder', type: 'address' },
+    { name: 'nonce', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+  ],
+};
+
+// Note: nonce has incremented by 1
+const message = {
+  owner: '0xYourWalletAddress',
+  forwarder: '0xYourWalletAddress',
+  nonce: 1, // Previous nonce + 1
+  deadline: newDeadline, // From generateHashStruct with type 2
+};
+```
+
+## Step 6: Submit Registration on Etherscan
+
+1. Go to "Write Contract"
+2. Find `walletRegistration` function
+3. Enter the parameters (similar to step 3)
+4. Add any required ETH value (registration fee)
+5. Click "Write"
+6. Confirm the transaction
+
+## Step 7: Verify Registration
+
+After the registration transaction is mined:
+
+1. Go to "Read Contract"
+2. Find `isRegistered(address)`
+3. Enter your wallet address
+4. Should return `true`
+
+Or check the events:
+
+1. Go to the transaction
+2. Look for `RegistrationEvent`
+3. Verify your address is in the logs
+
+## Common Errors
+
+### "InvalidSigner"
+
+The signature doesn't match the owner address. Check:
+
+- Correct domain parameters (name, version, chainId, verifyingContract)
+- Correct message parameters
+- You signed with the correct wallet
+
+### "InvalidDeadline"
+
+The deadline has passed or is invalid. Get a fresh deadline from `generateHashStruct`.
+
+### "NonceAlreadyUsed"
+
+You've already submitted this phase. Check your current nonce with `nonces(address)`.
+
+### "GracePeriodNotStarted"
+
+You're trying to register before the grace period. Wait for the start block.
+
+### "WindowExpired"
+
+The registration window has closed. You'll need to restart from acknowledgement.
+
+## Programmatic Integration
+
+For integrating into your own systems:
+
+```typescript
+import { createPublicClient, createWalletClient, http } from 'viem';
+import { base } from 'viem/chains';
+
+const publicClient = createPublicClient({
+  chain: base,
+  transport: http(),
+});
+
+// Read nonce
+const nonce = await publicClient.readContract({
+  address: contractAddress,
+  abi: stolenWalletRegistryAbi,
+  functionName: 'nonces',
+  args: [walletAddress],
+});
+
+// Get deadline
+const [deadline, hashStruct] = await publicClient.readContract({
+  address: contractAddress,
+  abi: stolenWalletRegistryAbi,
+  functionName: 'generateHashStruct',
+  args: [walletAddress, 1], // 1 = acknowledgement
+});
+
+// Sign and submit...
+```
+
+## Next Steps
+
+- [Smart Contract Reference](/technical/contracts)
+- [EIP-712 Signature Details](/technical/eip712-signatures)
+- [Return to Quick Start](/guide)

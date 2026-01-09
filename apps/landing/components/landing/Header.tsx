@@ -14,11 +14,18 @@ import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler';
  */
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5173';
 
-const NAV_LINKS = [
+/**
+ * Docs URL for documentation links.
+ * Configured via NEXT_PUBLIC_DOCS_URL environment variable.
+ */
+const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL ?? 'http://localhost:5174';
+
+const NAV_LINKS: { href: string; label: string; external?: boolean }[] = [
   { href: '#cross-chain', label: 'Cross-Chain' },
   { href: '#registries', label: 'Registries' },
   { href: '#how-it-works', label: 'How It Works' },
-] as const;
+  { href: DOCS_URL, label: 'Docs', external: true },
+];
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -32,15 +39,27 @@ export function Header() {
 
       {/* Desktop Navigation */}
       <nav className="hidden items-center gap-6 md:flex">
-        {NAV_LINKS.map(({ href, label }) => (
-          <Link
-            key={href}
-            href={href}
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {label}
-          </Link>
-        ))}
+        {NAV_LINKS.map(({ href, label, external }) =>
+          external ? (
+            <a
+              key={href}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {label}
+            </a>
+          ) : (
+            <Link
+              key={href}
+              href={href}
+              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {label}
+            </Link>
+          )
+        )}
       </nav>
 
       {/* Right side actions */}
@@ -72,16 +91,29 @@ export function Header() {
         )}
       >
         <nav className="flex flex-col px-6 py-4">
-          {NAV_LINKS.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              className="py-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              {label}
-            </Link>
-          ))}
+          {NAV_LINKS.map(({ href, label, external }) =>
+            external ? (
+              <a
+                key={href}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                {label}
+              </a>
+            ) : (
+              <Link
+                key={href}
+                href={href}
+                className="py-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                {label}
+              </Link>
+            )
+          )}
           <Button asChild className="mt-4 w-full sm:hidden">
             <a href={APP_URL} target="_blank" rel="noopener noreferrer">
               Launch App

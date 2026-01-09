@@ -13,6 +13,11 @@ import { cn } from '@/lib/utils';
  */
 const HOMEPAGE_URL = import.meta.env.VITE_HOMEPAGE_URL ?? 'http://localhost:3000';
 
+/**
+ * Documentation URL for "Docs" link.
+ */
+const DOCS_URL = import.meta.env.VITE_DOCS_URL ?? 'http://localhost:5174';
+
 export function Header() {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -56,6 +61,18 @@ export function Header() {
                 {item.label}
               </Link>
             ))}
+            <a
+              href={DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                'inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 py-2',
+                'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+              )}
+            >
+              Docs
+            </a>
           </nav>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
@@ -95,6 +112,19 @@ export function Header() {
                 {item.label}
               </Link>
             ))}
+            <a
+              href={DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setMobileMenuOpen(false)}
+              className={cn(
+                'inline-flex items-center rounded-md text-sm font-medium h-9 px-4 py-2 w-full',
+                'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+              )}
+            >
+              Docs
+            </a>
           </div>
         </nav>
       )}

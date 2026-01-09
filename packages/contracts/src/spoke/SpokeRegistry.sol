@@ -122,10 +122,17 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         // This avoids constructor complexity while still failing fast on first use.
         if (_bridgeAdapter == address(0)) revert SpokeRegistry__ZeroAddress();
 
-        // Validate timing parameters to prevent misconfiguration
-        // deadlineBlocks must be > graceBlocks because both use randomization:
-        // if equal, deadline could end before grace period due to random offsets
-        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks <= _graceBlocks) {
+        // Validate timing parameters to prevent misconfiguration.
+        // Both grace period and deadline use randomization in TimingConfig.sol:
+        //   - Grace end:   block.number + random(0, graceBlocks) + graceBlocks
+        //                  Range: [current + graceBlocks, current + 2*graceBlocks - 1]
+        //   - Deadline:    block.number + random(0, deadlineBlocks) + deadlineBlocks
+        //                  Range: [current + deadlineBlocks, current + 2*deadlineBlocks - 1]
+        //
+        // Worst case: grace period ends at maximum (2*graceBlocks - 1), deadline at minimum (deadlineBlocks)
+        // To ensure deadline always > grace end: deadlineBlocks > 2*graceBlocks - 1
+        // Simplified: deadlineBlocks >= 2*graceBlocks
+        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks) {
             revert SpokeRegistry__InvalidTimingConfig();
         }
 

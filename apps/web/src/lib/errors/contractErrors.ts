@@ -26,7 +26,7 @@ export interface ContractErrorInfo {
  */
 export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
   // ═══════════════════════════════════════════════════════════════════════════
-  // IStolenWalletRegistry errors (12)
+  // IStolenWalletRegistry errors (16)
   // ═══════════════════════════════════════════════════════════════════════════
 
   '0x756688fe': {
@@ -125,7 +125,7 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ISpokeRegistry errors (11)
+  // ISpokeRegistry errors (10)
   // ═══════════════════════════════════════════════════════════════════════════
 
   '0xe08eb492': {

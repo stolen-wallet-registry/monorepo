@@ -10,27 +10,67 @@ The `getSpokeAddress()` function in `crosschain-addresses.ts` validates against 
 
 ## Testnet Deployment (Base Sepolia + Optimism Sepolia)
 
-After running `forge script script/DeployTestnet.s.sol`, update these files:
+After running `forge script script/DeployTestnet.s.sol`, extract addresses from the output:
+
+```bash
+# Run deployment with broadcast to see deployed addresses
+forge script script/DeployTestnet.s.sol --rpc-url base-sepolia --broadcast --verify
+
+# Look for lines like:
+#   == Logs ==
+#     FeeManager deployed at: 0x1234...
+#     RegistryHub deployed at: 0x5678...
+#     StolenWalletRegistry deployed at: 0x9abc...
+#
+# Or check the broadcast file for each deployment:
+#   broadcast/DeployTestnet.s.sol/84532/run-latest.json
+#
+# Use jq to extract addresses:
+cat broadcast/DeployTestnet.s.sol/84532/run-latest.json | jq '.transactions[] | {contractName, contractAddress}'
+```
+
+Update these files with the extracted addresses:
 
 ### `apps/web/src/lib/contracts/addresses.ts`
 
 ```typescript
-// Lines 27-38: Update Base Sepolia hub addresses
-[baseSepolia.id]: '<DEPLOYED_ADDRESS>', // registryHub
-[baseSepolia.id]: '<DEPLOYED_ADDRESS>', // feeManager
-[baseSepolia.id]: '<DEPLOYED_ADDRESS>', // stolenWalletRegistry
+// Update each contract's address mapping with Base Sepolia entry:
+stolenWalletRegistry: {
+  // ... existing entries
+  [baseSepolia.id]: '<STOLEN_WALLET_REGISTRY_ADDRESS>' as Address,
+},
+feeManager: {
+  // ... existing entries
+  [baseSepolia.id]: '<FEE_MANAGER_ADDRESS>' as Address,
+},
+registryHub: {
+  // ... existing entries
+  [baseSepolia.id]: '<REGISTRY_HUB_ADDRESS>' as Address,
+},
 ```
 
 ### `apps/web/src/lib/contracts/crosschain-addresses.ts`
 
 ```typescript
-// Line 74: Update Base Sepolia CrossChainInbox
-[baseSepolia.id]: '<DEPLOYED_ADDRESS>', // crossChainInbox
+// HUB_CROSSCHAIN_ADDRESSES - Update Base Sepolia CrossChainInbox:
+crossChainInbox: {
+  // ... existing entries
+  [baseSepolia.id]: '<CROSS_CHAIN_INBOX_ADDRESS>' as Address,
+},
 
-// Lines 100-111: Update Optimism Sepolia spoke addresses
-[optimismSepolia.id]: '<DEPLOYED_ADDRESS>', // hyperlaneAdapter
-[optimismSepolia.id]: '<DEPLOYED_ADDRESS>', // feeManager (spoke)
-[optimismSepolia.id]: '<DEPLOYED_ADDRESS>', // spokeRegistry
+// SPOKE_ADDRESSES - Update Optimism Sepolia spoke contracts:
+hyperlaneAdapter: {
+  // ... existing entries
+  [optimismSepolia.id]: '<HYPERLANE_ADAPTER_ADDRESS>' as Address,
+},
+feeManager: {
+  // ... existing entries
+  [optimismSepolia.id]: '<SPOKE_FEE_MANAGER_ADDRESS>' as Address,
+},
+spokeRegistry: {
+  // ... existing entries
+  [optimismSepolia.id]: '<SPOKE_REGISTRY_ADDRESS>' as Address,
+},
 ```
 
 ## Mainnet Deployment (Base + Optimism)

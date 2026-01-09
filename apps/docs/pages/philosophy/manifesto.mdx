@@ -1,0 +1,182 @@
+# Manifesto
+
+The complete vision for the Stolen Wallet Registry.
+
+---
+
+## The Three Subregistries
+
+This registry collects information along three different tracks:
+
+1. **Stolen wallet addresses**
+2. **Stolen transactions**
+3. **Fraudulent and untrustable smart contract addresses**
+
+This is a **CAIP-10 compliant cross-blockchain registry** for tracking these different addresses and transactions in order to reveal transparency trails that might be used for various information purposes.
+
+The top-level registry will settle across blockchains (Ethereum L2s and other blockchains like Solana, Bitcoin, etc.) to a single contract that holds the data for the 3 subregistries. The settlement registry will exist on Base. The registry will store addresses in a CAIP-10 compliant way so that whatever addresses are stored can be tracked back to their chain, address type, and be formatted for each specific blockchain while still existing in one registry on Ethereum.
+
+Storing this type of data and associated metadata along with it will allow things like off-ramps to coordinate around tracking down stolen funds, or wallets to eventually have another reference resource for untrustable smart contracts.
+
+---
+
+## Operators vs Individual Signers
+
+### Operators
+
+Operators are any entity that can be specially approved by the DAO wrapping this registry and give the operator special permission to submit addresses to each registry.
+
+Think if Kraken and Coinbase were both operators on the registry and could aggregate their siloed information around stolen wallets, transactions, and fraud contracts into one registry that exists on-chain for both of these entities to share along with any other entity or user that wants to listen for and hook into events around addresses that are compromised for either fraud recovery, monitoring, or prevention.
+
+Operators can submit batch lists of addresses to be accepted into all 3 subregistries.
+
+### Individual Signers
+
+Individual signers are wallet and private key owners that can only submit their own controlled addresses and transactions into either the stolen wallet or stolen transaction subregistries.
+
+There are **3 ways to register** as an individual signer:
+
+1. **Sign and pay with the same wallet** you're registering
+2. **Self-relay** - sign with the wallet you're registering under, switch wallets, pay for transaction under a different wallet
+3. **P2P via libp2p and trusted relayer** - sign with wallet you're registering under, send signature to trusted friend or confidant to sign and pay for registration of stolen wallet or stolen transactions
+
+These methods provide anyone the ability to pay to register and announce the stolen wallet or transaction situation while sometimes not actually having any money on the wallet to do the transaction (because their wallet or funds were stolen).
+
+### Operator-as-Paymaster
+
+There is another scenario where we could enable operators to sponsor transactions and allow individuals to sign their wallets over to the registry via like Coinbase's website or something (where Coinbase becomes the relayer in this scenario).
+
+---
+
+## Stolen Wallet Subregistry
+
+The stolen wallet subregistry is a place for a user or operator to sign over a wallet as **completely stolen**. This means that the original owner of the wallet no longer has ownership of the private keys.
+
+For instance, in the case that they stored them in LastPass and then suffered a loss of funds when the LastPass hack unraveled a bunch of private keys with access to wallets. In these scenarios, there are now two people with access to a list of wallets the private keys can generate addresses for.
+
+The stolen wallet subregistry provides a place for the original owner to announce to anyone listening to the registry that they no longer have ownership of any of their wallets belonging to the lost private keys.
+
+### Trust Signal
+
+The stolen wallet registry has a **high chance of trustability** if the wallet being signed into the registry comes from the wallet itself because you can assume that the entities who stole the private keys to begin with have no incentive to register the wallet as stolen.
+
+We can therefore assume if the wallet is being registered to the registry via a signature from the wallet itself, it is truly being marked as stolen and should be untrusted by entities like off-ramp exchanges where funds usually drift to be withdrawn.
+
+Operators can also be permitted to register wallets to this subregistry, but just because an operator registers a wallet as stolen and is deemed worthy and trustable enough to submit wallets to this subregistry, does not mean that their submission should be outright trusted.
+
+---
+
+## Stolen Transaction Subregistry
+
+Stolen transactions are probably the most common form of fraud. This entails signing assets over to a smart contract that may not necessarily clean everything out of your wallet, but a one-time trick that steals funds or other assets in a fraudulent single transaction.
+
+Other types of attacks like **address poisoning** occur often where the user does not lose COMPLETE control of their wallet, but suffers from a fraudulent irreversible transaction in itself.
+
+It might be useful to allow users and operators to sign specific transactions in their history and mark them as fraudulent, sending an event and tracking it in the registry itself for anyone who is listening to this particular registry to collect and monitor transactions themselves and how they flow.
+
+### Gaming Concerns
+
+One thing about this subregistry is that it is inherently open to certain types of games. Unlike signing your entire wallet over to the stolen wallet subregistry where it will never be trusted again, you can imagine a scenario where:
+
+1. I send you some tokens in a transaction that is assumed correct
+2. I go to the stolen transaction registry and report that transaction stolen
+3. If the registry is being listened to by 3rd parties like Coinbase or off-ramp exchanges and that transaction gets flagged while moving towards your off-chain account
+4. Coinbase's systems could hypothetically be flagging a transaction that was not in fact stolen and is being gamed in this example by me
+
+The registry and entities listening or reacting to this subregistry would need to have trust systems in place for both individually signed transactions and operator submitted transactions to balance the fraud detection with gameability of signing.
+
+There would have to be a feedback loop also inside the protocol to remove gamed transactions and arbitrate over what data is correct here. In this scenario, operator submitted batches might be more trustable than individually signed stolen transaction data, but both types of submissions would still be applicable.
+
+---
+
+## Fraudulent Smart Contract Subregistry
+
+The smart contract subregistry will be a subregistry that catalogs information on addresses of untrustable and fraudulent smart contracts.
+
+This subregistry will be **operator submissions only** and will provide one central hub where siloed data can be aggregated and coordinated on that will provide instant and available information on fraudulent smart contracts across blockchains.
+
+### Use Cases
+
+Entities of all kinds could use this kind of information in interesting ways:
+
+- **Wallets** could have an on-chain resource for checking interactions of smart contracts that have been registered
+- **Any entity interactions** with smart contracts could call this subregistry to understand if any contract they are interacting with is listed as fraudulent
+
+### Removal Mechanism
+
+Operators could make mistakes in registering addresses to the list or worse, approved operators could submit bad data purposely (gaming the system in some way for whatever reason).
+
+Therefore this would have to have similar mechanics for removing records from the registry through DAO processes or overrides as other subregistries.
+
+---
+
+## User Registration Process
+
+There is a bit of a flow for individual users centered around **preventing manipulation** of tricking people into registering their wallets (original intent) into the registry from a single transaction.
+
+### Two-Phase Process
+
+1. **Announcement** - The first transaction to the registry is ANNOUNCING that you are registering the wallet
+2. **Cooldown** - The announcement gives a cooldown time (usually 1 min) and a registration window (4-5 minutes)
+3. **Registration** - Within the window, submit the actual registration
+
+If you miss this window and do not follow through with registering, you must announce to the registry again.
+
+### Why This Flow?
+
+The purpose of this flow is to make it harder to game wherein IF an entity wanted to fool an individual into announcing their wallet as stolen, they could prepare a transaction to register and the user would only have to sign and pay unknowingly ONCE.
+
+Having a registration window and a pre-announce transaction before finalizing in the registry ensures that **any user would have to unknowingly sign TWO transactions**, reducing the likelihood that any one single user would fall for an untrusted registration attempt.
+
+Having a cooldown period AND then a registration window prevents ongoing attempts to bypass this system. If I were an individual user and I unknowingly signed an ANNOUNCEMENT transaction, then whatever fraudulent party or website I'm on queues up a second REGISTRATION transaction, I as a user would find that quite suspicious and most likely not continue with the signature and payment.
+
+All this to say, the following mechanism is in place to ensure that the frontend handling the registration is harder to game. Although it is a worse user experience, I feel it is a decent way to protect the registration process to the registry AND it's the only interaction anyone ever does with the thing so it should favor certainty and protection over better UX.
+
+---
+
+## Public Goods Mechanism
+
+This idea came from a few places. First, in order to stop any spamming of the registry by potentially bad actors (which wouldn't serve any purpose to begin with BUT just in case), adding a small fee to registering a wallet - let's say **$5 in ETH** to the total transaction for individual registerees of the registry that gets mostly directed towards public goods funding gives registering at least some economic defense against spamming from a bad actor.
+
+### Fee Distribution
+
+- **Optimism Retroactive Fund** on Optimism-based chains
+- **Protocol Guild** for any other registerees
+
+### The Reasoning
+
+The idea came from an Ethereum upgrade call where they were giving a POAP for any donations to the Protocol Guild - people sent $1, $5, $10 of ETH and they raised a decent amount. I like the idea of these smaller fees and tacking them on because when it comes to blockchain transactions they are fairly cheap compared to what most people are used to paying for doing things on the blockchain.
+
+$5 as a spam prevention AND mechanism to raise funds for public goods is a good idea in my book. The other thing this serves is marketing essentially. If in a hypothetical situation people actually used the stolen wallet registry and there were small funds flowing in, then being distributed to Optimism retroactive public goods and Protocol Guild, more of the OGs might recognize the project as a net positive.
+
+Good will goes a long way in the blockchain space, especially the Ethereum ecosystem.
+
+---
+
+## Cross-Chain Communication
+
+### Intra-Ethereum (L2 to L2)
+
+How to communicate across L2s on Ethereum - using bridge protocols like Hyperlane or Chainlink CCIP.
+
+### Cross-Blockchain (BTC, Solana, etc.)
+
+How to communicate cross-blockchain (BTC to ETH, Solana to ETH) - using bridge protocols with multi-chain support like Wormhole.
+
+---
+
+## Off-Chain Registry Accessibility
+
+A backend server with API access that is listening, indexing, and updating a database of the registry for quick access.
+
+### Tradeoffs
+
+The registry is the true trust layer but this backend server provides good syncing capabilities without having to be directly integrated into the indexing of the events it's emitting.
+
+This allows a quick access API that is less intrusive to implement or listen into potentially.
+
+### Warning
+
+When it comes to reacting to events for security reasons (off-ramp operator for example), **the events from the smart contracts themselves should be the source of truth**, not the off-chain quick access server or API, but this server can provide a reliable service for frontends without having a user build out that infrastructure themselves potentially.
+
+**Use at your own risk for security dependent activities.**
