@@ -7,6 +7,7 @@
 
 import { config } from './wagmi';
 import type { Address, Hash } from '@/lib/types/ethereum';
+import { LOCAL_DEV_CHAINS } from '@swr/ui';
 
 /**
  * Find a chain by ID from wagmi config.
@@ -88,8 +89,6 @@ export function getChainShortName(chainId: number): string {
 // ═══════════════════════════════════════════════════════════════════════════
 // CROSS-CHAIN BRIDGE EXPLORERS
 // ═══════════════════════════════════════════════════════════════════════════
-
-import { LOCAL_DEV_CHAINS } from '@swr/ui';
 
 /** Supported bridge providers */
 export type BridgeProvider = 'hyperlane' | 'wormhole' | 'ccip';

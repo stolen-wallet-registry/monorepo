@@ -25,8 +25,6 @@ export interface AnimatedBeamProps {
   endYOffset?: number;
   /** Controls if beam is visible and animating. When false, beam is hidden. (default: true) */
   isActive?: boolean;
-  /** @deprecated - Timing should be managed externally. This prop is preserved for backwards compatibility. */
-  onComplete?: () => void;
 }
 
 export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
@@ -48,9 +46,7 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   endXOffset = 0,
   endYOffset = 0,
   isActive = true,
-  onComplete: _onComplete,
 }) => {
-  // Note: _onComplete is preserved for backwards compatibility but timing should be managed externally
   const id = useId();
 
   // Respect user's reduced motion preference for accessibility
@@ -68,7 +64,7 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
 
   useEffect(() => {
     if (isActive && !wasActiveRef.current) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: detecting prop transition to trigger re-render
       setActivationCount((c) => c + 1);
     }
     wasActiveRef.current = isActive;

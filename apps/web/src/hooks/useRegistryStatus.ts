@@ -136,8 +136,10 @@ export function useRegistryStatus({
   }
 
   // Wrap queryRefetch to match expected void return signature
+  // Guard against calling when params are missing to prevent queryFn from throwing
   const refetch: () => void = () => {
-    queryRefetch();
+    if (!enabled) return;
+    void queryRefetch();
   };
 
   return {

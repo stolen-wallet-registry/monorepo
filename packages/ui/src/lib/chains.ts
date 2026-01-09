@@ -47,7 +47,7 @@ export const CHAIN_EXPLORERS: Record<number, string> = {
  * @returns The explorer URL or null if chain not supported
  */
 export function getExplorerAddressUrl(chainId: number, address: string): string | null {
-  const baseUrl = CHAIN_EXPLORERS[chainId];
+  const baseUrl = CHAIN_EXPLORERS[chainId]?.replace(/\/$/, '');
   if (!baseUrl) return null;
   return `${baseUrl}/address/${address}`;
 }
@@ -60,10 +60,25 @@ export function getExplorerAddressUrl(chainId: number, address: string): string 
  * @returns The explorer URL or null if chain not supported
  */
 export function getExplorerTxUrl(chainId: number, txHash: string): string | null {
-  const baseUrl = CHAIN_EXPLORERS[chainId];
+  const baseUrl = CHAIN_EXPLORERS[chainId]?.replace(/\/$/, '');
   if (!baseUrl) return null;
   return `${baseUrl}/tx/${txHash}`;
 }
+
+/**
+ * Block explorer names for supported chains.
+ * Defined outside the function to avoid re-allocation on every call.
+ */
+const EXPLORER_NAMES: Record<number, string> = {
+  1: 'Etherscan',
+  8453: 'Basescan',
+  10: 'Optimism Explorer',
+  42161: 'Arbiscan',
+  137: 'Polygonscan',
+  84532: 'Basescan Sepolia',
+  11155420: 'Optimism Sepolia Explorer',
+  11155111: 'Sepolia Etherscan',
+};
 
 /**
  * Get the block explorer name for a chain.
@@ -72,15 +87,5 @@ export function getExplorerTxUrl(chainId: number, txHash: string): string | null
  * @returns The explorer name or 'Explorer' as default
  */
 export function getExplorerName(chainId: number): string {
-  const names: Record<number, string> = {
-    1: 'Etherscan',
-    8453: 'Basescan',
-    10: 'Optimism Explorer',
-    42161: 'Arbiscan',
-    137: 'Polygonscan',
-    84532: 'Basescan Sepolia',
-    11155420: 'Optimism Sepolia Explorer',
-    11155111: 'Sepolia Etherscan',
-  };
-  return names[chainId] ?? 'Explorer';
+  return EXPLORER_NAMES[chainId] ?? 'Explorer';
 }

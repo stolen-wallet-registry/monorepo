@@ -94,7 +94,6 @@ interface AnimationState {
 type AnimationAction =
   | { type: 'START_CYCLE'; flow: 'reportFraud' | 'trustedOperators'; networkIndex: number }
   | { type: 'SET_STEP'; step: StepName; networkIndex?: number } // Direct step setting - bypasses React effects
-  | { type: 'NEXT_STEP' } // Legacy - kept for compatibility
   | { type: 'RESET_TRIGGERS' };
 
 const initialState: AnimationState = {
@@ -176,61 +175,6 @@ function animationReducer(state: AnimationState, action: AnimationAction): Anima
           triggerEmission: false,
           selectedNetwork: 0,
         };
-      }
-    }
-
-    case 'NEXT_STEP': {
-      // Centralized step progression - no dependency on beam callbacks
-      const { currentStep } = state;
-      log('NEXT_STEP from', { currentStep });
-
-      switch (currentStep) {
-        case 'rf_networkToBridges':
-          log('→ rf_bridgesToHub');
-          return {
-            ...state,
-            currentStep: 'rf_bridgesToHub',
-            activeBeams: new Set(['bridgesToHub']),
-          };
-
-        case 'rf_bridgesToHub':
-          log('→ rf_hubToListeners (+ pulse + emission)');
-          return {
-            ...state,
-            currentStep: 'rf_hubToListeners',
-            activeBeams: new Set(['exchanges', 'wallets', 'security']),
-            pulseListeners: true,
-            triggerEmission: true,
-          };
-
-        case 'rf_hubToListeners':
-          log('→ idle (cycle complete)');
-          return {
-            ...state,
-            currentStep: 'idle',
-            activeBeams: new Set(),
-          };
-
-        case 'to_operatorToHub':
-          log('→ to_hubToListeners (+ pulse + emission)');
-          return {
-            ...state,
-            currentStep: 'to_hubToListeners',
-            activeBeams: new Set(['exchanges', 'wallets', 'security']),
-            pulseListeners: true,
-            triggerEmission: true,
-          };
-
-        case 'to_hubToListeners':
-          log('→ idle (cycle complete)');
-          return {
-            ...state,
-            currentStep: 'idle',
-            activeBeams: new Set(),
-          };
-
-        default:
-          return state;
       }
     }
 

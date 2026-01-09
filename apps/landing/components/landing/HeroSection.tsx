@@ -74,7 +74,13 @@ export function HeroSection(): React.JSX.Element {
         </div>
 
         {/* Registry Search Preview - Wider */}
-        <ErrorBoundary fallback={<div className="mt-16 w-full max-w-xl sm:mt-20" />}>
+        <ErrorBoundary
+          fallback={
+            <div className="mt-16 w-full max-w-xl sm:mt-20">
+              <Skeleton className="h-28 w-full rounded-lg" />
+            </div>
+          }
+        >
           <RegistrySearchPreview className="mt-16 w-full max-w-xl sm:mt-20" />
         </ErrorBoundary>
 

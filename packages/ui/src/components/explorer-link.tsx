@@ -55,6 +55,9 @@ const TYPE_LABELS: Record<ExplorerLinkType, { copy: string; view: string }> = {
  * Infer type from value length if not explicitly provided.
  * - 42 chars (0x + 40 hex) = address
  * - 66 chars (0x + 64 hex) = transaction hash
+ *
+ * For other lengths, defaults to 'transaction' as a fallback.
+ * Callers should pass explicit `type` prop for non-standard lengths.
  */
 function inferType(value: string): ExplorerLinkType {
   // Transaction hashes are 66 chars (0x + 64 hex chars)
@@ -62,7 +65,11 @@ function inferType(value: string): ExplorerLinkType {
     return 'transaction';
   }
   // Addresses are 42 chars (0x + 40 hex chars)
-  return 'address';
+  if (value.length === 42) {
+    return 'address';
+  }
+  // Fallback for unexpected lengths - callers should pass explicit type prop
+  return 'transaction';
 }
 
 export interface ExplorerLinkProps {
@@ -153,6 +160,7 @@ export function ExplorerLink({
       // Clear any existing timeout before creating a new one (handles rapid clicks)
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
+        timeoutRef.current = undefined;
       }
       timeoutRef.current = setTimeout(() => setCopied(false), 2000);
     } catch (error) {
