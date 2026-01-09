@@ -95,10 +95,11 @@ export function useGenerateHashStruct(
   }
 
   // Transform the raw array result into a typed object
+  // The ABI returns bytes32 which wagmi infers as string, but we know it's a hex hash
   const transformedData: HashStructData | undefined = result.data
     ? {
         deadline: result.data[0],
-        hashStruct: result.data[1],
+        hashStruct: result.data[1] as Hash,
       }
     : undefined;
 

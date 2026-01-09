@@ -4,7 +4,10 @@
  * Extracts cross-chain message IDs from transaction receipts.
  * Uses the official Hyperlane SDK for reliable message parsing.
  *
- * NOTE: Further cross-chain development (Solana, etc.) may require
+ * NOTE: The Hyperlane SDK is dynamically imported to reduce main bundle size.
+ * The SDK is ~15MB and only needed when extracting cross-chain message IDs.
+ *
+ * Further cross-chain development (Solana, etc.) may require
  * additional SDK integration. See @hyperlane-xyz/sdk for:
  * - MultiProvider chain management
  * - HyperlaneCore message handling
@@ -12,7 +15,6 @@
  * - Cross-chain token transfers (Warp Routes)
  */
 
-import { HyperlaneCore } from '@hyperlane-xyz/sdk';
 import type { Log, TransactionReceipt } from 'viem';
 import type { Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -28,10 +30,10 @@ import type { BridgeProvider } from '@/lib/explorer';
  * @param provider - Bridge provider to look for (default: hyperlane)
  * @returns The message ID or null if not found
  */
-export function extractBridgeMessageIdFromReceipt(
+export async function extractBridgeMessageIdFromReceipt(
   receipt: TransactionReceipt,
   provider: BridgeProvider = 'hyperlane'
-): Hash | null {
+): Promise<Hash | null> {
   if (provider === 'hyperlane') {
     return extractHyperlaneMessageIdFromReceipt(receipt);
   }
@@ -54,10 +56,10 @@ export function extractBridgeMessageIdFromReceipt(
  * @param provider - Bridge provider to look for (default: hyperlane)
  * @returns The message ID or null if not found
  */
-export function extractBridgeMessageId(
+export async function extractBridgeMessageId(
   logs: Log[],
   provider: BridgeProvider = 'hyperlane'
-): Hash | null {
+): Promise<Hash | null> {
   if (provider === 'hyperlane') {
     return extractHyperlaneMessageId(logs);
   }
@@ -73,9 +75,16 @@ export function extractBridgeMessageId(
  * - Finding Dispatch events from Mailbox contract
  * - Decoding the message body
  * - Computing the message ID (keccak256 of encoded message)
+ *
+ * NOTE: SDK is dynamically imported to reduce main bundle size (~2-3MB savings).
  */
-function extractHyperlaneMessageIdFromReceipt(receipt: TransactionReceipt): Hash | null {
+async function extractHyperlaneMessageIdFromReceipt(
+  receipt: TransactionReceipt
+): Promise<Hash | null> {
   try {
+    // Dynamic import to avoid bundling the heavy SDK in main chunk
+    const { HyperlaneCore } = await import('@hyperlane-xyz/sdk');
+
     // HyperlaneCore.getDispatchedMessages accepts viem TransactionReceipt directly
     const messages = HyperlaneCore.getDispatchedMessages(receipt);
 
@@ -105,9 +114,13 @@ function extractHyperlaneMessageIdFromReceipt(receipt: TransactionReceipt): Hash
  * Extract Hyperlane message ID from logs array.
  *
  * Builds a minimal receipt structure for SDK compatibility.
+ * NOTE: SDK is dynamically imported to reduce main bundle size (~2-3MB savings).
  */
-function extractHyperlaneMessageId(logs: Log[]): Hash | null {
+async function extractHyperlaneMessageId(logs: Log[]): Promise<Hash | null> {
   try {
+    // Dynamic import to avoid bundling the heavy SDK in main chunk
+    const { HyperlaneCore } = await import('@hyperlane-xyz/sdk');
+
     // Build minimal receipt-like structure for SDK
     // The SDK only needs the logs array with proper typing
     const minimalReceipt = { logs } as TransactionReceipt;
@@ -138,6 +151,10 @@ function extractHyperlaneMessageId(logs: Log[]): Hash | null {
 /**
  * Check if transaction logs contain a bridge message dispatch.
  */
-export function hasBridgeMessage(logs: Log[], provider: BridgeProvider = 'hyperlane'): boolean {
-  return extractBridgeMessageId(logs, provider) !== null;
+export async function hasBridgeMessage(
+  logs: Log[],
+  provider: BridgeProvider = 'hyperlane'
+): Promise<boolean> {
+  const messageId = await extractBridgeMessageId(logs, provider);
+  return messageId !== null;
 }

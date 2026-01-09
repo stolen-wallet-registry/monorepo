@@ -117,15 +117,18 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   useEffect(() => {
     if (!isCrossChain || !receipt?.logs) return;
 
-    const messageId = extractBridgeMessageId(receipt.logs);
-    if (messageId) {
-      logger.registration.info('Stored bridge message ID for explorer link', { messageId });
-      setBridgeMessageId(messageId);
-    } else {
-      logger.registration.debug('Could not extract bridge message ID from receipt', {
-        logCount: receipt.logs.length,
-      });
-    }
+    const extractMessage = async () => {
+      const messageId = await extractBridgeMessageId(receipt.logs);
+      if (messageId) {
+        logger.registration.info('Stored bridge message ID for explorer link', { messageId });
+        setBridgeMessageId(messageId);
+      } else {
+        logger.registration.debug('Could not extract bridge message ID from receipt', {
+          logCount: receipt.logs.length,
+        });
+      }
+    };
+    void extractMessage();
   }, [isCrossChain, receipt, setBridgeMessageId]);
 
   // Map hook state to TransactionStatus
