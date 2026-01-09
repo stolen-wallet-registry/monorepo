@@ -157,7 +157,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
         // Extract bridge message ID if cross-chain
         let messageId: Hash | null = null;
         if (isCrossChain && receipt?.logs) {
-          messageId = extractBridgeMessageId(receipt.logs);
+          messageId = await extractBridgeMessageId(receipt.logs);
           if (messageId) {
             logger.p2p.info('Extracted bridge message ID for P2P', { messageId });
             // Store locally for relayer's success step too

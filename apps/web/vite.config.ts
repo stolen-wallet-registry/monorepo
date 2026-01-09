@@ -46,6 +46,16 @@ export default defineConfig({
   // Build configuration for production
   build: {
     target: 'esnext',
+    rollupOptions: {
+      output: {
+        // Split heavy vendor chunks for better caching and reduced initial load
+        manualChunks: {
+          'vendor-web3': ['wagmi', 'viem', '@tanstack/react-query'],
+          'vendor-rainbow': ['@rainbow-me/rainbowkit'],
+          'vendor-p2p': ['libp2p', '@libp2p/webrtc', '@libp2p/websockets'],
+        },
+      },
+    },
   },
   // Global definitions for Web3 compatibility
   define: {
