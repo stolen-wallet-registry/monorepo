@@ -53,6 +53,10 @@ contract CrossChainIntegrationTest is Test {
     uint32 constant HUB_CHAIN_ID = 84_532; // EIP-155 chain ID (same as domain for Base Sepolia)
     uint32 constant SPOKE_CHAIN_ID = 11_155_420; // EIP-155 chain ID
 
+    // Timing configuration (matching local Anvil - 13s blocks)
+    uint256 internal constant GRACE_BLOCKS = 10;
+    uint256 internal constant DEADLINE_BLOCKS = 50;
+
     function setUp() public {
         // Create victim address from private key
         victim = vm.addr(VICTIM_PRIVATE_KEY);
@@ -67,7 +71,7 @@ contract CrossChainIntegrationTest is Test {
         hub = new RegistryHub(owner, address(0), address(0));
 
         // Deploy hub registry with hub address
-        hubRegistry = new StolenWalletRegistry(address(0), address(hub));
+        hubRegistry = new StolenWalletRegistry(address(0), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         // Set registry in hub
         vm.startPrank(owner);
@@ -99,7 +103,9 @@ contract CrossChainIntegrationTest is Test {
 
         // Deploy spoke registry
         bytes32 hubInboxBytes = CrossChainMessage.addressToBytes32(address(inbox));
-        spokeRegistry = new SpokeRegistry(owner, address(spokeAdapter), address(0), HUB_DOMAIN, hubInboxBytes);
+        spokeRegistry = new SpokeRegistry(
+            owner, address(spokeAdapter), address(0), HUB_DOMAIN, hubInboxBytes, GRACE_BLOCKS, DEADLINE_BLOCKS
+        );
 
         vm.stopPrank();
 

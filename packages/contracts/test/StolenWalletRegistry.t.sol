@@ -29,9 +29,13 @@ contract StolenWalletRegistryTest is Test {
     bytes32 private constant TYPE_HASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
+    // Timing configuration (matching local Anvil - 13s blocks)
+    uint256 internal constant GRACE_BLOCKS = 10;
+    uint256 internal constant DEADLINE_BLOCKS = 50;
+
     function setUp() public {
         // Deploy registry without fee collection for base tests
-        registry = new StolenWalletRegistry(address(0), address(0));
+        registry = new StolenWalletRegistry(address(0), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         // Create test accounts with known private key for signing
         ownerPrivateKey = 0xA11CE;
@@ -608,6 +612,10 @@ contract StolenWalletRegistryFeeTest is Test {
     bytes32 private constant TYPE_HASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
+    // Timing configuration (matching local Anvil - 13s blocks)
+    uint256 internal constant GRACE_BLOCKS = 10;
+    uint256 internal constant DEADLINE_BLOCKS = 50;
+
     function setUp() public {
         deployer = makeAddr("deployer");
         ownerPrivateKey = 0xA11CE;
@@ -622,7 +630,7 @@ contract StolenWalletRegistryFeeTest is Test {
         mockOracle = new MockAggregator(300_000_000_000); // $3000 ETH
         feeManager = new FeeManager(deployer, address(mockOracle));
         hub = new RegistryHub(deployer, address(feeManager), address(0));
-        registry = new StolenWalletRegistry(address(feeManager), address(hub));
+        registry = new StolenWalletRegistry(address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
         hub.setRegistry(hub.STOLEN_WALLET(), address(registry));
         vm.stopPrank();
     }
@@ -724,7 +732,8 @@ contract StolenWalletRegistryFeeTest is Test {
 
     function test_Register_NoFeeManager_Free() public {
         // Deploy registry without fee manager
-        StolenWalletRegistry freeRegistry = new StolenWalletRegistry(address(0), address(0));
+        StolenWalletRegistry freeRegistry =
+            new StolenWalletRegistry(address(0), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = freeRegistry.nonces(owner);
@@ -802,7 +811,8 @@ contract StolenWalletRegistryFeeTest is Test {
 
     function test_Register_ZeroFeeWhenNoFeeManager() public {
         // Deploy registry without fee manager
-        StolenWalletRegistry freeRegistry = new StolenWalletRegistry(address(0), address(0));
+        StolenWalletRegistry freeRegistry =
+            new StolenWalletRegistry(address(0), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         assertEq(freeRegistry.feeManager(), address(0));
         assertEq(freeRegistry.registryHub(), address(0));

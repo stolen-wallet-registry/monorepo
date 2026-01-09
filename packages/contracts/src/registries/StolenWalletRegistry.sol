@@ -39,6 +39,14 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
     /// @notice Registry hub address for fee forwarding
     address public immutable registryHub;
 
+    /// @notice Base blocks for grace period (chain-specific for consistent UX)
+    /// @dev Grace period = graceBlocks + random(0, graceBlocks). See TimingConfig.sol.
+    uint256 public immutable graceBlocks;
+
+    /// @notice Base blocks for registration deadline (chain-specific for consistent UX)
+    /// @dev Deadline = deadlineBlocks + random(0, deadlineBlocks). See TimingConfig.sol.
+    uint256 public immutable deadlineBlocks;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // STATE
     // ═══════════════════════════════════════════════════════════════════════════
@@ -60,9 +68,15 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
     /// @dev Version "4" for frontend compatibility with existing signatures
     /// @param _feeManager FeeManager contract address (address(0) for free registrations)
     /// @param _registryHub RegistryHub contract address for fee forwarding
-    constructor(address _feeManager, address _registryHub) EIP712("StolenWalletRegistry", "4") {
+    /// @param _graceBlocks Base blocks for grace period (chain-specific, see TimingConfig.sol)
+    /// @param _deadlineBlocks Base blocks for deadline window (chain-specific, see TimingConfig.sol)
+    constructor(address _feeManager, address _registryHub, uint256 _graceBlocks, uint256 _deadlineBlocks)
+        EIP712("StolenWalletRegistry", "4")
+    {
         feeManager = _feeManager;
         registryHub = _registryHub;
+        graceBlocks = _graceBlocks;
+        deadlineBlocks = _deadlineBlocks;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -98,8 +112,8 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
         // Store acknowledgement with randomized grace period timing
         pendingAcknowledgements[owner] = AcknowledgementData({
             trustedForwarder: msg.sender,
-            startBlock: TimingConfig.getGracePeriodEndBlock(),
-            expiryBlock: TimingConfig.getDeadlineBlock()
+            startBlock: TimingConfig.getGracePeriodEndBlock(graceBlocks),
+            expiryBlock: TimingConfig.getDeadlineBlock(deadlineBlocks)
         });
 
         emit WalletAcknowledged(owner, msg.sender, owner != msg.sender);

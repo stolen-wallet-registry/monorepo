@@ -34,6 +34,10 @@ number_underscore = "thousands"
 
 [rpc_endpoints]
 localhost = "http://localhost:8545"
-sepolia = "${SEPOLIA_RPC_URL}"
-base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+base_sepolia = "${BASE_SEPOLIA_RPC}"
+optimism_sepolia = "${OPTIMISM_SEPOLIA_RPC}"
 base = "${BASE_RPC_URL}"
+
+[etherscan]
+base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
+optimism_sepolia = { key = "${OPTIMISM_ETHERSCAN_API_KEY}", url = "https://api-sepolia-optimistic.etherscan.io/api" }

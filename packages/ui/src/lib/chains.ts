@@ -36,7 +36,6 @@ export const CHAIN_EXPLORERS: Record<number, string> = {
   // Testnets
   84532: 'https://sepolia.basescan.org',
   11155420: 'https://sepolia-optimism.etherscan.io',
-  11155111: 'https://sepolia.etherscan.io',
 };
 
 /**
@@ -77,7 +76,6 @@ const EXPLORER_NAMES: Record<number, string> = {
   137: 'Polygonscan',
   84532: 'Basescan Sepolia',
   11155420: 'Optimism Sepolia Explorer',
-  11155111: 'Sepolia Etherscan',
 };
 
 /**

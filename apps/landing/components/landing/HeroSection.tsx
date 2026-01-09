@@ -36,7 +36,7 @@ function GlobeSkeleton() {
 
 export function HeroSection(): React.JSX.Element {
   return (
-    <section className="relative flex min-h-[calc(100vh-5rem)] flex-col items-center justify-start overflow-hidden px-4 pt-4 pb-8 text-center">
+    <section className="relative flex min-h-[calc(100vh-5rem)] flex-col items-center justify-center overflow-hidden px-4 py-10 text-center sm:py-12 lg:py-16">
       {/* Background gradient effect */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/80" />
 

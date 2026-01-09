@@ -20,6 +20,10 @@ contract RegistryHubTest is Test {
     address public user;
     address public recipient;
 
+    // Timing configuration (matching local Anvil - 13s blocks)
+    uint256 internal constant GRACE_BLOCKS = 10;
+    uint256 internal constant DEADLINE_BLOCKS = 50;
+
     function setUp() public {
         owner = makeAddr("owner");
         user = makeAddr("user");
@@ -35,7 +39,7 @@ contract RegistryHubTest is Test {
         vm.startPrank(owner);
         feeManager = new FeeManager(owner, address(mockOracle));
         hub = new RegistryHub(owner, address(feeManager), address(0));
-        walletRegistry = new StolenWalletRegistry(address(feeManager), address(hub));
+        walletRegistry = new StolenWalletRegistry(address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
         hub.setRegistry(hub.STOLEN_WALLET(), address(walletRegistry));
         vm.stopPrank();
     }
@@ -173,7 +177,8 @@ contract RegistryHubTest is Test {
     }
 
     function test_SetRegistry_Success() public {
-        StolenWalletRegistry newRegistry = new StolenWalletRegistry(address(feeManager), address(hub));
+        StolenWalletRegistry newRegistry =
+            new StolenWalletRegistry(address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
         bytes32 registryType = hub.STOLEN_WALLET();
 
         vm.expectEmit(true, true, true, true);

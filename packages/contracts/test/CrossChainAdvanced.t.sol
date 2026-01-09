@@ -59,6 +59,10 @@ contract CrossChainAdvancedTest is Test {
     uint32 constant SPOKE1_DOMAIN = 11_155_420; // Optimism Sepolia
     uint32 constant SPOKE2_DOMAIN = 421_614; // Arbitrum Sepolia
 
+    // Timing configuration (matching local Anvil - 13s blocks)
+    uint256 internal constant GRACE_BLOCKS = 10;
+    uint256 internal constant DEADLINE_BLOCKS = 50;
+
     function setUp() public {
         victim1 = vm.addr(victim1Pk);
         victim2 = vm.addr(victim2Pk);
@@ -69,7 +73,7 @@ contract CrossChainAdvancedTest is Test {
 
         hubMailbox = new MockMailbox(HUB_DOMAIN);
         hub = new RegistryHub(owner, address(0), address(0));
-        hubRegistry = new StolenWalletRegistry(address(0), address(hub));
+        hubRegistry = new StolenWalletRegistry(address(0), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         vm.startPrank(owner);
         hub.setRegistry(hub.STOLEN_WALLET(), address(hubRegistry));
@@ -90,7 +94,9 @@ contract CrossChainAdvancedTest is Test {
         spoke1Adapter.setDomainSupport(HUB_DOMAIN, true);
 
         bytes32 hubInboxBytes = CrossChainMessage.addressToBytes32(address(inbox));
-        spoke1Registry = new SpokeRegistry(owner, address(spoke1Adapter), address(0), HUB_DOMAIN, hubInboxBytes);
+        spoke1Registry = new SpokeRegistry(
+            owner, address(spoke1Adapter), address(0), HUB_DOMAIN, hubInboxBytes, GRACE_BLOCKS, DEADLINE_BLOCKS
+        );
         vm.stopPrank();
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -105,7 +111,9 @@ contract CrossChainAdvancedTest is Test {
         spoke2Adapter = new HyperlaneAdapter(owner, address(spoke2Mailbox), address(spoke2GasPaymaster));
         spoke2Adapter.setDomainSupport(HUB_DOMAIN, true);
 
-        spoke2Registry = new SpokeRegistry(owner, address(spoke2Adapter), address(0), HUB_DOMAIN, hubInboxBytes);
+        spoke2Registry = new SpokeRegistry(
+            owner, address(spoke2Adapter), address(0), HUB_DOMAIN, hubInboxBytes, GRACE_BLOCKS, DEADLINE_BLOCKS
+        );
         vm.stopPrank();
 
         // ═══════════════════════════════════════════════════════════════════════

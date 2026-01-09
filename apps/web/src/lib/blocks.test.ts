@@ -16,10 +16,6 @@ describe('block utilities', () => {
       expect(getBlockTime(1)).toBe(12);
     });
 
-    it('returns correct block time for Sepolia', () => {
-      expect(getBlockTime(11155111)).toBe(12);
-    });
-
     it('returns correct block time for localhost/Anvil', () => {
       expect(getBlockTime(31337)).toBe(13);
     });

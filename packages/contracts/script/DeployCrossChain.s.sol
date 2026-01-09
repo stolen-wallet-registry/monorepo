@@ -154,10 +154,22 @@ contract DeployCrossChain is DeployBase {
         address spokeFeeManager = address(new FeeManager(deployer, spokePriceFeed));
         console2.log("FeeManager (Spoke):", spokeFeeManager);
 
-        // nonce 5: Deploy SpokeRegistry
+        // nonce 5: Deploy SpokeRegistry (with chain-specific timing)
         bytes32 hubInboxBytes = CrossChainMessage.addressToBytes32(crossChainInbox);
-        spokeRegistry =
-            address(new SpokeRegistry(deployer, hyperlaneAdapter, spokeFeeManager, HUB_CHAIN_ID, hubInboxBytes));
+        (uint256 spokeGraceBlocks, uint256 spokeDeadlineBlocks) = getTimingConfig(SPOKE_CHAIN_ID);
+        console2.log("Timing Config - Grace Blocks:", spokeGraceBlocks);
+        console2.log("Timing Config - Deadline Blocks:", spokeDeadlineBlocks);
+        spokeRegistry = address(
+            new SpokeRegistry(
+                deployer,
+                hyperlaneAdapter,
+                spokeFeeManager,
+                HUB_CHAIN_ID,
+                hubInboxBytes,
+                spokeGraceBlocks,
+                spokeDeadlineBlocks
+            )
+        );
         console2.log("SpokeRegistry:", spokeRegistry);
 
         vm.stopBroadcast();

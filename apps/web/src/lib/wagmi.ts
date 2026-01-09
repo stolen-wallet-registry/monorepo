@@ -1,5 +1,5 @@
 import { http, createConfig } from 'wagmi';
-import { sepolia } from 'wagmi/chains';
+import { baseSepolia, optimismSepolia } from 'wagmi/chains';
 import { injected, walletConnect } from 'wagmi/connectors';
 import type { Chain } from 'wagmi/chains';
 
@@ -34,22 +34,34 @@ export const localhost = anvilHub;
 const RPC_URLS: Record<number, string> = {
   [anvilHub.id]: 'http://127.0.0.1:8545',
   [anvilSpoke.id]: 'http://127.0.0.1:8546',
-  [sepolia.id]: 'https://rpc.sepolia.org',
+  [baseSepolia.id]: 'https://sepolia.base.org',
+  [optimismSepolia.id]: 'https://sepolia.optimism.io',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CROSS-CHAIN MODE
+// ENVIRONMENT MODES
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Whether cross-chain mode is enabled (set via VITE_CROSSCHAIN=true) */
 export const isCrossChainMode = import.meta.env.VITE_CROSSCHAIN === 'true';
 
+/** Whether testnet mode is enabled (set via VITE_TESTNET=true) */
+export const isTestnetMode = import.meta.env.VITE_TESTNET === 'true';
+
 // Build chains array based on mode
 const getChains = (): readonly [Chain, ...Chain[]] => {
-  if (isCrossChainMode) {
-    return [anvilHub, anvilSpoke, sepolia] as const;
+  // Testnet mode: Base Sepolia (hub) + Optimism Sepolia (spoke)
+  if (isTestnetMode) {
+    return [baseSepolia, optimismSepolia] as const;
   }
-  return [anvilHub, sepolia] as const;
+
+  // Local cross-chain mode: Anvil Hub + Anvil Spoke
+  if (isCrossChainMode) {
+    return [anvilHub, anvilSpoke] as const;
+  }
+
+  // Default local development: Anvil Hub only
+  return [anvilHub] as const;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -61,9 +73,16 @@ const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
 
 // Build transports based on mode
 const getTransports = () => {
+  // Testnet mode: Base Sepolia + Optimism Sepolia
+  if (isTestnetMode) {
+    return {
+      [baseSepolia.id]: http(RPC_URLS[baseSepolia.id]),
+      [optimismSepolia.id]: http(RPC_URLS[optimismSepolia.id]),
+    };
+  }
+
   const base = {
     [anvilHub.id]: http(RPC_URLS[anvilHub.id]),
-    [sepolia.id]: http(RPC_URLS[sepolia.id]),
   };
 
   if (isCrossChainMode) {
