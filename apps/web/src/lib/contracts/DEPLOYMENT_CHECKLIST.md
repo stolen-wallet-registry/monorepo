@@ -8,13 +8,26 @@ Several contract address mappings use `0x000000000000000000000000000000000000000
 
 The `getSpokeAddress()` function in `crosschain-addresses.ts` validates against zero addresses and throws a helpful error. However, hub addresses in `addresses.ts` and `crosschain-addresses.ts` do not have equivalent validation.
 
+**Future improvement:** Add similar validation to hub address getters in `addresses.ts` to match the robustness of `getSpokeAddress()`, ensuring early detection of misconfigured hub contracts.
+
 ## Testnet Deployment (Base Sepolia + Optimism Sepolia)
 
-After running `forge script script/DeployTestnet.s.sol`, extract addresses from the output:
+After running the deploy scripts, extract addresses from the output:
 
 ```bash
-# Run deployment with broadcast to see deployed addresses
-forge script script/DeployTestnet.s.sol --rpc-url base-sepolia --broadcast --verify
+# Deploy Hub contracts to Base Sepolia
+forge script script/DeployTestnet.s.sol:DeployTestnetHub \
+  --rpc-url base_sepolia \
+  --broadcast \
+  --verify \
+  --etherscan-api-key $BASESCAN_API_KEY
+
+# Deploy Spoke contracts to Optimism Sepolia
+forge script script/DeployTestnet.s.sol:DeployTestnetSpoke \
+  --rpc-url optimism_sepolia \
+  --broadcast \
+  --verify \
+  --etherscan-api-key $OPTIMISM_ETHERSCAN_API_KEY
 
 # Look for lines like:
 #   == Logs ==
@@ -23,7 +36,8 @@ forge script script/DeployTestnet.s.sol --rpc-url base-sepolia --broadcast --ver
 #     StolenWalletRegistry deployed at: 0x9abc...
 #
 # Or check the broadcast file for each deployment:
-#   broadcast/DeployTestnet.s.sol/84532/run-latest.json
+#   broadcast/DeployTestnet.s.sol/84532/run-latest.json (Base Sepolia)
+#   broadcast/DeployTestnet.s.sol/11155420/run-latest.json (Optimism Sepolia)
 #
 # Use jq to extract addresses:
 cat broadcast/DeployTestnet.s.sol/84532/run-latest.json | jq '.transactions[] | {contractName, contractAddress}'

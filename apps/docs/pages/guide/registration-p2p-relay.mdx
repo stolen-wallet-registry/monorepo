@@ -22,8 +22,9 @@ Use P2P Relay Registration when:
 **Relayer (helper):**
 
 - Web3 wallet with ~$5 in ETH
-- Willingness to pay for someone's registration
+- Trust relationship with the victim (friend, family, colleague)
 - The victim's peer ID
+- Understanding that you are sponsoring their registration claim
 
 ## How It Works
 
@@ -202,14 +203,28 @@ REGISTEREE                              RELAYER
 
 - The grace period can be up to 4 minutes
 - Both parties need to stay connected
-- If lost, you may need to restart from acknowledgement
+- If connection drops, restart from the acknowledgement phase
 
 ## Security Considerations
 
-- **Verify the helper** - Only use someone you trust
-- **Check addresses** - Verify the registeree address before signing
-- **Don't share signatures** - They can only be used for registration
-- **Public networks** - P2P traffic is encrypted but use secure channels for peer IDs
+### For Registerees (Victims)
+
+- **Verify the helper** - Use someone you personally trust (friend, family, colleague)
+- **Check peer IDs** - Verify the connected peer ID matches who you expect
+- **P2P traffic is encrypted** - But share peer IDs via secure channels (Signal, not public chat)
+
+### For Relayers (Helpers)
+
+- **Verify the claim** - Confirm the victim's story through direct communication
+- **Check addresses** - Verify the registeree address displayed matches the victim's wallet
+- **Understand the cost** - You pay ~$5 in gas fees that are not refundable
+- **No disputes** - Once registered, there is no reversal mechanism; ensure you trust the claim
+- **Signatures are single-use** - The signatures received can exclusively be used for this registration
+
+### General
+
+- **Two signatures required** - The EIP-712 flow requires two separate signatures, preventing single-transaction phishing
+- **Time-limited window** - Registration must complete within ~4-13 minutes of acknowledgement
 
 ## Next Steps
 

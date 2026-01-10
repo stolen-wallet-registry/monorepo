@@ -112,6 +112,8 @@ After acknowledgement:
 - Start: ~1-2 minutes from ACK (4-8 blocks)
 - Window: ~4-13 minutes total (55-110 blocks)
 
+> **Note:** These timing values are approximate and vary by chain. Block times differ across L2s (Base ~2s, Ethereum ~12s). The contract uses configurable `graceBlocks` and `deadlineBlocks` parameters set at deployment. See `TimingConfig.sol` for chain-specific values.
+
 ### Phase 2: Registration
 
 Same flow as ACK but with:
@@ -278,11 +280,24 @@ const signature = await signTypedDataAsync({
 
 ### Extracting v, r, s
 
+Using viem's built-in utility (recommended):
+
+```typescript
+import { hexToSignature } from 'viem';
+
+const { v, r, s } = hexToSignature(signature);
+// v is already normalized to 27/28
+```
+
+Manual extraction (if needed):
+
 ```typescript
 function splitSignature(signature: `0x${string}`) {
   const r = `0x${signature.slice(2, 66)}` as `0x${string}`;
   const s = `0x${signature.slice(66, 130)}` as `0x${string}`;
-  const v = parseInt(signature.slice(130, 132), 16);
+  let v = parseInt(signature.slice(130, 132), 16);
+  // Normalize v: some wallets return 0/1, contract expects 27/28
+  if (v < 27) v += 27;
   return { v, r, s };
 }
 ```

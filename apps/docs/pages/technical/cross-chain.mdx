@@ -114,11 +114,11 @@ Each L2 has a spoke contract that:
 
 ### Under Evaluation
 
-| Protocol           | Strengths                    | Considerations         |
-| ------------------ | ---------------------------- | ---------------------- |
-| **Hyperlane**      | EVM-native, modular security | Best for L2-to-L2      |
-| **Chainlink CCIP** | Oracle network credibility   | Enterprise focus       |
-| **Wormhole**       | 30+ chains, non-EVM support  | Past security incident |
+| Protocol           | Strengths                    | Considerations                                                                                             |
+| ------------------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Hyperlane**      | EVM-native, modular security | Best for L2-to-L2                                                                                          |
+| **Chainlink CCIP** | Oracle network credibility   | Enterprise focus                                                                                           |
+| **Wormhole**       | 30+ chains, non-EVM support  | [Feb 2022 exploit](https://rekt.news/wormhole-rekt/) - security improvements since, due diligence required |
 
 ### Hyperlane (Recommended for L2s)
 
@@ -246,19 +246,19 @@ Chainlink CCIP may be used for enterprise integrations:
 
 ## Implementation Timeline
 
-### Phase 1 (Current)
+### Phase 1-3 (Current)
 
-- Single chain (Base)
+- Single chain (Base Sepolia for testnet)
 - No bridging needed
 - CAIP-10 addresses stored for future
 
-### Phase 4 (Future)
+### Phase 4-5 (Planned)
 
 - Deploy spokes to Optimism, Arbitrum
 - Integrate Hyperlane for L2-to-L2
 - Settlement on Base
 
-### Phase 7+ (Future)
+### Phase 6+ (Future)
 
 - Non-EVM support (Solana, Bitcoin)
 - Wormhole integration

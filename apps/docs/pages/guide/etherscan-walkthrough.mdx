@@ -2,6 +2,8 @@
 
 Register a stolen wallet directly through Etherscan (or Basescan) without using the web app.
 
+> **Security Warning:** Interacting with contracts directly on Etherscan bypasses the frontend's input validation and user experience safeguards. Double-check all values before signing. If you make an error, you may need to restart the registration process.
+
 ## When to Use
 
 Use Etherscan registration when:
@@ -46,8 +48,8 @@ Read from the contract to get your current nonce and deadline:
 2. Click "Read Contract"
 3. Find `nonces(address)` and enter your address
 4. Note your current nonce
-5. Find `generateHashStruct(address, uint8)`
-   - Enter your address and `1` for acknowledgement
+5. Find `generateHashStruct(address forwarder, uint8 step)`
+   - Enter your forwarder address (same as your address for standard registration) and `1` for acknowledgement
    - Note the deadline from the result
 
 ## Step 2: Generate EIP-712 Signature
@@ -60,8 +62,8 @@ You need to sign an EIP-712 typed data message. This can be done with:
 const domain = {
   name: 'StolenWalletRegistry',
   version: '4',
-  chainId: 8453, // Base
-  verifyingContract: '0x...', // Contract address
+  chainId: 84532, // Base Sepolia (use 8453 for Base mainnet)
+  verifyingContract: '0x...', // Contract address from table above
 };
 
 const types = {
@@ -92,7 +94,7 @@ const signature = await signTypedData(walletClient, {
   domain: {
     name: 'StolenWalletRegistry',
     version: '4',
-    chainId: 8453n,
+    chainId: 84532n, // Base Sepolia (use 8453n for Base mainnet)
     verifyingContract: '0x...',
   },
   types: {
@@ -128,7 +130,7 @@ cast wallet sign-typed-data \
 1. Go to the contract on Etherscan
 2. Click "Write Contract"
 3. Connect your wallet
-4. Find `acknowledgementOfRegistry` function
+4. Find `acknowledge` function
 5. Enter the parameters:
 
 | Parameter   | Value                              |
@@ -141,11 +143,24 @@ cast wallet sign-typed-data \
 
 ### Extracting v, r, s from Signature
 
+Using viem (recommended):
+
+```typescript
+import { hexToSignature } from 'viem';
+
+const { v, r, s } = hexToSignature(signature);
+// v is already normalized to 27/28
+```
+
+Manual extraction:
+
 ```javascript
 // From a 65-byte signature
 const r = '0x' + signature.slice(2, 66);
 const s = '0x' + signature.slice(66, 130);
-const v = parseInt(signature.slice(130, 132), 16);
+let v = parseInt(signature.slice(130, 132), 16);
+// Normalize v: some wallets return 0/1, contract expects 27/28
+if (v < 27) v += 27;
 ```
 
 6. Click "Write"
@@ -192,7 +207,7 @@ const message = {
 ## Step 6: Submit Registration on Etherscan
 
 1. Go to "Write Contract"
-2. Find `walletRegistration` function
+2. Find `register` function
 3. Enter the parameters (similar to step 3)
 4. Add any required ETH value (registration fee)
 5. Click "Write"

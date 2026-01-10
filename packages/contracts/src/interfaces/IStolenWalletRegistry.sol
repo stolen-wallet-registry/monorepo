@@ -106,6 +106,9 @@ interface IStolenWalletRegistry {
     /// @notice Thrown when timing configuration is invalid (graceBlocks=0, deadlineBlocks=0, or deadline <= grace)
     error InvalidTimingConfig();
 
+    /// @notice Thrown when fee configuration is invalid (feeManager set without registryHub)
+    error InvalidFeeConfig();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════

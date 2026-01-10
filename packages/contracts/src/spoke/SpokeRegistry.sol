@@ -136,6 +136,8 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
             revert SpokeRegistry__InvalidTimingConfig();
         }
 
+        // Validate chain ID fits in uint32 (all current EVM chains do, but defensive)
+        require(block.chainid <= type(uint32).max, "chain id too large");
         spokeChainId = uint32(block.chainid);
         bridgeAdapter = _bridgeAdapter;
         feeManager = _feeManager;

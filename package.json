@@ -24,7 +24,7 @@
     "forge:clean": "cd packages/contracts && forge clean",
     "forge:slither": "pnpm --filter @swr/contracts slither",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,mdx}\" && pnpm forge:fmt",
-    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,mdx}\" && pnpm --filter @swr/contracts lint",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,mdx}\" && pnpm --filter @swr/contracts lint:fmt",
     "check": "turbo lint typecheck test && pnpm format:check && pnpm syncpack:check && pnpm knip",
     "clean": "turbo clean && rm -rf node_modules",
     "prepare": "husky",
@@ -69,7 +69,7 @@
     "syncpack": "^13.0.4",
     "turbo": "^2.7.3"
   },
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@10.28.0",
   "engines": {
     "node": ">=22.12.0",
     "pnpm": ">=9.0.0"

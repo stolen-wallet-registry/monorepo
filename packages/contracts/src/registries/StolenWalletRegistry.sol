@@ -78,7 +78,7 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
         // Otherwise, register() could accept fees that can never be forwarded.
         // Note: feeManager=0 with registryHub!=0 is valid (free registrations with hub).
         if (_feeManager != address(0) && _registryHub == address(0)) {
-            revert InvalidTimingConfig(); // Reusing error for config issues
+            revert InvalidFeeConfig();
         }
 
         // Validate timing parameters to prevent misconfiguration.
