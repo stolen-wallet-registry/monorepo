@@ -17,35 +17,52 @@ import { optimismSepolia } from './optimism-sepolia';
 export { anvilHub, anvilSpoke, base, baseSepolia, optimism, optimismSepolia };
 
 /**
- * All supported networks.
+ * All supported networks (frozen to prevent runtime mutation).
  */
-export const allNetworks: readonly NetworkConfig[] = [
+const _allNetworks: readonly NetworkConfig[] = [
   anvilHub,
   anvilSpoke,
   base,
   baseSepolia,
   optimism,
   optimismSepolia,
-] as const;
+];
+
+// Validate no duplicate chain IDs at module init
+const seenChainIds = new Set<number>();
+for (const network of _allNetworks) {
+  if (seenChainIds.has(network.chainId)) {
+    throw new Error(
+      `Duplicate chainId ${network.chainId} detected in allNetworks. ` +
+        `Each network must have a unique chainId.`
+    );
+  }
+  seenChainIds.add(network.chainId);
+  Object.freeze(network);
+}
+
+export const allNetworks: readonly NetworkConfig[] = Object.freeze(_allNetworks);
 
 /**
- * Network lookup by chain ID.
+ * Network lookup by chain ID (null-prototype, frozen for safety).
  *
  * @example
  * const config = networks[84532]; // Base Sepolia
  */
-export const networks: Record<number, NetworkConfig> = Object.fromEntries(
-  allNetworks.map((n) => [n.chainId, n])
-);
+const _networks: Record<number, NetworkConfig> = Object.create(null);
+for (const n of _allNetworks) _networks[n.chainId] = n;
+export const networks: Readonly<Record<number, NetworkConfig>> = Object.freeze(_networks);
 
 /**
  * Get network configuration by chain ID.
- * @throws Error if chain ID not found
+ * @throws Error if chain ID not found (includes supported IDs in message)
  */
 export function getNetwork(chainId: number): NetworkConfig {
-  const network = networks[chainId];
+  const network = getNetworkOrUndefined(chainId);
   if (!network) {
-    throw new Error(`Network not found for chain ID ${chainId}`);
+    throw new Error(
+      `Network not found for chain ID ${chainId}. Supported: ${getSupportedChainIds().join(', ')}`
+    );
   }
   return network;
 }
@@ -54,19 +71,19 @@ export function getNetwork(chainId: number): NetworkConfig {
  * Get network configuration by chain ID, or undefined if not found.
  */
 export function getNetworkOrUndefined(chainId: number): NetworkConfig | undefined {
-  return networks[chainId];
+  return Object.prototype.hasOwnProperty.call(_networks, chainId) ? _networks[chainId] : undefined;
 }
 
 /**
  * Check if a chain ID is supported.
  */
 export function isSupportedChain(chainId: number): boolean {
-  return chainId in networks;
+  return Object.prototype.hasOwnProperty.call(_networks, chainId);
 }
 
 /**
- * Get all supported chain IDs.
+ * Get all supported chain IDs (deduped).
  */
 export function getSupportedChainIds(): number[] {
-  return allNetworks.map((n) => n.chainId);
+  return [...new Set(_allNetworks.map((n) => n.chainId))];
 }
