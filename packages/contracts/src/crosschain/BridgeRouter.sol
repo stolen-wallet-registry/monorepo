@@ -65,6 +65,11 @@ contract BridgeRouter is Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when a message is routed cross-chain
+    /// @param messageId Unique bridge message identifier
+    /// @param destinationDomain Target chain domain ID
+    /// @param adapter Bridge adapter contract used
+    /// @param wallet Wallet address in the registration payload
+    /// @param fee Fee paid for bridge transport
     event MessageRouted(
         bytes32 indexed messageId,
         uint32 indexed destinationDomain,
@@ -74,18 +79,27 @@ contract BridgeRouter is Ownable2Step {
     );
 
     /// @notice Emitted when adapter is registered or updated
+    /// @param bridgeId Bridge identifier (1=Hyperlane, 2=CCIP, 3=Wormhole)
+    /// @param adapter Adapter contract address (address(0) if removed)
     event AdapterUpdated(uint8 indexed bridgeId, address indexed adapter);
 
     /// @notice Emitted when route configuration is updated
+    /// @param domain Destination domain ID
+    /// @param adapter Bridge adapter to use for this route
+    /// @param recipientInbox CrossChainInbox address on destination
+    /// @param enabled Whether the route is active
     event RouteUpdated(uint32 indexed domain, address adapter, bytes32 recipientInbox, bool enabled);
 
     /// @notice Emitted when hub domain is updated
+    /// @param oldDomain Previous hub domain ID
+    /// @param newDomain New hub domain ID
     event HubDomainUpdated(uint32 indexed oldDomain, uint32 indexed newDomain);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Initializes the bridge router with owner and hub domain
     /// @param _owner Contract owner
     /// @param _hubDomain Hub chain Hyperlane domain ID
     constructor(address _owner, uint32 _hubDomain) Ownable(_owner) {

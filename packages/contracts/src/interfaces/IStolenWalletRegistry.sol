@@ -198,9 +198,11 @@ interface IStolenWalletRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Fee manager address (address(0) = free registrations)
+    /// @return The fee manager contract address
     function feeManager() external view returns (address);
 
     /// @notice Registry hub address for fee forwarding
+    /// @return The registry hub contract address
     function registryHub() external view returns (address);
 
     // ═══════════════════════════════════════════════════════════════════════════

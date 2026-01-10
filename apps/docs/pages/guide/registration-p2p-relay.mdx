@@ -136,24 +136,24 @@ The cryptographic signature proves ownership. The relayer just provides gas.
 ## P2P Protocol Flow
 
 ```
-REGISTEREE                              RELAYER
-(stolen wallet)                         (has funds)
+REGISTEREE                                              RELAYER
+(stolen wallet)                                         (has funds)
 
-1. Initialize libp2p ───────────────── Initialize libp2p
-2. Get peer ID ◄───── exchange ──────► Get peer ID
-3. Wait ◄────────── connect ──────────► Dial peer ID
+1. Initialize libp2p ─────────────────────────────────── Initialize libp2p
+2. Get peer ID ◄─────────── exchange ──────────────────► Get peer ID
+3. Wait ◄───────────────── /swr/connected/1.0.0 ───────► Dial peer ID
 
-4. Sign ACK ────── /swr/ack/sig ──────► Store signature
-          ◄─── /swr/ack/rec ────────── Confirm received
-          ◄─── /swr/ack/pay ────────── Submit tx, send hash
+4. Sign ACK ─── /swr/acknowledgement/signature/1.0.0 ──► Store signature
+          ◄── /swr/acknowledgement/signature/1.0.0/received ── Confirm
+          ◄── /swr/acknowledgement/payment/1.0.0 ────── Submit tx, send hash
 
-5. ─────────────── grace period ───────────────────────
+5. ─────────────────────── grace period ───────────────────────────────
 
-6. Sign REG ────── /swr/reg/sig ──────► Store signature
-          ◄─── /swr/reg/rec ────────── Confirm received
-          ◄─── /swr/reg/pay ────────── Submit tx, send hash
+6. Sign REG ────── /swr/register/signature/1.0.0 ──────► Store signature
+          ◄── /swr/register/signature/1.0.0/received ── Confirm received
+          ◄── /swr/register/payment/1.0.0 ───────────── Submit tx, send hash
 
-7. ─────────────────── SUCCESS ────────────────────────
+7. ──────────────────────── SUCCESS ───────────────────────────────────
 ```
 
 ## Connection Tips
@@ -191,7 +191,7 @@ REGISTEREE                              RELAYER
 
 - Keep the browser tab active (not minimized)
 - Disable browser battery saver mode
-- libp2p uses keep-alive pings every 45 seconds
+- This app uses libp2p's ping service to send keep-alive pings every 45 seconds
 
 ### "Signature not received"
 

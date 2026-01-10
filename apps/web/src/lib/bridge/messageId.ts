@@ -18,7 +18,7 @@
 import type { Log, TransactionReceipt } from 'viem';
 import type { Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
-import type { BridgeProvider } from '@/lib/explorer';
+import type { BridgeProvider } from '@swr/chains';
 
 /**
  * Extract bridge message ID from transaction receipt.

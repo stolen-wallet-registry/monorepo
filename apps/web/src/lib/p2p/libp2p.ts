@@ -139,9 +139,7 @@ export interface SetupOptions {
  * @returns Started libp2p node
  */
 export async function setup(options: SetupOptions): Promise<{ libp2p: Libp2p }>;
-/**
- * @deprecated Use setup({ handlers, walletAddress }) instead
- */
+/** Overload for passing handlers array directly */
 export async function setup(handlers: ProtocolHandler[]): Promise<{ libp2p: Libp2p }>;
 export async function setup(
   optionsOrHandlers: SetupOptions | ProtocolHandler[]

@@ -41,6 +41,7 @@ contract FeeManager is IFeeManager, Ownable2Step {
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Initializes the fee manager with optional Chainlink price feed
     /// @param _owner Contract owner (DAO or deployer)
     /// @param priceFeedAddress Chainlink ETH/USD feed address (address(0) for manual-only mode)
     constructor(address _owner, address priceFeedAddress) Ownable(_owner) {

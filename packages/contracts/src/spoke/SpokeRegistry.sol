@@ -74,6 +74,8 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when hub configuration is updated
+    /// @param hubChainId Hub chain Hyperlane domain ID
+    /// @param hubInbox CrossChainInbox address on hub (bytes32 for cross-VM addressing)
     event HubConfigUpdated(uint32 indexed hubChainId, bytes32 hubInbox);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -99,6 +101,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Initializes the spoke registry with bridge and timing configuration
     /// @param _owner Contract owner
     /// @param _bridgeAdapter Bridge adapter address for cross-chain messaging.
     ///        Must implement IBridgeAdapter. Validated at runtime on first message send.
@@ -136,8 +139,6 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
             revert SpokeRegistry__InvalidTimingConfig();
         }
 
-        // Validate chain ID fits in uint32 (all current EVM chains do, but defensive)
-        require(block.chainid <= type(uint32).max, "chain id too large");
         spokeChainId = uint32(block.chainid);
         bridgeAdapter = _bridgeAdapter;
         feeManager = _feeManager;
@@ -413,5 +414,6 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     // RECEIVE ETH
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Allows the contract to receive ETH for fee collection
     receive() external payable { }
 }

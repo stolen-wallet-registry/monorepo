@@ -30,8 +30,10 @@ The registry is designed to be **cross-chain from day one**:
 | Optimism         | `eip155:10:0x...`                                     |
 | Arbitrum         | `eip155:42161:0x...`                                  |
 | Polygon          | `eip155:137:0x...`                                    |
-| Solana           | `solana:mainnet:FN1...`                               |
+| Solana           | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:FN1...`      |
 | Bitcoin          | `bip122:000000000019d6689c085ae165831e93:1A1zP1...`   |
+
+> **Note:** Solana uses [CAIP-2](https://github.com/ChainAgnostic/CAIPs/blob/master/CAIPs/caip-2.md) chain references (e.g., `5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` for mainnet-beta). See the CAIP-2 spec for the correct chainReference format.
 
 ### Benefits
 
@@ -44,13 +46,13 @@ The registry is designed to be **cross-chain from day one**:
 
 ### Why Base?
 
-| Factor               | Value                                        |
-| -------------------- | -------------------------------------------- |
-| TVL                  | $4B+                                         |
-| Monthly Transactions | 50M+                                         |
-| Finality             | ~2 seconds                                   |
-| Ecosystem            | Coinbase alignment for Operator-as-Paymaster |
-| Cost                 | Low gas fees                                 |
+| Factor               | Value                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| TVL                  | Significant (check [L2Beat](https://l2beat.com/scaling/projects/base) for current) |
+| Monthly Transactions | High volume L2                                                                     |
+| Finality             | ~2 seconds                                                                         |
+| Ecosystem            | Coinbase alignment for Operator-as-Paymaster                                       |
+| Cost                 | Low gas fees                                                                       |
 
 ### How Settlement Works
 
@@ -135,12 +137,14 @@ IMailbox(mailbox).dispatch(
 
 ```solidity
 struct CrossChainRegistration {
-    bytes32 caip10Address;    // CAIP-10 formatted
-    bytes32 signatureHash;    // For verification
+    string caip10Address;     // Full CAIP-10 string (e.g., "eip155:8453:0x...")
+    bytes32 signatureHash;    // keccak256 of EIP-712 signature for verification
     uint256 timestamp;
     address submitter;
 }
 ```
+
+> **Note:** The `caip10Address` is stored as a UTF-8 string to preserve the full address format. For gas-optimized lookups, consider using `keccak256(bytes(caip10Address))` as a mapping key.
 
 ## Fee Handling
 
@@ -309,9 +313,10 @@ const parsed = parseCAIP10(caip10);
 
 ### Replay Protection
 
-- CAIP-10 includes chainId, preventing cross-chain replay
-- Nonces are per-chain, per-wallet
-- Deadlines are chain-specific (block numbers differ)
+- **EIP-712 domain separation** is the core anti-replay mechanism (chainId + verifyingContract in domain)
+- **Nonces** prevent replay within the same chain/contract (incremented after each signature use)
+- **Deadlines** prevent stale signatures from being submitted
+- CAIP-10 helps with address identification across chains but is not the security boundary
 
 ### Liveness
 

@@ -46,11 +46,12 @@ Read from the contract to get your current nonce and deadline:
 
 1. Go to the contract on Etherscan
 2. Click "Read Contract"
-3. Find `nonces(address)` and enter your address
-4. Note your current nonce
+3. Find `nonces(address owner)` and enter your wallet address
+4. Note your current nonce (you'll need this for signing)
 5. Find `generateHashStruct(address forwarder, uint8 step)`
-   - Enter your forwarder address (same as your address for standard registration) and `1` for acknowledgement
-   - Note the deadline from the result
+   - `forwarder`: Your wallet address (same as owner for standard registration)
+   - `step`: Enter `1` for acknowledgement, `2` for registration
+   - Note the `deadline` and `hashStruct` from the result
 
 ## Step 2: Generate EIP-712 Signature
 
@@ -88,13 +89,11 @@ const signature = await signer.signTypedData(domain, types, message);
 ### Using viem
 
 ```typescript
-import { signTypedData } from 'viem/wallet';
-
-const signature = await signTypedData(walletClient, {
+const signature = await walletClient.signTypedData({
   domain: {
     name: 'StolenWalletRegistry',
     version: '4',
-    chainId: 84532n, // Base Sepolia (use 8453n for Base mainnet)
+    chainId: 84532, // Base Sepolia (use 8453 for Base mainnet)
     verifyingContract: '0x...',
   },
   types: {
@@ -117,12 +116,44 @@ const signature = await signTypedData(walletClient, {
 
 ### Using cast (Foundry)
 
+Create a `typed-data.json` file with your EIP-712 payload:
+
+```json
+{
+  "domain": {
+    "name": "StolenWalletRegistry",
+    "version": "4",
+    "chainId": 8453,
+    "verifyingContract": "0x..."
+  },
+  "types": {
+    "EIP712Domain": [
+      { "name": "name", "type": "string" },
+      { "name": "version", "type": "string" },
+      { "name": "chainId", "type": "uint256" },
+      { "name": "verifyingContract", "type": "address" }
+    ],
+    "AcknowledgementOfRegistry": [
+      { "name": "owner", "type": "address" },
+      { "name": "forwarder", "type": "address" },
+      { "name": "nonce", "type": "uint256" },
+      { "name": "deadline", "type": "uint256" }
+    ]
+  },
+  "primaryType": "AcknowledgementOfRegistry",
+  "message": {
+    "owner": "0xYourWalletAddress",
+    "forwarder": "0xYourWalletAddress",
+    "nonce": "0",
+    "deadline": "1234567890"
+  }
+}
+```
+
+Then sign:
+
 ```bash
-cast wallet sign-typed-data \
-  --private-key $PRIVATE_KEY \
-  --domain "StolenWalletRegistry,4,8453,0x..." \
-  --type "AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)" \
-  --message "owner:0x...,forwarder:0x...,nonce:0,deadline:1234567890"
+cast wallet sign --private-key $PRIVATE_KEY --data --from-file typed-data.json
 ```
 
 ## Step 3: Submit Acknowledgement on Etherscan
@@ -133,13 +164,14 @@ cast wallet sign-typed-data \
 4. Find `acknowledge` function
 5. Enter the parameters:
 
-| Parameter   | Value                              |
-| ----------- | ---------------------------------- |
-| `_owner`    | Your wallet address                |
-| `_deadline` | Deadline from step 1               |
-| `_v`        | Signature v value (27 or 28)       |
-| `_r`        | Signature r value (first 32 bytes) |
-| `_s`        | Signature s value (last 32 bytes)  |
+| Parameter  | Value                              |
+| ---------- | ---------------------------------- |
+| `owner`    | Your wallet address                |
+| `deadline` | Deadline from step 1               |
+| `nonce`    | Your current nonce from step 1     |
+| `v`        | Signature v value (27 or 28)       |
+| `r`        | Signature r value (first 32 bytes) |
+| `s`        | Signature s value (last 32 bytes)  |
 
 ### Extracting v, r, s from Signature
 
@@ -170,10 +202,14 @@ if (v < 27) v += 27;
 
 After the acknowledgement transaction is mined:
 
-1. Check the transaction for the emitted event
-2. Find `startBlock` and `expiryBlock` values
-3. Wait until the current block number is >= `startBlock`
-4. You have until `expiryBlock` to complete registration
+1. Check the transaction for the `WalletAcknowledged` event
+   - Fields: `owner` (indexed), `forwarder` (indexed), `isSponsored` (indexed)
+2. Query the contract state to get timing values:
+   - Go to "Read Contract" on Etherscan
+   - Call `getAcknowledgement(address wallet)` with your wallet address
+   - Note the `graceEndBlock` and `deadlineBlock` from the returned data
+3. Wait until the current block number is >= `graceEndBlock`
+4. You have until `deadlineBlock` to complete registration
 
 You can monitor blocks at [Basescan](https://basescan.org) or via:
 
@@ -195,12 +231,12 @@ const types = {
   ],
 };
 
-// Note: nonce has incremented by 1
+// Note: Query nonces(owner) again - it incremented after acknowledgement
 const message = {
   owner: '0xYourWalletAddress',
   forwarder: '0xYourWalletAddress',
-  nonce: 1, // Previous nonce + 1
-  deadline: newDeadline, // From generateHashStruct with type 2
+  nonce: 1, // Query contract for current nonce (previous + 1)
+  deadline: newDeadline, // From generateHashStruct(forwarder, 2)
 };
 ```
 
@@ -225,32 +261,32 @@ After the registration transaction is mined:
 Or check the events:
 
 1. Go to the transaction
-2. Look for `RegistrationEvent`
+2. Look for `WalletRegistered`
 3. Verify your address is in the logs
 
 ## Common Errors
 
-### "InvalidSigner"
+### "Acknowledgement**InvalidSigner" / "Registration**InvalidSigner"
 
 The signature doesn't match the owner address. Check:
 
 - Correct domain parameters (name, version, chainId, verifyingContract)
-- Correct message parameters
+- Correct message parameters (owner, forwarder, nonce, deadline)
 - You signed with the correct wallet
 
-### "InvalidDeadline"
+### "Acknowledgement**Expired" / "Registration**SignatureExpired"
 
-The deadline has passed or is invalid. Get a fresh deadline from `generateHashStruct`.
+The deadline has passed or is invalid. Get a fresh deadline from `generateHashStruct(forwarder, step)`.
 
-### "NonceAlreadyUsed"
+### "InvalidNonce"
 
-You've already submitted this phase. Check your current nonce with `nonces(address)`.
+You've used an incorrect nonce. Check your current nonce with `nonces(owner)`.
 
-### "GracePeriodNotStarted"
+### "Registration\_\_GracePeriodNotStarted"
 
-You're trying to register before the grace period. Wait for the start block.
+You're trying to register before the grace period ends. Check `getAcknowledgement(wallet)` for `graceEndBlock`.
 
-### "WindowExpired"
+### "Registration\_\_ForwarderExpired"
 
 The registration window has closed. You'll need to restart from acknowledgement.
 

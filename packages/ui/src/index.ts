@@ -4,11 +4,10 @@ export { cn } from './lib/utils';
 // Viem utilities (re-exported for convenience)
 export { isAddress } from 'viem';
 
-// Chain configuration
+// Chain configuration (re-exported from @swr/chains)
 export {
-  LOCAL_DEV_CHAINS,
-  CHAIN_EXPLORERS,
-  isLocalDevChain,
+  getLocalChainIds,
+  isLocalChain,
   getExplorerAddressUrl,
   getExplorerTxUrl,
   getExplorerName,
