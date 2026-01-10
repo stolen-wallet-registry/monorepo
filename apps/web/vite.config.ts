@@ -12,6 +12,9 @@ const dirname =
 
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
+  server: {
+    port: Number(process.env.PORT) || 5173,
+  },
   plugins: [
     react(),
     tailwindcss(),

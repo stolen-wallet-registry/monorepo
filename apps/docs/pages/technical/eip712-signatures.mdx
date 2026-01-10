@@ -33,10 +33,17 @@ The domain uniquely identifies the contract and chain:
 const domain = {
   name: 'StolenWalletRegistry',
   version: '4',
-  chainId: 8453, // Base
-  verifyingContract: '0x...',
+  chainId: chainId, // Use your current chain (see table below)
+  verifyingContract: '0x...', // Contract address for your chain
 };
 ```
+
+| Network          | chainId  |
+| ---------------- | -------- |
+| Base             | 8453     |
+| Base Sepolia     | 84532    |
+| Optimism         | 10       |
+| Optimism Sepolia | 11155420 |
 
 **Why this matters:**
 
@@ -79,10 +86,11 @@ const EIP712_TYPES = {
 ### Phase 1: Acknowledgement
 
 ```
-┌─────────────────────────────────────┐
-│ 1. Query contract for deadline      │
-│    generateHashStruct(address, 1)   │
-└──────────────┬──────────────────────┘
+┌───────────────────────────────────────────────┐
+│ 1. Query contract for deadline                │
+│    generateHashStruct(forwarder, 1)           │
+│    Returns: (deadline, hashStruct)            │
+└──────────────┬────────────────────────────────┘
                │
                ▼
 ┌─────────────────────────────────────┐
@@ -99,7 +107,7 @@ const EIP712_TYPES = {
                ▼
 ┌─────────────────────────────────────┐
 │ 4. Submit to contract               │
-│    acknowledgementOfRegistry(...)   │
+│    acknowledge(...)                 │
 └─────────────────────────────────────┘
 ```
 
@@ -107,10 +115,10 @@ const EIP712_TYPES = {
 
 After acknowledgement:
 
-- Contract records `startBlock` and `expiryBlock`
+- Contract records `graceEndBlock` and `deadlineBlock`
 - Uses `block.prevrandao` for randomization
-- Start: ~1-2 minutes from ACK (4-8 blocks)
-- Window: ~4-13 minutes total (55-110 blocks)
+- Grace period ends: ~1-2 minutes from ACK (configurable blocks)
+- Window closes: ~4-13 minutes total (configurable blocks)
 
 > **Note:** These timing values are approximate and vary by chain. Block times differ across L2s (Base ~2s, Ethereum ~12s). The contract uses configurable `graceBlocks` and `deadlineBlocks` parameters set at deployment. See `TimingConfig.sol` for chain-specific values.
 
@@ -119,8 +127,8 @@ After acknowledgement:
 Same flow as ACK but with:
 
 - `primaryType: 'Registration'`
-- Nonce incremented by 1
-- New deadline from `generateHashStruct(address, 2)`
+- Nonce incremented by 1 (query `nonces(owner)` again)
+- New deadline from `generateHashStruct(forwarder, 2)` (returns `deadline` and `hashStruct`)
 
 ## Contract Verification
 
@@ -129,25 +137,25 @@ Same flow as ACK but with:
 bytes32 digest = _hashTypedDataV4(structHash);
 address recoveredWallet = ECDSA.recover(digest, v, r, s);
 
-if (recoveredWallet != owner) revert InvalidSigner();
+if (recoveredWallet != owner) revert Acknowledgement__InvalidSigner();
 
 nonces[owner]++;  // Replay prevention
 
-// Store trusted forwarder
-trustedForwarders[owner] = TrustedForwarder({
+// Store acknowledgement data
+acknowledgements[owner] = AcknowledgementData({
     forwarder: forwarder,
-    startBlock: calculateStart(),
-    expiryBlock: calculateExpiry()
+    graceEndBlock: getGracePeriodEndBlock(graceBlocks),
+    deadlineBlock: getDeadlineBlock(deadlineBlocks)
 });
 ```
 
 ```solidity
 // Registration verification
-TrustedForwarder memory tf = trustedForwarders[owner];
+AcknowledgementData memory ack = acknowledgements[owner];
 
-if (tf.forwarder != msg.sender) revert InvalidForwarder();
-if (block.number < tf.startBlock) revert GracePeriodNotStarted();
-if (block.number > tf.expiryBlock) revert WindowExpired();
+if (ack.forwarder != msg.sender) revert Registration__InvalidForwarder();
+if (block.number < ack.graceEndBlock) revert Registration__GracePeriodNotStarted();
+if (block.number > ack.deadlineBlock) revert Registration__ForwarderExpired();
 
 // Verify signature and register
 ```
@@ -339,14 +347,14 @@ const nonce = await publicClient.readContract({
 
 ### Deadline Expired
 
-The deadline block has passed. Get a fresh deadline:
+The deadline has passed. Get a fresh deadline:
 
 ```typescript
-const [deadline] = await publicClient.readContract({
+const [deadline, hashStruct] = await publicClient.readContract({
   address: contractAddress,
   abi,
   functionName: 'generateHashStruct',
-  args: [walletAddress, signatureStep],
+  args: [forwarderAddress, step], // step: 1 for ACK, 2 for REG
 });
 ```
 

@@ -134,6 +134,8 @@ Registeree                              Relayer
 
 ## Tech Stack
 
+> **Note:** Version numbers reflect `main` branch as of January 2026. For current versions, see [apps/web/package.json](https://github.com/stolenwallet/registry/blob/main/apps/web/package.json).
+
 | Layer        | Technology           | Purpose                     |
 | ------------ | -------------------- | --------------------------- |
 | Build        | Vite 7.x             | Fast dev server, ESM-native |
@@ -154,9 +156,10 @@ Registeree                              Relayer
 
 ```
 StolenWalletRegistry.sol
-├── acknowledgementOfRegistry()
-├── walletRegistration()
+├── acknowledge()
+├── register()
 ├── generateHashStruct()
+├── getAcknowledgement()
 ├── isRegistered()
 └── nonces()
 ```
@@ -186,23 +189,24 @@ Each subregistry implements a common interface, allowing:
 
 ### Transports
 
-| Transport     | Purpose                   | When Used              |
-| ------------- | ------------------------- | ---------------------- |
-| Circuit Relay | NAT traversal             | Always (initial)       |
-| WebRTC        | Direct browser-to-browser | After dcutr (~85%)     |
-| WebSockets    | Fallback                  | Safari, older browsers |
+| Transport     | Purpose                   | When Used                         |
+| ------------- | ------------------------- | --------------------------------- |
+| Circuit Relay | NAT traversal             | Always (initial connection)       |
+| WebRTC        | Direct browser-to-browser | After dcutr upgrade when possible |
+| WebSockets    | Fallback                  | Safari, older browsers            |
 
 ### Custom Protocols
 
 ```typescript
+// See: apps/web/src/lib/p2p/protocols.ts
 const PROTOCOLS = {
   CONNECT: '/swr/connected/1.0.0',
   ACK_SIG: '/swr/acknowledgement/signature/1.0.0',
-  ACK_REC: '/swr/acknowledgement/signature/1.0.0/received',
-  ACK_PAY: '/swr/acknowledgement/payment/1.0.0',
+  ACK_SIG_RECEIVED: '/swr/acknowledgement/signature/1.0.0/received',
+  ACK_PAYMENT: '/swr/acknowledgement/payment/1.0.0',
   REG_SIG: '/swr/register/signature/1.0.0',
-  REG_REC: '/swr/register/signature/1.0.0/received',
-  REG_PAY: '/swr/register/payment/1.0.0',
+  REG_SIG_RECEIVED: '/swr/register/signature/1.0.0/received',
+  REG_PAYMENT: '/swr/register/payment/1.0.0',
 };
 ```
 

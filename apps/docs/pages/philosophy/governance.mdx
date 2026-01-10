@@ -15,6 +15,8 @@ The registry uses a **phased governance approach** that evolves with the protoco
 - Single owner controls contract upgrades
 - Focus on proving core functionality
 
+**Transition to Phase 2:** Triggered by DAO vote after achieving 1,000+ registrations and completing security audit.
+
 ### Phase 2: DAO Ownership
 
 - Transfer ownership to a DAO
@@ -22,12 +24,16 @@ The registry uses a **phased governance approach** that evolves with the protoco
 - Ownable2Step pattern ensures safe transfer
 - Emergency multisig for critical issues
 
+**Transition to Phase 3:** Triggered by successful 6-month DAO operation period and community vote.
+
 ### Phase 3: Operator Approvals
 
 - DAO can approve operators
 - Operators gain batch submission rights
 - Different trust levels per subregistry
 - Operator staking/slashing (TBD)
+
+**Transition to Phase 4:** Triggered by first operator onboarding and need for dispute mechanism.
 
 ### Phase 4: Dispute Resolution
 
@@ -108,7 +114,7 @@ A key feature enabling **gasless registration** for users.
 User signs → Operator's frontend → Paymaster pays → Registry updated
 ```
 
-Uses EIP-4337 Account Abstraction for gas sponsorship.
+Uses [EIP-4337 Account Abstraction](https://eips.ethereum.org/EIPS/eip-4337) for gas sponsorship. The Paymaster mechanism in EIP-4337 allows operators to sponsor transaction fees on behalf of users.
 
 ## Dispute Resolution
 
@@ -152,14 +158,16 @@ To prevent frivolous disputes:
 - If dispute succeeds, bond returned + reward
 - If dispute fails, bond forfeited
 
-### Removal Mechanism
+### Entry Removal Mechanism
 
-If a dispute succeeds:
+If a dispute against a **registry entry** succeeds:
 
 - Entry is marked as `removed`
 - Original registration event still on-chain (immutable)
 - New event indicates removal
 - Integrators should check both
+
+> **Note:** This is distinct from **operator removal** (revoking an operator's approval to submit data). See [Operator Penalties](#operator-penalties) and the [Proposals table](#proposals) for operator removal governance.
 
 ## DAO Structure
 

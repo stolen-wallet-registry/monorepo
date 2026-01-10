@@ -27,6 +27,9 @@ interface IRegistryHub {
     /// @notice Thrown when caller is not authorized CrossChainInbox
     error Hub__UnauthorizedInbox();
 
+    /// @notice Thrown when a zero address is provided for a required parameter
+    error Hub__ZeroAddress();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -65,14 +68,17 @@ interface IRegistryHub {
 
     /// @notice Registry type identifier for stolen wallets
     /// @dev keccak256("STOLEN_WALLET_REGISTRY")
+    /// @return The bytes32 identifier for the stolen wallet registry
     function stolenWalletRegistryType() external pure returns (bytes32);
 
     /// @notice Registry type identifier for fraudulent contracts (future)
     /// @dev keccak256("FRAUDULENT_CONTRACT_REGISTRY")
+    /// @return The bytes32 identifier for the fraudulent contract registry
     function fraudulentContractRegistryType() external pure returns (bytes32);
 
     /// @notice Registry type identifier for stolen transactions (future)
     /// @dev keccak256("STOLEN_TRANSACTION_REGISTRY")
+    /// @return The bytes32 identifier for the stolen transaction registry
     function stolenTransactionRegistryType() external pure returns (bytes32);
 
     // ═══════════════════════════════════════════════════════════════════════════

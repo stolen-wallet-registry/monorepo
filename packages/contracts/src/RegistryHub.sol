@@ -16,8 +16,11 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Registry type identifier for stolen wallets
     bytes32 public constant STOLEN_WALLET = keccak256("STOLEN_WALLET_REGISTRY");
+    /// @notice Registry type identifier for fraudulent contracts
     bytes32 public constant FRAUDULENT_CONTRACT = keccak256("FRAUDULENT_CONTRACT_REGISTRY");
+    /// @notice Registry type identifier for stolen transactions
     bytes32 public constant STOLEN_TRANSACTION = keccak256("STOLEN_TRANSACTION_REGISTRY");
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -40,6 +43,7 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Initializes the registry hub with owner and optional fee manager
     /// @param _owner Contract owner (deployer or DAO multisig)
     /// @param _feeManager Fee manager address (address(0) for free registrations)
     /// @param _stolenWalletRegistry Initial stolen wallet registry address
@@ -120,18 +124,10 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Get current fee in wei (0 if no fee manager configured)
+    /// @return The current registration fee in wei
     function currentFeeWei() external view returns (uint256) {
         if (feeManager == address(0)) return 0;
         return IFeeManager(feeManager).currentFeeWei();
-    }
-
-    /// @notice Validate fee payment (skips if no fee manager)
-    /// @dev Call this in subregistry registration functions
-    function validateFee() internal view {
-        if (feeManager == address(0)) return; // No fee manager = free
-        uint256 requiredFee = IFeeManager(feeManager).currentFeeWei();
-        if (requiredFee == 0) return; // Zero fee = free
-        IFeeManager(feeManager).validateFee(msg.value);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -186,6 +182,7 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
 
     /// @inheritdoc IRegistryHub
     function withdrawFees(address to, uint256 amount) external onlyOwner {
+        if (to == address(0)) revert Hub__ZeroAddress();
         (bool success,) = to.call{ value: amount }("");
         if (!success) revert Hub__WithdrawalFailed();
         emit FeesWithdrawn(to, amount);
@@ -195,5 +192,6 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
     // RECEIVE ETH
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Allows the contract to receive ETH for fee collection
     receive() external payable { }
 }

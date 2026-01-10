@@ -239,7 +239,7 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // IRegistryHub errors (4)
+  // IRegistryHub errors (5)
   // ═══════════════════════════════════════════════════════════════════════════
 
   '0x719cea76': {
@@ -270,6 +270,12 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
     name: 'Hub__UnauthorizedInbox',
     message: 'Cross-chain message from unauthorized source.',
     action: 'Please contact support.',
+  },
+
+  '0xc16752ee': {
+    name: 'Hub__ZeroAddress',
+    message: 'Invalid address provided.',
+    action: 'A valid address is required for this operation.',
   },
 
   // ═══════════════════════════════════════════════════════════════════════════

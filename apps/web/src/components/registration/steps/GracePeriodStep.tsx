@@ -19,6 +19,7 @@ import { useContractDeadlines } from '@/hooks/useContractDeadlines';
 import { useCountdownTimer } from '@/hooks/useCountdownTimer';
 import { logger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/providers/useTheme';
 import { AlertCircle, Check } from 'lucide-react';
 
 export interface GracePeriodStepProps {
@@ -36,6 +37,7 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   const chainId = useChainId();
   const { registeree } = useFormStore();
   const { acknowledgementHash } = useRegistrationStore();
+  const { themeVariant, triggerThemeAnimation } = useTheme();
 
   // Get explorer URL for acknowledgement tx
   const ackExplorerUrl = acknowledgementHash
@@ -73,8 +75,13 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
     }
   }, [deadlines, registeree, chainId]);
 
-  // Custom onExpire handler with logging
+  // Custom onExpire handler with logging and theme switch
   const handleExpire = () => {
+    // Trigger hacker theme animation if not already on hacker theme
+    if (themeVariant !== 'hacker' && triggerThemeAnimation) {
+      triggerThemeAnimation('hacker');
+    }
+
     logger.registration.info('Grace period complete, registration window is now open', {
       registeree,
     });

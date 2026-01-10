@@ -73,16 +73,15 @@ crossChainInbox: {
 },
 
 // SPOKE_ADDRESSES - Update Optimism Sepolia spoke contracts:
-hyperlaneAdapter: {
-  // ... existing entries
-  [optimismSepolia.id]: '<HYPERLANE_ADAPTER_ADDRESS>' as Address,
+bridgeAdapters: {
+  [optimismSepolia.id]: {
+    hyperlane: '<HYPERLANE_ADAPTER_ADDRESS>' as Address,
+  },
 },
 feeManager: {
-  // ... existing entries
   [optimismSepolia.id]: '<SPOKE_FEE_MANAGER_ADDRESS>' as Address,
 },
 spokeRegistry: {
-  // ... existing entries
   [optimismSepolia.id]: '<SPOKE_REGISTRY_ADDRESS>' as Address,
 },
 ```
@@ -108,14 +107,14 @@ pnpm dev
 
 ## Files to Update
 
-| Network                     | File                      | Contracts                                     |
-| --------------------------- | ------------------------- | --------------------------------------------- |
-| Base Sepolia (84532)        | `addresses.ts`            | registryHub, feeManager, stolenWalletRegistry |
-| Base Sepolia (84532)        | `crosschain-addresses.ts` | crossChainInbox                               |
-| Optimism Sepolia (11155420) | `crosschain-addresses.ts` | hyperlaneAdapter, feeManager, spokeRegistry   |
-| Base (8453)                 | `addresses.ts`            | registryHub, feeManager, stolenWalletRegistry |
-| Base (8453)                 | `crosschain-addresses.ts` | crossChainInbox                               |
-| Optimism (10)               | `crosschain-addresses.ts` | hyperlaneAdapter, feeManager, spokeRegistry   |
+| Network                     | File                      | Contracts                                           |
+| --------------------------- | ------------------------- | --------------------------------------------------- |
+| Base Sepolia (84532)        | `addresses.ts`            | registryHub, feeManager, stolenWalletRegistry       |
+| Base Sepolia (84532)        | `crosschain-addresses.ts` | crossChainInbox                                     |
+| Optimism Sepolia (11155420) | `crosschain-addresses.ts` | bridgeAdapters.hyperlane, feeManager, spokeRegistry |
+| Base (8453)                 | `addresses.ts`            | registryHub, feeManager, stolenWalletRegistry       |
+| Base (8453)                 | `crosschain-addresses.ts` | crossChainInbox                                     |
+| Optimism (10)               | `crosschain-addresses.ts` | bridgeAdapters.hyperlane, feeManager, spokeRegistry |
 
 ## Hyperlane Addresses
 

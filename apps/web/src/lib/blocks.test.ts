@@ -10,14 +10,26 @@ import {
   DEFAULT_BLOCK_TIME,
 } from './blocks';
 
+/**
+ * Block utilities tests.
+ *
+ * NOTE: These tests only cover chains defined in @swr/chains:
+ * - Base (8453), Optimism (10) - production L2s
+ * - Base Sepolia (84532), Optimism Sepolia (11155420) - testnets
+ * - Anvil Hub (31337), Anvil Spoke (31338) - local development
+ *
+ * Chains not in @swr/chains (Ethereum mainnet, Arbitrum, Polygon, etc.)
+ * will fall back to DEFAULT_BLOCK_TIME (12 seconds).
+ */
 describe('block utilities', () => {
   describe('getBlockTime', () => {
-    it('returns correct block time for Ethereum mainnet', () => {
-      expect(getBlockTime(1)).toBe(12);
+    it('returns correct block time for Anvil Hub', () => {
+      expect(getBlockTime(31337)).toBe(13);
     });
 
-    it('returns correct block time for localhost/Anvil', () => {
-      expect(getBlockTime(31337)).toBe(13);
+    it('returns correct block time for Anvil Spoke', () => {
+      // Anvil spoke uses same block time as hub for consistency
+      expect(getBlockTime(31338)).toBe(13);
     });
 
     it('returns correct block time for Base', () => {
@@ -28,80 +40,96 @@ describe('block utilities', () => {
       expect(getBlockTime(10)).toBe(2);
     });
 
-    it('returns correct block time for Arbitrum', () => {
-      expect(getBlockTime(42161)).toBe(0.25);
+    it('returns correct block time for Base Sepolia', () => {
+      expect(getBlockTime(84532)).toBe(2);
+    });
+
+    it('returns correct block time for Optimism Sepolia', () => {
+      expect(getBlockTime(11155420)).toBe(2);
     });
 
     it('returns default block time for unknown chains', () => {
+      // Unknown chains fall back to DEFAULT_BLOCK_TIME (Ethereum mainnet default)
       expect(getBlockTime(999999)).toBe(DEFAULT_BLOCK_TIME);
     });
 
-    it('has all expected chains configured', () => {
-      expect(BLOCK_TIMES[1]).toBeDefined(); // Ethereum
+    it('has all SWR-supported chains configured', () => {
+      expect(BLOCK_TIMES[31337]).toBeDefined(); // Anvil Hub
+      expect(BLOCK_TIMES[31338]).toBeDefined(); // Anvil Spoke
       expect(BLOCK_TIMES[8453]).toBeDefined(); // Base
       expect(BLOCK_TIMES[10]).toBeDefined(); // Optimism
-      expect(BLOCK_TIMES[42161]).toBeDefined(); // Arbitrum
-      expect(BLOCK_TIMES[137]).toBeDefined(); // Polygon
+      expect(BLOCK_TIMES[84532]).toBeDefined(); // Base Sepolia
+      expect(BLOCK_TIMES[11155420]).toBeDefined(); // Optimism Sepolia
     });
   });
 
   describe('estimateTimeFromBlocks', () => {
-    it('calculates time for Ethereum mainnet (12s blocks)', () => {
-      // 10 blocks * 12 seconds * 1000 = 120000ms
-      expect(estimateTimeFromBlocks(10n, 1)).toBe(120000);
-    });
-
     it('calculates time for Base (2s blocks)', () => {
       // 10 blocks * 2 seconds * 1000 = 20000ms
       expect(estimateTimeFromBlocks(10n, 8453)).toBe(20000);
     });
 
-    it('calculates time for Arbitrum (0.25s blocks)', () => {
-      // 100 blocks * 0.25 seconds * 1000 = 25000ms
-      expect(estimateTimeFromBlocks(100n, 42161)).toBe(25000);
+    it('calculates time for Optimism (2s blocks)', () => {
+      // 10 blocks * 2 seconds * 1000 = 20000ms
+      expect(estimateTimeFromBlocks(10n, 10)).toBe(20000);
     });
 
-    it('calculates time for localhost (13s blocks)', () => {
+    it('calculates time for Anvil Hub (13s blocks)', () => {
       // 60 blocks * 13 seconds * 1000 = 780000ms
       expect(estimateTimeFromBlocks(60n, 31337)).toBe(780000);
     });
 
+    it('calculates time for Anvil Spoke (13s blocks)', () => {
+      // 10 blocks * 13 seconds * 1000 = 130000ms
+      expect(estimateTimeFromBlocks(10n, 31338)).toBe(130000);
+    });
+
+    it('calculates time for unknown chain using default (12s)', () => {
+      // 10 blocks * 12 seconds * 1000 = 120000ms
+      expect(estimateTimeFromBlocks(10n, 999999)).toBe(120000);
+    });
+
     it('returns 0 for zero blocks', () => {
-      expect(estimateTimeFromBlocks(0n, 1)).toBe(0);
+      expect(estimateTimeFromBlocks(0n, 8453)).toBe(0);
     });
 
     it('returns 0 for negative blocks', () => {
-      expect(estimateTimeFromBlocks(-5n, 1)).toBe(0);
+      expect(estimateTimeFromBlocks(-5n, 8453)).toBe(0);
     });
   });
 
   describe('estimateBlocksFromTime', () => {
-    it('estimates blocks for Ethereum mainnet', () => {
-      // 120000ms / 1000 / 12 = 10 blocks
-      expect(estimateBlocksFromTime(120000, 1)).toBe(10n);
-    });
-
     it('estimates blocks for Base', () => {
       // 20000ms / 1000 / 2 = 10 blocks
       expect(estimateBlocksFromTime(20000, 8453)).toBe(10n);
     });
 
-    it('estimates blocks for Arbitrum', () => {
-      // 25000ms / 1000 / 0.25 = 100 blocks
-      expect(estimateBlocksFromTime(25000, 42161)).toBe(100n);
+    it('estimates blocks for Optimism', () => {
+      // 20000ms / 1000 / 2 = 10 blocks
+      expect(estimateBlocksFromTime(20000, 10)).toBe(10n);
+    });
+
+    it('estimates blocks for Anvil Hub', () => {
+      // 130000ms / 1000 / 13 = 10 blocks
+      expect(estimateBlocksFromTime(130000, 31337)).toBe(10n);
+    });
+
+    it('estimates blocks for unknown chain using default', () => {
+      // 120000ms / 1000 / 12 = 10 blocks
+      expect(estimateBlocksFromTime(120000, 999999)).toBe(10n);
     });
 
     it('rounds up partial blocks', () => {
-      // 13000ms / 1000 / 12 = 1.083... → 2 blocks
-      expect(estimateBlocksFromTime(13000, 1)).toBe(2n);
+      // 3000ms / 1000 / 2 = 1.5 → 2 blocks
+      expect(estimateBlocksFromTime(3000, 8453)).toBe(2n);
     });
 
     it('returns 0 for zero milliseconds', () => {
-      expect(estimateBlocksFromTime(0, 1)).toBe(0n);
+      expect(estimateBlocksFromTime(0, 8453)).toBe(0n);
     });
 
     it('returns 0 for negative milliseconds', () => {
-      expect(estimateBlocksFromTime(-1000, 1)).toBe(0n);
+      expect(estimateBlocksFromTime(-1000, 8453)).toBe(0n);
     });
   });
 

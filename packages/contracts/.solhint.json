@@ -45,7 +45,7 @@
     "gas-calldata-parameters": "off",
     "gas-strict-inequalities": "off",
     "gas-increment-by-one": "off",
-    "gas-struct-packing": "off",
+    "gas-struct-packing": "warn",
     "gas-small-strings": "off"
   }
 }

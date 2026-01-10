@@ -1,11 +1,15 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'wouter';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { Menu, X } from 'lucide-react';
 import { Button } from '@swr/ui';
 
-import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler';
+import {
+  AnimatedThemeToggler,
+  type ThemeTogglerHandle,
+} from '@/components/ui/animated-theme-toggler';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/providers/useTheme';
 
 /**
  * Homepage URL for "Stolen Wallet Registry" logo link.
@@ -21,6 +25,16 @@ const DOCS_URL = import.meta.env.VITE_DOCS_URL ?? 'http://localhost:5174';
 export function Header() {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const themeTogglerRef = useRef<ThemeTogglerHandle>(null);
+  const { setTriggerThemeAnimation } = useTheme();
+
+  // Register the theme toggler's trigger function with context
+  useEffect(() => {
+    if (themeTogglerRef.current) {
+      setTriggerThemeAnimation(themeTogglerRef.current.triggerVariantSwitch);
+    }
+    return () => setTriggerThemeAnimation(null);
+  }, [setTriggerThemeAnimation]);
 
   const navItems = [
     { href: '/', label: 'Register', matchPaths: ['/', '/register', '/registration'] },
@@ -87,7 +101,10 @@ export function Header() {
           >
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
-          <AnimatedThemeToggler className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9" />
+          <AnimatedThemeToggler
+            ref={themeTogglerRef}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9"
+          />
           <ConnectButton />
         </div>
       </div>

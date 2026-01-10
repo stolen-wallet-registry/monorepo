@@ -58,15 +58,20 @@ contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when a domain is added or removed from supported list
+    /// @param domain Hyperlane domain ID that was updated
+    /// @param supported True if domain is now supported, false if removed
     event DomainSupportUpdated(uint32 indexed domain, bool supported);
 
     /// @notice Emitted when gas amount is updated for a domain
+    /// @param domain Hyperlane domain ID for which gas was updated
+    /// @param gasAmount New gas amount (0 = use DEFAULT_GAS_AMOUNT)
     event GasAmountUpdated(uint32 indexed domain, uint256 gasAmount);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Initializes the Hyperlane adapter with mailbox and gas paymaster
     /// @param _owner Contract owner
     /// @param _mailbox Hyperlane Mailbox address on this chain
     /// @param _gasPaymaster Hyperlane InterchainGasPaymaster address

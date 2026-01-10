@@ -183,9 +183,6 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
 
         bool isSponsored = owner != msg.sender;
 
-        // Validate chain ID fits in uint32 (all current EVM chains do, but defensive)
-        require(block.chainid <= type(uint32).max, "chain id too large");
-
         registeredWallets[owner] = RegistrationData({
             registeredAt: uint64(block.number),
             sourceChainId: uint32(block.chainid),

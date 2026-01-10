@@ -19,70 +19,74 @@ The main contract for wallet registration.
 
 ### Functions
 
-#### acknowledgementOfRegistry
+#### acknowledge
 
 Submit the first phase of registration.
 
 ```solidity
-function acknowledgementOfRegistry(
-    address _owner,
-    uint256 _deadline,
-    uint8 _v,
-    bytes32 _r,
-    bytes32 _s
+function acknowledge(
+    address owner,
+    uint256 deadline,
+    uint256 nonce,
+    uint8 v,
+    bytes32 r,
+    bytes32 s
 ) external
 ```
 
-| Parameter   | Type    | Description                  |
-| ----------- | ------- | ---------------------------- |
-| `_owner`    | address | Wallet being registered      |
-| `_deadline` | uint256 | Block deadline for signature |
-| `_v`        | uint8   | Signature v component        |
-| `_r`        | bytes32 | Signature r component        |
-| `_s`        | bytes32 | Signature s component        |
+| Parameter  | Type    | Description                      |
+| ---------- | ------- | -------------------------------- |
+| `owner`    | address | Wallet being registered          |
+| `deadline` | uint256 | Timestamp when signature expires |
+| `nonce`    | uint256 | Current nonce for the owner      |
+| `v`        | uint8   | Signature v component            |
+| `r`        | bytes32 | Signature r component            |
+| `s`        | bytes32 | Signature s component            |
 
-**Emits:** `AcknowledgementEvent(address indexed registeree, address indexed forwarder, bool isSponsored)`
+**Emits:** `WalletAcknowledged(address indexed owner, address indexed forwarder, bool indexed isSponsored)`
 
 **Reverts:**
 
-- `InvalidSigner` - Signature doesn't match owner
-- `InvalidDeadline` - Deadline has passed
-- `NonceAlreadyUsed` - Nonce mismatch
+- `Acknowledgement__InvalidSigner` - Signature doesn't match owner
+- `Acknowledgement__Expired` - Deadline has passed
+- `InvalidNonce` - Nonce mismatch
 
 ---
 
-#### walletRegistration
+#### register
 
 Submit the second phase of registration.
 
 ```solidity
-function walletRegistration(
-    address _owner,
-    uint256 _deadline,
-    uint8 _v,
-    bytes32 _r,
-    bytes32 _s
+function register(
+    address owner,
+    uint256 deadline,
+    uint256 nonce,
+    uint8 v,
+    bytes32 r,
+    bytes32 s
 ) external payable
 ```
 
-| Parameter   | Type    | Description                  |
-| ----------- | ------- | ---------------------------- |
-| `_owner`    | address | Wallet being registered      |
-| `_deadline` | uint256 | Block deadline for signature |
-| `_v`        | uint8   | Signature v component        |
-| `_r`        | bytes32 | Signature r component        |
-| `_s`        | bytes32 | Signature s component        |
+| Parameter  | Type    | Description                      |
+| ---------- | ------- | -------------------------------- |
+| `owner`    | address | Wallet being registered          |
+| `deadline` | uint256 | Timestamp when signature expires |
+| `nonce`    | uint256 | Current nonce for the owner      |
+| `v`        | uint8   | Signature v component            |
+| `r`        | bytes32 | Signature r component            |
+| `s`        | bytes32 | Signature s component            |
 
 **Value:** Registration fee (if required)
 
-**Emits:** `RegistrationEvent(address indexed registeree, bool isSponsored)`
+**Emits:** `WalletRegistered(address indexed owner, bool indexed isSponsored)`
 
 **Reverts:**
 
-- `InvalidSigner` - Signature doesn't match owner
-- `InvalidForwarder` - Caller isn't the trusted forwarder
-- `GracePeriodNotStarted` - Too early to register
-- `WindowExpired` - Registration window closed
+- `Registration__InvalidSigner` - Signature doesn't match owner
+- `Registration__InvalidForwarder` - Caller isn't the trusted forwarder
+- `Registration__GracePeriodNotStarted` - Too early to register
+- `Registration__ForwarderExpired` - Registration window closed
 - `InsufficientFee` - Not enough ETH sent
 
 ---
@@ -93,19 +97,19 @@ Get the deadline and hash for signing.
 
 ```solidity
 function generateHashStruct(
-    address _registeree,
-    uint8 _signatureStep
+    address forwarder,
+    uint8 step
 ) external view returns (uint256 deadline, bytes32 hashStruct)
 ```
 
-| Parameter        | Type    | Description             |
-| ---------------- | ------- | ----------------------- |
-| `_registeree`    | address | Wallet being registered |
-| `_signatureStep` | uint8   | 1 = ACK, 2 = REG        |
+| Parameter   | Type    | Description                              |
+| ----------- | ------- | ---------------------------------------- |
+| `forwarder` | address | Address that will submit the transaction |
+| `step`      | uint8   | 1 = acknowledgement, 2 = registration    |
 
 **Returns:**
 
-- `deadline` - Block number when signature expires
+- `deadline` - Timestamp when signature expires
 - `hashStruct` - EIP-712 struct hash (for verification)
 
 ---
@@ -115,7 +119,7 @@ function generateHashStruct(
 Check if a wallet is registered.
 
 ```solidity
-function isRegistered(address _wallet) external view returns (bool)
+function isRegistered(address wallet) external view returns (bool)
 ```
 
 ---
@@ -125,43 +129,51 @@ function isRegistered(address _wallet) external view returns (bool)
 Get the current nonce for a wallet.
 
 ```solidity
-function nonces(address _wallet) external view returns (uint256)
+function nonces(address owner) external view returns (uint256)
 ```
 
 ---
 
-#### trustedForwarders
+#### getAcknowledgement
 
-Get the trusted forwarder data for a wallet.
+Get the acknowledgement data for a wallet.
 
 ```solidity
-function trustedForwarders(address _wallet) external view returns (
-    address forwarder,
-    uint256 startBlock,
-    uint256 expiryBlock
+function getAcknowledgement(address wallet) external view returns (
+    AcknowledgementData memory data
 )
+```
+
+**AcknowledgementData struct:**
+
+```solidity
+struct AcknowledgementData {
+    address forwarder;
+    uint256 graceEndBlock;
+    uint256 deadlineBlock;
+}
 ```
 
 ### Events
 
-#### AcknowledgementEvent
+#### WalletAcknowledged
 
 ```solidity
-event AcknowledgementEvent(
-    address indexed registeree,
+event WalletAcknowledged(
+    address indexed owner,
     address indexed forwarder,
-    bool isSponsored
+    bool indexed isSponsored
 );
 ```
 
 Emitted when acknowledgement phase completes.
 
-#### RegistrationEvent
+#### WalletRegistered
 
 ```solidity
-event RegistrationEvent(
-    address indexed registeree,
-    bool isSponsored
+event WalletRegistered(
+    address indexed owner,
+    bool indexed isSponsored
 );
 ```
 
@@ -170,45 +182,59 @@ Emitted when registration completes.
 ### Errors
 
 ```solidity
-error InvalidSigner();
-error InvalidDeadline();
-error NonceAlreadyUsed();
-error InvalidForwarder();
-error GracePeriodNotStarted();
-error WindowExpired();
+// Acknowledgement errors
+error Acknowledgement__Expired();
+error Acknowledgement__InvalidSigner();
+
+// Registration errors
+error Registration__SignatureExpired();
+error Registration__InvalidSigner();
+error Registration__InvalidForwarder();
+error Registration__GracePeriodNotStarted();
+error Registration__ForwarderExpired();
+
+// General errors
+error InvalidOwner();
+error InvalidNonce();
 error InsufficientFee();
 error AlreadyRegistered();
+error FeeForwardFailed();
+error UnauthorizedCaller();
+error InvalidBridgeId();
+error InvalidChainId();
+error InvalidTimingConfig();
+error InvalidFeeConfig();
 ```
 
-## CommonUtils.sol
+## TimingConfig.sol
 
-Utility library for timing calculations.
+Utility library for timing calculations with randomization.
 
 ### Functions
 
-#### calculateGracePeriodStart
+#### getGracePeriodEndBlock
 
 ```solidity
-function calculateGracePeriodStart() internal view returns (uint256)
+function getGracePeriodEndBlock(uint256 graceBlocks) internal view returns (uint256)
 ```
 
-Returns the block number when the grace period starts. Uses `block.prevrandao` for randomization.
+Returns the block number when the grace period ends. Computes `block.number + graceBlocks + random(0, graceBlocks)` using `block.prevrandao` for randomization.
 
-#### calculateGracePeriodDeadline
+#### getDeadlineBlock
 
 ```solidity
-function calculateGracePeriodDeadline() internal view returns (uint256)
+function getDeadlineBlock(uint256 deadlineBlocks) internal view returns (uint256)
 ```
 
-Returns the block number when the registration window expires.
+Returns the block number when the registration window expires. Computes `block.number + deadlineBlocks + random(0, deadlineBlocks)` using `block.prevrandao` for randomization.
 
-### Constants
+#### getSignatureDeadline
 
 ```solidity
-uint256 constant START_TIME_BLOCKS = 5;    // ~1 min on Base
-uint256 constant DEADLINE_BLOCKS = 55;     // ~11 min on Base
-uint256 constant RANDOMIZATION_RANGE = 4;  // Additional random blocks
+function getSignatureDeadline() internal view returns (uint256)
 ```
+
+Returns `block.timestamp + 10 minutes` as the signature expiration timestamp.
 
 ## Integration Examples
 
@@ -256,8 +282,8 @@ const walletClient = createWalletClient({
 const hash = await walletClient.writeContract({
   address: '0x...',
   abi: stolenWalletRegistryAbi,
-  functionName: 'acknowledgementOfRegistry',
-  args: [owner, deadline, v, r, s],
+  functionName: 'acknowledge',
+  args: [owner, deadline, nonce, v, r, s],
 });
 ```
 
@@ -276,10 +302,10 @@ const client = createPublicClient({
 const unwatch = client.watchContractEvent({
   address: '0x...',
   abi: stolenWalletRegistryAbi,
-  eventName: 'RegistrationEvent',
+  eventName: 'WalletRegistered',
   onLogs: (logs) => {
     for (const log of logs) {
-      console.log('Wallet registered:', log.args.registeree);
+      console.log('Wallet registered:', log.args.owner);
     }
   },
 });
@@ -304,8 +330,8 @@ const { writeContract } = useWriteContract();
 writeContract({
   address: '0x...',
   abi: stolenWalletRegistryAbi,
-  functionName: 'walletRegistration',
-  args: [owner, deadline, v, r, s],
+  functionName: 'register',
+  args: [owner, deadline, nonce, v, r, s],
   value: parseEther('0.005'), // If fee required
 });
 ```
