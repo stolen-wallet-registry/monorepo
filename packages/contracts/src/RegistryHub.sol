@@ -130,15 +130,6 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
         return IFeeManager(feeManager).currentFeeWei();
     }
 
-    /// @notice Validate fee payment (skips if no fee manager)
-    /// @dev Call this in subregistry registration functions
-    function validateFee() internal view {
-        if (feeManager == address(0)) return; // No fee manager = free
-        uint256 requiredFee = IFeeManager(feeManager).currentFeeWei();
-        if (requiredFee == 0) return; // Zero fee = free
-        IFeeManager(feeManager).validateFee(msg.value);
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // CROSS-CHAIN REGISTRATION
     // ═══════════════════════════════════════════════════════════════════════════
@@ -191,6 +182,7 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
 
     /// @inheritdoc IRegistryHub
     function withdrawFees(address to, uint256 amount) external onlyOwner {
+        if (to == address(0)) revert Hub__ZeroAddress();
         (bool success,) = to.call{ value: amount }("");
         if (!success) revert Hub__WithdrawalFailed();
         emit FeesWithdrawn(to, amount);

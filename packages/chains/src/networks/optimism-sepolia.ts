@@ -17,7 +17,7 @@ export const optimismSepolia: SpokeNetworkConfig = {
     decimals: 18,
   },
 
-  rpcUrls: ['https://sepolia.optimism.io', 'https://opt-sepolia.g.alchemy.com/v2/demo'],
+  rpcUrls: ['https://sepolia.optimism.io'],
 
   explorer: {
     name: 'Optimism Sepolia Explorer',

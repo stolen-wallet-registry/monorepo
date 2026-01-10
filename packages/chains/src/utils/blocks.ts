@@ -50,6 +50,7 @@ export function getDeadlineBlocks(chainId: number): number {
  * @returns Estimated time in milliseconds
  */
 export function estimateTimeFromBlocks(blocks: bigint | number, chainId: number): number {
+  // Note: Precision loss possible for blockCount > Number.MAX_SAFE_INTEGER (~9 quadrillion)
   const blockCount = typeof blocks === 'bigint' ? Number(blocks) : blocks;
   if (blockCount <= 0) return 0;
   const blockTime = getBlockTime(chainId);

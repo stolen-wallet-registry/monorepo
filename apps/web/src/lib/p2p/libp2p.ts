@@ -139,12 +139,12 @@ export interface SetupOptions {
  * @returns Started libp2p node
  */
 export async function setup(options: SetupOptions): Promise<{ libp2p: Libp2p }>;
-/** Overload for passing handlers array directly */
+/** Backward-compatible overload for passing handlers array directly (prefer `setup({ handlers, walletAddress })`). */
 export async function setup(handlers: ProtocolHandler[]): Promise<{ libp2p: Libp2p }>;
 export async function setup(
   optionsOrHandlers: SetupOptions | ProtocolHandler[]
 ): Promise<{ libp2p: Libp2p }> {
-  // Handle both old array-style and new options-style calls
+  // Handle both handlers-array and options-object call styles
   const { handlers, walletAddress } = Array.isArray(optionsOrHandlers)
     ? { handlers: optionsOrHandlers, walletAddress: undefined }
     : optionsOrHandlers;

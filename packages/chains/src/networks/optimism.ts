@@ -17,7 +17,7 @@ export const optimism: SpokeNetworkConfig = {
     decimals: 18,
   },
 
-  rpcUrls: ['https://mainnet.optimism.io', 'https://opt-mainnet.g.alchemy.com/v2/demo'],
+  rpcUrls: ['https://mainnet.optimism.io'],
 
   explorer: {
     name: 'Optimism Explorer',

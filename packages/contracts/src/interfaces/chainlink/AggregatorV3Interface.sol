@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// solhint-disable interface-starts-with-i
 /// @title AggregatorV3Interface
 /// @author Chainlink
 /// @notice Interface for Chainlink price feed aggregators
 /// @dev Standard interface for reading price data from Chainlink oracles.
 ///      This is a standard Chainlink interface - naming convention exception is intentional.
+// solhint-disable-next-line interface-starts-with-i
 interface AggregatorV3Interface {
-    // solhint-enable interface-starts-with-i
     /// @notice Returns the number of decimals in the price feed response
     /// @return The number of decimals (e.g., 8 for ETH/USD)
     function decimals() external view returns (uint8);

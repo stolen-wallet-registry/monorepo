@@ -27,6 +27,9 @@ interface IRegistryHub {
     /// @notice Thrown when caller is not authorized CrossChainInbox
     error Hub__UnauthorizedInbox();
 
+    /// @notice Thrown when a zero address is provided for a required parameter
+    error Hub__ZeroAddress();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════

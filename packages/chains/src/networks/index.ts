@@ -6,21 +6,15 @@
 
 import type { NetworkConfig } from '../types';
 
-// Individual network exports
-export { anvilHub } from './anvil-hub';
-export { anvilSpoke } from './anvil-spoke';
-export { base } from './base';
-export { baseSepolia } from './base-sepolia';
-export { optimism } from './optimism';
-export { optimismSepolia } from './optimism-sepolia';
-
-// Import for map building
 import { anvilHub } from './anvil-hub';
 import { anvilSpoke } from './anvil-spoke';
 import { base } from './base';
 import { baseSepolia } from './base-sepolia';
 import { optimism } from './optimism';
 import { optimismSepolia } from './optimism-sepolia';
+
+// Re-export individual network configs
+export { anvilHub, anvilSpoke, base, baseSepolia, optimism, optimismSepolia };
 
 /**
  * All supported networks.

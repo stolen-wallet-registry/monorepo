@@ -62,9 +62,10 @@ export function getEnvironmentNetworks(env: Environment): readonly NetworkConfig
  * @returns The environment, or undefined if not recognized
  */
 export function detectEnvironmentFromChainId(chainId: number): Environment | undefined {
-  for (const [env, ids] of Object.entries(environmentChainIds)) {
-    if ((ids as readonly number[]).includes(chainId)) {
-      return env as Environment;
+  const entries = Object.entries(environmentChainIds) as [Environment, readonly number[]][];
+  for (const [env, ids] of entries) {
+    if (ids.includes(chainId)) {
+      return env;
     }
   }
   return undefined;

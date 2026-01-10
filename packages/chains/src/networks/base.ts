@@ -17,7 +17,7 @@ export const base: HubNetworkConfig = {
     decimals: 18,
   },
 
-  rpcUrls: ['https://mainnet.base.org', 'https://base-mainnet.g.alchemy.com/v2/demo'],
+  rpcUrls: ['https://mainnet.base.org'],
 
   explorer: {
     name: 'Basescan',
@@ -37,7 +37,7 @@ export const base: HubNetworkConfig = {
     primary: 'hyperlane',
     hyperlane: {
       mailbox: '0xeA87ae93Fa0019a82A727bfd3eBd1cFCa8f64f1D',
-      igp: '0x8F1E22d309baa69D398a03cD4D3c5A3B22572c14',
+      igp: '0xc3F23848Ed2e04C0c6d41bd7804fa8f89F940B94',
     },
   },
 

@@ -140,13 +140,13 @@ export function getCcipConfig(chainId: number): CcipBridgeConfig | null {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Get the bridge adapter address for a spoke chain.
+ * Get the bridge adapter address for a spoke chain, or null if not deployed.
  *
  * @param chainId - The spoke chain ID
  * @param provider - The bridge provider (defaults to primary)
  * @returns Adapter address or null if not deployed
  */
-export function getBridgeAdapterAddress(
+export function getBridgeAdapterAddressOrNull(
   chainId: number,
   provider?: BridgeProvider
 ): Address | null {
@@ -157,6 +157,23 @@ export function getBridgeAdapterAddress(
   if (!bridgeProvider) return null;
 
   return network.spokeContracts.bridgeAdapters?.[bridgeProvider] ?? null;
+}
+
+/**
+ * Get the bridge adapter address for a spoke chain.
+ *
+ * @param chainId - The spoke chain ID
+ * @param provider - The bridge provider (defaults to primary)
+ * @returns Adapter address
+ * @throws Error if adapter not deployed
+ */
+export function getBridgeAdapterAddress(chainId: number, provider?: BridgeProvider): Address {
+  const address = getBridgeAdapterAddressOrNull(chainId, provider);
+  if (!address) {
+    const providerName = provider ?? 'primary';
+    throw new Error(`No ${providerName} bridge adapter deployed for chain ${chainId}`);
+  }
+  return address;
 }
 
 /**

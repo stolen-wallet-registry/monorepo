@@ -58,8 +58,8 @@ export function getHubChainId(chainId: number): number | undefined {
 
   if (network.role === 'hub') return undefined;
 
-  // TypeScript knows this is SpokeNetworkConfig now
-  return (network as SpokeNetworkConfig).hubChainId;
+  // TypeScript narrows to SpokeNetworkConfig after the hub check
+  return network.hubChainId;
 }
 
 /**

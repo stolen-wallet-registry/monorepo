@@ -7,6 +7,7 @@ import {
   formatTimeString,
   blocksRemaining,
   BLOCK_TIMES,
+  DEFAULT_BLOCK_TIME,
 } from './blocks';
 
 /**
@@ -48,8 +49,8 @@ describe('block utilities', () => {
     });
 
     it('returns default block time for unknown chains', () => {
-      // Unknown chains fall back to 12 seconds (Ethereum mainnet default)
-      expect(getBlockTime(999999)).toBe(12);
+      // Unknown chains fall back to DEFAULT_BLOCK_TIME (Ethereum mainnet default)
+      expect(getBlockTime(999999)).toBe(DEFAULT_BLOCK_TIME);
     });
 
     it('has all SWR-supported chains configured', () => {

@@ -539,6 +539,11 @@ export const RegistryHubABI = [
   },
   {
     type: 'error',
+    name: 'Hub__ZeroAddress',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'OwnableInvalidOwner',
     inputs: [
       {

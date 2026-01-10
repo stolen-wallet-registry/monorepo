@@ -17,7 +17,7 @@ export const baseSepolia: HubNetworkConfig = {
     decimals: 18,
   },
 
-  rpcUrls: ['https://sepolia.base.org', 'https://base-sepolia.g.alchemy.com/v2/demo'],
+  rpcUrls: ['https://sepolia.base.org'],
 
   explorer: {
     name: 'Basescan Sepolia',

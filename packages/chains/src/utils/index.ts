@@ -66,5 +66,6 @@ export {
   getWormholeConfig,
   getCcipConfig,
   getBridgeAdapterAddress,
+  getBridgeAdapterAddressOrNull,
   getAllBridgeAdapters,
 } from './bridges';
