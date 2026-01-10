@@ -45,6 +45,14 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     /// @notice Fee manager for registration fees (address(0) = free)
     address public immutable feeManager;
 
+    /// @notice Base blocks for grace period (chain-specific for consistent UX)
+    /// @dev Grace period = graceBlocks + random(0, graceBlocks). See TimingConfig.sol.
+    uint256 public immutable graceBlocks;
+
+    /// @notice Base blocks for registration deadline (chain-specific for consistent UX)
+    /// @dev Deadline = deadlineBlocks + random(0, deadlineBlocks). See TimingConfig.sol.
+    uint256 public immutable deadlineBlocks;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // STATE
     // ═══════════════════════════════════════════════════════════════════════════
@@ -97,20 +105,46 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     /// @param _feeManager Fee manager address (address(0) for free registrations)
     /// @param _hubChainId Hub chain Hyperlane domain ID
     /// @param _hubInbox CrossChainInbox address on hub
-    constructor(address _owner, address _bridgeAdapter, address _feeManager, uint32 _hubChainId, bytes32 _hubInbox)
-        EIP712("StolenWalletRegistry", "4")
-        Ownable(_owner)
-    {
+    /// @param _graceBlocks Base blocks for grace period (chain-specific, see TimingConfig.sol)
+    /// @param _deadlineBlocks Base blocks for deadline window (chain-specific, see TimingConfig.sol)
+    constructor(
+        address _owner,
+        address _bridgeAdapter,
+        address _feeManager,
+        uint32 _hubChainId,
+        bytes32 _hubInbox,
+        uint256 _graceBlocks,
+        uint256 _deadlineBlocks
+    ) EIP712("StolenWalletRegistry", "4") Ownable(_owner) {
         // Validate owner explicitly (Ownable allows zero but we want to fail fast)
         if (_owner == address(0)) revert SpokeRegistry__ZeroAddress();
         // Note: We validate non-zero here but defer interface validation to runtime.
         // This avoids constructor complexity while still failing fast on first use.
         if (_bridgeAdapter == address(0)) revert SpokeRegistry__ZeroAddress();
+
+        // Validate timing parameters to prevent misconfiguration.
+        // Both grace period and deadline use randomization in TimingConfig.sol:
+        //   - Grace end:   block.number + random(0, graceBlocks) + graceBlocks
+        //                  Range: [current + graceBlocks, current + 2*graceBlocks - 1]
+        //   - Deadline:    block.number + random(0, deadlineBlocks) + deadlineBlocks
+        //                  Range: [current + deadlineBlocks, current + 2*deadlineBlocks - 1]
+        //
+        // Worst case: grace period ends at maximum (2*graceBlocks - 1), deadline at minimum (deadlineBlocks)
+        // To ensure deadline always > grace end: deadlineBlocks > 2*graceBlocks - 1
+        // Simplified: deadlineBlocks >= 2*graceBlocks
+        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks) {
+            revert SpokeRegistry__InvalidTimingConfig();
+        }
+
+        // Validate chain ID fits in uint32 (all current EVM chains do, but defensive)
+        require(block.chainid <= type(uint32).max, "chain id too large");
         spokeChainId = uint32(block.chainid);
         bridgeAdapter = _bridgeAdapter;
         feeManager = _feeManager;
         hubChainId = _hubChainId;
         hubInbox = _hubInbox;
+        graceBlocks = _graceBlocks;
+        deadlineBlocks = _deadlineBlocks;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -143,8 +177,8 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         // Store acknowledgement with randomized grace period timing
         pendingAcknowledgements[owner] = AcknowledgementData({
             trustedForwarder: msg.sender,
-            startBlock: TimingConfig.getGracePeriodEndBlock(),
-            expiryBlock: TimingConfig.getDeadlineBlock()
+            startBlock: TimingConfig.getGracePeriodEndBlock(graceBlocks),
+            expiryBlock: TimingConfig.getDeadlineBlock(deadlineBlocks)
         });
 
         emit WalletAcknowledged(owner, msg.sender, owner != msg.sender);

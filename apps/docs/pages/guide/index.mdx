@@ -1,0 +1,65 @@
+# Quick Start Guide
+
+Get started with the Stolen Wallet Registry in minutes.
+
+## Prerequisites
+
+- A Web3 wallet (MetaMask, Rainbow, Coinbase Wallet, etc.)
+- The wallet address you want to register as stolen
+- ETH for gas fees (or a helper for P2P relay)
+
+## Choose Your Registration Method
+
+| Method                                       | When to Use                                               | You Need                  |
+| -------------------------------------------- | --------------------------------------------------------- | ------------------------- |
+| [Standard](/guide/registration-standard)     | You have access to the compromised wallet and funds       | One wallet                |
+| [Self-Relay](/guide/registration-self-relay) | Compromised wallet is drained but you have another wallet | Two wallets               |
+| [P2P Relay](/guide/registration-p2p-relay)   | No funds at all, need a trusted helper                    | Trusted friend with funds |
+
+## The Two-Phase Process
+
+All registration methods follow the same security pattern:
+
+### Phase 1: Acknowledgement
+
+1. Connect your wallet
+2. Enter the address being registered
+3. Sign the EIP-712 acknowledgement message
+4. Submit the transaction (or have your relayer submit it)
+
+### Phase 2: Registration
+
+After a 1-4 minute grace period:
+
+1. Sign the EIP-712 registration message
+2. Submit the final transaction
+3. Your wallet is now registered as stolen
+
+## Why Two Phases?
+
+The two-phase process prevents phishing attacks. If someone tricks you into signing an acknowledgement, you'd need to sign a **second** message to complete registration. This gives you time to realize something is wrong.
+
+[Learn more about the security model](/technical/eip712-signatures)
+
+## After Registration
+
+Once registered:
+
+- The wallet is permanently marked as stolen on-chain
+- Events are emitted for off-chain indexers
+- Exchanges and off-ramps listening to the registry can flag associated transactions
+- The registration cannot be undone (by design)
+
+## Verification
+
+You can verify a registration:
+
+1. Check the transaction on Etherscan/Basescan
+2. Query the registry contract directly
+3. Use the verification page on the app
+
+## Need Help?
+
+- [Etherscan Walkthrough](/guide/etherscan-walkthrough) - Manual registration via Etherscan
+- [Technical Architecture](/technical/architecture) - How it works under the hood
+- [GitHub Issues](https://github.com/stolen-wallet-registry/monorepo/issues) - Report problems

@@ -1,0 +1,310 @@
+# Architecture
+
+Technical architecture of the Stolen Wallet Registry.
+
+## System Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         USER                                     │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     WEB APPLICATION                              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │   Pages     │  │   Stores    │  │   Hooks     │             │
+│  └─────────────┘  └─────────────┘  └─────────────┘             │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+        ▼                     ▼                     ▼
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│ wagmi/viem    │   │    libp2p     │   │ sessionStorage│
+│ (Web3)        │   │    (P2P)      │   │ (Signatures)  │
+└───────┬───────┘   └───────┬───────┘   └───────────────┘
+        │                   │
+        ▼                   ▼
+┌───────────────┐   ┌───────────────┐
+│  BLOCKCHAIN   │   │ RELAY SERVER  │
+│  (Base L2)    │   │  (libp2p)     │
+└───────────────┘   └───────────────┘
+```
+
+## Monorepo Structure
+
+```
+stolen-wallet-registry-monorepo/
+├── apps/
+│   ├── web/                    # Vite SPA - registration flows
+│   │   └── src/
+│   │       ├── providers/      # ThemeProvider, Web3Provider
+│   │       ├── stores/         # formStore, registrationStore, p2pStore
+│   │       ├── hooks/          # Contract, P2P, signature hooks
+│   │       ├── components/     # UI components
+│   │       │   ├── composed/   # Business components
+│   │       │   └── registration/ # Step components
+│   │       ├── pages/          # Route entry points
+│   │       └── lib/
+│   │           ├── contracts/  # ABIs, addresses
+│   │           ├── signatures/ # EIP-712 helpers
+│   │           ├── p2p/        # libp2p config
+│   │           └── logger/     # Logging system
+│   ├── landing/                # Next.js marketing site
+│   ├── relay/                  # libp2p relay server
+│   └── docs/                   # Vocs documentation (this site)
+├── packages/
+│   ├── contracts/              # Foundry smart contracts
+│   ├── abis/                   # Generated ABIs
+│   └── ui/                     # Shared component library
+└── PRPs/                       # Planning documents
+```
+
+## Provider Hierarchy
+
+The provider order is critical for proper functionality:
+
+```
+AppProviders
+└─ ThemeProvider         ← Must wrap Web3 (RainbowKit needs theme)
+   └─ Web3Provider
+      └─ WagmiProvider
+         └─ QueryClientProvider
+            └─ RainbowKitProvider
+```
+
+**Why this order?**
+
+- ThemeProvider must be outermost so RainbowKit can access theme context
+- WagmiProvider wraps QueryClient because wagmi uses TanStack Query internally
+- RainbowKitProvider is innermost, consuming both wagmi and theme
+
+## Data Flow
+
+### Registration Flow
+
+```
+User Action
+     │
+     ▼
+┌─────────────┐
+│    Page     │  StandardRegistrationPage, SelfRelayPage, etc.
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   Stores    │  registrationStore (step), formStore (values)
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   Hooks     │  useAcknowledgement, useRegistration
+└──────┬──────┘
+       │
+       ├────────────────┬─────────────────┐
+       ▼                ▼                 ▼
+┌─────────────┐  ┌─────────────┐  ┌──────────────┐
+│ signTypedData│  │writeContract│  │sessionStorage│
+│   (viem)    │  │   (wagmi)   │  │ (signatures) │
+└─────────────┘  └─────────────┘  └──────────────┘
+```
+
+### P2P Flow
+
+```
+Registeree                              Relayer
+    │                                      │
+    ▼                                      ▼
+┌─────────────┐                    ┌─────────────┐
+│ p2pStore    │                    │ p2pStore    │
+└──────┬──────┘                    └──────┬──────┘
+       │                                  │
+       ▼                                  ▼
+┌─────────────┐                    ┌─────────────┐
+│useP2PSignatureRelay │ ◄──────────► │useP2PSignatureRelay │
+└──────┬──────┘                    └──────┬──────┘
+       │                                  │
+       ▼                                  ▼
+┌─────────────────────────────────────────────────┐
+│                  libp2p Network                  │
+│     (WebRTC + Circuit Relay + WebSockets)        │
+└─────────────────────────────────────────────────┘
+```
+
+## Tech Stack
+
+| Layer        | Technology           | Purpose                     |
+| ------------ | -------------------- | --------------------------- |
+| Build        | Vite 7.x             | Fast dev server, ESM-native |
+| UI           | React 19             | Component framework         |
+| Styling      | Tailwind 4.x         | Utility CSS                 |
+| Components   | shadcn/ui            | Radix primitives            |
+| State        | Zustand 5.x          | Client state management     |
+| Server State | TanStack Query 5.x   | Contract reads caching      |
+| Web3         | wagmi 2.x + viem 2.x | Ethereum interactions       |
+| Wallet       | RainbowKit 2.x       | Wallet connection           |
+| P2P          | libp2p 3.x           | Peer-to-peer messaging      |
+| Forms        | React Hook Form 7.x  | Form management             |
+| Validation   | Zod 4.x              | Schema validation           |
+
+## Smart Contract Architecture
+
+### Current (Single Contract)
+
+```
+StolenWalletRegistry.sol
+├── acknowledgementOfRegistry()
+├── walletRegistration()
+├── generateHashStruct()
+├── isRegistered()
+└── nonces()
+```
+
+### Future (Hub + Subregistries)
+
+```
+RegistryHub.sol
+    │
+    ├── StolenWalletRegistry.sol
+    │       └── ISubRegistry
+    │
+    ├── StolenTransactionRegistry.sol
+    │       └── ISubRegistry
+    │
+    └── FraudulentContractRegistry.sol
+            └── ISubRegistry
+```
+
+Each subregistry implements a common interface, allowing:
+
+- Independent upgrades
+- Different fee structures
+- Scoped operator permissions
+
+## P2P Relay Infrastructure
+
+### Transports
+
+| Transport     | Purpose                   | When Used              |
+| ------------- | ------------------------- | ---------------------- |
+| Circuit Relay | NAT traversal             | Always (initial)       |
+| WebRTC        | Direct browser-to-browser | After dcutr (~85%)     |
+| WebSockets    | Fallback                  | Safari, older browsers |
+
+### Custom Protocols
+
+```typescript
+const PROTOCOLS = {
+  CONNECT: '/swr/connected/1.0.0',
+  ACK_SIG: '/swr/acknowledgement/signature/1.0.0',
+  ACK_REC: '/swr/acknowledgement/signature/1.0.0/received',
+  ACK_PAY: '/swr/acknowledgement/payment/1.0.0',
+  REG_SIG: '/swr/register/signature/1.0.0',
+  REG_REC: '/swr/register/signature/1.0.0/received',
+  REG_PAY: '/swr/register/payment/1.0.0',
+};
+```
+
+### Connection Upgrade (dcutr)
+
+```
+1. INITIAL: A ←─relay─→ Server ←─relay─→ B
+2. EXCHANGE: A sends addresses to B via relay
+3. UPGRADE: A ←────── direct WebRTC ──────→ B
+```
+
+Benefits: Lower latency, reduced server load.
+
+## State Management
+
+### Zustand Stores
+
+| Store               | Purpose                     | Persistence  |
+| ------------------- | --------------------------- | ------------ |
+| `registrationStore` | Current step, tx hashes     | localStorage |
+| `formStore`         | Form values (addresses)     | localStorage |
+| `p2pStore`          | Peer IDs, connection status | localStorage |
+
+### Store Structure
+
+```typescript
+// registrationStore
+interface RegistrationState {
+  step: RegistrationStep;
+  registrationType: RegistrationType;
+  acknowledgementTxHash?: `0x${string}`;
+  registrationTxHash?: `0x${string}`;
+  setStep: (step: RegistrationStep) => void;
+  reset: () => void;
+}
+```
+
+## Key Design Patterns
+
+### Step-Based Flow
+
+Each registration method defines a sequence of steps:
+
+```typescript
+const STEP_SEQUENCES = {
+  standard: [
+    'acknowledge-and-sign',
+    'acknowledge-and-pay',
+    'grace-period',
+    'register-and-sign',
+    'register-and-pay',
+    'success',
+  ],
+  selfRelay: [...],
+  p2pRelay: [...],
+};
+```
+
+The `StepRenderer` component maps steps to UI components.
+
+### Signature Storage
+
+Signatures are stored in sessionStorage with a 30-minute TTL:
+
+```typescript
+interface StoredSignature {
+  signature: `0x${string}`;
+  deadline: bigint;
+  nonce: bigint;
+  address: `0x${string}`;
+  chainId: number;
+  step: SignatureStep;
+  storedAt: number;
+}
+```
+
+Key format: `swr_sig_${address}_${chainId}_${step}`
+
+### Logger Categories
+
+```typescript
+logger.wallet.info('Connected', { address, chainId });
+logger.contract.debug('Reading deadlines', { registeree });
+logger.signature.warn('Signature expired', { deadline });
+logger.registration.error('Failed', { step }, error);
+logger.p2p.info('Peer connected', { peerId });
+```
+
+## Security Considerations
+
+### EIP-712 Two-Phase
+
+- Two signatures prevent single-transaction phishing
+- Grace period (1-4 min) prevents automated attacks
+- Nonces prevent replay attacks
+- Deadlines prevent stale signatures
+
+### P2P Security
+
+- Stream size limit: 100KB
+- JSON safety: prototype pollution prevention
+- Zod strict mode: rejects unknown keys
+- Connection gating: blocks localhost in production
+
+[Learn more about signatures](/technical/eip712-signatures)

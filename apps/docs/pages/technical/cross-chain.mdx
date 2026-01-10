@@ -1,0 +1,320 @@
+# Cross-Chain Architecture
+
+How the Stolen Wallet Registry works across multiple chains.
+
+## Overview
+
+The registry is designed to be **cross-chain from day one**:
+
+- **CAIP-10 addresses** - Universal address format
+- **Settlement on Base** - Single source of truth
+- **L2 deployments** - User-facing registrations on cheaper chains
+- **Bridge integration** - Messages flow to settlement chain
+
+## CAIP-10 Address Format
+
+[CAIP-10](https://github.com/ChainAgnostic/CAIPs/blob/master/CAIPs/caip-10.md) is a standard for representing blockchain addresses across any chain.
+
+### Format
+
+```
+{namespace}:{chainId}:{address}
+```
+
+### Examples
+
+| Chain            | CAIP-10 Address                                       |
+| ---------------- | ----------------------------------------------------- |
+| Ethereum Mainnet | `eip155:1:0x742d35Cc6634C0532925a3b844Bc454e4438f44e` |
+| Base             | `eip155:8453:0x...`                                   |
+| Optimism         | `eip155:10:0x...`                                     |
+| Arbitrum         | `eip155:42161:0x...`                                  |
+| Polygon          | `eip155:137:0x...`                                    |
+| Solana           | `solana:mainnet:FN1...`                               |
+| Bitcoin          | `bip122:000000000019d6689c085ae165831e93:1A1zP1...`   |
+
+### Benefits
+
+- **Universal format** - Same structure for any chain
+- **Self-describing** - Address includes chain information
+- **Validation** - Each namespace has specific format rules
+- **Future-proof** - New chains just need namespace registration
+
+## Settlement Chain: Base
+
+### Why Base?
+
+| Factor               | Value                                        |
+| -------------------- | -------------------------------------------- |
+| TVL                  | $4B+                                         |
+| Monthly Transactions | 50M+                                         |
+| Finality             | ~2 seconds                                   |
+| Ecosystem            | Coinbase alignment for Operator-as-Paymaster |
+| Cost                 | Low gas fees                                 |
+
+### How Settlement Works
+
+```
+User on Optimism
+       │
+       ▼
+┌──────────────────┐
+│ Local Registry   │  Register on Optimism
+│ (Spoke)          │
+└────────┬─────────┘
+         │
+         │ Bridge message
+         ▼
+┌──────────────────┐
+│ Registry Hub     │  Settlement on Base
+│ (Hub)            │
+└──────────────────┘
+```
+
+All registrations are recorded on Base as the canonical source. Local registrations on other chains are bridged.
+
+## Multi-Chain Deployment
+
+### Architecture
+
+```
+                    ┌─────────────────────┐
+                    │     BASE (Hub)      │
+                    │  ┌───────────────┐  │
+                    │  │ RegistryHub   │  │
+                    │  └───────────────┘  │
+                    └──────────┬──────────┘
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+        ▼                      ▼                      ▼
+┌───────────────┐    ┌───────────────┐    ┌───────────────┐
+│   OPTIMISM    │    │   ARBITRUM    │    │   POLYGON     │
+│    (Spoke)    │    │    (Spoke)    │    │    (Spoke)    │
+└───────────────┘    └───────────────┘    └───────────────┘
+```
+
+### Spoke Contracts
+
+Each L2 has a spoke contract that:
+
+1. Accepts local registrations
+2. Stores local state for quick reads
+3. Sends messages to hub for settlement
+4. Receives updates from hub (optional)
+
+### Benefits
+
+- **Lower costs** - Users register on cheap L2s
+- **Fast UX** - Local confirmation is instant
+- **Single source** - All data settles to Base
+- **Flexibility** - Add new chains easily
+
+## Bridge Protocols
+
+### Under Evaluation
+
+| Protocol           | Strengths                    | Considerations                                                                                             |
+| ------------------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Hyperlane**      | EVM-native, modular security | Best for L2-to-L2                                                                                          |
+| **Chainlink CCIP** | Oracle network credibility   | Enterprise focus                                                                                           |
+| **Wormhole**       | 30+ chains, non-EVM support  | [Feb 2022 exploit](https://rekt.news/wormhole-rekt/) - security improvements since, due diligence required |
+
+### Hyperlane (Recommended for L2s)
+
+```solidity
+// Sending a message from Optimism to Base
+IMailbox(mailbox).dispatch(
+    8453, // Base chain ID
+    registryHubAddress,
+    abi.encode(registrationData)
+);
+```
+
+### Message Format
+
+```solidity
+struct CrossChainRegistration {
+    bytes32 caip10Address;    // CAIP-10 formatted
+    bytes32 signatureHash;    // For verification
+    uint256 timestamp;
+    address submitter;
+}
+```
+
+## Fee Handling
+
+### Per-Chain Fees
+
+Users pay in native currency of their chain:
+
+- Optimism → ETH
+- Polygon → MATIC
+- Solana → SOL
+
+### Fee Conversion
+
+```
+User pays in native token
+         │
+         ▼
+┌────────────────┐
+│ Bridge/DEX     │  Convert to ETH
+└────────┬───────┘
+         │
+         ▼
+┌────────────────┐
+│ Settlement     │  Receive in ETH
+│ (Base)         │
+└────────────────┘
+```
+
+The bridge or a DEX aggregator handles conversion. User/operator covers conversion costs.
+
+## Reading Cross-Chain Data
+
+### Option 1: Query Settlement Chain
+
+```typescript
+// Read from Base (source of truth)
+const isRegistered = await baseClient.readContract({
+  address: registryHubAddress,
+  abi: registryHubAbi,
+  functionName: 'isRegistered',
+  args: [caip10Address],
+});
+```
+
+### Option 2: Query Local Spoke
+
+```typescript
+// Read from local chain (may have slight delay)
+const isRegistered = await optimismClient.readContract({
+  address: optimismSpokeAddress,
+  abi: spokeAbi,
+  functionName: 'isRegistered',
+  args: [caip10Address],
+});
+```
+
+### Option 3: Off-Chain API
+
+```typescript
+// Query the off-chain indexer
+const response = await fetch(`https://api.stolenwallet.registry/v1/check/${caip10Address}`);
+const { isRegistered, chains } = await response.json();
+```
+
+## Non-EVM Chains
+
+### Solana
+
+Solana addresses use a different format and signature scheme:
+
+```
+solana:mainnet:FN1...abc123...xyz
+```
+
+Integration requires:
+
+- Ed25519 signature verification
+- Solana program for local registration
+- Wormhole for cross-chain messaging
+
+### Bitcoin
+
+Bitcoin addresses have their own namespace:
+
+```
+bip122:000000000019d6689c085ae165831e93:1A1zP1...
+```
+
+Registration methods differ:
+
+- No smart contracts on Bitcoin
+- Use signed messages (BIP-322)
+- Submit proof to EVM settlement
+
+## Future: CCIP for Enterprise
+
+Chainlink CCIP may be used for enterprise integrations:
+
+- Higher trust from oracle reputation
+- Built-in rate limiting
+- Token transfers alongside messages
+- Premium pricing
+
+## Implementation Timeline
+
+### Phase 1-3 (Current)
+
+- Single chain (Base Sepolia for testnet)
+- No bridging needed
+- CAIP-10 addresses stored for future
+
+### Phase 4-5 (Planned)
+
+- Deploy spokes to Optimism, Arbitrum
+- Integrate Hyperlane for L2-to-L2
+- Settlement on Base
+
+### Phase 6+ (Future)
+
+- Non-EVM support (Solana, Bitcoin)
+- Wormhole integration
+- Cross-chain queries
+
+## Developer Resources
+
+### CAIP-10 Library (Planned)
+
+```solidity
+library CAIP10 {
+    function parse(string memory caip10)
+        internal pure
+        returns (string memory namespace, uint256 chainId, address addr);
+
+    function format(string memory namespace, uint256 chainId, address addr)
+        internal pure
+        returns (string memory);
+
+    function isValid(string memory caip10)
+        internal pure
+        returns (bool);
+}
+```
+
+### TypeScript Utilities (Planned)
+
+```typescript
+import { formatCAIP10, parseCAIP10 } from '@swr/shared';
+
+const caip10 = formatCAIP10({
+  namespace: 'eip155',
+  chainId: 8453,
+  address: '0x...',
+});
+
+const parsed = parseCAIP10(caip10);
+// { namespace: 'eip155', chainId: 8453, address: '0x...' }
+```
+
+## Security Considerations
+
+### Bridge Trust
+
+- Bridge security is critical for cross-chain integrity
+- Multiple validators reduce single points of failure
+- Consider optimistic fraud proofs for high-value operations
+
+### Replay Protection
+
+- CAIP-10 includes chainId, preventing cross-chain replay
+- Nonces are per-chain, per-wallet
+- Deadlines are chain-specific (block numbers differ)
+
+### Liveness
+
+- If a bridge goes down, local registrations still work
+- Settlement may be delayed but not lost
+- Hub can accept out-of-order messages

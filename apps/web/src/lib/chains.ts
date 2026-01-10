@@ -15,7 +15,8 @@ const CHAIN_COLORS: Record<number, string> = {
   137: 'bg-purple-500', // Polygon
   42161: 'bg-blue-400', // Arbitrum
   8453: 'bg-blue-600', // Base
-  11155111: 'bg-purple-400', // Sepolia
+  84532: 'bg-blue-400', // Base Sepolia
+  11155420: 'bg-red-400', // Optimism Sepolia
   31337: 'bg-blue-500', // Anvil Hub (local)
   31338: 'bg-green-500', // Anvil Spoke (local)
 };

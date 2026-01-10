@@ -1,0 +1,387 @@
+# Smart Contracts
+
+Reference documentation for the Stolen Wallet Registry contracts.
+
+## Contract Addresses
+
+| Network          | Address | Explorer                                                                     |
+| ---------------- | ------- | ---------------------------------------------------------------------------- |
+| Base             | `0x...` | [Basescan](https://basescan.org/address/0x...)                               |
+| Optimism         | `0x...` | [Optimism Etherscan](https://optimistic.etherscan.io/address/0x...)          |
+| Base Sepolia     | `0x...` | [Base Sepolia Scan](https://sepolia.basescan.org/address/0x...)              |
+| Optimism Sepolia | `0x...` | [Optimism Sepolia Scan](https://sepolia-optimism.etherscan.io/address/0x...) |
+
+_Note: Replace with actual deployed addresses_
+
+## StolenWalletRegistry.sol
+
+The main contract for wallet registration.
+
+### Functions
+
+#### acknowledgementOfRegistry
+
+Submit the first phase of registration.
+
+```solidity
+function acknowledgementOfRegistry(
+    address _owner,
+    uint256 _deadline,
+    uint8 _v,
+    bytes32 _r,
+    bytes32 _s
+) external
+```
+
+| Parameter   | Type    | Description                  |
+| ----------- | ------- | ---------------------------- |
+| `_owner`    | address | Wallet being registered      |
+| `_deadline` | uint256 | Block deadline for signature |
+| `_v`        | uint8   | Signature v component        |
+| `_r`        | bytes32 | Signature r component        |
+| `_s`        | bytes32 | Signature s component        |
+
+**Emits:** `AcknowledgementEvent(address indexed registeree, address indexed forwarder, bool isSponsored)`
+
+**Reverts:**
+
+- `InvalidSigner` - Signature doesn't match owner
+- `InvalidDeadline` - Deadline has passed
+- `NonceAlreadyUsed` - Nonce mismatch
+
+---
+
+#### walletRegistration
+
+Submit the second phase of registration.
+
+```solidity
+function walletRegistration(
+    address _owner,
+    uint256 _deadline,
+    uint8 _v,
+    bytes32 _r,
+    bytes32 _s
+) external payable
+```
+
+| Parameter   | Type    | Description                  |
+| ----------- | ------- | ---------------------------- |
+| `_owner`    | address | Wallet being registered      |
+| `_deadline` | uint256 | Block deadline for signature |
+| `_v`        | uint8   | Signature v component        |
+| `_r`        | bytes32 | Signature r component        |
+| `_s`        | bytes32 | Signature s component        |
+
+**Value:** Registration fee (if required)
+
+**Emits:** `RegistrationEvent(address indexed registeree, bool isSponsored)`
+
+**Reverts:**
+
+- `InvalidSigner` - Signature doesn't match owner
+- `InvalidForwarder` - Caller isn't the trusted forwarder
+- `GracePeriodNotStarted` - Too early to register
+- `WindowExpired` - Registration window closed
+- `InsufficientFee` - Not enough ETH sent
+
+---
+
+#### generateHashStruct
+
+Get the deadline and hash for signing.
+
+```solidity
+function generateHashStruct(
+    address _registeree,
+    uint8 _signatureStep
+) external view returns (uint256 deadline, bytes32 hashStruct)
+```
+
+| Parameter        | Type    | Description             |
+| ---------------- | ------- | ----------------------- |
+| `_registeree`    | address | Wallet being registered |
+| `_signatureStep` | uint8   | 1 = ACK, 2 = REG        |
+
+**Returns:**
+
+- `deadline` - Block number when signature expires
+- `hashStruct` - EIP-712 struct hash (for verification)
+
+---
+
+#### isRegistered
+
+Check if a wallet is registered.
+
+```solidity
+function isRegistered(address _wallet) external view returns (bool)
+```
+
+---
+
+#### nonces
+
+Get the current nonce for a wallet.
+
+```solidity
+function nonces(address _wallet) external view returns (uint256)
+```
+
+---
+
+#### trustedForwarders
+
+Get the trusted forwarder data for a wallet.
+
+```solidity
+function trustedForwarders(address _wallet) external view returns (
+    address forwarder,
+    uint256 startBlock,
+    uint256 expiryBlock
+)
+```
+
+### Events
+
+#### AcknowledgementEvent
+
+```solidity
+event AcknowledgementEvent(
+    address indexed registeree,
+    address indexed forwarder,
+    bool isSponsored
+);
+```
+
+Emitted when acknowledgement phase completes.
+
+#### RegistrationEvent
+
+```solidity
+event RegistrationEvent(
+    address indexed registeree,
+    bool isSponsored
+);
+```
+
+Emitted when registration completes.
+
+### Errors
+
+```solidity
+error InvalidSigner();
+error InvalidDeadline();
+error NonceAlreadyUsed();
+error InvalidForwarder();
+error GracePeriodNotStarted();
+error WindowExpired();
+error InsufficientFee();
+error AlreadyRegistered();
+```
+
+## CommonUtils.sol
+
+Utility library for timing calculations.
+
+### Functions
+
+#### calculateGracePeriodStart
+
+```solidity
+function calculateGracePeriodStart() internal view returns (uint256)
+```
+
+Returns the block number when the grace period starts. Uses `block.prevrandao` for randomization.
+
+#### calculateGracePeriodDeadline
+
+```solidity
+function calculateGracePeriodDeadline() internal view returns (uint256)
+```
+
+Returns the block number when the registration window expires.
+
+### Constants
+
+```solidity
+uint256 constant START_TIME_BLOCKS = 5;    // ~1 min on Base
+uint256 constant DEADLINE_BLOCKS = 55;     // ~11 min on Base
+uint256 constant RANDOMIZATION_RANGE = 4;  // Additional random blocks
+```
+
+## Integration Examples
+
+### Reading Contract State
+
+```typescript
+import { createPublicClient, http } from 'viem';
+import { base } from 'viem/chains';
+import { stolenWalletRegistryAbi } from '@swr/abis';
+
+const client = createPublicClient({
+  chain: base,
+  transport: http(),
+});
+
+// Check if wallet is registered
+const isRegistered = await client.readContract({
+  address: '0x...',
+  abi: stolenWalletRegistryAbi,
+  functionName: 'isRegistered',
+  args: ['0xWalletAddress'],
+});
+
+// Get current nonce
+const nonce = await client.readContract({
+  address: '0x...',
+  abi: stolenWalletRegistryAbi,
+  functionName: 'nonces',
+  args: ['0xWalletAddress'],
+});
+```
+
+### Writing to Contract
+
+```typescript
+import { createWalletClient, custom } from 'viem';
+import { base } from 'viem/chains';
+
+const walletClient = createWalletClient({
+  chain: base,
+  transport: custom(window.ethereum),
+});
+
+// Submit acknowledgement
+const hash = await walletClient.writeContract({
+  address: '0x...',
+  abi: stolenWalletRegistryAbi,
+  functionName: 'acknowledgementOfRegistry',
+  args: [owner, deadline, v, r, s],
+});
+```
+
+### Listening to Events
+
+```typescript
+import { createPublicClient, http, parseAbiItem } from 'viem';
+import { base } from 'viem/chains';
+
+const client = createPublicClient({
+  chain: base,
+  transport: http(),
+});
+
+// Watch for registrations
+const unwatch = client.watchContractEvent({
+  address: '0x...',
+  abi: stolenWalletRegistryAbi,
+  eventName: 'RegistrationEvent',
+  onLogs: (logs) => {
+    for (const log of logs) {
+      console.log('Wallet registered:', log.args.registeree);
+    }
+  },
+});
+```
+
+### Using wagmi Hooks
+
+```typescript
+import { useReadContract, useWriteContract } from 'wagmi';
+
+// Read
+const { data: isRegistered } = useReadContract({
+  address: '0x...',
+  abi: stolenWalletRegistryAbi,
+  functionName: 'isRegistered',
+  args: [walletAddress],
+});
+
+// Write
+const { writeContract } = useWriteContract();
+
+writeContract({
+  address: '0x...',
+  abi: stolenWalletRegistryAbi,
+  functionName: 'walletRegistration',
+  args: [owner, deadline, v, r, s],
+  value: parseEther('0.005'), // If fee required
+});
+```
+
+## Future: ISubRegistry Interface
+
+The planned interface for subregistries:
+
+```solidity
+interface ISubRegistry {
+    function register(
+        bytes32 identifier,
+        bytes calldata proof,
+        uint256 deadline
+    ) external payable returns (bool);
+
+    function isRegistered(
+        bytes32 identifier
+    ) external view returns (bool);
+
+    function getRegistrationData(
+        bytes32 identifier
+    ) external view returns (RegistrationData memory);
+
+    function registryType() external pure returns (bytes32);
+}
+```
+
+## Future: RegistryHub
+
+Central hub for routing to subregistries:
+
+```solidity
+contract RegistryHub is Ownable2Step {
+    mapping(bytes32 => address) public subRegistries;
+
+    function registerToSubRegistry(
+        bytes32 registryType,
+        bytes32 identifier,
+        bytes calldata proof,
+        uint256 deadline
+    ) external payable {
+        ISubRegistry(subRegistries[registryType]).register{value: msg.value}(
+            identifier,
+            proof,
+            deadline
+        );
+    }
+}
+```
+
+## Development
+
+### Build Contracts
+
+```bash
+pnpm forge:build
+```
+
+### Run Tests
+
+```bash
+pnpm forge:test
+```
+
+### Deploy Locally
+
+```bash
+pnpm anvil        # Terminal 1
+pnpm deploy:dev   # Terminal 2
+```
+
+### Generate ABIs
+
+ABIs are automatically generated and exported from `@swr/abis`:
+
+```typescript
+import { stolenWalletRegistryAbi, stolenWalletRegistryAddress } from '@swr/abis';
+```

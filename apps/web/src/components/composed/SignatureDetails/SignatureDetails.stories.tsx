@@ -46,10 +46,10 @@ export const Default: Story = {
 };
 
 /**
- * On Sepolia testnet (chain ID 11155111).
+ * On Base Sepolia testnet (chain ID 84532).
  */
-export const Sepolia: Story = {
-  render: () => <SignatureDetails data={createData({ chainId: 11155111 })} />,
+export const BaseSepolia: Story = {
+  render: () => <SignatureDetails data={createData({ chainId: 84532 })} />,
 };
 
 /**

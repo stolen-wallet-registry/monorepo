@@ -1,0 +1,18 @@
+# Dependencies
+lib/
+node_modules/
+
+# Build artifacts
+out/
+cache/
+artifacts/
+
+# Scripts (may use console.log for debugging)
+script/
+
+# Test files (may have different conventions)
+test/
+
+# Coverage
+coverage/
+lcov.info

@@ -18,6 +18,58 @@ import { RegistryHub } from "../src/RegistryHub.sol";
 ///   4: (setRegistry tx)
 abstract contract DeployBase is Script {
     // ═══════════════════════════════════════════════════════════════════════════
+    // BLOCK TIMING CONFIGURATION
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Get timing configuration for a chain
+    /// @dev Block counts adjusted per-chain for consistent UX (~2 min grace, ~10 min deadline)
+    ///
+    ///      | Chain          | Block Time | Grace Blocks | Deadline Blocks | Result           |
+    ///      |----------------|------------|--------------|-----------------|------------------|
+    ///      | Anvil (local)  | 13s        | 10           | 50              | ~2 min / ~10 min |
+    ///      | Base/Optimism  | 2s         | 60           | 300             | ~2 min / ~10 min |
+    ///      | Arbitrum       | 0.25s      | 480          | 2400            | ~2 min / ~10 min |
+    ///      | Ethereum L1    | 12s        | 10           | 50              | ~2 min / ~10 min |
+    ///
+    /// @param chainId The chain ID to get timing config for
+    /// @return graceBlocks Base blocks for grace period
+    /// @return deadlineBlocks Base blocks for deadline window
+    function getTimingConfig(uint256 chainId) internal pure returns (uint256 graceBlocks, uint256 deadlineBlocks) {
+        // Anvil/Local (13s blocks)
+        if (chainId == 31_337 || chainId == 31_338) {
+            return (10, 50);
+        }
+
+        // Base mainnet/Sepolia (2s blocks)
+        if (chainId == 8453 || chainId == 84_532) {
+            return (60, 300);
+        }
+
+        // Optimism mainnet/Sepolia (2s blocks)
+        if (chainId == 10 || chainId == 11_155_420) {
+            return (60, 300);
+        }
+
+        // Arbitrum One/Sepolia (0.25s blocks)
+        if (chainId == 42_161 || chainId == 421_614) {
+            return (480, 2400);
+        }
+
+        // Polygon mainnet/Amoy (2s blocks)
+        if (chainId == 137 || chainId == 80_002) {
+            return (60, 300);
+        }
+
+        // Ethereum L1 mainnet (12s blocks)
+        if (chainId == 1) {
+            return (10, 50);
+        }
+
+        // Unknown chain - revert to force explicit configuration
+        revert("DeployBase: unsupported chain ID - add timing config");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // CHAINLINK PRICE FEEDS
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -27,6 +79,7 @@ abstract contract DeployBase is Script {
         if (chainId == 1) return 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419; // Ethereum Mainnet
         if (chainId == 8453) return 0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70; // Base
         if (chainId == 84_532) return 0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1; // Base Sepolia
+        if (chainId == 11_155_420) return address(0); // Optimism Sepolia - no official feed, use MockAggregator
         if (chainId == 42_161) return 0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612; // Arbitrum
         if (chainId == 10) return 0x13e3Ee699D1909E989722E753853AE30b17e08c5; // Optimism
         if (chainId == 137) return 0xF9680D99D6C9589e2a93a78A04A279e509205945; // Polygon
@@ -51,6 +104,11 @@ abstract contract DeployBase is Script {
     {
         uint256 chainId = block.chainid;
 
+        // Get chain-specific timing configuration
+        (uint256 graceBlocks, uint256 deadlineBlocks) = getTimingConfig(chainId);
+        console2.log("Timing Config - Grace Blocks:", graceBlocks);
+        console2.log("Timing Config - Deadline Blocks:", deadlineBlocks);
+
         // nonce 0: Deploy price feed (mock for local, Chainlink for mainnet/testnet)
         priceFeed = getChainlinkFeed(chainId);
         if (priceFeed == address(0)) {
@@ -69,8 +127,8 @@ abstract contract DeployBase is Script {
         hub = payable(address(hubContract));
         console2.log("RegistryHub:", hub);
 
-        // nonce 3: Deploy StolenWalletRegistry
-        registry = address(new StolenWalletRegistry(feeManager, hub));
+        // nonce 3: Deploy StolenWalletRegistry (with chain-specific timing)
+        registry = address(new StolenWalletRegistry(feeManager, hub, graceBlocks, deadlineBlocks));
         console2.log("StolenWalletRegistry:", registry);
 
         // nonce 4: Wire up hub to registry

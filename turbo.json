@@ -52,6 +52,26 @@
     "build-storybook": {
       "dependsOn": ["^build"],
       "outputs": ["storybook-static/**"]
+    },
+    "@swr/docs#dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "@swr/docs#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "@swr/docs#lint": {
+      "dependsOn": ["^build"]
+    },
+    "@swr/docs#typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "@swr/docs#format": {
+      "cache": false
+    },
+    "@swr/docs#format:check": {
+      "outputs": []
     }
   }
 }

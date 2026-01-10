@@ -30,6 +30,10 @@ contract IntegrationTest is Test {
     bytes32 private constant TYPE_HASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
+    // Timing configuration (matching local Anvil - 13s blocks)
+    uint256 internal constant GRACE_BLOCKS = 10;
+    uint256 internal constant DEADLINE_BLOCKS = 50;
+
     function setUp() public {
         deployer = makeAddr("deployer");
         forwarder = makeAddr("forwarder");
@@ -55,7 +59,7 @@ contract IntegrationTest is Test {
         hub = new RegistryHub(deployer, address(feeManager), address(0));
 
         // 4. Deploy StolenWalletRegistry with fee collection
-        walletRegistry = new StolenWalletRegistry(address(feeManager), address(hub));
+        walletRegistry = new StolenWalletRegistry(address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         // 5. Wire hub to registry
         hub.setRegistry(hub.STOLEN_WALLET(), address(walletRegistry));

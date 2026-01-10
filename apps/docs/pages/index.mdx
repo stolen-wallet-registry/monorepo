@@ -1,0 +1,88 @@
+# Stolen Wallet Registry
+
+A cross-chain fraud detection and transparency registry for Web3.
+
+## What is the Stolen Wallet Registry?
+
+The Stolen Wallet Registry (SWR) provides victims of crypto fraud a decentralized mechanism to register stolen wallets and transactions, enabling off-ramps, wallets, and other Web3 services to access verified fraud data for prevention and recovery.
+
+### Core Value Proposition
+
+- **Victim empowerment** - Register compromised wallets even without access to funds
+- **Shared intelligence** - Exchanges and off-ramps gain access to crowdsourced fraud data
+- **On-chain transparency** - Reduces siloed fraud data across the ecosystem
+- **Cross-chain support** - CAIP-10 compliant for multi-chain address tracking
+
+## Three Subregistries
+
+| Registry                | Purpose                                        | Who Can Submit          |
+| ----------------------- | ---------------------------------------------- | ----------------------- |
+| **Stolen Wallet**       | Mark entire wallets as permanently compromised | Individuals + Operators |
+| **Fraudulent Contract** | Catalog malicious smart contract addresses     | Operators only          |
+| **Stolen Transaction**  | Flag specific fraudulent transactions          | Individuals + Operators |
+
+## Registration Methods
+
+Choose the method that fits your situation:
+
+### 1. Standard Registration
+
+Sign and pay with the same wallet you're registering. Best when you still have temporary access to a compromised wallet.
+
+[Standard Registration Guide](/guide/registration-standard)
+
+### 2. Self-Relay Registration
+
+Sign with your compromised wallet, then switch to a different wallet to pay for gas. Useful when your wallet is drained but you have another wallet with funds.
+
+[Self-Relay Guide](/guide/registration-self-relay)
+
+### 3. P2P Relay Registration
+
+Sign with your compromised wallet and send the signature to a trusted helper via libp2p. The helper pays gas on your behalf. For when you have no funds at all.
+
+[P2P Relay Guide](/guide/registration-p2p-relay)
+
+## Quick Start
+
+Ready to register a stolen wallet?
+
+1. **Connect your wallet** at the [registration app](https://app.stolenwallet.registry)
+2. **Choose your registration method** based on your situation
+3. **Complete the two-phase process** (acknowledgement + registration)
+4. **Done** - Your wallet is now marked as stolen on-chain
+
+[Full Quick Start Guide](/guide)
+
+## Security Model
+
+The registry uses a **two-phase EIP-712 signature flow** to prevent phishing attacks:
+
+1. **Acknowledgement Phase** - Sign intent to register, starts a grace period
+2. **Grace Period** - 1-4 minute randomized delay
+3. **Registration Phase** - Sign final registration within the time window
+
+This requires two separate signatures, making it much harder for attackers to trick victims into accidentally registering legitimate wallets.
+
+[Learn more about the security model](/technical/eip712-signatures)
+
+## For Operators
+
+Operators are DAO-approved entities (exchanges, security firms) with enhanced capabilities:
+
+- Batch submission of addresses across all registries
+- Higher trust signals for submitted data
+- Integration with Operator-as-Paymaster for gasless user registration
+
+[Governance & Operators](/philosophy/governance)
+
+## Tech Stack
+
+Built with the modern Web3 stack:
+
+- **Contracts**: Foundry, Solidity 0.8.21+, OpenZeppelin
+- **Frontend**: Vite, React 19, wagmi 2.x, viem 2.x
+- **P2P**: libp2p 3.x with WebRTC
+- **Settlement**: Base (Optimism L2)
+
+[Technical Architecture](/technical/architecture)

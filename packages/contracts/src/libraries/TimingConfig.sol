@@ -7,10 +7,19 @@ pragma solidity ^0.8.24;
 /// @dev Provides randomized grace period and deadline calculations.
 ///      Uses block.prevrandao for randomization (post-merge Ethereum).
 ///
-/// TIMING CONSTANTS:
-/// - Grace period: 1-4 minutes (randomized) before registration can begin
-/// - Deadline: 4-13 minutes (randomized) window to complete registration
-/// - Block time assumption: ~12 seconds (Ethereum mainnet)
+/// TIMING BEHAVIOR:
+/// - Grace period: Randomized delay before registration can begin
+/// - Deadline: Randomized window to complete registration after grace period
+/// - Block counts are configurable per-chain to maintain consistent UX
+///
+/// CHAIN-SPECIFIC CONFIGURATION:
+/// Different chains have different block times, so block counts must be adjusted:
+/// | Chain          | Block Time | Grace Blocks | Deadline Blocks | Result         |
+/// |----------------|------------|--------------|-----------------|----------------|
+/// | Anvil (local)  | 13s        | 10           | 50              | ~2 min / ~10 min |
+/// | Base/Optimism  | 2s         | 60           | 300             | ~2 min / ~10 min |
+/// | Arbitrum       | 0.25s      | 480          | 2400            | ~2 min / ~10 min |
+/// | Ethereum L1    | 12s        | 10           | 50              | ~2 min / ~10 min |
 ///
 /// SECURITY NOTES:
 /// - Randomization prevents timing attacks and automated phishing
@@ -18,16 +27,8 @@ pragma solidity ^0.8.24;
 /// - Attackers cannot predict exact grace period start/end times
 library TimingConfig {
     // ═══════════════════════════════════════════════════════════════════════════
-    // CONSTANTS - Configurable per-chain deployment
+    // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @notice Minimum blocks before grace period ends (~1 minute at 12s/block)
-    /// @dev Grace period start = current block + random(0, START_TIME_BLOCKS) + START_TIME_BLOCKS
-    uint256 internal constant START_TIME_BLOCKS = 5;
-
-    /// @notice Minimum blocks until registration window closes (~10 minutes at 12s/block)
-    /// @dev Deadline = current block + random(0, DEADLINE_BLOCKS) + DEADLINE_BLOCKS
-    uint256 internal constant DEADLINE_BLOCKS = 50;
 
     /// @notice Maximum additional randomness for timestamps (in seconds)
     /// @dev 30 minutes to match frontend session storage duration
@@ -39,20 +40,22 @@ library TimingConfig {
 
     /// @notice Calculate randomized block when grace period ends
     /// @dev Registration can begin after this block
+    /// @param graceBlocks Base number of blocks for grace period (chain-specific)
     /// @return Block number when grace period ends
-    function getGracePeriodEndBlock() internal view returns (uint256) {
-        return block.number + getRandomBlockOffset(START_TIME_BLOCKS) + START_TIME_BLOCKS;
+    function getGracePeriodEndBlock(uint256 graceBlocks) internal view returns (uint256) {
+        return block.number + getRandomBlockOffset(graceBlocks) + graceBlocks;
     }
 
     /// @notice Calculate randomized block when registration window closes
     /// @dev Registration must complete before this block
+    /// @param deadlineBlocks Base number of blocks for deadline window (chain-specific)
     /// @return Block number when registration window expires
-    function getDeadlineBlock() internal view returns (uint256) {
-        return block.number + getRandomBlockOffset(DEADLINE_BLOCKS) + DEADLINE_BLOCKS;
+    function getDeadlineBlock(uint256 deadlineBlocks) internal view returns (uint256) {
+        return block.number + getRandomBlockOffset(deadlineBlocks) + deadlineBlocks;
     }
 
     /// @notice Calculate signature deadline timestamp
-    /// @dev Used for EIP-712 signature expiry validation
+    /// @dev Used for EIP-712 signature expiry validation. Chain-agnostic (uses timestamp).
     /// @return Timestamp when signature expires
     function getSignatureDeadline() internal view returns (uint256) {
         return block.timestamp + getRandomTimestampOffset() + TIMESTAMP_JITTER;

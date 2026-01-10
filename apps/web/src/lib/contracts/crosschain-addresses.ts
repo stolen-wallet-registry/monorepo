@@ -10,6 +10,7 @@
 
 import type { Address } from '@/lib/types/ethereum';
 import { anvilHub, anvilSpoke } from '@/lib/wagmi';
+import { baseSepolia, optimismSepolia } from 'wagmi/chains';
 
 // Re-export chain role helpers
 export { isHubChain, isSpokeChain, getHubChainId } from '@/lib/chains/config';
@@ -32,8 +33,21 @@ import { isSpokeChain } from '@/lib/chains/config';
 /** Hyperlane Mailbox addresses (from Hyperlane CLI deployment with Account 9) */
 export const HYPERLANE_ADDRESSES = {
   mailbox: {
+    // Local Anvil (deployed by Account 9 via `hyperlane core deploy`)
     [anvilHub.id]: '0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84' as Address,
     [anvilSpoke.id]: '0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84' as Address,
+    // Testnet (official Hyperlane deployments - same on both chains via CREATE2)
+    // Source: https://github.com/hyperlane-xyz/hyperlane-registry
+    [baseSepolia.id]: '0x6966b0E55883d49BFB24539356a2f8A673E02039' as Address,
+    [optimismSepolia.id]: '0x6966b0E55883d49BFB24539356a2f8A673E02039' as Address,
+  },
+  igp: {
+    // Local Anvil (mock, not used)
+    [anvilHub.id]: '0x0000000000000000000000000000000000000000' as Address,
+    [anvilSpoke.id]: '0x0000000000000000000000000000000000000000' as Address,
+    // Testnet (official Hyperlane InterchainGasPaymaster)
+    [baseSepolia.id]: '0x28B02B97a850872C4D33C3E024fab6499ad96564' as Address,
+    [optimismSepolia.id]: '0x28B02B97a850872C4D33C3E024fab6499ad96564' as Address,
   },
 } as const;
 
@@ -56,6 +70,8 @@ export const HYPERLANE_ADDRESSES = {
 export const HUB_CROSSCHAIN_ADDRESSES = {
   crossChainInbox: {
     [anvilHub.id]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
+    // Base Sepolia (testnet hub) - fill after deployment
+    [baseSepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;
 
@@ -77,15 +93,22 @@ export const HUB_CROSSCHAIN_ADDRESSES = {
 export const SPOKE_ADDRESSES = {
   mockGasPaymaster: {
     [anvilSpoke.id]: '0x5FbDB2315678afecb367f032d93F642f64180aa3' as Address,
+    // Optimism Sepolia uses real Hyperlane IGP, not mock
   },
   hyperlaneAdapter: {
     [anvilSpoke.id]: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address,
+    // Optimism Sepolia (testnet spoke) - fill after deployment
+    [optimismSepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
   },
   feeManager: {
     [anvilSpoke.id]: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9' as Address,
+    // Optimism Sepolia (testnet spoke) - fill after deployment
+    [optimismSepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
   },
   spokeRegistry: {
     [anvilSpoke.id]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
+    // Optimism Sepolia (testnet spoke) - fill after deployment
+    [optimismSepolia.id]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;
 
@@ -96,8 +119,10 @@ export const SPOKE_ADDRESSES = {
 export function getSpokeAddress(contract: keyof typeof SPOKE_ADDRESSES, chainId: number): Address {
   const addresses = SPOKE_ADDRESSES[contract];
   const address = addresses[chainId as keyof typeof addresses];
-  if (!address) {
-    throw new Error(`No ${contract} address configured for spoke chain ID ${chainId}`);
+  if (!address || address === '0x0000000000000000000000000000000000000000') {
+    throw new Error(
+      `No ${contract} address configured for spoke chain ID ${chainId}. Deploy contracts first.`
+    );
   }
   return address;
 }
