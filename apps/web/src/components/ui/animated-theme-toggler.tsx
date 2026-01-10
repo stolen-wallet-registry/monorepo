@@ -1,90 +1,125 @@
-import { useCallback, useRef } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { flushSync } from 'react-dom';
 
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/useTheme';
+import type { ThemeVariant } from '@/providers/ThemeProviderContext';
 
 interface AnimatedThemeTogglerProps extends React.ComponentPropsWithoutRef<'button'> {
   duration?: number;
 }
 
-export const AnimatedThemeToggler = ({
-  className,
-  duration = 400,
-  onClick,
-  ...rest
-}: AnimatedThemeTogglerProps) => {
-  const { resolvedColorScheme, setColorScheme } = useTheme();
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const isDark = resolvedColorScheme === 'dark';
+/** Handle exposed by AnimatedThemeToggler for programmatic control */
+export interface ThemeTogglerHandle {
+  /** Trigger animated switch to a specific theme variant */
+  triggerVariantSwitch: (variant: ThemeVariant) => void;
+}
 
-  const toggleTheme = useCallback(async () => {
-    if (!buttonRef.current) return;
+export const AnimatedThemeToggler = forwardRef<ThemeTogglerHandle, AnimatedThemeTogglerProps>(
+  function AnimatedThemeToggler({ className, duration = 400, onClick, ...rest }, ref) {
+    const { resolvedColorScheme, setColorScheme, themeVariant, setThemeVariant } = useTheme();
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const isDark = resolvedColorScheme === 'dark';
 
-    const newScheme = isDark ? 'light' : 'dark';
+    /**
+     * Runs View Transitions animation from button position, executing updateFn during transition.
+     */
+    const animateTransition = useCallback(
+      async (updateFn: () => void) => {
+        // Check if View Transitions API is supported
+        if (!document.startViewTransition) {
+          updateFn();
+          return;
+        }
 
-    // Check if View Transitions API is supported
-    if (!document.startViewTransition) {
-      setColorScheme(newScheme);
-      return;
-    }
+        // Fallback if button not mounted
+        if (!buttonRef.current) {
+          updateFn();
+          return;
+        }
 
-    // Mark that we're using View Transition (disables CSS transitions)
-    document.documentElement.setAttribute('data-view-transition', '');
+        // Mark that we're using View Transition (disables CSS transitions)
+        document.documentElement.setAttribute('data-view-transition', '');
 
-    const transition = document.startViewTransition(() => {
-      flushSync(() => {
-        setColorScheme(newScheme);
-      });
-    });
+        const transition = document.startViewTransition(() => {
+          flushSync(() => {
+            updateFn();
+          });
+        });
 
-    await transition.ready;
+        await transition.ready;
 
-    const { top, left, width, height } = buttonRef.current.getBoundingClientRect();
-    const x = left + width / 2;
-    const y = top + height / 2;
-    const maxRadius = Math.hypot(
-      Math.max(left, window.innerWidth - left),
-      Math.max(top, window.innerHeight - top)
-    );
+        const { top, left, width, height } = buttonRef.current.getBoundingClientRect();
+        const x = left + width / 2;
+        const y = top + height / 2;
+        const maxRadius = Math.hypot(
+          Math.max(left, window.innerWidth - left),
+          Math.max(top, window.innerHeight - top)
+        );
 
-    document.documentElement.animate(
-      {
-        clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${maxRadius}px at ${x}px ${y}px)`],
+        document.documentElement.animate(
+          {
+            clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${maxRadius}px at ${x}px ${y}px)`],
+          },
+          {
+            duration,
+            easing: 'ease-in-out',
+            pseudoElement: '::view-transition-new(root)',
+          }
+        );
+
+        // Clean up after animation completes
+        transition.finished.then(() => {
+          document.documentElement.removeAttribute('data-view-transition');
+        });
       },
-      {
-        duration,
-        easing: 'ease-in-out',
-        pseudoElement: '::view-transition-new(root)',
-      }
+      [duration]
     );
 
-    // Clean up after animation completes
-    transition.finished.then(() => {
-      document.documentElement.removeAttribute('data-view-transition');
-    });
-  }, [isDark, duration, setColorScheme]);
+    const toggleColorScheme = useCallback(async () => {
+      const newScheme = isDark ? 'light' : 'dark';
+      await animateTransition(() => setColorScheme(newScheme));
+    }, [isDark, animateTransition, setColorScheme]);
 
-  const handleClick = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      toggleTheme().catch(console.error);
-      onClick?.(event);
-    },
-    [toggleTheme, onClick]
-  );
+    const triggerVariantSwitch = useCallback(
+      (variant: ThemeVariant) => {
+        // Skip if already on this variant
+        if (themeVariant === variant) return;
+        animateTransition(() => setThemeVariant(variant)).catch(console.error);
+      },
+      [themeVariant, animateTransition, setThemeVariant]
+    );
 
-  return (
-    <button
-      ref={buttonRef}
-      {...rest}
-      type="button"
-      onClick={handleClick}
-      className={cn(className)}
-      aria-pressed={isDark}
-    >
-      {isDark ? <Sun /> : <Moon />}
-      <span className="sr-only">Toggle theme</span>
-    </button>
-  );
-};
+    // Expose imperative handle for programmatic control
+    useImperativeHandle(
+      ref,
+      () => ({
+        triggerVariantSwitch,
+      }),
+      [triggerVariantSwitch]
+    );
+
+    const handleClick = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        toggleColorScheme().catch(console.error);
+        onClick?.(event);
+      },
+      [toggleColorScheme, onClick]
+    );
+
+    return (
+      <button
+        ref={buttonRef}
+        {...rest}
+        type="button"
+        onClick={handleClick}
+        className={cn(className)}
+        aria-pressed={isDark}
+      >
+        {isDark ? <Sun /> : <Moon />}
+        <span className="sr-only">Toggle theme</span>
+      </button>
+    );
+  }
+);

@@ -17,6 +17,19 @@ import { optimismSepolia } from './optimism-sepolia';
 export { anvilHub, anvilSpoke, base, baseSepolia, optimism, optimismSepolia };
 
 /**
+ * Deep freeze an object and all nested objects.
+ */
+function deepFreeze<T extends object>(obj: T): T {
+  Object.freeze(obj);
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+      deepFreeze(value);
+    }
+  }
+  return obj;
+}
+
+/**
  * All supported networks (frozen to prevent runtime mutation).
  */
 const _allNetworks: readonly NetworkConfig[] = [
@@ -28,7 +41,7 @@ const _allNetworks: readonly NetworkConfig[] = [
   optimismSepolia,
 ];
 
-// Validate no duplicate chain IDs at module init
+// Validate no duplicate chain IDs at module init and deep freeze each network
 const seenChainIds = new Set<number>();
 for (const network of _allNetworks) {
   if (seenChainIds.has(network.chainId)) {
@@ -38,10 +51,16 @@ for (const network of _allNetworks) {
     );
   }
   seenChainIds.add(network.chainId);
-  Object.freeze(network);
+  deepFreeze(network);
 }
 
 export const allNetworks: readonly NetworkConfig[] = Object.freeze(_allNetworks);
+
+/**
+ * Cached array of supported chain IDs (computed once at module init).
+ * Since allNetworks is frozen and uniqueness is validated above, no Set needed.
+ */
+const _supportedChainIds: readonly number[] = Object.freeze(_allNetworks.map((n) => n.chainId));
 
 /**
  * Network lookup by chain ID (null-prototype, frozen for safety).
@@ -82,8 +101,9 @@ export function isSupportedChain(chainId: number): boolean {
 }
 
 /**
- * Get all supported chain IDs (deduped).
+ * Get all supported chain IDs.
+ * Returns a new array copy of the cached chain IDs.
  */
 export function getSupportedChainIds(): number[] {
-  return [...new Set(_allNetworks.map((n) => n.chainId))];
+  return [..._supportedChainIds];
 }

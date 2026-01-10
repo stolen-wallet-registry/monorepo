@@ -49,6 +49,11 @@ export function ThemeProvider({
   // Track system preference separately for reactive updates
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(getSystemTheme);
 
+  // Animated theme trigger function (registered by AnimatedThemeToggler)
+  const [triggerThemeAnimation, setTriggerThemeAnimation] = useState<
+    ((variant: ThemeVariant) => void) | null
+  >(null);
+
   // Derive resolved color scheme from colorScheme and systemPreference
   const resolvedColorScheme = useMemo<'light' | 'dark'>(() => {
     if (colorScheme === 'system') return systemPreference;
@@ -102,8 +107,17 @@ export function ThemeProvider({
       themeVariant,
       setColorScheme,
       setThemeVariant,
+      triggerThemeAnimation,
+      setTriggerThemeAnimation,
     }),
-    [colorScheme, resolvedColorScheme, themeVariant, setColorScheme, setThemeVariant]
+    [
+      colorScheme,
+      resolvedColorScheme,
+      themeVariant,
+      setColorScheme,
+      setThemeVariant,
+      triggerThemeAnimation,
+    ]
   );
 
   return <ThemeProviderContext.Provider value={value}>{children}</ThemeProviderContext.Provider>;
