@@ -306,6 +306,12 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.currentFeeWei(), 0);
     }
 
+    function test_SetBaseFee_OverflowReverts() public {
+        vm.prank(owner);
+        vm.expectRevert(IFeeManager.Fee__InvalidPrice.selector);
+        feeManager.setBaseFee(type(uint256).max / 1e18 + 1);
+    }
+
     function test_SetFallbackPrice_OnlyOwner() public {
         vm.prank(user);
         vm.expectRevert();
@@ -359,6 +365,15 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.stalePriceThreshold(), 3600);
     }
 
+    function test_SetStalePriceThreshold_ZeroForcesFreshOnly() public {
+        vm.prank(owner);
+        feeManager.setStalePriceThreshold(0);
+
+        mockOracle.setUpdatedAt(block.timestamp - 1);
+        uint256 price = feeManager.getEthPriceUsdCentsView();
+        assertEq(price, DEFAULT_FALLBACK_PRICE);
+    }
+
     function test_SetFallbackSyncInterval_OnlyOwner() public {
         vm.prank(user);
         vm.expectRevert();
@@ -372,6 +387,22 @@ contract FeeManagerTest is Test {
 
         feeManager.setFallbackSyncInterval(12 hours);
         assertEq(feeManager.fallbackSyncInterval(), 12 hours);
+    }
+
+    function test_SetFallbackSyncInterval_ZeroSyncsFrequently() public {
+        vm.prank(owner);
+        feeManager.setFallbackSyncInterval(0);
+
+        vm.warp(2 days);
+        mockOracle.setUpdatedAt(block.timestamp);
+        feeManager.syncAndGetEthPriceUsdCents();
+
+        mockOracle.setPrice(ORACLE_PRICE_4000);
+        vm.warp(block.timestamp + 1);
+        mockOracle.setUpdatedAt(block.timestamp);
+        feeManager.syncAndGetEthPriceUsdCents();
+
+        assertEq(feeManager.fallbackEthPriceUsdCents(), 400_000);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

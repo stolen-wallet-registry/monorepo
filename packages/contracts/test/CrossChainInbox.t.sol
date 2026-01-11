@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import { Test } from "forge-std/Test.sol";
+import { CrossChainInbox } from "../src/crosschain/CrossChainInbox.sol";
+import { ICrossChainInbox } from "../src/interfaces/ICrossChainInbox.sol";
+import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
+import { MockMailbox } from "./mocks/MockMailbox.sol";
+
+contract CrossChainInboxTest is Test {
+    using CrossChainMessage for CrossChainMessage.RegistrationPayload;
+
+    MockMailbox mailbox;
+    CrossChainInbox inbox;
+
+    address owner;
+    address registryHub;
+
+    uint32 constant HUB_DOMAIN = 84_532;
+    uint32 constant SPOKE_DOMAIN = 11_155_420;
+
+    function setUp() public {
+        owner = makeAddr("owner");
+        registryHub = makeAddr("registryHub");
+        mailbox = new MockMailbox(HUB_DOMAIN);
+        inbox = new CrossChainInbox(address(mailbox), registryHub, owner);
+    }
+
+    function test_Constructor_ZeroMailbox_Reverts() public {
+        vm.expectRevert(ICrossChainInbox.CrossChainInbox__ZeroAddress.selector);
+        new CrossChainInbox(address(0), registryHub, owner);
+    }
+
+    function test_Constructor_ZeroRegistryHub_Reverts() public {
+        vm.expectRevert(ICrossChainInbox.CrossChainInbox__ZeroAddress.selector);
+        new CrossChainInbox(address(mailbox), address(0), owner);
+    }
+
+    function test_Constructor_ZeroOwner_Reverts() public {
+        vm.expectRevert(abi.encodeWithSignature("OwnableInvalidOwner(address)", address(0)));
+        new CrossChainInbox(address(mailbox), registryHub, address(0));
+    }
+
+    function test_SetTrustedSource_OnlyOwner() public {
+        vm.prank(makeAddr("user"));
+        vm.expectRevert();
+        inbox.setTrustedSource(SPOKE_DOMAIN, bytes32(uint256(1)), true);
+    }
+
+    function test_Handle_SourceChainMismatch_Reverts() public {
+        bytes32 sender = CrossChainMessage.addressToBytes32(makeAddr("spokeRegistry"));
+
+        vm.prank(owner);
+        inbox.setTrustedSource(SPOKE_DOMAIN, sender, true);
+
+        CrossChainMessage.RegistrationPayload memory payload = CrossChainMessage.RegistrationPayload({
+            wallet: makeAddr("victim"),
+            sourceChainId: SPOKE_DOMAIN + 1,
+            isSponsored: false,
+            nonce: 0,
+            timestamp: uint64(block.timestamp),
+            registrationHash: bytes32(0)
+        });
+
+        bytes memory messageBody = payload.encodeRegistration();
+
+        vm.expectRevert(ICrossChainInbox.CrossChainInbox__SourceChainMismatch.selector);
+        mailbox.simulateReceive(address(inbox), SPOKE_DOMAIN, sender, messageBody);
+    }
+
+    function test_BridgeId_ReturnsHyperlane() public view {
+        assertEq(inbox.bridgeId(), 1);
+    }
+}

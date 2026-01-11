@@ -226,6 +226,12 @@ contract RegistryHubTest is Test {
         assertEq(hub.currentFeeWei(), 0);
     }
 
+    function test_SetCrossChainInbox_OnlyOwner() public {
+        vm.prank(user);
+        vm.expectRevert();
+        hub.setCrossChainInbox(address(0x123));
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ETH HANDLING TESTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -249,6 +255,12 @@ contract RegistryHubTest is Test {
         vm.prank(user);
         vm.expectRevert();
         hub.withdrawFees(recipient, 0.5 ether);
+    }
+
+    function test_WithdrawFees_ZeroAddress_Reverts() public {
+        vm.prank(owner);
+        vm.expectRevert(IRegistryHub.Hub__ZeroAddress.selector);
+        hub.withdrawFees(address(0), 1);
     }
 
     function test_WithdrawFees_Success() public {
@@ -363,6 +375,18 @@ contract RegistryHubTest is Test {
         assertEq(hub.getRegistry(hub.FRAUDULENT_CONTRACT()), address(0));
         assertEq(hub.getRegistry(hub.STOLEN_TRANSACTION()), address(0));
         assertEq(hub.getRegistry(keccak256("RANDOM_REGISTRY")), address(0));
+    }
+
+    function test_RegisterFromSpoke_InvalidRegistry_Reverts() public {
+        address inbox = makeAddr("inbox");
+        vm.startPrank(owner);
+        hub.setRegistry(hub.STOLEN_WALLET(), address(0));
+        hub.setCrossChainInbox(inbox);
+        vm.stopPrank();
+
+        vm.expectRevert(IRegistryHub.Hub__InvalidRegistry.selector);
+        vm.prank(inbox);
+        hub.registerFromSpoke(user, 1, false, 1, bytes32(0));
     }
 }
 

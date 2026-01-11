@@ -56,6 +56,7 @@ export function useContractNonce(ownerAddress: Address | undefined): UseContract
   const result = useReadContract({
     address: contractAddress,
     abi,
+    chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'nonces',
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {

@@ -62,6 +62,7 @@ export function useQuoteRegistration(
   const result = useReadContract({
     address: contractAddress,
     abi,
+    chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'quoteRegistration',
     args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {

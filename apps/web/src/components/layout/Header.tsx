@@ -31,9 +31,15 @@ export function Header() {
   // Register the theme toggler's trigger function with context
   useEffect(() => {
     if (themeTogglerRef.current) {
+      console.log('[Header] Registering triggerThemeAnimation with context');
       setTriggerThemeAnimation(themeTogglerRef.current.triggerVariantSwitch);
+    } else {
+      console.warn('[Header] themeTogglerRef.current is null, cannot register');
     }
-    return () => setTriggerThemeAnimation(null);
+    return () => {
+      console.log('[Header] Cleanup: unregistering triggerThemeAnimation');
+      setTriggerThemeAnimation(null);
+    };
   }, [setTriggerThemeAnimation]);
 
   const navItems = [
