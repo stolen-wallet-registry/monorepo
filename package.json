@@ -26,6 +26,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,mdx}\" && pnpm forge:fmt",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,mdx}\" && pnpm --filter @swr/contracts lint:fmt",
     "check": "turbo lint typecheck test && pnpm format:check && pnpm syncpack:check && pnpm knip",
+    "coverage": "pnpm --filter @swr/contracts report:coverage && pnpm --filter @swr/contracts report:gas",
     "clean": "turbo clean && rm -rf node_modules",
     "prepare": "husky",
     "storybook": "turbo storybook",

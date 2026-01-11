@@ -66,6 +66,7 @@ export function useGenerateHashStruct(
   const result = useReadContract({
     address: contractAddress,
     abi,
+    chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'generateHashStruct',
     args: forwarderAddress ? [forwarderAddress, step] : undefined,
     query: {

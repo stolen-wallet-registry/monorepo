@@ -78,8 +78,18 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   // Custom onExpire handler with logging and theme switch
   const handleExpire = () => {
     // Trigger hacker theme animation if not already on hacker theme
+    logger.registration.debug('Grace period handleExpire called', {
+      themeVariant,
+      hasTriggerFn: !!triggerThemeAnimation,
+    });
+
     if (themeVariant !== 'hacker' && triggerThemeAnimation) {
+      logger.registration.info('Triggering hacker theme animation');
       triggerThemeAnimation('hacker');
+    } else if (themeVariant === 'hacker') {
+      logger.registration.debug('Already on hacker theme, skipping animation');
+    } else if (!triggerThemeAnimation) {
+      logger.registration.warn('triggerThemeAnimation not available');
     }
 
     logger.registration.info('Grace period complete, registration window is now open', {

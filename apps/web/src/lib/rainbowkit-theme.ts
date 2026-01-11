@@ -113,10 +113,14 @@ function getModalTextColors(colorScheme: 'light' | 'dark', variant: ThemeVariant
  * Creates a RainbowKit theme based on color scheme and variant.
  */
 export function createRainbowKitTheme(colorScheme: 'light' | 'dark', variant: ThemeVariant): Theme {
-  const baseTheme = colorScheme === 'dark' ? darkTheme() : lightTheme();
-  const fontFamily = THEME_FONTS[variant];
-  const p = PALETTES[variant][colorScheme];
-  const modalTextColors = getModalTextColors(colorScheme, variant);
+  // Robust validation - handle undefined, null, or invalid values
+  const safeColorScheme = colorScheme === 'dark' ? 'dark' : 'light';
+  const safeVariant = variant === 'hacker' ? 'hacker' : 'base';
+
+  const baseTheme = safeColorScheme === 'dark' ? darkTheme() : lightTheme();
+  const fontFamily = THEME_FONTS[safeVariant];
+  const p = PALETTES[safeVariant][safeColorScheme];
+  const modalTextColors = getModalTextColors(safeColorScheme, safeVariant);
 
   const colors = {
     // Accent - THE button background and text colors

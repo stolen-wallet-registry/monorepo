@@ -18,6 +18,8 @@ cache/
 broadcast/
 packages/contracts/out/
 packages/contracts/cache/
+.gas-snapshot
+!packages/contracts/reports/gas/.gas-snapshot
 
 # Environment files
 .env
@@ -48,6 +50,9 @@ yarn-error.log*
 # Testing
 coverage/
 .nyc_output/
+!packages/contracts/reports/coverage/summary.txt
+packages/contracts/reports/coverage/lcov.info
+packages/contracts/reports/gas/gas-report.txt
 
 # TypeScript
 *.tsbuildinfo

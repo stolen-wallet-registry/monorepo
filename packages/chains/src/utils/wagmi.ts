@@ -9,16 +9,14 @@ import type { NetworkConfig } from '../types';
 import { getNetworkOrUndefined, allNetworks } from '../networks';
 
 /**
- * Standard multicall3 address deployed on Anvil and most EVM chains.
- * @see https://github.com/mds1/multicall
- */
-const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as const;
-
-/**
  * Convert a NetworkConfig to a wagmi/viem Chain object.
  *
  * @param config - The network configuration
  * @returns A wagmi-compatible Chain object
+ *
+ * Note: We intentionally do NOT configure multicall3 for local chains.
+ * Anvil doesn't deploy multicall3 by default, and wagmi will fail silently
+ * when trying to batch calls through a non-existent contract (returns 0x).
  */
 export function toWagmiChain(config: NetworkConfig): Chain {
   return {
@@ -34,14 +32,6 @@ export function toWagmiChain(config: NetworkConfig): Chain {
             name: config.explorer.name,
             url: config.explorer.url,
             apiUrl: config.explorer.apiUrl,
-          },
-        }
-      : undefined,
-    // Add multicall3 contract for local chains (Anvil has it at standard address)
-    contracts: config.isLocal
-      ? {
-          multicall3: {
-            address: MULTICALL3_ADDRESS,
           },
         }
       : undefined,
