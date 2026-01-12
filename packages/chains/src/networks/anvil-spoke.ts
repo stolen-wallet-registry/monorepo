@@ -25,8 +25,8 @@ export const anvilSpoke: SpokeNetworkConfig = {
 
   blockTiming: {
     blockTimeSeconds: 13, // Match anvil --block-time setting
-    graceBlocks: 10, // Faster for local dev
-    deadlineBlocks: 50,
+    graceBlocks: 2, // ~26s for fast local iteration
+    deadlineBlocks: 12, // ~2.5 min deadline window
   },
 
   role: 'spoke',

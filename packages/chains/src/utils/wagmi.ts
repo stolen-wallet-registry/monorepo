@@ -9,16 +9,39 @@ import type { NetworkConfig } from '../types';
 import { getNetworkOrUndefined, allNetworks } from '../networks';
 
 /**
+ * Multicall3 addresses per chain.
+ *
+ * Canonical address for most chains: 0xcA11bde05977b3631167028862bE2a173976CA11
+ *
+ * Local Anvil chains use our deployed addresses (varies by deploy script):
+ * - deploy:crosschain (DeployCrossChain.s.sol):
+ *   - Hub (31337): nonce 7 → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
+ *   - Spoke (31338): nonce 6 → 0x0165878A594ca255338adfa4d48449f69242Eb8F
+ * - deploy (Deploy.s.sol, single-chain):
+ *   - Hub (31337): nonce 5 → 0x9A676e781A523b5d0C0e43731313A708CB607508
+ */
+const MULTICALL3_ADDRESSES: Record<number, `0x${string}`> = {
+  // Local Anvil chains - cross-chain deployment addresses
+  31337: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
+  31338: '0x0165878A594ca255338adfa4d48449f69242Eb8F',
+  // All other chains use canonical address (pre-deployed)
+};
+
+const CANONICAL_MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11' as const;
+
+/**
  * Convert a NetworkConfig to a wagmi/viem Chain object.
  *
  * @param config - The network configuration
  * @returns A wagmi-compatible Chain object
  *
- * Note: We intentionally do NOT configure multicall3 for local chains.
- * Anvil doesn't deploy multicall3 by default, and wagmi will fail silently
- * when trying to batch calls through a non-existent contract (returns 0x).
+ * Configures multicall3 for all chains:
+ * - Local Anvil uses our deployed address
+ * - All other chains use the canonical multicall3 address
  */
 export function toWagmiChain(config: NetworkConfig): Chain {
+  const multicall3Address = MULTICALL3_ADDRESSES[config.chainId] ?? CANONICAL_MULTICALL3;
+
   return {
     id: config.chainId,
     name: config.displayName,
@@ -35,6 +58,11 @@ export function toWagmiChain(config: NetworkConfig): Chain {
           },
         }
       : undefined,
+    contracts: {
+      multicall3: {
+        address: multicall3Address,
+      },
+    },
     testnet: config.isTestnet || config.isLocal,
   };
 }

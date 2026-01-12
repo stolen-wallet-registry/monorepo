@@ -767,7 +767,8 @@ contract StolenWalletRegistryFeeTest is Test {
         assertTrue(registry.isRegistered(owner));
     }
 
-    // Without fee manager, registration should be free.
+    // Fee bypass: when no fee manager is configured, registration should
+    // succeed without sending any ETH. This preserves free-mode deployments.
     function test_Register_NoFeeManager_Free() public {
         // Deploy registry without fee manager
         StolenWalletRegistry freeRegistry =
@@ -806,7 +807,8 @@ contract StolenWalletRegistryFeeTest is Test {
         assertTrue(freeRegistry.isRegistered(owner));
     }
 
-    // Fees should be forwarded to the hub on registration.
+    // Fee forwarding is critical for revenue collection. This test verifies
+    // the full fee amount is transferred to the hub on registration.
     function test_Register_FeeForwardedToHub() public {
         _doAcknowledgement();
         _skipToRegistrationWindow();
@@ -826,7 +828,8 @@ contract StolenWalletRegistryFeeTest is Test {
         assertEq(hubBalanceAfter - hubBalanceBefore, fee, "Hub should receive full fee");
     }
 
-    // Hub should receive ETH and be able to withdraw it.
+    // Hub receives ETH and should be able to withdraw via owner-only path,
+    // validating the full fee lifecycle.
     function test_Register_HubReceivesETH() public {
         _doAcknowledgement();
         _skipToRegistrationWindow();

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { Script, console2 } from "forge-std/Script.sol";
+import { IMulticall3 } from "forge-std/interfaces/IMulticall3.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
@@ -16,6 +17,7 @@ import { RegistryHub } from "../src/RegistryHub.sol";
 ///   2: RegistryHub          → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
 ///   3: StolenWalletRegistry → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
 ///   4: (setRegistry tx)
+///   5: Multicall3           → 0x9A676e781A523b5d0C0e43731313A708CB607508
 abstract contract DeployBase is Script {
     // ═══════════════════════════════════════════════════════════════════════════
     // BLOCK TIMING CONFIGURATION
@@ -35,9 +37,9 @@ abstract contract DeployBase is Script {
     /// @return graceBlocks Base blocks for grace period
     /// @return deadlineBlocks Base blocks for deadline window
     function getTimingConfig(uint256 chainId) internal pure returns (uint256 graceBlocks, uint256 deadlineBlocks) {
-        // Anvil/Local (13s blocks)
+        // Anvil/Local (13s blocks) - ~30s grace, ~2.5 min deadline for fast iteration
         if (chainId == 31_337 || chainId == 31_338) {
-            return (10, 50);
+            return (2, 12);
         }
 
         // Base mainnet/Sepolia (2s blocks)
@@ -134,6 +136,27 @@ abstract contract DeployBase is Script {
         // nonce 4: Wire up hub to registry
         hubContract.setRegistry(hubContract.STOLEN_WALLET(), registry);
     }
+
+    /// @notice Canonical Multicall3 address (pre-deployed on all major chains)
+    /// @dev See https://www.multicall3.com for deployment addresses
+    address internal constant CANONICAL_MULTICALL3 = 0xcA11bde05977b3631167028862bE2a173976CA11;
+
+    /// @notice Deploy Multicall3 for local chains (mainnet/testnets have it pre-deployed)
+    /// @dev Call this AFTER deployCore to maintain deterministic nonce ordering
+    /// @return multicall3 The deployed Multicall3 address
+    function deployMulticall3() internal returns (address multicall3) {
+        // On mainnet/testnets, Multicall3 is deployed at canonical address
+        // Only deploy for local chains
+        if (block.chainid == 31_337 || block.chainid == 31_338) {
+            // nonce 5: Deploy Multicall3
+            multicall3 = address(new Multicall3());
+            console2.log("Multicall3:", multicall3);
+        } else {
+            // Use canonical Multicall3 address on all other chains
+            multicall3 = CANONICAL_MULTICALL3;
+            console2.log("Multicall3 (canonical):", multicall3);
+        }
+    }
 }
 
 /// @notice Minimal mock aggregator for local deployment
@@ -178,5 +201,145 @@ contract MockAggregator {
         returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 _updatedAt, uint80 answeredInRound)
     {
         return (0, price, 0, updatedAt, 0);
+    }
+}
+
+/// @notice Multicall3 - Aggregate multiple contract calls into a single call
+/// @dev Minimal implementation of IMulticall3 from forge-std for local Anvil deployment.
+///      Canonical Multicall3 is pre-deployed at 0xcA11bde05977b3631167028862bE2a173976CA11 on most chains.
+///      See https://www.multicall3.com for full implementation and deployment info.
+contract Multicall3 is IMulticall3 {
+    /// @inheritdoc IMulticall3
+    function aggregate(Call[] calldata calls)
+        external
+        payable
+        returns (uint256 blockNumber, bytes[] memory returnData)
+    {
+        blockNumber = block.number;
+        returnData = new bytes[](calls.length);
+        for (uint256 i = 0; i < calls.length; ++i) {
+            (bool success, bytes memory ret) = calls[i].target.call(calls[i].callData);
+            require(success, "Multicall3: call failed");
+            returnData[i] = ret;
+        }
+    }
+
+    /// @inheritdoc IMulticall3
+    function aggregate3(Call3[] calldata calls) external payable returns (Result[] memory returnData) {
+        returnData = new Result[](calls.length);
+        for (uint256 i = 0; i < calls.length; ++i) {
+            (bool success, bytes memory ret) = calls[i].target.call(calls[i].callData);
+            if (!success && !calls[i].allowFailure) {
+                assembly { revert(add(ret, 32), mload(ret)) }
+            }
+            returnData[i] = Result({ success: success, returnData: ret });
+        }
+    }
+
+    /// @inheritdoc IMulticall3
+    function aggregate3Value(Call3Value[] calldata calls) external payable returns (Result[] memory returnData) {
+        returnData = new Result[](calls.length);
+        for (uint256 i = 0; i < calls.length; ++i) {
+            (bool success, bytes memory ret) = calls[i].target.call{ value: calls[i].value }(calls[i].callData);
+            if (!success && !calls[i].allowFailure) {
+                assembly { revert(add(ret, 32), mload(ret)) }
+            }
+            returnData[i] = Result({ success: success, returnData: ret });
+        }
+    }
+
+    /// @inheritdoc IMulticall3
+    function blockAndAggregate(Call[] calldata calls)
+        external
+        payable
+        returns (uint256 blockNumber, bytes32 blockHash, Result[] memory returnData)
+    {
+        blockNumber = block.number;
+        blockHash = blockhash(block.number - 1);
+        returnData = new Result[](calls.length);
+        for (uint256 i = 0; i < calls.length; ++i) {
+            (bool success, bytes memory ret) = calls[i].target.call(calls[i].callData);
+            returnData[i] = Result({ success: success, returnData: ret });
+        }
+    }
+
+    /// @inheritdoc IMulticall3
+    function tryAggregate(bool requireSuccess, Call[] calldata calls)
+        external
+        payable
+        returns (Result[] memory returnData)
+    {
+        returnData = new Result[](calls.length);
+        for (uint256 i = 0; i < calls.length; ++i) {
+            (bool success, bytes memory ret) = calls[i].target.call(calls[i].callData);
+            if (requireSuccess) require(success, "Multicall3: call failed");
+            returnData[i] = Result({ success: success, returnData: ret });
+        }
+    }
+
+    /// @inheritdoc IMulticall3
+    function tryBlockAndAggregate(bool requireSuccess, Call[] calldata calls)
+        external
+        payable
+        returns (uint256 blockNumber, bytes32 blockHash, Result[] memory returnData)
+    {
+        blockNumber = block.number;
+        blockHash = blockhash(block.number - 1);
+        returnData = new Result[](calls.length);
+        for (uint256 i = 0; i < calls.length; ++i) {
+            (bool success, bytes memory ret) = calls[i].target.call(calls[i].callData);
+            if (requireSuccess) require(success, "Multicall3: call failed");
+            returnData[i] = Result({ success: success, returnData: ret });
+        }
+    }
+
+    /// @inheritdoc IMulticall3
+    function getBasefee() external view returns (uint256 basefee) {
+        basefee = block.basefee;
+    }
+
+    /// @inheritdoc IMulticall3
+    function getBlockHash(uint256 blockNumber) external view returns (bytes32 blockHash) {
+        blockHash = blockhash(blockNumber);
+    }
+
+    /// @inheritdoc IMulticall3
+    function getBlockNumber() external view returns (uint256 blockNumber) {
+        blockNumber = block.number;
+    }
+
+    /// @inheritdoc IMulticall3
+    function getChainId() external view returns (uint256 chainid) {
+        chainid = block.chainid;
+    }
+
+    /// @inheritdoc IMulticall3
+    function getCurrentBlockCoinbase() external view returns (address coinbase) {
+        coinbase = block.coinbase;
+    }
+
+    /// @inheritdoc IMulticall3
+    function getCurrentBlockDifficulty() external view returns (uint256 difficulty) {
+        difficulty = block.prevrandao;
+    }
+
+    /// @inheritdoc IMulticall3
+    function getCurrentBlockGasLimit() external view returns (uint256 gaslimit) {
+        gaslimit = block.gaslimit;
+    }
+
+    /// @inheritdoc IMulticall3
+    function getCurrentBlockTimestamp() external view returns (uint256 timestamp) {
+        timestamp = block.timestamp;
+    }
+
+    /// @inheritdoc IMulticall3
+    function getEthBalance(address addr) external view returns (uint256 balance) {
+        balance = addr.balance;
+    }
+
+    /// @inheritdoc IMulticall3
+    function getLastBlockHash() external view returns (bytes32 blockHash) {
+        blockHash = blockhash(block.number - 1);
     }
 }

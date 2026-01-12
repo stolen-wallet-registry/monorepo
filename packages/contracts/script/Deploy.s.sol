@@ -28,6 +28,9 @@ contract Deploy is DeployBase {
         (address priceFeed, address feeManager, address payable hub, address registry) =
             deployCore(deployer, address(0));
 
+        // Deploy Multicall3 for local chains (needed for viem/wagmi batch calls)
+        address multicall3 = deployMulticall3();
+
         vm.stopBroadcast();
 
         // Summary
@@ -37,6 +40,7 @@ contract Deploy is DeployBase {
         console2.log("FeeManager:", feeManager);
         console2.log("RegistryHub:", hub);
         console2.log("Price Feed:", priceFeed);
+        console2.log("Multicall3:", multicall3);
         console2.log("Current Fee (wei):", FeeManager(feeManager).currentFeeWei());
     }
 }

@@ -76,3 +76,4 @@ PRPs/
 
 # Claude Code local settings (user-specific permissions)
 .claude/settings.local.json
+.claude/plans/

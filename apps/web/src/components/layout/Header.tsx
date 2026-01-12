@@ -30,18 +30,23 @@ export function Header() {
   const { setTriggerThemeAnimation } = useTheme();
 
   // Register the theme toggler's trigger function with context
+  // We register a WRAPPER function that calls through the ref, ensuring
+  // we always invoke the latest triggerVariantSwitch (which may change
+  // when themeVariant changes due to useCallback dependencies)
   useEffect(() => {
-    if (themeTogglerRef.current) {
-      logger.ui.debug('Registering triggerThemeAnimation with context', {
-        component: 'Header',
-        hasRef: true,
-      });
-      setTriggerThemeAnimation(themeTogglerRef.current.triggerVariantSwitch);
-    } else {
-      logger.ui.warn('themeTogglerRef.current is null, cannot register', {
-        component: 'Header',
-      });
-    }
+    logger.ui.debug('Registering triggerThemeAnimation wrapper with context', {
+      component: 'Header',
+    });
+    setTriggerThemeAnimation((variant) => {
+      if (themeTogglerRef.current) {
+        themeTogglerRef.current.triggerVariantSwitch(variant);
+      } else {
+        logger.ui.warn('themeTogglerRef.current is null when triggering animation', {
+          component: 'Header',
+          requestedVariant: variant,
+        });
+      }
+    });
     return () => {
       logger.ui.debug('Cleanup: unregistering triggerThemeAnimation', {
         component: 'Header',
