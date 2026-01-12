@@ -51,8 +51,8 @@ yarn-error.log*
 coverage/
 .nyc_output/
 !packages/contracts/reports/coverage/summary.txt
-packages/contracts/reports/coverage/lcov.info
-packages/contracts/reports/gas/gas-report.txt
+!packages/contracts/reports/coverage/lcov.info
+!packages/contracts/reports/gas/gas-report.txt
 
 # TypeScript
 *.tsbuildinfo

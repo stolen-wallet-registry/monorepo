@@ -317,6 +317,10 @@ contract IntegrationTest is Test {
         vm.prank(forwarder);
         walletRegistry.acknowledge(deadline, nonce, victim2, v, r, s);
 
+        // Verify victim's registration state wasn't affected by victim2's acknowledgement
+        assertFalse(hub.isWalletPending(victim)); // victim should still be registered, not pending
+        assertTrue(hub.isWalletRegistered(victim)); // victim's registration should be unchanged
+
         // Skip to registration window for victim2
         (,, uint256 startBlock,,,) = walletRegistry.getDeadlines(victim2);
         vm.roll(startBlock + 1);

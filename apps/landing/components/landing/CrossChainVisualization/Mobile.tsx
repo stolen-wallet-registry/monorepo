@@ -64,7 +64,16 @@ export function CrossChainVisualizationMobile({
               >
                 CAIP-10
               </a>{' '}
-              chain-agnostic identifiers. Services react in real-time to protect the ecosystem.
+              and{' '}
+              <a
+                href="https://chainagnostic.org/CAIPs/caip-2"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-foreground underline decoration-dotted underline-offset-2"
+              >
+                CAIP-2
+              </a>{' '}
+              standards. Services react in real-time to protect the ecosystem.
             </p>
           </div>
         )}
@@ -72,7 +81,7 @@ export function CrossChainVisualizationMobile({
         {/* Networks - representative icons */}
         <MobileSection
           label={showLabels ? 'Report Fraud' : undefined}
-          tooltip="Report stolen wallets or fraudulent transactions. Self-attestation requires proving wallet ownership via cryptographic signature."
+          tooltip="Report stolen wallets from any chain. Addresses are formatted as CAIP-10 identifiers (eip155:1:0x... for Ethereum, solana:mainnet:7S3P... for Solana) enabling unified tracking across all blockchains."
         >
           <div className="flex flex-wrap items-center justify-center gap-3">
             <IconCircle label="Ethereum" size="sm">
@@ -99,7 +108,7 @@ export function CrossChainVisualizationMobile({
         {/* Cross-Chain Messaging */}
         <MobileSection
           label={showLabels ? 'Cross-Chain Messaging' : undefined}
-          tooltip="Cross-chain messaging protocols securely transmit reports from any chain to the consolidated registry on Base."
+          tooltip="Cross-chain messaging protocols relay CAIP-10 formatted reports from source chains to the central registry on Base, maintaining data integrity across different blockchain architectures."
         >
           <div className="flex items-center gap-3">
             <BridgeIcon label="Chainlink CCIP">

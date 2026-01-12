@@ -259,6 +259,7 @@ contract Multicall3 is IMulticall3 {
         returnData = new Result[](calls.length);
         for (uint256 i = 0; i < calls.length; ++i) {
             (bool success, bytes memory ret) = calls[i].target.call(calls[i].callData);
+            require(success, "Multicall3: call failed");
             returnData[i] = Result({ success: success, returnData: ret });
         }
     }

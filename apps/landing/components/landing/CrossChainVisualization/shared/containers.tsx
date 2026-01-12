@@ -82,7 +82,7 @@ export const GroupContainer = forwardRef<
       ref={ref}
       className={cn(
         'relative flex flex-col items-center gap-2 rounded-xl border p-3 backdrop-blur-sm',
-        'border-border/50 dark:border-border/70',
+        'border-border/70 dark:border-border',
         'bg-background/50 dark:bg-background/60',
         className
       )}
@@ -190,7 +190,7 @@ export function MobileSection({
     <div
       className={cn(
         'flex w-full flex-col items-center gap-2 rounded-xl border p-4 backdrop-blur-sm',
-        'border-border/50 dark:border-border/70',
+        'border-border/70 dark:border-border',
         'bg-background/50 dark:bg-background/60',
         className
       )}
@@ -210,7 +210,7 @@ export function MobileRegistryHub({ showLabels = true }: { showLabels?: boolean 
     <div
       className={cn(
         'relative flex w-full flex-col items-center gap-3 rounded-xl border p-4 backdrop-blur-sm',
-        'border-border/50 dark:border-border/70',
+        'border-border/70 dark:border-border',
         'bg-background/50 dark:bg-background/60'
       )}
     >

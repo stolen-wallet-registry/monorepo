@@ -243,7 +243,7 @@ function StaticConnection({
         stroke="currentColor"
         strokeWidth={1}
         strokeDasharray="4 4"
-        className="opacity-15 dark:opacity-30"
+        className="opacity-30 dark:opacity-50"
       />
     </svg>
   );
@@ -509,8 +509,17 @@ export function CrossChainVisualizationDesktop({
               >
                 CAIP-10
               </a>{' '}
-              chain-agnostic identifiers. Exchanges, wallets, and security services listen for
-              events and react in real-time to protect the ecosystem.
+              (addresses) and{' '}
+              <a
+                href="https://chainagnostic.org/CAIPs/caip-2"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-foreground underline decoration-dotted underline-offset-2 transition-colors hover:text-primary"
+              >
+                CAIP-2
+              </a>{' '}
+              (chain IDs) standards. Exchanges, wallets, and security services listen for events and
+              react in real-time to protect the ecosystem.
             </p>
           </div>
         )}
@@ -534,7 +543,7 @@ export function CrossChainVisualizationDesktop({
               ref={ethEcosystemRef}
               rightAnchorRef={ethRightAnchorRef}
               label={showLabels ? 'Ethereum Ecosystem' : undefined}
-              labelTooltip="Ethereum L1 and its Layer 2 rollups. L2s inherit Ethereum's security while providing faster, cheaper transactions. All settle back to Ethereum mainnet."
+              labelTooltip="Reports from Ethereum and its L2 rollups are formatted as CAIP-10 identifiers (eip155:1:0x..., eip155:10:0x...) and relayed to the central registry via cross-chain messaging. Same 0x address format as the hub chain, but CAIP-10 standardizes chain and signature type identification."
             >
               {/* Core L2s - tightly clustered around ETH */}
               <div className="flex items-center gap-1">
@@ -615,7 +624,7 @@ export function CrossChainVisualizationDesktop({
               ref={evmChainsRef}
               rightAnchorRef={evmRightAnchorRef}
               label={showLabels ? 'EVM Chains' : undefined}
-              labelTooltip="EVM-compatible Layer 1 blockchains that can execute Ethereum smart contracts. Each has its own consensus and security model."
+              labelTooltip="EVM chains share the same 0x address format as Ethereum. Reports are formatted as CAIP-10 (eip155:56:0x... for BNB Chain) and passed through cross-chain messaging to the registry. The standard format enables unified tracking regardless of source chain."
             >
               <div className="flex items-center gap-2">
                 <IconCircle label="BNB Chain" size="sm">
@@ -635,7 +644,7 @@ export function CrossChainVisualizationDesktop({
               ref={nonEvmRef}
               rightAnchorRef={nonEvmRightAnchorRef}
               label={showLabels ? 'Non-EVM' : undefined}
-              labelTooltip="Blockchains with their own virtual machines and address formats. CAIP-10 standard enables tracking these alongside EVM chains in one registry."
+              labelTooltip="Non-EVM chains have different address formats (Solana uses base58, Cosmos uses bech32). CAIP-10 normalizes these into a standard format (solana:mainnet:7S3P..., cosmos:cosmoshub-4:cosmos1...) so the registry can track stolen wallets from any blockchain in one place."
             >
               <div className="flex items-center gap-2">
                 <IconCircle label="Solana" size="sm">
@@ -655,7 +664,7 @@ export function CrossChainVisualizationDesktop({
               ref={btcRef}
               rightAnchorRef={btcRightAnchorRef}
               label={showLabels ? 'Bitcoin' : undefined}
-              labelTooltip="The original blockchain. Bitcoin addresses use bip122 format but are fully supported via CAIP-10 compliant storage."
+              labelTooltip="Bitcoin addresses are formatted as CAIP-10 using the bip122 namespace (bip122:000000000019d6689c:1A1zP1...). This allows the registry to track compromised Bitcoin wallets alongside EVM and other chain addresses in a unified format."
             >
               <IconCircle label="Bitcoin" size="md">
                 <NetworkBitcoin variant="branded" className="size-7" />

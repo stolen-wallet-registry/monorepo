@@ -253,6 +253,16 @@ contract RegistryHubTest is Test {
         hub.setCrossChainInbox(address(0x123));
     }
 
+    // setCrossChainInbox should update state when called by owner.
+    function test_SetCrossChainInbox_Success() public {
+        address newInbox = makeAddr("crossChainInbox");
+
+        vm.prank(owner);
+        hub.setCrossChainInbox(newInbox);
+
+        assertEq(hub.crossChainInbox(), newInbox);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ETH HANDLING TESTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -323,6 +333,18 @@ contract RegistryHubTest is Test {
         hub.withdrawFees(recipient, 1 ether);
 
         assertEq(address(hub).balance, 0);
+    }
+
+    // Withdraw should revert when requesting more than available balance.
+    function test_WithdrawFees_InsufficientBalance_Reverts() public {
+        // Send some ETH first
+        vm.prank(user);
+        (bool success,) = address(hub).call{ value: 1 ether }("");
+        assertTrue(success);
+
+        vm.prank(owner);
+        vm.expectRevert(); // Low-level call will fail
+        hub.withdrawFees(recipient, 2 ether);
     }
 
     // Withdraw should revert if recipient rejects ETH.
@@ -425,6 +447,27 @@ contract RegistryHubTest is Test {
         vm.expectRevert(IRegistryHub.Hub__InvalidRegistry.selector);
         vm.prank(inbox);
         hub.registerFromSpoke(user, 1, false, 1, bytes32(0));
+    }
+
+    // registerFromSpoke should successfully register wallet when called by authorized inbox.
+    function test_RegisterFromSpoke_Success() public {
+        address inbox = makeAddr("crossChainInbox");
+        address wallet = makeAddr("victimWallet");
+        uint32 sourceChainId = 8453; // Base
+        bytes32 messageId = keccak256("test-message");
+
+        vm.prank(owner);
+        hub.setCrossChainInbox(inbox);
+
+        // Register via cross-chain inbox
+        vm.prank(inbox);
+        vm.expectEmit(true, true, true, true);
+        emit IRegistryHub.CrossChainRegistration(wallet, sourceChainId, messageId);
+
+        hub.registerFromSpoke(wallet, sourceChainId, false, 1, messageId);
+
+        // Verify wallet is now registered
+        assertTrue(hub.isWalletRegistered(wallet));
     }
 }
 

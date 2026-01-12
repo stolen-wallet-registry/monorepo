@@ -46,8 +46,9 @@ contract CrossChainInboxTest is Test {
 
     function test_SetTrustedSource_OnlyOwner() public {
         // Only the owner should be able to update trusted sources.
-        vm.prank(makeAddr("user"));
-        vm.expectRevert();
+        address user = makeAddr("user");
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         inbox.setTrustedSource(SPOKE_DOMAIN, bytes32(uint256(1)), true);
     }
 

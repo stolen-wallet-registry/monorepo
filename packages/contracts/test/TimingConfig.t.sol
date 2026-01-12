@@ -121,4 +121,17 @@ contract TimingConfigTest is Test {
         assertGe(result, currentBlock + deadlineBlocks);
         assertLe(result, currentBlock + (2 * deadlineBlocks) - 1);
     }
+
+    // Fuzz test: signature deadline should always be within the documented range.
+    function testFuzz_SignatureDeadline_Range(uint256 currentTimestamp) public {
+        // Bound to reasonable timestamp values (avoid overflow with deadline additions)
+        currentTimestamp = bound(currentTimestamp, 1, type(uint128).max);
+
+        vm.warp(currentTimestamp);
+        uint256 result = harness.signatureDeadline();
+
+        // Signature deadline should be between 30 min (1800s) and 1 hour (3600s) from now
+        assertGe(result, currentTimestamp + 1800);
+        assertLt(result, currentTimestamp + 3600);
+    }
 }

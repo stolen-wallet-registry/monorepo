@@ -516,4 +516,22 @@ contract FeeManagerTest is Test {
             feeManager.validateFee(payment);
         }
     }
+
+    // Fuzz test: setBaseFee should handle extreme values near overflow boundary.
+    function testFuzz_SetBaseFee_ExtremeBoundary(uint256 baseFee) public {
+        // The contract prevents overflow in currentFeeWei calculation: (baseFeeUsdCents * 1e18) / ethPrice
+        // Max safe value: type(uint256).max / 1e18
+        uint256 maxSafeBaseFee = type(uint256).max / 1e18;
+
+        vm.prank(owner);
+        if (baseFee > maxSafeBaseFee) {
+            // Values above overflow threshold should revert
+            vm.expectRevert(IFeeManager.Fee__InvalidPrice.selector);
+            feeManager.setBaseFee(baseFee);
+        } else {
+            // All other values should succeed (including 0 for free registrations)
+            feeManager.setBaseFee(baseFee);
+            assertEq(feeManager.baseFeeUsdCents(), baseFee);
+        }
+    }
 }

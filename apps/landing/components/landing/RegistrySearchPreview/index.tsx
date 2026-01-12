@@ -118,8 +118,24 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
   );
 
   const handleExampleClick = useCallback(
-    (address: string) => {
+    (address: string, forceStolen = false) => {
       setInputValue(address);
+
+      // For demo purposes: force "Stolen Wallet" example to show as registered
+      // since we don't have a production registry with actual stolen wallets yet
+      if (forceStolen) {
+        setError(null);
+        setSearchedAddress(address);
+        // Mock a "registered" result for demo
+        setResult({
+          isRegistered: true,
+          isPending: false,
+          registrationData: null,
+          acknowledgementData: null,
+        });
+        return;
+      }
+
       handleSearch(address);
     },
     [handleSearch]
@@ -150,6 +166,13 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
               aria-label="Wallet address to search"
             />
           </div>
+          <Button
+            type="submit"
+            disabled={isLoading || !inputValue.trim()}
+            aria-label={isLoading ? 'Searching registry' : 'Search registry'}
+          >
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+          </Button>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -160,20 +183,13 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
                 <HelpCircle className="h-4 w-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs text-center">
+            <TooltipContent side="right" className="max-w-xs text-center">
               <p>
                 Enter any wallet address to check if it&apos;s been reported as stolen in our
                 registry.
               </p>
             </TooltipContent>
           </Tooltip>
-          <Button
-            type="submit"
-            disabled={isLoading || !inputValue.trim()}
-            aria-label={isLoading ? 'Searching registry' : 'Search registry'}
-          >
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
-          </Button>
         </form>
 
         {/* Example Buttons - Centered */}
@@ -186,7 +202,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleExampleClick(EXAMPLE_REGISTERED_ADDRESS)}
+            onClick={() => handleExampleClick(EXAMPLE_REGISTERED_ADDRESS, true)}
             disabled={isLoading}
             className="h-7 px-3 text-xs"
             aria-label="Search example stolen wallet address"
