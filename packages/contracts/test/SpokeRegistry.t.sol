@@ -72,14 +72,26 @@ contract SpokeRegistryTest is Test {
         );
     }
 
+    function _sign(
+        bytes32 typeHash,
+        address ownerAddr,
+        address forwarderAddr,
+        uint256 nonce,
+        uint256 deadline,
+        address targetRegistry
+    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+        bytes32 structHash = keccak256(abi.encode(typeHash, ownerAddr, forwarderAddr, nonce, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(targetRegistry), structHash));
+        (v, r, s) = vm.sign(victimPk, digest);
+    }
+
+    // Convenience overload for the default registry
     function _sign(bytes32 typeHash, address ownerAddr, address forwarderAddr, uint256 nonce, uint256 deadline)
         internal
         view
         returns (uint8 v, bytes32 r, bytes32 s)
     {
-        bytes32 structHash = keccak256(abi.encode(typeHash, ownerAddr, forwarderAddr, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(address(registry)), structHash));
-        (v, r, s) = vm.sign(victimPk, digest);
+        return _sign(typeHash, ownerAddr, forwarderAddr, nonce, deadline, address(registry));
     }
 
     function _acknowledge(address forwarderAddr) internal {
@@ -96,6 +108,7 @@ contract SpokeRegistryTest is Test {
         vm.roll(startBlock + 1);
     }
 
+    // Ownable should reject a zero owner at deployment.
     function test_Constructor_RevertsOnZeroOwner() public {
         vm.expectRevert(abi.encodeWithSignature("OwnableInvalidOwner(address)", address(0)));
         new SpokeRegistry(
@@ -109,6 +122,7 @@ contract SpokeRegistryTest is Test {
         );
     }
 
+    // Constructor should reject a zero bridge adapter.
     function test_Constructor_RevertsOnZeroBridgeAdapter() public {
         vm.expectRevert(SpokeRegistry.SpokeRegistry__ZeroAddress.selector);
         new SpokeRegistry(
@@ -122,6 +136,7 @@ contract SpokeRegistryTest is Test {
         );
     }
 
+    // Constructor should reject invalid timing parameters.
     function test_Constructor_RevertsOnInvalidTiming() public {
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidTimingConfig.selector);
         new SpokeRegistry(
@@ -135,6 +150,7 @@ contract SpokeRegistryTest is Test {
         );
     }
 
+    // Acknowledgement should reject a zero owner address.
     function test_Acknowledge_InvalidOwner_Reverts() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(address(0));
@@ -145,6 +161,7 @@ contract SpokeRegistryTest is Test {
         registry.acknowledgeLocal(deadline, nonce, address(0), v, r, s);
     }
 
+    // Acknowledgement should reject an incorrect nonce.
     function test_Acknowledge_InvalidNonce_Reverts() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = 999;
@@ -155,6 +172,7 @@ contract SpokeRegistryTest is Test {
         registry.acknowledgeLocal(deadline, nonce, victim, v, r, s);
     }
 
+    // Acknowledgement should reject signatures not from the owner.
     function test_Acknowledge_InvalidSigner_Reverts() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(victim);
@@ -167,6 +185,7 @@ contract SpokeRegistryTest is Test {
         registry.acknowledgeLocal(deadline, nonce, victim, v, r, s);
     }
 
+    // Acknowledgement should reject expired signatures.
     function test_Acknowledge_SignatureExpired_Reverts() public {
         uint256 deadline = block.timestamp - 1;
         uint256 nonce = registry.nonces(victim);
@@ -177,6 +196,8 @@ contract SpokeRegistryTest is Test {
         registry.acknowledgeLocal(deadline, nonce, victim, v, r, s);
     }
 
+    // Registration depends on a configured hub inbox; without it, messages
+    // cannot be routed cross-chain, so the call must revert early.
     function test_Register_HubNotConfigured_Reverts() public {
         SpokeRegistry noHub = new SpokeRegistry(
             owner, address(adapter), address(feeManager), HUB_DOMAIN, bytes32(0), GRACE_BLOCKS, DEADLINE_BLOCKS
@@ -184,15 +205,15 @@ contract SpokeRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = noHub.nonces(victim);
-        bytes32 structHash = keccak256(abi.encode(REG_TYPEHASH, victim, forwarder, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(address(noHub)), structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(victimPk, digest);
+        // Use parameterized _sign to target the noHub registry instance
+        (uint8 v, bytes32 r, bytes32 s) = _sign(REG_TYPEHASH, victim, forwarder, nonce, deadline, address(noHub));
 
         vm.prank(forwarder);
         vm.expectRevert(SpokeRegistry.SpokeRegistry__HubNotConfigured.selector);
         noHub.registerLocal(deadline, nonce, victim, v, r, s);
     }
 
+    // Registration must be submitted by the trusted forwarder.
     function test_Register_InvalidForwarder_Reverts() public {
         _acknowledge(forwarder);
         _skipToWindow(victim);
@@ -207,6 +228,7 @@ contract SpokeRegistryTest is Test {
         registry.registerLocal(deadline, nonce, victim, v, r, s);
     }
 
+    // Registration should fail before grace period starts.
     function test_Register_GracePeriodNotStarted_Reverts() public {
         _acknowledge(forwarder);
 
@@ -219,6 +241,8 @@ contract SpokeRegistryTest is Test {
         registry.registerLocal(deadline, nonce, victim, v, r, s);
     }
 
+    // Registration must respect the timing window: after expiry, the forwarder
+    // is no longer trusted, so the call must revert.
     function test_Register_ExpiredForwarder_Reverts() public {
         _acknowledge(forwarder);
 
@@ -234,6 +258,8 @@ contract SpokeRegistryTest is Test {
         registry.registerLocal(deadline, nonce, victim, v, r, s);
     }
 
+    // Fee enforcement: registration must include bridge + protocol fees.
+    // This protects relayers from subsidizing underpayments.
     function test_Register_InsufficientFee_Reverts() public {
         _acknowledge(forwarder);
         _skipToWindow(victim);
@@ -249,18 +275,21 @@ contract SpokeRegistryTest is Test {
         registry.registerLocal{ value: fee - 1 }(deadline, nonce, victim, v, r, s);
     }
 
+    // Hub config should reject chainId set with zero inbox.
     function test_SetHubConfig_InvalidCombination_Reverts() public {
         vm.prank(owner);
         vm.expectRevert(SpokeRegistry.SpokeRegistry__InvalidHubConfig.selector);
         registry.setHubConfig(HUB_DOMAIN, bytes32(0));
     }
 
+    // Withdraw should reject a zero recipient.
     function test_WithdrawFees_ZeroAddress_Reverts() public {
         vm.prank(owner);
         vm.expectRevert(SpokeRegistry.SpokeRegistry__ZeroAddress.selector);
         registry.withdrawFees(address(0), 1);
     }
 
+    // Withdraw should revert if recipient rejects ETH.
     function test_WithdrawFees_RejectsReceiver_Reverts() public {
         RejectingReceiver rejector = new RejectingReceiver();
         vm.deal(address(registry), 1 ether);
@@ -270,15 +299,19 @@ contract SpokeRegistryTest is Test {
         registry.withdrawFees(address(rejector), 0.5 ether);
     }
 
+    // Fee breakdown should include both bridge and registration fees.
     function test_QuoteFeeBreakdown_IncludesRegistrationFee() public view {
         ISpokeRegistry.FeeBreakdown memory breakdown = registry.quoteFeeBreakdown(victim);
 
         assertGt(breakdown.bridgeFee, 0);
         assertGt(breakdown.registrationFee, 0);
         assertEq(breakdown.total, breakdown.bridgeFee + breakdown.registrationFee);
-        assertEq(breakdown.bridgeName, "Hyperlane");
+        // Use adapter's bridgeName() to avoid brittleness if name changes
+        assertEq(breakdown.bridgeName, adapter.bridgeName());
     }
 
+    // Refund safety: if a payer can't receive the excess refund, the call
+    // must revert to avoid unexpected loss of funds.
     function test_RefundFailure_Reverts() public {
         RefundRejector rejector = new RefundRejector(registry);
         address refundForwarder = address(rejector);

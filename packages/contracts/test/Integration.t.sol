@@ -135,6 +135,8 @@ contract IntegrationTest is Test {
     // FULL REGISTRATION FLOW TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // End-to-end native registration should complete acknowledgement, grace,
+    // and registration phases and reflect correctly via the hub.
     function test_FullRegistrationFlow() public {
         // Initial state
         assertFalse(hub.isWalletRegistered(victim));
@@ -158,6 +160,8 @@ contract IntegrationTest is Test {
         assertFalse(hub.isWalletPending(victim));
     }
 
+    // After registration, hub and registry queries should agree on state and
+    // metadata to prevent UI inconsistencies.
     function test_QueryAfterRegistration() public {
         // Complete full flow
         _doAcknowledgement();
@@ -186,6 +190,7 @@ contract IntegrationTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_FeeCalculation_Integration() public view {
+        // Hub fee should match fee manager fee and oracle price.
         // Verify fee flows through hub → feeManager → oracle
         uint256 hubFee = hub.currentFeeWei();
         uint256 feeManagerFee = feeManager.currentFeeWei();
@@ -197,6 +202,8 @@ contract IntegrationTest is Test {
         assertEq(hubFee, expectedFee);
     }
 
+    // Fee changes should propagate from fee manager to hub to keep UI quotes
+    // and payment validation consistent.
     function test_FeeChanges_ReflectInHub() public {
         uint256 initialFee = hub.currentFeeWei();
 
@@ -215,6 +222,7 @@ contract IntegrationTest is Test {
     }
 
     function test_FreeRegistrations_WhenNoFeeManager() public {
+        // Hub without fee manager should report zero fee.
         // Deploy hub without fee manager
         vm.prank(deployer);
         RegistryHub freeHub = new RegistryHub(deployer, address(0), address(walletRegistry));
@@ -223,6 +231,7 @@ contract IntegrationTest is Test {
     }
 
     function test_FreeRegistrations_WhenZeroBaseFee() public {
+        // Zero base fee should make hub fee zero.
         vm.prank(deployer);
         feeManager.setBaseFee(0);
 
@@ -233,6 +242,8 @@ contract IntegrationTest is Test {
     // SYSTEM STATE TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Deployment wiring is critical for fee routing and registry lookups.
+    // This test ensures the system is correctly linked end-to-end.
     function test_SystemDeployment_AllContractsLinked() public view {
         // Hub has correct references
         assertEq(hub.feeManager(), address(feeManager));
@@ -246,6 +257,8 @@ contract IntegrationTest is Test {
         assertEq(hub.owner(), deployer);
     }
 
+    // Ownership transfers are operationally critical (DAO control).
+    // Ensure both hub and fee manager follow the two-step flow.
     function test_OwnershipTransfer_FullSystem() public {
         address newOwner = makeAddr("newOwner");
 
@@ -279,6 +292,8 @@ contract IntegrationTest is Test {
     // EDGE CASE TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Multi-wallet support: registrations for different wallets should not
+    // interfere with each other or share state.
     function test_MultipleWalletRegistrations() public {
         // Register first wallet
         _doAcknowledgement();
@@ -323,6 +338,8 @@ contract IntegrationTest is Test {
         assertTrue(hub.isWalletRegistered(victim2));
     }
 
+    // If the oracle fails, fallback pricing should keep registrations viable.
+    // This prevents system downtime due to oracle outages.
     function test_OracleFailure_SystemStillWorks() public {
         // Make oracle fail
         mockOracle.setShouldRevert(true);
@@ -338,6 +355,7 @@ contract IntegrationTest is Test {
     }
 
     function test_PriceVolatility_FeeUpdates() public {
+        // Fee should scale inversely with ETH price.
         // Price doubles
         mockOracle.setPrice(600_000_000_000); // $6000 ETH
         uint256 feeAt6k = hub.currentFeeWei();
@@ -355,6 +373,7 @@ contract IntegrationTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_Gas_HubQueryPassthrough() public view {
+        // Gas for hub passthrough queries should remain under target.
         // Measure gas for hub passthrough queries
         uint256 gasBefore = gasleft();
         hub.isWalletRegistered(victim);
@@ -366,6 +385,7 @@ contract IntegrationTest is Test {
     }
 
     function test_Gas_CurrentFeeWei() public view {
+        // Gas for currentFeeWei should remain under target.
         uint256 gasBefore = gasleft();
         hub.currentFeeWei();
         uint256 gasUsed = gasBefore - gasleft();

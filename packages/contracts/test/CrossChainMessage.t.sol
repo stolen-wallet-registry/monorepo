@@ -25,6 +25,7 @@ contract CrossChainMessageTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_EncodeRegistration_Success() public pure {
+        // Encoding should produce expected length for registration payload.
         CrossChainMessage.RegistrationPayload memory payload = CrossChainMessage.RegistrationPayload({
             wallet: address(0x1234567890123456789012345678901234567890),
             sourceChainId: 11_155_420, // Optimism Sepolia
@@ -42,6 +43,7 @@ contract CrossChainMessageTest is Test {
     }
 
     function test_DecodeRegistration_Success() public view {
+        // Decoding should recover the original payload values.
         // Create and encode a payload
         address testWallet = address(0xabCDeF0123456789AbcdEf0123456789aBCDEF01);
         CrossChainMessage.RegistrationPayload memory original = CrossChainMessage.RegistrationPayload({
@@ -67,6 +69,8 @@ contract CrossChainMessageTest is Test {
         assertEq(decoded.registrationHash, original.registrationHash, "registrationHash mismatch");
     }
 
+    // Fuzz test: encode/decode roundtrip should preserve all fields across
+    // a wide range of inputs to validate serialization stability.
     function testFuzz_EncodeDecodeRoundtrip(
         address wallet,
         uint32 sourceChainId,
@@ -103,6 +107,7 @@ contract CrossChainMessageTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_DecodeRegistration_InvalidVersion_Reverts() public {
+        // Decode should reject unsupported message versions.
         // Create payload with wrong version
         bytes memory invalidPayload = abi.encode(
             uint8(99), // Wrong version (should be 1)
@@ -120,6 +125,7 @@ contract CrossChainMessageTest is Test {
     }
 
     function test_DecodeRegistration_InvalidMessageType_Reverts() public {
+        // Decode should reject unsupported message types.
         // Create payload with wrong message type
         bytes memory invalidPayload = abi.encode(
             CrossChainMessage.MESSAGE_VERSION,
@@ -137,6 +143,7 @@ contract CrossChainMessageTest is Test {
     }
 
     function test_DecodeRegistration_TruncatedData_Reverts() public {
+        // Decode should reject too-short payloads.
         // Create truncated payload (missing registrationHash field - 7 fields = 224 bytes, requires 256)
         bytes memory truncatedPayload = abi.encode(
             CrossChainMessage.MESSAGE_VERSION,
@@ -154,6 +161,7 @@ contract CrossChainMessageTest is Test {
     }
 
     function test_DecodeRegistration_EmptyData_Reverts() public {
+        // Decode should reject empty payloads.
         bytes memory emptyPayload = "";
 
         vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector);
@@ -165,6 +173,7 @@ contract CrossChainMessageTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_AddressToBytes32() public pure {
+        // addressToBytes32 should left-pad the address.
         address addr = 0x1234567890123456789012345678901234567890;
         bytes32 result = CrossChainMessage.addressToBytes32(addr);
 
@@ -173,12 +182,15 @@ contract CrossChainMessageTest is Test {
     }
 
     function test_Bytes32ToAddress() public pure {
+        // bytes32ToAddress should recover the original address.
         bytes32 b = bytes32(uint256(uint160(0x1234567890123456789012345678901234567890)));
         address result = CrossChainMessage.bytes32ToAddress(b);
 
         assertEq(result, address(0x1234567890123456789012345678901234567890));
     }
 
+    // Fuzz test: address <-> bytes32 roundtrip should be lossless across
+    // many random addresses.
     function testFuzz_AddressBytes32Roundtrip(address addr) public pure {
         bytes32 b = CrossChainMessage.addressToBytes32(addr);
         address recovered = CrossChainMessage.bytes32ToAddress(b);
@@ -191,6 +203,7 @@ contract CrossChainMessageTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_MessageConstants() public pure {
+        // Message constants should match expected values.
         assertEq(CrossChainMessage.MESSAGE_VERSION, 1, "version should be 1");
         assertEq(CrossChainMessage.MSG_TYPE_REGISTRATION, bytes1(0x01), "registration type should be 0x01");
     }

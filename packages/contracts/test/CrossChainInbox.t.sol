@@ -27,27 +27,32 @@ contract CrossChainInboxTest is Test {
     }
 
     function test_Constructor_ZeroMailbox_Reverts() public {
+        // Ensure constructor rejects a zero mailbox address.
         vm.expectRevert(ICrossChainInbox.CrossChainInbox__ZeroAddress.selector);
         new CrossChainInbox(address(0), registryHub, owner);
     }
 
     function test_Constructor_ZeroRegistryHub_Reverts() public {
+        // Ensure constructor rejects a zero registry hub address.
         vm.expectRevert(ICrossChainInbox.CrossChainInbox__ZeroAddress.selector);
         new CrossChainInbox(address(mailbox), address(0), owner);
     }
 
     function test_Constructor_ZeroOwner_Reverts() public {
+        // Ownable should reject a zero owner before contract-level checks.
         vm.expectRevert(abi.encodeWithSignature("OwnableInvalidOwner(address)", address(0)));
         new CrossChainInbox(address(mailbox), registryHub, address(0));
     }
 
     function test_SetTrustedSource_OnlyOwner() public {
+        // Only the owner should be able to update trusted sources.
         vm.prank(makeAddr("user"));
         vm.expectRevert();
         inbox.setTrustedSource(SPOKE_DOMAIN, bytes32(uint256(1)), true);
     }
 
     function test_Handle_SourceChainMismatch_Reverts() public {
+        // Defensive check: payload source chain must match the Hyperlane origin.
         bytes32 sender = CrossChainMessage.addressToBytes32(makeAddr("spokeRegistry"));
 
         vm.prank(owner);
@@ -69,6 +74,7 @@ contract CrossChainInboxTest is Test {
     }
 
     function test_BridgeId_ReturnsHyperlane() public view {
+        // Ensure the inbox advertises the expected bridge ID constant.
         assertEq(inbox.bridgeId(), 1);
     }
 }

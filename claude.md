@@ -353,6 +353,14 @@ cast sig 'MyContract__DescriptiveName()'
 - Simple wrapper components
 - E2E flows (add later with Playwright)
 
+### Solidity Test Documentation
+
+When writing Solidity tests in `packages/contracts/test/`:
+
+- If a test is more than trivially obvious, add a short comment above the test explaining what it verifies.
+- For complex or security-critical tests, add 2-3 lines explaining why the test matters.
+- For very simple tests, a comment is optional.
+
 ### Test File Location
 
 ```text

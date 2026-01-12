@@ -8,6 +8,7 @@ import {
   AnimatedThemeToggler,
   type ThemeTogglerHandle,
 } from '@/components/ui/animated-theme-toggler';
+import { logger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/useTheme';
 
@@ -31,13 +32,20 @@ export function Header() {
   // Register the theme toggler's trigger function with context
   useEffect(() => {
     if (themeTogglerRef.current) {
-      console.log('[Header] Registering triggerThemeAnimation with context');
+      logger.ui.debug('Registering triggerThemeAnimation with context', {
+        component: 'Header',
+        hasRef: true,
+      });
       setTriggerThemeAnimation(themeTogglerRef.current.triggerVariantSwitch);
     } else {
-      console.warn('[Header] themeTogglerRef.current is null, cannot register');
+      logger.ui.warn('themeTogglerRef.current is null, cannot register', {
+        component: 'Header',
+      });
     }
     return () => {
-      console.log('[Header] Cleanup: unregistering triggerThemeAnimation');
+      logger.ui.debug('Cleanup: unregistering triggerThemeAnimation', {
+        component: 'Header',
+      });
       setTriggerThemeAnimation(null);
     };
   }, [setTriggerThemeAnimation]);

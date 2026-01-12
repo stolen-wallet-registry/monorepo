@@ -17,16 +17,19 @@ contract StolenWalletRegistryHubPathTest is Test {
     bytes32 private constant REG_TYPEHASH =
         keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
 
+    // Constructor should reject feeManager set without a registry hub.
     function test_Constructor_InvalidFeeConfig_Reverts() public {
         vm.expectRevert(IStolenWalletRegistry.InvalidFeeConfig.selector);
         new StolenWalletRegistry(makeAddr("feeManager"), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
     }
 
+    // Constructor should reject invalid timing configuration.
     function test_Constructor_InvalidTiming_Reverts() public {
         vm.expectRevert(IStolenWalletRegistry.InvalidTimingConfig.selector);
         new StolenWalletRegistry(address(0), address(0), 0, DEADLINE_BLOCKS);
     }
 
+    // registerFromHub should only be callable by the registry hub.
     function test_RegisterFromHub_Unauthorized_Reverts() public {
         StolenWalletRegistry registry =
             new StolenWalletRegistry(address(0), makeAddr("hub"), GRACE_BLOCKS, DEADLINE_BLOCKS);
@@ -35,6 +38,7 @@ contract StolenWalletRegistryHubPathTest is Test {
         registry.registerFromHub(makeAddr("wallet"), 1, false, 1, bytes32(0));
     }
 
+    // registerFromHub should reject a zero wallet address.
     function test_RegisterFromHub_InvalidOwner_Reverts() public {
         address hub = makeAddr("hub");
         StolenWalletRegistry registry = new StolenWalletRegistry(address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
@@ -44,6 +48,7 @@ contract StolenWalletRegistryHubPathTest is Test {
         registry.registerFromHub(address(0), 1, false, 1, bytes32(0));
     }
 
+    // Cross-chain registration must include a non-zero source chain ID.
     function test_RegisterFromHub_InvalidChainId_Reverts() public {
         address hub = makeAddr("hub");
         StolenWalletRegistry registry = new StolenWalletRegistry(address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
@@ -53,17 +58,18 @@ contract StolenWalletRegistryHubPathTest is Test {
         registry.registerFromHub(makeAddr("wallet"), 0, false, 1, bytes32(0));
     }
 
+    // registerFromHub should reject unsupported bridge IDs.
     function test_RegisterFromHub_InvalidBridgeId_Reverts() public {
         address hub = makeAddr("hub");
         StolenWalletRegistry registry = new StolenWalletRegistry(address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         vm.prank(hub);
         vm.expectRevert(IStolenWalletRegistry.InvalidBridgeId.selector);
-        registry.registerFromHub(
-            makeAddr("wallet"), 1, false, uint8(IStolenWalletRegistry.BridgeId.WORMHOLE) + 1, bytes32(0)
-        );
+        // Use type(uint8).max to ensure invalid regardless of future enum additions
+        registry.registerFromHub(makeAddr("wallet"), 1, false, type(uint8).max, bytes32(0));
     }
 
+    // A wallet cannot be registered twice via the hub path.
     function test_RegisterFromHub_AlreadyRegistered_Reverts() public {
         address hub = makeAddr("hub");
         StolenWalletRegistry registry = new StolenWalletRegistry(address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
@@ -77,6 +83,8 @@ contract StolenWalletRegistryHubPathTest is Test {
         registry.registerFromHub(wallet, 1, false, 1, bytes32(0));
     }
 
+    // Hub registrations must preserve cross-chain provenance (source chain,
+    // bridge ID, sponsorship). This is the audit trail for registrations.
     function test_RegisterFromHub_Success() public {
         address hub = makeAddr("hub");
         StolenWalletRegistry registry = new StolenWalletRegistry(address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
@@ -91,11 +99,13 @@ contract StolenWalletRegistryHubPathTest is Test {
         assertTrue(data.isSponsored);
     }
 
+    // quoteRegistration should return 0 when no fee manager is set.
     function test_QuoteRegistration_NoFeeManager_ReturnsZero() public {
         StolenWalletRegistry registry = new StolenWalletRegistry(address(0), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
         assertEq(registry.quoteRegistration(makeAddr("wallet")), 0);
     }
 
+    // quoteRegistration should mirror the fee manager's current fee.
     function test_QuoteRegistration_WithFeeManager_ReturnsFee() public {
         MockAggregator oracle = new MockAggregator(300_000_000_000);
         FeeManager feeManager = new FeeManager(makeAddr("owner"), address(oracle));
@@ -105,6 +115,8 @@ contract StolenWalletRegistryHubPathTest is Test {
         assertEq(registry.quoteRegistration(makeAddr("wallet")), feeManager.currentFeeWei());
     }
 
+    // getDeadlines should return zeroed/expired values for sessions with no
+    // acknowledgement so the UI doesn't misinterpret timing state.
     function test_GetDeadlines_NoAcknowledgement_ReturnsExpired() public {
         StolenWalletRegistry registry = new StolenWalletRegistry(address(0), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
@@ -125,6 +137,8 @@ contract StolenWalletRegistryHubPathTest is Test {
         assertTrue(isExpired);
     }
 
+    // Fee forwarding is an external call; if it fails, registration must
+    // revert to avoid accepting a fee that can't be delivered to the hub.
     function test_Register_FeeForwardFailure_Reverts() public {
         RejectingReceiver rejectingHub = new RejectingReceiver();
         MockAggregator oracle = new MockAggregator(300_000_000_000);

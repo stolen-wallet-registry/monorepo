@@ -48,6 +48,7 @@ contract RegistryHubTest is Test {
     // CONSTRUCTOR TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Constructor wires owner, fee manager, and initial registry as expected.
     function test_Constructor_WithAllParams() public view {
         assertEq(hub.owner(), owner);
         assertEq(hub.feeManager(), address(feeManager));
@@ -55,6 +56,7 @@ contract RegistryHubTest is Test {
         assertFalse(hub.paused());
     }
 
+    // Constructor should allow fee-free configuration.
     function test_Constructor_WithoutFeeManager() public {
         vm.prank(owner);
         RegistryHub noFeesHub = new RegistryHub(owner, address(0), address(walletRegistry));
@@ -63,6 +65,7 @@ contract RegistryHubTest is Test {
         assertEq(noFeesHub.currentFeeWei(), 0);
     }
 
+    // Constructor should allow deploying without an initial registry.
     function test_Constructor_WithoutRegistry() public {
         vm.prank(owner);
         RegistryHub noRegistryHub = new RegistryHub(owner, address(feeManager), address(0));
@@ -74,12 +77,14 @@ contract RegistryHubTest is Test {
     // REGISTRY TYPE CONSTANTS TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Registry type constants should match expected hashes.
     function test_RegistryTypeConstants() public view {
         assertEq(hub.stolenWalletRegistryType(), keccak256("STOLEN_WALLET_REGISTRY"));
         assertEq(hub.fraudulentContractRegistryType(), keccak256("FRAUDULENT_CONTRACT_REGISTRY"));
         assertEq(hub.stolenTransactionRegistryType(), keccak256("STOLEN_TRANSACTION_REGISTRY"));
     }
 
+    // Public constant getters should match stored constants.
     function test_RegistryTypeConstants_MatchStorage() public view {
         assertEq(hub.stolenWalletRegistryType(), hub.STOLEN_WALLET());
         assertEq(hub.fraudulentContractRegistryType(), hub.FRAUDULENT_CONTRACT());
@@ -90,12 +95,14 @@ contract RegistryHubTest is Test {
     // PAUSE TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Only owner should be able to pause the hub.
     function test_Pause_OnlyOwner() public {
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         hub.setPaused(true);
     }
 
+    // Pausing should flip state and emit event.
     function test_Pause_Success() public {
         vm.prank(owner);
         vm.expectEmit(true, true, true, true);
@@ -105,6 +112,7 @@ contract RegistryHubTest is Test {
         assertTrue(hub.paused());
     }
 
+    // Unpausing should flip state and emit event.
     function test_Unpause_Success() public {
         vm.prank(owner);
         hub.setPaused(true);
@@ -121,16 +129,19 @@ contract RegistryHubTest is Test {
     // QUERY PASSTHROUGH TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Passthrough query should return false before registration.
     function test_IsWalletRegistered_ReturnsCorrectState() public view {
         // No registration yet
         assertFalse(hub.isWalletRegistered(user));
     }
 
+    // Passthrough pending query should return false before acknowledgement.
     function test_IsWalletPending_ReturnsCorrectState() public view {
         // No acknowledgement yet
         assertFalse(hub.isWalletPending(user));
     }
 
+    // Passthrough should return false when registry is unset.
     function test_IsWalletRegistered_NoRegistry() public {
         vm.prank(owner);
         RegistryHub noRegistryHub = new RegistryHub(owner, address(feeManager), address(0));
@@ -139,6 +150,7 @@ contract RegistryHubTest is Test {
         assertFalse(noRegistryHub.isWalletRegistered(user));
     }
 
+    // Pending passthrough should return false when registry is unset.
     function test_IsWalletPending_NoRegistry() public {
         vm.prank(owner);
         RegistryHub noRegistryHub = new RegistryHub(owner, address(feeManager), address(0));
@@ -151,6 +163,7 @@ contract RegistryHubTest is Test {
     // FEE HANDLING TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // currentFeeWei should delegate to fee manager when configured.
     function test_CurrentFeeWei_WithFeeManager() public view {
         uint256 fee = hub.currentFeeWei();
         uint256 expectedFee = feeManager.currentFeeWei();
@@ -158,6 +171,7 @@ contract RegistryHubTest is Test {
         assertGt(fee, 0);
     }
 
+    // currentFeeWei should return 0 when fee manager is unset.
     function test_CurrentFeeWei_NoFeeManager() public {
         vm.prank(owner);
         RegistryHub noFeesHub = new RegistryHub(owner, address(0), address(walletRegistry));
@@ -169,13 +183,15 @@ contract RegistryHubTest is Test {
     // REGISTRY MANAGEMENT TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Only owner should be able to update registry addresses.
     function test_SetRegistry_OnlyOwner() public {
         bytes32 registryType = hub.STOLEN_WALLET();
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         hub.setRegistry(registryType, address(0));
     }
 
+    // setRegistry should update mapping and emit event.
     function test_SetRegistry_Success() public {
         StolenWalletRegistry newRegistry =
             new StolenWalletRegistry(address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
@@ -189,6 +205,7 @@ contract RegistryHubTest is Test {
         assertEq(hub.getRegistry(registryType), address(newRegistry));
     }
 
+    // setRegistry should allow clearing an entry.
     function test_SetRegistry_Unregister() public {
         bytes32 registryType = hub.STOLEN_WALLET();
         vm.prank(owner);
@@ -201,12 +218,14 @@ contract RegistryHubTest is Test {
     // FEE MANAGER MANAGEMENT TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Only owner should be able to set fee manager.
     function test_SetFeeManager_OnlyOwner() public {
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         hub.setFeeManager(address(0));
     }
 
+    // setFeeManager should update state and emit event.
     function test_SetFeeManager_Success() public {
         FeeManager newFeeManager = new FeeManager(owner, address(mockOracle));
 
@@ -218,6 +237,7 @@ contract RegistryHubTest is Test {
         assertEq(hub.feeManager(), address(newFeeManager));
     }
 
+    // setFeeManager should allow disabling fees.
     function test_SetFeeManager_ToZero() public {
         vm.prank(owner);
         hub.setFeeManager(address(0));
@@ -226,9 +246,10 @@ contract RegistryHubTest is Test {
         assertEq(hub.currentFeeWei(), 0);
     }
 
+    // Only owner should be able to set cross-chain inbox.
     function test_SetCrossChainInbox_OnlyOwner() public {
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         hub.setCrossChainInbox(address(0x123));
     }
 
@@ -236,6 +257,7 @@ contract RegistryHubTest is Test {
     // ETH HANDLING TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Hub should be able to receive ETH.
     function test_ReceiveEth() public {
         uint256 amount = 1 ether;
 
@@ -246,6 +268,7 @@ contract RegistryHubTest is Test {
         assertEq(address(hub).balance, amount);
     }
 
+    // Only owner should be able to withdraw fees.
     function test_WithdrawFees_OnlyOwner() public {
         // Send some ETH first
         vm.prank(user);
@@ -253,16 +276,23 @@ contract RegistryHubTest is Test {
         assertTrue(success);
 
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         hub.withdrawFees(recipient, 0.5 ether);
     }
 
+    // Withdraw should reject a zero recipient.
     function test_WithdrawFees_ZeroAddress_Reverts() public {
+        // Fund the hub first so the revert is from zero address check, not insufficient balance
+        vm.prank(user);
+        (bool success,) = address(hub).call{ value: 1 ether }("");
+        assertTrue(success);
+
         vm.prank(owner);
         vm.expectRevert(IRegistryHub.Hub__ZeroAddress.selector);
         hub.withdrawFees(address(0), 1);
     }
 
+    // Withdraw should transfer requested amount and emit event.
     function test_WithdrawFees_Success() public {
         // Send some ETH first
         vm.prank(user);
@@ -282,6 +312,7 @@ contract RegistryHubTest is Test {
         assertEq(address(hub).balance, 0.5 ether);
     }
 
+    // Withdraw should allow draining full balance.
     function test_WithdrawFees_FullBalance() public {
         // Send some ETH first
         vm.prank(user);
@@ -294,6 +325,7 @@ contract RegistryHubTest is Test {
         assertEq(address(hub).balance, 0);
     }
 
+    // Withdraw should revert if recipient rejects ETH.
     function test_WithdrawFees_ToContractThatRejects() public {
         // Send some ETH first
         vm.prank(user);
@@ -312,6 +344,7 @@ contract RegistryHubTest is Test {
     // OWNERSHIP TESTS (Ownable2Step)
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Ownership transfer should require acceptOwnership by pending owner.
     function test_TransferOwnership_TwoStep() public {
         address newOwner = makeAddr("newOwner");
 
@@ -331,6 +364,7 @@ contract RegistryHubTest is Test {
         assertEq(hub.pendingOwner(), address(0));
     }
 
+    // Only the pending owner should be able to accept ownership.
     function test_TransferOwnership_OnlyPendingOwnerCanAccept() public {
         address newOwner = makeAddr("newOwner");
 
@@ -339,10 +373,11 @@ contract RegistryHubTest is Test {
 
         // Random user cannot accept
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         hub.acceptOwnership();
     }
 
+    // Owner should be able to update pending owner before acceptance.
     function test_TransferOwnership_CanCancel() public {
         address newOwner = makeAddr("newOwner");
 
@@ -356,7 +391,7 @@ contract RegistryHubTest is Test {
 
         // Original pending owner can no longer accept
         vm.prank(newOwner);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", newOwner));
         hub.acceptOwnership();
 
         // New pending owner can accept
@@ -367,16 +402,19 @@ contract RegistryHubTest is Test {
     // GETREGISTRY TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // getRegistry should return configured registry addresses.
     function test_GetRegistry_ReturnsCorrectAddress() public view {
         assertEq(hub.getRegistry(hub.STOLEN_WALLET()), address(walletRegistry));
     }
 
+    // getRegistry should return zero for unknown types.
     function test_GetRegistry_ReturnsZeroForUnregistered() public view {
         assertEq(hub.getRegistry(hub.FRAUDULENT_CONTRACT()), address(0));
         assertEq(hub.getRegistry(hub.STOLEN_TRANSACTION()), address(0));
         assertEq(hub.getRegistry(keccak256("RANDOM_REGISTRY")), address(0));
     }
 
+    // registerFromSpoke should revert if target registry is not configured.
     function test_RegisterFromSpoke_InvalidRegistry_Reverts() public {
         address inbox = makeAddr("inbox");
         vm.startPrank(owner);

@@ -38,6 +38,7 @@ contract FeeManagerTest is Test {
     // CONSTRUCTOR TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Constructor should set owner, oracle, and defaults when oracle is provided.
     function test_Constructor_WithOracle() public view {
         assertEq(feeManager.owner(), owner);
         assertEq(feeManager.priceFeed(), address(mockOracle));
@@ -46,6 +47,7 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.fallbackEthPriceUsdCents(), DEFAULT_FALLBACK_PRICE);
     }
 
+    // Constructor should allow manual-only mode with no oracle.
     function test_Constructor_WithoutOracle() public {
         vm.prank(owner);
         FeeManager noOracleFm = new FeeManager(owner, address(0));
@@ -58,6 +60,7 @@ contract FeeManagerTest is Test {
     // FEE CALCULATION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Fee calculation should follow baseFee / ETH price formula.
     function test_CurrentFeeWei_Calculation() public view {
         // With $3000 ETH (300_000 cents) and $5 fee (500 cents)
         // Formula: (500 * 1e18) / 300000 = 1.666...e15 wei
@@ -68,6 +71,7 @@ contract FeeManagerTest is Test {
         assertEq(fee, expected);
     }
 
+    // Fee should change inversely with ETH price.
     function test_CurrentFeeWei_WithDifferentPrices() public {
         // Test with $2500 ETH (250_000 cents)
         mockOracle.setPrice(ORACLE_PRICE_2500);
@@ -82,6 +86,7 @@ contract FeeManagerTest is Test {
         assertEq(fee, expected);
     }
 
+    // Zero base fee should make current fee zero.
     function test_CurrentFeeWei_ZeroBaseFee() public {
         vm.prank(owner);
         feeManager.setBaseFee(0);
@@ -93,12 +98,14 @@ contract FeeManagerTest is Test {
     // FEE VALIDATION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // validateFee should pass when payment meets or exceeds required fee.
     function test_ValidateFee_Sufficient() public view {
         uint256 requiredFee = feeManager.currentFeeWei();
         assertTrue(feeManager.validateFee(requiredFee));
         assertTrue(feeManager.validateFee(requiredFee + 1 ether)); // Overpayment is fine
     }
 
+    // validateFee should revert when payment is below required fee.
     function test_ValidateFee_Insufficient() public {
         uint256 requiredFee = feeManager.currentFeeWei();
 
@@ -106,6 +113,7 @@ contract FeeManagerTest is Test {
         feeManager.validateFee(requiredFee - 1);
     }
 
+    // Zero fee should allow validation to pass for any payment.
     function test_ValidateFee_ZeroFeeAlwaysPasses() public {
         vm.prank(owner);
         feeManager.setBaseFee(0);
@@ -117,6 +125,7 @@ contract FeeManagerTest is Test {
     // CHAINLINK PRICE TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Fresh oracle data should be used for price resolution.
     function test_ChainlinkPriceUsed_WhenFresh() public view {
         // Oracle price is $3000 (3000_00000000 with 8 decimals)
         // Converted to cents: 3000_00000000 / 1e6 = 300_000 cents = $3,000.00
@@ -124,6 +133,7 @@ contract FeeManagerTest is Test {
         assertEq(price, 300_000);
     }
 
+    // Stale oracle data should fall back to stored price.
     function test_FallbackWhenStale() public {
         // Move forward in time so we can set a stale time
         vm.warp(block.timestamp + 10 hours);
@@ -136,6 +146,7 @@ contract FeeManagerTest is Test {
         assertEq(price, DEFAULT_FALLBACK_PRICE);
     }
 
+    // Oracle reverts should fall back to stored price.
     function test_FallbackWhenOracleReverts() public {
         mockOracle.setShouldRevert(true);
 
@@ -143,6 +154,7 @@ contract FeeManagerTest is Test {
         assertEq(price, DEFAULT_FALLBACK_PRICE);
     }
 
+    // Zero oracle price should fall back to stored price.
     function test_FallbackWhenPriceZero() public {
         mockOracle.setPrice(0);
 
@@ -150,6 +162,7 @@ contract FeeManagerTest is Test {
         assertEq(price, DEFAULT_FALLBACK_PRICE);
     }
 
+    // Negative oracle price should fall back to stored price.
     function test_FallbackWhenPriceNegative() public {
         mockOracle.setPrice(-1);
 
@@ -157,6 +170,7 @@ contract FeeManagerTest is Test {
         assertEq(price, DEFAULT_FALLBACK_PRICE);
     }
 
+    // Manual mode should always use fallback price.
     function test_ManualModeNoPriceFeed() public {
         vm.prank(owner);
         FeeManager manualFm = new FeeManager(owner, address(0));
@@ -170,6 +184,7 @@ contract FeeManagerTest is Test {
     // OPPORTUNISTIC SYNC TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // syncAndGetEthPriceUsdCents should update fallback after interval.
     function test_OpportunisticSync_Triggers() public {
         // Warp to a reasonable timestamp (sync check: block.timestamp - lastFallbackSync > fallbackSyncInterval)
         // Since lastFallbackSync starts at 0 and fallbackSyncInterval is 1 day,
@@ -199,6 +214,7 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.fallbackEthPriceUsdCents(), 400_000); // New price synced
     }
 
+    // syncAndGetEthPriceUsdCents should not update within interval.
     function test_OpportunisticSync_SkipsWithinInterval() public {
         // Warp to make initial sync happen
         vm.warp(2 days);
@@ -219,6 +235,7 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.fallbackEthPriceUsdCents(), 300_000); // Old price
     }
 
+    // Opportunistic sync should emit FallbackPriceSynced.
     function test_OpportunisticSync_EmitsEvent() public {
         // Warp to make sync happen
         vm.warp(2 days);
@@ -234,6 +251,7 @@ contract FeeManagerTest is Test {
     // PERMISSIONLESS REFRESH TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // refreshFallbackPrice should be permissionless.
     function test_AnyoneCanRefreshFallback() public {
         // Change oracle price
         mockOracle.setPrice(ORACLE_PRICE_4000);
@@ -245,6 +263,7 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.fallbackEthPriceUsdCents(), 400_000);
     }
 
+    // refreshFallbackPrice should revert if no oracle is configured.
     function test_RefreshRevertsIfNoOracle() public {
         vm.prank(owner);
         FeeManager manualFm = new FeeManager(owner, address(0));
@@ -253,6 +272,7 @@ contract FeeManagerTest is Test {
         manualFm.refreshFallbackPrice();
     }
 
+    // refreshFallbackPrice should revert if oracle data is stale.
     function test_RefreshRevertsIfStale() public {
         // Move forward in time so we can set a stale time
         vm.warp(block.timestamp + 10 hours);
@@ -264,6 +284,7 @@ contract FeeManagerTest is Test {
         feeManager.refreshFallbackPrice();
     }
 
+    // refreshFallbackPrice should revert if oracle price is invalid.
     function test_RefreshRevertsIfPriceInvalid() public {
         mockOracle.setPrice(0);
 
@@ -271,6 +292,7 @@ contract FeeManagerTest is Test {
         feeManager.refreshFallbackPrice();
     }
 
+    // refreshFallbackPrice should emit FallbackPriceRefreshed.
     function test_RefreshEmitsEvent() public {
         mockOracle.setPrice(ORACLE_PRICE_4000);
 
@@ -284,12 +306,14 @@ contract FeeManagerTest is Test {
     // ADMIN FUNCTION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // setBaseFee should be owner-only.
     function test_SetBaseFee_OnlyOwner() public {
         vm.prank(user);
         vm.expectRevert();
         feeManager.setBaseFee(1000);
     }
 
+    // setBaseFee should update state and emit event.
     function test_SetBaseFee_Success() public {
         vm.prank(owner);
         vm.expectEmit(true, true, true, true);
@@ -299,6 +323,7 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.baseFeeUsdCents(), 1000);
     }
 
+    // setBaseFee should allow zero for free registrations.
     function test_SetBaseFee_ZeroAllowed() public {
         vm.prank(owner);
         feeManager.setBaseFee(0);
@@ -306,18 +331,21 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.currentFeeWei(), 0);
     }
 
+    // setBaseFee should reject values that overflow the fee calc.
     function test_SetBaseFee_OverflowReverts() public {
         vm.prank(owner);
         vm.expectRevert(IFeeManager.Fee__InvalidPrice.selector);
         feeManager.setBaseFee(type(uint256).max / 1e18 + 1);
     }
 
+    // setFallbackPrice should be owner-only.
     function test_SetFallbackPrice_OnlyOwner() public {
         vm.prank(user);
         vm.expectRevert();
         feeManager.setFallbackPrice(400_000);
     }
 
+    // setFallbackPrice should update state and emit event.
     function test_SetFallbackPrice_Success() public {
         vm.prank(owner);
         vm.expectEmit(true, true, true, true);
@@ -327,18 +355,21 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.fallbackEthPriceUsdCents(), 400_000);
     }
 
+    // setFallbackPrice should reject zero values.
     function test_SetFallbackPrice_ZeroNotAllowed() public {
         vm.prank(owner);
         vm.expectRevert(IFeeManager.Fee__InvalidPrice.selector);
         feeManager.setFallbackPrice(0);
     }
 
+    // setPriceFeed should be owner-only.
     function test_SetPriceFeed_OnlyOwner() public {
         vm.prank(user);
         vm.expectRevert();
         feeManager.setPriceFeed(address(0));
     }
 
+    // setPriceFeed should update the oracle address and emit event.
     function test_SetPriceFeed_Success() public {
         MockAggregator newOracle = new MockAggregator(ORACLE_PRICE_4000);
 
@@ -350,12 +381,14 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.priceFeed(), address(newOracle));
     }
 
+    // setStalePriceThreshold should be owner-only.
     function test_SetStalePriceThreshold_OnlyOwner() public {
         vm.prank(user);
         vm.expectRevert();
         feeManager.setStalePriceThreshold(1 hours);
     }
 
+    // setStalePriceThreshold should update state and emit event.
     function test_SetStalePriceThreshold_Success() public {
         vm.prank(owner);
         vm.expectEmit(true, true, true, true);
@@ -365,6 +398,7 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.stalePriceThreshold(), 3600);
     }
 
+    // Zero threshold should force fallback when timestamp is non-zero old.
     function test_SetStalePriceThreshold_ZeroForcesFreshOnly() public {
         vm.prank(owner);
         feeManager.setStalePriceThreshold(0);
@@ -374,12 +408,14 @@ contract FeeManagerTest is Test {
         assertEq(price, DEFAULT_FALLBACK_PRICE);
     }
 
+    // setFallbackSyncInterval should be owner-only.
     function test_SetFallbackSyncInterval_OnlyOwner() public {
         vm.prank(user);
         vm.expectRevert();
         feeManager.setFallbackSyncInterval(12 hours);
     }
 
+    // setFallbackSyncInterval should update state and emit event.
     function test_SetFallbackSyncInterval_Success() public {
         vm.prank(owner);
         vm.expectEmit(true, true, true, true);
@@ -389,6 +425,7 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.fallbackSyncInterval(), 12 hours);
     }
 
+    // Zero interval should sync on every call.
     function test_SetFallbackSyncInterval_ZeroSyncsFrequently() public {
         vm.prank(owner);
         feeManager.setFallbackSyncInterval(0);
@@ -409,6 +446,7 @@ contract FeeManagerTest is Test {
     // OWNERSHIP TESTS (Ownable2Step)
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Ownership transfer should follow the two-step flow.
     function test_TransferOwnership_TwoStep() public {
         address newOwner = makeAddr("newOwner");
 
@@ -428,6 +466,7 @@ contract FeeManagerTest is Test {
         assertEq(feeManager.pendingOwner(), address(0));
     }
 
+    // Only pending owner should be able to accept ownership.
     function test_TransferOwnership_OnlyPendingOwnerCanAccept() public {
         address newOwner = makeAddr("newOwner");
 
@@ -444,6 +483,8 @@ contract FeeManagerTest is Test {
     // FUZZ TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Fuzz test: fee calculation should match the formula across a wide range
+    // of base fees and ETH prices.
     function testFuzz_FeeCalculation(uint256 baseFee, int256 ethPrice) public {
         // Bound inputs to reasonable ranges
         baseFee = bound(baseFee, 1, 100_000); // $0.01 to $1000
@@ -463,6 +504,8 @@ contract FeeManagerTest is Test {
         assertEq(fee, expectedFee);
     }
 
+    // Fuzz test: validateFee should accept payments >= required and reject
+    // those below, across a wide range of values.
     function testFuzz_ValidateFee_ThresholdBehavior(uint256 payment) public {
         uint256 requiredFee = feeManager.currentFeeWei();
 

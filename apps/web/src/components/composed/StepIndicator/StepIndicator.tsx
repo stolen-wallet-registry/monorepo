@@ -5,6 +5,7 @@
  */
 
 import { Check, Circle, Loader2 } from 'lucide-react';
+import { logger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import type { RegistrationStep, RegistrationType } from '@/stores/registrationStore';
 import { STEP_SEQUENCES } from '@/stores/registrationStore';
@@ -62,7 +63,11 @@ function getStepStatus(
 
   // Guard against invalid/unknown steps (-1 from indexOf)
   if (currentIndex === -1) {
-    console.warn(`[StepIndicator] Unknown currentStep: ${currentStep}`);
+    logger.ui.warn('Unknown currentStep in sequence', {
+      component: 'StepIndicator',
+      currentStep,
+      availableSteps: sequence,
+    });
     return 'pending';
   }
   if (stepIndex === -1) {

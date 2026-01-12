@@ -9,6 +9,7 @@ import {
   getRpcUrl,
 } from '@swr/chains';
 import type { Chain } from 'wagmi/chains';
+import { logger } from '@/lib/logger';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ENVIRONMENT MODES
@@ -22,11 +23,11 @@ export const isTestnetMode = import.meta.env.VITE_TESTNET === 'true';
 
 // Log mode at startup for debugging chain configuration issues
 if (import.meta.env.DEV) {
-  console.log(
-    '[wagmi] Mode:',
-    isTestnetMode ? 'TESTNET' : isCrossChainMode ? 'CROSSCHAIN' : 'LOCAL',
-    { VITE_CROSSCHAIN: import.meta.env.VITE_CROSSCHAIN, VITE_TESTNET: import.meta.env.VITE_TESTNET }
-  );
+  logger.wallet.info('wagmi mode initialized', {
+    mode: isTestnetMode ? 'TESTNET' : isCrossChainMode ? 'CROSSCHAIN' : 'LOCAL',
+    VITE_CROSSCHAIN: import.meta.env.VITE_CROSSCHAIN,
+    VITE_TESTNET: import.meta.env.VITE_TESTNET,
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -85,7 +86,7 @@ const getTransports = () => {
     const spokeRpc = getRpcUrl(anvilSpoke.chainId);
     // Log RPC URLs for debugging
     if (import.meta.env.DEV) {
-      console.log('[wagmi] Transport RPCs:', {
+      logger.wallet.debug('Transport RPCs configured', {
         hub: { chainId: anvilHub.chainId, rpc: hubRpc },
         spoke: { chainId: anvilSpoke.chainId, rpc: spokeRpc },
       });
@@ -104,10 +105,9 @@ export const chains = getChains();
 
 // Log configured chains for debugging
 if (import.meta.env.DEV) {
-  console.log(
-    '[wagmi] Configured chains:',
-    chains.map((c) => ({ id: c.id, name: c.name }))
-  );
+  logger.wallet.debug('Configured chains', {
+    chains: chains.map((c) => ({ id: c.id, name: c.name })),
+  });
 }
 
 // Create config with conditional WalletConnect

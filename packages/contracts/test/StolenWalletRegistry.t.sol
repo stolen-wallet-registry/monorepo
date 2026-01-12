@@ -99,6 +99,7 @@ contract StolenWalletRegistryTest is Test {
     // ACKNOWLEDGE TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Acknowledgement should succeed and set pending state.
     function test_Acknowledge_Success() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
@@ -123,6 +124,7 @@ contract StolenWalletRegistryTest is Test {
         assertGt(ack.expiryBlock, ack.startBlock, "Expiry should be after start");
     }
 
+    // Self-relay acknowledgement should set isSponsored to false.
     function test_Acknowledge_SelfRelay() public {
         // Owner is also the forwarder (not sponsored)
         uint256 deadline = block.timestamp + 1 hours;
@@ -139,6 +141,7 @@ contract StolenWalletRegistryTest is Test {
         assertTrue(registry.isPending(owner));
     }
 
+    // Acknowledgement should reject expired signatures.
     function test_Acknowledge_ExpiredDeadline() public {
         uint256 deadline = block.timestamp - 1; // Already expired
         uint256 nonce = registry.nonces(owner);
@@ -150,6 +153,7 @@ contract StolenWalletRegistryTest is Test {
         registry.acknowledge(deadline, nonce, owner, v, r, s);
     }
 
+    // Acknowledgement should reject incorrect nonce.
     function test_Acknowledge_InvalidNonce() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 wrongNonce = 999;
@@ -161,6 +165,7 @@ contract StolenWalletRegistryTest is Test {
         registry.acknowledge(deadline, wrongNonce, owner, v, r, s);
     }
 
+    // Acknowledgement should reject signatures not from owner.
     function test_Acknowledge_InvalidSigner() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
@@ -174,6 +179,7 @@ contract StolenWalletRegistryTest is Test {
         registry.acknowledge(deadline, nonce, owner, v, r, s);
     }
 
+    // Acknowledgement should fail for already registered wallets.
     function test_Acknowledge_AlreadyRegistered() public {
         // Complete full registration first
         _doAcknowledgement(forwarder);
@@ -197,6 +203,7 @@ contract StolenWalletRegistryTest is Test {
         registry.acknowledge(deadline, nonce, owner, v, r, s);
     }
 
+    // Acknowledgement should reject zero owner address.
     function test_Acknowledge_ZeroAddress() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = 0;
@@ -213,6 +220,7 @@ contract StolenWalletRegistryTest is Test {
     // REGISTER TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Registration should succeed after grace period and clear pending state.
     function test_Register_Success() public {
         _doAcknowledgement(forwarder);
 
@@ -245,6 +253,7 @@ contract StolenWalletRegistryTest is Test {
         assertEq(reg.crossChainMessageId, bytes32(0), "No bridge message for native");
     }
 
+    // Self-relay registration should set isSponsored to false.
     function test_Register_SelfRelay() public {
         // Owner is forwarder
         _doAcknowledgement(owner);
@@ -264,6 +273,7 @@ contract StolenWalletRegistryTest is Test {
         assertFalse(reg.isSponsored, "Should not be sponsored");
     }
 
+    // Registration should fail before grace period starts.
     function test_Register_BeforeGracePeriod() public {
         _doAcknowledgement(forwarder);
 
@@ -277,6 +287,7 @@ contract StolenWalletRegistryTest is Test {
         registry.register(deadline, nonce, owner, v, r, s);
     }
 
+    // Registration should fail after the registration window expires.
     function test_Register_AfterExpiry() public {
         _doAcknowledgement(forwarder);
 
@@ -297,6 +308,7 @@ contract StolenWalletRegistryTest is Test {
         assertFalse(registry.isPending(owner), "Should not be pending (expired)");
     }
 
+    // Registration should fail if caller is not trusted forwarder.
     function test_Register_WrongForwarder() public {
         _doAcknowledgement(forwarder);
         _skipToRegistrationWindow();
@@ -314,6 +326,7 @@ contract StolenWalletRegistryTest is Test {
         registry.register(deadline, nonce, owner, v, r, s);
     }
 
+    // Registration should reject expired signatures.
     function test_Register_ExpiredDeadline() public {
         _doAcknowledgement(forwarder);
         _skipToRegistrationWindow();
@@ -327,6 +340,7 @@ contract StolenWalletRegistryTest is Test {
         registry.register(deadline, nonce, owner, v, r, s);
     }
 
+    // Registration should reject incorrect nonce.
     function test_Register_InvalidNonce() public {
         _doAcknowledgement(forwarder);
         _skipToRegistrationWindow();
@@ -340,6 +354,7 @@ contract StolenWalletRegistryTest is Test {
         registry.register(deadline, wrongNonce, owner, v, r, s);
     }
 
+    // Registration should reject signatures not from owner.
     function test_Register_InvalidSigner() public {
         _doAcknowledgement(forwarder);
         _skipToRegistrationWindow();
@@ -354,6 +369,7 @@ contract StolenWalletRegistryTest is Test {
         registry.register(deadline, nonce, owner, v, r, s);
     }
 
+    // Registration should reject zero owner address.
     function test_Register_ZeroAddress() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = 0;
@@ -370,6 +386,7 @@ contract StolenWalletRegistryTest is Test {
     // QUERY TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // isRegistered should return true after registration.
     function test_IsRegistered_True() public {
         _doAcknowledgement(forwarder);
         _skipToRegistrationWindow();
@@ -384,19 +401,23 @@ contract StolenWalletRegistryTest is Test {
         assertTrue(registry.isRegistered(owner));
     }
 
+    // isRegistered should return false before registration.
     function test_IsRegistered_False() public {
         assertFalse(registry.isRegistered(owner));
     }
 
+    // isPending should return true after acknowledgement.
     function test_IsPending_True() public {
         _doAcknowledgement(forwarder);
         assertTrue(registry.isPending(owner));
     }
 
+    // isPending should return false with no acknowledgement.
     function test_IsPending_False_NoPending() public {
         assertFalse(registry.isPending(owner));
     }
 
+    // isPending should return false after expiry.
     function test_IsPending_False_Expired() public {
         _doAcknowledgement(forwarder);
 
@@ -411,6 +432,7 @@ contract StolenWalletRegistryTest is Test {
     // NONCE TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Nonce should increment on acknowledgement and registration.
     function test_NonceIncrements_BothPhases() public {
         assertEq(registry.nonces(owner), 0, "Initial nonce should be 0");
 
@@ -433,6 +455,7 @@ contract StolenWalletRegistryTest is Test {
     // FRONTEND COMPATIBILITY TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // generateHashStruct should produce acknowledgement hash for step 1.
     function test_GenerateHashStruct_Step1() public {
         vm.prank(owner);
         (uint256 deadline, bytes32 hashStruct) = registry.generateHashStruct(forwarder, 1);
@@ -445,6 +468,7 @@ contract StolenWalletRegistryTest is Test {
         assertEq(hashStruct, expectedHash, "Hash struct should match");
     }
 
+    // generateHashStruct should produce registration hash for step 2.
     function test_GenerateHashStruct_Step2() public {
         vm.prank(owner);
         (uint256 deadline, bytes32 hashStruct) = registry.generateHashStruct(forwarder, 2);
@@ -457,6 +481,7 @@ contract StolenWalletRegistryTest is Test {
         assertEq(hashStruct, expectedHash, "Hash struct should match");
     }
 
+    // Non-1 steps should default to registration hash.
     function test_GenerateHashStruct_InvalidStep_DefaultsToRegistration() public {
         // Any step value other than 1 defaults to registration typehash
         // This is by design - see IStolenWalletRegistry.generateHashStruct docs
@@ -479,6 +504,7 @@ contract StolenWalletRegistryTest is Test {
         assertTrue(hashStructStep1 != hashStructStep2, "Step 1 should differ from step 2");
     }
 
+    // getDeadlines should report active window values after acknowledgement.
     function test_GetDeadlines_Active() public {
         _doAcknowledgement(forwarder);
 
@@ -499,6 +525,7 @@ contract StolenWalletRegistryTest is Test {
         assertFalse(isExpired, "Should not be expired");
     }
 
+    // getDeadlines should report expired after deadline passes.
     function test_GetDeadlines_Expired() public {
         _doAcknowledgement(forwarder);
 
@@ -511,6 +538,7 @@ contract StolenWalletRegistryTest is Test {
         assertTrue(isExpired, "Should be expired");
     }
 
+    // getDeadlines should show graceStartsAt=0 after grace period.
     function test_GetDeadlines_AfterGracePeriod() public {
         _doAcknowledgement(forwarder);
         _skipToRegistrationWindow();
@@ -524,6 +552,8 @@ contract StolenWalletRegistryTest is Test {
     // FUZZ TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Fuzz test: for valid signatures across a wide keyspace, acknowledgements
+    // should succeed and increment nonces as expected.
     function testFuzz_Acknowledge_ValidSignature(uint256 privateKey) public {
         // Bound private key to valid range (1 to secp256k1 order - 1)
         privateKey = bound(privateKey, 1, 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140);
@@ -543,6 +573,8 @@ contract StolenWalletRegistryTest is Test {
         assertEq(registry.nonces(fuzzOwner), 1);
     }
 
+    // Fuzz test: registration should succeed when executed within the valid
+    // grace/expiry window for many timing offsets.
     function testFuzz_Register_TimingWindow(uint256 blocksAfterStart) public {
         _doAcknowledgement(forwarder);
 
@@ -563,6 +595,8 @@ contract StolenWalletRegistryTest is Test {
         assertTrue(registry.isRegistered(owner));
     }
 
+    // Fuzz test: nonces should never decrease across repeated acknowledgements,
+    // even after expiry rollovers.
     function testFuzz_Nonces_NeverDecrease(uint8 numOperations) public {
         // Limit operations to prevent timeout
         numOperations = uint8(bound(numOperations, 1, 10));
@@ -681,6 +715,7 @@ contract StolenWalletRegistryFeeTest is Test {
     // FEE VALIDATION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Registration should succeed when paid exact required fee.
     function test_Register_WithCorrectFee_Succeeds() public {
         _doAcknowledgement();
         _skipToRegistrationWindow();
@@ -697,6 +732,7 @@ contract StolenWalletRegistryFeeTest is Test {
         assertTrue(registry.isRegistered(owner));
     }
 
+    // Registration should revert when payment is below required fee.
     function test_Register_WithInsufficientFee_Reverts() public {
         _doAcknowledgement();
         _skipToRegistrationWindow();
@@ -713,6 +749,7 @@ contract StolenWalletRegistryFeeTest is Test {
         registry.register{ value: insufficientFee }(deadline, nonce, owner, v, r, s);
     }
 
+    // Registration should succeed with overpayment.
     function test_Register_WithExcessFee_Succeeds() public {
         _doAcknowledgement();
         _skipToRegistrationWindow();
@@ -730,6 +767,7 @@ contract StolenWalletRegistryFeeTest is Test {
         assertTrue(registry.isRegistered(owner));
     }
 
+    // Without fee manager, registration should be free.
     function test_Register_NoFeeManager_Free() public {
         // Deploy registry without fee manager
         StolenWalletRegistry freeRegistry =
@@ -768,6 +806,7 @@ contract StolenWalletRegistryFeeTest is Test {
         assertTrue(freeRegistry.isRegistered(owner));
     }
 
+    // Fees should be forwarded to the hub on registration.
     function test_Register_FeeForwardedToHub() public {
         _doAcknowledgement();
         _skipToRegistrationWindow();
@@ -787,6 +826,7 @@ contract StolenWalletRegistryFeeTest is Test {
         assertEq(hubBalanceAfter - hubBalanceBefore, fee, "Hub should receive full fee");
     }
 
+    // Hub should receive ETH and be able to withdraw it.
     function test_Register_HubReceivesETH() public {
         _doAcknowledgement();
         _skipToRegistrationWindow();
@@ -809,6 +849,7 @@ contract StolenWalletRegistryFeeTest is Test {
         assertEq(deployer.balance, fee, "Deployer should receive withdrawn fee");
     }
 
+    // Registry should store zero fee manager and hub when free.
     function test_Register_ZeroFeeWhenNoFeeManager() public {
         // Deploy registry without fee manager
         StolenWalletRegistry freeRegistry =
@@ -818,6 +859,7 @@ contract StolenWalletRegistryFeeTest is Test {
         assertEq(freeRegistry.registryHub(), address(0));
     }
 
+    // Constructor should store fee manager and hub addresses.
     function test_Constructor_StoresFeeManagerAndHub() public view {
         assertEq(registry.feeManager(), address(feeManager));
         assertEq(registry.registryHub(), address(hub));
