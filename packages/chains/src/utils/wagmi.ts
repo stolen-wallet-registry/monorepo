@@ -4,7 +4,7 @@
  * Convert NetworkConfig to wagmi Chain type for use with wagmi/viem.
  */
 
-import type { Chain } from 'viem';
+import { isAddress, type Chain } from 'viem';
 import type { NetworkConfig } from '../types';
 import { getNetworkOrUndefined, allNetworks } from '../networks';
 
@@ -49,8 +49,9 @@ function getMulticall3Address(chainId: number): `0x${string}` {
   if (chainId === 31337 && typeof import.meta !== 'undefined') {
     const envAddress = (import.meta as { env?: Record<string, string> }).env
       ?.VITE_MULTICALL3_ADDRESS;
-    if (envAddress && envAddress.startsWith('0x')) {
-      return envAddress as `0x${string}`;
+    // Use viem's isAddress for proper validation (0x + 40 hex chars, checksum-aware)
+    if (envAddress && isAddress(envAddress)) {
+      return envAddress;
     }
   }
   return MULTICALL3_ADDRESSES[chainId] ?? CANONICAL_MULTICALL3;

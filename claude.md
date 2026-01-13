@@ -115,22 +115,25 @@ find_tasks(filter_by="project", filter_value="proj-123")
 - Exchanges and off-ramps gain access to crowdsourced fraud intelligence
 - Transparent, on-chain registry reduces siloed fraud data
 
-### Three Subregistries
+### Three Subregistries (Submission Rules)
 
 1. **Stolen Wallet Subregistry** (Launching First)
-   - User self-attestation with wallet signature
+   - **Who can submit:** Anyone (individual users) + Operators can batch-submit
+   - User self-attestation with wallet signature provides high trust signal
    - EIP-712 two-phase registration prevents phishing
    - Once registered, wallet marked permanently compromised
 
-2. **Fraudulent Contract Subregistry** (Phase 3)
-   - Operator-only submissions (DAO-approved entities)
-   - Catalogs malicious smart contract addresses
-   - Batch submission support for known scam patterns
-
-3. **Stolen Transaction Subregistry** (Phase 8 - Deferred)
-   - Mark specific fraudulent transactions
+2. **Stolen Transaction Subregistry** (Phase 8 - Deferred)
+   - **Who can submit:** Anyone (individual users) + Operators can batch-submit
+   - Mark specific fraudulent transactions (phishing, address poisoning, unauthorized transfers)
    - Higher gaming risk - needs dispute mechanism
    - Deferred until wallet registry proves PMF
+
+3. **Fraudulent Contract Subregistry** (Phase 3)
+   - **Who can submit:** Approved operators only
+   - Users can flag suspicious contracts, but only operators can formalize registry entries
+   - Catalogs malicious smart contract addresses (scams, honeypots, exploits)
+   - Batch submission support for known scam patterns
 
 ### Three Registration Methods
 

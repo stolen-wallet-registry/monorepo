@@ -20,10 +20,10 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5173';
  */
 const TAGLINES = [
   'A coordination tool for fraud response.',
-  'Global. Borderless. On-chain.',
-  'Lost your seed phrase? Register the wallet.',
   'Signed a malicious message? Report it.',
   'Competing entities sharing fraud intelligence.',
+  'Flagged once, visible everywhere.',
+  'One registry. Every chain.',
 ];
 
 function GlobeSkeleton() {

@@ -48,12 +48,27 @@ contract RegistryHubTest is Test {
     // CONSTRUCTOR TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Constructor wires owner, fee manager, and initial registry as expected.
+    // Constructor wires owner, fee manager, and paused state; registry is set via setUp.
     function test_Constructor_WithAllParams() public view {
         assertEq(hub.owner(), owner);
         assertEq(hub.feeManager(), address(feeManager));
-        assertEq(hub.getRegistry(hub.STOLEN_WALLET()), address(walletRegistry));
         assertFalse(hub.paused());
+    }
+
+    // Constructor should wire initial registry when passed.
+    function test_Constructor_WithInitialRegistry() public {
+        vm.startPrank(owner);
+        // Deploy new hub with registry passed to constructor
+        RegistryHub hubWithRegistry = new RegistryHub(owner, address(feeManager), address(walletRegistry));
+        vm.stopPrank();
+
+        // Verify constructor-passed registry is wired correctly
+        assertEq(hubWithRegistry.getRegistry(hubWithRegistry.STOLEN_WALLET()), address(walletRegistry));
+    }
+
+    // Verify setUp correctly wires registry (documents that setUp calls setRegistry, not constructor).
+    function test_SetUp_WiresRegistry() public view {
+        assertEq(hub.getRegistry(hub.STOLEN_WALLET()), address(walletRegistry));
     }
 
     // Constructor should allow fee-free configuration.
@@ -97,18 +112,20 @@ contract RegistryHubTest is Test {
 
     // Only owner should be able to pause the hub.
     function test_Pause_OnlyOwner() public {
-        vm.prank(user);
+        vm.startPrank(user);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         hub.setPaused(true);
+        vm.stopPrank();
     }
 
     // Pausing should flip state and emit event.
     function test_Pause_Success() public {
-        vm.prank(owner);
+        vm.startPrank(owner);
         vm.expectEmit(true, true, true, true);
         emit IRegistryHub.HubPaused(true);
-
         hub.setPaused(true);
+        vm.stopPrank();
+
         assertTrue(hub.paused());
     }
 
@@ -117,11 +134,12 @@ contract RegistryHubTest is Test {
         vm.prank(owner);
         hub.setPaused(true);
 
-        vm.prank(owner);
+        vm.startPrank(owner);
         vm.expectEmit(true, true, true, true);
         emit IRegistryHub.HubPaused(false);
-
         hub.setPaused(false);
+        vm.stopPrank();
+
         assertFalse(hub.paused());
     }
 
@@ -186,9 +204,10 @@ contract RegistryHubTest is Test {
     // Only owner should be able to update registry addresses.
     function test_SetRegistry_OnlyOwner() public {
         bytes32 registryType = hub.STOLEN_WALLET();
-        vm.prank(user);
+        vm.startPrank(user);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         hub.setRegistry(registryType, address(0));
+        vm.stopPrank();
     }
 
     // setRegistry should update mapping and emit event.
@@ -197,11 +216,12 @@ contract RegistryHubTest is Test {
             new StolenWalletRegistry(address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
         bytes32 registryType = hub.STOLEN_WALLET();
 
+        vm.startPrank(owner);
         vm.expectEmit(true, true, true, true);
         emit IRegistryHub.RegistryUpdated(registryType, address(newRegistry));
-
-        vm.prank(owner);
         hub.setRegistry(registryType, address(newRegistry));
+        vm.stopPrank();
+
         assertEq(hub.getRegistry(registryType), address(newRegistry));
     }
 
@@ -220,20 +240,22 @@ contract RegistryHubTest is Test {
 
     // Only owner should be able to set fee manager.
     function test_SetFeeManager_OnlyOwner() public {
-        vm.prank(user);
+        vm.startPrank(user);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         hub.setFeeManager(address(0));
+        vm.stopPrank();
     }
 
     // setFeeManager should update state and emit event.
     function test_SetFeeManager_Success() public {
         FeeManager newFeeManager = new FeeManager(owner, address(mockOracle));
 
-        vm.prank(owner);
+        vm.startPrank(owner);
         vm.expectEmit(true, true, true, true);
         emit IRegistryHub.FeeManagerUpdated(address(newFeeManager));
-
         hub.setFeeManager(address(newFeeManager));
+        vm.stopPrank();
+
         assertEq(hub.feeManager(), address(newFeeManager));
     }
 
@@ -248,9 +270,10 @@ contract RegistryHubTest is Test {
 
     // Only owner should be able to set cross-chain inbox.
     function test_SetCrossChainInbox_OnlyOwner() public {
-        vm.prank(user);
+        vm.startPrank(user);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         hub.setCrossChainInbox(address(0x123));
+        vm.stopPrank();
     }
 
     // setCrossChainInbox should update state when called by owner.
@@ -285,9 +308,10 @@ contract RegistryHubTest is Test {
         (bool success,) = address(hub).call{ value: 1 ether }("");
         assertTrue(success);
 
-        vm.prank(user);
+        vm.startPrank(user);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         hub.withdrawFees(recipient, 0.5 ether);
+        vm.stopPrank();
     }
 
     // Withdraw should reject a zero recipient.
@@ -312,11 +336,11 @@ contract RegistryHubTest is Test {
         uint256 withdrawAmount = 0.5 ether;
         uint256 recipientBalanceBefore = recipient.balance;
 
-        vm.prank(owner);
+        vm.startPrank(owner);
         vm.expectEmit(true, true, true, true);
         emit IRegistryHub.FeesWithdrawn(recipient, withdrawAmount);
-
         hub.withdrawFees(recipient, withdrawAmount);
+        vm.stopPrank();
 
         assertEq(recipient.balance, recipientBalanceBefore + withdrawAmount);
         assertEq(address(hub).balance, 0.5 ether);
@@ -342,9 +366,11 @@ contract RegistryHubTest is Test {
         (bool success,) = address(hub).call{ value: 1 ether }("");
         assertTrue(success);
 
-        vm.prank(owner);
-        vm.expectRevert(); // Low-level call will fail
+        vm.startPrank(owner);
+        // Low-level call fails due to insufficient balance, which triggers Hub__WithdrawalFailed
+        vm.expectRevert(IRegistryHub.Hub__WithdrawalFailed.selector);
         hub.withdrawFees(recipient, 2 ether);
+        vm.stopPrank();
     }
 
     // Withdraw should revert if recipient rejects ETH.

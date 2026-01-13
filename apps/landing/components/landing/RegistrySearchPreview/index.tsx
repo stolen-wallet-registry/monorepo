@@ -7,7 +7,7 @@
  * Uses the shared queryRegistryStatusSimple from @swr/ui.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, type FormEvent } from 'react';
 import { Search, Loader2, AlertTriangle, CheckCircle, Clock, HelpCircle } from 'lucide-react';
 import {
   Button,
@@ -110,22 +110,23 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
   }, []);
 
   const handleSubmit = useCallback(
-    (e: React.FormEvent) => {
+    (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      handleSearch(inputValue);
+      void handleSearch(inputValue);
     },
     [inputValue, handleSearch]
   );
 
   const handleExampleClick = useCallback(
     (address: string, forceStolen = false) => {
-      setInputValue(address);
+      const trimmed = address.trim();
+      setInputValue(trimmed);
 
       // For demo purposes: force "Stolen Wallet" example to show as registered
       // since we don't have a production registry with actual stolen wallets yet
       if (forceStolen) {
         setError(null);
-        setSearchedAddress(address);
+        setSearchedAddress(trimmed);
         // Mock a "registered" result for demo
         setResult({
           isRegistered: true,
@@ -136,7 +137,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
         return;
       }
 
-      handleSearch(address);
+      void handleSearch(trimmed);
     },
     [handleSearch]
   );

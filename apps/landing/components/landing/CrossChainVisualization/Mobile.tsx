@@ -57,7 +57,7 @@ export function CrossChainVisualizationMobile({
             <p className="mt-2 max-w-sm text-xs text-muted-foreground">
               Aggregates reports using{' '}
               <a
-                href="https://chainagnostic.org/CAIPs/caip-10"
+                href="https://standards.chainagnostic.org/CAIPs/caip-10"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-foreground underline decoration-dotted underline-offset-2"
@@ -66,7 +66,7 @@ export function CrossChainVisualizationMobile({
               </a>{' '}
               and{' '}
               <a
-                href="https://chainagnostic.org/CAIPs/caip-2"
+                href="https://standards.chainagnostic.org/CAIPs/caip-2"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-foreground underline decoration-dotted underline-offset-2"

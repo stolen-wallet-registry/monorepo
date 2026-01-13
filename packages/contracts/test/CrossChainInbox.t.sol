@@ -18,12 +18,19 @@ contract CrossChainInboxTest is Test {
 
     uint32 constant HUB_DOMAIN = 84_532;
     uint32 constant SPOKE_DOMAIN = 11_155_420;
+    uint256 constant BRIDGE_ID_HYPERLANE = 1;
 
     function setUp() public {
         owner = makeAddr("owner");
         registryHub = makeAddr("registryHub");
         mailbox = new MockMailbox(HUB_DOMAIN);
         inbox = new CrossChainInbox(address(mailbox), registryHub, owner);
+
+        // Label addresses for clearer trace output
+        vm.label(owner, "owner");
+        vm.label(registryHub, "registryHub");
+        vm.label(address(mailbox), "mailbox");
+        vm.label(address(inbox), "inbox");
     }
 
     function test_Constructor_ZeroMailbox_Reverts() public {
@@ -40,16 +47,34 @@ contract CrossChainInboxTest is Test {
 
     function test_Constructor_ZeroOwner_Reverts() public {
         // Ownable should reject a zero owner before contract-level checks.
-        vm.expectRevert(abi.encodeWithSignature("OwnableInvalidOwner(address)", address(0)));
+        // Use encodeWithSelector to compute selector at runtime (avoids import dependency).
+        vm.expectRevert(abi.encodeWithSelector(bytes4(keccak256("OwnableInvalidOwner(address)")), address(0)));
         new CrossChainInbox(address(mailbox), registryHub, address(0));
     }
 
     function test_SetTrustedSource_OnlyOwner() public {
         // Only the owner should be able to update trusted sources.
         address user = makeAddr("user");
-        vm.prank(user);
+        vm.startPrank(user);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         inbox.setTrustedSource(SPOKE_DOMAIN, bytes32(uint256(1)), true);
+        vm.stopPrank();
+    }
+
+    function test_SetTrustedSource_Success() public {
+        // Owner should be able to set trusted sources and state should update.
+        bytes32 sender = bytes32(uint256(1));
+
+        vm.prank(owner);
+        inbox.setTrustedSource(SPOKE_DOMAIN, sender, true);
+
+        assertTrue(inbox.isTrustedSource(SPOKE_DOMAIN, sender));
+
+        // Verify we can also remove trusted sources
+        vm.prank(owner);
+        inbox.setTrustedSource(SPOKE_DOMAIN, sender, false);
+
+        assertFalse(inbox.isTrustedSource(SPOKE_DOMAIN, sender));
     }
 
     function test_Handle_SourceChainMismatch_Reverts() public {
@@ -76,6 +101,6 @@ contract CrossChainInboxTest is Test {
 
     function test_BridgeId_ReturnsHyperlane() public view {
         // Ensure the inbox advertises the expected bridge ID constant.
-        assertEq(inbox.bridgeId(), 1);
+        assertEq(inbox.bridgeId(), BRIDGE_ID_HYPERLANE);
     }
 }

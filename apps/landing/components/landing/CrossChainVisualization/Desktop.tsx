@@ -502,7 +502,7 @@ export function CrossChainVisualizationDesktop({
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
               Aggregates stolen wallet and transaction reports using{' '}
               <a
-                href="https://chainagnostic.org/CAIPs/caip-10"
+                href="https://standards.chainagnostic.org/CAIPs/caip-10"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-foreground underline decoration-dotted underline-offset-2 transition-colors hover:text-primary"
@@ -511,7 +511,7 @@ export function CrossChainVisualizationDesktop({
               </a>{' '}
               (addresses) and{' '}
               <a
-                href="https://chainagnostic.org/CAIPs/caip-2"
+                href="https://standards.chainagnostic.org/CAIPs/caip-2"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-foreground underline decoration-dotted underline-offset-2 transition-colors hover:text-primary"
@@ -534,7 +534,7 @@ export function CrossChainVisualizationDesktop({
             {showLabels && (
               <SectionTitle
                 title="Report Fraud"
-                tooltip="Report stolen wallets or fraudulent transactions. Whether your seed phrase was compromised, you interacted with a malicious contract, or funds were drained via phishing - self-attestation requires proving wallet ownership via cryptographic signature."
+                tooltip="Report stolen wallets or fraudulent transactions from any supported chain. Whether your seed phrase was compromised, you interacted with a malicious contract, or funds were drained via phishing - self-attestation requires proving wallet ownership via cryptographic signature."
               />
             )}
 
@@ -543,7 +543,7 @@ export function CrossChainVisualizationDesktop({
               ref={ethEcosystemRef}
               rightAnchorRef={ethRightAnchorRef}
               label={showLabels ? 'Ethereum Ecosystem' : undefined}
-              labelTooltip="Reports from Ethereum and its L2 rollups are formatted as CAIP-10 identifiers (eip155:1:0x..., eip155:10:0x...) and relayed to the central registry via cross-chain messaging. Same 0x address format as the hub chain, but CAIP-10 standardizes chain and signature type identification."
+              labelTooltip="Reports from Ethereum and its L2 rollups are formatted as CAIP-10 identifiers (eip155:1:0x..., eip155:10:0x...) and relayed to the central registry via cross-chain messaging. CAIP-10 standardizes chain and signature type identification, enabling unified tracking across all chains."
             >
               {/* Core L2s - tightly clustered around ETH */}
               <div className="flex items-center gap-1">
@@ -772,7 +772,7 @@ export function CrossChainVisualizationDesktop({
               ref={walletsContainerRef}
               leftAnchorRef={walletsLeftAnchorRef}
               label={showLabels ? 'Wallets' : undefined}
-              labelTooltip="Self-custody wallets that can warn users before sending to flagged addresses or display alerts about compromised wallets in their contact lists."
+              labelTooltip="Self-custody wallets that can query the registry to warn users before sending to flagged addresses. Wallets can integrate via on-chain events or indexers, complementing ERC-7730 clear signing for safer transaction approval."
             >
               <div className="flex items-center gap-2">
                 <IconCircle label="MetaMask" size="sm" triggerPulse={state.pulseListeners}>
