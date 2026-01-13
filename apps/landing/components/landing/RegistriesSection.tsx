@@ -10,21 +10,21 @@ const REGISTRIES = [
   {
     title: 'Stolen Wallets',
     description:
-      'Register wallets you no longer control. Self-attestation with wallet signature provides high trust signal for fraud prevention.',
+      'Anyone can register wallets they no longer control. Self-attestation with wallet signature provides high trust signal. Operators can batch-submit on behalf of victims.',
     status: 'active' as const,
     icon: <Wallet className="size-6" />,
   },
   {
     title: 'Stolen Transactions',
     description:
-      'Report specific fraudulent transactions like phishing attacks, address poisoning, or unauthorized transfers.',
+      'Anyone can report specific fraudulent transactions like phishing attacks, address poisoning, or unauthorized transfers. Operators can batch-submit.',
     status: 'coming-soon' as const,
     icon: <FileText className="size-6" />,
   },
   {
     title: 'Fraudulent Contracts',
     description:
-      'Catalog malicious smart contract addresses. Operator-approved submissions for known scam patterns.',
+      'Operator-only submissions for malicious smart contracts. Users can flag suspicious contracts, but only approved operators can formalize registry entries.',
     status: 'coming-soon' as const,
     icon: <Code2 className="size-6" />,
   },
@@ -56,8 +56,8 @@ export function RegistriesSection() {
             once
           >
             An on-chain coordination system for tracking stolen wallets, fraudulent transactions,
-            and malicious contracts. Data stored in smart contracts, accessible via indexing
-            services.
+            and malicious contracts. Data stored on-chain—immutable, censorship-resistant, and
+            accessible to any wallet or service without permission.
           </TextAnimate>
         </div>
 

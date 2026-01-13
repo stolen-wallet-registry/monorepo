@@ -20,7 +20,8 @@ const STEPS = [
   {
     number: 3,
     title: 'Register',
-    description: 'Complete registration within the time window. Wallet is marked permanently.',
+    description:
+      'Complete registration within the time window. Entry is marked permanently in the registry.',
     icon: <CheckCircle2 className="size-5" aria-hidden="true" />,
   },
 ];
@@ -100,9 +101,14 @@ export function HowItWorksSection() {
 
         {/* CAIP-10 address example */}
         <div className="mt-12 rounded-lg border border-border/50 bg-muted/30 p-6 text-center md:mt-16">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <a
+            href="https://standards.chainagnostic.org/CAIPs/caip-10"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mb-3 inline-block text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-primary hover:underline"
+          >
             Cross-Chain Address Format (CAIP-10)
-          </p>
+          </a>
           <TextAnimate
             animation="blurIn"
             by="character"

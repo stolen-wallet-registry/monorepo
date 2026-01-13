@@ -16,13 +16,13 @@ const OPERATOR_FEATURES = [
   {
     title: 'Batch Submissions',
     description:
-      'Submit hundreds of stolen wallets and fraudulent transactions in a single transaction. Aggregate fraud intelligence from multiple sources efficiently.',
+      'Batch-submit stolen wallets and fraudulent transactions on behalf of victims. Aggregate fraud intelligence from multiple sources into efficient single transactions.',
     icon: <FileStack className="size-6" aria-hidden="true" />,
   },
   {
     title: 'Fraudulent Contracts',
     description:
-      'Operator-exclusive ability to catalog malicious smart contracts. Report known scam patterns, honeypots, and exploit contracts.',
+      'Exclusive authority to catalog malicious smart contracts. Users can flag suspicious contracts, but only approved operators can formalize registry entries.',
     icon: <Code2 className="size-6" aria-hidden="true" />,
   },
   {
@@ -41,7 +41,7 @@ const POTENTIAL_OPERATORS = [
 ];
 
 const OPERATOR_DESCRIPTION =
-  'Any organization committed to sharing reliable, trustworthy information on stolen wallets, ' +
+  'Any DAO-approved organization committed to sharing reliable, trustworthy information on stolen wallets, ' +
   'fraudulent transactions, and malicious contracts. Operators coordinate openly to help ' +
   'off-ramps track and recover stolen funds across the ecosystem.';
 

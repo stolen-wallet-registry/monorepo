@@ -69,10 +69,7 @@ export function Footer() {
   return (
     <footer className="border-t border-border/50 px-6 py-8">
       <div className="mx-auto max-w-4xl">
-        <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-          <p className="text-sm text-muted-foreground">
-            Stolen Wallet Registry - A public good for fraud prevention
-          </p>
+        <div className="flex items-center justify-center sm:justify-end">
           <nav className="flex items-center gap-4 text-sm">
             <a
               href={DOCS_URL}
@@ -92,9 +89,7 @@ export function Footer() {
             </a>
           </nav>
         </div>
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          Built with transparency. Open source. Cross-chain.
-        </p>
+        <p className="mt-4 text-center text-xs text-muted-foreground">Built with transparency.</p>
       </div>
     </footer>
   );

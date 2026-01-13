@@ -35,12 +35,14 @@ contract HyperlaneAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_Constructor_SetsImmutables() public view {
+        // Constructor should store mailbox, gas paymaster, and owner.
         assertEq(address(adapter.mailbox()), address(mailbox));
         assertEq(address(adapter.gasPaymaster()), address(gasPaymaster));
         assertEq(adapter.owner(), owner);
     }
 
     function test_BridgeName() public view {
+        // Adapter should return its bridge name.
         assertEq(adapter.bridgeName(), "Hyperlane");
     }
 
@@ -49,20 +51,24 @@ contract HyperlaneAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_SupportsChain_Enabled() public view {
+        // supportsChain should return true for enabled domains.
         assertTrue(adapter.supportsChain(HUB_DOMAIN));
     }
 
     function test_SupportsChain_Disabled() public view {
+        // supportsChain should return false for disabled domains.
         assertFalse(adapter.supportsChain(999));
     }
 
     function test_SetDomainSupport_OnlyOwner() public {
+        // Only owner should be able to update domain support.
         vm.prank(user);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         adapter.setDomainSupport(999, true);
     }
 
     function test_SetDomainSupport_Success() public {
+        // setDomainSupport should update state and emit event.
         uint32 newDomain = 42_161; // Arbitrum One
 
         vm.expectEmit(true, false, false, true);
@@ -75,6 +81,7 @@ contract HyperlaneAdapterTest is Test {
     }
 
     function test_AddDomains_Batch() public {
+        // addDomains should enable all provided domains.
         uint32[] memory domains = new uint32[](3);
         domains[0] = 1;
         domains[1] = 10;
@@ -93,11 +100,13 @@ contract HyperlaneAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_QuoteMessage_UnsupportedChain_Reverts() public {
+        // quoteMessage should revert for unsupported chains.
         vm.expectRevert(IBridgeAdapter.BridgeAdapter__UnsupportedChain.selector);
         adapter.quoteMessage(999, "test");
     }
 
     function test_QuoteMessage_Success() public view {
+        // quoteMessage should return the gas payment quote.
         uint256 quote = adapter.quoteMessage(HUB_DOMAIN, "test");
 
         // Default gas amount is 200,000, default gas price is 1 gwei
@@ -106,6 +115,7 @@ contract HyperlaneAdapterTest is Test {
     }
 
     function test_QuoteMessage_CustomGasAmount() public {
+        // Custom gas amount should affect the quote.
         vm.prank(owner);
         adapter.setGasAmount(HUB_DOMAIN, 500_000);
 
@@ -118,11 +128,13 @@ contract HyperlaneAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_SendMessage_UnsupportedChain_Reverts() public {
+        // sendMessage should revert for unsupported chains.
         vm.expectRevert(IBridgeAdapter.BridgeAdapter__UnsupportedChain.selector);
         adapter.sendMessage(999, bytes32(uint256(1)), "test");
     }
 
     function test_SendMessage_InsufficientFee_Reverts() public {
+        // sendMessage should revert if msg.value is below quote.
         bytes32 recipient = bytes32(uint256(uint160(address(0x3))));
 
         vm.expectRevert(IBridgeAdapter.BridgeAdapter__InsufficientFee.selector);
@@ -130,6 +142,7 @@ contract HyperlaneAdapterTest is Test {
     }
 
     function test_SendMessage_Success() public {
+        // sendMessage should dispatch via mailbox and emit event.
         bytes32 recipient = bytes32(uint256(uint160(address(0x3))));
         bytes memory payload = "registration_data";
         uint256 fee = adapter.quoteMessage(HUB_DOMAIN, payload);
@@ -151,6 +164,7 @@ contract HyperlaneAdapterTest is Test {
     }
 
     function test_SendMessage_RefundsExcess() public {
+        // sendMessage should refund any excess payment.
         bytes32 recipient = bytes32(uint256(uint160(address(0x3))));
         bytes memory payload = "test";
         uint256 fee = adapter.quoteMessage(HUB_DOMAIN, payload);
@@ -171,12 +185,14 @@ contract HyperlaneAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_SetGasAmount_OnlyOwner() public {
+        // setGasAmount should be owner-only.
         vm.prank(user);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
         adapter.setGasAmount(HUB_DOMAIN, 300_000);
     }
 
     function test_SetGasAmount_Success() public {
+        // setGasAmount should update state and emit event.
         vm.expectEmit(true, false, false, true);
         emit HyperlaneAdapter.GasAmountUpdated(HUB_DOMAIN, 300_000);
 
@@ -187,6 +203,7 @@ contract HyperlaneAdapterTest is Test {
     }
 
     function test_DefaultGasAmount() public view {
+        // DEFAULT_GAS_AMOUNT should match expected constant.
         assertEq(adapter.DEFAULT_GAS_AMOUNT(), 200_000);
     }
 }

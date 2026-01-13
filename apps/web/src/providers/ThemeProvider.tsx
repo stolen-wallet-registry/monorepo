@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 
 import { ThemeProviderContext, type ColorScheme, type ThemeVariant } from './ThemeProviderContext';
+import { logger } from '@/lib/logger';
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -50,9 +51,14 @@ export function ThemeProvider({
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(getSystemTheme);
 
   // Animated theme trigger function (registered by AnimatedThemeToggler)
-  const [triggerThemeAnimation, setTriggerThemeAnimation] = useState<
+  const [triggerThemeAnimation, setTriggerThemeAnimationState] = useState<
     ((variant: ThemeVariant) => void) | null
   >(null);
+
+  // Wrap setter to track registration
+  const setTriggerThemeAnimation = useCallback((fn: ((variant: ThemeVariant) => void) | null) => {
+    setTriggerThemeAnimationState(fn);
+  }, []);
 
   // Derive resolved color scheme from colorScheme and systemPreference
   const resolvedColorScheme = useMemo<'light' | 'dark'>(() => {
@@ -67,9 +73,9 @@ export function ThemeProvider({
     // Remove all theme-related classes
     root.classList.remove('light', 'dark', 'base', 'hacker');
 
-    // Add current color scheme and variant
+    // Add current color scheme and variant (guard against null themeVariant)
     root.classList.add(resolvedColorScheme);
-    root.classList.add(themeVariant);
+    root.classList.add(themeVariant ?? 'base');
   }, [resolvedColorScheme, themeVariant]);
 
   // Listen for system theme changes
@@ -100,25 +106,33 @@ export function ThemeProvider({
     [variantStorageKey]
   );
 
-  const value = useMemo(
-    () => ({
+  const value = useMemo(() => {
+    // Defensive: ensure themeVariant is never null (shouldn't happen, but guard against HMR issues)
+    const safeThemeVariant: ThemeVariant = themeVariant ?? 'base';
+    if (themeVariant !== safeThemeVariant) {
+      logger.ui.error('themeVariant was null, defaulting to base', {
+        originalValue: themeVariant,
+        originalType: typeof themeVariant,
+      });
+    }
+    return {
       colorScheme,
       resolvedColorScheme,
-      themeVariant,
+      themeVariant: safeThemeVariant,
       setColorScheme,
       setThemeVariant,
       triggerThemeAnimation,
       setTriggerThemeAnimation,
-    }),
-    [
-      colorScheme,
-      resolvedColorScheme,
-      themeVariant,
-      setColorScheme,
-      setThemeVariant,
-      triggerThemeAnimation,
-    ]
-  );
+    };
+  }, [
+    colorScheme,
+    resolvedColorScheme,
+    themeVariant,
+    setColorScheme,
+    setThemeVariant,
+    triggerThemeAnimation,
+    setTriggerThemeAnimation,
+  ]);
 
   return <ThemeProviderContext.Provider value={value}>{children}</ThemeProviderContext.Provider>;
 }

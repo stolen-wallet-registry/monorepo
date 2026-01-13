@@ -138,6 +138,8 @@ contract CrossChainAdvancedTest is Test {
     // MULTI-SPOKE TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Multi-spoke scenario: registrations from different chains should both
+    // arrive and persist on the hub with correct sourceChainId metadata.
     function test_MultiSpoke_DifferentWalletsFromDifferentSpokes() public {
         // Register victim1 from spoke1
         _registerFromSpoke(spoke1Registry, spoke1Mailbox, SPOKE1_DOMAIN, victim1, victim1Pk);
@@ -162,6 +164,9 @@ contract CrossChainAdvancedTest is Test {
     // DOUBLE REGISTRATION PREVENTION
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Double registration defense: the same wallet should not be registrable
+    // twice across spokes. The second delivery must revert to preserve
+    // immutability and prevent conflicting provenance.
     function test_DoubleRegistration_SameWalletFromTwoSpokes_SecondReverts() public {
         // Register victim1 from spoke1
         _registerFromSpoke(spoke1Registry, spoke1Mailbox, SPOKE1_DOMAIN, victim1, victim1Pk);
@@ -209,6 +214,8 @@ contract CrossChainAdvancedTest is Test {
     // MESSAGE REPLAY PREVENTION
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Replay protection: the same message body should not be processed twice.
+    // This ensures idempotence at the hub and prevents duplicate registrations.
     function test_MessageReplay_SameMessageTwice_SecondReverts() public {
         // Complete registration from spoke1
         vm.chainId(SPOKE1_DOMAIN);
@@ -253,6 +260,8 @@ contract CrossChainAdvancedTest is Test {
     // HUB PAUSED DURING DELIVERY
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Pause handling: when the hub is paused, cross-chain delivery must revert.
+    // This preserves emergency stops during incidents.
     function test_HubPaused_CrossChainDeliveryReverts() public {
         // Complete registration on spoke
         vm.chainId(SPOKE1_DOMAIN);
@@ -294,6 +303,8 @@ contract CrossChainAdvancedTest is Test {
     // TRUSTED SOURCE REMOVAL
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Trust revocation: removing a trusted source should immediately block
+    // subsequent deliveries from that source.
     function test_TrustedSourceRemoved_DeliveryReverts() public {
         // Complete registration on spoke
         vm.chainId(SPOKE1_DOMAIN);
@@ -335,6 +346,8 @@ contract CrossChainAdvancedTest is Test {
     // INVALID MESSAGE FORMAT
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Message validation: unsupported versions must revert to prevent decoding
+    // ambiguity and future format confusion.
     function test_InvalidMessageVersion_Reverts() public {
         // Create message with wrong version
         bytes memory invalidMessage = abi.encode(
@@ -355,6 +368,7 @@ contract CrossChainAdvancedTest is Test {
         hubMailbox.simulateReceive(address(inbox), SPOKE1_DOMAIN, sender, invalidMessage);
     }
 
+    // Message validation: unsupported message types must revert.
     function test_InvalidMessageType_Reverts() public {
         // Create message with wrong type
         bytes memory invalidMessage = abi.encode(
@@ -379,6 +393,7 @@ contract CrossChainAdvancedTest is Test {
     // FUZZ TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Fuzz test: encode/decode roundtrip should preserve all payload fields.
     function testFuzz_MessageEncodeDecode_RoundTrip(
         address wallet,
         uint32 sourceChainId,
@@ -387,6 +402,7 @@ contract CrossChainAdvancedTest is Test {
         uint64 timestamp,
         bytes32 registrationHash
     ) public {
+        // Fuzz test: encode/decode roundtrip should preserve fields.
         // Skip zero address
         vm.assume(wallet != address(0));
 
@@ -414,9 +430,11 @@ contract CrossChainAdvancedTest is Test {
 
     /// @dev Helper to convert memory to calldata for decoding
     function decodeHelper(bytes calldata data) external pure returns (CrossChainMessage.RegistrationPayload memory) {
+        // Helper to decode calldata using the library.
         return CrossChainMessage.decodeRegistration(data);
     }
 
+    // Fuzz test: address <-> bytes32 conversion should be lossless.
     function testFuzz_AddressBytes32Conversion_RoundTrip(address addr) public pure {
         bytes32 converted = CrossChainMessage.addressToBytes32(addr);
         address recovered = CrossChainMessage.bytes32ToAddress(converted);
@@ -427,6 +445,8 @@ contract CrossChainAdvancedTest is Test {
     // FEE EDGE CASES
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Fee enforcement: registration must reject payments below the required
+    // bridge + protocol fee.
     function test_InsufficientFee_Reverts() public {
         vm.chainId(SPOKE1_DOMAIN);
 
@@ -453,6 +473,7 @@ contract CrossChainAdvancedTest is Test {
         spoke1Registry.registerLocal{ value: fee - 1 }(deadline, nonce, victim1, v, r, s);
     }
 
+    // Overpayment handling: excess ETH should be refunded to the sender.
     function test_Overpayment_RefundsExcess() public {
         vm.chainId(SPOKE1_DOMAIN);
 
@@ -489,6 +510,7 @@ contract CrossChainAdvancedTest is Test {
     // CROSS-CHAIN INBOX DIRECT ACCESS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Access control: registerFromSpoke must be callable only by the inbox.
     function test_DirectInboxAccess_NotFromHub_Reverts() public {
         vm.chainId(HUB_DOMAIN);
 

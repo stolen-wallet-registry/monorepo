@@ -94,11 +94,13 @@ export function useFeeEstimate(): UseFeeEstimateResult {
       {
         address: feeManagerAddress!,
         abi: feeManagerAbi,
+        chainId, // Explicit chain ID ensures RPC call targets correct chain
         functionName: 'currentFeeWei',
       },
       {
         address: feeManagerAddress!,
         abi: feeManagerAbi,
+        chainId, // Explicit chain ID ensures RPC call targets correct chain
         functionName: 'baseFeeUsdCents',
       },
     ],

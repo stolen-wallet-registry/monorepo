@@ -5,7 +5,7 @@
  * This is a content-only component - wrap in Card if needed for standalone use.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { useChainId } from 'wagmi';
 
 import { Alert, AlertDescription, Skeleton } from '@swr/ui';
@@ -37,7 +37,18 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   const chainId = useChainId();
   const { registeree } = useFormStore();
   const { acknowledgementHash } = useRegistrationStore();
-  const { themeVariant, triggerThemeAnimation } = useTheme();
+  const { themeVariant, triggerThemeAnimation, setThemeVariant } = useTheme();
+
+  // Use refs for theme values to avoid stale closure issues in handleExpire callback.
+  // useLayoutEffect runs synchronously after render but before paint, ensuring refs
+  // are updated before any callbacks can fire.
+  const themeVariantRef = useRef(themeVariant);
+  const triggerThemeAnimationRef = useRef(triggerThemeAnimation);
+
+  useLayoutEffect(() => {
+    themeVariantRef.current = themeVariant;
+    triggerThemeAnimationRef.current = triggerThemeAnimation;
+  }, [themeVariant, triggerThemeAnimation]);
 
   // Get explorer URL for acknowledgement tx
   const ackExplorerUrl = acknowledgementHash
@@ -75,18 +86,29 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
     }
   }, [deadlines, registeree, chainId]);
 
-  // Custom onExpire handler with logging and theme switch
-  const handleExpire = () => {
-    // Trigger hacker theme animation if not already on hacker theme
-    if (themeVariant !== 'hacker' && triggerThemeAnimation) {
-      triggerThemeAnimation('hacker');
+  // Custom onExpire handler with theme switch.
+  // Uses refs to access latest theme values, avoiding stale closure issues.
+  const handleExpire = useCallback(() => {
+    const currentThemeVariant = themeVariantRef.current;
+    const currentTriggerFn = triggerThemeAnimationRef.current;
+
+    // Switch to hacker theme when grace period expires
+    if (currentThemeVariant !== 'hacker') {
+      if (currentTriggerFn) {
+        // Preferred: animated theme switch
+        logger.registration.info('Triggering hacker theme animation');
+        currentTriggerFn('hacker');
+      } else {
+        // Fallback: direct theme switch (no animation)
+        logger.registration.warn('triggerThemeAnimation not available, using fallback');
+        logger.registration.info('Setting hacker theme directly');
+        setThemeVariant('hacker');
+      }
     }
 
-    logger.registration.info('Grace period complete, registration window is now open', {
-      registeree,
-    });
+    logger.registration.info('Grace period complete');
     onComplete();
-  };
+  }, [setThemeVariant, onComplete]);
 
   // Countdown timer - target is the START block (when window opens)
   // Note: The hook is intentionally called even when deadlines is null/loading.
@@ -108,7 +130,7 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
     if (totalMs > 0) {
       // Capture initial value for progress bar (runs only once)
       if (initialTotalMs === undefined) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional one-time capture of initial value
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional guarded one-time capture
         setInitialTotalMs(totalMs);
       }
       // Log once

@@ -19,6 +19,9 @@ export default defineConfig([
         ...globals.browser,
         ...globals.node,
       },
+      parserOptions: {
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
       // Allow underscore-prefixed unused variables

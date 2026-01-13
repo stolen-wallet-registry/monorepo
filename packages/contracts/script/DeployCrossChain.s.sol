@@ -40,6 +40,7 @@ import { MockInterchainGasPaymaster } from "../test/mocks/MockInterchainGasPayma
 ///   4: (setRegistry tx)
 ///   5: CrossChainInbox      → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
 ///   6: (setCrossChainInbox tx)
+///   7: Multicall3           → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
 ///
 /// Spoke deployment order (Account 0 nonces):
 ///   0: MockGasPaymaster     → 0x5FbDB2315678afecb367f032d93F642f64180aa3
@@ -48,6 +49,7 @@ import { MockInterchainGasPaymaster } from "../test/mocks/MockInterchainGasPayma
 ///   3: MockAggregator       → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
 ///   4: FeeManager           → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
 ///   5: SpokeRegistry        → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
+///   6: Multicall3           → 0x0165878A594ca255338adfa4d48449f69242Eb8F
 contract DeployCrossChain is DeployBase {
     // Chain RPCs
     string constant HUB_RPC = "http://localhost:8545";
@@ -67,9 +69,11 @@ contract DeployCrossChain is DeployBase {
     address payable hubRegistry;
     address stolenWalletRegistry;
     address crossChainInbox;
+    address hubMulticall3;
     address spokeGasPaymaster;
     address hyperlaneAdapter;
     address spokeRegistry;
+    address spokeMulticall3;
 
     function run() external {
         uint256 deployerPrivateKey =
@@ -120,6 +124,9 @@ contract DeployCrossChain is DeployBase {
 
         // nonce 6: Wire CrossChainInbox to hub
         RegistryHub(hubRegistry).setCrossChainInbox(crossChainInbox);
+
+        // nonce 7: Deploy Multicall3 for local development (viem/wagmi batch calls)
+        hubMulticall3 = deployMulticall3();
 
         vm.stopBroadcast();
 
@@ -173,6 +180,9 @@ contract DeployCrossChain is DeployBase {
         );
         console2.log("SpokeRegistry:", spokeRegistry);
 
+        // nonce 6: Deploy Multicall3 for local development (viem/wagmi batch calls)
+        spokeMulticall3 = deployMulticall3();
+
         vm.stopBroadcast();
 
         console2.log("");
@@ -214,6 +224,7 @@ contract DeployCrossChain is DeployBase {
         console2.log("  RegistryHub:          ", hubRegistry);
         console2.log("  StolenWalletRegistry: ", stolenWalletRegistry);
         console2.log("  CrossChainInbox:      ", crossChainInbox);
+        console2.log("  Multicall3:           ", hubMulticall3);
         console2.log("");
         console2.log("Spoke Chain (31338) - http://localhost:8546:");
         console2.log("  MockInterchainGasPaymaster:", spokeGasPaymaster);
@@ -221,6 +232,7 @@ contract DeployCrossChain is DeployBase {
         console2.log("  MockAggregator:           ", spokePriceFeed);
         console2.log("  FeeManager:               ", spokeFeeManager);
         console2.log("  SpokeRegistry:            ", spokeRegistry);
+        console2.log("  Multicall3:               ", spokeMulticall3);
         console2.log("");
         console2.log("Trust Relationships:");
         console2.log("  CrossChainInbox trusts HyperlaneAdapter from chain 31338");

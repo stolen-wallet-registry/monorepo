@@ -44,6 +44,9 @@ const CHAIN_CONFIGS: Record<number, Chain> = {
  * - getRegistration() - full registration data
  * - getAcknowledgement() - full acknowledgement data
  *
+ * Note: Requires multicall3 contract to be deployed. For local Anvil chains,
+ * our deploy scripts deploy Multicall3 and the chain config includes the address.
+ *
  * **Return Value Semantics:**
  * - `isRegistered`: True if the address is registered as stolen
  * - `isPending`: True if the address has an active acknowledgement awaiting registration

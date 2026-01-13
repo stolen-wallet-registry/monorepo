@@ -8,6 +8,7 @@ import {
   AnimatedThemeToggler,
   type ThemeTogglerHandle,
 } from '@/components/ui/animated-theme-toggler';
+import { logger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/useTheme';
 
@@ -29,11 +30,29 @@ export function Header() {
   const { setTriggerThemeAnimation } = useTheme();
 
   // Register the theme toggler's trigger function with context
+  // We register a WRAPPER function that calls through the ref, ensuring
+  // we always invoke the latest triggerVariantSwitch (which may change
+  // when themeVariant changes due to useCallback dependencies)
   useEffect(() => {
-    if (themeTogglerRef.current) {
-      setTriggerThemeAnimation(themeTogglerRef.current.triggerVariantSwitch);
-    }
-    return () => setTriggerThemeAnimation(null);
+    logger.ui.debug('Registering triggerThemeAnimation wrapper with context', {
+      component: 'Header',
+    });
+    setTriggerThemeAnimation((variant) => {
+      if (themeTogglerRef.current) {
+        themeTogglerRef.current.triggerVariantSwitch(variant);
+      } else {
+        logger.ui.warn('themeTogglerRef.current is null when triggering animation', {
+          component: 'Header',
+          requestedVariant: variant,
+        });
+      }
+    });
+    return () => {
+      logger.ui.debug('Cleanup: unregistering triggerThemeAnimation', {
+        component: 'Header',
+      });
+      setTriggerThemeAnimation(null);
+    };
   }, [setTriggerThemeAnimation]);
 
   const navItems = [

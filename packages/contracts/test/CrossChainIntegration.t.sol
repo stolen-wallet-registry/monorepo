@@ -126,6 +126,10 @@ contract CrossChainIntegrationTest is Test {
     // FULL FLOW TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // End-to-end cross-chain flow: a spoke acknowledgement + registration should
+    // produce a valid hub registration after message delivery. This validates
+    // signature domain separation, timing window enforcement, and bridge payload
+    // wiring across the hop.
     function test_FullCrossChainFlow_StandardRegistration() public {
         // Switch to spoke chain
         vm.chainId(SPOKE_CHAIN_ID);
@@ -217,6 +221,9 @@ contract CrossChainIntegrationTest is Test {
         assertTrue(data.crossChainMessageId != bytes32(0), "Should have message ID");
     }
 
+    // Sponsored flow: relayer submits on behalf of victim and the hub should
+    // reflect sponsorship state correctly. This protects the relayer model and
+    // ensures metadata doesn’t misrepresent who paid gas.
     function test_CrossChainFlow_SponsoredRegistration() public {
         vm.chainId(SPOKE_CHAIN_ID);
 
@@ -291,6 +298,8 @@ contract CrossChainIntegrationTest is Test {
     // SECURITY TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Security: only trusted sources should be able to deliver cross-chain
+    // registrations. This guards against spoofed messages from unknown senders.
     function test_UntrustedSource_Reverts() public {
         // Create malicious message
         CrossChainMessage.RegistrationPayload memory payload = CrossChainMessage.RegistrationPayload({
@@ -310,6 +319,8 @@ contract CrossChainIntegrationTest is Test {
         hubMailbox.simulateReceive(address(inbox), 999, untrustedSender, messageBody);
     }
 
+    // Security: the inbox handle function must be callable only by the mailbox.
+    // This ensures off-chain relayers or arbitrary callers cannot inject messages.
     function test_OnlyMailboxCanDeliver() public {
         CrossChainMessage.RegistrationPayload memory payload = CrossChainMessage.RegistrationPayload({
             wallet: victim,
@@ -335,6 +346,8 @@ contract CrossChainIntegrationTest is Test {
     // QUERY TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Hub passthrough queries should reflect the final hub state after a
+    // cross-chain registration completes.
     function test_HubQueryPassthrough_AfterCrossChain() public {
         // Complete cross-chain registration first
         test_FullCrossChainFlow_StandardRegistration();
@@ -348,6 +361,8 @@ contract CrossChainIntegrationTest is Test {
     // FEE BREAKDOWN TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Fee breakdown should include bridge fee and name, plus total that matches
+    // the sum of line items. This is important for UI fee transparency.
     function test_quoteFeeBreakdown_ReturnsCorrectBreakdown() public {
         vm.chainId(SPOKE_CHAIN_ID);
 
@@ -366,6 +381,8 @@ contract CrossChainIntegrationTest is Test {
         assertEq(breakdown.bridgeName, "Hyperlane", "Bridge name should be Hyperlane");
     }
 
+    // Quote helpers should be internally consistent so UI doesn’t show
+    // mismatched totals vs. breakdown.
     function test_quoteFeeBreakdown_MatchesQuoteRegistration() public {
         vm.chainId(SPOKE_CHAIN_ID);
 
@@ -375,6 +392,8 @@ contract CrossChainIntegrationTest is Test {
         assertEq(breakdown.total, totalFromQuote, "Breakdown total should match quoteRegistration");
     }
 
+    // Fee breakdown should be consistent across users when there is no
+    // user-specific pricing logic.
     function test_quoteFeeBreakdown_DifferentUsers() public {
         vm.chainId(SPOKE_CHAIN_ID);
 

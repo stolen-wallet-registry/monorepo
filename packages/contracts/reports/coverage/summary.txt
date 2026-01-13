@@ -1,0 +1,358 @@
+Compiling 77 files with Solc 0.8.24
+Solc 0.8.24 finished in 5.66s
+Compiler run successful with warnings:
+Warning (2018): Function state mutability can be restricted to view
+   --> test/CrossChainAdvanced.t.sol:397:5:
+    |
+397 |     function testFuzz_MessageEncodeDecode_RoundTrip(
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/CrossChainAdvanced.t.sol:568:5:
+    |
+568 |     function _signAcknowledgement(
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/CrossChainAdvanced.t.sol:595:5:
+    |
+595 |     function _signRegistration(
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/StolenWalletRegistry.t.sol:405:5:
+    |
+405 |     function test_IsRegistered_False() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/StolenWalletRegistry.t.sol:416:5:
+    |
+416 |     function test_IsPending_False_NoPending() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Analysing contracts...
+Running tests...
+
+Ran 6 tests for test/CrossChainInbox.t.sol:CrossChainInboxTest
+[PASS] test_BridgeId_ReturnsHyperlane() (gas: 5811)
+[PASS] test_Constructor_ZeroMailbox_Reverts() (gas: 68768)
+[PASS] test_Constructor_ZeroOwner_Reverts() (gas: 43469)
+[PASS] test_Constructor_ZeroRegistryHub_Reverts() (gas: 68875)
+[PASS] test_Handle_SourceChainMismatch_Reverts() (gas: 88693)
+[PASS] test_SetTrustedSource_OnlyOwner() (gas: 14504)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 37.92ms (12.78ms CPU time)
+
+Ran 13 tests for test/Integration.t.sol:IntegrationTest
+[PASS] test_FeeCalculation_Integration() (gas: 41322)
+[PASS] test_FeeChanges_ReflectInHub() (gas: 69919)
+[PASS] test_FreeRegistrations_WhenNoFeeManager() (gas: 1301188)
+[PASS] test_FreeRegistrations_WhenZeroBaseFee() (gas: 24372)
+[PASS] test_FullRegistrationFlow() (gas: 193322)
+[PASS] test_Gas_CurrentFeeWei() (gas: 35693)
+[PASS] test_Gas_HubQueryPassthrough() (gas: 20656)
+[PASS] test_MultipleWalletRegistrations() (gas: 331970)
+[PASS] test_OracleFailure_SystemStillWorks() (gas: 177967)
+[PASS] test_OwnershipTransfer_FullSystem() (gas: 93654)
+[PASS] test_PriceVolatility_FeeUpdates() (gas: 45416)
+[PASS] test_QueryAfterRegistration() (gas: 188482)
+[PASS] test_SystemDeployment_AllContractsLinked() (gas: 34271)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 39.82ms (47.75ms CPU time)
+
+Ran 10 tests for test/BridgeRouter.t.sol:BridgeRouterTest
+[PASS] test_IsRouteEnabled_FalseByDefault() (gas: 12939)
+[PASS] test_IsRouteEnabled_TrueWhenConfigured() (gas: 89968)
+[PASS] test_QuoteHubFee_RouteNotConfigured_Reverts() (gas: 22355)
+[PASS] test_SendMessage_AdapterNotConfigured_Reverts() (gas: 12438)
+[PASS] test_SendMessage_InsufficientFee_Reverts() (gas: 64822)
+[PASS] test_SendMessage_RefundFailure_Reverts() (gas: 763175)
+[PASS] test_SendToHub_InsufficientFee_Reverts() (gas: 127054)
+[PASS] test_SendToHub_RefundFailure_Reverts() (gas: 943838)
+[PASS] test_SendToHub_RouteNotConfigured_Reverts() (gas: 22376)
+[PASS] test_SetRoute_InvalidConfig_Reverts() (gas: 14773)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 43.13ms (30.59ms CPU time)
+
+Ran 8 tests for test/StolenWalletRegistry.t.sol:StolenWalletRegistryFeeTest
+[PASS] test_Constructor_StoresFeeManagerAndHub() (gas: 11447)
+[PASS] test_Register_FeeForwardedToHub() (gas: 174228)
+[PASS] test_Register_HubReceivesETH() (gas: 186380)
+[PASS] test_Register_NoFeeManager_Free() (gas: 2588828)
+[PASS] test_Register_WithCorrectFee_Succeeds() (gas: 173545)
+[PASS] test_Register_WithExcessFee_Succeeds() (gas: 173789)
+[PASS] test_Register_WithInsufficientFee_Reverts() (gas: 185023)
+[PASS] test_Register_ZeroFeeWhenNoFeeManager() (gas: 2484857)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 65.03ms (52.25ms CPU time)
+
+Ran 12 tests for test/StolenWalletRegistryHubPath.t.sol:StolenWalletRegistryHubPathTest
+[PASS] test_Constructor_InvalidFeeConfig_Reverts() (gas: 45857)
+[PASS] test_Constructor_InvalidTiming_Reverts() (gas: 43707)
+[PASS] test_GetDeadlines_NoAcknowledgement_ReturnsExpired() (gas: 2497329)
+[PASS] test_QuoteRegistration_NoFeeManager_ReturnsZero() (gas: 2488989)
+[PASS] test_QuoteRegistration_WithFeeManager_ReturnsFee() (gas: 4235973)
+[PASS] test_RegisterFromHub_AlreadyRegistered_Reverts() (gas: 2524145)
+[PASS] test_RegisterFromHub_InvalidBridgeId_Reverts() (gas: 2493309)
+[PASS] test_RegisterFromHub_InvalidChainId_Reverts() (gas: 2493347)
+[PASS] test_RegisterFromHub_InvalidOwner_Reverts() (gas: 2491096)
+[PASS] test_RegisterFromHub_Success() (gas: 2544598)
+[PASS] test_RegisterFromHub_Unauthorized_Reverts() (gas: 2492724)
+[PASS] test_Register_FeeForwardFailure_Reverts() (gas: 4414809)
+Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 65.61ms (51.52ms CPU time)
+
+Ran 17 tests for test/HyperlaneAdapter.t.sol:HyperlaneAdapterTest
+[PASS] test_AddDomains_Batch() (gas: 93951)
+[PASS] test_BridgeName() (gas: 10684)
+[PASS] test_Constructor_SetsImmutables() (gas: 17369)
+[PASS] test_DefaultGasAmount() (gas: 5881)
+[PASS] test_QuoteMessage_CustomGasAmount() (gas: 48284)
+[PASS] test_QuoteMessage_Success() (gas: 17542)
+[PASS] test_QuoteMessage_UnsupportedChain_Reverts() (gas: 11805)
+[PASS] test_SendMessage_InsufficientFee_Reverts() (gas: 132050)
+[PASS] test_SendMessage_RefundsExcess() (gas: 209725)
+[PASS] test_SendMessage_Success() (gas: 189962)
+[PASS] test_SendMessage_UnsupportedChain_Reverts() (gas: 12065)
+[PASS] test_SetDomainSupport_OnlyOwner() (gas: 15335)
+[PASS] test_SetDomainSupport_Success() (gas: 41594)
+[PASS] test_SetGasAmount_OnlyOwner() (gas: 15302)
+[PASS] test_SetGasAmount_Success() (gas: 41627)
+[PASS] test_SupportsChain_Disabled() (gas: 8625)
+[PASS] test_SupportsChain_Enabled() (gas: 8496)
+Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 67.61ms (42.41ms CPU time)
+
+Ran 8 tests for test/CrossChainIntegration.t.sol:CrossChainIntegrationTest
+[PASS] test_CrossChainFlow_SponsoredRegistration() (gas: 590269)
+[PASS] test_FullCrossChainFlow_StandardRegistration() (gas: 575527)
+[PASS] test_HubQueryPassthrough_AfterCrossChain() (gas: 591225)
+[PASS] test_OnlyMailboxCanDeliver() (gas: 17108)
+[PASS] test_UntrustedSource_Reverts() (gas: 53923)
+[PASS] test_quoteFeeBreakdown_DifferentUsers() (gas: 54730)
+[PASS] test_quoteFeeBreakdown_MatchesQuoteRegistration() (gas: 46233)
+[PASS] test_quoteFeeBreakdown_ReturnsCorrectBreakdown() (gas: 40137)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 81.62ms (57.98ms CPU time)
+
+Ran 33 tests for test/RegistryHub.t.sol:RegistryHubTest
+[PASS] test_Constructor_WithAllParams() (gas: 26124)
+[PASS] test_Constructor_WithoutFeeManager() (gas: 1302431)
+[PASS] test_Constructor_WithoutRegistry() (gas: 1300756)
+[PASS] test_CurrentFeeWei_NoFeeManager() (gas: 1301188)
+[PASS] test_CurrentFeeWei_WithFeeManager() (gas: 40906)
+[PASS] test_GetRegistry_ReturnsCorrectAddress() (gas: 11868)
+[PASS] test_GetRegistry_ReturnsZeroForUnregistered() (gas: 18407)
+[PASS] test_IsWalletPending_NoRegistry() (gas: 1302063)
+[PASS] test_IsWalletPending_ReturnsCorrectState() (gas: 21338)
+[PASS] test_IsWalletRegistered_NoRegistry() (gas: 1302042)
+[PASS] test_IsWalletRegistered_ReturnsCorrectState() (gas: 16814)
+[PASS] test_Pause_OnlyOwner() (gas: 14976)
+[PASS] test_Pause_Success() (gas: 39943)
+[PASS] test_ReceiveEth() (gas: 17683)
+[PASS] test_RegisterFromSpoke_InvalidRegistry_Reverts() (gas: 52742)
+[PASS] test_RegistryTypeConstants() (gas: 8136)
+[PASS] test_RegistryTypeConstants_MatchStorage() (gas: 11403)
+[PASS] test_SetCrossChainInbox_OnlyOwner() (gas: 15102)
+[PASS] test_SetFeeManager_OnlyOwner() (gas: 15058)
+[PASS] test_SetFeeManager_Success() (gas: 1329665)
+[PASS] test_SetFeeManager_ToZero() (gas: 17561)
+[PASS] test_SetRegistry_OnlyOwner() (gas: 16424)
+[PASS] test_SetRegistry_Success() (gas: 2510582)
+[PASS] test_SetRegistry_Unregister() (gas: 18637)
+[PASS] test_TransferOwnership_CanCancel() (gas: 50413)
+[PASS] test_TransferOwnership_OnlyPendingOwnerCanAccept() (gas: 44887)
+[PASS] test_TransferOwnership_TwoStep() (gas: 37122)
+[PASS] test_Unpause_Success() (gas: 30661)
+[PASS] test_WithdrawFees_FullBalance() (gas: 62524)
+[PASS] test_WithdrawFees_OnlyOwner() (gas: 25536)
+[PASS] test_WithdrawFees_Success() (gas: 65655)
+[PASS] test_WithdrawFees_ToContractThatRejects() (gas: 103339)
+[PASS] test_WithdrawFees_ZeroAddress_Reverts() (gas: 24365)
+Suite result: ok. 33 passed; 0 failed; 0 skipped; finished in 89.28ms (93.29ms CPU time)
+
+Ran 9 tests for test/TimingConfig.t.sol:TimingConfigTest
+[PASS] testFuzz_DeadlineBlock_Range(uint256,uint256) (runs: 1000, μ: 18173, ~: 18362)
+[PASS] testFuzz_GracePeriodEndBlock_Range(uint256,uint256) (runs: 1000, μ: 18172, ~: 18361)
+[PASS] test_DeadlineBlock_InRange() (gas: 11048)
+[PASS] test_DeadlineBlock_LargeValue() (gas: 11760)
+[PASS] test_DeadlineBlock_MinimumValue() (gas: 11026)
+[PASS] test_GracePeriodEndBlock_InRange() (gas: 11093)
+[PASS] test_GracePeriodEndBlock_LargeValue() (gas: 11739)
+[PASS] test_GracePeriodEndBlock_MinimumValue() (gas: 11072)
+[PASS] test_SignatureDeadline_InRange() (gas: 10493)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 342.43ms (554.10ms CPU time)
+
+Ran 17 tests for test/SpokeRegistry.t.sol:SpokeRegistryTest
+[PASS] test_Acknowledge_InvalidNonce_Reverts() (gas: 23568)
+[PASS] test_Acknowledge_InvalidOwner_Reverts() (gas: 22849)
+[PASS] test_Acknowledge_InvalidSigner_Reverts() (gas: 28548)
+[PASS] test_Acknowledge_SignatureExpired_Reverts() (gas: 25344)
+[PASS] test_Constructor_RevertsOnInvalidTiming() (gas: 80657)
+[PASS] test_Constructor_RevertsOnZeroBridgeAdapter() (gas: 78338)
+[PASS] test_Constructor_RevertsOnZeroOwner() (gas: 52991)
+[PASS] test_QuoteFeeBreakdown_IncludesRegistrationFee() (gas: 66590)
+[PASS] test_RefundFailure_Reverts() (gas: 892955)
+[PASS] test_Register_ExpiredForwarder_Reverts() (gas: 145385)
+[PASS] test_Register_GracePeriodNotStarted_Reverts() (gas: 140492)
+[PASS] test_Register_HubNotConfigured_Reverts() (gas: 3056585)
+[PASS] test_Register_InsufficientFee_Reverts() (gas: 210950)
+[PASS] test_Register_InvalidForwarder_Reverts() (gas: 147347)
+[PASS] test_SetHubConfig_InvalidCombination_Reverts() (gas: 14183)
+[PASS] test_WithdrawFees_RejectsReceiver_Reverts() (gas: 91807)
+[PASS] test_WithdrawFees_ZeroAddress_Reverts() (gas: 14417)
+Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 420.57ms (83.84ms CPU time)
+
+Ran 12 tests for test/CrossChainAdvanced.t.sol:CrossChainAdvancedTest
+[PASS] testFuzz_AddressBytes32Conversion_RoundTrip(address) (runs: 1000, μ: 803, ~: 803)
+[PASS] testFuzz_MessageEncodeDecode_RoundTrip(address,uint32,bool,uint256,uint64,bytes32) (runs: 1000, μ: 14776, ~: 14776)
+[PASS] test_DirectInboxAccess_NotFromHub_Reverts() (gas: 15747)
+[PASS] test_DoubleRegistration_SameWalletFromTwoSpokes_SecondReverts() (gas: 1046784)
+[PASS] test_HubPaused_CrossChainDeliveryReverts() (gas: 533573)
+[PASS] test_InsufficientFee_Reverts() (gas: 178345)
+[PASS] test_InvalidMessageType_Reverts() (gas: 56931)
+[PASS] test_InvalidMessageVersion_Reverts() (gas: 56485)
+[PASS] test_MessageReplay_SameMessageTwice_SecondReverts() (gas: 609765)
+[PASS] test_MultiSpoke_DifferentWalletsFromDifferentSpokes() (gas: 1112933)
+[PASS] test_Overpayment_RefundsExcess() (gas: 469035)
+[PASS] test_TrustedSourceRemoved_DeliveryReverts() (gas: 497475)
+Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 420.42ms (530.51ms CPU time)
+
+Ran 11 tests for test/CrossChainMessage.t.sol:CrossChainMessageTest
+[PASS] testFuzz_AddressBytes32Roundtrip(address) (runs: 1000, μ: 774, ~: 774)
+[PASS] testFuzz_EncodeDecodeRoundtrip(address,uint32,bool,uint256,uint64,bytes32) (runs: 1000, μ: 19374, ~: 19374)
+[PASS] test_AddressToBytes32() (gas: 332)
+[PASS] test_Bytes32ToAddress() (gas: 340)
+[PASS] test_DecodeRegistration_EmptyData_Reverts() (gas: 11861)
+[PASS] test_DecodeRegistration_InvalidMessageType_Reverts() (gas: 14473)
+[PASS] test_DecodeRegistration_InvalidVersion_Reverts() (gas: 13938)
+[PASS] test_DecodeRegistration_Success() (gas: 15206)
+[PASS] test_DecodeRegistration_TruncatedData_Reverts() (gas: 13298)
+[PASS] test_EncodeRegistration_Success() (gas: 1630)
+[PASS] test_MessageConstants() (gas: 457)
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 431.78ms (435.18ms CPU time)
+
+Ran 41 tests for test/FeeManager.t.sol:FeeManagerTest
+[PASS] testFuzz_FeeCalculation(uint256,int256) (runs: 1000, μ: 54262, ~: 54711)
+[PASS] testFuzz_ValidateFee_ThresholdBehavior(uint256) (runs: 1000, μ: 35371, ~: 36704)
+[PASS] test_AnyoneCanRefreshFallback() (gas: 64005)
+[PASS] test_ChainlinkPriceUsed_WhenFresh() (gas: 23455)
+[PASS] test_Constructor_WithOracle() (gas: 23450)
+[PASS] test_Constructor_WithoutOracle() (gas: 1292104)
+[PASS] test_CurrentFeeWei_Calculation() (gas: 26654)
+[PASS] test_CurrentFeeWei_WithDifferentPrices() (gas: 41795)
+[PASS] test_CurrentFeeWei_ZeroBaseFee() (gas: 16772)
+[PASS] test_FallbackWhenOracleReverts() (gas: 38765)
+[PASS] test_FallbackWhenPriceNegative() (gas: 30048)
+[PASS] test_FallbackWhenPriceZero() (gas: 25247)
+[PASS] test_FallbackWhenStale() (gas: 32993)
+[PASS] test_ManualModeNoPriceFeed() (gas: 1290966)
+[PASS] test_OpportunisticSync_EmitsEvent() (gas: 62472)
+[PASS] test_OpportunisticSync_SkipsWithinInterval() (gas: 76412)
+[PASS] test_OpportunisticSync_Triggers() (gas: 90209)
+[PASS] test_RefreshEmitsEvent() (gas: 62306)
+[PASS] test_RefreshRevertsIfNoOracle() (gas: 1290987)
+[PASS] test_RefreshRevertsIfPriceInvalid() (gas: 23424)
+[PASS] test_RefreshRevertsIfStale() (gas: 30955)
+[PASS] test_SetBaseFee_OnlyOwner() (gas: 14080)
+[PASS] test_SetBaseFee_OverflowReverts() (gas: 14438)
+[PASS] test_SetBaseFee_Success() (gas: 24111)
+[PASS] test_SetBaseFee_ZeroAllowed() (gas: 17972)
+[PASS] test_SetFallbackPrice_OnlyOwner() (gas: 13991)
+[PASS] test_SetFallbackPrice_Success() (gas: 23819)
+[PASS] test_SetFallbackPrice_ZeroNotAllowed() (gas: 13950)
+[PASS] test_SetFallbackSyncInterval_OnlyOwner() (gas: 14037)
+[PASS] test_SetFallbackSyncInterval_Success() (gas: 23864)
+[PASS] test_SetFallbackSyncInterval_ZeroSyncsFrequently() (gas: 84172)
+[PASS] test_SetPriceFeed_OnlyOwner() (gas: 13983)
+[PASS] test_SetPriceFeed_Success() (gas: 446376)
+[PASS] test_SetStalePriceThreshold_OnlyOwner() (gas: 14038)
+[PASS] test_SetStalePriceThreshold_Success() (gas: 23799)
+[PASS] test_SetStalePriceThreshold_ZeroForcesFreshOnly() (gas: 33538)
+[PASS] test_TransferOwnership_OnlyPendingOwnerCanAccept() (gas: 43954)
+[PASS] test_TransferOwnership_TwoStep() (gas: 37280)
+[PASS] test_ValidateFee_Insufficient() (gas: 36562)
+[PASS] test_ValidateFee_Sufficient() (gas: 41231)
+[PASS] test_ValidateFee_ZeroFeeAlwaysPasses() (gas: 17338)
+Suite result: ok. 41 passed; 0 failed; 0 skipped; finished in 480.25ms (912.53ms CPU time)
+
+Ran 31 tests for test/StolenWalletRegistry.t.sol:StolenWalletRegistryTest
+[PASS] testFuzz_Acknowledge_ValidSignature(uint256) (runs: 1000, μ: 129562, ~: 129512)
+[PASS] testFuzz_Nonces_NeverDecrease(uint8) (runs: 1000, μ: 228697, ~: 197520)
+[PASS] testFuzz_Register_TimingWindow(uint256) (runs: 1000, μ: 138790, ~: 138896)
+[PASS] test_Acknowledge_AlreadyRegistered() (gas: 142564)
+[PASS] test_Acknowledge_ExpiredDeadline() (gas: 25316)
+[PASS] test_Acknowledge_InvalidNonce() (gas: 23648)
+[PASS] test_Acknowledge_InvalidSigner() (gas: 30870)
+[PASS] test_Acknowledge_SelfRelay() (gas: 127862)
+[PASS] test_Acknowledge_Success() (gas: 137902)
+[PASS] test_Acknowledge_ZeroAddress() (gas: 19028)
+[PASS] test_GenerateHashStruct_InvalidStep_DefaultsToRegistration() (gas: 36200)
+[PASS] test_GenerateHashStruct_Step1() (gas: 22114)
+[PASS] test_GenerateHashStruct_Step2() (gas: 22059)
+[PASS] test_GetDeadlines_Active() (gas: 129202)
+[PASS] test_GetDeadlines_AfterGracePeriod() (gas: 133265)
+[PASS] test_GetDeadlines_Expired() (gas: 133100)
+[PASS] test_IsPending_False_Expired() (gas: 131583)
+[PASS] test_IsPending_False_NoPending() (gas: 15107)
+[PASS] test_IsPending_True() (gas: 126711)
+[PASS] test_IsRegistered_False() (gas: 10692)
+[PASS] test_IsRegistered_True() (gas: 134232)
+[PASS] test_NonceIncrements_BothPhases() (gas: 137504)
+[PASS] test_Register_AfterExpiry() (gas: 147736)
+[PASS] test_Register_BeforeGracePeriod() (gas: 140428)
+[PASS] test_Register_ExpiredDeadline() (gas: 139273)
+[PASS] test_Register_InvalidNonce() (gas: 137563)
+[PASS] test_Register_InvalidSigner() (gas: 144572)
+[PASS] test_Register_SelfRelay() (gas: 136773)
+[PASS] test_Register_Success() (gas: 145584)
+[PASS] test_Register_WrongForwarder() (gas: 147987)
+[PASS] test_Register_ZeroAddress() (gas: 19091)
+Suite result: ok. 31 passed; 0 failed; 0 skipped; finished in 2.89s (5.27s CPU time)
+
+Ran 14 test suites in 2.90s (5.47s CPU time): 228 tests passed, 0 failed, 0 skipped (228 total tests)
+Wrote LCOV report.
+
+╭----------------------------------------------+------------------+-------------------+-----------------+------------------╮
+| File                                         | % Lines          | % Statements      | % Branches      | % Funcs          |
++==========================================================================================================================+
+| script/Deploy.s.sol                          | 0.00% (0/21)     | 0.00% (0/22)      | 100.00% (0/0)   | 0.00% (0/1)      |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| script/DeployBase.s.sol                      | 0.00% (0/126)    | 0.00% (0/143)     | 0.00% (0/28)    | 0.00% (0/27)     |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| script/DeployCrossChain.s.sol                | 0.00% (0/88)     | 0.00% (0/95)      | 0.00% (0/4)     | 0.00% (0/1)      |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| script/DeployTestnet.s.sol                   | 0.00% (0/86)     | 0.00% (0/97)      | 0.00% (0/12)    | 0.00% (0/3)      |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| src/FeeManager.sol                           | 92.41% (73/79)   | 93.10% (81/87)    | 71.43% (15/21)  | 100.00% (14/14)  |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| src/RegistryHub.sol                          | 100.00% (54/54)  | 100.00% (47/47)   | 100.00% (9/9)   | 100.00% (18/18)  |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| src/crosschain/BridgeRouter.sol              | 88.00% (44/50)   | 86.44% (51/59)    | 100.00% (10/10) | 87.50% (7/8)     |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| src/crosschain/CrossChainInbox.sol           | 92.31% (24/26)   | 92.00% (23/25)    | 83.33% (5/6)    | 85.71% (6/7)     |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| src/crosschain/adapters/HyperlaneAdapter.sol | 100.00% (41/41)  | 91.11% (41/45)    | 60.00% (6/10)   | 100.00% (8/8)    |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| src/libraries/CrossChainMessage.sol          | 100.00% (18/18)  | 100.00% (20/20)   | 100.00% (3/3)   | 100.00% (4/4)    |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| src/libraries/TimingConfig.sol               | 100.00% (13/13)  | 95.45% (21/22)    | 0.00% (0/1)     | 100.00% (5/5)    |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| src/registries/StolenWalletRegistry.sol      | 100.00% (80/80)  | 100.00% (112/112) | 100.00% (26/26) | 100.00% (11/11)  |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| src/spoke/SpokeRegistry.sol                  | 90.10% (91/101)  | 89.44% (127/142)  | 76.92% (20/26)  | 90.91% (10/11)   |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| test/BridgeRouter.t.sol                      | 100.00% (8/8)    | 100.00% (4/4)     | 100.00% (0/0)   | 100.00% (4/4)    |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| test/CrossChainMessage.t.sol                 | 100.00% (2/2)    | 100.00% (2/2)     | 100.00% (0/0)   | 100.00% (1/1)    |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| test/RegistryHub.t.sol                       | 100.00% (2/2)    | 100.00% (1/1)     | 100.00% (0/0)   | 100.00% (1/1)    |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| test/SpokeRegistry.t.sol                     | 100.00% (10/10)  | 100.00% (5/5)     | 100.00% (0/0)   | 100.00% (5/5)    |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| test/StolenWalletRegistryHubPath.t.sol       | 0.00% (0/2)      | 0.00% (0/1)       | 100.00% (0/0)   | 0.00% (0/1)      |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| test/TimingConfig.t.sol                      | 100.00% (6/6)    | 100.00% (6/6)     | 100.00% (0/0)   | 100.00% (3/3)    |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| test/mocks/MockAggregator.sol                | 68.18% (15/22)   | 69.23% (9/13)     | 50.00% (1/2)    | 66.67% (6/9)     |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| test/mocks/MockInterchainGasPaymaster.sol    | 69.23% (9/13)    | 71.43% (10/14)    | 20.00% (1/5)    | 66.67% (2/3)     |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| test/mocks/MockMailbox.sol                   | 59.46% (22/37)   | 66.67% (20/30)    | 100.00% (2/2)   | 30.00% (3/10)    |
+|----------------------------------------------+------------------+-------------------+-----------------+------------------|
+| Total                                        | 57.85% (512/885) | 58.47% (580/992)  | 59.39% (98/165) | 69.68% (108/155) |
+╰----------------------------------------------+------------------+-------------------+-----------------+------------------╯

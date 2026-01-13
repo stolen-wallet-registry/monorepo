@@ -86,6 +86,7 @@ export function useQuoteFeeBreakdown(
   const spokeResult = useReadContract({
     address: contractAddress,
     abi: spokeRegistryAbi,
+    chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'quoteFeeBreakdown',
     args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {
@@ -98,6 +99,7 @@ export function useQuoteFeeBreakdown(
   const hubResult = useReadContract({
     address: contractAddress,
     abi: stolenWalletRegistryAbi,
+    chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'quoteRegistration',
     args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {

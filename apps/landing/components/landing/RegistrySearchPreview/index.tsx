@@ -7,7 +7,7 @@
  * Uses the shared queryRegistryStatusSimple from @swr/ui.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, type FormEvent } from 'react';
 import { Search, Loader2, AlertTriangle, CheckCircle, Clock, HelpCircle } from 'lucide-react';
 import {
   Button,
@@ -110,17 +110,34 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
   }, []);
 
   const handleSubmit = useCallback(
-    (e: React.FormEvent) => {
+    (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      handleSearch(inputValue);
+      void handleSearch(inputValue);
     },
     [inputValue, handleSearch]
   );
 
   const handleExampleClick = useCallback(
-    (address: string) => {
-      setInputValue(address);
-      handleSearch(address);
+    (address: string, forceStolen = false) => {
+      const trimmed = address.trim();
+      setInputValue(trimmed);
+
+      // For demo purposes: force "Stolen Wallet" example to show as registered
+      // since we don't have a production registry with actual stolen wallets yet
+      if (forceStolen) {
+        setError(null);
+        setSearchedAddress(trimmed);
+        // Mock a "registered" result for demo
+        setResult({
+          isRegistered: true,
+          isPending: false,
+          registrationData: null,
+          acknowledgementData: null,
+        });
+        return;
+      }
+
+      void handleSearch(trimmed);
     },
     [handleSearch]
   );
@@ -150,6 +167,13 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
               aria-label="Wallet address to search"
             />
           </div>
+          <Button
+            type="submit"
+            disabled={isLoading || !inputValue.trim()}
+            aria-label={isLoading ? 'Searching registry' : 'Search registry'}
+          >
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+          </Button>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -160,20 +184,13 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
                 <HelpCircle className="h-4 w-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs text-center">
+            <TooltipContent side="right" className="max-w-xs text-center">
               <p>
                 Enter any wallet address to check if it&apos;s been reported as stolen in our
                 registry.
               </p>
             </TooltipContent>
           </Tooltip>
-          <Button
-            type="submit"
-            disabled={isLoading || !inputValue.trim()}
-            aria-label={isLoading ? 'Searching registry' : 'Search registry'}
-          >
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
-          </Button>
         </form>
 
         {/* Example Buttons - Centered */}
@@ -186,7 +203,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleExampleClick(EXAMPLE_REGISTERED_ADDRESS)}
+            onClick={() => handleExampleClick(EXAMPLE_REGISTERED_ADDRESS, true)}
             disabled={isLoading}
             className="h-7 px-3 text-xs"
             aria-label="Search example stolen wallet address"

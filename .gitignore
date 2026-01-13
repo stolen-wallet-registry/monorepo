@@ -18,6 +18,8 @@ cache/
 broadcast/
 packages/contracts/out/
 packages/contracts/cache/
+.gas-snapshot
+!packages/contracts/reports/gas/.gas-snapshot
 
 # Environment files
 .env
@@ -48,6 +50,14 @@ yarn-error.log*
 # Testing
 coverage/
 .nyc_output/
+# Re-enable specific coverage reports in contracts package
+# Note: lcov.info explicitly ignored - too large for git
+!packages/contracts/reports/
+!packages/contracts/reports/coverage/
+packages/contracts/reports/coverage/lcov.info
+!packages/contracts/reports/coverage/summary.txt
+!packages/contracts/reports/gas/
+!packages/contracts/reports/gas/gas-report.txt
 
 # TypeScript
 *.tsbuildinfo
@@ -71,3 +81,4 @@ PRPs/
 
 # Claude Code local settings (user-specific permissions)
 .claude/settings.local.json
+.claude/plans/

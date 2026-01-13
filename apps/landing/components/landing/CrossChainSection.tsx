@@ -1,5 +1,7 @@
 'use client';
 
+import { ExternalLink } from 'lucide-react';
+
 import { TextAnimate } from '@swr/ui';
 
 import { CrossChainVisualizationWithSuspense } from './CrossChainVisualization';
@@ -33,6 +35,15 @@ export function CrossChainSection() {
             exchanges, wallets, and security tools worldwide. Competing entities coordinate openly
             to track stolen funds.
           </TextAnimate>
+          <a
+            href="https://standards.chainagnostic.org/CAIPs/caip-10"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+          >
+            Learn about CAIP-10 address format
+            <ExternalLink className="size-3.5" />
+          </a>
         </div>
 
         {/* Visualization */}

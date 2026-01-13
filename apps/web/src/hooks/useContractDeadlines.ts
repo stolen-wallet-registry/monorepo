@@ -77,6 +77,7 @@ export function useContractDeadlines(
   const result = useReadContract({
     address: contractAddress,
     abi,
+    chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'getDeadlines',
     args: registereeAddress ? [registereeAddress] : undefined,
     query: {

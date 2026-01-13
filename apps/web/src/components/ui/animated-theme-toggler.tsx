@@ -50,6 +50,9 @@ export const AnimatedThemeToggler = forwardRef<ThemeTogglerHandle, AnimatedTheme
 
         await transition.ready;
 
+        // Re-check ref after async gap (component may have unmounted)
+        if (!buttonRef.current) return;
+
         const { top, left, width, height } = buttonRef.current.getBoundingClientRect();
         const x = left + width / 2;
         const y = top + height / 2;
@@ -86,7 +89,10 @@ export const AnimatedThemeToggler = forwardRef<ThemeTogglerHandle, AnimatedTheme
       (variant: ThemeVariant) => {
         // Skip if already on this variant
         if (themeVariant === variant) return;
-        animateTransition(() => setThemeVariant(variant)).catch(console.error);
+        animateTransition(() => setThemeVariant(variant)).catch((err) => {
+          // AbortError is expected when View Transition is skipped (e.g., during init)
+          if (err.name !== 'AbortError') console.error(err);
+        });
       },
       [themeVariant, animateTransition, setThemeVariant]
     );

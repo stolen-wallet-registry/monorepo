@@ -7,3 +7,7 @@
 
 # Dependencies (restored via forge install)
 /lib
+
+# Gas snapshots (regenerate with: pnpm report:gas)
+# Keep tooling-owned to reduce noisy diffs
+.gas-snapshot
