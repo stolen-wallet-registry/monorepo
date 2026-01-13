@@ -238,13 +238,22 @@ contract Multicall3 is IMulticall3 {
 
     /// @inheritdoc IMulticall3
     function aggregate3Value(Call3Value[] calldata calls) external payable returns (Result[] memory returnData) {
+        uint256 valLeft = msg.value;
         returnData = new Result[](calls.length);
         for (uint256 i = 0; i < calls.length; ++i) {
-            (bool success, bytes memory ret) = calls[i].target.call{ value: calls[i].value }(calls[i].callData);
+            uint256 val = calls[i].value;
+            require(val <= valLeft, "Multicall3: value exceeds balance");
+            valLeft -= val;
+            (bool success, bytes memory ret) = calls[i].target.call{ value: val }(calls[i].callData);
             if (!success && !calls[i].allowFailure) {
                 assembly { revert(add(ret, 32), mload(ret)) }
             }
             returnData[i] = Result({ success: success, returnData: ret });
+        }
+        // Refund any excess ETH to caller
+        if (valLeft > 0) {
+            (bool refundSuccess,) = msg.sender.call{ value: valLeft }("");
+            require(refundSuccess, "Multicall3: ETH refund failed");
         }
     }
 

@@ -475,6 +475,19 @@ contract RegistryHubTest is Test {
         hub.registerFromSpoke(user, 1, false, 1, bytes32(0));
     }
 
+    // registerFromSpoke should revert if called by unauthorized address.
+    function test_RegisterFromSpoke_UnauthorizedCaller_Reverts() public {
+        address inbox = makeAddr("crossChainInbox");
+        address unauthorized = makeAddr("unauthorized");
+
+        vm.prank(owner);
+        hub.setCrossChainInbox(inbox);
+
+        vm.expectRevert(IRegistryHub.Hub__UnauthorizedInbox.selector);
+        vm.prank(unauthorized);
+        hub.registerFromSpoke(user, 1, false, 1, bytes32(0));
+    }
+
     // registerFromSpoke should successfully register wallet when called by authorized inbox.
     function test_RegisterFromSpoke_Success() public {
         address inbox = makeAddr("crossChainInbox");

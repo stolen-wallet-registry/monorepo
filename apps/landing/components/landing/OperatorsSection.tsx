@@ -41,7 +41,7 @@ const POTENTIAL_OPERATORS = [
 ];
 
 const OPERATOR_DESCRIPTION =
-  'Any DAO approved organization committed to sharing reliable, trustworthy information on stolen wallets, ' +
+  'Any DAO-approved organization committed to sharing reliable, trustworthy information on stolen wallets, ' +
   'fraudulent transactions, and malicious contracts. Operators coordinate openly to help ' +
   'off-ramps track and recover stolen funds across the ecosystem.';
 
