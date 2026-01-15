@@ -106,7 +106,7 @@ export function useTokenURI({
     error,
     refetch: queryRefetch,
   } = useQuery({
-    queryKey: ['soulbound', 'tokenURI', contractAddress, tokenId.toString()],
+    queryKey: ['soulbound', 'tokenURI', type, contractAddress, tokenId.toString()],
     queryFn: async () => {
       if (!client || !contractAddress) {
         throw new Error('Missing required parameters');

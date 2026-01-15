@@ -77,7 +77,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
     refetch: refetchTokens,
     isLoading: isLoadingTokens,
   } = useSupportTokens({
-    supporter: connectedAddress ?? '0x0000000000000000000000000000000000000000',
+    supporter: connectedAddress,
     enabled: isConfirmed && !!connectedAddress,
   });
 

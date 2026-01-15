@@ -2,6 +2,7 @@
  * Hook to get all SupportSoulbound tokens for a given supporter.
  */
 
+import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { usePublicClient } from 'wagmi';
 import { zeroAddress } from 'viem';
@@ -27,8 +28,8 @@ export interface UseSupportTokensResult {
 }
 
 export interface UseSupportTokensOptions {
-  /** Supporter address to check */
-  supporter: Address;
+  /** Supporter address to check (optional - query disabled if undefined) */
+  supporter?: Address;
   /** Whether to enable the query */
   enabled?: boolean;
 }
@@ -105,10 +106,11 @@ export function useSupportTokens({
     staleTime: 1000 * 30, // 30 seconds - can mint multiple tokens
   });
 
-  const refetch: () => void = () => {
+  // Stable refetch callback to prevent unnecessary effect re-runs
+  const refetch = useCallback(() => {
     if (!queryEnabled) return;
     void queryRefetch();
-  };
+  }, [queryEnabled, queryRefetch]);
 
   const tokenIds = data ?? [];
   // Latest token is the last one in the array (highest ID)

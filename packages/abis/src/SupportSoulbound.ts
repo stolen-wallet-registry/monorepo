@@ -825,6 +825,11 @@ export const SupportSoulboundABI = [
   },
   {
     type: 'error',
+    name: 'InvalidMinWei',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'InvalidTranslations',
     inputs: [],
   },

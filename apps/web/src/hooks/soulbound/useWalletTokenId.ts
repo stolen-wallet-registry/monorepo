@@ -25,8 +25,8 @@ export interface UseWalletTokenIdResult {
 }
 
 export interface UseWalletTokenIdOptions {
-  /** Wallet address to check */
-  wallet: Address;
+  /** Wallet address to check (optional - query disabled if undefined) */
+  wallet?: Address;
   /** Whether to enable the query */
   enabled?: boolean;
 }

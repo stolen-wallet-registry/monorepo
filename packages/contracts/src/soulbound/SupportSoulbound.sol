@@ -41,6 +41,9 @@ contract SupportSoulbound is BaseSoulbound {
     /// @notice Thrown when donation is below minimum
     error BelowMinimum();
 
+    /// @notice Thrown when minWei is zero in constructor
+    error InvalidMinWei();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -58,13 +61,14 @@ contract SupportSoulbound is BaseSoulbound {
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @param _minWei Minimum donation in wei (spam prevention)
+    /// @param _minWei Minimum donation in wei (spam prevention, must be > 0)
     /// @param _translations Address of the TranslationRegistry contract
     /// @param _feeCollector Address to receive fees
     /// @param _domain Domain to display in SVG (e.g., "stolenwallet.xyz")
     constructor(uint256 _minWei, address _translations, address _feeCollector, string memory _domain)
         BaseSoulbound("SWR Support Soulbound", "SWRS", _translations, _feeCollector, _domain)
     {
+        if (_minWei == 0) revert InvalidMinWei();
         minWei = _minWei;
     }
 

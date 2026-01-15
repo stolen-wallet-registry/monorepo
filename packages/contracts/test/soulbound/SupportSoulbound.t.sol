@@ -129,10 +129,11 @@ contract SupportSoulboundTest is Test {
     }
 
     /// @notice setMinWei emits event
+    /// @dev MinWeiUpdated has no indexed params, so check data payload only
     function test_setMinWei_emitsEvent() public {
         uint256 newMin = 0.001 ether;
 
-        vm.expectEmit(true, true, false, false);
+        vm.expectEmit(false, false, false, true);
         emit SupportSoulbound.MinWeiUpdated(MIN_WEI, newMin);
 
         soulbound.setMinWei(newMin);

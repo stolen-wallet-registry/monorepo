@@ -193,6 +193,9 @@ library SVGRenderer {
             return "";
         }
 
+        // Ensure parallel arrays have matching lengths
+        require(langCodes.length == subtitles.length, "Array length mismatch");
+
         // Start switch element
         string memory result = "<switch>";
 

@@ -11,6 +11,11 @@ import { getLanguageTranslation } from '@/lib/constants/languages';
 // Domain shown in SVG (matches contract default)
 const DOMAIN = 'stolenwallet.xyz';
 
+// Preview data (static, for display purposes only)
+const PREVIEW_ADDRESS = '0x1234567890abcdef1234567890abcdef12345678';
+const PREVIEW_TOKEN_ID = '42';
+const PREVIEW_DONATION = '0.01 ETH';
+
 export interface SoulboundSvgPreviewProps {
   /** Language code (e.g., 'en', 'es', 'zh') */
   language: string;
@@ -50,11 +55,6 @@ export function SoulboundSvgPreview({
     type === 'wallet'
       ? 'STOLEN WALLET - STOLEN WALLET - STOLEN WALLET - '
       : 'THANK YOU - THANK YOU - THANK YOU - ';
-
-  // Preview address (full 42-char format)
-  const previewAddress = '0x1234567890abcdef1234567890abcdef12345678';
-  const previewTokenId = '42';
-  const previewDonation = '0.01 ETH';
 
   return (
     <div className={cn('inline-block', className)}>
@@ -128,12 +128,12 @@ export function SoulboundSvgPreview({
 
             {/* Full wallet address - white text, larger font */}
             <text x="200" y="200" textAnchor="middle" fill="#fff" fontSize="11">
-              {previewAddress}
+              {PREVIEW_ADDRESS}
             </text>
 
             {/* Token ID - white text */}
             <text x="200" y="240" textAnchor="middle" fill="#fff" fontSize="12">
-              WALLET #{previewTokenId}
+              WALLET #{PREVIEW_TOKEN_ID}
             </text>
 
             {/* Footer - white text */}
@@ -151,17 +151,17 @@ export function SoulboundSvgPreview({
 
             {/* Donation amount */}
             <text x="200" y="200" textAnchor="middle" fill="#fff" fontSize="24">
-              {previewDonation}
+              {PREVIEW_DONATION}
             </text>
 
             {/* Full supporter address - white text, larger font */}
             <text x="200" y="250" textAnchor="middle" fill="#fff" fontSize="11">
-              {previewAddress}
+              {PREVIEW_ADDRESS}
             </text>
 
             {/* Token ID - white text */}
             <text x="200" y="280" textAnchor="middle" fill="#fff" fontSize="12">
-              TOKEN #{previewTokenId}
+              TOKEN #{PREVIEW_TOKEN_ID}
             </text>
 
             {/* Footer - white text */}

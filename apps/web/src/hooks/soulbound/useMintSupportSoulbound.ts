@@ -6,7 +6,7 @@
  * switch chains if they're connected to a spoke chain.
  */
 
-import { useWriteContract, useWaitForTransactionReceipt, useSwitchChain, useChainId } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt, useSwitchChain } from 'wagmi';
 import { zeroAddress } from 'viem';
 import { supportSoulboundAbi } from '@/lib/contracts/abis';
 import { getSupportSoulboundAddress } from '@/lib/contracts/addresses';
@@ -61,7 +61,6 @@ export interface UseMintSupportSoulboundResult {
 export function useMintSupportSoulbound(): UseMintSupportSoulboundResult {
   // Soulbound contracts are only deployed on the hub chain
   const hubChainId = getHubChainIdForEnvironment();
-  const currentChainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
 
   let contractAddress: Address | undefined;
@@ -103,14 +102,11 @@ export function useMintSupportSoulbound(): UseMintSupportSoulboundResult {
 
     const { donationWei } = params;
 
-    // Switch to hub chain if not already connected
-    if (currentChainId !== hubChainId) {
-      logger.contract.info('Switching to hub chain for SupportSoulbound mint', {
-        fromChainId: currentChainId,
-        toChainId: hubChainId,
-      });
-      await switchChainAsync({ chainId: hubChainId });
-    }
+    // Always ensure we're on the hub chain (switchChainAsync is idempotent - no prompt if already on correct chain)
+    logger.contract.info('Ensuring hub chain for SupportSoulbound mint', {
+      hubChainId,
+    });
+    await switchChainAsync({ chainId: hubChainId });
 
     logger.contract.info('Minting SupportSoulbound token', {
       chainId: hubChainId,

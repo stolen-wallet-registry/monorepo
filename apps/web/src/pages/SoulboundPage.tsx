@@ -31,11 +31,14 @@ import { isAddress } from 'viem';
 export function SoulboundPage() {
   const { isConnected, address: connectedAddress } = useAccount();
   const [walletToMint, setWalletToMint] = useState<Address | undefined>(undefined);
+  const [walletInput, setWalletInput] = useState('');
   const [showWalletInput, setShowWalletInput] = useState(false);
 
   // Handle address input for minting to a different wallet
+  // Store raw input separately so partial addresses don't clear the field
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
+    setWalletInput(value);
     if (isAddress(value)) {
       setWalletToMint(value);
     } else {
@@ -111,7 +114,7 @@ export function SoulboundPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <AddressInput
-                    value={walletToMint ?? ''}
+                    value={walletInput}
                     onChange={handleAddressChange}
                     placeholder="0x..."
                   />
@@ -122,6 +125,7 @@ export function SoulboundPage() {
                     onClick={() => {
                       setShowWalletInput(false);
                       setWalletToMint(undefined);
+                      setWalletInput('');
                     }}
                     className="w-full"
                   >
