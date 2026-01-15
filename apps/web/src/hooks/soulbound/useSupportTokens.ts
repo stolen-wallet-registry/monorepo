@@ -57,8 +57,12 @@ export function useSupportTokens({
   let contractAddress: Address | undefined;
   try {
     contractAddress = getSupportSoulboundAddress(hubChainId);
-  } catch {
+  } catch (err) {
     contractAddress = undefined;
+    logger.contract.warn('Failed to resolve SupportSoulbound address', {
+      chainId: hubChainId,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   const queryEnabled =
@@ -76,7 +80,7 @@ export function useSupportTokens({
     error,
     refetch: queryRefetch,
   } = useQuery({
-    queryKey: ['soulbound', 'supportTokens', supporter],
+    queryKey: ['soulbound', 'supportTokens', hubChainId, supporter],
     queryFn: async () => {
       if (!client || !contractAddress || !supporter) {
         throw new Error('Missing required parameters');

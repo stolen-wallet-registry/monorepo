@@ -146,6 +146,12 @@ contract SupportSoulboundTest is Test {
         soulbound.setMinWei(0.001 ether);
     }
 
+    /// @notice setMinWei reverts when zero is passed
+    function test_setMinWei_revert_zeroValue() public {
+        vm.expectRevert(SupportSoulbound.InvalidMinWei.selector);
+        soulbound.setMinWei(0);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERC-5192 SOULBOUND TESTS
     // ═══════════════════════════════════════════════════════════════════════════

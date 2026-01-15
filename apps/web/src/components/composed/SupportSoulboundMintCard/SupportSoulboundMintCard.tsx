@@ -82,7 +82,14 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
   });
 
   const hubChainId = getHubChainIdForEnvironment();
-  const supportSoulboundAddress = getSupportSoulboundAddress(hubChainId);
+
+  // Resolve contract address safely (mirrors hook pattern)
+  let supportSoulboundAddress: ReturnType<typeof getSupportSoulboundAddress> | undefined;
+  try {
+    supportSoulboundAddress = getSupportSoulboundAddress(hubChainId);
+  } catch {
+    supportSoulboundAddress = undefined;
+  }
 
   const isMinting = isPending || isConfirming;
   const ethPrice = ethPriceData?.usd ?? 0;
@@ -187,7 +194,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
           </Alert>
 
           {/* Display minted NFT */}
-          {latestTokenId !== null && (
+          {latestTokenId !== null && supportSoulboundAddress && (
             <div className="flex justify-center py-4">
               <MintedTokenDisplay
                 contractAddress={supportSoulboundAddress}

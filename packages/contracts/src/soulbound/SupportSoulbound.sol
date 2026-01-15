@@ -98,8 +98,9 @@ contract SupportSoulbound is BaseSoulbound {
 
     /// @notice Update minimum donation (owner only)
     /// @dev Allows adjusting for ETH price changes
-    /// @param _minWei New minimum in wei
+    /// @param _minWei New minimum in wei (must be > 0)
     function setMinWei(uint256 _minWei) external onlyOwner {
+        if (_minWei == 0) revert InvalidMinWei();
         uint256 oldMin = minWei;
         minWei = _minWei;
         emit MinWeiUpdated(oldMin, _minWei);
@@ -200,6 +201,8 @@ contract SupportSoulbound is BaseSoulbound {
     }
 
     /// @notice Get token IDs owned by an address
+    /// @dev O(n) complexity - intended for off-chain view calls only.
+    ///      For on-chain enumeration at scale, consider ERC721Enumerable.
     /// @param supporter The address to look up
     /// @return tokenIds Array of token IDs owned
     function getTokensForSupporter(address supporter) external view returns (uint256[] memory tokenIds) {

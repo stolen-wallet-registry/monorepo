@@ -55,7 +55,11 @@ export interface UseTokenURIOptions {
 
 /**
  * Decode a base64 data URI to its content.
- * Handles both JSON and SVG data URIs.
+ * Handles both JSON and SVG data URIs with proper UTF-8 support.
+ *
+ * @remarks
+ * Uses TextDecoder for proper UTF-8 handling instead of atob,
+ * which corrupts multi-byte characters in non-ASCII content.
  */
 function decodeDataUri(dataUri: string): string {
   // data:application/json;base64,{content}
@@ -64,7 +68,14 @@ function decodeDataUri(dataUri: string): string {
   if (!match) {
     throw new Error('Invalid data URI format');
   }
-  return atob(match[1]);
+
+  // Decode base64 to binary string, then to UTF-8
+  const binaryString = atob(match[1]);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return new TextDecoder('utf-8').decode(bytes);
 }
 
 /**
@@ -84,6 +95,9 @@ function decodeDataUri(dataUri: string): string {
  * });
  *
  * if (isLoading) return <Spinner />;
+ * // IMPORTANT: The SVG comes from our own contract, but for defense-in-depth,
+ * // consider sanitizing with DOMPurify or rendering as an <img> data URL:
+ * // <img src={`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`} />
  * if (svg) return <div dangerouslySetInnerHTML={{ __html: svg }} />;
  * ```
  */
