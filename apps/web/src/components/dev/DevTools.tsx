@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import { useTheme, type ColorScheme, type ThemeVariant } from '@/providers';
 import { cn } from '@/lib/utils';
 import { SoulboundSvgPreview } from '@/components/composed/SoulboundSvgPreview';
-import { LanguageSelector } from '@/components/composed/LanguageSelector';
 
 type DevToolsTab = 'theme' | 'tests' | 'soulbound';
 
@@ -30,7 +29,6 @@ export function DevTools() {
   // Using a function initializer ensures fresh state on HMR
   const [errorKey, setErrorKey] = useState<number | null>(() => null);
   // Soulbound preview state
-  const [previewLanguage, setPreviewLanguage] = useState('en');
   const [previewType, setPreviewType] = useState<'wallet' | 'support'>('wallet');
   const containerRef = useRef<HTMLDivElement>(null);
   const { colorScheme, setColorScheme, themeVariant, setThemeVariant, resolvedColorScheme } =
@@ -113,7 +111,7 @@ export function DevTools() {
       {isOpen && (
         <div
           className={cn(
-            'absolute bottom-14 left-0 min-w-80 max-w-96',
+            'absolute bottom-14 left-0 min-w-80 max-w-[360px]',
             'rounded-lg border bg-card shadow-xl',
             'animate-in slide-in-from-bottom-2 fade-in-0 duration-200'
           )}
@@ -353,16 +351,16 @@ export function DevTools() {
             {activeTab === 'soulbound' && (
               <>
                 {/* Token Type Toggle */}
-                <div className="mb-4">
-                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
-                    Token Type
+                <div className="mb-3">
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                    Preview Type
                   </label>
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => setPreviewType('wallet')}
                       className={cn(
-                        'rounded-md px-3 py-1.5 text-sm font-medium',
+                        'rounded-md px-3 py-1 text-xs font-medium',
                         'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
                         previewType === 'wallet'
                           ? 'bg-primary text-primary-foreground'
@@ -375,7 +373,7 @@ export function DevTools() {
                       type="button"
                       onClick={() => setPreviewType('support')}
                       className={cn(
-                        'rounded-md px-3 py-1.5 text-sm font-medium',
+                        'rounded-md px-3 py-1 text-xs font-medium',
                         'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
                         previewType === 'support'
                           ? 'bg-primary text-primary-foreground'
@@ -387,23 +385,53 @@ export function DevTools() {
                   </div>
                 </div>
 
-                {/* Language Selector */}
-                <div className="mb-4">
-                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
-                    Language
-                  </label>
-                  <LanguageSelector value={previewLanguage} onChange={setPreviewLanguage} />
-                </div>
-
                 {/* SVG Preview */}
-                <div className="flex justify-center rounded-lg bg-muted/50 p-4">
-                  <SoulboundSvgPreview type={previewType} language={previewLanguage} size={200} />
+                <div className="flex justify-center rounded-lg bg-muted/50 p-2">
+                  <SoulboundSvgPreview type={previewType} size={200} />
                 </div>
 
-                {/* Info */}
-                <p className="mt-2 text-xs text-muted-foreground text-center">
-                  Preview matches on-chain SVG from SVGRenderer.sol
-                </p>
+                {/* Testing Translations - Instructions */}
+                <div className="mt-3 border-t border-border pt-3">
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">
+                    Testing Minted SVG Translations
+                  </h4>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    On-chain SVGs embed all translations via{' '}
+                    <code className="bg-muted px-1 rounded">&lt;switch&gt;</code> elements with{' '}
+                    <code className="bg-muted px-1 rounded">systemLanguage</code> attributes. The
+                    browser selects which translation to display based on its language settings.
+                  </p>
+                  <div className="mb-2 text-xs text-muted-foreground">
+                    <p className="font-medium text-foreground mb-1">Contract files:</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-[10px]">
+                      <li>
+                        <code className="bg-muted px-1 rounded">
+                          contracts/src/soulbound/TranslationRegistry.sol
+                        </code>
+                      </li>
+                      <li>
+                        <code className="bg-muted px-1 rounded">
+                          contracts/src/soulbound/libraries/SVGRenderer.sol
+                        </code>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="space-y-1.5 text-xs text-muted-foreground">
+                    <p className="font-medium text-foreground">To test:</p>
+                    <p>
+                      <strong className="text-foreground">Chrome:</strong> Settings → Languages →
+                      drag to top → reload
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Firefox:</strong> Settings → Language →
+                      move to top → reload
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Safari:</strong> System Settings →
+                      Language & Region → reload
+                    </p>
+                  </div>
+                </div>
               </>
             )}
           </div>

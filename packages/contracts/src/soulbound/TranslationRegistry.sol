@@ -26,7 +26,8 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
     /// @notice Language pack containing all translated strings
     struct LanguagePack {
         string title; // "STOLEN WALLET" / "CARTERA ROBADA"
-        string subtitle; // "This wallet has been reported stolen"
+        string subtitle; // "Signed as stolen" (for wallet soulbound)
+        string supportSubtitle; // "Thank you for your support" (for support soulbound)
         string warning; // "Do not send funds to this address"
         string footer; // "Stolen Wallet Registry"
         bool exists;
@@ -76,6 +77,7 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
             LanguagePack({
                 title: "STOLEN WALLET",
                 subtitle: "Signed as stolen",
+                supportSubtitle: "Thank you for your support",
                 warning: "Do not send funds to this address",
                 footer: "Stolen Wallet Registry",
                 exists: true
@@ -90,13 +92,15 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
     /// @notice Add a new language (owner only)
     /// @param languageCode ISO 639-1 code (e.g., "es", "zh", "fr")
     /// @param title The title text
-    /// @param subtitle The subtitle text
+    /// @param subtitle The subtitle text (wallet soulbound)
+    /// @param supportSubtitle The subtitle text (support soulbound)
     /// @param warning The warning text
     /// @param footer The footer text
     function addLanguage(
         string calldata languageCode,
         string calldata title,
         string calldata subtitle,
+        string calldata supportSubtitle,
         string calldata warning,
         string calldata footer
     ) external onlyOwner {
@@ -105,27 +109,42 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
 
         _addLanguageInternal(
             languageCode,
-            LanguagePack({ title: title, subtitle: subtitle, warning: warning, footer: footer, exists: true })
+            LanguagePack({
+                title: title,
+                subtitle: subtitle,
+                supportSubtitle: supportSubtitle,
+                warning: warning,
+                footer: footer,
+                exists: true
+            })
         );
     }
 
     /// @notice Update existing language translations (owner only)
     /// @param languageCode ISO 639-1 code of existing language
     /// @param title The title text
-    /// @param subtitle The subtitle text
+    /// @param subtitle The subtitle text (wallet soulbound)
+    /// @param supportSubtitle The subtitle text (support soulbound)
     /// @param warning The warning text
     /// @param footer The footer text
     function updateLanguage(
         string calldata languageCode,
         string calldata title,
         string calldata subtitle,
+        string calldata supportSubtitle,
         string calldata warning,
         string calldata footer
     ) external onlyOwner {
         if (!_languages[languageCode].exists) revert LanguageNotSupported(languageCode);
 
-        _languages[languageCode] =
-            LanguagePack({ title: title, subtitle: subtitle, warning: warning, footer: footer, exists: true });
+        _languages[languageCode] = LanguagePack({
+            title: title,
+            subtitle: subtitle,
+            supportSubtitle: supportSubtitle,
+            warning: warning,
+            footer: footer,
+            exists: true
+        });
 
         emit LanguageUpdated(languageCode);
     }
@@ -152,11 +171,17 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
     function getLanguage(string calldata languageCode)
         external
         view
-        returns (string memory title, string memory subtitle, string memory warning, string memory footer)
+        returns (
+            string memory title,
+            string memory subtitle,
+            string memory supportSubtitle,
+            string memory warning,
+            string memory footer
+        )
     {
         LanguagePack storage pack = _languages[languageCode];
         if (!pack.exists) revert LanguageNotSupported(languageCode);
-        return (pack.title, pack.subtitle, pack.warning, pack.footer);
+        return (pack.title, pack.subtitle, pack.supportSubtitle, pack.warning, pack.footer);
     }
 
     /// @inheritdoc ITranslationRegistry
@@ -179,6 +204,19 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
             string memory code = _supportedLanguages[i];
             codes[i] = code;
             subtitles[i] = _languages[code].subtitle;
+        }
+    }
+
+    /// @inheritdoc ITranslationRegistry
+    function getAllSupportSubtitles() external view returns (string[] memory codes, string[] memory supportSubtitles) {
+        uint256 len = _supportedLanguages.length;
+        codes = new string[](len);
+        supportSubtitles = new string[](len);
+
+        for (uint256 i = 0; i < len; i++) {
+            string memory code = _supportedLanguages[i];
+            codes[i] = code;
+            supportSubtitles[i] = _languages[code].supportSubtitle;
         }
     }
 

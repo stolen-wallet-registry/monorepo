@@ -161,7 +161,7 @@ contract WalletSoulbound is BaseSoulbound {
             return (false, "Already minted");
         }
         if (!registry.isRegistered(wallet) && !registry.isPending(wallet)) {
-            return (false, "Not registered");
+            return (false, "This wallet is not registered");
         }
         return (true, "");
     }

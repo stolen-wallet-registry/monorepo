@@ -69,7 +69,7 @@ export function SoulboundPreviewModal({
   const title = type === 'wallet' ? 'Wallet Soulbound Token' : 'Support Soulbound Token';
   const description =
     type === 'wallet'
-      ? 'Preview how your commemorative token will look. Select a language to see the translation.'
+      ? 'Preview your registry proof token. Select a language to see the translation.'
       : 'Preview your supporter token. Choose a language for the international message.';
 
   return (
@@ -82,7 +82,7 @@ export function SoulboundPreviewModal({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -103,9 +103,9 @@ export function SoulboundPreviewModal({
           </div>
 
           {/* Preview container - centered */}
-          <ScrollArea className="max-h-[500px]">
+          <ScrollArea className="max-h-[600px]">
             <div className="flex justify-center py-4">
-              <SoulboundSvgPreview type={type} language={language} size={300} />
+              <SoulboundSvgPreview type={type} language={language} size={450} />
             </div>
           </ScrollArea>
 

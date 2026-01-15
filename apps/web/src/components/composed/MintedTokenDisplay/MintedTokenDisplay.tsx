@@ -75,9 +75,11 @@ export function MintedTokenDisplay({
   }
 
   // Render the SVG safely
+  // Note: No overflow-hidden or rounded corners - the SVG has animated border at y=12
+  // which would be clipped by CSS border-radius
   return (
     <div
-      className={cn('overflow-hidden rounded-lg', className)}
+      className={className}
       style={{ width: size, height: size }}
       dangerouslySetInnerHTML={{ __html: svg }}
     />

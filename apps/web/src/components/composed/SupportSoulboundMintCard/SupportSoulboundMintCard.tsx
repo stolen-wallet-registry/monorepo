@@ -24,10 +24,10 @@ import { ExplorerLink, getExplorerTxUrl } from '@/components/composed/ExplorerLi
 import { SoulboundPreviewModal } from '@/components/composed/SoulboundPreviewModal';
 import { MintedTokenDisplay } from '@/components/composed/MintedTokenDisplay';
 import { cn, sanitizeErrorMessage } from '@/lib/utils';
-import { getHubChainIdForEnvironment } from '@/lib/chains/config';
+import { getChainName } from '@/lib/chains/config';
 import { getSupportSoulboundAddress } from '@/lib/contracts/addresses';
-import { useAccount } from 'wagmi';
-import { Loader2, Check, AlertCircle, Heart } from 'lucide-react';
+import { useAccount, useSwitchChain } from 'wagmi';
+import { Loader2, Check, AlertCircle, Heart, ArrowRightLeft } from 'lucide-react';
 import { formatEther, parseEther } from 'viem';
 import type { Hash } from '@/lib/types/ethereum';
 
@@ -68,20 +68,39 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
   const { address: connectedAddress } = useAccount();
   const { minWei, isLoading: isLoadingMin } = useMinDonation();
   const { data: ethPriceData } = useEthPrice();
-  const { mint, isPending, isConfirming, isConfirmed, isError, error, hash, reset } =
-    useMintSupportSoulbound();
-
-  // Get tokens for displaying minted NFT (enabled after confirmation)
   const {
+    mint,
+    isPending,
+    isConfirming,
+    isConfirmed,
+    isError,
+    error,
+    hash,
+    reset,
+    isOnHubChain,
+    hubChainId,
+  } = useMintSupportSoulbound();
+  const { switchChain, isPending: isSwitching } = useSwitchChain();
+
+  // Get tokens for displaying minted NFT (always enabled if connected)
+  const {
+    tokenIds: existingTokenIds,
     latestTokenId,
     refetch: refetchTokens,
     isLoading: isLoadingTokens,
   } = useSupportTokens({
     supporter: connectedAddress,
-    enabled: isConfirmed && !!connectedAddress,
+    enabled: !!connectedAddress,
   });
 
-  const hubChainId = getHubChainIdForEnvironment();
+  // Check if user has any previously minted tokens
+  const hasPreviousTokens = existingTokenIds.length > 0 && !isConfirmed;
+
+  const hubChainName = getChainName(hubChainId);
+
+  const handleSwitchChain = () => {
+    switchChain({ chainId: hubChainId });
+  };
 
   // Resolve contract address safely (mirrors hook pattern)
   let supportSoulboundAddress: ReturnType<typeof getSupportSoulboundAddress> | undefined;
@@ -181,7 +200,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
       <Card className={cn('', className)}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Heart className="h-5 w-5 text-pink-500" />
+            <Heart className="h-5 w-5 text-pink-500" fill="currentColor" />
             Support the Registry
           </CardTitle>
         </CardHeader>
@@ -226,7 +245,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
     <Card className={cn('', className)}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Heart className="h-5 w-5 text-pink-500" />
+          <Heart className="h-5 w-5 text-pink-500" fill="currentColor" />
           Support the Registry
         </CardTitle>
         <CardDescription>
@@ -307,6 +326,16 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
           />
         </div>
 
+        {/* Wrong chain warning */}
+        {!isOnHubChain && (
+          <Alert>
+            <ArrowRightLeft className="h-4 w-4" />
+            <AlertDescription>
+              Support tokens are minted on {hubChainName}. Please switch chains to donate.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Error state */}
         {isError && error && (
           <Alert variant="destructive">
@@ -315,33 +344,80 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
           </Alert>
         )}
 
-        <Button
-          onClick={handleMint}
-          disabled={isMinting || !isValidAmount}
-          className="w-full"
-          size="lg"
-        >
-          {isPending ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Confirm in wallet...
-            </>
-          ) : isConfirming ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Processing donation...
-            </>
-          ) : (
-            <>
-              <Heart className="mr-2 h-4 w-4" />
-              Donate & Mint
-            </>
-          )}
-        </Button>
+        {/* Show switch button when on wrong chain, mint button when on hub */}
+        {!isOnHubChain ? (
+          <Button onClick={handleSwitchChain} disabled={isSwitching} className="w-full" size="lg">
+            {isSwitching ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Switching...
+              </>
+            ) : (
+              <>
+                <ArrowRightLeft className="mr-2 h-4 w-4" />
+                Switch to {hubChainName}
+              </>
+            )}
+          </Button>
+        ) : (
+          <Button
+            onClick={handleMint}
+            disabled={isMinting || !isValidAmount}
+            className="w-full"
+            size="lg"
+          >
+            {isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Confirm in wallet...
+              </>
+            ) : isConfirming ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing donation...
+              </>
+            ) : (
+              <>
+                <Heart className="mr-2 h-4 w-4" />
+                Donate & Mint
+              </>
+            )}
+          </Button>
+        )}
 
         <p className="text-xs text-center text-muted-foreground">
           100% of donations go to supporting the registry infrastructure
         </p>
+
+        {/* Show previously minted tokens */}
+        {hasPreviousTokens && supportSoulboundAddress && (
+          <div className="border-t pt-4 mt-4">
+            <Label className="text-xs text-muted-foreground mb-2 block">
+              Your minted tokens ({existingTokenIds.length})
+            </Label>
+            <div className="flex flex-wrap justify-center gap-2">
+              {existingTokenIds.slice(-3).map((tokenId) => (
+                <MintedTokenDisplay
+                  key={tokenId.toString()}
+                  contractAddress={supportSoulboundAddress}
+                  tokenId={tokenId}
+                  type="support"
+                  size={140}
+                />
+              ))}
+            </div>
+            {existingTokenIds.length > 3 && (
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                +{existingTokenIds.length - 3} more tokens
+              </p>
+            )}
+          </div>
+        )}
+        {isLoadingTokens && !isConfirmed && (
+          <div className="flex justify-center py-2">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

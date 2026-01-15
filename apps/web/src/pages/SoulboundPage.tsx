@@ -1,8 +1,8 @@
 /**
- * Soulbound page - Mint commemorative soulbound tokens.
+ * Soulbound page - Mint soulbound tokens.
  *
  * Allows users to:
- * - Mint a WalletSoulbound token (if they have a registered wallet)
+ * - Mint a WalletSoulbound token (proof of registration, visible on NFT platforms)
  * - Donate and mint a SupportSoulbound token (anyone)
  */
 
@@ -60,8 +60,8 @@ export function SoulboundPage() {
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold tracking-tight">Soulbound Tokens</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          Mint commemorative non-transferable tokens to mark your registration or support the
-          registry.
+          Mint non-transferable soulbound tokens to mark your registration or support the registry
+          infrastructure.
         </p>
       </div>
 
@@ -166,8 +166,8 @@ export function SoulboundPage() {
             <div>
               <h4 className="font-medium text-foreground mb-1">Wallet Soulbound</h4>
               <p>
-                Commemorates your registration in the Stolen Wallet Registry. Each registered wallet
-                can mint exactly one token—you only pay gas.
+                Optional on-chain proof of your registration. Each registered wallet can mint
+                exactly one token—you only pay gas.
               </p>
             </div>
             <div>

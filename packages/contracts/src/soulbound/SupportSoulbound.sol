@@ -110,7 +110,8 @@ contract SupportSoulbound is BaseSoulbound {
     // TOKEN URI (ON-CHAIN SVG)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Generate on-chain SVG metadata
+    /// @notice Generate on-chain SVG metadata with multilingual support
+    /// @dev SVG uses <switch> with systemLanguage for auto language selection
     /// @param tokenId The token to get URI for
     /// @return Base64 encoded JSON metadata with embedded SVG
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
@@ -119,8 +120,12 @@ contract SupportSoulbound is BaseSoulbound {
         address supporter = ownerOf(tokenId);
         uint256 donation = tokenDonation[tokenId];
 
-        // Render SVG with domain
-        string memory svg = SVGRenderer.renderSupportSoulbound(supporter, tokenId, donation, domain);
+        // Get ALL language support subtitles for the multilingual SVG
+        (string[] memory langCodes, string[] memory supportSubtitles) = translations.getAllSupportSubtitles();
+
+        // Render SVG with domain and all languages embedded
+        string memory svg =
+            SVGRenderer.renderSupportSoulbound(supporter, tokenId, donation, domain, langCodes, supportSubtitles);
 
         // Format donation for attributes
         string memory donationStr = _formatEtherAttribute(donation);

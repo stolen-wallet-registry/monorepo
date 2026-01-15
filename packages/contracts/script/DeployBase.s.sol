@@ -223,83 +223,92 @@ abstract contract DeployBase is Script {
     /// @dev Seeds additional languages beyond the default English
     /// @notice Subtitles shortened to ~25 chars max to fit in SVG without wrapping
     function _seedLanguages(TranslationRegistry t) internal {
-        // Spanish - "Firmado como robado" (20 chars)
+        // Spanish
         t.addLanguage(
             "es",
             "CARTERA ROBADA",
             "Firmado como robado",
+            "Gracias por tu apoyo",
             unicode"No envíe fondos a esta dirección",
             "Registro de Carteras Robadas"
         );
 
-        // Chinese (Simplified) - "已签名为被盗" (7 chars)
+        // Chinese (Simplified)
         t.addLanguage(
             "zh",
             unicode"被盗钱包",
             unicode"已签名为被盗",
+            unicode"感谢您的支持",
             unicode"请勿向此地址发送资金",
             unicode"被盗钱包登记处"
         );
 
-        // French - "Signé comme volé" (17 chars)
+        // French
         t.addLanguage(
             "fr",
             unicode"PORTEFEUILLE VOLÉ",
             unicode"Signé comme volé",
+            "Merci pour votre soutien",
             unicode"N'envoyez pas de fonds à cette adresse",
             "Registre des Portefeuilles Voles"
         );
 
-        // German - "Als gestohlen signiert" (23 chars)
+        // German
         t.addLanguage(
             "de",
             "GESTOHLENE WALLET",
             "Als gestohlen signiert",
+            unicode"Danke für Ihre Unterstützung",
             "Senden Sie keine Gelder an diese Adresse",
             "Gestohlene Wallet Registrierung"
         );
 
-        // Japanese - "盗難として署名済み" (10 chars)
+        // Japanese
         t.addLanguage(
             "ja",
             unicode"盗まれたウォレット",
             unicode"盗難として署名済み",
+            unicode"ご支援ありがとうございます",
             unicode"このアドレスに資金を送らないでください",
             unicode"盗難ウォレット登録"
         );
 
-        // Korean - "도난으로 서명됨" (9 chars)
+        // Korean
         t.addLanguage(
             "ko",
             unicode"도난 지갑",
             unicode"도난으로 서명됨",
+            unicode"지원해 주셔서 감사합니다",
             unicode"이 주소로 자금을 보내지 마세요",
             unicode"도난 지갑 등록소"
         );
 
-        // Portuguese - "Assinado como roubado" (22 chars)
+        // Portuguese
         t.addLanguage(
             "pt",
             "CARTEIRA ROUBADA",
             "Assinado como roubado",
+            "Obrigado pelo seu apoio",
             unicode"Não envie fundos para este endereço",
             "Registro de Carteiras Roubadas"
         );
 
-        // Russian - "Подписан как украден" (21 chars)
+        // Russian
         t.addLanguage(
             "ru",
             unicode"УКРАДЕННЫЙ КОШЕЛЕК",
             unicode"Подписан как украден",
+            unicode"Спасибо за вашу поддержку",
             unicode"Не отправляйте средства на этот адрес",
             unicode"Реестр Украденных Кошельков"
         );
 
-        // Arabic - "موقع كمسروق" (11 chars)
+        // Arabic
         t.addLanguage(
             "ar",
             unicode"محفظة مسروقة",
             unicode"موقع كمسروق",
+            unicode"شكرا لدعمكم",
             unicode"لا ترسل أموالاً إلى هذا العنوان",
             unicode"سجل المحافظ المسروقة"
         );

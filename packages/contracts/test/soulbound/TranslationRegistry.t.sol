@@ -26,11 +26,17 @@ contract TranslationRegistryTest is Test {
     function test_constructor_initializesEnglish() public view {
         assertTrue(registry.isLanguageSupported("en"));
 
-        (string memory title, string memory subtitle, string memory warning, string memory footer) =
-            registry.getLanguage("en");
+        (
+            string memory title,
+            string memory subtitle,
+            string memory supportSubtitle,
+            string memory warning,
+            string memory footer
+        ) = registry.getLanguage("en");
 
         assertEq(title, "STOLEN WALLET");
         assertEq(subtitle, "Signed as stolen");
+        assertEq(supportSubtitle, "Thank you for your support");
         assertEq(warning, "Do not send funds to this address");
         assertEq(footer, "Stolen Wallet Registry");
     }
@@ -49,12 +55,17 @@ contract TranslationRegistryTest is Test {
     /// @notice Owner can add a new language
     function test_addLanguage_success() public {
         registry.addLanguage(
-            "es", "CARTERA ROBADA", "Esta cartera ha sido reportada como robada", "No envie fondos", "Registro"
+            "es",
+            "CARTERA ROBADA",
+            "Esta cartera ha sido reportada como robada",
+            "Gracias por tu apoyo",
+            "No envie fondos",
+            "Registro"
         );
 
         assertTrue(registry.isLanguageSupported("es"));
 
-        (string memory title,,,) = registry.getLanguage("es");
+        (string memory title,,,,) = registry.getLanguage("es");
         assertEq(title, "CARTERA ROBADA");
     }
 
@@ -63,26 +74,26 @@ contract TranslationRegistryTest is Test {
         vm.expectEmit(true, false, false, false);
         emit TranslationRegistry.LanguageAdded("fr");
 
-        registry.addLanguage("fr", "PORTEFEUILLE VOLE", "subtitle", "warning", "footer");
+        registry.addLanguage("fr", "PORTEFEUILLE VOLE", "subtitle", "supportSubtitle", "warning", "footer");
     }
 
     /// @notice Cannot add duplicate language
     function test_addLanguage_revert_alreadyExists() public {
         vm.expectRevert(abi.encodeWithSelector(TranslationRegistry.LanguageAlreadyExists.selector, "en"));
-        registry.addLanguage("en", "test", "test", "test", "test");
+        registry.addLanguage("en", "test", "test", "test", "test", "test");
     }
 
     /// @notice Cannot add empty language code
     function test_addLanguage_revert_emptyCode() public {
         vm.expectRevert(TranslationRegistry.EmptyLanguageCode.selector);
-        registry.addLanguage("", "test", "test", "test", "test");
+        registry.addLanguage("", "test", "test", "test", "test", "test");
     }
 
     /// @notice Non-owner cannot add language
     function test_addLanguage_revert_notOwner() public {
         vm.prank(nonOwner);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
-        registry.addLanguage("de", "test", "test", "test", "test");
+        registry.addLanguage("de", "test", "test", "test", "test", "test");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -91,13 +102,19 @@ contract TranslationRegistryTest is Test {
 
     /// @notice Owner can update existing language
     function test_updateLanguage_success() public {
-        registry.updateLanguage("en", "NEW TITLE", "new subtitle", "new warning", "new footer");
+        registry.updateLanguage("en", "NEW TITLE", "new subtitle", "new supportSubtitle", "new warning", "new footer");
 
-        (string memory title, string memory subtitle, string memory warning, string memory footer) =
-            registry.getLanguage("en");
+        (
+            string memory title,
+            string memory subtitle,
+            string memory supportSubtitle,
+            string memory warning,
+            string memory footer
+        ) = registry.getLanguage("en");
 
         assertEq(title, "NEW TITLE");
         assertEq(subtitle, "new subtitle");
+        assertEq(supportSubtitle, "new supportSubtitle");
         assertEq(warning, "new warning");
         assertEq(footer, "new footer");
     }
@@ -107,20 +124,20 @@ contract TranslationRegistryTest is Test {
         vm.expectEmit(true, false, false, false);
         emit TranslationRegistry.LanguageUpdated("en");
 
-        registry.updateLanguage("en", "NEW", "sub", "warn", "foot");
+        registry.updateLanguage("en", "NEW", "sub", "supportSub", "warn", "foot");
     }
 
     /// @notice Cannot update non-existent language
     function test_updateLanguage_revert_notSupported() public {
         vm.expectRevert(abi.encodeWithSelector(TranslationRegistry.LanguageNotSupported.selector, "zz"));
-        registry.updateLanguage("zz", "test", "test", "test", "test");
+        registry.updateLanguage("zz", "test", "test", "test", "test", "test");
     }
 
     /// @notice Non-owner cannot update language
     function test_updateLanguage_revert_notOwner() public {
         vm.prank(nonOwner);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
-        registry.updateLanguage("en", "test", "test", "test", "test");
+        registry.updateLanguage("en", "test", "test", "test", "test", "test");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -176,9 +193,9 @@ contract TranslationRegistryTest is Test {
 
     /// @notice getSupportedLanguages returns all added languages
     function test_getSupportedLanguages_multiple() public {
-        registry.addLanguage("es", "ES", "es", "es", "es");
-        registry.addLanguage("fr", "FR", "fr", "fr", "fr");
-        registry.addLanguage("de", "DE", "de", "de", "de");
+        registry.addLanguage("es", "ES", "es", "supportEs", "es", "es");
+        registry.addLanguage("fr", "FR", "fr", "supportFr", "fr", "fr");
+        registry.addLanguage("de", "DE", "de", "supportDe", "de", "de");
 
         string[] memory languages = registry.getSupportedLanguages();
         assertEq(languages.length, 4);

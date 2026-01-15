@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+// solhint-disable max-line-length
+// solhint-disable function-max-lines
+// solhint-disable gas-custom-errors
+
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @title SVGRenderer
@@ -32,32 +36,41 @@ library SVGRenderer {
         // Build in parts to avoid stack too deep
         string memory part1 = string(abi.encodePacked(_svgHeader(), _defs(), _background()));
         string memory part2 = _animatedBorderDual(domain, "STOLEN WALLET");
-        string memory part3 = _walletContentMultilang(wallet, tokenId, langCodes, subtitles);
+        string memory part3 = _walletContentMultilang(wallet, tokenId, domain, langCodes, subtitles);
 
         return string(abi.encodePacked(part1, part2, part3, _svgFooter()));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // SUPPORT SOULBOUND SVG
+    // SUPPORT SOULBOUND SVG (MULTILINGUAL)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Render SVG for SupportSoulbound token
+    /// @notice Render SVG for SupportSoulbound token with ALL languages
+    /// @dev Uses SVG <switch> with systemLanguage to auto-select user's language
     /// @param supporter The supporter address
     /// @param tokenId The token ID
     /// @param donation The donation amount in wei
     /// @param domain The domain to display (e.g., "stolenwallet.xyz")
-    function renderSupportSoulbound(address supporter, uint256 tokenId, uint256 donation, string memory domain)
-        internal
-        pure
-        returns (string memory)
-    {
+    /// @param langCodes Array of ISO 639-1 language codes
+    /// @param supportSubtitles Array of support subtitle translations (parallel to langCodes)
+    function renderSupportSoulbound(
+        address supporter,
+        uint256 tokenId,
+        uint256 donation,
+        string memory domain,
+        string[] memory langCodes,
+        string[] memory supportSubtitles
+    ) internal pure returns (string memory) {
         string memory donationStr = _formatEther(donation);
 
         // Build in two parts to avoid stack too deep
         string memory part1 = string(abi.encodePacked(_svgHeader(), _defs(), _background()));
 
         string memory part2 = string(
-            abi.encodePacked(_animatedBorderDual(domain, "THANK YOU"), _supportContent(supporter, tokenId, donationStr))
+            abi.encodePacked(
+                _animatedBorderDual(domain, "THANK YOU"),
+                _supportContentMultilang(supporter, tokenId, donationStr, domain, langCodes, supportSubtitles)
+            )
         );
 
         return string(abi.encodePacked(part1, part2, _svgFooter()));
@@ -83,17 +96,19 @@ library SVGRenderer {
             abi.encodePacked(
                 "<defs>",
                 // Rectangular path centered in gutter - starts at top center for smooth animation
-                "<path id=\"borderPath\" d=\"M200 12 H368 A16 16 0 0 1 388 32 V368 A16 16 0 0 1 368 388 H32 A16 16 0 0 1 12 368 V32 A16 16 0 0 1 32 12 H200\"/>",
+                // Path bounds: 12-388 (376px), corners at ±16px from edges for 16px radius arcs
+                "<path id=\"borderPath\" d=\"M200 12 H372 A16 16 0 0 1 388 28 V372 A16 16 0 0 1 372 388 H28 A16 16 0 0 1 12 372 V28 A16 16 0 0 1 28 12 H200\"/>",
                 "</defs>"
             )
         );
     }
 
-    /// @dev Black background with inner rectangle
+    /// @dev Black background with inner rectangle (both have rounded corners)
+    /// @notice Outer rect has white border for visibility on dark backgrounds
     function _background() private pure returns (string memory) {
         return string(
             abi.encodePacked(
-                "<rect width=\"400\" height=\"400\" fill=\"#000\"/>",
+                "<rect width=\"400\" height=\"400\" rx=\"20\" fill=\"#000\" stroke=\"#fff\" stroke-width=\"1\"/>",
                 "<rect x=\"20\" y=\"20\" width=\"360\" height=\"360\" rx=\"20\" ",
                 "fill=\"#111\" stroke=\"#333\" stroke-width=\"1\"/>"
             )
@@ -103,9 +118,9 @@ library SVGRenderer {
     /// @dev Animated text on BOTH sides of the border using single path with 50% offset
     /// @notice Creates seamless continuous loop - two textPaths on same path, opposite sides
     function _animatedBorderDual(string memory text1, string memory text2) private pure returns (string memory) {
-        // Text content with single separator (no double dash)
-        string memory content1 = string(abi.encodePacked(text1, " - ", text1, " - ", text1, " - "));
-        string memory content2 = string(abi.encodePacked(text2, " - ", text2, " - ", text2, " - "));
+        // Text content with separators (NO trailing dash)
+        string memory content1 = string(abi.encodePacked(text1, " - ", text1, " - ", text1));
+        string memory content2 = string(abi.encodePacked(text2, " - ", text2, " - ", text2));
 
         return string(
             abi.encodePacked(
@@ -128,11 +143,12 @@ library SVGRenderer {
     }
 
     /// @dev Wallet content with multilingual subtitle
-    /// @notice English "STOLEN WALLET" ALWAYS displayed at top (no systemLanguage)
+    /// @notice English "STOLEN WALLET" + "Signed as stolen" ALWAYS displayed (no systemLanguage)
     /// @notice Other language translations shown below via <switch> with systemLanguage
     function _walletContentMultilang(
         address wallet,
         uint256 tokenId,
+        string memory domain,
         string[] memory langCodes,
         string[] memory subtitles
     ) private pure returns (string memory) {
@@ -140,10 +156,18 @@ library SVGRenderer {
         string memory fullAddr = Strings.toHexString(uint160(wallet), 20);
 
         // English title - ALWAYS shown (no systemLanguage)
-        string memory englishLine = string(
+        string memory englishTitle = string(
             abi.encodePacked(
-                "<text x=\"200\" y=\"120\" text-anchor=\"middle\" fill=\"#fff\" ",
+                "<text x=\"200\" y=\"110\" text-anchor=\"middle\" fill=\"#fff\" ",
                 "font-size=\"16\" font-family=\"monospace\">STOLEN WALLET</text>"
+            )
+        );
+
+        // English subtitle - ALWAYS shown (no systemLanguage)
+        string memory englishSubtitle = string(
+            abi.encodePacked(
+                "<text x=\"200\" y=\"135\" text-anchor=\"middle\" fill=\"#fff\" ",
+                "font-size=\"12\" font-family=\"monospace\">Signed as stolen</text>"
             )
         );
 
@@ -170,6 +194,16 @@ library SVGRenderer {
             )
         );
 
+        // Domain - white text at y=320
+        string memory domainLine = string(
+            abi.encodePacked(
+                "<text x=\"200\" y=\"320\" text-anchor=\"middle\" fill=\"#fff\" ",
+                "font-size=\"11\" font-family=\"monospace\">",
+                domain,
+                "</text>"
+            )
+        );
+
         // Footer - white text
         string memory footerLine = string(
             abi.encodePacked(
@@ -178,7 +212,11 @@ library SVGRenderer {
             )
         );
 
-        return string(abi.encodePacked(englishLine, switchElement, addressLine, tokenLine, footerLine));
+        return string(
+            abi.encodePacked(
+                englishTitle, englishSubtitle, switchElement, addressLine, tokenLine, domainLine, footerLine
+            )
+        );
     }
 
     /// @dev Build SVG <switch> element with systemLanguage for each translation
@@ -206,11 +244,11 @@ library SVGRenderer {
                 continue;
             }
 
-            // Position at y=150 (below English title at y=120)
+            // Position at y=160 (below English subtitle at y=135)
             result = string(
                 abi.encodePacked(
                     result,
-                    "<text x=\"200\" y=\"150\" text-anchor=\"middle\" fill=\"#fff\" ",
+                    "<text x=\"200\" y=\"160\" text-anchor=\"middle\" fill=\"#fff\" ",
                     "font-size=\"14\" font-family=\"monospace\" systemLanguage=\"",
                     langCodes[i],
                     "\">",
@@ -229,23 +267,41 @@ library SVGRenderer {
         return result;
     }
 
-    function _supportContent(address supporter, uint256 tokenId, string memory donation)
-        private
-        pure
-        returns (string memory)
-    {
+    /// @dev Support content with multilingual subtitle
+    /// @notice English "SUPPORTER" + "Registry Supporter" ALWAYS displayed (no systemLanguage)
+    /// @notice Other language translations shown below via <switch> with systemLanguage
+    function _supportContentMultilang(
+        address supporter,
+        uint256 tokenId,
+        string memory donation,
+        string memory domain,
+        string[] memory langCodes,
+        string[] memory supportSubtitles
+    ) private pure returns (string memory) {
         // Full address (no truncation), white text
         string memory fullAddr = Strings.toHexString(uint160(supporter), 20);
 
-        // Split into parts - all white text
-        string memory line1 = string(
+        // English title - ALWAYS shown
+        string memory title = string(
             abi.encodePacked(
-                "<text x=\"200\" y=\"150\" text-anchor=\"middle\" fill=\"#fff\" ",
+                "<text x=\"200\" y=\"110\" text-anchor=\"middle\" fill=\"#fff\" ",
                 "font-size=\"16\" font-family=\"monospace\">SUPPORTER</text>"
             )
         );
 
-        string memory line2 = string(
+        // English subtitle - ALWAYS shown
+        string memory subtitle = string(
+            abi.encodePacked(
+                "<text x=\"200\" y=\"135\" text-anchor=\"middle\" fill=\"#fff\" ",
+                "font-size=\"12\" font-family=\"monospace\">Registry Supporter</text>"
+            )
+        );
+
+        // Build the <switch> element for non-English language translations
+        string memory switchElement = _buildSupportLanguageSwitch(langCodes, supportSubtitles);
+
+        // Donation amount
+        string memory donationLine = string(
             abi.encodePacked(
                 "<text x=\"200\" y=\"200\" text-anchor=\"middle\" fill=\"#fff\" ",
                 "font-size=\"24\" font-family=\"monospace\">",
@@ -254,8 +310,8 @@ library SVGRenderer {
             )
         );
 
-        // Address - larger font (11px instead of 8px)
-        string memory line3 = string(
+        // Address - larger font (11px)
+        string memory addressLine = string(
             abi.encodePacked(
                 "<text x=\"200\" y=\"250\" text-anchor=\"middle\" fill=\"#fff\" ",
                 "font-size=\"11\" font-family=\"monospace\">",
@@ -264,7 +320,8 @@ library SVGRenderer {
             )
         );
 
-        string memory line4 = string(
+        // Token ID
+        string memory tokenLine = string(
             abi.encodePacked(
                 "<text x=\"200\" y=\"280\" text-anchor=\"middle\" fill=\"#fff\" ",
                 "font-size=\"12\" font-family=\"monospace\">TOKEN #",
@@ -273,15 +330,74 @@ library SVGRenderer {
             )
         );
 
-        // Footer - white text (not gray)
-        string memory line5 = string(
+        // Domain - white text at y=320
+        string memory domainLine = string(
+            abi.encodePacked(
+                "<text x=\"200\" y=\"320\" text-anchor=\"middle\" fill=\"#fff\" ",
+                "font-size=\"11\" font-family=\"monospace\">",
+                domain,
+                "</text>"
+            )
+        );
+
+        // Footer - white text
+        string memory footer = string(
             abi.encodePacked(
                 "<text x=\"200\" y=\"360\" text-anchor=\"middle\" fill=\"#fff\" ",
                 "font-size=\"10\" font-family=\"monospace\">Stolen Wallet Registry</text>"
             )
         );
 
-        return string(abi.encodePacked(line1, line2, line3, line4, line5));
+        return string(
+            abi.encodePacked(title, subtitle, switchElement, donationLine, addressLine, tokenLine, domainLine, footer)
+        );
+    }
+
+    /// @dev Build SVG <switch> element for support soulbound translations
+    /// @notice Shows translation below English subtitle ONLY for non-English browsers
+    function _buildSupportLanguageSwitch(string[] memory langCodes, string[] memory supportSubtitles)
+        private
+        pure
+        returns (string memory)
+    {
+        if (langCodes.length == 0) {
+            return "";
+        }
+
+        // Ensure parallel arrays have matching lengths
+        require(langCodes.length == supportSubtitles.length, "Array length mismatch");
+
+        // Start switch element
+        string memory result = "<switch>";
+
+        // Add each non-English language with systemLanguage attribute
+        for (uint256 i = 0; i < langCodes.length; i++) {
+            // Skip English - English subtitle is always shown above, no need for translation
+            if (keccak256(bytes(langCodes[i])) == keccak256(bytes("en"))) {
+                continue;
+            }
+
+            // Position at y=160 (below English subtitle at y=135)
+            result = string(
+                abi.encodePacked(
+                    result,
+                    "<text x=\"200\" y=\"160\" text-anchor=\"middle\" fill=\"#fff\" ",
+                    "font-size=\"14\" font-family=\"monospace\" systemLanguage=\"",
+                    langCodes[i],
+                    "\">",
+                    supportSubtitles[i],
+                    "</text>"
+                )
+            );
+        }
+
+        // Empty fallback for English browsers (they just see the English subtitle above)
+        result = string(abi.encodePacked(result, "<g></g>"));
+
+        // Close switch
+        result = string(abi.encodePacked(result, "</switch>"));
+
+        return result;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

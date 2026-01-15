@@ -7,6 +7,7 @@ import { SupportSoulbound } from "../../src/soulbound/SupportSoulbound.sol";
 import { BaseSoulbound } from "../../src/soulbound/BaseSoulbound.sol";
 import { TranslationRegistry } from "../../src/soulbound/TranslationRegistry.sol";
 import { IERC5192 } from "../../src/soulbound/interfaces/IERC5192.sol";
+import { SVGRenderer } from "../../src/soulbound/libraries/SVGRenderer.sol";
 
 /// @title SupportSoulbound Tests
 /// @notice Tests for donation-based soulbound tokens (unlimited per wallet)
@@ -33,6 +34,10 @@ contract SupportSoulboundTest is Test {
 
         // Deploy dependencies
         translations = new TranslationRegistry();
+        // Add Spanish for multilingual testing
+        translations.addLanguage(
+            "es", "CARTERA ROBADA", "Firmado como robado", "Gracias por tu apoyo", "No envie fondos", "Registro"
+        );
 
         // Deploy soulbound contract
         soulbound = new SupportSoulbound(MIN_WEI, address(translations), feeCollector, "stolenwallet.xyz");
@@ -229,6 +234,27 @@ contract SupportSoulboundTest is Test {
         assertTrue(bytes(uri).length > 0);
     }
 
+    /// @notice SVG contains multilingual switch elements with systemLanguage
+    /// @dev Tests SVGRenderer directly to verify translations are embedded for browser language selection
+    function test_svgRenderer_containsMultilingualSwitch() public view {
+        // Get translations from registry (same as tokenURI would)
+        (string[] memory langCodes, string[] memory supportSubtitles) = translations.getAllSupportSubtitles();
+
+        // Render SVG directly using the library
+        string memory svg = SVGRenderer.renderSupportSoulbound(
+            supporter1, 1, 0.025 ether, "stolenwallet.xyz", langCodes, supportSubtitles
+        );
+
+        // The SVG must contain <switch> elements for language selection
+        assertTrue(_contains(svg, "<switch>"), "SVG should contain <switch> element");
+
+        // The SVG must contain systemLanguage attributes for non-English languages
+        assertTrue(_contains(svg, "systemLanguage"), "SVG should contain systemLanguage attribute");
+
+        // The SVG must contain the Spanish translation (proves non-English languages are included)
+        assertTrue(_contains(svg, "Gracias por tu apoyo"), "SVG should contain Spanish support subtitle");
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -333,5 +359,25 @@ contract SupportSoulboundTest is Test {
             if (strBytes[i] != prefixBytes[i]) return false;
         }
         return true;
+    }
+
+    function _contains(string memory str, string memory substr) internal pure returns (bool) {
+        bytes memory strBytes = bytes(str);
+        bytes memory subBytes = bytes(substr);
+
+        if (subBytes.length > strBytes.length) return false;
+        if (subBytes.length == 0) return true;
+
+        for (uint256 i = 0; i <= strBytes.length - subBytes.length; i++) {
+            bool found = true;
+            for (uint256 j = 0; j < subBytes.length; j++) {
+                if (strBytes[i + j] != subBytes[j]) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) return true;
+        }
+        return false;
     }
 }

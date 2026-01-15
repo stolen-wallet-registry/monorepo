@@ -17,8 +17,8 @@ const PREVIEW_TOKEN_ID = '42';
 const PREVIEW_DONATION = '0.01 ETH';
 
 export interface SoulboundSvgPreviewProps {
-  /** Language code (e.g., 'en', 'es', 'zh') */
-  language: string;
+  /** Language code (e.g., 'en', 'es', 'zh'). Defaults to 'en'. */
+  language?: string;
   /** Type of soulbound token */
   type: 'wallet' | 'support';
   /** Custom size (default: 400) - SVG is square */
@@ -38,7 +38,7 @@ export interface SoulboundSvgPreviewProps {
  * - English subtitle hidden (redundant with border text)
  */
 export function SoulboundSvgPreview({
-  language,
+  language = 'en',
   type,
   size = 400,
   className,
@@ -49,26 +49,27 @@ export function SoulboundSvgPreview({
   // Match contract animation duration (60s)
   const animationDuration = '60s';
 
-  // Content for border text (repeated 3x with single separator for coverage)
-  const text1 = `${DOMAIN} - ${DOMAIN} - ${DOMAIN} - `;
+  // Content for border text (repeated 3x, NO trailing dash)
+  const text1 = `${DOMAIN} - ${DOMAIN} - ${DOMAIN}`;
   const text2 =
     type === 'wallet'
-      ? 'STOLEN WALLET - STOLEN WALLET - STOLEN WALLET - '
-      : 'THANK YOU - THANK YOU - THANK YOU - ';
+      ? 'STOLEN WALLET - STOLEN WALLET - STOLEN WALLET'
+      : 'THANK YOU - THANK YOU - THANK YOU';
 
   return (
     <div className={cn('inline-block', className)}>
       <svg width={size} height={size} viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
         <defs>
           {/* Single rectangular path - centered in gutter at y=12 */}
+          {/* Path bounds: 12-388 (376px), corners at ±16px from edges for 16px radius arcs */}
           <path
             id="borderPath"
-            d="M200 12 H368 A16 16 0 0 1 388 32 V368 A16 16 0 0 1 368 388 H32 A16 16 0 0 1 12 368 V32 A16 16 0 0 1 32 12 H200"
+            d="M200 12 H372 A16 16 0 0 1 388 28 V372 A16 16 0 0 1 372 388 H28 A16 16 0 0 1 12 372 V28 A16 16 0 0 1 28 12 H200"
           />
         </defs>
 
-        {/* Black background */}
-        <rect width="400" height="400" fill="#000" />
+        {/* Black background with rounded corners and white border for visibility */}
+        <rect width="400" height="400" rx="20" fill="#000" stroke="#fff" strokeWidth="1" />
 
         {/* Inner border with subtle gray stroke */}
         <rect
@@ -115,13 +116,18 @@ export function SoulboundSvgPreview({
           // Wallet token content
           <g fontFamily="monospace">
             {/* English title - ALWAYS shown */}
-            <text x="200" y="120" textAnchor="middle" fill="#fff" fontSize="16">
+            <text x="200" y="110" textAnchor="middle" fill="#fff" fontSize="16">
               STOLEN WALLET
             </text>
 
-            {/* Translation line - only show if NOT English (below English title) */}
+            {/* English subtitle - ALWAYS shown (no lang attribute) */}
+            <text x="200" y="135" textAnchor="middle" fill="#fff" fontSize="12">
+              Signed as stolen
+            </text>
+
+            {/* Translation line - only show if NOT English (below English subtitle) */}
             {!isEnglish && (
-              <text x="200" y="150" textAnchor="middle" fill="#fff" fontSize="14">
+              <text x="200" y="160" textAnchor="middle" fill="#fff" fontSize="14">
                 {translation}
               </text>
             )}
@@ -136,6 +142,11 @@ export function SoulboundSvgPreview({
               WALLET #{PREVIEW_TOKEN_ID}
             </text>
 
+            {/* Domain - white text at y=320 */}
+            <text x="200" y="320" textAnchor="middle" fill="#fff" fontSize="11">
+              {DOMAIN}
+            </text>
+
             {/* Footer - white text */}
             <text x="200" y="360" textAnchor="middle" fill="#fff" fontSize="10">
               Stolen Wallet Registry
@@ -144,10 +155,22 @@ export function SoulboundSvgPreview({
         ) : (
           // Support token content
           <g fontFamily="monospace">
-            {/* Title */}
-            <text x="200" y="150" textAnchor="middle" fill="#fff" fontSize="16">
+            {/* English title - ALWAYS shown */}
+            <text x="200" y="110" textAnchor="middle" fill="#fff" fontSize="16">
               SUPPORTER
             </text>
+
+            {/* English subtitle - ALWAYS shown (no lang attribute) */}
+            <text x="200" y="135" textAnchor="middle" fill="#fff" fontSize="12">
+              Registry Supporter
+            </text>
+
+            {/* Translation line - only show if NOT English */}
+            {!isEnglish && (
+              <text x="200" y="160" textAnchor="middle" fill="#fff" fontSize="14">
+                {translation}
+              </text>
+            )}
 
             {/* Donation amount */}
             <text x="200" y="200" textAnchor="middle" fill="#fff" fontSize="24">
@@ -162,6 +185,11 @@ export function SoulboundSvgPreview({
             {/* Token ID - white text */}
             <text x="200" y="280" textAnchor="middle" fill="#fff" fontSize="12">
               TOKEN #{PREVIEW_TOKEN_ID}
+            </text>
+
+            {/* Domain - white text at y=320 */}
+            <text x="200" y="320" textAnchor="middle" fill="#fff" fontSize="11">
+              {DOMAIN}
             </text>
 
             {/* Footer - white text */}

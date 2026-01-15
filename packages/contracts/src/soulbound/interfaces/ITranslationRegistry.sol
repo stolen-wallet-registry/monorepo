@@ -14,13 +14,20 @@ interface ITranslationRegistry {
     /// @notice Get all translations for a language pack
     /// @param languageCode ISO 639-1 code
     /// @return title The title text (e.g., "STOLEN WALLET")
-    /// @return subtitle The subtitle text (e.g., "This wallet has been reported stolen")
+    /// @return subtitle The subtitle text for wallet soulbound (e.g., "Signed as stolen")
+    /// @return supportSubtitle The subtitle text for support soulbound (e.g., "Thank you for your support")
     /// @return warning The warning text (e.g., "Do not send funds to this address")
     /// @return footer The footer text (e.g., "Stolen Wallet Registry")
     function getLanguage(string calldata languageCode)
         external
         view
-        returns (string memory title, string memory subtitle, string memory warning, string memory footer);
+        returns (
+            string memory title,
+            string memory subtitle,
+            string memory supportSubtitle,
+            string memory warning,
+            string memory footer
+        );
 
     /// @notice Check if a language is supported
     /// @param languageCode ISO 639-1 code to check
@@ -31,9 +38,15 @@ interface ITranslationRegistry {
     /// @return Array of ISO 639-1 language codes
     function getSupportedLanguages() external view returns (string[] memory);
 
-    /// @notice Get all languages with their subtitles for multi-language SVG rendering
-    /// @dev Used by tokenURI to build SVG with systemLanguage switch elements
+    /// @notice Get all languages with their subtitles for wallet soulbound SVG rendering
+    /// @dev Used by WalletSoulbound.tokenURI to build SVG with systemLanguage switch elements
     /// @return codes Array of ISO 639-1 language codes
     /// @return subtitles Array of subtitle strings (parallel to codes array)
     function getAllSubtitles() external view returns (string[] memory codes, string[] memory subtitles);
+
+    /// @notice Get all languages with their support subtitles for support soulbound SVG rendering
+    /// @dev Used by SupportSoulbound.tokenURI to build SVG with systemLanguage switch elements
+    /// @return codes Array of ISO 639-1 language codes
+    /// @return supportSubtitles Array of support subtitle strings (parallel to codes array)
+    function getAllSupportSubtitles() external view returns (string[] memory codes, string[] memory supportSubtitles);
 }

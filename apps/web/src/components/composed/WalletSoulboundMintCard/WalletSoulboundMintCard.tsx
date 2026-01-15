@@ -5,7 +5,8 @@
  * Only eligible (registered/pending) wallets can mint.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSwitchChain } from 'wagmi';
 import {
   Card,
   CardHeader,
@@ -27,9 +28,9 @@ import { ExplorerLink, getExplorerTxUrl } from '@/components/composed/ExplorerLi
 import { SoulboundPreviewModal } from '@/components/composed/SoulboundPreviewModal';
 import { MintedTokenDisplay } from '@/components/composed/MintedTokenDisplay';
 import { cn, sanitizeErrorMessage } from '@/lib/utils';
-import { getHubChainIdForEnvironment } from '@/lib/chains/config';
+import { getChainName } from '@/lib/chains/config';
 import { getWalletSoulboundAddress } from '@/lib/contracts/addresses';
-import { Loader2, Check, AlertCircle, Award } from 'lucide-react';
+import { Loader2, Check, AlertCircle, Award, ArrowRightLeft } from 'lucide-react';
 import type { Address, Hash } from '@/lib/types/ethereum';
 
 /** Get browser language code (e.g., 'en' from 'en-US') */
@@ -70,9 +71,26 @@ export function WalletSoulboundMintCard({
   const [language, setLanguage] = useState(getBrowserLanguage);
 
   const { canMint, reason, isLoading: isCheckingEligibility } = useCanMint({ address: wallet });
-  const { hasMinted, isLoading: isCheckingMinted } = useHasMinted({ address: wallet });
-  const { mint, isPending, isConfirming, isConfirmed, isError, error, hash, reset } =
-    useMintWalletSoulbound();
+  const {
+    hasMinted,
+    isLoading: isCheckingMinted,
+    refetch: refetchHasMinted,
+  } = useHasMinted({
+    address: wallet,
+  });
+  const {
+    mint,
+    isPending,
+    isConfirming,
+    isConfirmed,
+    isError,
+    error,
+    hash,
+    reset,
+    isOnHubChain,
+    hubChainId,
+  } = useMintWalletSoulbound();
+  const { switchChain, isPending: isSwitching } = useSwitchChain();
 
   // Get tokenId for displaying minted NFT (enabled when already minted OR after confirmation)
   const { tokenId, isLoading: isLoadingTokenId } = useWalletTokenId({
@@ -80,11 +98,22 @@ export function WalletSoulboundMintCard({
     enabled: hasMinted || isConfirmed,
   });
 
-  const hubChainId = getHubChainIdForEnvironment();
   const walletSoulboundAddress = getWalletSoulboundAddress(hubChainId);
 
   const isLoading = isCheckingEligibility || isCheckingMinted;
   const isMinting = isPending || isConfirming;
+  const hubChainName = getChainName(hubChainId);
+
+  const handleSwitchChain = () => {
+    switchChain({ chainId: hubChainId });
+  };
+
+  // Refetch hasMinted when mint confirms so "Done" shows correct state
+  useEffect(() => {
+    if (isConfirmed) {
+      refetchHasMinted();
+    }
+  }, [isConfirmed, refetchHasMinted]);
 
   const handleMint = async () => {
     try {
@@ -104,7 +133,7 @@ export function WalletSoulboundMintCard({
             <Award className="h-5 w-5 text-primary" />
             Wallet Soulbound Token
           </CardTitle>
-          <CardDescription>Commemorative NFT for registered stolen wallets</CardDescription>
+          <CardDescription>On-chain proof your wallet is in the registry</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Alert>
@@ -188,7 +217,7 @@ export function WalletSoulboundMintCard({
           Wallet Soulbound Token
         </CardTitle>
         <CardDescription>
-          Mint a commemorative non-transferable NFT for your registered wallet
+          Optionally mint a soulbound token as on-chain proof of your registration
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -231,6 +260,17 @@ export function WalletSoulboundMintCard({
               />
             </div>
 
+            {/* Wrong chain warning */}
+            {!isOnHubChain && (
+              <Alert>
+                <ArrowRightLeft className="h-4 w-4" />
+                <AlertDescription>
+                  Wallet soulbound tokens are minted on {hubChainName}. Please switch chains to
+                  mint.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Error state */}
             {isError && error && (
               <Alert variant="destructive">
@@ -239,21 +279,43 @@ export function WalletSoulboundMintCard({
               </Alert>
             )}
 
-            <Button onClick={handleMint} disabled={isMinting} className="w-full" size="lg">
-              {isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Confirm in wallet...
-                </>
-              ) : isConfirming ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Minting...
-                </>
-              ) : (
-                'Mint Soulbound Token'
-              )}
-            </Button>
+            {/* Show switch button when on wrong chain, mint button when on hub */}
+            {!isOnHubChain ? (
+              <Button
+                onClick={handleSwitchChain}
+                disabled={isSwitching}
+                className="w-full"
+                size="lg"
+              >
+                {isSwitching ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Switching...
+                  </>
+                ) : (
+                  <>
+                    <ArrowRightLeft className="mr-2 h-4 w-4" />
+                    Switch to {hubChainName}
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button onClick={handleMint} disabled={isMinting} className="w-full" size="lg">
+                {isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Confirm in wallet...
+                  </>
+                ) : isConfirming ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Minting...
+                  </>
+                ) : (
+                  'Mint Soulbound Token'
+                )}
+              </Button>
+            )}
 
             <p className="text-xs text-center text-muted-foreground">
               Free to mint - you only pay gas

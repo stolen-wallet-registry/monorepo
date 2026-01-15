@@ -2,11 +2,11 @@
  * Hook to mint a SupportSoulbound token with a donation.
  *
  * Note: SupportSoulbound contracts are deployed on the hub chain only.
- * This hook always targets the hub chain and will prompt the user to
- * switch chains if they're connected to a spoke chain.
+ * The hook exposes `isOnHubChain` and `hubChainId` so the UI can show
+ * a manual chain switch button when needed.
  */
 
-import { useWriteContract, useWaitForTransactionReceipt, useSwitchChain } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt, useAccount } from 'wagmi';
 import { zeroAddress } from 'viem';
 import { supportSoulboundAbi } from '@/lib/contracts/abis';
 import { getSupportSoulboundAddress } from '@/lib/contracts/addresses';
@@ -36,6 +36,10 @@ export interface UseMintSupportSoulboundResult {
   error: Error | null;
   /** Reset the hook state */
   reset: () => void;
+  /** True if currently connected to the hub chain */
+  isOnHubChain: boolean;
+  /** Hub chain ID where soulbound contracts are deployed */
+  hubChainId: number;
 }
 
 /**
@@ -61,7 +65,8 @@ export interface UseMintSupportSoulboundResult {
 export function useMintSupportSoulbound(): UseMintSupportSoulboundResult {
   // Soulbound contracts are only deployed on the hub chain
   const hubChainId = getHubChainIdForEnvironment();
-  const { switchChainAsync } = useSwitchChain();
+  const { chain } = useAccount();
+  const isOnHubChain = chain?.id === hubChainId;
 
   let contractAddress: Address | undefined;
   try {
@@ -102,11 +107,14 @@ export function useMintSupportSoulbound(): UseMintSupportSoulboundResult {
 
     const { donationWei } = params;
 
-    // Always ensure we're on the hub chain (switchChainAsync is idempotent - no prompt if already on correct chain)
-    logger.contract.info('Ensuring hub chain for SupportSoulbound mint', {
-      hubChainId,
-    });
-    await switchChainAsync({ chainId: hubChainId });
+    // Require user to be on hub chain - UI should show switch button if not
+    if (!isOnHubChain) {
+      logger.contract.error('useMintSupportSoulbound: Not on hub chain', {
+        currentChainId: chain?.id,
+        hubChainId,
+      });
+      throw new Error('Please switch to the hub chain to mint');
+    }
 
     logger.contract.info('Minting SupportSoulbound token', {
       chainId: hubChainId,
@@ -149,5 +157,7 @@ export function useMintSupportSoulbound(): UseMintSupportSoulboundResult {
     isError: isWriteError || isReceiptError,
     error: writeError || receiptError,
     reset,
+    isOnHubChain,
+    hubChainId,
   };
 }

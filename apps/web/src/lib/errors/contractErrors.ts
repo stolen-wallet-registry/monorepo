@@ -313,7 +313,7 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Soulbound Token errors (11)
+  // Soulbound Token errors (12)
   // ═══════════════════════════════════════════════════════════════════════════
 
   // BaseSoulbound errors
@@ -363,6 +363,12 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
     name: 'BelowMinimum',
     message: 'Donation amount is below the minimum.',
     action: 'Please increase your donation amount.',
+  },
+
+  '0x5cd609c7': {
+    name: 'InvalidMinWei',
+    message: 'Invalid minimum donation amount.',
+    action: 'Please contact support.',
   },
 
   // TranslationRegistry errors

@@ -8,6 +8,7 @@ import { BaseSoulbound } from "../../src/soulbound/BaseSoulbound.sol";
 import { TranslationRegistry } from "../../src/soulbound/TranslationRegistry.sol";
 import { IStolenWalletRegistry } from "../../src/interfaces/IStolenWalletRegistry.sol";
 import { IERC5192 } from "../../src/soulbound/interfaces/IERC5192.sol";
+import { SVGRenderer } from "../../src/soulbound/libraries/SVGRenderer.sol";
 
 /// @notice Mock registry for testing WalletSoulbound
 contract MockStolenWalletRegistry {
@@ -55,6 +56,10 @@ contract WalletSoulboundTest is Test {
 
         // Deploy dependencies
         translations = new TranslationRegistry();
+        // Add Spanish for multilingual testing
+        translations.addLanguage(
+            "es", "CARTERA ROBADA", "Firmado como robado", "Gracias por tu apoyo", "No envie fondos", "Registro"
+        );
         mockRegistry = new MockStolenWalletRegistry();
 
         // Setup mock registry state
@@ -237,6 +242,26 @@ contract WalletSoulboundTest is Test {
         soulbound.tokenURI(999);
     }
 
+    /// @notice SVG contains multilingual switch elements with systemLanguage
+    /// @dev Tests SVGRenderer directly to verify translations are embedded for browser language selection
+    function test_svgRenderer_containsMultilingualSwitch() public view {
+        // Get translations from registry (same as tokenURI would)
+        (string[] memory langCodes, string[] memory subtitles) = translations.getAllSubtitles();
+
+        // Render SVG directly using the library
+        string memory svg =
+            SVGRenderer.renderWalletSoulbound(registeredWallet, 1, "stolenwallet.xyz", langCodes, subtitles);
+
+        // The SVG must contain <switch> elements for language selection
+        assertTrue(_contains(svg, "<switch>"), "SVG should contain <switch> element");
+
+        // The SVG must contain systemLanguage attributes for non-English languages
+        assertTrue(_contains(svg, "systemLanguage"), "SVG should contain systemLanguage attribute");
+
+        // The SVG must contain the Spanish translation (proves non-English languages are included)
+        assertTrue(_contains(svg, "Firmado como robado"), "SVG should contain Spanish subtitle");
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -262,7 +287,7 @@ contract WalletSoulboundTest is Test {
     function test_canMint_notRegistered() public view {
         (bool eligible, string memory reason) = soulbound.canMint(unregisteredWallet);
         assertFalse(eligible);
-        assertEq(reason, "Not registered");
+        assertEq(reason, "This wallet is not registered");
     }
 
     /// @notice getTokenIdForWallet returns correct token ID
@@ -330,5 +355,25 @@ contract WalletSoulboundTest is Test {
             if (strBytes[i] != prefixBytes[i]) return false;
         }
         return true;
+    }
+
+    function _contains(string memory str, string memory substr) internal pure returns (bool) {
+        bytes memory strBytes = bytes(str);
+        bytes memory subBytes = bytes(substr);
+
+        if (subBytes.length > strBytes.length) return false;
+        if (subBytes.length == 0) return true;
+
+        for (uint256 i = 0; i <= strBytes.length - subBytes.length; i++) {
+            bool found = true;
+            for (uint256 j = 0; j < subBytes.length; j++) {
+                if (strBytes[i + j] != subBytes[j]) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) return true;
+        }
+        return false;
     }
 }

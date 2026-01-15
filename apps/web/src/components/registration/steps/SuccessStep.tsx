@@ -230,7 +230,7 @@ export function SuccessStep() {
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Award className="h-5 w-5 text-primary" />
-              <p className="text-sm font-medium">Commemorative Soulbound Token</p>
+              <p className="text-sm font-medium">Registry Proof Token</p>
             </div>
             <WalletSoulboundMintCard wallet={registeree} />
             <Button variant="link" size="sm" asChild className="w-full justify-center">
