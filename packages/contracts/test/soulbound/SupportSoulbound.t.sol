@@ -147,7 +147,7 @@ contract SupportSoulboundTest is Test {
     /// @notice Non-owner cannot update minimum
     function test_setMinWei_revert_notOwner() public {
         vm.prank(supporter1);
-        vm.expectRevert(); // OwnableUnauthorizedAccount
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, supporter1));
         soulbound.setMinWei(0.001 ether);
     }
 
@@ -170,8 +170,9 @@ contract SupportSoulboundTest is Test {
     }
 
     /// @notice Emits Locked event on mint
+    /// @dev Locked(uint256 tokenId) has no indexed params, so tokenId is in data
     function test_mint_emitsLocked() public {
-        vm.expectEmit(true, false, false, false);
+        vm.expectEmit(false, false, false, true);
         emit IERC5192.Locked(1);
 
         vm.prank(supporter1);
@@ -223,15 +224,15 @@ contract SupportSoulboundTest is Test {
         assertEq(_startsWith(uri, "data:application/json;base64,"), true);
     }
 
-    /// @notice tokenURI shows donation amount
-    function test_tokenURI_showsDonationAmount() public {
+    /// @notice tokenURI returns non-empty for large donations
+    /// @dev Verifies tokenURI handles large donation values without reverting
+    function test_tokenURI_handlesLargeDonation() public {
         vm.prank(supporter1);
         soulbound.mint{ value: 1 ether }();
 
-        // URI contains base64-encoded JSON with donation info
-        // We just verify it returns without error for large donations
+        // Verify tokenURI returns without error for large donations
         string memory uri = soulbound.tokenURI(1);
-        assertTrue(bytes(uri).length > 0);
+        assertTrue(bytes(uri).length > 0, "tokenURI should return non-empty for 1 ETH donation");
     }
 
     /// @notice SVG contains multilingual switch elements with systemLanguage

@@ -183,8 +183,9 @@ contract WalletSoulboundTest is Test {
     }
 
     /// @notice Emits Locked event on mint
+    /// @dev Locked(uint256 tokenId) has no indexed params, so tokenId is in data
     function test_mintTo_emitsLocked() public {
-        vm.expectEmit(true, false, false, false);
+        vm.expectEmit(false, false, false, true);
         emit IERC5192.Locked(1);
 
         vm.prank(minter);

@@ -26,6 +26,7 @@ import { MintedTokenDisplay } from '@/components/composed/MintedTokenDisplay';
 import { cn, sanitizeErrorMessage } from '@/lib/utils';
 import { getChainName } from '@/lib/chains/config';
 import { getSupportSoulboundAddress } from '@/lib/contracts/addresses';
+import { getBrowserLanguage } from '@/lib/browser';
 import { useAccount, useSwitchChain } from 'wagmi';
 import { Loader2, Check, AlertCircle, Heart, ArrowRightLeft } from 'lucide-react';
 import { formatEther, parseEther } from 'viem';
@@ -33,13 +34,6 @@ import type { Hash } from '@/lib/types/ethereum';
 
 /** Preset donation amounts in ETH for quick selection */
 const DONATION_PRESETS = [0.001, 0.005, 0.01, 0.05, 0.1] as const;
-
-/** Get browser language code (e.g., 'en' from 'en-US') */
-function getBrowserLanguage(): string {
-  if (typeof navigator === 'undefined') return 'en';
-  const lang = navigator.language || (navigator as { userLanguage?: string }).userLanguage;
-  return lang?.split('-')[0].toLowerCase() ?? 'en';
-}
 
 export interface SupportSoulboundMintCardProps {
   /** Callback when mint succeeds */

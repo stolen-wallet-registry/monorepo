@@ -30,15 +30,9 @@ import { MintedTokenDisplay } from '@/components/composed/MintedTokenDisplay';
 import { cn, sanitizeErrorMessage } from '@/lib/utils';
 import { getChainName } from '@/lib/chains/config';
 import { getWalletSoulboundAddress } from '@/lib/contracts/addresses';
+import { getBrowserLanguage } from '@/lib/browser';
 import { Loader2, Check, AlertCircle, Award, ArrowRightLeft } from 'lucide-react';
 import type { Address, Hash } from '@/lib/types/ethereum';
-
-/** Get browser language code (e.g., 'en' from 'en-US') */
-function getBrowserLanguage(): string {
-  if (typeof navigator === 'undefined') return 'en';
-  const lang = navigator.language || (navigator as { userLanguage?: string }).userLanguage;
-  return lang?.split('-')[0].toLowerCase() ?? 'en';
-}
 
 export interface WalletSoulboundMintCardProps {
   /** Wallet address to mint for */
@@ -98,7 +92,13 @@ export function WalletSoulboundMintCard({
     enabled: hasMinted || isConfirmed,
   });
 
-  const walletSoulboundAddress = getWalletSoulboundAddress(hubChainId);
+  // Resolve contract address safely (can throw for unconfigured chains)
+  let walletSoulboundAddress: ReturnType<typeof getWalletSoulboundAddress> | undefined;
+  try {
+    walletSoulboundAddress = getWalletSoulboundAddress(hubChainId);
+  } catch {
+    walletSoulboundAddress = undefined;
+  }
 
   const isLoading = isCheckingEligibility || isCheckingMinted;
   const isMinting = isPending || isConfirming;
@@ -142,10 +142,10 @@ export function WalletSoulboundMintCard({
           </Alert>
 
           {/* Display the minted NFT */}
-          {tokenId > 0n && (
+          {tokenId > 0n && walletSoulboundAddress && (
             <div className="flex justify-center py-4">
               <MintedTokenDisplay
-                contractAddress={walletSoulboundAddress}
+                contractAddress={walletSoulboundAddress!}
                 tokenId={tokenId}
                 type="wallet"
                 size={320}
@@ -181,10 +181,10 @@ export function WalletSoulboundMintCard({
           </Alert>
 
           {/* Display minted NFT */}
-          {tokenId > 0n && (
+          {tokenId > 0n && walletSoulboundAddress && (
             <div className="flex justify-center py-4">
               <MintedTokenDisplay
-                contractAddress={walletSoulboundAddress}
+                contractAddress={walletSoulboundAddress!}
                 tokenId={tokenId}
                 type="wallet"
                 size={320}

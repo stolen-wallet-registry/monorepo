@@ -74,14 +74,19 @@ export function MintedTokenDisplay({
     );
   }
 
-  // Render the SVG safely
+  // Render the SVG safely via <img> tag (defense-in-depth)
+  // Using data URL prevents any script execution since images can't run JS
   // Note: No overflow-hidden or rounded corners - the SVG has animated border at y=12
   // which would be clipped by CSS border-radius
+  // Use encodeURIComponent + unescape to handle UTF-8 characters (multilingual text)
+  const svgDataUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+
   return (
-    <div
+    <img
+      src={svgDataUrl}
+      alt="Soulbound Token"
       className={className}
       style={{ width: size, height: size }}
-      dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
 }
