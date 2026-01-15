@@ -3,8 +3,10 @@ import { toast } from 'sonner';
 
 import { useTheme, type ColorScheme, type ThemeVariant } from '@/providers';
 import { cn } from '@/lib/utils';
+import { SoulboundSvgPreview } from '@/components/composed/SoulboundSvgPreview';
+import { LanguageSelector } from '@/components/composed/LanguageSelector';
 
-type DevToolsTab = 'theme' | 'tests';
+type DevToolsTab = 'theme' | 'tests' | 'soulbound';
 
 /**
  * Component that throws an error on mount.
@@ -27,6 +29,9 @@ export function DevTools() {
   // errorKey controls when ErrorThrower renders - null means no error
   // Using a function initializer ensures fresh state on HMR
   const [errorKey, setErrorKey] = useState<number | null>(() => null);
+  // Soulbound preview state
+  const [previewLanguage, setPreviewLanguage] = useState('en');
+  const [previewType, setPreviewType] = useState<'wallet' | 'support'>('wallet');
   const containerRef = useRef<HTMLDivElement>(null);
   const { colorScheme, setColorScheme, themeVariant, setThemeVariant, resolvedColorScheme } =
     useTheme();
@@ -119,7 +124,7 @@ export function DevTools() {
             role="tablist"
             aria-label="DevTools sections"
             onKeyDown={(e) => {
-              const tabs: DevToolsTab[] = ['theme', 'tests'];
+              const tabs: DevToolsTab[] = ['theme', 'tests', 'soulbound'];
               const currentIndex = tabs.indexOf(activeTab);
               if (e.key === 'ArrowRight') {
                 e.preventDefault();
@@ -138,7 +143,7 @@ export function DevTools() {
               }
             }}
           >
-            {(['theme', 'tests'] as DevToolsTab[]).map((tab) => (
+            {(['theme', 'tests', 'soulbound'] as DevToolsTab[]).map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -341,6 +346,64 @@ export function DevTools() {
                     Throws an error to test the ErrorBoundary UI
                   </p>
                 </div>
+              </>
+            )}
+
+            {/* Soulbound Tab */}
+            {activeTab === 'soulbound' && (
+              <>
+                {/* Token Type Toggle */}
+                <div className="mb-4">
+                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                    Token Type
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewType('wallet')}
+                      className={cn(
+                        'rounded-md px-3 py-1.5 text-sm font-medium',
+                        'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+                        previewType === 'wallet'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      )}
+                    >
+                      Wallet
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewType('support')}
+                      className={cn(
+                        'rounded-md px-3 py-1.5 text-sm font-medium',
+                        'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+                        previewType === 'support'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      )}
+                    >
+                      Support
+                    </button>
+                  </div>
+                </div>
+
+                {/* Language Selector */}
+                <div className="mb-4">
+                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                    Language
+                  </label>
+                  <LanguageSelector value={previewLanguage} onChange={setPreviewLanguage} />
+                </div>
+
+                {/* SVG Preview */}
+                <div className="flex justify-center rounded-lg bg-muted/50 p-4">
+                  <SoulboundSvgPreview type={previewType} language={previewLanguage} size={200} />
+                </div>
+
+                {/* Info */}
+                <p className="mt-2 text-xs text-muted-foreground text-center">
+                  Preview matches on-chain SVG from SVGRenderer.sol
+                </p>
               </>
             )}
           </div>

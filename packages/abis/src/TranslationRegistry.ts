@@ -46,6 +46,24 @@ export const TranslationRegistryABI = [
   },
   {
     type: 'function',
+    name: 'getAllSubtitles',
+    inputs: [],
+    outputs: [
+      {
+        name: 'codes',
+        type: 'string[]',
+        internalType: 'string[]',
+      },
+      {
+        name: 'subtitles',
+        type: 'string[]',
+        internalType: 'string[]',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'getLanguage',
     inputs: [
       {

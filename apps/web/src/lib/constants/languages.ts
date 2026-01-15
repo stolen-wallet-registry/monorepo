@@ -19,18 +19,32 @@ export const LANGUAGE_NAMES: Record<string, string> = {
   ar: 'Arabic',
 };
 
-/** Map of ISO 639-1 codes to preview translations */
-export const LANGUAGE_TRANSLATIONS: Record<string, string> = {
-  en: 'This wallet has been marked as stolen.',
-  es: 'Esta billetera ha sido marcada como robada.',
-  zh: '此钱包已被标记为被盗。',
-  fr: 'Ce portefeuille a été signalé comme volé.',
-  de: 'Diese Wallet wurde als gestohlen markiert.',
-  ja: 'このウォレットは盗難として報告されています。',
-  ko: '이 지갑은 도난으로 신고되었습니다.',
-  pt: 'Esta carteira foi marcada como roubada.',
-  ru: 'Этот кошелек отмечен как украденный.',
-  ar: 'تم وضع علامة على هذه المحفظة بأنها مسروقة.',
+/** Map of ISO 639-1 codes to wallet soulbound preview translations (max ~25 chars) */
+export const WALLET_TRANSLATIONS: Record<string, string> = {
+  en: 'Signed as stolen',
+  es: 'Firmado como robado',
+  zh: '已签名为被盗',
+  fr: 'Signé comme volé',
+  de: 'Als gestohlen signiert',
+  ja: '盗難として署名済み',
+  ko: '도난으로 서명됨',
+  pt: 'Assinado como roubado',
+  ru: 'Подписан как украден',
+  ar: 'موقع كمسروق',
+};
+
+/** Map of ISO 639-1 codes to support soulbound preview translations (max ~25 chars) */
+export const SUPPORT_TRANSLATIONS: Record<string, string> = {
+  en: 'Registry Supporter',
+  es: 'Apoyador del Registro',
+  zh: '注册支持者',
+  fr: 'Supporteur du Registre',
+  de: 'Registry Unterstützer',
+  ja: 'レジストリサポーター',
+  ko: '레지스트리 지지자',
+  pt: 'Apoiador do Registro',
+  ru: 'Поддержка реестра',
+  ar: 'داعم السجل',
 };
 
 /**
@@ -44,7 +58,14 @@ export function getLanguageName(code: string): string {
 /**
  * Get preview translation for a language code.
  * Falls back to English if not found.
+ *
+ * @param code - ISO 639-1 language code
+ * @param type - Token type ('wallet' or 'support')
  */
-export function getLanguageTranslation(code: string): string {
-  return LANGUAGE_TRANSLATIONS[code] ?? LANGUAGE_TRANSLATIONS.en;
+export function getLanguageTranslation(
+  code: string,
+  type: 'wallet' | 'support' = 'wallet'
+): string {
+  const translations = type === 'wallet' ? WALLET_TRANSLATIONS : SUPPORT_TRANSLATIONS;
+  return translations[code] ?? translations.en;
 }

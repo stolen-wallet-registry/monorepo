@@ -15,7 +15,7 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 /// - Unlimited mints per wallet (donation model)
 /// - No registry gate - anyone can mint
 /// - Minimum donation enforced (spam prevention)
-/// - On-chain SVG artwork with multilingual support
+/// - On-chain SVG artwork
 /// - ERC-5192 compliant (non-transferable)
 contract SupportSoulbound is BaseSoulbound {
     using Strings for uint256;
@@ -33,9 +33,6 @@ contract SupportSoulbound is BaseSoulbound {
 
     /// @dev Amount donated per token
     mapping(uint256 tokenId => uint256) public tokenDonation;
-
-    /// @dev Language preference per token
-    mapping(uint256 tokenId => string) public tokenLanguage;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
@@ -55,8 +52,7 @@ contract SupportSoulbound is BaseSoulbound {
     /// @param tokenId The minted token ID
     /// @param supporter The address that minted
     /// @param amount The donation amount in wei
-    /// @param language The language code for the SVG
-    event SupportSoulboundMinted(uint256 indexed tokenId, address indexed supporter, uint256 amount, string language);
+    event SupportSoulboundMinted(uint256 indexed tokenId, address indexed supporter, uint256 amount);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -65,8 +61,9 @@ contract SupportSoulbound is BaseSoulbound {
     /// @param _minWei Minimum donation in wei (spam prevention)
     /// @param _translations Address of the TranslationRegistry contract
     /// @param _feeCollector Address to receive fees
-    constructor(uint256 _minWei, address _translations, address _feeCollector)
-        BaseSoulbound("SWR Support Soulbound", "SWRS", _translations, _feeCollector)
+    /// @param _domain Domain to display in SVG (e.g., "stolenwallet.xyz")
+    constructor(uint256 _minWei, address _translations, address _feeCollector, string memory _domain)
+        BaseSoulbound("SWR Support Soulbound", "SWRS", _translations, _feeCollector, _domain)
     {
         minWei = _minWei;
     }
@@ -78,22 +75,17 @@ contract SupportSoulbound is BaseSoulbound {
     /// @notice Mint a support soulbound token
     /// @dev msg.value must be >= minWei (spam prevention).
     ///      User decides donation amount - UI suggests ~$25.
-    /// @param language ISO 639-1 language code for SVG text
-    function mint(string calldata language) external payable {
+    function mint() external payable {
         if (msg.value < minWei) revert BelowMinimum();
-
-        // Validate language (falls back to "en" if unsupported)
-        string memory lang = translations.isLanguageSupported(language) ? language : "en";
 
         // Mint token to sender
         uint256 tokenId = _mintAndLock(msg.sender);
 
         // Store metadata
         tokenDonation[tokenId] = msg.value;
-        tokenLanguage[tokenId] = lang;
         _totalDonationsReceived += msg.value;
 
-        emit SupportSoulboundMinted(tokenId, msg.sender, msg.value, lang);
+        emit SupportSoulboundMinted(tokenId, msg.sender, msg.value);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -121,13 +113,9 @@ contract SupportSoulbound is BaseSoulbound {
 
         address supporter = ownerOf(tokenId);
         uint256 donation = tokenDonation[tokenId];
-        string memory language = tokenLanguage[tokenId];
 
-        // Get translations (reusing same pack, using title and footer)
-        (string memory title,,, string memory footer) = translations.getLanguage(language);
-
-        // Render SVG
-        string memory svg = SVGRenderer.renderSupportSoulbound(supporter, tokenId, donation, title, footer);
+        // Render SVG with domain
+        string memory svg = SVGRenderer.renderSupportSoulbound(supporter, tokenId, donation, domain);
 
         // Format donation for attributes
         string memory donationStr = _formatEtherAttribute(donation);
@@ -145,8 +133,6 @@ contract SupportSoulbound is BaseSoulbound {
                 Strings.toHexString(uint160(supporter), 20),
                 "\"},{\"trait_type\":\"Donation\",\"value\":\"",
                 donationStr,
-                "\"},{\"trait_type\":\"Language\",\"value\":\"",
-                language,
                 "\"},{\"trait_type\":\"Type\",\"value\":\"Support Soulbound\"}",
                 "]}"
             )

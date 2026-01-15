@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { Link } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { ArrowLeft, Award, Heart, Info } from 'lucide-react';
+import { ArrowLeft, Info } from 'lucide-react';
 
 import {
   Card,
@@ -80,15 +80,6 @@ export function SoulboundPage() {
         <div className="grid gap-8 md:grid-cols-2">
           {/* Wallet Soulbound Section */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Award className="h-6 w-6 text-primary" />
-              <h2 className="text-2xl font-semibold">Wallet Soulbound</h2>
-            </div>
-            <p className="text-muted-foreground">
-              Mint a soulbound token for a registered stolen wallet. One per wallet, forever
-              non-transferable.
-            </p>
-
             {/* Info alert */}
             <Alert>
               <Info className="h-4 w-4" />
@@ -142,16 +133,7 @@ export function SoulboundPage() {
           </div>
 
           {/* Support Soulbound Section */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Heart className="h-6 w-6 text-pink-500" />
-              <h2 className="text-2xl font-semibold">Support Soulbound</h2>
-            </div>
-            <p className="text-muted-foreground">
-              Support the registry with a donation and receive a commemorative soulbound token.
-              Unlimited mints per wallet.
-            </p>
-
+          <div>
             <SupportSoulboundMintCard />
           </div>
         </div>
@@ -164,8 +146,17 @@ export function SoulboundPage() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <p>
-            Soulbound tokens (ERC-5192) are non-transferable NFTs that remain permanently bound to
-            their original recipient. They serve as on-chain proof of identity or achievement.
+            Soulbound tokens (
+            <a
+              href="https://eips.ethereum.org/EIPS/eip-5192"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline underline-offset-2 hover:text-primary/80"
+            >
+              ERC-5192
+            </a>
+            ) are non-transferable NFTs that remain permanently bound to their original recipient.
+            They serve as on-chain proof of identity or achievement.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>

@@ -1,17 +1,20 @@
 /**
  * Hook to mint a SupportSoulbound token with a donation.
+ *
+ * Note: SupportSoulbound contracts are deployed on the hub chain only.
+ * This hook always targets the hub chain and will prompt the user to
+ * switch chains if they're connected to a spoke chain.
  */
 
-import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt, useSwitchChain, useChainId } from 'wagmi';
 import { zeroAddress } from 'viem';
 import { supportSoulboundAbi } from '@/lib/contracts/abis';
 import { getSupportSoulboundAddress } from '@/lib/contracts/addresses';
+import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import type { Address, Hash } from '@/lib/types/ethereum';
 
 export interface MintSupportSoulboundParams {
-  /** ISO 639-1 language code for the SVG (e.g., 'en', 'es', 'zh') */
-  language: string;
   /** Donation amount in wei (must be >= minWei) */
   donationWei: bigint;
 }
@@ -46,7 +49,7 @@ export interface UseMintSupportSoulboundResult {
  * const { mint, isPending, isConfirming, isConfirmed } = useMintSupportSoulbound();
  *
  * const handleMint = async () => {
- *   await mint({ language: 'en', donationWei: parseEther('0.01') });
+ *   await mint({ donationWei: parseEther('0.01') });
  * };
  *
  * if (isPending) return <p>Confirm in wallet...</p>;
@@ -56,15 +59,18 @@ export interface UseMintSupportSoulboundResult {
  * ```
  */
 export function useMintSupportSoulbound(): UseMintSupportSoulboundResult {
-  const chainId = useChainId();
+  // Soulbound contracts are only deployed on the hub chain
+  const hubChainId = getHubChainIdForEnvironment();
+  const currentChainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
 
   let contractAddress: Address | undefined;
   try {
-    contractAddress = getSupportSoulboundAddress(chainId);
+    contractAddress = getSupportSoulboundAddress(hubChainId);
   } catch (error) {
     contractAddress = undefined;
     logger.contract.error('useMintSupportSoulbound: Failed to resolve contract address', {
-      chainId,
+      chainId: hubChainId,
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -89,16 +95,26 @@ export function useMintSupportSoulbound(): UseMintSupportSoulboundResult {
 
   const mint = async (params: MintSupportSoulboundParams): Promise<Hash> => {
     if (!contractAddress || contractAddress === zeroAddress) {
-      logger.contract.error('useMintSupportSoulbound: No contract address configured', { chainId });
+      logger.contract.error('useMintSupportSoulbound: No contract address configured', {
+        chainId: hubChainId,
+      });
       throw new Error('SupportSoulbound contract not configured for this chain');
     }
 
-    const { language, donationWei } = params;
+    const { donationWei } = params;
+
+    // Switch to hub chain if not already connected
+    if (currentChainId !== hubChainId) {
+      logger.contract.info('Switching to hub chain for SupportSoulbound mint', {
+        fromChainId: currentChainId,
+        toChainId: hubChainId,
+      });
+      await switchChainAsync({ chainId: hubChainId });
+    }
 
     logger.contract.info('Minting SupportSoulbound token', {
-      chainId,
+      chainId: hubChainId,
       contractAddress,
-      language,
       donationWei: donationWei.toString(),
     });
 
@@ -107,21 +123,21 @@ export function useMintSupportSoulbound(): UseMintSupportSoulboundResult {
         address: contractAddress,
         abi: supportSoulboundAbi,
         functionName: 'mint',
-        args: [language],
+        args: [],
         value: donationWei,
+        chainId: hubChainId,
       });
 
       logger.contract.info('SupportSoulbound mint transaction submitted', {
         txHash,
-        language,
         donationWei: donationWei.toString(),
-        chainId,
+        chainId: hubChainId,
       });
 
       return txHash;
     } catch (error) {
       logger.contract.error('SupportSoulbound mint failed', {
-        chainId,
+        chainId: hubChainId,
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;

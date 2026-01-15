@@ -169,7 +169,10 @@ abstract contract DeployBase is Script {
     /// @dev ~$0.25 at $2500/ETH - very low to not discourage small donations
     uint256 internal constant MIN_DONATION = 0.0001 ether;
 
-    /// @notice Deploy soulbound token contracts
+    /// @notice Default domain for soulbound SVG display
+    string internal constant DEFAULT_DOMAIN = "stolenwallet.xyz";
+
+    /// @notice Deploy soulbound token contracts with default domain
     /// @param registry The StolenWalletRegistry address (for WalletSoulbound gate)
     /// @param feeCollector The address to receive withdrawn fees (typically RegistryHub)
     /// @return translations The TranslationRegistry address
@@ -179,11 +182,26 @@ abstract contract DeployBase is Script {
         internal
         returns (address translations, address walletSoulbound, address supportSoulbound)
     {
+        return deploySoulbound(registry, feeCollector, DEFAULT_DOMAIN);
+    }
+
+    /// @notice Deploy soulbound token contracts with custom domain
+    /// @param registry The StolenWalletRegistry address (for WalletSoulbound gate)
+    /// @param feeCollector The address to receive withdrawn fees (typically RegistryHub)
+    /// @param domain The domain to display in SVG (e.g., "stolenwallet.xyz")
+    /// @return translations The TranslationRegistry address
+    /// @return walletSoulbound The WalletSoulbound address
+    /// @return supportSoulbound The SupportSoulbound address
+    function deploySoulbound(address registry, address feeCollector, string memory domain)
+        internal
+        returns (address translations, address walletSoulbound, address supportSoulbound)
+    {
         require(registry != address(0), "DeployBase: registry is zero address");
         require(feeCollector != address(0), "DeployBase: feeCollector is zero address");
 
         console2.log("");
         console2.log("=== SOULBOUND DEPLOYMENT ===");
+        console2.log("Domain:", domain);
 
         // Deploy TranslationRegistry (no dependencies)
         translations = address(new TranslationRegistry());
@@ -194,93 +212,94 @@ abstract contract DeployBase is Script {
         console2.log("Languages seeded: en, es, zh, fr, de, ja, ko, pt, ru, ar");
 
         // Deploy WalletSoulbound (gated by registry)
-        walletSoulbound = address(new WalletSoulbound(registry, translations, feeCollector));
+        walletSoulbound = address(new WalletSoulbound(registry, translations, feeCollector, domain));
         console2.log("WalletSoulbound:", walletSoulbound);
 
         // Deploy SupportSoulbound (donation-based, no gate)
-        supportSoulbound = address(new SupportSoulbound(MIN_DONATION, translations, feeCollector));
+        supportSoulbound = address(new SupportSoulbound(MIN_DONATION, translations, feeCollector, domain));
         console2.log("SupportSoulbound:", supportSoulbound);
     }
 
     /// @dev Seeds additional languages beyond the default English
+    /// @notice Subtitles shortened to ~25 chars max to fit in SVG without wrapping
     function _seedLanguages(TranslationRegistry t) internal {
-        // Spanish
+        // Spanish - "Firmado como robado" (20 chars)
         t.addLanguage(
             "es",
             "CARTERA ROBADA",
-            "Esta cartera ha sido reportada como robada",
+            "Firmado como robado",
             unicode"No envíe fondos a esta dirección",
             "Registro de Carteras Robadas"
         );
 
-        // Chinese (Simplified)
+        // Chinese (Simplified) - "已签名为被盗" (7 chars)
         t.addLanguage(
             "zh",
             unicode"被盗钱包",
-            unicode"此钱包已被报告被盗",
+            unicode"已签名为被盗",
             unicode"请勿向此地址发送资金",
             unicode"被盗钱包登记处"
         );
 
-        // French
+        // French - "Signé comme volé" (17 chars)
         t.addLanguage(
             "fr",
             unicode"PORTEFEUILLE VOLÉ",
-            unicode"Ce portefeuille a été signalé comme volé",
+            unicode"Signé comme volé",
             unicode"N'envoyez pas de fonds à cette adresse",
             "Registre des Portefeuilles Voles"
         );
 
-        // German
+        // German - "Als gestohlen signiert" (23 chars)
         t.addLanguage(
             "de",
             "GESTOHLENE WALLET",
-            "Diese Wallet wurde als gestohlen gemeldet",
+            "Als gestohlen signiert",
             "Senden Sie keine Gelder an diese Adresse",
             "Gestohlene Wallet Registrierung"
         );
 
-        // Japanese
+        // Japanese - "盗難として署名済み" (10 chars)
         t.addLanguage(
             "ja",
             unicode"盗まれたウォレット",
-            unicode"このウォレットは盗難として報告されています",
+            unicode"盗難として署名済み",
             unicode"このアドレスに資金を送らないでください",
             unicode"盗難ウォレット登録"
         );
 
-        // Korean
+        // Korean - "도난으로 서명됨" (9 chars)
         t.addLanguage(
             "ko",
             unicode"도난 지갑",
-            unicode"이 지갑은 도난 신고되었습니다",
+            unicode"도난으로 서명됨",
             unicode"이 주소로 자금을 보내지 마세요",
             unicode"도난 지갑 등록소"
         );
 
-        // Portuguese
+        // Portuguese - "Assinado como roubado" (22 chars)
         t.addLanguage(
             "pt",
             "CARTEIRA ROUBADA",
-            "Esta carteira foi reportada como roubada",
+            "Assinado como roubado",
             unicode"Não envie fundos para este endereço",
             "Registro de Carteiras Roubadas"
         );
 
-        // Russian
+        // Russian - "Подписан как украден" (21 chars)
         t.addLanguage(
             "ru",
             unicode"УКРАДЕННЫЙ КОШЕЛЕК",
-            unicode"Этот кошелек был заявлен как украденный",
+            unicode"Подписан как украден",
             unicode"Не отправляйте средства на этот адрес",
             unicode"Реестр Украденных Кошельков"
         );
 
-        // Arabic
+        // Arabic - "موقع كمسروق" (11 chars)
         t.addLanguage(
             "ar",
             unicode"محفظة مسروقة",
-            unicode"تم الإبلاغ عن هذه المحفظة على أنها مسروقة",
+            unicode"موقع كمسروق",
             unicode"لا ترسل أموالاً إلى هذا العنوان",
             unicode"سجل المحافظ المسروقة"
         );

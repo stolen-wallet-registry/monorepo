@@ -1,7 +1,7 @@
 /**
  * Card component for minting a WalletSoulbound token.
  *
- * Displays eligibility status, language selector, and mint button.
+ * Displays eligibility status and mint button.
  * Only eligible (registered/pending) wallets can mint.
  */
 
@@ -15,13 +15,29 @@ import {
   Button,
   Alert,
   AlertDescription,
+  Label,
 } from '@swr/ui';
-import { useCanMint, useHasMinted, useMintWalletSoulbound } from '@/hooks/soulbound';
-import { LanguageSelector } from '@/components/composed/LanguageSelector';
+import {
+  useCanMint,
+  useHasMinted,
+  useMintWalletSoulbound,
+  useWalletTokenId,
+} from '@/hooks/soulbound';
+import { ExplorerLink, getExplorerTxUrl } from '@/components/composed/ExplorerLink';
 import { SoulboundPreviewModal } from '@/components/composed/SoulboundPreviewModal';
+import { MintedTokenDisplay } from '@/components/composed/MintedTokenDisplay';
 import { cn, sanitizeErrorMessage } from '@/lib/utils';
+import { getHubChainIdForEnvironment } from '@/lib/chains/config';
+import { getWalletSoulboundAddress } from '@/lib/contracts/addresses';
 import { Loader2, Check, AlertCircle, Award } from 'lucide-react';
 import type { Address, Hash } from '@/lib/types/ethereum';
+
+/** Get browser language code (e.g., 'en' from 'en-US') */
+function getBrowserLanguage(): string {
+  if (typeof navigator === 'undefined') return 'en';
+  const lang = navigator.language || (navigator as { userLanguage?: string }).userLanguage;
+  return lang?.split('-')[0].toLowerCase() ?? 'en';
+}
 
 export interface WalletSoulboundMintCardProps {
   /** Wallet address to mint for */
@@ -50,26 +66,36 @@ export function WalletSoulboundMintCard({
   onSuccess,
   className,
 }: WalletSoulboundMintCardProps) {
-  const [language, setLanguage] = useState('en');
+  // Language defaults to browser language, can be overridden via preview modal
+  const [language, setLanguage] = useState(getBrowserLanguage);
 
   const { canMint, reason, isLoading: isCheckingEligibility } = useCanMint({ address: wallet });
   const { hasMinted, isLoading: isCheckingMinted } = useHasMinted({ address: wallet });
   const { mint, isPending, isConfirming, isConfirmed, isError, error, hash, reset } =
     useMintWalletSoulbound();
 
+  // Get tokenId for displaying minted NFT (enabled when already minted OR after confirmation)
+  const { tokenId, isLoading: isLoadingTokenId } = useWalletTokenId({
+    wallet,
+    enabled: hasMinted || isConfirmed,
+  });
+
+  const hubChainId = getHubChainIdForEnvironment();
+  const walletSoulboundAddress = getWalletSoulboundAddress(hubChainId);
+
   const isLoading = isCheckingEligibility || isCheckingMinted;
   const isMinting = isPending || isConfirming;
 
   const handleMint = async () => {
     try {
-      const txHash = await mint({ wallet, language });
+      const txHash = await mint({ wallet });
       onSuccess?.(txHash);
     } catch {
       // Error is handled by the hook
     }
   };
 
-  // Already minted state
+  // Already minted state - show the minted NFT
   if (hasMinted && !isLoading) {
     return (
       <Card className={cn('', className)}>
@@ -80,11 +106,28 @@ export function WalletSoulboundMintCard({
           </CardTitle>
           <CardDescription>Commemorative NFT for registered stolen wallets</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <Alert>
             <Check className="h-4 w-4" />
             <AlertDescription>This wallet has already minted its soulbound token.</AlertDescription>
           </Alert>
+
+          {/* Display the minted NFT */}
+          {tokenId > 0n && (
+            <div className="flex justify-center py-4">
+              <MintedTokenDisplay
+                contractAddress={walletSoulboundAddress}
+                tokenId={tokenId}
+                type="wallet"
+                size={320}
+              />
+            </div>
+          )}
+          {isLoadingTokenId && (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
         </CardContent>
       </Card>
     );
@@ -107,9 +150,28 @@ export function WalletSoulboundMintCard({
               Successfully minted your Wallet Soulbound token!
             </AlertDescription>
           </Alert>
-          <p className="text-sm text-muted-foreground">
-            Transaction: {hash.slice(0, 10)}...{hash.slice(-8)}
-          </p>
+
+          {/* Display minted NFT */}
+          {tokenId > 0n && (
+            <div className="flex justify-center py-4">
+              <MintedTokenDisplay
+                contractAddress={walletSoulboundAddress}
+                tokenId={tokenId}
+                type="wallet"
+                size={320}
+              />
+            </div>
+          )}
+          {isLoadingTokenId && (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Transaction</Label>
+            <ExplorerLink value={hash} href={getExplorerTxUrl(hubChainId, hash)} />
+          </div>
           <Button variant="outline" onClick={reset} className="w-full">
             Done
           </Button>
@@ -139,35 +201,34 @@ export function WalletSoulboundMintCard({
 
         {/* Not eligible */}
         {!isLoading && !canMint && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              {reason || 'This wallet is not eligible to mint a soulbound token.'}
-            </AlertDescription>
-          </Alert>
+          <>
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {reason || 'This wallet is not eligible to mint a soulbound token.'}
+              </AlertDescription>
+            </Alert>
+            {/* Still allow preview even when not eligible */}
+            <div className="flex justify-end">
+              <SoulboundPreviewModal
+                type="wallet"
+                initialLanguage={language}
+                onLanguageChange={setLanguage}
+              />
+            </div>
+          </>
         )}
 
         {/* Eligible - show mint UI */}
         {!isLoading && canMint && (
           <>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">Language</label>
-                <SoulboundPreviewModal
-                  type="wallet"
-                  initialLanguage={language}
-                  onLanguageChange={setLanguage}
-                />
-              </div>
-              <LanguageSelector
-                value={language}
-                onChange={setLanguage}
-                disabled={isMinting}
-                className="w-full"
+            {/* Preview button only - language is auto-detected, modal allows override */}
+            <div className="flex justify-end">
+              <SoulboundPreviewModal
+                type="wallet"
+                initialLanguage={language}
+                onLanguageChange={setLanguage}
               />
-              <p className="text-xs text-muted-foreground">
-                The language for your on-chain SVG artwork
-              </p>
             </div>
 
             {/* Error state */}

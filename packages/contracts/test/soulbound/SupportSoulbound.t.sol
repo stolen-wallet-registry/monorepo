@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test, console2 } from "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SupportSoulbound } from "../../src/soulbound/SupportSoulbound.sol";
 import { BaseSoulbound } from "../../src/soulbound/BaseSoulbound.sol";
@@ -35,7 +35,7 @@ contract SupportSoulboundTest is Test {
         translations = new TranslationRegistry();
 
         // Deploy soulbound contract
-        soulbound = new SupportSoulbound(MIN_WEI, address(translations), feeCollector);
+        soulbound = new SupportSoulbound(MIN_WEI, address(translations), feeCollector, "stolenwallet.xyz");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -61,7 +61,7 @@ contract SupportSoulboundTest is Test {
     /// @notice Can mint with minimum amount
     function test_mint_success_minimum() public {
         vm.prank(supporter1);
-        soulbound.mint{ value: MIN_WEI }("en");
+        soulbound.mint{ value: MIN_WEI }();
 
         assertEq(soulbound.balanceOf(supporter1), 1);
         assertEq(soulbound.ownerOf(1), supporter1);
@@ -70,7 +70,7 @@ contract SupportSoulboundTest is Test {
     /// @notice Can mint with large donation
     function test_mint_success_largeDonation() public {
         vm.prank(supporter1);
-        soulbound.mint{ value: 1 ether }("en");
+        soulbound.mint{ value: 1 ether }();
 
         assertEq(soulbound.tokenDonation(1), 1 ether);
     }
@@ -79,56 +79,38 @@ contract SupportSoulboundTest is Test {
     function test_mint_storesDonation() public {
         uint256 donation = 0.05 ether;
         vm.prank(supporter1);
-        soulbound.mint{ value: donation }("en");
+        soulbound.mint{ value: donation }();
 
         assertEq(soulbound.tokenDonation(1), donation);
-    }
-
-    /// @notice Stores language correctly
-    function test_mint_storesLanguage() public {
-        translations.addLanguage("es", "ES", "es", "es", "es");
-
-        vm.prank(supporter1);
-        soulbound.mint{ value: MIN_WEI }("es");
-
-        assertEq(soulbound.tokenLanguage(1), "es");
-    }
-
-    /// @notice Unsupported language falls back to English
-    function test_mint_fallbackLanguage() public {
-        vm.prank(supporter1);
-        soulbound.mint{ value: MIN_WEI }("zz");
-
-        assertEq(soulbound.tokenLanguage(1), "en");
     }
 
     /// @notice Mint emits correct event
     function test_mint_emitsEvent() public {
         vm.expectEmit(true, true, false, true);
-        emit SupportSoulbound.SupportSoulboundMinted(1, supporter1, 0.01 ether, "en");
+        emit SupportSoulbound.SupportSoulboundMinted(1, supporter1, 0.01 ether);
 
         vm.prank(supporter1);
-        soulbound.mint{ value: 0.01 ether }("en");
+        soulbound.mint{ value: 0.01 ether }();
     }
 
     /// @notice Cannot mint below minimum
     function test_mint_revert_belowMinimum() public {
         vm.prank(supporter1);
         vm.expectRevert(SupportSoulbound.BelowMinimum.selector);
-        soulbound.mint{ value: MIN_WEI - 1 }("en");
+        soulbound.mint{ value: MIN_WEI - 1 }();
     }
 
     /// @notice Same wallet can mint multiple times (unlimited)
     function test_mint_multipleTimes() public {
         vm.startPrank(supporter1);
 
-        soulbound.mint{ value: MIN_WEI }("en");
+        soulbound.mint{ value: MIN_WEI }();
         assertEq(soulbound.balanceOf(supporter1), 1);
 
-        soulbound.mint{ value: MIN_WEI }("en");
+        soulbound.mint{ value: MIN_WEI }();
         assertEq(soulbound.balanceOf(supporter1), 2);
 
-        soulbound.mint{ value: MIN_WEI }("en");
+        soulbound.mint{ value: MIN_WEI }();
         assertEq(soulbound.balanceOf(supporter1), 3);
 
         vm.stopPrank();
@@ -170,7 +152,7 @@ contract SupportSoulboundTest is Test {
     /// @notice locked() returns true for minted tokens
     function test_locked_returnsTrue() public {
         vm.prank(supporter1);
-        soulbound.mint{ value: MIN_WEI }("en");
+        soulbound.mint{ value: MIN_WEI }();
 
         assertTrue(soulbound.locked(1));
     }
@@ -181,7 +163,7 @@ contract SupportSoulboundTest is Test {
         emit IERC5192.Locked(1);
 
         vm.prank(supporter1);
-        soulbound.mint{ value: MIN_WEI }("en");
+        soulbound.mint{ value: MIN_WEI }();
     }
 
     /// @notice Contract reports ERC-5192 interface support
@@ -196,7 +178,7 @@ contract SupportSoulboundTest is Test {
     /// @notice transferFrom reverts (via _update override)
     function test_transfer_revert() public {
         vm.prank(supporter1);
-        soulbound.mint{ value: MIN_WEI }("en");
+        soulbound.mint{ value: MIN_WEI }();
 
         vm.prank(supporter1);
         vm.expectRevert(BaseSoulbound.NonTransferrable.selector);
@@ -206,7 +188,7 @@ contract SupportSoulboundTest is Test {
     /// @notice safeTransferFrom reverts (via _update override)
     function test_safeTransfer_revert() public {
         vm.prank(supporter1);
-        soulbound.mint{ value: MIN_WEI }("en");
+        soulbound.mint{ value: MIN_WEI }();
 
         vm.prank(supporter1);
         vm.expectRevert(BaseSoulbound.NonTransferrable.selector);
@@ -220,7 +202,7 @@ contract SupportSoulboundTest is Test {
     /// @notice tokenURI returns valid JSON data URI
     function test_tokenURI_returnsValidDataURI() public {
         vm.prank(supporter1);
-        soulbound.mint{ value: 0.025 ether }("en");
+        soulbound.mint{ value: 0.025 ether }();
 
         string memory uri = soulbound.tokenURI(1);
 
@@ -232,7 +214,7 @@ contract SupportSoulboundTest is Test {
     /// @notice tokenURI shows donation amount
     function test_tokenURI_showsDonationAmount() public {
         vm.prank(supporter1);
-        soulbound.mint{ value: 1 ether }("en");
+        soulbound.mint{ value: 1 ether }();
 
         // URI contains base64-encoded JSON with donation info
         // We just verify it returns without error for large donations
@@ -247,13 +229,13 @@ contract SupportSoulboundTest is Test {
     /// @notice totalDonations returns sum of all donations
     function test_totalDonations() public {
         vm.prank(supporter1);
-        soulbound.mint{ value: 0.5 ether }("en");
+        soulbound.mint{ value: 0.5 ether }();
 
         vm.prank(supporter2);
-        soulbound.mint{ value: 0.3 ether }("en");
+        soulbound.mint{ value: 0.3 ether }();
 
         vm.prank(supporter1);
-        soulbound.mint{ value: 0.2 ether }("en");
+        soulbound.mint{ value: 0.2 ether }();
 
         assertEq(soulbound.totalDonations(), 1 ether);
     }
@@ -261,13 +243,13 @@ contract SupportSoulboundTest is Test {
     /// @notice getTokensForSupporter returns correct token IDs
     function test_getTokensForSupporter() public {
         vm.startPrank(supporter1);
-        soulbound.mint{ value: MIN_WEI }("en"); // Token 1
-        soulbound.mint{ value: MIN_WEI }("en"); // Token 2
-        soulbound.mint{ value: MIN_WEI }("en"); // Token 3
+        soulbound.mint{ value: MIN_WEI }(); // Token 1
+        soulbound.mint{ value: MIN_WEI }(); // Token 2
+        soulbound.mint{ value: MIN_WEI }(); // Token 3
         vm.stopPrank();
 
         vm.prank(supporter2);
-        soulbound.mint{ value: MIN_WEI }("en"); // Token 4
+        soulbound.mint{ value: MIN_WEI }(); // Token 4
 
         uint256[] memory tokens1 = soulbound.getTokensForSupporter(supporter1);
         uint256[] memory tokens2 = soulbound.getTokensForSupporter(supporter2);
@@ -292,11 +274,11 @@ contract SupportSoulboundTest is Test {
         assertEq(soulbound.totalSupply(), 0);
 
         vm.prank(supporter1);
-        soulbound.mint{ value: MIN_WEI }("en");
+        soulbound.mint{ value: MIN_WEI }();
         assertEq(soulbound.totalSupply(), 1);
 
         vm.prank(supporter2);
-        soulbound.mint{ value: MIN_WEI }("en");
+        soulbound.mint{ value: MIN_WEI }();
         assertEq(soulbound.totalSupply(), 2);
     }
 
@@ -307,10 +289,10 @@ contract SupportSoulboundTest is Test {
     /// @notice Withdraw sends balance to feeCollector
     function test_withdraw_success() public {
         vm.prank(supporter1);
-        soulbound.mint{ value: 1 ether }("en");
+        soulbound.mint{ value: 1 ether }();
 
         vm.prank(supporter2);
-        soulbound.mint{ value: 0.5 ether }("en");
+        soulbound.mint{ value: 0.5 ether }();
 
         uint256 balanceBefore = feeCollector.balance;
         soulbound.withdraw();
@@ -323,7 +305,7 @@ contract SupportSoulboundTest is Test {
     /// @notice Only owner can withdraw
     function test_withdraw_revert_notOwner() public {
         vm.prank(supporter1);
-        soulbound.mint{ value: 1 ether }("en");
+        soulbound.mint{ value: 1 ether }();
 
         vm.prank(supporter1);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, supporter1));

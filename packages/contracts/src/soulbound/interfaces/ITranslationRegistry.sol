@@ -30,4 +30,10 @@ interface ITranslationRegistry {
     /// @notice Get list of all supported language codes
     /// @return Array of ISO 639-1 language codes
     function getSupportedLanguages() external view returns (string[] memory);
+
+    /// @notice Get all languages with their subtitles for multi-language SVG rendering
+    /// @dev Used by tokenURI to build SVG with systemLanguage switch elements
+    /// @return codes Array of ISO 639-1 language codes
+    /// @return subtitles Array of subtitle strings (parallel to codes array)
+    function getAllSubtitles() external view returns (string[] memory codes, string[] memory subtitles);
 }

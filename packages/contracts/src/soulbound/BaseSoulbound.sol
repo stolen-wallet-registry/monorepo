@@ -27,6 +27,9 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
     /// @notice Fee collector address for withdrawals
     address public immutable feeCollector;
 
+    /// @notice Domain to display in SVG (e.g., "stolenwallet.xyz")
+    string public domain;
+
     /// @dev Counter for token IDs
     uint256 internal _tokenIdCounter;
 
@@ -47,6 +50,13 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
     error InvalidTranslations();
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // EVENTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Emitted when domain is updated
+    event DomainUpdated(string oldDomain, string newDomain);
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -54,15 +64,20 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
     /// @param symbol_ Token symbol
     /// @param _translations Address of the TranslationRegistry contract
     /// @param _feeCollector Address to receive withdrawn fees
-    constructor(string memory name_, string memory symbol_, address _translations, address _feeCollector)
-        ERC721(name_, symbol_)
-        Ownable(msg.sender)
-    {
+    /// @param _domain Domain to display in SVG (e.g., "stolenwallet.xyz")
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        address _translations,
+        address _feeCollector,
+        string memory _domain
+    ) ERC721(name_, symbol_) Ownable(msg.sender) {
         if (_translations == address(0)) revert InvalidTranslations();
         if (_feeCollector == address(0)) revert InvalidFeeCollector();
 
         translations = ITranslationRegistry(_translations);
         feeCollector = _feeCollector;
+        domain = _domain;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -112,6 +127,15 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
         uint256 balance = address(this).balance;
         (bool success,) = feeCollector.call{ value: balance }("");
         if (!success) revert WithdrawFailed();
+    }
+
+    /// @notice Update the domain displayed in SVG
+    /// @dev Only owner can update domain
+    /// @param _domain New domain string (e.g., "stolenwallet.xyz")
+    function setDomain(string calldata _domain) external onlyOwner {
+        string memory oldDomain = domain;
+        domain = _domain;
+        emit DomainUpdated(oldDomain, _domain);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

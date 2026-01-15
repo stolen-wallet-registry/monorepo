@@ -17,6 +17,11 @@ export const SupportSoulboundABI = [
         type: 'address',
         internalType: 'address',
       },
+      {
+        name: '_domain',
+        type: 'string',
+        internalType: 'string',
+      },
     ],
     stateMutability: 'nonpayable',
   },
@@ -60,6 +65,19 @@ export const SupportSoulboundABI = [
         name: '',
         type: 'uint256',
         internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'domain',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'string',
+        internalType: 'string',
       },
     ],
     stateMutability: 'view',
@@ -174,13 +192,7 @@ export const SupportSoulboundABI = [
   {
     type: 'function',
     name: 'mint',
-    inputs: [
-      {
-        name: 'language',
-        type: 'string',
-        internalType: 'string',
-      },
-    ],
+    inputs: [],
     outputs: [],
     stateMutability: 'payable',
   },
@@ -320,6 +332,19 @@ export const SupportSoulboundABI = [
   },
   {
     type: 'function',
+    name: 'setDomain',
+    inputs: [
+      {
+        name: '_domain',
+        type: 'string',
+        internalType: 'string',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'setMinWei',
     inputs: [
       {
@@ -378,25 +403,6 @@ export const SupportSoulboundABI = [
         name: '',
         type: 'uint256',
         internalType: 'uint256',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'tokenLanguage',
-    inputs: [
-      {
-        name: 'tokenId',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-    ],
-    outputs: [
-      {
-        name: '',
-        type: 'string',
-        internalType: 'string',
       },
     ],
     stateMutability: 'view',
@@ -554,6 +560,25 @@ export const SupportSoulboundABI = [
   },
   {
     type: 'event',
+    name: 'DomainUpdated',
+    inputs: [
+      {
+        name: 'oldDomain',
+        type: 'string',
+        indexed: false,
+        internalType: 'string',
+      },
+      {
+        name: 'newDomain',
+        type: 'string',
+        indexed: false,
+        internalType: 'string',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'Locked',
     inputs: [
       {
@@ -643,12 +668,6 @@ export const SupportSoulboundABI = [
         type: 'uint256',
         indexed: false,
         internalType: 'uint256',
-      },
-      {
-        name: 'language',
-        type: 'string',
-        indexed: false,
-        internalType: 'string',
       },
     ],
     anonymous: false,

@@ -89,23 +89,23 @@ export function SoulboundPreviewModal({
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Language selector */}
-          <div className="space-y-2">
+          {/* Language selector - centered */}
+          <div className="flex flex-col items-center space-y-2">
             <label className="text-sm font-medium">Select Language</label>
             <LanguageSelector
               value={language}
               onChange={handleLanguageChange}
               className="w-full max-w-xs"
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground text-center">
               The token will display text in your selected language
             </p>
           </div>
 
-          {/* Preview container */}
+          {/* Preview container - centered */}
           <ScrollArea className="max-h-[500px]">
             <div className="flex justify-center py-4">
-              <SoulboundSvgPreview type={type} language={language} />
+              <SoulboundSvgPreview type={type} language={language} size={300} />
             </div>
           </ScrollArea>
 

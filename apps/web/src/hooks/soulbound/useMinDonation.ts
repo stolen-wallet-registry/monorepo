@@ -1,12 +1,16 @@
 /**
  * Hook to get the minimum donation amount for SupportSoulbound.
+ *
+ * Note: SupportSoulbound contracts are deployed on the hub chain only.
+ * This hook defaults to querying the hub chain regardless of connected chain.
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { usePublicClient, useChainId } from 'wagmi';
+import { usePublicClient } from 'wagmi';
 import { zeroAddress } from 'viem';
 import { supportSoulboundAbi } from '@/lib/contracts/abis';
 import { getSupportSoulboundAddress } from '@/lib/contracts/addresses';
+import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
 
@@ -45,8 +49,9 @@ export function useMinDonation({
   chainId: overrideChainId,
   enabled = true,
 }: UseMinDonationOptions = {}): UseMinDonationResult {
-  const connectedChainId = useChainId();
-  const chainId = overrideChainId ?? connectedChainId;
+  // Default to hub chain since soulbound contracts are only deployed there
+  const hubChainId = getHubChainIdForEnvironment();
+  const chainId = overrideChainId ?? hubChainId;
   const client = usePublicClient({ chainId });
 
   let contractAddress: Address | undefined;

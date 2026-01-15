@@ -62,7 +62,7 @@ contract WalletSoulboundTest is Test {
         mockRegistry.setPending(pendingWallet, true);
 
         // Deploy soulbound contract
-        soulbound = new WalletSoulbound(address(mockRegistry), address(translations), feeCollector);
+        soulbound = new WalletSoulbound(address(mockRegistry), address(translations), feeCollector, "stolenwallet.xyz");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -83,13 +83,13 @@ contract WalletSoulboundTest is Test {
 
     function test_constructor_revert_zeroRegistry() public {
         vm.expectRevert(WalletSoulbound.InvalidRegistry.selector);
-        new WalletSoulbound(address(0), address(translations), feeCollector);
+        new WalletSoulbound(address(0), address(translations), feeCollector, "stolenwallet.xyz");
     }
 
     /// @notice Constructor reverts with zero translations address
     function test_constructor_revert_zeroTranslations() public {
         vm.expectRevert(BaseSoulbound.InvalidTranslations.selector);
-        new WalletSoulbound(address(mockRegistry), address(0), feeCollector);
+        new WalletSoulbound(address(mockRegistry), address(0), feeCollector, "stolenwallet.xyz");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -99,7 +99,7 @@ contract WalletSoulboundTest is Test {
     /// @notice Can mint to a registered wallet
     function test_mintTo_success_registered() public {
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
 
         assertEq(soulbound.balanceOf(registeredWallet), 1);
         assertEq(soulbound.ownerOf(1), registeredWallet);
@@ -109,7 +109,7 @@ contract WalletSoulboundTest is Test {
     /// @notice Can mint to a pending wallet (during grace period)
     function test_mintTo_success_pending() public {
         vm.prank(minter);
-        soulbound.mintTo(pendingWallet, "en");
+        soulbound.mintTo(pendingWallet);
 
         assertEq(soulbound.balanceOf(pendingWallet), 1);
         assertEq(soulbound.ownerOf(1), pendingWallet);
@@ -118,7 +118,7 @@ contract WalletSoulboundTest is Test {
     /// @notice Token is minted to wallet, not to msg.sender
     function test_mintTo_tokenGoesToWallet_notMinter() public {
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
 
         // Token goes to registered wallet, not minter
         assertEq(soulbound.balanceOf(registeredWallet), 1);
@@ -128,45 +128,35 @@ contract WalletSoulboundTest is Test {
     /// @notice Mint emits correct event
     function test_mintTo_emitsEvent() public {
         vm.expectEmit(true, true, true, true);
-        emit WalletSoulbound.WalletSoulboundMinted(1, registeredWallet, minter, "en");
+        emit WalletSoulbound.WalletSoulboundMinted(1, registeredWallet, minter);
 
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
     }
 
     /// @notice Cannot mint to unregistered wallet
     function test_mintTo_revert_notRegistered() public {
         vm.prank(minter);
         vm.expectRevert(WalletSoulbound.NotRegisteredOrPending.selector);
-        soulbound.mintTo(unregisteredWallet, "en");
+        soulbound.mintTo(unregisteredWallet);
     }
 
     /// @notice Cannot mint twice to same wallet
     function test_mintTo_revert_alreadyMinted() public {
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
 
         vm.prank(minter);
         vm.expectRevert(WalletSoulbound.AlreadyMinted.selector);
-        soulbound.mintTo(registeredWallet, "en");
-    }
-
-    /// @notice Unsupported language falls back to English
-    function test_mintTo_fallbackLanguage() public {
-        vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "zz"); // unsupported language
-
-        // Should store "en" as fallback
-        assertEq(soulbound.tokenLanguage(1), "en");
+        soulbound.mintTo(registeredWallet);
     }
 
     /// @notice Stores correct token metadata
     function test_mintTo_storesMetadata() public {
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
 
         assertEq(soulbound.tokenWallet(1), registeredWallet);
-        assertEq(soulbound.tokenLanguage(1), "en");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -176,7 +166,7 @@ contract WalletSoulboundTest is Test {
     /// @notice locked() returns true for minted tokens
     function test_locked_returnsTrue() public {
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
 
         assertTrue(soulbound.locked(1));
     }
@@ -193,7 +183,7 @@ contract WalletSoulboundTest is Test {
         emit IERC5192.Locked(1);
 
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
     }
 
     /// @notice Contract reports ERC-5192 interface support
@@ -208,7 +198,7 @@ contract WalletSoulboundTest is Test {
     /// @notice transferFrom reverts (via _update override)
     function test_transfer_revert() public {
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
 
         vm.prank(registeredWallet);
         vm.expectRevert(BaseSoulbound.NonTransferrable.selector);
@@ -218,7 +208,7 @@ contract WalletSoulboundTest is Test {
     /// @notice safeTransferFrom reverts (via _update override)
     function test_safeTransfer_revert() public {
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
 
         vm.prank(registeredWallet);
         vm.expectRevert(BaseSoulbound.NonTransferrable.selector);
@@ -232,7 +222,7 @@ contract WalletSoulboundTest is Test {
     /// @notice tokenURI returns valid JSON data URI
     function test_tokenURI_returnsValidDataURI() public {
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
 
         string memory uri = soulbound.tokenURI(1);
 
@@ -261,7 +251,7 @@ contract WalletSoulboundTest is Test {
     /// @notice canMint returns false if already minted
     function test_canMint_alreadyMinted() public {
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
 
         (bool eligible, string memory reason) = soulbound.canMint(registeredWallet);
         assertFalse(eligible);
@@ -278,7 +268,7 @@ contract WalletSoulboundTest is Test {
     /// @notice getTokenIdForWallet returns correct token ID
     function test_getTokenIdForWallet_success() public {
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
 
         assertEq(soulbound.getTokenIdForWallet(registeredWallet), 1);
     }
@@ -293,11 +283,11 @@ contract WalletSoulboundTest is Test {
         assertEq(soulbound.totalSupply(), 0);
 
         vm.prank(minter);
-        soulbound.mintTo(registeredWallet, "en");
+        soulbound.mintTo(registeredWallet);
         assertEq(soulbound.totalSupply(), 1);
 
         vm.prank(minter);
-        soulbound.mintTo(pendingWallet, "en");
+        soulbound.mintTo(pendingWallet);
         assertEq(soulbound.totalSupply(), 2);
     }
 

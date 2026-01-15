@@ -1,19 +1,22 @@
 /**
  * Hook to mint a WalletSoulbound token for a registered stolen wallet.
+ *
+ * Note: WalletSoulbound contracts are deployed on the hub chain only.
+ * This hook always targets the hub chain and will prompt the user to
+ * switch chains if they're connected to a spoke chain.
  */
 
-import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt, useSwitchChain, useChainId } from 'wagmi';
 import { zeroAddress } from 'viem';
 import { walletSoulboundAbi } from '@/lib/contracts/abis';
 import { getWalletSoulboundAddress } from '@/lib/contracts/addresses';
+import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import type { Address, Hash } from '@/lib/types/ethereum';
 
 export interface MintWalletSoulboundParams {
   /** Wallet address to mint the token for (must be registered/pending) */
   wallet: Address;
-  /** ISO 639-1 language code for the SVG (e.g., 'en', 'es', 'zh') */
-  language: string;
 }
 
 export interface UseMintWalletSoulboundResult {
@@ -46,7 +49,7 @@ export interface UseMintWalletSoulboundResult {
  * const { mint, isPending, isConfirming, isConfirmed, isError, error } = useMintWalletSoulbound();
  *
  * const handleMint = async () => {
- *   await mint({ wallet: registeredWallet, language: 'en' });
+ *   await mint({ wallet: registeredWallet });
  * };
  *
  * if (isPending) return <p>Confirm in wallet...</p>;
@@ -57,15 +60,18 @@ export interface UseMintWalletSoulboundResult {
  * ```
  */
 export function useMintWalletSoulbound(): UseMintWalletSoulboundResult {
-  const chainId = useChainId();
+  // Soulbound contracts are only deployed on the hub chain
+  const hubChainId = getHubChainIdForEnvironment();
+  const currentChainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
 
   let contractAddress: Address | undefined;
   try {
-    contractAddress = getWalletSoulboundAddress(chainId);
+    contractAddress = getWalletSoulboundAddress(hubChainId);
   } catch (error) {
     contractAddress = undefined;
     logger.contract.error('useMintWalletSoulbound: Failed to resolve contract address', {
-      chainId,
+      chainId: hubChainId,
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -90,17 +96,27 @@ export function useMintWalletSoulbound(): UseMintWalletSoulboundResult {
 
   const mint = async (params: MintWalletSoulboundParams): Promise<Hash> => {
     if (!contractAddress || contractAddress === zeroAddress) {
-      logger.contract.error('useMintWalletSoulbound: No contract address configured', { chainId });
+      logger.contract.error('useMintWalletSoulbound: No contract address configured', {
+        chainId: hubChainId,
+      });
       throw new Error('WalletSoulbound contract not configured for this chain');
     }
 
-    const { wallet, language } = params;
+    const { wallet } = params;
+
+    // Switch to hub chain if not already connected
+    if (currentChainId !== hubChainId) {
+      logger.contract.info('Switching to hub chain for WalletSoulbound mint', {
+        fromChainId: currentChainId,
+        toChainId: hubChainId,
+      });
+      await switchChainAsync({ chainId: hubChainId });
+    }
 
     logger.contract.info('Minting WalletSoulbound token', {
-      chainId,
+      chainId: hubChainId,
       contractAddress,
       wallet,
-      language,
     });
 
     try {
@@ -108,20 +124,20 @@ export function useMintWalletSoulbound(): UseMintWalletSoulboundResult {
         address: contractAddress,
         abi: walletSoulboundAbi,
         functionName: 'mintTo',
-        args: [wallet, language],
+        args: [wallet],
+        chainId: hubChainId,
       });
 
       logger.contract.info('WalletSoulbound mint transaction submitted', {
         txHash,
         wallet,
-        language,
-        chainId,
+        chainId: hubChainId,
       });
 
       return txHash;
     } catch (error) {
       logger.contract.error('WalletSoulbound mint failed', {
-        chainId,
+        chainId: hubChainId,
         wallet,
         error: error instanceof Error ? error.message : String(error),
       });

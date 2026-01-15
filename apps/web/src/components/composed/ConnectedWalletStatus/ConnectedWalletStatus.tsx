@@ -8,12 +8,11 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useAccount } from 'wagmi';
-import { Alert, AlertTitle, AlertDescription, Button } from '@swr/ui';
+import { Alert, AlertTitle, AlertDescription, Button, ExplorerLink } from '@swr/ui';
 import { AlertTriangle, Clock, X } from 'lucide-react';
 import { useRegistryStatus } from '@/hooks';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { cn } from '@/lib/utils';
-import { truncateAddress } from '@/lib/address';
 import { logger } from '@/lib/logger';
 
 const DISMISS_KEY = 'swr-wallet-status-dismissed';
@@ -143,8 +142,15 @@ export function ConnectedWalletStatus({
         <AlertTitle>Your connected wallet is registered as stolen</AlertTitle>
         <AlertDescription className="space-y-2">
           <p>
-            This wallet (<code className="text-xs">{truncateAddress(address)}</code>) has been
-            registered as stolen. Consider disconnecting and using a different wallet.
+            This wallet (
+            <ExplorerLink
+              value={address}
+              type="address"
+              truncate={false}
+              showDisabledIcon={false}
+              className="inline"
+            />
+            ) has been registered as stolen. Consider disconnecting and using a different wallet.
           </p>
         </AlertDescription>
         <Button
@@ -175,8 +181,15 @@ export function ConnectedWalletStatus({
         </AlertTitle>
         <AlertDescription className="text-yellow-800 dark:text-yellow-200">
           <p>
-            This wallet (<code className="text-xs">{truncateAddress(address)}</code>) has an
-            acknowledgement pending. Registration may complete soon.
+            This wallet (
+            <ExplorerLink
+              value={address}
+              type="address"
+              truncate={false}
+              showDisabledIcon={false}
+              className="inline"
+            />
+            ) has an acknowledgement pending. Registration may complete soon.
           </p>
         </AlertDescription>
         <Button

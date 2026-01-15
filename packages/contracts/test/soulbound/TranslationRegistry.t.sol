@@ -30,7 +30,7 @@ contract TranslationRegistryTest is Test {
             registry.getLanguage("en");
 
         assertEq(title, "STOLEN WALLET");
-        assertEq(subtitle, "This wallet has been reported stolen");
+        assertEq(subtitle, "Signed as stolen");
         assertEq(warning, "Do not send funds to this address");
         assertEq(footer, "Stolen Wallet Registry");
     }
@@ -130,7 +130,7 @@ contract TranslationRegistryTest is Test {
     /// @notice Can get individual translations by key
     function test_getTranslation_success() public view {
         assertEq(registry.getTranslation("en", "title"), "STOLEN WALLET");
-        assertEq(registry.getTranslation("en", "subtitle"), "This wallet has been reported stolen");
+        assertEq(registry.getTranslation("en", "subtitle"), "Signed as stolen");
         assertEq(registry.getTranslation("en", "warning"), "Do not send funds to this address");
         assertEq(registry.getTranslation("en", "footer"), "Stolen Wallet Registry");
     }

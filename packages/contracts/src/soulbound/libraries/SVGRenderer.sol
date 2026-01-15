@@ -5,33 +5,36 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @title SVGRenderer
 /// @notice Generates on-chain SVG artwork for soulbound tokens
-/// @dev Uniswap-style animated SVG with rotating text path
+/// @dev Uniswap-style animated SVG with text following rectangular border
 /// @author Stolen Wallet Registry Team
 library SVGRenderer {
     using Strings for uint256;
     using Strings for address;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // WALLET SOULBOUND SVG
+    // WALLET SOULBOUND SVG (MULTILINGUAL)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Render SVG for WalletSoulbound token
+    /// @notice Render SVG for WalletSoulbound token with ALL languages
+    /// @dev Uses SVG <switch> with systemLanguage to auto-select user's language
+    /// @param wallet The wallet address being marked as stolen
+    /// @param tokenId The token ID
+    /// @param domain The domain to display (e.g., "stolenwallet.xyz")
+    /// @param langCodes Array of ISO 639-1 language codes
+    /// @param subtitles Array of subtitle translations (parallel to langCodes)
     function renderWalletSoulbound(
         address wallet,
         uint256 tokenId,
-        string memory title,
-        string memory subtitle,
-        string memory warning,
-        string memory footer
+        string memory domain,
+        string[] memory langCodes,
+        string[] memory subtitles
     ) internal pure returns (string memory) {
-        // Build in two parts to avoid stack too deep
-        string memory part1 = string(abi.encodePacked(_svgHeader(), _defs(), _backgroundWallet()));
+        // Build in parts to avoid stack too deep
+        string memory part1 = string(abi.encodePacked(_svgHeader(), _defs(), _background()));
+        string memory part2 = _animatedBorderDual(domain, "STOLEN WALLET");
+        string memory part3 = _walletContentMultilang(wallet, tokenId, langCodes, subtitles);
 
-        string memory part2 = string(
-            abi.encodePacked(_animatedBorder(title, warning), _walletContent(wallet, tokenId, subtitle, footer))
-        );
-
-        return string(abi.encodePacked(part1, part2, _svgFooter()));
+        return string(abi.encodePacked(part1, part2, part3, _svgFooter()));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -39,20 +42,22 @@ library SVGRenderer {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Render SVG for SupportSoulbound token
-    function renderSupportSoulbound(
-        address supporter,
-        uint256 tokenId,
-        uint256 donation,
-        string memory title,
-        string memory footer
-    ) internal pure returns (string memory) {
+    /// @param supporter The supporter address
+    /// @param tokenId The token ID
+    /// @param donation The donation amount in wei
+    /// @param domain The domain to display (e.g., "stolenwallet.xyz")
+    function renderSupportSoulbound(address supporter, uint256 tokenId, uint256 donation, string memory domain)
+        internal
+        pure
+        returns (string memory)
+    {
         string memory donationStr = _formatEther(donation);
 
         // Build in two parts to avoid stack too deep
-        string memory part1 = string(abi.encodePacked(_svgHeader(), _defs(), _backgroundSupport()));
+        string memory part1 = string(abi.encodePacked(_svgHeader(), _defs(), _background()));
 
         string memory part2 = string(
-            abi.encodePacked(_animatedBorderSimple(title), _supportContent(supporter, tokenId, donationStr, footer))
+            abi.encodePacked(_animatedBorderDual(domain, "THANK YOU"), _supportContent(supporter, tokenId, donationStr))
         );
 
         return string(abi.encodePacked(part1, part2, _svgFooter()));
@@ -70,179 +75,206 @@ library SVGRenderer {
         return "</svg>";
     }
 
+    /// @dev Defines a single rectangular border path for text to follow
+    /// @notice Path positioned in the gutter between outer edge (0) and inner rect (20)
+    /// @notice Path at y=12 gives 12px from edge and 8px from inner rect
     function _defs() private pure returns (string memory) {
         return string(
             abi.encodePacked(
                 "<defs>",
-                "<path id=\"textCircle\" d=\"M 200,200 m -150,0 a 150,150 0 1,1 300,0 a 150,150 0 1,1 -300,0\"/>",
-                _gradient(),
+                // Rectangular path centered in gutter - starts at top center for smooth animation
+                "<path id=\"borderPath\" d=\"M200 12 H368 A16 16 0 0 1 388 32 V368 A16 16 0 0 1 368 388 H32 A16 16 0 0 1 12 368 V32 A16 16 0 0 1 32 12 H200\"/>",
                 "</defs>"
             )
         );
     }
 
-    function _gradient() private pure returns (string memory) {
+    /// @dev Black background with inner rectangle
+    function _background() private pure returns (string memory) {
         return string(
             abi.encodePacked(
-                "<linearGradient id=\"grad1\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"100%\">",
-                "<stop offset=\"0%\" style=\"stop-color:#ff6b6b\"/>",
-                "<stop offset=\"100%\" style=\"stop-color:#feca57\"/>",
-                "</linearGradient>"
-            )
-        );
-    }
-
-    function _backgroundWallet() private pure returns (string memory) {
-        return string(
-            abi.encodePacked(
-                "<rect width=\"400\" height=\"400\" fill=\"#1a1a2e\"/>",
+                "<rect width=\"400\" height=\"400\" fill=\"#000\"/>",
                 "<rect x=\"20\" y=\"20\" width=\"360\" height=\"360\" rx=\"20\" ",
-                "fill=\"#16213e\" stroke=\"url(#grad1)\" stroke-width=\"2\"/>"
+                "fill=\"#111\" stroke=\"#333\" stroke-width=\"1\"/>"
             )
         );
     }
 
-    function _backgroundSupport() private pure returns (string memory) {
+    /// @dev Animated text on BOTH sides of the border using single path with 50% offset
+    /// @notice Creates seamless continuous loop - two textPaths on same path, opposite sides
+    function _animatedBorderDual(string memory text1, string memory text2) private pure returns (string memory) {
+        // Text content with single separator (no double dash)
+        string memory content1 = string(abi.encodePacked(text1, " - ", text1, " - ", text1, " - "));
+        string memory content2 = string(abi.encodePacked(text2, " - ", text2, " - ", text2, " - "));
+
         return string(
             abi.encodePacked(
-                "<rect width=\"400\" height=\"400\" fill=\"#0d1b2a\"/>",
-                "<rect x=\"20\" y=\"20\" width=\"360\" height=\"360\" rx=\"20\" ",
-                "fill=\"#1b263b\" stroke=\"url(#grad1)\" stroke-width=\"2\"/>"
+                // First text at 0% offset, animates 0% -> 100% (clockwise)
+                "<text fill=\"#fff\" font-size=\"10\" font-family=\"monospace\">",
+                "<textPath href=\"#borderPath\">",
+                "<animate attributeName=\"startOffset\" from=\"0%\" to=\"100%\" dur=\"60s\" repeatCount=\"indefinite\"/>",
+                content1,
+                "</textPath>",
+                "</text>",
+                // Second text at 50% offset (opposite side), animates 50% -> 150%
+                "<text fill=\"#fff\" font-size=\"10\" font-family=\"monospace\">",
+                "<textPath href=\"#borderPath\" startOffset=\"50%\">",
+                "<animate attributeName=\"startOffset\" from=\"50%\" to=\"150%\" dur=\"60s\" repeatCount=\"indefinite\"/>",
+                content2,
+                "</textPath>",
+                "</text>"
             )
         );
     }
 
-    /// @dev Animated rotating text around the border for wallet tokens
-    function _animatedBorder(string memory text1, string memory text2) private pure returns (string memory) {
-        // Split into smaller parts to avoid stack issues
-        string memory textStart = string(
+    /// @dev Wallet content with multilingual subtitle
+    /// @notice English "STOLEN WALLET" ALWAYS displayed at top (no systemLanguage)
+    /// @notice Other language translations shown below via <switch> with systemLanguage
+    function _walletContentMultilang(
+        address wallet,
+        uint256 tokenId,
+        string[] memory langCodes,
+        string[] memory subtitles
+    ) private pure returns (string memory) {
+        // Full wallet address (no truncation)
+        string memory fullAddr = Strings.toHexString(uint160(wallet), 20);
+
+        // English title - ALWAYS shown (no systemLanguage)
+        string memory englishLine = string(
             abi.encodePacked(
-                "<text fill=\"#ff6b6b\" font-size=\"12\" font-family=\"monospace\">",
-                "<textPath href=\"#textCircle\">",
-                "<animate attributeName=\"startOffset\" from=\"0%\" to=\"100%\" ",
-                "dur=\"20s\" repeatCount=\"indefinite\"/>"
+                "<text x=\"200\" y=\"120\" text-anchor=\"middle\" fill=\"#fff\" ",
+                "font-size=\"16\" font-family=\"monospace\">STOLEN WALLET</text>"
             )
         );
 
-        string memory content = string(
-            abi.encodePacked(text1, unicode" • ", text2, unicode" • ", text1, unicode" • ", text2, unicode" • ")
-        );
+        // Build the <switch> element for non-English language translations only
+        string memory switchElement = _buildLanguageSwitch(langCodes, subtitles);
 
-        return string(abi.encodePacked(textStart, content, "</textPath></text>"));
-    }
-
-    /// @dev Simplified border for support tokens
-    function _animatedBorderSimple(string memory title) private pure returns (string memory) {
-        string memory textStart = string(
+        // Wallet address - full display, white text, larger font
+        string memory addressLine = string(
             abi.encodePacked(
-                "<text fill=\"#ff6b6b\" font-size=\"12\" font-family=\"monospace\">",
-                "<textPath href=\"#textCircle\">",
-                "<animate attributeName=\"startOffset\" from=\"0%\" to=\"100%\" ",
-                "dur=\"20s\" repeatCount=\"indefinite\"/>"
-            )
-        );
-
-        string memory content =
-            string(abi.encodePacked(title, unicode" • THANK YOU • ", title, unicode" • THANK YOU • "));
-
-        return string(abi.encodePacked(textStart, content, "</textPath></text>"));
-    }
-
-    function _walletContent(address wallet, uint256 tokenId, string memory subtitle, string memory footer)
-        private
-        pure
-        returns (string memory)
-    {
-        string memory truncatedAddr = _truncateAddress(wallet);
-
-        // Split into parts
-        string memory line1 = string(
-            abi.encodePacked(
-                "<text x=\"200\" y=\"160\" text-anchor=\"middle\" fill=\"white\" ",
-                "font-size=\"14\" font-family=\"monospace\">",
-                subtitle,
+                "<text x=\"200\" y=\"200\" text-anchor=\"middle\" fill=\"#fff\" ",
+                "font-size=\"11\" font-family=\"monospace\">",
+                fullAddr,
                 "</text>"
             )
         );
 
-        string memory line2 = string(
+        // Token ID - white text
+        string memory tokenLine = string(
             abi.encodePacked(
-                "<text x=\"200\" y=\"200\" text-anchor=\"middle\" fill=\"url(#grad1)\" ",
-                "font-size=\"10\" font-family=\"monospace\">",
-                truncatedAddr,
-                "</text>"
-            )
-        );
-
-        string memory line3 = string(
-            abi.encodePacked(
-                "<text x=\"200\" y=\"240\" text-anchor=\"middle\" fill=\"#888\" ",
+                "<text x=\"200\" y=\"240\" text-anchor=\"middle\" fill=\"#fff\" ",
                 "font-size=\"12\" font-family=\"monospace\">WALLET #",
                 tokenId.toString(),
                 "</text>"
             )
         );
 
-        string memory line4 = string(
+        // Footer - white text
+        string memory footerLine = string(
             abi.encodePacked(
-                "<text x=\"200\" y=\"360\" text-anchor=\"middle\" fill=\"#666\" ",
-                "font-size=\"10\" font-family=\"monospace\">",
-                footer,
-                "</text>"
+                "<text x=\"200\" y=\"360\" text-anchor=\"middle\" fill=\"#fff\" ",
+                "font-size=\"10\" font-family=\"monospace\">Stolen Wallet Registry</text>"
             )
         );
 
-        return string(abi.encodePacked(line1, line2, line3, line4));
+        return string(abi.encodePacked(englishLine, switchElement, addressLine, tokenLine, footerLine));
     }
 
-    function _supportContent(address supporter, uint256 tokenId, string memory donation, string memory footer)
+    /// @dev Build SVG <switch> element with systemLanguage for each translation
+    /// @notice Shows translation below English title ONLY for non-English browsers
+    /// @notice English browsers see nothing here (empty fallback)
+    function _buildLanguageSwitch(string[] memory langCodes, string[] memory subtitles)
         private
         pure
         returns (string memory)
     {
-        string memory truncatedAddr = _truncateAddress(supporter);
+        if (langCodes.length == 0) {
+            return "";
+        }
 
-        // Split into parts
+        // Start switch element
+        string memory result = "<switch>";
+
+        // Add each non-English language with systemLanguage attribute
+        for (uint256 i = 0; i < langCodes.length; i++) {
+            // Skip English - English title is always shown above, no need for translation
+            if (keccak256(bytes(langCodes[i])) == keccak256(bytes("en"))) {
+                continue;
+            }
+
+            // Position at y=150 (below English title at y=120)
+            result = string(
+                abi.encodePacked(
+                    result,
+                    "<text x=\"200\" y=\"150\" text-anchor=\"middle\" fill=\"#fff\" ",
+                    "font-size=\"14\" font-family=\"monospace\" systemLanguage=\"",
+                    langCodes[i],
+                    "\">",
+                    subtitles[i],
+                    "</text>"
+                )
+            );
+        }
+
+        // Empty fallback for English browsers (they just see the English title above)
+        result = string(abi.encodePacked(result, "<g></g>"));
+
+        // Close switch
+        result = string(abi.encodePacked(result, "</switch>"));
+
+        return result;
+    }
+
+    function _supportContent(address supporter, uint256 tokenId, string memory donation)
+        private
+        pure
+        returns (string memory)
+    {
+        // Full address (no truncation), white text
+        string memory fullAddr = Strings.toHexString(uint160(supporter), 20);
+
+        // Split into parts - all white text
         string memory line1 = string(
             abi.encodePacked(
-                "<text x=\"200\" y=\"150\" text-anchor=\"middle\" fill=\"white\" ",
+                "<text x=\"200\" y=\"150\" text-anchor=\"middle\" fill=\"#fff\" ",
                 "font-size=\"16\" font-family=\"monospace\">SUPPORTER</text>"
             )
         );
 
         string memory line2 = string(
             abi.encodePacked(
-                "<text x=\"200\" y=\"200\" text-anchor=\"middle\" fill=\"url(#grad1)\" ",
+                "<text x=\"200\" y=\"200\" text-anchor=\"middle\" fill=\"#fff\" ",
                 "font-size=\"24\" font-family=\"monospace\">",
                 donation,
                 "</text>"
             )
         );
 
+        // Address - larger font (11px instead of 8px)
         string memory line3 = string(
             abi.encodePacked(
-                "<text x=\"200\" y=\"240\" text-anchor=\"middle\" fill=\"#888\" ",
-                "font-size=\"10\" font-family=\"monospace\">",
-                truncatedAddr,
+                "<text x=\"200\" y=\"250\" text-anchor=\"middle\" fill=\"#fff\" ",
+                "font-size=\"11\" font-family=\"monospace\">",
+                fullAddr,
                 "</text>"
             )
         );
 
         string memory line4 = string(
             abi.encodePacked(
-                "<text x=\"200\" y=\"270\" text-anchor=\"middle\" fill=\"#888\" ",
+                "<text x=\"200\" y=\"280\" text-anchor=\"middle\" fill=\"#fff\" ",
                 "font-size=\"12\" font-family=\"monospace\">TOKEN #",
                 tokenId.toString(),
                 "</text>"
             )
         );
 
+        // Footer - white text (not gray)
         string memory line5 = string(
             abi.encodePacked(
-                "<text x=\"200\" y=\"360\" text-anchor=\"middle\" fill=\"#666\" ",
-                "font-size=\"10\" font-family=\"monospace\">",
-                footer,
-                "</text>"
+                "<text x=\"200\" y=\"360\" text-anchor=\"middle\" fill=\"#fff\" ",
+                "font-size=\"10\" font-family=\"monospace\">Stolen Wallet Registry</text>"
             )
         );
 
@@ -252,30 +284,6 @@ library SVGRenderer {
     // ═══════════════════════════════════════════════════════════════════════════
     // UTILITY FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @dev Truncate address to 0x1234...5678 format
-    function _truncateAddress(address addr) private pure returns (string memory) {
-        string memory full = Strings.toHexString(uint160(addr), 20);
-        // full is "0x" + 40 hex chars = 42 chars total
-        // Return 0x1234...5678 format (first 6 chars + ... + last 4 chars)
-        bytes memory fullBytes = bytes(full);
-        bytes memory result = new bytes(13); // "0x1234...5678" = 13 chars
-
-        // Copy first 6 chars (0x1234)
-        for (uint256 i = 0; i < 6; i++) {
-            result[i] = fullBytes[i];
-        }
-        // Add "..."
-        result[6] = ".";
-        result[7] = ".";
-        result[8] = ".";
-        // Copy last 4 chars (5678)
-        for (uint256 i = 0; i < 4; i++) {
-            result[9 + i] = fullBytes[38 + i];
-        }
-
-        return string(result);
-    }
 
     /// @dev Format wei to ETH string with up to 4 decimal places
     /// @notice Preserves leading zeros (e.g., 0.05 ETH displays correctly, not 0.5)

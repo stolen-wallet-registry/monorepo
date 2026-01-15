@@ -75,7 +75,7 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
             "en",
             LanguagePack({
                 title: "STOLEN WALLET",
-                subtitle: "This wallet has been reported stolen",
+                subtitle: "Signed as stolen",
                 warning: "Do not send funds to this address",
                 footer: "Stolen Wallet Registry",
                 exists: true
@@ -167,6 +167,19 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
     /// @inheritdoc ITranslationRegistry
     function getSupportedLanguages() external view returns (string[] memory) {
         return _supportedLanguages;
+    }
+
+    /// @inheritdoc ITranslationRegistry
+    function getAllSubtitles() external view returns (string[] memory codes, string[] memory subtitles) {
+        uint256 len = _supportedLanguages.length;
+        codes = new string[](len);
+        subtitles = new string[](len);
+
+        for (uint256 i = 0; i < len; i++) {
+            string memory code = _supportedLanguages[i];
+            codes[i] = code;
+            subtitles[i] = _languages[code].subtitle;
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

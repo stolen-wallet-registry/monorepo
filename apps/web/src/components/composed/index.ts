@@ -49,3 +49,4 @@ export {
 } from './SupportSoulboundMintCard';
 export { SoulboundSvgPreview, type SoulboundSvgPreviewProps } from './SoulboundSvgPreview';
 export { SoulboundPreviewModal, type SoulboundPreviewModalProps } from './SoulboundPreviewModal';
+export { MintedTokenDisplay, type MintedTokenDisplayProps } from './MintedTokenDisplay';

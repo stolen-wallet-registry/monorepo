@@ -16,7 +16,7 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 /// - 1 token per registered wallet (enforced on-chain)
 /// - Gated by StolenWalletRegistry (wallet must be registered or pending)
 /// - Anyone can pay for mint, token goes to the registered wallet
-/// - On-chain SVG artwork with multilingual support
+/// - On-chain SVG artwork with multilingual support (auto-selects based on browser)
 /// - ERC-5192 compliant (non-transferable)
 contract WalletSoulbound is BaseSoulbound {
     using Strings for uint256;
@@ -37,9 +37,6 @@ contract WalletSoulbound is BaseSoulbound {
 
     /// @dev Reverse mapping for O(1) token lookup by wallet
     mapping(address wallet => uint256 tokenId) private _walletToTokenId;
-
-    /// @dev Language preference per token (ISO 639-1 code)
-    mapping(uint256 tokenId => string) public tokenLanguage;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
@@ -62,10 +59,7 @@ contract WalletSoulbound is BaseSoulbound {
     /// @param tokenId The minted token ID
     /// @param wallet The wallet the token represents
     /// @param minter Who paid for the mint (may differ from wallet)
-    /// @param language The language code for the SVG
-    event WalletSoulboundMinted(
-        uint256 indexed tokenId, address indexed wallet, address indexed minter, string language
-    );
+    event WalletSoulboundMinted(uint256 indexed tokenId, address indexed wallet, address indexed minter);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -74,8 +68,9 @@ contract WalletSoulbound is BaseSoulbound {
     /// @param _registry Address of the StolenWalletRegistry contract
     /// @param _translations Address of the TranslationRegistry contract
     /// @param _feeCollector Address to receive fees
-    constructor(address _registry, address _translations, address _feeCollector)
-        BaseSoulbound("SWR Wallet Soulbound", "SWRW", _translations, _feeCollector)
+    /// @param _domain Domain to display in SVG (e.g., "stolenwallet.xyz")
+    constructor(address _registry, address _translations, address _feeCollector, string memory _domain)
+        BaseSoulbound("SWR Wallet Soulbound", "SWRW", _translations, _feeCollector, _domain)
     {
         if (_registry == address(0)) revert InvalidRegistry();
         registry = IStolenWalletRegistry(_registry);
@@ -89,9 +84,9 @@ contract WalletSoulbound is BaseSoulbound {
     /// @dev Anyone can pay for the mint - the token goes to the wallet.
     ///      This supports the drained wallet scenario where the owner
     ///      can't pay gas but a friend/relayer can help.
+    ///      SVG auto-selects language based on viewer's browser settings.
     /// @param wallet The wallet address to mint for (must be registered or pending)
-    /// @param language ISO 639-1 language code for SVG text (e.g., "en", "es", "zh")
-    function mintTo(address wallet, string calldata language) external payable {
+    function mintTo(address wallet) external payable {
         // Check wallet is in registry (registered or pending acknowledgement)
         if (!registry.isRegistered(wallet) && !registry.isPending(wallet)) {
             revert NotRegisteredOrPending();
@@ -102,9 +97,6 @@ contract WalletSoulbound is BaseSoulbound {
             revert AlreadyMinted();
         }
 
-        // Validate language (falls back to "en" if unsupported)
-        string memory lang = translations.isLanguageSupported(language) ? language : "en";
-
         // Mark as minted before mint to prevent reentrancy
         hasMinted[wallet] = true;
 
@@ -113,31 +105,29 @@ contract WalletSoulbound is BaseSoulbound {
 
         // Store metadata
         tokenWallet[tokenId] = wallet;
-        tokenLanguage[tokenId] = lang;
         _walletToTokenId[wallet] = tokenId;
 
-        emit WalletSoulboundMinted(tokenId, wallet, msg.sender, lang);
+        emit WalletSoulboundMinted(tokenId, wallet, msg.sender);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // TOKEN URI (ON-CHAIN SVG)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Generate on-chain SVG metadata
+    /// @notice Generate on-chain SVG metadata with multilingual support
+    /// @dev SVG uses <switch> with systemLanguage for auto language selection
     /// @param tokenId The token to get URI for
     /// @return Base64 encoded JSON metadata with embedded SVG
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         _requireOwned(tokenId);
 
         address wallet = tokenWallet[tokenId];
-        string memory language = tokenLanguage[tokenId];
 
-        // Get translations
-        (string memory title, string memory subtitle, string memory warning, string memory footer) =
-            translations.getLanguage(language);
+        // Get ALL language subtitles for the multilingual SVG
+        (string[] memory langCodes, string[] memory subtitles) = translations.getAllSubtitles();
 
-        // Render SVG
-        string memory svg = SVGRenderer.renderWalletSoulbound(wallet, tokenId, title, subtitle, warning, footer);
+        // Render SVG with domain and all languages embedded
+        string memory svg = SVGRenderer.renderWalletSoulbound(wallet, tokenId, domain, langCodes, subtitles);
 
         // Build JSON metadata
         string memory json = string(
@@ -150,8 +140,6 @@ contract WalletSoulbound is BaseSoulbound {
                 "\",\"attributes\":[",
                 "{\"trait_type\":\"Wallet\",\"value\":\"",
                 Strings.toHexString(uint160(wallet), 20),
-                "\"},{\"trait_type\":\"Language\",\"value\":\"",
-                language,
                 "\"},{\"trait_type\":\"Type\",\"value\":\"Wallet Soulbound\"}",
                 "]}"
             )

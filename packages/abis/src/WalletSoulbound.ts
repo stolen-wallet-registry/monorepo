@@ -17,6 +17,11 @@ export const WalletSoulboundABI = [
         type: 'address',
         internalType: 'address',
       },
+      {
+        name: '_domain',
+        type: 'string',
+        internalType: 'string',
+      },
     ],
     stateMutability: 'nonpayable',
   },
@@ -82,6 +87,19 @@ export const WalletSoulboundABI = [
       },
       {
         name: 'reason',
+        type: 'string',
+        internalType: 'string',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'domain',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
         type: 'string',
         internalType: 'string',
       },
@@ -209,11 +227,6 @@ export const WalletSoulboundABI = [
         name: 'wallet',
         type: 'address',
         internalType: 'address',
-      },
-      {
-        name: 'language',
-        type: 'string',
-        internalType: 'string',
       },
     ],
     outputs: [],
@@ -368,6 +381,19 @@ export const WalletSoulboundABI = [
   },
   {
     type: 'function',
+    name: 'setDomain',
+    inputs: [
+      {
+        name: '_domain',
+        type: 'string',
+        internalType: 'string',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'supportsInterface',
     inputs: [
       {
@@ -389,25 +415,6 @@ export const WalletSoulboundABI = [
     type: 'function',
     name: 'symbol',
     inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'string',
-        internalType: 'string',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'tokenLanguage',
-    inputs: [
-      {
-        name: 'tokenId',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-    ],
     outputs: [
       {
         name: '',
@@ -576,6 +583,25 @@ export const WalletSoulboundABI = [
   },
   {
     type: 'event',
+    name: 'DomainUpdated',
+    inputs: [
+      {
+        name: 'oldDomain',
+        type: 'string',
+        indexed: false,
+        internalType: 'string',
+      },
+      {
+        name: 'newDomain',
+        type: 'string',
+        indexed: false,
+        internalType: 'string',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'Locked',
     inputs: [
       {
@@ -684,12 +710,6 @@ export const WalletSoulboundABI = [
         type: 'address',
         indexed: true,
         internalType: 'address',
-      },
-      {
-        name: 'language',
-        type: 'string',
-        indexed: false,
-        internalType: 'string',
       },
     ],
     anonymous: false,

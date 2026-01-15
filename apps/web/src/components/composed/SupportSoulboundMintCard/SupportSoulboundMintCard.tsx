@@ -5,7 +5,7 @@
  * a commemorative soulbound token.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   Card,
   CardHeader,
@@ -16,19 +16,30 @@ import {
   Alert,
   AlertDescription,
   Label,
-  Slider,
+  Input,
 } from '@swr/ui';
-import { useMinDonation, useMintSupportSoulbound } from '@/hooks/soulbound';
+import { useMinDonation, useMintSupportSoulbound, useSupportTokens } from '@/hooks/soulbound';
 import { useEthPrice } from '@/hooks/useEthPrice';
-import { LanguageSelector } from '@/components/composed/LanguageSelector';
+import { ExplorerLink, getExplorerTxUrl } from '@/components/composed/ExplorerLink';
 import { SoulboundPreviewModal } from '@/components/composed/SoulboundPreviewModal';
+import { MintedTokenDisplay } from '@/components/composed/MintedTokenDisplay';
 import { cn, sanitizeErrorMessage } from '@/lib/utils';
+import { getHubChainIdForEnvironment } from '@/lib/chains/config';
+import { getSupportSoulboundAddress } from '@/lib/contracts/addresses';
+import { useAccount } from 'wagmi';
 import { Loader2, Check, AlertCircle, Heart } from 'lucide-react';
 import { formatEther, parseEther } from 'viem';
 import type { Hash } from '@/lib/types/ethereum';
 
-/** Preset donation amounts in ETH */
-const DONATION_PRESETS = [0.0001, 0.001, 0.005, 0.01, 0.05, 0.1] as const;
+/** Preset donation amounts in ETH for quick selection */
+const DONATION_PRESETS = [0.001, 0.005, 0.01, 0.05, 0.1] as const;
+
+/** Get browser language code (e.g., 'en' from 'en-US') */
+function getBrowserLanguage(): string {
+  if (typeof navigator === 'undefined') return 'en';
+  const lang = navigator.language || (navigator as { userLanguage?: string }).userLanguage;
+  return lang?.split('-')[0].toLowerCase() ?? 'en';
+}
 
 export interface SupportSoulboundMintCardProps {
   /** Callback when mint succeeds */
@@ -48,46 +59,114 @@ export interface SupportSoulboundMintCardProps {
  * ```
  */
 export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulboundMintCardProps) {
-  const [language, setLanguage] = useState('en');
-  const [sliderIndex, setSliderIndex] = useState(3); // Default to 0.01 ETH
+  // Language defaults to browser language, can be overridden via preview modal
+  const [language, setLanguage] = useState(getBrowserLanguage);
+  const [ethInput, setEthInput] = useState('0.01');
+  const [usdInput, setUsdInput] = useState('');
+  const lastInputRef = useRef<'eth' | 'usd'>('eth');
 
+  const { address: connectedAddress } = useAccount();
   const { minWei, isLoading: isLoadingMin } = useMinDonation();
   const { data: ethPriceData } = useEthPrice();
   const { mint, isPending, isConfirming, isConfirmed, isError, error, hash, reset } =
     useMintSupportSoulbound();
 
-  const isMinting = isPending || isConfirming;
+  // Get tokens for displaying minted NFT (enabled after confirmation)
+  const {
+    latestTokenId,
+    refetch: refetchTokens,
+    isLoading: isLoadingTokens,
+  } = useSupportTokens({
+    supporter: connectedAddress ?? '0x0000000000000000000000000000000000000000',
+    enabled: isConfirmed && !!connectedAddress,
+  });
 
-  // Get donation amount from slider
-  const donationEth = DONATION_PRESETS[sliderIndex];
-  const donationWei = parseEther(donationEth.toString());
+  const hubChainId = getHubChainIdForEnvironment();
+  const supportSoulboundAddress = getSupportSoulboundAddress(hubChainId);
+
+  const isMinting = isPending || isConfirming;
+  const ethPrice = ethPriceData?.usd ?? 0;
+
+  // Parse ETH input to wei
+  const donationWei = useMemo(() => {
+    try {
+      const value = parseFloat(ethInput);
+      if (isNaN(value) || value <= 0) return 0n;
+      return parseEther(value.toString());
+    } catch {
+      return 0n;
+    }
+  }, [ethInput]);
+
+  // Calculate USD from ETH
+  const calculatedUsd = useMemo(() => {
+    const ethValue = parseFloat(ethInput);
+    if (isNaN(ethValue) || !ethPrice) return '';
+    return (ethValue * ethPrice).toFixed(2);
+  }, [ethInput, ethPrice]);
+
+  // Update USD display when ETH changes (only if ETH was last input)
+  useEffect(() => {
+    if (lastInputRef.current === 'eth' && calculatedUsd) {
+      setUsdInput(calculatedUsd);
+    }
+  }, [calculatedUsd]);
+
+  // Handle ETH input change
+  const handleEthChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    lastInputRef.current = 'eth';
+    const value = e.target.value;
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+      setEthInput(value);
+    }
+  }, []);
+
+  // Handle USD input change and convert to ETH
+  const handleUsdChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      lastInputRef.current = 'usd';
+      const value = e.target.value;
+      if (value === '' || /^\d*\.?\d*$/.test(value)) {
+        setUsdInput(value);
+        const usdValue = parseFloat(value);
+        if (!isNaN(usdValue) && ethPrice > 0) {
+          const ethValue = usdValue / ethPrice;
+          setEthInput(ethValue.toFixed(6).replace(/\.?0+$/, ''));
+        } else if (value === '') {
+          setEthInput('');
+        }
+      }
+    },
+    [ethPrice]
+  );
+
+  // Handle preset button click
+  const handlePresetClick = useCallback((amount: number) => {
+    lastInputRef.current = 'eth';
+    setEthInput(amount.toString());
+  }, []);
 
   // Check if valid (meets minimum)
-  const isValidAmount = donationWei >= minWei;
-
-  // Calculate USD value
-  const donationUsd = useMemo(() => {
-    if (!ethPriceData?.usd) return null;
-    const usd = donationEth * ethPriceData.usd;
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(usd);
-  }, [donationEth, ethPriceData?.usd]);
+  const isValidAmount = donationWei > 0n && donationWei >= minWei;
 
   const handleMint = async () => {
     if (!isValidAmount) return;
-
-    // Clear any previous error state before attempting new mint
     reset();
 
     try {
-      const txHash = await mint({ language, donationWei });
+      const txHash = await mint({ donationWei });
       onSuccess?.(txHash);
     } catch {
       // Error is handled by the hook
     }
   };
+
+  // Refetch tokens after successful mint to get the new token ID
+  useEffect(() => {
+    if (isConfirmed) {
+      refetchTokens();
+    }
+  }, [isConfirmed, refetchTokens]);
 
   // Success state
   if (isConfirmed && hash) {
@@ -106,9 +185,28 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
               Thank you for supporting the Stolen Wallet Registry!
             </AlertDescription>
           </Alert>
-          <p className="text-sm text-muted-foreground">
-            Transaction: {hash.slice(0, 10)}...{hash.slice(-8)}
-          </p>
+
+          {/* Display minted NFT */}
+          {latestTokenId !== null && (
+            <div className="flex justify-center py-4">
+              <MintedTokenDisplay
+                contractAddress={supportSoulboundAddress}
+                tokenId={latestTokenId}
+                type="support"
+                size={320}
+              />
+            </div>
+          )}
+          {isLoadingTokens && (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Transaction</Label>
+            <ExplorerLink value={hash} href={getExplorerTxUrl(hubChainId, hash)} />
+          </div>
           <Button variant="outline" onClick={reset} className="w-full">
             Mint Another
           </Button>
@@ -129,56 +227,77 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Donation amount slider */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label>Donation Amount</Label>
-            <div className="text-right">
-              <span className="text-lg font-semibold">{donationEth} ETH</span>
-              {donationUsd && (
-                <span className="ml-2 text-sm text-muted-foreground">({donationUsd})</span>
-              )}
+        {/* Donation amount inputs */}
+        <div className="space-y-3">
+          <Label>Donation Amount</Label>
+
+          {/* ETH and USD inputs */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="relative">
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={ethInput}
+                onChange={handleEthChange}
+                disabled={isMinting}
+                className="pr-12"
+                placeholder="0.01"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                ETH
+              </span>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                $
+              </span>
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={usdInput}
+                onChange={handleUsdChange}
+                disabled={isMinting || !ethPrice}
+                className="pl-7 pr-12"
+                placeholder={ethPrice ? '0.00' : '...'}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                USD
+              </span>
             </div>
           </div>
-          <Slider
-            value={[sliderIndex]}
-            onValueChange={([value]) => setSliderIndex(value)}
-            min={0}
-            max={DONATION_PRESETS.length - 1}
-            step={1}
-            disabled={isMinting}
-            className="w-full"
-          />
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{DONATION_PRESETS[0]} ETH</span>
-            <span>{DONATION_PRESETS[DONATION_PRESETS.length - 1]} ETH</span>
+
+          {/* Quick amount buttons - centered */}
+          <div className="flex flex-wrap justify-center gap-2">
+            {DONATION_PRESETS.map((amount) => (
+              <Button
+                key={amount}
+                type="button"
+                variant={ethInput === amount.toString() ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handlePresetClick(amount)}
+                disabled={isMinting}
+                className="text-xs"
+              >
+                {amount} ETH
+              </Button>
+            ))}
           </div>
-          {!isLoadingMin && minWei > 0n && !isValidAmount && (
-            <p className="text-xs text-destructive">
-              Amount must be at least {formatEther(minWei)} ETH
+
+          {/* Minimum amount warning */}
+          {!isLoadingMin && minWei > 0n && donationWei > 0n && !isValidAmount && (
+            <p className="text-xs text-destructive text-center">
+              Minimum donation: {formatEther(minWei)} ETH
             </p>
           )}
         </div>
 
-        {/* Language selector with preview */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Language</Label>
-            <SoulboundPreviewModal
-              type="support"
-              initialLanguage={language}
-              onLanguageChange={setLanguage}
-            />
-          </div>
-          <LanguageSelector
-            value={language}
-            onChange={setLanguage}
-            disabled={isMinting}
-            className="w-full"
+        {/* Preview button only - language is auto-detected, modal allows override */}
+        <div className="flex justify-end">
+          <SoulboundPreviewModal
+            type="support"
+            initialLanguage={language}
+            onLanguageChange={setLanguage}
           />
-          <p className="text-xs text-muted-foreground">
-            The language for your on-chain SVG artwork
-          </p>
         </div>
 
         {/* Error state */}
