@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { Test, console2 } from "forge-std/Test.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { TranslationRegistry } from "../../src/soulbound/TranslationRegistry.sol";
 
 /// @title TranslationRegistry Tests
@@ -80,7 +81,7 @@ contract TranslationRegistryTest is Test {
     /// @notice Non-owner cannot add language
     function test_addLanguage_revert_notOwner() public {
         vm.prank(nonOwner);
-        vm.expectRevert(); // OwnableUnauthorizedAccount
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
         registry.addLanguage("de", "test", "test", "test", "test");
     }
 
@@ -118,7 +119,7 @@ contract TranslationRegistryTest is Test {
     /// @notice Non-owner cannot update language
     function test_updateLanguage_revert_notOwner() public {
         vm.prank(nonOwner);
-        vm.expectRevert(); // OwnableUnauthorizedAccount
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
         registry.updateLanguage("en", "test", "test", "test", "test");
     }
 

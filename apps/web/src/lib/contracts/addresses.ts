@@ -1,3 +1,4 @@
+import { zeroAddress } from 'viem';
 import type { Address } from '@/lib/types/ethereum';
 import { anvilHub, baseSepolia, isSpokeChain } from '@swr/chains';
 import { getSpokeAddress } from './crosschain-addresses';
@@ -71,7 +72,7 @@ export function getContractAddress(contract: ContractName, chainId: number): Add
 
   const addresses = CONTRACT_ADDRESSES[contract];
   const address = addresses[chainId as keyof typeof addresses];
-  if (!address || address === '0x0000000000000000000000000000000000000000') {
+  if (!address || address === zeroAddress) {
     throw new Error(`No ${contract} address configured for chain ID ${chainId}`);
   }
   return address;

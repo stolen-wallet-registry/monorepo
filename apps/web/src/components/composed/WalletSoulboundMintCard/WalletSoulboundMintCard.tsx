@@ -26,7 +26,7 @@ import type { Address, Hash } from '@/lib/types/ethereum';
 export interface WalletSoulboundMintCardProps {
   /** Wallet address to mint for */
   wallet: Address;
-  /** Callback when mint succeeds */
+  /** Callback when mint transaction is submitted (not confirmed) */
   onSuccess?: (txHash: Hash) => void;
   /** Additional class names */
   className?: string;

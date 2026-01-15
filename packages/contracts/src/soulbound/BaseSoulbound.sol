@@ -107,8 +107,8 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Withdraw accumulated fees to FeeCollector
-    /// @dev Anyone can call this - fees always go to feeCollector
-    function withdraw() external {
+    /// @dev Only owner can trigger withdrawal
+    function withdraw() external onlyOwner {
         uint256 balance = address(this).balance;
         (bool success,) = feeCollector.call{ value: balance }("");
         if (!success) revert WithdrawFailed();

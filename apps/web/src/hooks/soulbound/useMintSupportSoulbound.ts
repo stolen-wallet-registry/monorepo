@@ -3,6 +3,7 @@
  */
 
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
+import { zeroAddress } from 'viem';
 import { supportSoulboundAbi } from '@/lib/contracts/abis';
 import { getSupportSoulboundAddress } from '@/lib/contracts/addresses';
 import { logger } from '@/lib/logger';
@@ -87,7 +88,7 @@ export function useMintSupportSoulbound(): UseMintSupportSoulboundResult {
   });
 
   const mint = async (params: MintSupportSoulboundParams): Promise<Hash> => {
-    if (!contractAddress || contractAddress === '0x0000000000000000000000000000000000000000') {
+    if (!contractAddress || contractAddress === zeroAddress) {
       logger.contract.error('useMintSupportSoulbound: No contract address configured', { chainId });
       throw new Error('SupportSoulbound contract not configured for this chain');
     }

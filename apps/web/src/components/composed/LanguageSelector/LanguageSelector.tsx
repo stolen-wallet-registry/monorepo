@@ -6,20 +6,7 @@
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@swr/ui';
 import { useSupportedLanguages } from '@/hooks/soulbound';
-
-/** Map of ISO 639-1 codes to display names */
-const LANGUAGE_NAMES: Record<string, string> = {
-  en: 'English',
-  es: 'Spanish',
-  zh: 'Chinese',
-  fr: 'French',
-  de: 'German',
-  ja: 'Japanese',
-  ko: 'Korean',
-  pt: 'Portuguese',
-  ru: 'Russian',
-  ar: 'Arabic',
-};
+import { getLanguageName } from '@/lib/constants/languages';
 
 export interface LanguageSelectorProps {
   /** Currently selected language code */
@@ -63,7 +50,7 @@ export function LanguageSelector({
       <SelectContent>
         {availableLanguages.map((lang) => (
           <SelectItem key={lang} value={lang}>
-            {LANGUAGE_NAMES[lang] ?? lang.toUpperCase()}
+            {getLanguageName(lang)}
           </SelectItem>
         ))}
       </SelectContent>

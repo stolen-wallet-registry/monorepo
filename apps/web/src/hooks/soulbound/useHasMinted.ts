@@ -4,6 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { usePublicClient, useChainId } from 'wagmi';
+import { zeroAddress } from 'viem';
 import { walletSoulboundAbi } from '@/lib/contracts/abis';
 import { getWalletSoulboundAddress } from '@/lib/contracts/addresses';
 import { logger } from '@/lib/logger';
@@ -18,7 +19,7 @@ export interface UseHasMintedResult {
   isError: boolean;
   /** Error object if query failed */
   error: Error | null;
-  /** Function to refetch status */
+  /** Function to refetch status. No-ops silently when query is disabled (missing address/contract). */
   refetch: () => void;
 }
 
@@ -57,10 +58,7 @@ export function useHasMinted({
   }
 
   const queryEnabled =
-    !!address &&
-    !!contractAddress &&
-    contractAddress !== '0x0000000000000000000000000000000000000000' &&
-    !!client;
+    !!address && !!contractAddress && contractAddress !== zeroAddress && !!client;
 
   const {
     data,
@@ -86,14 +84,21 @@ export function useHasMinted({
 
       logger.contract.debug('hasMinted result', { address, hasMinted: result });
 
-      return result as boolean;
+      return result;
     },
     enabled: queryEnabled,
     staleTime: 1000 * 30, // 30 seconds
   });
 
   const refetch: () => void = () => {
-    if (!queryEnabled) return;
+    if (!queryEnabled) {
+      logger.contract.debug('useHasMinted refetch skipped - query not enabled', {
+        address,
+        chainId,
+        contractAddress,
+      });
+      return;
+    }
     void queryRefetch();
   };
 

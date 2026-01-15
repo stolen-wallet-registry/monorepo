@@ -35,6 +35,9 @@ contract WalletSoulbound is BaseSoulbound {
     /// @dev Tracks if a wallet has already minted (1 per wallet enforcement)
     mapping(address wallet => bool) public hasMinted;
 
+    /// @dev Reverse mapping for O(1) token lookup by wallet
+    mapping(address wallet => uint256 tokenId) private _walletToTokenId;
+
     /// @dev Language preference per token (ISO 639-1 code)
     mapping(uint256 tokenId => string) public tokenLanguage;
 
@@ -111,6 +114,7 @@ contract WalletSoulbound is BaseSoulbound {
         // Store metadata
         tokenWallet[tokenId] = wallet;
         tokenLanguage[tokenId] = lang;
+        _walletToTokenId[wallet] = tokenId;
 
         emit WalletSoulboundMinted(tokenId, wallet, msg.sender, lang);
     }
@@ -174,17 +178,10 @@ contract WalletSoulbound is BaseSoulbound {
         return (true, "");
     }
 
-    /// @notice Get token ID for a wallet (returns 0 if not minted)
+    /// @notice Get token ID for a wallet (O(1) lookup, returns 0 if not minted)
     /// @param wallet The wallet to look up
     /// @return tokenId The token ID, or 0 if not minted
     function getTokenIdForWallet(address wallet) external view returns (uint256 tokenId) {
-        if (!hasMinted[wallet]) return 0;
-        // Linear search through tokens - acceptable for lookup utility
-        for (uint256 i = 1; i <= _tokenIdCounter; i++) {
-            if (tokenWallet[i] == wallet) {
-                return i;
-            }
-        }
-        return 0;
+        return _walletToTokenId[wallet];
     }
 }

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { Test, console2 } from "forge-std/Test.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { WalletSoulbound } from "../../src/soulbound/WalletSoulbound.sol";
 import { BaseSoulbound } from "../../src/soulbound/BaseSoulbound.sol";
 import { TranslationRegistry } from "../../src/soulbound/TranslationRegistry.sol";
@@ -83,6 +84,12 @@ contract WalletSoulboundTest is Test {
     function test_constructor_revert_zeroRegistry() public {
         vm.expectRevert(WalletSoulbound.InvalidRegistry.selector);
         new WalletSoulbound(address(0), address(translations), feeCollector);
+    }
+
+    /// @notice Constructor reverts with zero translations address
+    function test_constructor_revert_zeroTranslations() public {
+        vm.expectRevert(BaseSoulbound.InvalidTranslations.selector);
+        new WalletSoulbound(address(mockRegistry), address(0), feeCollector);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -309,6 +316,14 @@ contract WalletSoulboundTest is Test {
 
         assertEq(balanceAfter - balanceBefore, 1 ether);
         assertEq(address(soulbound).balance, 0);
+    }
+
+    /// @notice Only owner can withdraw
+    function test_withdraw_revert_notOwner() public {
+        vm.deal(address(soulbound), 1 ether);
+        vm.prank(minter);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, minter));
+        soulbound.withdraw();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

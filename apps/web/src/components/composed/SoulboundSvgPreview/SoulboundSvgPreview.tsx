@@ -7,34 +7,7 @@
  */
 
 import { cn } from '@/lib/utils';
-
-/** Map of ISO 639-1 codes to display names */
-const LANGUAGE_NAMES: Record<string, string> = {
-  en: 'English',
-  es: 'Spanish',
-  zh: 'Chinese',
-  fr: 'French',
-  de: 'German',
-  ja: 'Japanese',
-  ko: 'Korean',
-  pt: 'Portuguese',
-  ru: 'Russian',
-  ar: 'Arabic',
-};
-
-/** Map of ISO 639-1 codes to translations for preview */
-const LANGUAGE_TRANSLATIONS: Record<string, string> = {
-  en: 'This wallet has been marked as stolen.',
-  es: 'Esta billetera ha sido marcada como robada.',
-  zh: '此钱包已被标记为被盗。',
-  fr: 'Ce portefeuille a été signalé comme volé.',
-  de: 'Diese Wallet wurde als gestohlen markiert.',
-  ja: 'このウォレットは盗難として報告されています。',
-  ko: '이 지갑은 도난으로 신고되었습니다.',
-  pt: 'Esta carteira foi marcada como roubada.',
-  ru: 'Этот кошелек отмечен как украденный.',
-  ar: 'تم وضع علامة على هذه المحفظة بأنها مسروقة.',
-};
+import { getLanguageName, getLanguageTranslation } from '@/lib/constants/languages';
 
 export interface SoulboundSvgPreviewProps {
   /** Language code (e.g., 'en', 'es', 'zh') */
@@ -72,9 +45,10 @@ export function SoulboundSvgPreview({
   className,
 }: SoulboundSvgPreviewProps) {
   // Use static lookup for preview (actual NFT uses on-chain translations)
-  const displayName = LANGUAGE_NAMES[language] ?? language.toUpperCase();
-  const translation = LANGUAGE_TRANSLATIONS[language] ?? 'This wallet has been marked as stolen.';
+  const displayName = getLanguageName(language);
+  const translation = getLanguageTranslation(language);
   const isEnglish = language === 'en';
+  const isRtl = language === 'ar'; // Arabic requires RTL text direction
 
   // Animation duration for rotating text
   const animationDuration = '30s';
@@ -214,12 +188,25 @@ export function SoulboundSvgPreview({
           )}
 
           {/* Language name */}
-          <text x="30" y={isEnglish ? 260 : 300} fontSize="11" opacity="0.5">
+          <text
+            x={isRtl ? 260 : 30}
+            y={isEnglish ? 260 : 300}
+            fontSize="11"
+            opacity="0.5"
+            textAnchor={isRtl ? 'end' : 'start'}
+          >
             {displayName}
           </text>
 
-          {/* Translation */}
-          <text x="30" y={isEnglish ? 280 : 320} fontSize="12" fontWeight="500">
+          {/* Translation - RTL direction for Arabic */}
+          <text
+            x={isRtl ? 260 : 30}
+            y={isEnglish ? 280 : 320}
+            fontSize="12"
+            fontWeight="500"
+            textAnchor={isRtl ? 'end' : 'start'}
+            style={isRtl ? { direction: 'rtl' } : undefined}
+          >
             {/* Truncate if too long */}
             {translation.length > 45 ? `${translation.slice(0, 42)}...` : translation}
           </text>

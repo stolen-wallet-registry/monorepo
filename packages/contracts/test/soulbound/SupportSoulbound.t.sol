@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { Test, console2 } from "forge-std/Test.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SupportSoulbound } from "../../src/soulbound/SupportSoulbound.sol";
 import { BaseSoulbound } from "../../src/soulbound/BaseSoulbound.sol";
 import { TranslationRegistry } from "../../src/soulbound/TranslationRegistry.sol";
@@ -317,6 +318,16 @@ contract SupportSoulboundTest is Test {
 
         assertEq(balanceAfter - balanceBefore, 1.5 ether);
         assertEq(address(soulbound).balance, 0);
+    }
+
+    /// @notice Only owner can withdraw
+    function test_withdraw_revert_notOwner() public {
+        vm.prank(supporter1);
+        soulbound.mint{ value: 1 ether }("en");
+
+        vm.prank(supporter1);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, supporter1));
+        soulbound.withdraw();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -4,7 +4,8 @@
  * Displays confirmation after successful registration.
  */
 
-import { useLocation } from 'wouter';
+import { useLocation, Link } from 'wouter';
+import { isAddress } from 'viem';
 
 import {
   Button,
@@ -36,7 +37,6 @@ import { isSpokeChain, getHubChainId } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import { CheckCircle2, Home, RefreshCw, ArrowRight, Award, ExternalLink } from 'lucide-react';
 import { WalletSoulboundMintCard } from '@/components/composed/WalletSoulboundMintCard';
-import type { Address } from '@/lib/types/ethereum';
 
 /**
  * Get chain icon component for a given chain ID.
@@ -226,18 +226,18 @@ export function SuccessStep() {
         </div>
 
         {/* Soulbound Token Section */}
-        {registeree && (
+        {registeree && isAddress(registeree) && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Award className="h-5 w-5 text-primary" />
               <p className="text-sm font-medium">Commemorative Soulbound Token</p>
             </div>
-            <WalletSoulboundMintCard wallet={registeree as Address} />
+            <WalletSoulboundMintCard wallet={registeree} />
             <Button variant="link" size="sm" asChild className="w-full justify-center">
-              <a href="/soulbound">
+              <Link href="/soulbound">
                 <ExternalLink className="mr-1 h-3 w-3" />
                 View all soulbound options
-              </a>
+              </Link>
             </Button>
           </div>
         )}

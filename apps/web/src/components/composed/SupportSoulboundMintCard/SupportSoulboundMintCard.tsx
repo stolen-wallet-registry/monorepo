@@ -78,6 +78,9 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
   const handleMint = async () => {
     if (!isValidAmount) return;
 
+    // Clear any previous error state before attempting new mint
+    reset();
+
     try {
       const txHash = await mint({ language, donationWei });
       onSuccess?.(txHash);

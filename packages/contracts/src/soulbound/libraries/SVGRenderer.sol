@@ -278,6 +278,7 @@ library SVGRenderer {
     }
 
     /// @dev Format wei to ETH string with up to 4 decimal places
+    /// @notice Preserves leading zeros (e.g., 0.05 ETH displays correctly, not 0.5)
     function _formatEther(uint256 weiAmount) private pure returns (string memory) {
         uint256 eth = weiAmount / 1e18;
         uint256 remainder = weiAmount % 1e18;
@@ -289,15 +290,30 @@ library SVGRenderer {
         // Get up to 4 decimal places (1e14 = 0.0001 ETH precision)
         uint256 decimals = remainder / 1e14;
 
-        // Remove trailing zeros
-        while (decimals > 0 && decimals % 10 == 0) {
-            decimals = decimals / 10;
-        }
-
         if (decimals == 0) {
             return string(abi.encodePacked(eth.toString(), " ETH"));
         }
 
-        return string(abi.encodePacked(eth.toString(), ".", decimals.toString(), " ETH"));
+        // Build 4-digit decimal string with leading zeros preserved
+        bytes memory decimalBytes = new bytes(4);
+        uint256 temp = decimals;
+        for (uint256 i = 4; i > 0; i--) {
+            decimalBytes[i - 1] = bytes1(uint8(48 + (temp % 10)));
+            temp /= 10;
+        }
+
+        // Find position of last non-zero digit (strip trailing zeros only)
+        uint256 endPos = 4;
+        while (endPos > 0 && decimalBytes[endPos - 1] == "0") {
+            endPos--;
+        }
+
+        // Create trimmed decimal string
+        bytes memory trimmed = new bytes(endPos);
+        for (uint256 i = 0; i < endPos; i++) {
+            trimmed[i] = decimalBytes[i];
+        }
+
+        return string(abi.encodePacked(eth.toString(), ".", string(trimmed), " ETH"));
     }
 }

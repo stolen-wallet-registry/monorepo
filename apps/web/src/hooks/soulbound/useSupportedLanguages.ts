@@ -4,6 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { usePublicClient, useChainId } from 'wagmi';
+import { zeroAddress } from 'viem';
 import { translationRegistryAbi } from '@/lib/contracts/abis';
 import { getTranslationRegistryAddress } from '@/lib/contracts/addresses';
 import { logger } from '@/lib/logger';
@@ -59,11 +60,7 @@ export function useSupportedLanguages({
     contractAddress = undefined;
   }
 
-  const queryEnabled =
-    enabled &&
-    !!contractAddress &&
-    contractAddress !== '0x0000000000000000000000000000000000000000' &&
-    !!client;
+  const queryEnabled = enabled && !!contractAddress && contractAddress !== zeroAddress && !!client;
 
   const {
     data,

@@ -53,7 +53,7 @@ export function Footer() {
           </nav>
 
           {/* Copyright */}
-          <p className="text-sm text-muted-foreground">{currentYear} Stolen Wallet Registry</p>
+          <p className="text-sm text-muted-foreground">© {currentYear} Stolen Wallet Registry</p>
         </div>
       </div>
     </footer>

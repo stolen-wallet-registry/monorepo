@@ -115,10 +115,21 @@ export function SoulboundPreviewModal({
             <div className="text-sm text-muted-foreground">
               <p className="font-medium text-foreground mb-1">About this token</p>
               <ul className="space-y-1 list-disc list-inside">
-                <li>Non-transferable (ERC-5192 Soulbound)</li>
+                <li>
+                  Non-transferable (
+                  <a
+                    href="https://eips.ethereum.org/EIPS/eip-5192"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-foreground"
+                  >
+                    ERC-5192 Soulbound
+                  </a>
+                  )
+                </li>
                 <li>Permanently bound to your wallet</li>
                 <li>On-chain SVG artwork</li>
-                <li>Internationalized text in {type === 'wallet' ? '20+' : '20+'} languages</li>
+                <li>Internationalized text in 20+ languages</li>
                 {type === 'wallet' ? (
                   <li>One token per registered wallet</li>
                 ) : (

@@ -28,6 +28,9 @@ contract SupportSoulbound is BaseSoulbound {
     /// @notice Minimum donation amount in wei (spam prevention)
     uint256 public minWei;
 
+    /// @dev Running total of all donations received (O(1) lookup)
+    uint256 private _totalDonationsReceived;
+
     /// @dev Amount donated per token
     mapping(uint256 tokenId => uint256) public tokenDonation;
 
@@ -88,6 +91,7 @@ contract SupportSoulbound is BaseSoulbound {
         // Store metadata
         tokenDonation[tokenId] = msg.value;
         tokenLanguage[tokenId] = lang;
+        _totalDonationsReceived += msg.value;
 
         emit SupportSoulboundMinted(tokenId, msg.sender, msg.value, lang);
     }
@@ -155,7 +159,8 @@ contract SupportSoulbound is BaseSoulbound {
     // INTERNAL FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Format wei to ETH string for JSON attribute (no trailing space)
+    /// @dev Format wei to ETH string for JSON attribute
+    /// @notice Preserves leading zeros (e.g., 0.05 ETH displays correctly, not 0.5)
     function _formatEtherAttribute(uint256 weiAmount) internal pure returns (string memory) {
         uint256 eth = weiAmount / 1e18;
         uint256 remainder = weiAmount % 1e18;
@@ -167,30 +172,41 @@ contract SupportSoulbound is BaseSoulbound {
         // Get up to 4 decimal places (1e14 = 0.0001 ETH precision)
         uint256 decimals = remainder / 1e14;
 
-        // Remove trailing zeros
-        while (decimals > 0 && decimals % 10 == 0) {
-            decimals = decimals / 10;
-        }
-
         if (decimals == 0) {
             return string(abi.encodePacked(eth.toString(), " ETH"));
         }
 
-        return string(abi.encodePacked(eth.toString(), ".", decimals.toString(), " ETH"));
+        // Build 4-digit decimal string with leading zeros preserved
+        bytes memory decimalBytes = new bytes(4);
+        uint256 temp = decimals;
+        for (uint256 i = 4; i > 0; i--) {
+            decimalBytes[i - 1] = bytes1(uint8(48 + (temp % 10)));
+            temp /= 10;
+        }
+
+        // Find position of last non-zero digit (strip trailing zeros only)
+        uint256 endPos = 4;
+        while (endPos > 0 && decimalBytes[endPos - 1] == "0") {
+            endPos--;
+        }
+
+        // Create trimmed decimal string
+        bytes memory trimmed = new bytes(endPos);
+        for (uint256 i = 0; i < endPos; i++) {
+            trimmed[i] = decimalBytes[i];
+        }
+
+        return string(abi.encodePacked(eth.toString(), ".", string(trimmed), " ETH"));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Get total donations received
+    /// @notice Get total donations received (O(1) lookup)
     /// @return Total ETH donated (in wei)
     function totalDonations() external view returns (uint256) {
-        uint256 total = 0;
-        for (uint256 i = 1; i <= _tokenIdCounter; i++) {
-            total += tokenDonation[i];
-        }
-        return total;
+        return _totalDonationsReceived;
     }
 
     /// @notice Get token IDs owned by an address

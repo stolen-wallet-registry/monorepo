@@ -172,7 +172,7 @@ export function SoulboundPage() {
               <h4 className="font-medium text-foreground mb-1">Wallet Soulbound</h4>
               <p>
                 Commemorates your registration in the Stolen Wallet Registry. Each registered wallet
-                can mint exactly one token, free of gas.
+                can mint exactly one token—you only pay gas.
               </p>
             </div>
             <div>
