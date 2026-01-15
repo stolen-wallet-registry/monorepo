@@ -3,7 +3,13 @@
  */
 
 // Re-export everything from @swr/chains for backward compatibility
-export { isHubChain, isSpokeChain, getHubChainId, hubChainIds as HUB_CHAIN_IDS } from '@swr/chains';
+export {
+  isHubChain,
+  isSpokeChain,
+  getHubChainId,
+  hubChainIds as HUB_CHAIN_IDS,
+  getChainName,
+} from '@swr/chains';
 
 import { logger } from '@/lib/logger';
 import { hubChainIds } from '@swr/chains';

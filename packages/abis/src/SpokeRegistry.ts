@@ -27,6 +27,16 @@ export const SpokeRegistryABI = [
         type: 'bytes32',
         internalType: 'bytes32',
       },
+      {
+        name: '_graceBlocks',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: '_deadlineBlocks',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
     ],
     stateMutability: 'nonpayable',
   },
@@ -88,6 +98,19 @@ export const SpokeRegistryABI = [
         name: '',
         type: 'address',
         internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'deadlineBlocks',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
     stateMutability: 'view',
@@ -259,6 +282,19 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'graceBlocks',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'hubChainId',
     inputs: [],
     outputs: [
@@ -349,25 +385,6 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
-    name: 'quoteRegistration',
-    inputs: [
-      {
-        name: 'owner',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
-    outputs: [
-      {
-        name: '',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
     name: 'quoteFeeBreakdown',
     inputs: [
       {
@@ -378,7 +395,7 @@ export const SpokeRegistryABI = [
     ],
     outputs: [
       {
-        name: 'breakdown',
+        name: '',
         type: 'tuple',
         internalType: 'struct ISpokeRegistry.FeeBreakdown',
         components: [
@@ -403,6 +420,25 @@ export const SpokeRegistryABI = [
             internalType: 'string',
           },
         ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'quoteRegistration',
+    inputs: [
+      {
+        name: 'owner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
     stateMutability: 'view',
@@ -713,6 +749,11 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'error',
+    name: 'SpokeRegistry__InvalidHubConfig',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'SpokeRegistry__InvalidNonce',
     inputs: [],
   },
@@ -724,6 +765,11 @@ export const SpokeRegistryABI = [
   {
     type: 'error',
     name: 'SpokeRegistry__InvalidSigner',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__InvalidTimingConfig',
     inputs: [],
   },
   {

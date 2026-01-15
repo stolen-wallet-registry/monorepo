@@ -93,3 +93,25 @@ export {
   type UseCrossChainConfirmationOptions,
   type UseCrossChainConfirmationResult,
 } from './useCrossChainConfirmation';
+
+// Soulbound token hooks
+export {
+  useSupportedLanguages,
+  useHasMinted,
+  useCanMint,
+  useMinDonation,
+  useMintWalletSoulbound,
+  useMintSupportSoulbound,
+  type UseSupportedLanguagesResult,
+  type UseSupportedLanguagesOptions,
+  type UseHasMintedResult,
+  type UseHasMintedOptions,
+  type UseCanMintResult,
+  type UseCanMintOptions,
+  type UseMinDonationResult,
+  type UseMinDonationOptions,
+  type UseMintWalletSoulboundResult,
+  type MintWalletSoulboundParams,
+  type UseMintSupportSoulboundResult,
+  type MintSupportSoulboundParams,
+} from './soulbound';

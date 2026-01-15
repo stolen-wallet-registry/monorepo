@@ -36,3 +36,17 @@ export {
 } from './RegistrySearch';
 export { ConnectedWalletStatus, type ConnectedWalletStatusProps } from './ConnectedWalletStatus';
 export { ChainIndicator, type ChainIndicatorProps } from './ChainIndicator';
+
+// Soulbound components
+export { LanguageSelector, type LanguageSelectorProps } from './LanguageSelector';
+export {
+  WalletSoulboundMintCard,
+  type WalletSoulboundMintCardProps,
+} from './WalletSoulboundMintCard';
+export {
+  SupportSoulboundMintCard,
+  type SupportSoulboundMintCardProps,
+} from './SupportSoulboundMintCard';
+export { SoulboundSvgPreview, type SoulboundSvgPreviewProps } from './SoulboundSvgPreview';
+export { SoulboundPreviewModal, type SoulboundPreviewModalProps } from './SoulboundPreviewModal';
+export { MintedTokenDisplay, type MintedTokenDisplayProps } from './MintedTokenDisplay';

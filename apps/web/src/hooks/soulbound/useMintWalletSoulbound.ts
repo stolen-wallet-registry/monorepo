@@ -1,0 +1,164 @@
+/**
+ * Hook to mint a WalletSoulbound token for a registered stolen wallet.
+ *
+ * Note: WalletSoulbound contracts are deployed on the hub chain only.
+ * The hook exposes `isOnHubChain` and `hubChainId` so the UI can show
+ * a manual chain switch button when needed.
+ */
+
+import { useWriteContract, useWaitForTransactionReceipt, useAccount } from 'wagmi';
+import { zeroAddress } from 'viem';
+import { walletSoulboundAbi } from '@/lib/contracts/abis';
+import { getWalletSoulboundAddress } from '@/lib/contracts/addresses';
+import { getHubChainIdForEnvironment } from '@/lib/chains/config';
+import { logger } from '@/lib/logger';
+import type { Address, Hash } from '@/lib/types/ethereum';
+
+export interface MintWalletSoulboundParams {
+  /** Wallet address to mint the token for (must be registered/pending) */
+  wallet: Address;
+}
+
+export interface UseMintWalletSoulboundResult {
+  /** Function to submit the mint transaction */
+  mint: (params: MintWalletSoulboundParams) => Promise<Hash>;
+  /** Transaction hash if submitted */
+  hash: Hash | undefined;
+  /** True while waiting for user to confirm in wallet */
+  isPending: boolean;
+  /** True while waiting for transaction confirmation */
+  isConfirming: boolean;
+  /** True when transaction is confirmed */
+  isConfirmed: boolean;
+  /** True if any error occurred */
+  isError: boolean;
+  /** Error object if failed */
+  error: Error | null;
+  /** Reset the hook state */
+  reset: () => void;
+  /** True if currently connected to the hub chain */
+  isOnHubChain: boolean;
+  /** Hub chain ID where soulbound contracts are deployed */
+  hubChainId: number;
+}
+
+/**
+ * Hook for minting a WalletSoulbound token.
+ *
+ * The token is minted to the specified wallet (not msg.sender), so anyone
+ * can pay for the mint on behalf of a registered wallet.
+ *
+ * @example
+ * ```tsx
+ * const { mint, isPending, isConfirming, isConfirmed, isError, error } = useMintWalletSoulbound();
+ *
+ * const handleMint = async () => {
+ *   await mint({ wallet: registeredWallet });
+ * };
+ *
+ * if (isPending) return <p>Confirm in wallet...</p>;
+ * if (isConfirming) return <p>Minting...</p>;
+ * if (isConfirmed) return <p>Minted!</p>;
+ * if (isError) return <p>Error: {error?.message}</p>;
+ * return <button onClick={handleMint}>Mint Soulbound</button>;
+ * ```
+ */
+export function useMintWalletSoulbound(): UseMintWalletSoulboundResult {
+  // Soulbound contracts are only deployed on the hub chain
+  const hubChainId = getHubChainIdForEnvironment();
+  const { chain } = useAccount();
+  const isOnHubChain = chain?.id === hubChainId;
+
+  let contractAddress: Address | undefined;
+  try {
+    contractAddress = getWalletSoulboundAddress(hubChainId);
+  } catch (error) {
+    contractAddress = undefined;
+    logger.contract.error('useMintWalletSoulbound: Failed to resolve contract address', {
+      chainId: hubChainId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const {
+    writeContractAsync,
+    data: hash,
+    isPending,
+    isError: isWriteError,
+    error: writeError,
+    reset,
+  } = useWriteContract();
+
+  const {
+    isLoading: isConfirming,
+    isSuccess: isConfirmed,
+    isError: isReceiptError,
+    error: receiptError,
+  } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  const mint = async (params: MintWalletSoulboundParams): Promise<Hash> => {
+    if (!contractAddress || contractAddress === zeroAddress) {
+      logger.contract.error('useMintWalletSoulbound: No contract address configured', {
+        chainId: hubChainId,
+      });
+      throw new Error('WalletSoulbound contract not configured for this chain');
+    }
+
+    const { wallet } = params;
+
+    // Require user to be on hub chain - UI should show switch button if not
+    if (!isOnHubChain) {
+      logger.contract.error('useMintWalletSoulbound: Not on hub chain', {
+        currentChainId: chain?.id,
+        hubChainId,
+      });
+      throw new Error('Please switch to the hub chain to mint');
+    }
+
+    logger.contract.info('Minting WalletSoulbound token', {
+      chainId: hubChainId,
+      contractAddress,
+      wallet,
+    });
+
+    try {
+      const txHash = await writeContractAsync({
+        address: contractAddress,
+        abi: walletSoulboundAbi,
+        functionName: 'mintTo',
+        args: [wallet],
+        chainId: hubChainId,
+      });
+
+      logger.contract.info('WalletSoulbound mint transaction submitted', {
+        txHash,
+        wallet,
+        chainId: hubChainId,
+      });
+
+      return txHash;
+    } catch (error) {
+      logger.contract.error('WalletSoulbound mint failed', {
+        chainId: hubChainId,
+        wallet,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  };
+
+  return {
+    mint,
+    hash,
+    isPending,
+    isConfirming,
+    isConfirmed,
+    isError: isWriteError || isReceiptError,
+    error: writeError || receiptError,
+    reset,
+    isOnHubChain,
+    hubChainId,
+  };
+}

@@ -17,6 +17,10 @@ const contracts = [
   'CrossChainInbox.sol/CrossChainInbox.json',
   'SpokeRegistry.sol/SpokeRegistry.json',
   'HyperlaneAdapter.sol/HyperlaneAdapter.json',
+  // Soulbound contracts
+  'TranslationRegistry.sol/TranslationRegistry.json',
+  'WalletSoulbound.sol/WalletSoulbound.json',
+  'SupportSoulbound.sol/SupportSoulbound.json',
 ];
 
 mkdirSync(abiDir, { recursive: true });
@@ -47,7 +51,7 @@ for (const contract of contracts) {
       join(abiDir, `${name}.ts`),
       `export const ${name}ABI = ${JSON.stringify(artifact.abi, null, 2)} as const;\n`
     );
-    exportStatements.push(`export { ${name}ABI } from './${name}.js';`);
+    exportStatements.push(`export { ${name}ABI } from './${name}';`);
     console.log(`Exported: ${name}`);
   } catch (err) {
     console.error(`Failed to load artifact ${contract}:`, err.message);

@@ -31,16 +31,25 @@ contract Deploy is DeployBase {
         // Deploy Multicall3 for local chains (needed for viem/wagmi batch calls)
         address multicall3 = deployMulticall3();
 
+        // Deploy soulbound contracts (fee collector = hub for unified treasury)
+        (address translations, address walletSoulbound, address supportSoulbound) = deploySoulbound(registry, hub);
+
         vm.stopBroadcast();
 
         // Summary
         console2.log("");
         console2.log("=== DEPLOYMENT COMPLETE ===");
+        console2.log("--- Core ---");
         console2.log("StolenWalletRegistry:", registry);
         console2.log("FeeManager:", feeManager);
         console2.log("RegistryHub:", hub);
         console2.log("Price Feed:", priceFeed);
         console2.log("Multicall3:", multicall3);
         console2.log("Current Fee (wei):", FeeManager(feeManager).currentFeeWei());
+        console2.log("");
+        console2.log("--- Soulbound ---");
+        console2.log("TranslationRegistry:", translations);
+        console2.log("WalletSoulbound:", walletSoulbound);
+        console2.log("SupportSoulbound:", supportSoulbound);
     }
 }

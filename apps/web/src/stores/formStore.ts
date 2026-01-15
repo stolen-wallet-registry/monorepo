@@ -9,15 +9,11 @@ import type { Address } from '@/lib/types/ethereum';
 export interface FormState {
   registeree: Address | null;
   relayer: Address | null;
-  supportNFT: boolean;
-  walletNFT: boolean;
 }
 
 export interface FormActions {
   setRegisteree: (address: Address) => void;
   setRelayer: (address: Address) => void;
-  setSupportNFT: (value: boolean) => void;
-  setWalletNFT: (value: boolean) => void;
   setFormValues: (values: Partial<FormState>) => void;
   reset: () => void;
 }
@@ -25,8 +21,6 @@ export interface FormActions {
 const initialState: FormState = {
   registeree: null,
   relayer: null,
-  supportNFT: false,
-  walletNFT: false,
 };
 
 export const useFormStore = create<FormState & FormActions>()(
@@ -45,18 +39,6 @@ export const useFormStore = create<FormState & FormActions>()(
           set((state) => {
             logger.store.debug('Form relayer updated', { address });
             state.relayer = address;
-          }),
-
-        setSupportNFT: (value) =>
-          set((state) => {
-            logger.store.debug('Form supportNFT updated', { value });
-            state.supportNFT = value;
-          }),
-
-        setWalletNFT: (value) =>
-          set((state) => {
-            logger.store.debug('Form walletNFT updated', { value });
-            state.walletNFT = value;
           }),
 
         setFormValues: (values) =>
@@ -96,8 +78,6 @@ export const useFormStore = create<FormState & FormActions>()(
           return {
             registeree: validRegisteree,
             relayer: validRelayer,
-            supportNFT: state.supportNFT ?? initialState.supportNFT,
-            walletNFT: state.walletNFT ?? initialState.walletNFT,
           };
         },
       }
@@ -121,20 +101,6 @@ export const useFormAddresses = () =>
       relayer: s.relayer,
       setRegisteree: s.setRegisteree,
       setRelayer: s.setRelayer,
-    }))
-  );
-
-/**
- * Select NFT options.
- * Use when component manages NFT checkbox state.
- */
-export const useFormNFTOptions = () =>
-  useFormStore(
-    useShallow((s) => ({
-      supportNFT: s.supportNFT,
-      walletNFT: s.walletNFT,
-      setSupportNFT: s.setSupportNFT,
-      setWalletNFT: s.setWalletNFT,
     }))
   );
 

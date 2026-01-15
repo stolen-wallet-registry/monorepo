@@ -8,6 +8,7 @@
  * Hyperlane infrastructure is deployed by Account 9 (separate nonce space).
  */
 
+import { zeroAddress } from 'viem';
 import type { Address } from '@/lib/types/ethereum';
 import {
   anvilHub,
@@ -134,7 +135,7 @@ type SimpleSpokeContract = Exclude<keyof typeof SPOKE_ADDRESSES, 'bridgeAdapters
 export function getSpokeAddress(contract: SimpleSpokeContract, chainId: number): Address {
   const addresses = SPOKE_ADDRESSES[contract];
   const address = addresses[chainId as keyof typeof addresses];
-  if (!address || address === '0x0000000000000000000000000000000000000000') {
+  if (!address || address === zeroAddress) {
     throw new Error(
       `No ${contract} address configured for spoke chain ID ${chainId}. Deploy contracts first.`
     );
@@ -153,7 +154,7 @@ export function getBridgeAdapterAddress(
     throw new Error(`No bridge adapters configured for chain ID ${chainId}.`);
   }
   const address = chainAdapters[provider as keyof typeof chainAdapters];
-  if (!address || address === '0x0000000000000000000000000000000000000000') {
+  if (!address || address === zeroAddress) {
     throw new Error(
       `No ${provider} adapter configured for chain ID ${chainId}. Deploy adapter first.`
     );
@@ -168,7 +169,7 @@ export function getSpokeRegistryAddress(chainId: number): Address | null {
 
 export function getHyperlaneMailbox(chainId: number): Address {
   const address = HYPERLANE_ADDRESSES.mailbox[chainId as keyof typeof HYPERLANE_ADDRESSES.mailbox];
-  if (!address || address === '0x0000000000000000000000000000000000000000') {
+  if (!address || address === zeroAddress) {
     throw new Error(
       `Hyperlane Mailbox not configured for chain ID ${chainId}. Run Hyperlane setup first.`
     );

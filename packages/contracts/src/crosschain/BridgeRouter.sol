@@ -18,12 +18,13 @@ contract BridgeRouter is Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Route configuration for a destination chain
-    /// @param adapter Default bridge adapter address
     /// @param recipientInbox CrossChainInbox address on destination (bytes32 for cross-VM)
+    /// @param adapter Default bridge adapter address
     /// @param enabled Whether routing to this destination is enabled
+    /// @dev Struct packed: recipientInbox (32 bytes, slot 0), adapter+enabled (21 bytes, slot 1)
     struct RouteConfig {
-        address adapter;
         bytes32 recipientInbox;
+        address adapter;
         bool enabled;
     }
 

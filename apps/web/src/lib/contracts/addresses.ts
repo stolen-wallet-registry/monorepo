@@ -1,3 +1,4 @@
+import { zeroAddress } from 'viem';
 import type { Address } from '@/lib/types/ethereum';
 import { anvilHub, baseSepolia, isSpokeChain } from '@swr/chains';
 import { getSpokeAddress } from './crosschain-addresses';
@@ -36,6 +37,19 @@ export const CONTRACT_ADDRESSES = {
     // Base Sepolia (testnet hub) - fill after deployment
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
+  // Soulbound contracts - deployed via DeployCrossChain.s.sol (hub chain only)
+  translationRegistry: {
+    [anvilHub.chainId]: '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  walletSoulbound: {
+    [anvilHub.chainId]: '0x68B1D87F95878fE05B998F19b66F4baba5De1aed' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  supportSoulbound: {
+    [anvilHub.chainId]: '0x3Aa5ebB10DC797CAC828524e59A333d0A371443c' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
 } as const;
 
 export type ContractName = keyof typeof CONTRACT_ADDRESSES;
@@ -58,7 +72,7 @@ export function getContractAddress(contract: ContractName, chainId: number): Add
 
   const addresses = CONTRACT_ADDRESSES[contract];
   const address = addresses[chainId as keyof typeof addresses];
-  if (!address || address === '0x0000000000000000000000000000000000000000') {
+  if (!address || address === zeroAddress) {
     throw new Error(`No ${contract} address configured for chain ID ${chainId}`);
   }
   return address;
@@ -76,6 +90,19 @@ export function getFeeManagerAddress(chainId: number): Address {
 
 export function getRegistryHubAddress(chainId: number): Address {
   return getContractAddress('registryHub', chainId);
+}
+
+// Soulbound contract getters
+export function getTranslationRegistryAddress(chainId: number): Address {
+  return getContractAddress('translationRegistry', chainId);
+}
+
+export function getWalletSoulboundAddress(chainId: number): Address {
+  return getContractAddress('walletSoulbound', chainId);
+}
+
+export function getSupportSoulboundAddress(chainId: number): Address {
+  return getContractAddress('supportSoulbound', chainId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
