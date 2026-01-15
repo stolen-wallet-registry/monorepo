@@ -58,6 +58,7 @@ export function Header() {
   const navItems = [
     { href: '/', label: 'Register', matchPaths: ['/', '/register', '/registration'] },
     { href: '/search', label: 'Search', matchPaths: ['/search'] },
+    { href: '/soulbound', label: 'Support', matchPaths: ['/soulbound'] },
   ];
 
   // Check if current location matches any of the paths for a nav item

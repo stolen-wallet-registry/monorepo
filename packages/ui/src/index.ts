@@ -93,6 +93,7 @@ export {
 } from './components/select';
 export { Separator } from './components/separator';
 export { Skeleton } from './components/skeleton';
+export { Slider } from './components/slider';
 export { Toaster } from './components/sonner';
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './components/tooltip';
 

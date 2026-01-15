@@ -12,6 +12,16 @@ export const StolenWalletRegistryABI = [
         type: 'address',
         internalType: 'address',
       },
+      {
+        name: '_graceBlocks',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: '_deadlineBlocks',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
     ],
     stateMutability: 'nonpayable',
   },
@@ -52,6 +62,19 @@ export const StolenWalletRegistryABI = [
     ],
     outputs: [],
     stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'deadlineBlocks',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -260,6 +283,19 @@ export const StolenWalletRegistryABI = [
             internalType: 'bytes32',
           },
         ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'graceBlocks',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
     stateMutability: 'view',
@@ -533,6 +569,16 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'error',
+    name: 'InvalidChainId',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'InvalidFeeConfig',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'InvalidNonce',
     inputs: [],
   },
@@ -544,6 +590,11 @@ export const StolenWalletRegistryABI = [
   {
     type: 'error',
     name: 'InvalidShortString',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'InvalidTimingConfig',
     inputs: [],
   },
   {

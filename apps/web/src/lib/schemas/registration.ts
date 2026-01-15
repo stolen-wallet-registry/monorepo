@@ -12,14 +12,10 @@ import { ethereumAddressSchema, optionalEthereumAddressSchema } from './address'
  *
  * - registeree: The wallet being registered as stolen (required, validated address)
  * - relayer: Optional gas wallet for self-relay mode (empty string or valid address)
- * - supportNFT: Flag for support token option
- * - walletNFT: Flag for wallet token option
  */
 export const initialFormSchema = z.object({
   registeree: ethereumAddressSchema,
   relayer: optionalEthereumAddressSchema,
-  supportNFT: z.boolean(),
-  walletNFT: z.boolean(),
 });
 
 /**

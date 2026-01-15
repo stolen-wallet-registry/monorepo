@@ -7,3 +7,6 @@ export { FeeManagerABI } from './FeeManager';
 export { CrossChainInboxABI } from './CrossChainInbox';
 export { SpokeRegistryABI } from './SpokeRegistry';
 export { HyperlaneAdapterABI } from './HyperlaneAdapter';
+export { TranslationRegistryABI } from './TranslationRegistry';
+export { WalletSoulboundABI } from './WalletSoulbound';
+export { SupportSoulboundABI } from './SupportSoulbound';

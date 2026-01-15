@@ -311,6 +311,76 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
     message: 'Cross-chain message from unexpected chain.',
     action: 'Please contact support.',
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Soulbound Token errors (11)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // BaseSoulbound errors
+  '0xbf9e1a75': {
+    name: 'NonTransferrable',
+    message: 'Soulbound tokens cannot be transferred.',
+  },
+
+  '0x750b219c': {
+    name: 'WithdrawFailed',
+    message: 'Fee withdrawal failed.',
+    action: 'Please try again.',
+  },
+
+  '0xbb0bac99': {
+    name: 'InvalidFeeCollector',
+    message: 'Invalid fee collector address.',
+    action: 'Please contact support.',
+  },
+
+  '0xe48f34f1': {
+    name: 'InvalidTranslations',
+    message: 'Invalid translations registry address.',
+    action: 'Please contact support.',
+  },
+
+  // WalletSoulbound errors
+  '0x2ef38faa': {
+    name: 'NotRegisteredOrPending',
+    message: 'Wallet is not registered in the Stolen Wallet Registry.',
+    action: 'Only wallets that have been registered as stolen can mint.',
+  },
+
+  '0xddefae28': {
+    name: 'AlreadyMinted',
+    message: 'This wallet has already minted its soulbound token.',
+  },
+
+  '0x11a1e697': {
+    name: 'InvalidRegistry',
+    message: 'Invalid registry address.',
+    action: 'Please contact support.',
+  },
+
+  // SupportSoulbound errors
+  '0x860b82a9': {
+    name: 'BelowMinimum',
+    message: 'Donation amount is below the minimum.',
+    action: 'Please increase your donation amount.',
+  },
+
+  // TranslationRegistry errors
+  '0xbb97a108': {
+    name: 'LanguageNotSupported',
+    message: 'The selected language is not supported.',
+    action: 'Please select a different language.',
+  },
+
+  '0x564576d3': {
+    name: 'LanguageAlreadyExists',
+    message: 'This language has already been added.',
+  },
+
+  '0xecb52231': {
+    name: 'EmptyLanguageCode',
+    message: 'Language code cannot be empty.',
+  },
 };
 
 /**

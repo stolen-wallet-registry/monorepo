@@ -6,6 +6,9 @@ import { IMulticall3 } from "forge-std/interfaces/IMulticall3.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
+import { TranslationRegistry } from "../src/soulbound/TranslationRegistry.sol";
+import { WalletSoulbound } from "../src/soulbound/WalletSoulbound.sol";
+import { SupportSoulbound } from "../src/soulbound/SupportSoulbound.sol";
 
 /// @title DeployBase
 /// @notice Shared deployment logic for core SWR contracts
@@ -156,6 +159,128 @@ abstract contract DeployBase is Script {
             multicall3 = CANONICAL_MULTICALL3;
             console2.log("Multicall3 (canonical):", multicall3);
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SOULBOUND DEPLOYMENT
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Minimum donation for SupportSoulbound (spam prevention)
+    /// @dev ~$0.25 at $2500/ETH - very low to not discourage small donations
+    uint256 internal constant MIN_DONATION = 0.0001 ether;
+
+    /// @notice Deploy soulbound token contracts
+    /// @param registry The StolenWalletRegistry address (for WalletSoulbound gate)
+    /// @param feeCollector The address to receive withdrawn fees (typically RegistryHub)
+    /// @return translations The TranslationRegistry address
+    /// @return walletSoulbound The WalletSoulbound address
+    /// @return supportSoulbound The SupportSoulbound address
+    function deploySoulbound(address registry, address feeCollector)
+        internal
+        returns (address translations, address walletSoulbound, address supportSoulbound)
+    {
+        console2.log("");
+        console2.log("=== SOULBOUND DEPLOYMENT ===");
+
+        // Deploy TranslationRegistry (no dependencies)
+        translations = address(new TranslationRegistry());
+        console2.log("TranslationRegistry:", translations);
+
+        // Seed initial languages
+        _seedLanguages(TranslationRegistry(translations));
+        console2.log("Languages seeded: en, es, zh, fr, de, ja, ko, pt, ru, ar");
+
+        // Deploy WalletSoulbound (gated by registry)
+        walletSoulbound = address(new WalletSoulbound(registry, translations, feeCollector));
+        console2.log("WalletSoulbound:", walletSoulbound);
+
+        // Deploy SupportSoulbound (donation-based, no gate)
+        supportSoulbound = address(new SupportSoulbound(MIN_DONATION, translations, feeCollector));
+        console2.log("SupportSoulbound:", supportSoulbound);
+    }
+
+    /// @dev Seeds additional languages beyond the default English
+    function _seedLanguages(TranslationRegistry t) internal {
+        // Spanish
+        t.addLanguage(
+            "es",
+            "CARTERA ROBADA",
+            "Esta cartera ha sido reportada como robada",
+            unicode"No envíe fondos a esta dirección",
+            "Registro de Carteras Robadas"
+        );
+
+        // Chinese (Simplified)
+        t.addLanguage(
+            "zh",
+            unicode"被盗钱包",
+            unicode"此钱包已被报告被盗",
+            unicode"请勿向此地址发送资金",
+            unicode"被盗钱包登记处"
+        );
+
+        // French
+        t.addLanguage(
+            "fr",
+            unicode"PORTEFEUILLE VOLÉ",
+            unicode"Ce portefeuille a été signalé comme volé",
+            unicode"N'envoyez pas de fonds à cette adresse",
+            "Registre des Portefeuilles Voles"
+        );
+
+        // German
+        t.addLanguage(
+            "de",
+            "GESTOHLENE WALLET",
+            "Diese Wallet wurde als gestohlen gemeldet",
+            "Senden Sie keine Gelder an diese Adresse",
+            "Gestohlene Wallet Registrierung"
+        );
+
+        // Japanese
+        t.addLanguage(
+            "ja",
+            unicode"盗まれたウォレット",
+            unicode"このウォレットは盗難として報告されています",
+            unicode"このアドレスに資金を送らないでください",
+            unicode"盗難ウォレット登録"
+        );
+
+        // Korean
+        t.addLanguage(
+            "ko",
+            unicode"도난 지갑",
+            unicode"이 지갑은 도난 신고되었습니다",
+            unicode"이 주소로 자금을 보내지 마세요",
+            unicode"도난 지갑 등록소"
+        );
+
+        // Portuguese
+        t.addLanguage(
+            "pt",
+            "CARTEIRA ROUBADA",
+            "Esta carteira foi reportada como roubada",
+            unicode"Não envie fundos para este endereço",
+            "Registro de Carteiras Roubadas"
+        );
+
+        // Russian
+        t.addLanguage(
+            "ru",
+            unicode"УКРАДЕННЫЙ КОШЕЛЕК",
+            unicode"Этот кошелек был заявлен как украденный",
+            unicode"Не отправляйте средства на этот адрес",
+            unicode"Реестр Украденных Кошельков"
+        );
+
+        // Arabic
+        t.addLanguage(
+            "ar",
+            unicode"محفظة مسروقة",
+            unicode"تم الإبلاغ عن هذه المحفظة على أنها مسروقة",
+            unicode"لا ترسل أموالاً إلى هذا العنوان",
+            unicode"سجل المحافظ المسروقة"
+        );
     }
 }
 

@@ -63,13 +63,18 @@ contract DeployCrossChain is DeployBase {
     uint256 hubForkId;
     uint256 spokeForkId;
 
-    // Deployed addresses
+    // Deployed addresses - Hub
     address priceFeed;
     address feeManager;
     address payable hubRegistry;
     address stolenWalletRegistry;
     address crossChainInbox;
     address hubMulticall3;
+    // Soulbound addresses (Hub only)
+    address translationRegistry;
+    address walletSoulbound;
+    address supportSoulbound;
+    // Deployed addresses - Spoke
     address spokeGasPaymaster;
     address hyperlaneAdapter;
     address spokeRegistry;
@@ -127,6 +132,9 @@ contract DeployCrossChain is DeployBase {
 
         // nonce 7: Deploy Multicall3 for local development (viem/wagmi batch calls)
         hubMulticall3 = deployMulticall3();
+
+        // nonces 8-17: Deploy soulbound contracts (fee collector = hub for unified treasury)
+        (translationRegistry, walletSoulbound, supportSoulbound) = deploySoulbound(stolenWalletRegistry, hubRegistry);
 
         vm.stopBroadcast();
 
@@ -225,6 +233,9 @@ contract DeployCrossChain is DeployBase {
         console2.log("  StolenWalletRegistry: ", stolenWalletRegistry);
         console2.log("  CrossChainInbox:      ", crossChainInbox);
         console2.log("  Multicall3:           ", hubMulticall3);
+        console2.log("  TranslationRegistry:  ", translationRegistry);
+        console2.log("  WalletSoulbound:      ", walletSoulbound);
+        console2.log("  SupportSoulbound:     ", supportSoulbound);
         console2.log("");
         console2.log("Spoke Chain (31338) - http://localhost:8546:");
         console2.log("  MockInterchainGasPaymaster:", spokeGasPaymaster);

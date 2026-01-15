@@ -13,7 +13,6 @@ import { initialFormSchema, type InitialFormInput } from '@/lib/schemas';
 
 import {
   Button,
-  Checkbox,
   Alert,
   AlertDescription,
   Form,
@@ -64,8 +63,6 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     defaultValues: {
       registeree: address || '',
       relayer: isSelfRelay ? '' : address || '',
-      supportNFT: false,
-      walletNFT: false,
     },
   });
 
@@ -183,8 +180,6 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     const formData = {
       registeree: values.registeree as Address,
       relayer: (isSelfRelay ? values.relayer : values.registeree) as Address,
-      supportNFT: values.supportNFT,
-      walletNFT: values.walletNFT,
     };
     setFormValues(formData);
     logger.store.debug('Form values saved to store', formData);
@@ -445,57 +440,6 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
             )}
           />
         )}
-
-        {/* Soul Bound Token Options (Phase 2 - disabled for now) */}
-        <div className="space-y-4 rounded-lg border p-4 bg-muted/50">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium">Optional Soul Bound Tokens</p>
-            <InfoTooltip
-              content="Soul Bound Tokens (SBTs) are non-transferable tokens permanently linked to your wallet address. Unlike regular NFTs, they cannot be sold or moved, making them ideal for identity and reputation markers."
-              side="right"
-            />
-          </div>
-          <FormField
-            control={form.control}
-            name="supportNFT"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                <FormControl>
-                  <Checkbox
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                    disabled // Disabled for Phase 1
-                  />
-                </FormControl>
-                <div className="space-y-1 leading-none">
-                  <FormLabel className="text-sm font-normal text-muted-foreground">
-                    Support Token ($3) - Coming Soon
-                  </FormLabel>
-                </div>
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="walletNFT"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                <FormControl>
-                  <Checkbox
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                    disabled // Disabled for Phase 1
-                  />
-                </FormControl>
-                <div className="space-y-1 leading-none">
-                  <FormLabel className="text-sm font-normal text-muted-foreground">
-                    Wallet Token ($3) - Coming Soon
-                  </FormLabel>
-                </div>
-              </FormItem>
-            )}
-          />
-        </div>
 
         {/* Submit button */}
         <Button type="submit" className="w-full" size="lg" disabled={isContractDataLoading}>
