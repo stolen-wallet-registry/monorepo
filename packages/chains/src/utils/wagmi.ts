@@ -15,10 +15,10 @@ import { getNetworkOrUndefined, allNetworks } from '../networks';
  *
  * Local Anvil chains use our deployed addresses (varies by deploy script):
  * - deploy:crosschain (DeployCrossChain.s.sol):
- *   - Hub (31337): nonce 7 → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
- *   - Spoke (31338): nonce 6 → 0x0165878A594ca255338adfa4d48449f69242Eb8F
+ *   - Hub (31337): 0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
+ *   - Spoke (31338): 0x0165878A594ca255338adfa4d48449f69242Eb8F
  * - deploy (Deploy.s.sol, single-chain):
- *   - Hub (31337): nonce 5 → 0x9A676e781A523b5d0C0e43731313A708CB607508
+ *   - Hub (31337): 0x9A676e781A523b5d0C0e43731313A708CB607508
  *
  * IMPORTANT: The default addresses below are for cross-chain deployment.
  * For single-chain development, set VITE_MULTICALL3_ADDRESS=0x9A676e781A523b5d0C0e43731313A708CB607508
@@ -31,7 +31,7 @@ import { getNetworkOrUndefined, allNetworks } from '../networks';
 const MULTICALL3_ADDRESSES: Record<number, `0x${string}`> = {
   // Local Anvil chains - cross-chain deployment addresses (default)
   // Override via VITE_MULTICALL3_ADDRESS env var for single-chain development
-  31337: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
+  31337: '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318',
   31338: '0x0165878A594ca255338adfa4d48449f69242Eb8F',
   // All other chains use canonical address (pre-deployed)
 };
