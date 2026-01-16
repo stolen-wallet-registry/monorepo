@@ -140,16 +140,20 @@ export function TransactionStandardRegistrationPage() {
   useEffect(() => {
     if (chainId) {
       setReportedChainId(chainId);
+      setSelectedTxHashes([]);
+      setMerkleRoot(null);
     }
-  }, [chainId, setReportedChainId]);
+  }, [chainId, setReportedChainId, setSelectedTxHashes, setMerkleRoot]);
 
   // Set reporter address when connected
   useEffect(() => {
     if (address) {
       setReporter(address);
       setForwarder(address); // Standard registration: same address pays
+      setSelectedTxHashes([]);
+      setMerkleRoot(null);
     }
-  }, [address, setReporter, setForwarder]);
+  }, [address, setReporter, setForwarder, setSelectedTxHashes, setMerkleRoot]);
 
   // Redirect if not connected
   useEffect(() => {

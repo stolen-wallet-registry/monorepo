@@ -73,7 +73,7 @@ contract StolenTransactionRegistryTest is Test {
     function _getDomainSeparator() internal view returns (bytes32) {
         return keccak256(
             abi.encode(
-                TYPE_HASH, keccak256("StolenTransactionRegistry"), keccak256("1"), block.chainid, address(registry)
+                TYPE_HASH, keccak256("StolenTransactionRegistry"), keccak256("4"), block.chainid, address(registry)
             )
         );
     }
@@ -653,7 +653,7 @@ contract StolenTransactionRegistryFeeTest is Test {
     function _getDomainSeparator() internal view returns (bytes32) {
         return keccak256(
             abi.encode(
-                TYPE_HASH, keccak256("StolenTransactionRegistry"), keccak256("1"), block.chainid, address(registry)
+                TYPE_HASH, keccak256("StolenTransactionRegistry"), keccak256("4"), block.chainid, address(registry)
             )
         );
     }

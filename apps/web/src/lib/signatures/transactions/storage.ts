@@ -87,9 +87,16 @@ export function getTxSignature(
     if (
       !isHex(parsed.signature, { strict: true }) ||
       !isHex(parsed.merkleRoot, { strict: true }) ||
+      !isHex(parsed.reportedChainId, { strict: true }) ||
       !isAddress(parsed.reporter) ||
       !isAddress(parsed.forwarder)
     ) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+
+    // Validate numeric strings before BigInt conversion
+    if (!/^\d+$/.test(parsed.deadline) || !/^\d+$/.test(parsed.nonce)) {
       sessionStorage.removeItem(key);
       return null;
     }

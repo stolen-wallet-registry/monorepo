@@ -135,8 +135,11 @@ export function buildMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData
     // Compute leaves
     const leaves = transactions.map((tx, i) => computeLeaf(tx.txHash, caip2ChainIds[i]));
 
+    // Sort leaves to match on-chain ordering
+    const sortedLeaves = [...leaves].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+
     // Build tree
-    const { root, getProof } = buildTree(leaves);
+    const { root, getProof } = buildTree(sortedLeaves);
 
     logger.store.debug('Merkle tree built', {
       root,
@@ -152,7 +155,7 @@ export function buildMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData
       getProofByTx: (txHash: Hash, chainId: number) => {
         const caip2 = chainIdToCAIP2(chainId);
         const targetLeaf = computeLeaf(txHash, caip2);
-        const index = leaves.findIndex((leaf) => leaf === targetLeaf);
+        const index = sortedLeaves.findIndex((leaf) => leaf === targetLeaf);
         if (index === -1) {
           logger.store.warn('Transaction not found in tree', { txHash, chainId });
           return [];

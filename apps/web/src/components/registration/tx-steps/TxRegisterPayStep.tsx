@@ -45,11 +45,21 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   // Local state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [storedSignatureState, setStoredSignatureState] = useState<ReturnType<
+    typeof getTxSignature
+  > | null>(null);
 
-  // Get stored signature
-  const storedSignature = merkleRoot
-    ? getTxSignature(merkleRoot, chainId, TX_SIGNATURE_STEP.REGISTRATION)
-    : null;
+  // Get stored signature (client-only)
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (!merkleRoot) {
+      setStoredSignatureState(null);
+      return;
+    }
+    setStoredSignatureState(getTxSignature(merkleRoot, chainId, TX_SIGNATURE_STEP.REGISTRATION));
+  }, [merkleRoot, chainId]);
 
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : undefined;
@@ -98,16 +108,20 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
    * Submit the registration transaction.
    */
   const handleSubmit = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
     logger.contract.info('Transaction batch registration submission initiated', {
       merkleRoot,
       transactionCount: selectedTxHashes.length,
-      hasStoredSignature: !!storedSignature,
+      hasStoredSignature: !!storedSignatureState,
       connectedWallet: address,
     });
 
-    if (!storedSignature || !merkleRoot || !reportedChainIdHash) {
+    if (!storedSignatureState || !merkleRoot || !reportedChainIdHash) {
       logger.contract.error('Cannot submit transaction registration - missing data', {
-        hasStoredSignature: !!storedSignature,
+        hasStoredSignature: !!storedSignatureState,
         merkleRoot,
         reportedChainIdHash,
       });
@@ -119,7 +133,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     setLocalError(null);
 
     try {
-      const parsedSig = parseSignature(storedSignature.signature);
+      const parsedSig = parseSignature(storedSignatureState.signature);
 
       // Build chain IDs array (all same chain for now)
       const chainIds = selectedTxHashes.map(() => reportedChainIdHash);
@@ -128,7 +142,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         merkleRoot,
         reportedChainId: reportedChainIdHash,
         transactionCount: selectedTxHashes.length,
-        deadline: storedSignature.deadline.toString(),
+        deadline: storedSignatureState.deadline.toString(),
         chainId,
       });
 
@@ -137,8 +151,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         reportedChainId: reportedChainIdHash,
         transactionHashes: selectedTxHashes,
         chainIds,
-        reporter: storedSignature.reporter,
-        deadline: storedSignature.deadline,
+        reporter: storedSignatureState.reporter,
+        deadline: storedSignatureState.deadline,
         signature: parsedSig,
         feeWei: 0n, // No fee for now
       };
@@ -194,7 +208,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   }
 
   // Missing signature
-  if (!storedSignature) {
+  if (!storedSignatureState) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -212,13 +226,13 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   const errorMessage = localError || (error ? sanitizeErrorMessage(error) : null);
 
   // Build signed message data for display
-  const signedMessageData: SignedMessageData | null = storedSignature
+  const signedMessageData: SignedMessageData | null = storedSignatureState
     ? {
-        registeree: storedSignature.reporter,
-        forwarder: storedSignature.forwarder,
-        nonce: storedSignature.nonce,
-        deadline: storedSignature.deadline,
-        signature: storedSignature.signature,
+        registeree: storedSignatureState.reporter,
+        forwarder: storedSignatureState.forwarder,
+        nonce: storedSignatureState.nonce,
+        deadline: storedSignatureState.deadline,
+        signature: storedSignatureState.signature,
       }
     : null;
 

@@ -53,7 +53,8 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
     : null;
 
   // Track logging state
-  const hasLoggedStart = useRef(false);
+  const hasLoggedStartForDeadlines = useRef(false);
+  const hasLoggedStartForTimer = useRef(false);
   // Store initial totalMs for progress bar calculation
   // This state is intentionally set in an effect when the external timer first provides a value
   const [initialTotalMs, setInitialTotalMs] = useState<number | undefined>(undefined);
@@ -67,8 +68,8 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
 
   // Log when deadlines are loaded
   useEffect(() => {
-    if (deadlines && !hasLoggedStart.current) {
-      hasLoggedStart.current = true;
+    if (deadlines && !hasLoggedStartForDeadlines.current) {
+      hasLoggedStartForDeadlines.current = true;
       logger.registration.info('Transaction batch grace period started', {
         merkleRoot,
         currentBlock: deadlines.currentBlock.toString(),
@@ -118,8 +119,8 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
         // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: capturing initial value from external timer
         setInitialTotalMs(totalMs);
       }
-      if (!hasLoggedStart.current) {
-        hasLoggedStart.current = true;
+      if (!hasLoggedStartForTimer.current) {
+        hasLoggedStartForTimer.current = true;
         logger.registration.debug('Transaction batch grace period timer initialized', {
           totalMs,
           blocksLeft: blocksLeft.toString(),

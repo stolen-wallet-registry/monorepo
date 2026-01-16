@@ -55,6 +55,12 @@ const initialState: TransactionRegistrationState = {
   bridgeMessageId: null,
 };
 
+const VALID_REGISTRATION_TYPES: TransactionRegistrationType[] = [
+  'standard',
+  'selfRelay',
+  'p2pRelay',
+];
+
 export const useTransactionRegistrationStore = create<
   TransactionRegistrationState & TransactionRegistrationActions
 >()(
@@ -116,8 +122,15 @@ export const useTransactionRegistrationStore = create<
             return initialState;
           }
           const state = persisted as Partial<TransactionRegistrationState>;
+          const isValidRegistrationType =
+            state.registrationType &&
+            VALID_REGISTRATION_TYPES.includes(
+              state.registrationType as TransactionRegistrationType
+            );
           return {
-            registrationType: state.registrationType ?? initialState.registrationType,
+            registrationType: isValidRegistrationType
+              ? (state.registrationType as TransactionRegistrationType)
+              : initialState.registrationType,
             step: state.step ?? initialState.step,
             acknowledgementHash: state.acknowledgementHash ?? initialState.acknowledgementHash,
             acknowledgementChainId:

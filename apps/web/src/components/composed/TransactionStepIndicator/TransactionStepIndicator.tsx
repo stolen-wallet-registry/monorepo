@@ -61,11 +61,13 @@ function getStepStatus(
 
   // Guard against invalid/unknown steps (-1 from indexOf)
   if (currentIndex === -1) {
-    logger.ui.warn('Unknown currentStep in sequence', {
-      component: 'TransactionStepIndicator',
-      currentStep,
-      availableSteps: sequence,
-    });
+    if (step === sequence[0]) {
+      logger.ui.warn('Unknown currentStep in sequence', {
+        component: 'TransactionStepIndicator',
+        currentStep,
+        availableSteps: sequence,
+      });
+    }
     return 'pending';
   }
   if (stepIndex === -1) {

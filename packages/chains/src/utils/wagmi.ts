@@ -15,8 +15,8 @@ import { getNetworkOrUndefined, allNetworks } from '../networks';
  *
  * Local Anvil chains use our deployed addresses (varies by deploy script):
  * - deploy:crosschain (DeployCrossChain.s.sol):
- *   - Hub (31337): nonce 10 → 0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
- *   - Spoke (31338): nonce 0 → 0x0165878A594ca255338adfa4d48449f69242Eb8F
+ *   - Hub (31337): nonce 7 → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
+ *   - Spoke (31338): nonce 6 → 0x0165878A594ca255338adfa4d48449f69242Eb8F
  * - deploy (Deploy.s.sol, single-chain):
  *   - Hub (31337): nonce 5 → 0x9A676e781A523b5d0C0e43731313A708CB607508
  *
@@ -31,7 +31,7 @@ import { getNetworkOrUndefined, allNetworks } from '../networks';
 const MULTICALL3_ADDRESSES: Record<number, `0x${string}`> = {
   // Local Anvil chains - cross-chain deployment addresses (default)
   // Override via VITE_MULTICALL3_ADDRESS env var for single-chain development
-  31337: '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318',
+  31337: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
   31338: '0x0165878A594ca255338adfa4d48449f69242Eb8F',
   // All other chains use canonical address (pre-deployed)
 };
@@ -41,15 +41,22 @@ const CANONICAL_MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11' as con
 /**
  * Get the Multicall3 address for a given chain ID.
  *
- * For local development (chain 31337/31338), checks VITE_MULTICALL3_ADDRESS env var first.
+ * For local development, allows env overrides scoped to a chain ID.
+ * - VITE_MULTICALL3_ADDRESS_31337 applies only to chain 31337.
+ * - VITE_MULTICALL3_ADDRESS (legacy) only applies to chain 31337.
  * If not set, uses the hardcoded addresses for cross-chain deployment.
  */
 function getMulticall3Address(chainId: number): `0x${string}` {
   // Allow env override for local development (supports both deploy scripts)
-  if ((chainId === 31337 || chainId === 31338) && typeof import.meta !== 'undefined') {
-    const envAddress = (import.meta as { env?: Record<string, string> }).env
-      ?.VITE_MULTICALL3_ADDRESS;
+  if (typeof import.meta !== 'undefined') {
+    const env = (import.meta as { env?: Record<string, string> }).env ?? {};
+    const scopedKey = `VITE_MULTICALL3_ADDRESS_${chainId}`;
+    const scopedAddress = env[scopedKey];
+    const envAddress = chainId === 31337 ? env.VITE_MULTICALL3_ADDRESS : undefined;
     // Use viem's isAddress for proper validation (0x + 40 hex chars, checksum-aware)
+    if (scopedAddress && isAddress(scopedAddress)) {
+      return scopedAddress;
+    }
     if (envAddress && isAddress(envAddress)) {
       return envAddress;
     }

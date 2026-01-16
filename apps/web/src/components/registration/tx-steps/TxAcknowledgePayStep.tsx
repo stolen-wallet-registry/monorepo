@@ -4,7 +4,7 @@
  * Submits the acknowledgement transaction using the stored signature.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
 import { Alert, AlertDescription } from '@swr/ui';
@@ -100,7 +100,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   /**
    * Submit the acknowledgement transaction.
    */
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     logger.contract.info('Transaction batch acknowledgement submission initiated', {
       merkleRoot,
       transactionCount: selectedTxHashes.length,
@@ -164,7 +164,15 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [
+    storedSignature,
+    merkleRoot,
+    reportedChainIdHash,
+    selectedTxHashes,
+    address,
+    chainId,
+    submitAcknowledgement,
+  ]);
 
   /**
    * Handle retry after failure.

@@ -39,13 +39,18 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   const [signatureStatus, setSignatureStatus] = useState<SignatureStatus>('idle');
   const [signatureError, setSignatureError] = useState<string | null>(null);
   const [signature, setSignature] = useState<Hex | null>(null);
-  const [shouldAdvance, setShouldAdvance] = useState(false);
 
-  // Ref to track onComplete for cleanup
-  const onCompleteRef = useRef(onComplete);
+  // Ref for timeout cleanup
+  const completionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
   useEffect(() => {
-    onCompleteRef.current = onComplete;
-  }, [onComplete]);
+    return () => {
+      if (completionTimeoutRef.current) {
+        clearTimeout(completionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : undefined;
@@ -69,16 +74,6 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
 
   const isContractDataLoading = nonceLoading || hashLoading;
   const hasContractError = nonceError || hashError;
-
-  // Handle advancing to next step with cleanup
-  useEffect(() => {
-    if (shouldAdvance) {
-      const timerId = window.setTimeout(() => {
-        onCompleteRef.current();
-      }, 1000);
-      return () => clearTimeout(timerId);
-    }
-  }, [shouldAdvance]);
 
   /**
    * Handle signing the registration.
@@ -107,8 +102,11 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
     // Refetch to get fresh deadline
     logger.contract.debug('Refetching hash struct for fresh registration deadline');
     const refetchResult = await refetchHashStruct();
-    const rawData = refetchResult?.data as [bigint, Hex] | undefined;
-    const freshDeadline = rawData?.[0] ?? hashStructData?.deadline;
+    const rawData = refetchResult?.data;
+    const freshDeadline =
+      Array.isArray(rawData) && typeof rawData[0] === 'bigint'
+        ? rawData[0]
+        : hashStructData?.deadline;
 
     if (freshDeadline === undefined) {
       logger.signature.error('Failed to get hash struct data');
@@ -163,8 +161,12 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
       logger.registration.info(
         'Transaction batch registration signing complete, advancing to payment step'
       );
-      // Trigger advance to next step
-      setShouldAdvance(true);
+      // Clear any existing timeout before setting a new one
+      if (completionTimeoutRef.current) {
+        clearTimeout(completionTimeoutRef.current);
+      }
+      // Advance to next step after short delay
+      completionTimeoutRef.current = setTimeout(onComplete, 1000);
     } catch (err) {
       logger.signature.error(
         'Transaction batch registration signing failed',
@@ -224,8 +226,12 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
 
       {/* Loading state for contract data */}
       {isContractDataLoading && (
-        <div className="flex items-center justify-center py-8 text-muted-foreground">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center justify-center py-8 text-muted-foreground"
+        >
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
           Loading contract data...
         </div>
       )}

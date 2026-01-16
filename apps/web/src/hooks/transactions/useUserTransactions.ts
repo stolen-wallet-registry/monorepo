@@ -36,6 +36,7 @@ export interface UseUserTransactionsResult {
  * Increase if you need more transaction history.
  */
 const LOCAL_BLOCK_SCAN_DEPTH = 50;
+const LOCAL_BLOCK_BATCH_SIZE = 10;
 
 /**
  * Check if chainId is a local Anvil chain.
@@ -92,14 +93,23 @@ export function useUserTransactions(
             ? latestBlock - BigInt(LOCAL_BLOCK_SCAN_DEPTH)
             : 0n;
 
+        const blockNumbers: bigint[] = [];
         for (let blockNum = latestBlock; blockNum >= startBlock; blockNum--) {
-          try {
-            const block = await publicClient.getBlock({
-              blockNumber: blockNum,
-              includeTransactions: true,
-            });
+          blockNumbers.push(blockNum);
+        }
 
-            if (!block.transactions) continue;
+        for (let i = 0; i < blockNumbers.length; i += LOCAL_BLOCK_BATCH_SIZE) {
+          const batch = blockNumbers.slice(i, i + LOCAL_BLOCK_BATCH_SIZE);
+          const blocks = await Promise.all(
+            batch.map((blockNum) =>
+              publicClient
+                .getBlock({ blockNumber: blockNum, includeTransactions: true })
+                .catch(() => null)
+            )
+          );
+
+          for (const block of blocks) {
+            if (!block?.transactions) continue;
 
             // Filter transactions from this address
             for (const tx of block.transactions) {
@@ -118,9 +128,6 @@ export function useUserTransactions(
                 });
               }
             }
-          } catch {
-            // Some blocks might not exist yet, continue
-            logger.store.debug('Block fetch failed, continuing', { blockNum });
           }
         }
 

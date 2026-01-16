@@ -6,7 +6,7 @@
  * with Merkle tree generation.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -173,7 +173,7 @@ export function TransactionSelector({
   className,
 }: TransactionSelectorProps) {
   const transactionHashSet = new Set(transactions.map((tx) => tx.hash));
-  const selectedSet = new Set(selectedHashes);
+  const selectedSet = useMemo(() => new Set(selectedHashes), [selectedHashes]);
   // Count only selected hashes that exist in the current transaction list
   const validSelectedCount = selectedHashes.filter((h) => transactionHashSet.has(h)).length;
 

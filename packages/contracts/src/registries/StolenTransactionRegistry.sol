@@ -76,13 +76,13 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Initialize the registry with EIP-712 domain separator and fee configuration
-    /// @dev Version "1" for this new registry
+    /// @dev Version "4" to align with frontend EIP-712 domain
     /// @param _feeManager FeeManager contract address (address(0) for free registrations)
     /// @param _registryHub RegistryHub contract address for fee forwarding
     /// @param _graceBlocks Base blocks for grace period (chain-specific)
     /// @param _deadlineBlocks Base blocks for deadline window (chain-specific)
     constructor(address _feeManager, address _registryHub, uint256 _graceBlocks, uint256 _deadlineBlocks)
-        EIP712("StolenTransactionRegistry", "1")
+        EIP712("StolenTransactionRegistry", "4")
     {
         // Validate fee configuration consistency
         if (_feeManager != address(0) && _registryHub == address(0)) {
@@ -165,6 +165,9 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712 {
         // Validate reporter address
         if (reporter == address(0)) revert InvalidReporter();
 
+        // Verify Merkle root matches the provided transaction hashes
+        if (_computeMerkleRoot(transactionHashes, chainIds) != merkleRoot) revert MerkleRootMismatch();
+
         // Verify signature from reporter with correct nonce
         _verifyRegistrationSignature(merkleRoot, reportedChainId, reporter, deadline, v, r, s);
 
@@ -203,6 +206,9 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712 {
         if (bridgeId > uint8(BridgeId.WORMHOLE)) revert InvalidBridgeId();
         if (transactionHashes.length != chainIds.length) revert ArrayLengthMismatch();
         if (transactionHashes.length != transactionCount) revert InvalidTransactionCount();
+
+        // Verify Merkle root matches the provided transaction hashes
+        if (_computeMerkleRoot(transactionHashes, chainIds) != merkleRoot) revert MerkleRootMismatch();
 
         bytes32 batchId = _computeBatchId(merkleRoot, reporter, reportedChainId);
 
