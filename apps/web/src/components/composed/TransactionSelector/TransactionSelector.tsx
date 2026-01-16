@@ -54,14 +54,6 @@ function formatTxHash(hash: Hash): string {
 }
 
 /**
- * Format a timestamp for display.
- */
-function formatTimestamp(timestamp?: number): string {
-  if (!timestamp) return 'Unknown time';
-  return new Date(timestamp).toLocaleString();
-}
-
-/**
  * Format ETH value for display.
  */
 function formatValue(value: bigint): string {
@@ -73,24 +65,57 @@ function formatValue(value: bigint): string {
 }
 
 /**
+ * Explorer base URLs by chain ID.
+ */
+const EXPLORER_URLS: Record<number, string | undefined> = {
+  1: 'https://etherscan.io',
+  8453: 'https://basescan.org',
+  84532: 'https://sepolia.basescan.org',
+  10: 'https://optimistic.etherscan.io',
+  11155420: 'https://sepolia-optimistic.etherscan.io',
+  42161: 'https://arbiscan.io',
+  421614: 'https://sepolia.arbiscan.io',
+  // Local Anvil chains have no explorer
+};
+
+/**
  * Get explorer URL for a transaction.
  */
-function getExplorerUrl(hash: Hash, chainId?: number): string | null {
-  const explorers: Record<number, string | undefined> = {
-    1: 'https://etherscan.io',
-    8453: 'https://basescan.org',
-    84532: 'https://sepolia.basescan.org',
-    10: 'https://optimistic.etherscan.io',
-    11155420: 'https://sepolia-optimistic.etherscan.io',
-    42161: 'https://arbiscan.io',
-    421614: 'https://sepolia.arbiscan.io',
-    // Local Anvil chains have no explorer
-  };
-
+function getExplorerTxUrl(hash: Hash, chainId?: number): string | null {
   if (!chainId) return null;
-  const baseUrl = explorers[chainId];
+  const baseUrl = EXPLORER_URLS[chainId];
   if (!baseUrl) return null;
   return `${baseUrl}/tx/${hash}`;
+}
+
+/**
+ * Get explorer URL for an address.
+ */
+function getExplorerAddressUrl(address: string, chainId?: number): string | null {
+  if (!chainId || !address) return null;
+  const baseUrl = EXPLORER_URLS[chainId];
+  if (!baseUrl) return null;
+  return `${baseUrl}/address/${address}`;
+}
+
+/**
+ * Format timestamp as short date/time.
+ * Handles both Unix seconds and milliseconds.
+ */
+function formatShortTimestamp(timestamp?: number): string {
+  if (!timestamp) return '--';
+  // Convert Unix seconds to milliseconds if needed (timestamps < 1e12 are seconds)
+  const ms = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+  const date = new Date(ms);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/**
+ * Format address for compact display.
+ */
+function formatShortAddress(address: string | null): string {
+  if (!address) return '--';
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
 /**
@@ -98,15 +123,14 @@ function getExplorerUrl(hash: Hash, chainId?: number): string | null {
  */
 function TransactionSkeleton() {
   return (
-    <div className="space-y-3">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
-          <Skeleton className="h-5 w-5" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-3 w-32" />
-          </div>
-          <Skeleton className="h-4 w-24" />
+    <div className="space-y-1">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <div key={i} className="flex items-center gap-3 px-3 py-2 border rounded">
+          <Skeleton className="h-4 w-4" />
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-16 ml-auto" />
         </div>
       ))}
     </div>
@@ -148,7 +172,10 @@ export function TransactionSelector({
   chainId,
   className,
 }: TransactionSelectorProps) {
+  const transactionHashSet = new Set(transactions.map((tx) => tx.hash));
   const selectedSet = new Set(selectedHashes);
+  // Count only selected hashes that exist in the current transaction list
+  const validSelectedCount = selectedHashes.filter((h) => transactionHashSet.has(h)).length;
 
   const handleToggle = useCallback(
     (hash: Hash) => {
@@ -218,8 +245,8 @@ export function TransactionSelector({
           </div>
           {transactions.length > 0 && (
             <div className="flex items-center gap-2">
-              <Badge variant={selectedHashes.length > 0 ? 'default' : 'secondary'}>
-                {selectedHashes.length} / {Math.min(transactions.length, maxSelections)} selected
+              <Badge variant={validSelectedCount > 0 ? 'default' : 'secondary'}>
+                {validSelectedCount} / {Math.min(transactions.length, maxSelections)} selected
               </Badge>
               {onRefresh && (
                 <Button variant="ghost" size="icon" onClick={onRefresh} title="Refresh">
@@ -242,7 +269,7 @@ export function TransactionSelector({
                 size="sm"
                 className="p-0 h-auto"
                 onClick={handleSelectAll}
-                disabled={selectedHashes.length >= Math.min(transactions.length, maxSelections)}
+                disabled={validSelectedCount >= Math.min(transactions.length, maxSelections)}
               >
                 Select all
               </Button>
@@ -252,77 +279,96 @@ export function TransactionSelector({
                 size="sm"
                 className="p-0 h-auto"
                 onClick={handleClearAll}
-                disabled={selectedHashes.length === 0}
+                disabled={validSelectedCount === 0}
               >
                 Clear selection
               </Button>
             </div>
 
-            {/* Transaction list */}
-            <div className="space-y-2 max-h-96 overflow-y-auto">
+            {/* Column headers */}
+            <div className="grid grid-cols-[auto_1fr_minmax(80px,auto)_minmax(60px,auto)_minmax(70px,auto)_minmax(50px,auto)] gap-2 px-3 py-1.5 text-xs font-medium text-muted-foreground border-b">
+              <div className="w-4" />
+              <div>Hash</div>
+              <div>To</div>
+              <div>Date</div>
+              <div className="text-right">Value</div>
+              <div className="text-right">Block</div>
+            </div>
+
+            {/* Transaction list - compact single-line rows */}
+            <div className="space-y-0.5 max-h-80 overflow-y-auto">
               {transactions.map((tx) => {
                 const isSelected = selectedSet.has(tx.hash);
-                const explorerUrl = getExplorerUrl(tx.hash, chainId ?? tx.chainId);
+                const txExplorerUrl = getExplorerTxUrl(tx.hash, chainId ?? tx.chainId);
+                const toExplorerUrl = tx.to
+                  ? getExplorerAddressUrl(tx.to, chainId ?? tx.chainId)
+                  : null;
 
                 return (
                   <div
                     key={tx.hash}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleToggle(tx.hash)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleToggle(tx.hash);
-                      }
-                    }}
                     className={cn(
-                      'flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition-all',
-                      isSelected
-                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                        : 'hover:border-primary/50 hover:bg-muted/50'
+                      'grid grid-cols-[auto_1fr_minmax(80px,auto)_minmax(60px,auto)_minmax(70px,auto)_minmax(50px,auto)] gap-2 items-center px-3 py-2 rounded transition-all text-sm',
+                      isSelected ? 'bg-primary/10 ring-1 ring-primary/50' : 'hover:bg-muted/50'
                     )}
                   >
                     <Checkbox
                       checked={isSelected}
-                      onCheckedChange={() => handleToggle(tx.hash)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggle(tx.hash);
+                      }}
                       aria-label={`Select transaction ${formatTxHash(tx.hash)}`}
+                      className="h-4 w-4 cursor-pointer"
                     />
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <code className="text-sm font-mono">{formatTxHash(tx.hash)}</code>
-                        {explorerUrl && (
-                          <a
-                            href={explorerUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-muted-foreground hover:text-primary"
-                            title="View on explorer"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {formatTimestamp(tx.timestamp)}
-                        {tx.to && <span className="ml-2">to {tx.to.slice(0, 10)}...</span>}
-                      </div>
+                    <div className="flex items-center gap-1 min-w-0">
+                      <code className="text-xs font-mono truncate">{formatTxHash(tx.hash)}</code>
+                      {txExplorerUrl && (
+                        <a
+                          href={txExplorerUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-muted-foreground hover:text-primary flex-shrink-0"
+                          title="View transaction on explorer"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
                     </div>
 
-                    <div className="text-right">
-                      <div className="text-sm font-medium">{formatValue(tx.value)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Block {tx.blockNumber.toString()}
-                      </div>
+                    <div className="flex items-center gap-1 min-w-0">
+                      <code className="text-xs font-mono text-muted-foreground truncate">
+                        {formatShortAddress(tx.to)}
+                      </code>
+                      {toExplorerUrl && (
+                        <a
+                          href={toExplorerUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-muted-foreground hover:text-primary flex-shrink-0"
+                          title="View address on explorer"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
                     </div>
+
+                    <span className="text-xs text-muted-foreground">
+                      {formatShortTimestamp(tx.timestamp)}
+                    </span>
+
+                    <span className="text-xs font-medium text-right">{formatValue(tx.value)}</span>
+
+                    <span className="text-xs text-muted-foreground text-right">
+                      {tx.blockNumber.toString()}
+                    </span>
                   </div>
                 );
               })}
             </div>
 
-            {selectedHashes.length >= maxSelections && (
+            {validSelectedCount >= maxSelections && (
               <p className="text-sm text-amber-600">
                 Maximum of {maxSelections} transactions can be selected at once.
               </p>

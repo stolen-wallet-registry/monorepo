@@ -198,9 +198,7 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
                 crossChainMessageId
             );
 
-        // Note: CrossChainRegistration event uses wallet address, but for batches we emit
-        // the reporter address. Consider adding a dedicated event for transaction batches.
-        emit CrossChainRegistration(reporter, uint32(uint256(sourceChainId)), crossChainMessageId);
+        emit CrossChainBatchRegistration(reporter, sourceChainId, reportedChainId, crossChainMessageId);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

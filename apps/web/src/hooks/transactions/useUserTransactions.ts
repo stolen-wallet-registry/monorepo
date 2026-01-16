@@ -64,7 +64,10 @@ export function useUserTransactions(
 
   const fetchTransactions = useCallback(async () => {
     if (!address || !enabled || !publicClient) {
+      // Clear stale state when disabled or disconnected
       setTransactions([]);
+      setError(null);
+      setIsLoading(false);
       return;
     }
 

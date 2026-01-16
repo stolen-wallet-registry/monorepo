@@ -64,8 +64,10 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
 
         setSelectedTxHashes: (hashes) =>
           set((state) => {
-            logger.store.debug('Transaction form hashes updated', { count: hashes.length });
-            state.selectedTxHashes = hashes;
+            // Dedup and copy to prevent external mutation
+            const unique = Array.from(new Set(hashes));
+            logger.store.debug('Transaction form hashes updated', { count: unique.length });
+            state.selectedTxHashes = unique;
             // Clear merkle root when hashes change - it needs to be recomputed
             state.merkleRoot = null;
           }),

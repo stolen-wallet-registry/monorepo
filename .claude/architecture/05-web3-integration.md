@@ -174,7 +174,7 @@ Used for fetching user transaction history in the Stolen Transaction Registry.
 
 **Setup:**
 
-1. Create account at https://dashboard.alchemy.com
+1. Create account at [Alchemy Dashboard](https://dashboard.alchemy.com)
 2. Create an app
 3. Enable networks: Base, Optimism, Arbitrum, Polygon (and testnets)
 4. Copy API key to `VITE_ALCHEMY_API_KEY`

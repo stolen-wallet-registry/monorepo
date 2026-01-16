@@ -9,7 +9,7 @@ const DOCS_URL = import.meta.env.VITE_DOCS_URL ?? 'http://localhost:5174';
 /**
  * GitHub repository URL.
  */
-const GITHUB_URL = 'https://github.com/stolenwalletregistry';
+const GITHUB_URL = 'https://github.com/stolen-wallet-registry/monorepo';
 
 /**
  * Application footer with links and copyright.

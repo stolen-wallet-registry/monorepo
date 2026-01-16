@@ -62,6 +62,15 @@ interface IRegistryHub {
     /// @param messageId Bridge message identifier for tracking
     event CrossChainRegistration(address indexed wallet, uint32 indexed sourceChainId, bytes32 messageId);
 
+    /// @notice Emitted when a transaction batch is registered via cross-chain message
+    /// @param reporter The reporter address who registered the batch
+    /// @param sourceChainId Source chain ID as bytes32 (CAIP-2 format, not truncated)
+    /// @param reportedChainId Reported chain ID as bytes32 (where transactions occurred)
+    /// @param messageId Bridge message identifier for tracking
+    event CrossChainBatchRegistration(
+        address indexed reporter, bytes32 indexed sourceChainId, bytes32 indexed reportedChainId, bytes32 messageId
+    );
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════

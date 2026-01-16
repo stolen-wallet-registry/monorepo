@@ -5,6 +5,7 @@
  * After acknowledgement, a grace period begins before registration can be completed.
  */
 
+import { useMemo } from 'react';
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
 import { stolenTransactionRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenTransactionRegistryAddress } from '@/lib/contracts/addresses';
@@ -50,20 +51,22 @@ export interface UseTxAcknowledgementResult {
 export function useTransactionAcknowledgement(): UseTxAcknowledgementResult {
   const chainId = useChainId();
 
-  let contractAddress: Address | undefined;
-  try {
-    contractAddress = getStolenTransactionRegistryAddress(chainId);
-    logger.contract.debug('useTransactionAcknowledgement: Registry address resolved', {
-      chainId,
-      contractAddress,
-    });
-  } catch (error) {
-    contractAddress = undefined;
-    logger.contract.error('useTransactionAcknowledgement: Failed to resolve registry address', {
-      chainId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  const contractAddress = useMemo(() => {
+    try {
+      const address = getStolenTransactionRegistryAddress(chainId);
+      logger.contract.debug('useTransactionAcknowledgement: Registry address resolved', {
+        chainId,
+        contractAddress: address,
+      });
+      return address;
+    } catch (error) {
+      logger.contract.error('useTransactionAcknowledgement: Failed to resolve registry address', {
+        chainId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }, [chainId]);
 
   const {
     writeContractAsync,
@@ -101,6 +104,19 @@ export function useTransactionAcknowledgement(): UseTxAcknowledgementResult {
       deadline,
       signature,
     } = params;
+
+    // Validate batch sizes match to fail fast before gas burn
+    if (transactionCount !== transactionHashes.length || transactionCount !== chainIds.length) {
+      const error = new Error(
+        `Batch size mismatch: transactionCount=${transactionCount}, hashes=${transactionHashes.length}, chainIds=${chainIds.length}`
+      );
+      logger.registration.error('Transaction batch size mismatch', {
+        transactionCount,
+        hashesLength: transactionHashes.length,
+        chainIdsLength: chainIds.length,
+      });
+      throw error;
+    }
 
     logger.registration.info('Submitting transaction batch acknowledgement', {
       chainId,

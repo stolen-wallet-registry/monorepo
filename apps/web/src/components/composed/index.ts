@@ -39,6 +39,10 @@ export { ChainIndicator, type ChainIndicatorProps } from './ChainIndicator';
 
 // Transaction components
 export { TransactionSelector, type TransactionSelectorProps } from './TransactionSelector';
+export {
+  TransactionStepIndicator,
+  type TransactionStepIndicatorProps,
+} from './TransactionStepIndicator';
 
 // Soulbound components
 export { LanguageSelector, type LanguageSelectorProps } from './LanguageSelector';

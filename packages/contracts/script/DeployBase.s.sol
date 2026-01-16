@@ -15,13 +15,17 @@ import { SupportSoulbound } from "../src/soulbound/SupportSoulbound.sol";
 /// @notice Shared deployment logic for core SWR contracts
 /// @dev Inherit from this to ensure consistent addresses across deploy scripts
 ///
-/// Nonce order (Account 0):
-///   0: MockAggregator       → 0x5FbDB2315678afecb367f032d93F642f64180aa3
-///   1: FeeManager           → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-///   2: RegistryHub          → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
-///   3: StolenWalletRegistry → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
-///   4: (setRegistry tx)
-///   5: Multicall3           → 0x9A676e781A523b5d0C0e43731313A708CB607508
+/// Core deployment nonce order (Account 0):
+///   0: MockAggregator            → 0x5FbDB2315678afecb367f032d93F642f64180aa3
+///   1: FeeManager                → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+///   2: RegistryHub               → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+///   3: StolenWalletRegistry      → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+///   4: StolenTransactionRegistry → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
+///   5: (setRegistry STOLEN_WALLET tx)
+///   6: (setRegistry STOLEN_TRANSACTION tx)
+///
+/// Additional deployments (nonces continue from 7+):
+///   See DeployCrossChain.s.sol for CrossChainInbox, Soulbound, and Multicall3 nonces.
 abstract contract DeployBase is Script {
     // ═══════════════════════════════════════════════════════════════════════════
     // BLOCK TIMING CONFIGURATION
@@ -152,13 +156,15 @@ abstract contract DeployBase is Script {
     address internal constant CANONICAL_MULTICALL3 = 0xcA11bde05977b3631167028862bE2a173976CA11;
 
     /// @notice Deploy Multicall3 for local chains (mainnet/testnets have it pre-deployed)
-    /// @dev Call this AFTER deployCore to maintain deterministic nonce ordering
+    /// @dev Call this AFTER deployCore to maintain deterministic nonce ordering.
+    ///      On hub chain with CrossChainInbox, this will be nonce 9.
+    ///      On spoke chain, nonce varies by deployment script.
     /// @return multicall3 The deployed Multicall3 address
     function deployMulticall3() internal returns (address multicall3) {
         // On mainnet/testnets, Multicall3 is deployed at canonical address
         // Only deploy for local chains
         if (block.chainid == 31_337 || block.chainid == 31_338) {
-            // nonce 5: Deploy Multicall3
+            // Deploy Multicall3 (nonce depends on what was deployed before)
             multicall3 = address(new Multicall3());
             console2.log("Multicall3:", multicall3);
         } else {

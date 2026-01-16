@@ -1,7 +1,7 @@
 /**
- * Register page - Registration method selection.
+ * Transaction registration method selection page.
  *
- * Entry point for users to choose their wallet registration method.
+ * Entry point for users to choose their transaction registration method.
  */
 
 import { useLocation, Link } from 'wouter';
@@ -11,27 +11,30 @@ import { ArrowLeft } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@swr/ui';
 import { RegistrationMethodSelector } from '@/components/composed/RegistrationMethodSelector';
-import { useRegistrationStore, type RegistrationType } from '@/stores/registrationStore';
+import {
+  useTransactionRegistrationStore,
+  type TransactionRegistrationType,
+} from '@/stores/transactionRegistrationStore';
 
-export function HomePage() {
+export function TransactionHomePage() {
   const [, setLocation] = useLocation();
   const { isConnected } = useAccount();
-  const { setRegistrationType } = useRegistrationStore();
+  const { setRegistrationType } = useTransactionRegistrationStore();
   const p2pAvailable = Boolean(import.meta.env.VITE_RELAY_MULTIADDR);
 
-  const handleMethodSelect = (type: RegistrationType) => {
+  const handleMethodSelect = (type: TransactionRegistrationType) => {
     setRegistrationType(type);
 
     // Navigate to the appropriate registration flow
     switch (type) {
       case 'standard':
-        setLocation('/registration/wallet/standard');
+        setLocation('/registration/transactions/standard');
         break;
       case 'selfRelay':
-        setLocation('/registration/wallet/self-relay');
+        setLocation('/registration/transactions/self-relay');
         break;
       case 'p2pRelay':
-        setLocation('/registration/wallet/p2p-relay');
+        setLocation('/registration/transactions/p2p-relay');
         break;
     }
   };
@@ -47,9 +50,9 @@ export function HomePage() {
       </Button>
 
       <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold tracking-tight">Register Stolen Wallet</h1>
+        <h1 className="text-4xl font-bold tracking-tight">Report Fraudulent Transactions</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          Register your stolen wallet on-chain to strengthen fraud prevention and enable recovery
+          Register fraudulent transactions on-chain to help prevent fraud and enable recovery
           assistance.
         </p>
       </div>

@@ -15,8 +15,8 @@ import { getNetworkOrUndefined, allNetworks } from '../networks';
  *
  * Local Anvil chains use our deployed addresses (varies by deploy script):
  * - deploy:crosschain (DeployCrossChain.s.sol):
- *   - Hub (31337): nonce 7 → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
- *   - Spoke (31338): nonce 6 → 0x0165878A594ca255338adfa4d48449f69242Eb8F
+ *   - Hub (31337): nonce 10 → 0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
+ *   - Spoke (31338): nonce 0 → 0x0165878A594ca255338adfa4d48449f69242Eb8F
  * - deploy (Deploy.s.sol, single-chain):
  *   - Hub (31337): nonce 5 → 0x9A676e781A523b5d0C0e43731313A708CB607508
  *
@@ -31,7 +31,7 @@ import { getNetworkOrUndefined, allNetworks } from '../networks';
 const MULTICALL3_ADDRESSES: Record<number, `0x${string}`> = {
   // Local Anvil chains - cross-chain deployment addresses (default)
   // Override via VITE_MULTICALL3_ADDRESS env var for single-chain development
-  31337: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
+  31337: '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318',
   31338: '0x0165878A594ca255338adfa4d48449f69242Eb8F',
   // All other chains use canonical address (pre-deployed)
 };
@@ -41,12 +41,12 @@ const CANONICAL_MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11' as con
 /**
  * Get the Multicall3 address for a given chain ID.
  *
- * For local development (chain 31337), checks VITE_MULTICALL3_ADDRESS env var first
- * to allow overriding when using single-chain deployment script.
+ * For local development (chain 31337/31338), checks VITE_MULTICALL3_ADDRESS env var first.
+ * If not set, uses the hardcoded addresses for cross-chain deployment.
  */
 function getMulticall3Address(chainId: number): `0x${string}` {
   // Allow env override for local development (supports both deploy scripts)
-  if (chainId === 31337 && typeof import.meta !== 'undefined') {
+  if ((chainId === 31337 || chainId === 31338) && typeof import.meta !== 'undefined') {
     const envAddress = (import.meta as { env?: Record<string, string> }).env
       ?.VITE_MULTICALL3_ADDRESS;
     // Use viem's isAddress for proper validation (0x + 40 hex chars, checksum-aware)
@@ -68,8 +68,6 @@ function getMulticall3Address(chainId: number): `0x${string}` {
  * - All other chains use the canonical multicall3 address
  */
 export function toWagmiChain(config: NetworkConfig): Chain {
-  const multicall3Address = getMulticall3Address(config.chainId);
-
   return {
     id: config.chainId,
     name: config.displayName,
@@ -88,7 +86,7 @@ export function toWagmiChain(config: NetworkConfig): Chain {
       : undefined,
     contracts: {
       multicall3: {
-        address: multicall3Address,
+        address: getMulticall3Address(config.chainId),
       },
     },
     testnet: config.isTestnet || config.isLocal,

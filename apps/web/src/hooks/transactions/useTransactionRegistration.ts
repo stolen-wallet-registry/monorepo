@@ -5,6 +5,7 @@
  * Must be called after the grace period has elapsed following acknowledgement.
  */
 
+import { useMemo } from 'react';
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
 import { stolenTransactionRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenTransactionRegistryAddress } from '@/lib/contracts/addresses';
@@ -50,20 +51,22 @@ export interface UseTxRegistrationResult {
 export function useTransactionRegistration(): UseTxRegistrationResult {
   const chainId = useChainId();
 
-  let contractAddress: Address | undefined;
-  try {
-    contractAddress = getStolenTransactionRegistryAddress(chainId);
-    logger.contract.debug('useTransactionRegistration: Registry address resolved', {
-      chainId,
-      contractAddress,
-    });
-  } catch (error) {
-    contractAddress = undefined;
-    logger.contract.error('useTransactionRegistration: Failed to resolve registry address', {
-      chainId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  const contractAddress = useMemo(() => {
+    try {
+      const address = getStolenTransactionRegistryAddress(chainId);
+      logger.contract.debug('useTransactionRegistration: Registry address resolved', {
+        chainId,
+        contractAddress: address,
+      });
+      return address;
+    } catch (error) {
+      logger.contract.error('useTransactionRegistration: Failed to resolve registry address', {
+        chainId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }, [chainId]);
 
   const {
     writeContractAsync,

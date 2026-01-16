@@ -102,10 +102,11 @@ export const useTransactionRegistrationStore = create<
             state.bridgeMessageId = messageId;
           }),
 
-        reset: () => {
-          logger.registration.info('Transaction registration state reset');
-          set(initialState);
-        },
+        reset: () =>
+          set((state) => {
+            logger.registration.info('Transaction registration state reset');
+            Object.assign(state, initialState);
+          }),
       })),
       {
         name: 'swr-transaction-registration-state',

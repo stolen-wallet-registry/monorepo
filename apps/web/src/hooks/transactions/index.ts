@@ -34,3 +34,18 @@ export {
   type UserTransaction,
   type UseUserTransactionsResult,
 } from './useUserTransactions';
+
+export {
+  useSignTxEIP712,
+  type TxSignAckParams,
+  type TxSignRegParams,
+  type UseSignTxEIP712Result,
+} from './useSignTxEIP712';
+
+export { useTxContractNonce, type UseTxContractNonceResult } from './useTxContractNonce';
+
+export {
+  useTxContractDeadlines,
+  type TxDeadlineData,
+  type UseTxContractDeadlinesResult,
+} from './useTxContractDeadlines';

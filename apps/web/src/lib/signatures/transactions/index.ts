@@ -12,3 +12,13 @@ export {
   type TxRegistrationMessage,
   type TxSignatureStep,
 } from './eip712';
+
+export {
+  TX_SIGNATURE_TTL_MS,
+  storeTxSignature,
+  getTxSignature,
+  removeTxSignature,
+  clearTxSignatures,
+  clearAllTxSignatures,
+  type StoredTxSignature,
+} from './storage';
