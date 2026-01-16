@@ -31,6 +31,11 @@ export const TranslationRegistryABI = [
         internalType: 'string',
       },
       {
+        name: 'supportSubtitle',
+        type: 'string',
+        internalType: 'string',
+      },
+      {
         name: 'warning',
         type: 'string',
         internalType: 'string',
@@ -64,6 +69,24 @@ export const TranslationRegistryABI = [
   },
   {
     type: 'function',
+    name: 'getAllSupportSubtitles',
+    inputs: [],
+    outputs: [
+      {
+        name: 'codes',
+        type: 'string[]',
+        internalType: 'string[]',
+      },
+      {
+        name: 'supportSubtitles',
+        type: 'string[]',
+        internalType: 'string[]',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'getLanguage',
     inputs: [
       {
@@ -80,6 +103,11 @@ export const TranslationRegistryABI = [
       },
       {
         name: 'subtitle',
+        type: 'string',
+        internalType: 'string',
+      },
+      {
+        name: 'supportSubtitle',
         type: 'string',
         internalType: 'string',
       },
@@ -214,6 +242,11 @@ export const TranslationRegistryABI = [
       },
       {
         name: 'subtitle',
+        type: 'string',
+        internalType: 'string',
+      },
+      {
+        name: 'supportSubtitle',
         type: 'string',
         internalType: 'string',
       },

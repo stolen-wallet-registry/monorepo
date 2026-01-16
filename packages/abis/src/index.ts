@@ -3,6 +3,7 @@
 
 export { RegistryHubABI } from './RegistryHub';
 export { StolenWalletRegistryABI } from './StolenWalletRegistry';
+export { StolenTransactionRegistryABI } from './StolenTransactionRegistry';
 export { FeeManagerABI } from './FeeManager';
 export { CrossChainInboxABI } from './CrossChainInbox';
 export { SpokeRegistryABI } from './SpokeRegistry';

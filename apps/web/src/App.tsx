@@ -15,6 +15,7 @@ import {
   P2PRegistereeRegistrationPage,
   P2PRelayerRegistrationPage,
   SoulboundPage,
+  TransactionRegistrationPage,
   NotFoundPage,
 } from '@/pages';
 
@@ -36,6 +37,7 @@ function App() {
             />
             <Route path="/registration/p2p-relay/relayer" component={P2PRelayerRegistrationPage} />
             <Route path="/soulbound" component={SoulboundPage} />
+            <Route path="/registration/transactions" component={TransactionRegistrationPage} />
             <Route component={NotFoundPage} />
           </Switch>
         </Layout>

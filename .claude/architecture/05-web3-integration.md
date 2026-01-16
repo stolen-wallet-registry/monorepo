@@ -158,11 +158,93 @@ export function createRainbowKitTheme(colorScheme, variant): Theme {
 
 ## Environment Variables
 
-| Variable                        | Purpose              |
-| ------------------------------- | -------------------- |
-| `VITE_SEPOLIA_RPC_URL`          | Sepolia RPC endpoint |
-| `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect        |
-| `VITE_CONTRACT_ADDRESS_*`       | Address overrides    |
+| Variable                        | Purpose                           |
+| ------------------------------- | --------------------------------- |
+| `VITE_ALCHEMY_API_KEY`          | Alchemy API for tx fetching       |
+| `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect                     |
+| `VITE_CONTRACT_ADDRESS_*`       | Address overrides                 |
+| `VITE_TESTNET`                  | Use testnets instead of localhost |
+| `VITE_CROSSCHAIN`               | Enable cross-chain mode           |
+
+---
+
+## Alchemy SDK Integration
+
+Used for fetching user transaction history in the Stolen Transaction Registry.
+
+**Setup:**
+
+1. Create account at https://dashboard.alchemy.com
+2. Create an app
+3. Enable networks: Base, Optimism, Arbitrum, Polygon (and testnets)
+4. Copy API key to `VITE_ALCHEMY_API_KEY`
+
+**SDK handles network routing automatically:**
+
+```typescript
+import { Alchemy, Network } from 'alchemy-sdk';
+
+// Single API key works for all networks
+const alchemy = new Alchemy({
+  apiKey: import.meta.env.VITE_ALCHEMY_API_KEY,
+  network: Network.BASE_MAINNET, // SDK builds correct URL
+});
+
+// Internally constructs: https://base-mainnet.g.alchemy.com/v2/{key}
+```
+
+**Supported Networks:**
+
+| Network          | SDK Enum                | Endpoint                                         |
+| ---------------- | ----------------------- | ------------------------------------------------ |
+| Ethereum         | `Network.ETH_MAINNET`   | `https://eth-mainnet.g.alchemy.com/v2/{key}`     |
+| Base             | `Network.BASE_MAINNET`  | `https://base-mainnet.g.alchemy.com/v2/{key}`    |
+| Optimism         | `Network.OPT_MAINNET`   | `https://opt-mainnet.g.alchemy.com/v2/{key}`     |
+| Arbitrum         | `Network.ARB_MAINNET`   | `https://arb-mainnet.g.alchemy.com/v2/{key}`     |
+| Polygon          | `Network.MATIC_MAINNET` | `https://polygon-mainnet.g.alchemy.com/v2/{key}` |
+| Sepolia          | `Network.ETH_SEPOLIA`   | `https://eth-sepolia.g.alchemy.com/v2/{key}`     |
+| Base Sepolia     | `Network.BASE_SEPOLIA`  | `https://base-sepolia.g.alchemy.com/v2/{key}`    |
+| Optimism Sepolia | `Network.OPT_SEPOLIA`   | `https://opt-sepolia.g.alchemy.com/v2/{key}`     |
+
+**Chain ID to Network mapping:**
+
+```typescript
+// apps/web/src/lib/alchemy.ts
+
+import { Network } from 'alchemy-sdk';
+
+export const chainIdToAlchemyNetwork: Record<number, Network> = {
+  // Mainnets
+  1: Network.ETH_MAINNET,
+  8453: Network.BASE_MAINNET,
+  10: Network.OPT_MAINNET,
+  42161: Network.ARB_MAINNET,
+  137: Network.MATIC_MAINNET,
+  // Testnets
+  11155111: Network.ETH_SEPOLIA,
+  84532: Network.BASE_SEPOLIA,
+  11155420: Network.OPT_SEPOLIA,
+};
+```
+
+**Fetching transactions:**
+
+```typescript
+const transfers = await alchemy.core.getAssetTransfers({
+  fromAddress: userAddress,
+  category: [
+    AssetTransfersCategory.EXTERNAL, // ETH transfers
+    AssetTransfersCategory.ERC20, // Token transfers
+    AssetTransfersCategory.ERC721, // NFT transfers
+    AssetTransfersCategory.ERC1155, // Multi-token transfers
+  ],
+  maxCount: 100,
+  order: 'desc',
+  withMetadata: true,
+});
+```
+
+**Free tier limits:** 300M compute units/month (sufficient for development and moderate production use).
 
 ---
 
@@ -173,6 +255,7 @@ apps/web/src/
 ├── lib/
 │   ├── wagmi.ts                 # Chain config
 │   ├── rainbowkit-theme.ts      # Theme integration
+│   ├── alchemy.ts               # Alchemy SDK config & network mapping
 │   └── contracts/
 │       ├── abis.ts
 │       ├── addresses.ts
@@ -183,5 +266,6 @@ apps/web/src/
     ├── useAcknowledgement.ts
     ├── useRegistration.ts
     ├── useContractNonce.ts
-    └── useContractDeadlines.ts
+    ├── useContractDeadlines.ts
+    └── useUserTransactions.ts   # Transaction registry - fetches via Alchemy
 ```

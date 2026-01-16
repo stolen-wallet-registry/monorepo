@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { IRegistryHub } from "./interfaces/IRegistryHub.sol";
 import { IStolenWalletRegistry } from "./interfaces/IStolenWalletRegistry.sol";
+import { IStolenTransactionRegistry } from "./interfaces/IStolenTransactionRegistry.sol";
 import { IFeeManager } from "./interfaces/IFeeManager.sol";
 
 /// @title RegistryHub
@@ -119,6 +120,20 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
         return IStolenWalletRegistry(registry).isPending(wallet);
     }
 
+    /// @inheritdoc IRegistryHub
+    function isTransactionBatchRegistered(bytes32 batchId) external view returns (bool) {
+        address registry = subRegistries[STOLEN_TRANSACTION];
+        if (registry == address(0)) return false;
+        return IStolenTransactionRegistry(registry).isBatchRegistered(batchId);
+    }
+
+    /// @inheritdoc IRegistryHub
+    function isTransactionBatchPending(address reporter) external view returns (bool) {
+        address registry = subRegistries[STOLEN_TRANSACTION];
+        if (registry == address(0)) return false;
+        return IStolenTransactionRegistry(registry).isPending(reporter);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // FEE HANDLING (OPTIONAL)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -150,6 +165,42 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
             .registerFromHub(wallet, sourceChainId, isSponsored, bridgeId, crossChainMessageId);
 
         emit CrossChainRegistration(wallet, sourceChainId, crossChainMessageId);
+    }
+
+    /// @inheritdoc IRegistryHub
+    function registerTransactionBatchFromSpoke(
+        bytes32 merkleRoot,
+        address reporter,
+        bytes32 reportedChainId,
+        bytes32 sourceChainId,
+        uint32 transactionCount,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds,
+        bool isSponsored,
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    ) external onlyCrossChainInbox whenNotPaused {
+        // Route to StolenTransactionRegistry for storage
+        address registry = subRegistries[STOLEN_TRANSACTION];
+        if (registry == address(0)) revert Hub__InvalidRegistry();
+
+        IStolenTransactionRegistry(registry)
+            .registerFromHub(
+                merkleRoot,
+                reporter,
+                reportedChainId,
+                sourceChainId,
+                transactionCount,
+                transactionHashes,
+                chainIds,
+                isSponsored,
+                bridgeId,
+                crossChainMessageId
+            );
+
+        // Note: CrossChainRegistration event uses wallet address, but for batches we emit
+        // the reporter address. Consider adding a dedicated event for transaction batches.
+        emit CrossChainRegistration(reporter, uint32(uint256(sourceChainId)), crossChainMessageId);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

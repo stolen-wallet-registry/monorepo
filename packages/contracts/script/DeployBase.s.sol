@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import { Script, console2 } from "forge-std/Script.sol";
 import { IMulticall3 } from "forge-std/interfaces/IMulticall3.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
+import { StolenTransactionRegistry } from "../src/registries/StolenTransactionRegistry.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { TranslationRegistry } from "../src/soulbound/TranslationRegistry.sol";
@@ -102,10 +103,11 @@ abstract contract DeployBase is Script {
     /// @return priceFeed The price feed address (mock or Chainlink)
     /// @return feeManager The FeeManager address
     /// @return hub The RegistryHub address
-    /// @return registry The StolenWalletRegistry address
+    /// @return walletRegistry The StolenWalletRegistry address
+    /// @return txRegistry The StolenTransactionRegistry address
     function deployCore(address deployer, address crossChainInbox)
         internal
-        returns (address priceFeed, address feeManager, address payable hub, address registry)
+        returns (address priceFeed, address feeManager, address payable hub, address walletRegistry, address txRegistry)
     {
         uint256 chainId = block.chainid;
 
@@ -133,11 +135,16 @@ abstract contract DeployBase is Script {
         console2.log("RegistryHub:", hub);
 
         // nonce 3: Deploy StolenWalletRegistry (with chain-specific timing)
-        registry = address(new StolenWalletRegistry(feeManager, hub, graceBlocks, deadlineBlocks));
-        console2.log("StolenWalletRegistry:", registry);
+        walletRegistry = address(new StolenWalletRegistry(feeManager, hub, graceBlocks, deadlineBlocks));
+        console2.log("StolenWalletRegistry:", walletRegistry);
 
-        // nonce 4: Wire up hub to registry
-        hubContract.setRegistry(hubContract.STOLEN_WALLET(), registry);
+        // nonce 4: Deploy StolenTransactionRegistry (with same chain-specific timing)
+        txRegistry = address(new StolenTransactionRegistry(feeManager, hub, graceBlocks, deadlineBlocks));
+        console2.log("StolenTransactionRegistry:", txRegistry);
+
+        // nonce 5-6: Wire up hub to registries
+        hubContract.setRegistry(hubContract.STOLEN_WALLET(), walletRegistry);
+        hubContract.setRegistry(hubContract.STOLEN_TRANSACTION(), txRegistry);
     }
 
     /// @notice Canonical Multicall3 address (pre-deployed on all major chains)

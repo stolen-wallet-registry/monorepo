@@ -143,6 +143,44 @@ export const RegistryHubABI = [
   },
   {
     type: 'function',
+    name: 'isTransactionBatchPending',
+    inputs: [
+      {
+        name: 'reporter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isTransactionBatchRegistered',
+    inputs: [
+      {
+        name: 'batchId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'isWalletPending',
     inputs: [
       {
@@ -231,6 +269,64 @@ export const RegistryHubABI = [
         name: 'sourceChainId',
         type: 'uint32',
         internalType: 'uint32',
+      },
+      {
+        name: 'isSponsored',
+        type: 'bool',
+        internalType: 'bool',
+      },
+      {
+        name: 'bridgeId',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+      {
+        name: 'crossChainMessageId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'registerTransactionBatchFromSpoke',
+    inputs: [
+      {
+        name: 'merkleRoot',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'reporter',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'sourceChainId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'transactionCount',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'transactionHashes',
+        type: 'bytes32[]',
+        internalType: 'bytes32[]',
+      },
+      {
+        name: 'chainIds',
+        type: 'bytes32[]',
+        internalType: 'bytes32[]',
       },
       {
         name: 'isSponsored',

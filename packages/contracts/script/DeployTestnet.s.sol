@@ -74,7 +74,7 @@ contract DeployTestnetHub is DeployBase, TestnetConstants {
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy core contracts (CrossChainInbox set later)
-        (address priceFeed, address feeManager, address payable hub, address registry) =
+        (address priceFeed, address feeManager, address payable hub, address walletRegistry, address txRegistry) =
             deployCore(deployer, address(0));
 
         // Deploy CrossChainInbox
@@ -96,7 +96,8 @@ contract DeployTestnetHub is DeployBase, TestnetConstants {
         console2.log("");
         console2.log("Contract Addresses:");
         console2.log("  RegistryHub:", hub);
-        console2.log("  StolenWalletRegistry:", registry);
+        console2.log("  StolenWalletRegistry:", walletRegistry);
+        console2.log("  StolenTransactionRegistry:", txRegistry);
         console2.log("  FeeManager:", feeManager);
         console2.log("  CrossChainInbox:", crossChainInbox);
         console2.log("  PriceFeed:", priceFeed);
