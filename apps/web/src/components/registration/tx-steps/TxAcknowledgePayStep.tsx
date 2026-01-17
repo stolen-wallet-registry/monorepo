@@ -57,10 +57,16 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  // Get stored signature
-  const storedSignature = merkleRoot
-    ? getTxSignature(merkleRoot, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT)
-    : null;
+  // SSR-safe signature retrieval - sessionStorage not available during SSR
+  const [storedSignature, setStoredSignature] = useState<ReturnType<typeof getTxSignature>>(null);
+
+  useEffect(() => {
+    if (merkleRoot) {
+      setStoredSignature(getTxSignature(merkleRoot, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT));
+    } else {
+      setStoredSignature(null);
+    }
+  }, [merkleRoot, chainId]);
 
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : undefined;
@@ -236,16 +242,14 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   // Get error message
   const errorMessage = localError || (error ? sanitizeErrorMessage(error) : null);
 
-  // Build signed message data for display
-  const signedMessageData: SignedMessageData | null = storedSignature
-    ? {
-        registeree: storedSignature.reporter,
-        forwarder: storedSignature.forwarder,
-        nonce: storedSignature.nonce,
-        deadline: storedSignature.deadline,
-        signature: storedSignature.signature,
-      }
-    : null;
+  // Build signed message data for display (storedSignature guaranteed non-null after early return)
+  const signedMessageData: SignedMessageData = {
+    registeree: storedSignature.reporter,
+    forwarder: storedSignature.forwarder,
+    nonce: storedSignature.nonce,
+    deadline: storedSignature.deadline,
+    signature: storedSignature.signature,
+  };
 
   return (
     <div className="space-y-4">

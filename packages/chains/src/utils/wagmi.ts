@@ -41,12 +41,27 @@ function getMulticall3Address(chainId: number): `0x${string}` {
  *
  * @param config - The network configuration
  * @returns A wagmi-compatible Chain object
+ * @throws Error if local chain is missing Multicall3 address mapping
  *
  * Configures multicall3 for all chains:
  * - Local Anvil uses deterministic addresses from deployment script
  * - All other chains use the canonical multicall3 address
+ *
+ * IMPORTANT: If you add a new local chain, you MUST add its Multicall3 address
+ * to MULTICALL3_ADDRESSES. The canonical address won't exist on local chains.
+ * This has caused issues during local development - the guard below prevents
+ * silent fallback to a non-existent address.
  */
 export function toWagmiChain(config: NetworkConfig): Chain {
+  // Guard: Local chains MUST have explicit Multicall3 address mapping
+  // Canonical address doesn't exist on fresh Anvil instances
+  if (config.isLocal && !MULTICALL3_ADDRESSES[config.chainId]) {
+    throw new Error(
+      `Missing Multicall3 address for local chain ${config.chainId} (${config.displayName}). ` +
+        `Add it to MULTICALL3_ADDRESSES in packages/chains/src/utils/wagmi.ts`
+    );
+  }
+
   return {
     id: config.chainId,
     name: config.displayName,

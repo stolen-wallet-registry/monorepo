@@ -136,11 +136,18 @@ export const useTransactionRegistrationStore = create<
             VALID_REGISTRATION_TYPES.includes(
               state.registrationType as TransactionRegistrationType
             );
+          const finalRegistrationType = isValidRegistrationType
+            ? (state.registrationType as TransactionRegistrationType)
+            : initialState.registrationType;
+          const validSteps = TX_STEP_SEQUENCES[finalRegistrationType];
+          const isValidStep =
+            state.step === null ||
+            (state.step && validSteps.includes(state.step as TransactionRegistrationStep));
           return {
-            registrationType: isValidRegistrationType
-              ? (state.registrationType as TransactionRegistrationType)
-              : initialState.registrationType,
-            step: state.step ?? initialState.step,
+            registrationType: finalRegistrationType,
+            step: isValidStep
+              ? (state.step as TransactionRegistrationStep | null)
+              : initialState.step,
             acknowledgementHash: state.acknowledgementHash ?? initialState.acknowledgementHash,
             acknowledgementChainId:
               state.acknowledgementChainId ?? initialState.acknowledgementChainId,

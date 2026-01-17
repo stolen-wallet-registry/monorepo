@@ -138,10 +138,12 @@ export function TransactionStandardRegistrationPage() {
     }
   }, [step, setStep]);
 
-  // Update form state when merkle tree changes
+  // Update form state when merkle tree changes (clear when selections cleared)
   useEffect(() => {
     if (merkleTree) {
       setMerkleRoot(merkleTree.root);
+    } else {
+      setMerkleRoot(null);
     }
   }, [merkleTree, setMerkleRoot]);
 

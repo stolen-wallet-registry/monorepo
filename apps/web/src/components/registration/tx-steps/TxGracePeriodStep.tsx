@@ -4,7 +4,7 @@
  * Displays countdown timer until the registration window opens.
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
 import { Alert, AlertDescription, Skeleton } from '@swr/ui';
@@ -42,7 +42,8 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
   const themeVariantRef = useRef(themeVariant);
   const triggerThemeAnimationRef = useRef(triggerThemeAnimation);
 
-  useEffect(() => {
+  // useLayoutEffect ensures refs are updated synchronously before callbacks fire
+  useLayoutEffect(() => {
     themeVariantRef.current = themeVariant;
     triggerThemeAnimationRef.current = triggerThemeAnimation;
   }, [themeVariant, triggerThemeAnimation]);

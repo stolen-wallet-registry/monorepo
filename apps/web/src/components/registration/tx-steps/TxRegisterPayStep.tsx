@@ -150,6 +150,17 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       return;
     }
 
+    // Guard: Ensure valid fee quote is available to avoid underpayment revert
+    if (feeWei === undefined || feeLoading || feeError) {
+      logger.contract.error('Cannot submit transaction registration - fee quote unavailable', {
+        feeWei: feeWei?.toString(),
+        feeLoading,
+        feeError,
+      });
+      setLocalError('Fee quote unavailable. Please retry.');
+      return;
+    }
+
     setIsSubmitting(true);
     setLocalError(null);
 
@@ -165,7 +176,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         transactionCount: selectedTxHashes.length,
         deadline: storedSignatureState.deadline.toString(),
         chainId,
-        feeWei: (feeWei ?? 0n).toString(),
+        feeWei: feeWei.toString(),
       });
 
       const params: TxRegistrationParams = {
@@ -176,7 +187,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         reporter: storedSignatureState.reporter,
         deadline: storedSignatureState.deadline,
         signature: parsedSig,
-        feeWei: feeWei ?? 0n,
+        feeWei,
       };
 
       await submitRegistration(params);
