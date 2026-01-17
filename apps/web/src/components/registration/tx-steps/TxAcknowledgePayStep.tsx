@@ -124,6 +124,17 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     setIsSubmitting(true);
     setLocalError(null);
 
+    // Validate that selection hasn't changed since signing
+    if (storedSignature.transactionCount !== selectedTxHashes.length) {
+      logger.contract.warn('Transaction count mismatch - selection changed after signing', {
+        signedCount: storedSignature.transactionCount,
+        currentCount: selectedTxHashes.length,
+      });
+      setIsSubmitting(false);
+      setLocalError('Selection changed after signing. Please go back and re-sign.');
+      return;
+    }
+
     try {
       const parsedSig = parseSignature(storedSignature.signature);
 

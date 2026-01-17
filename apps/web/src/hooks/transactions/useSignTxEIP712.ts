@@ -6,7 +6,7 @@
  * - Registration signatures (Phase 2)
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useSignTypedData, useAccount, useChainId } from 'wagmi';
 import {
   buildTxAcknowledgementTypedData,
@@ -55,20 +55,22 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
 
   const { signTypedDataAsync, isPending, isError, error, reset } = useSignTypedData();
 
-  let contractAddress: Address | undefined;
-  try {
-    contractAddress = getStolenTransactionRegistryAddress(chainId);
-    logger.signature.debug('useSignTxEIP712: Transaction registry address resolved', {
-      chainId,
-      contractAddress,
-    });
-  } catch (err) {
-    contractAddress = undefined;
-    logger.signature.error('useSignTxEIP712: Failed to resolve transaction registry address', {
-      chainId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  const contractAddress = useMemo(() => {
+    try {
+      const address = getStolenTransactionRegistryAddress(chainId);
+      logger.signature.debug('useSignTxEIP712: Transaction registry address resolved', {
+        chainId,
+        contractAddress: address,
+      });
+      return address;
+    } catch (err) {
+      logger.signature.error('useSignTxEIP712: Failed to resolve transaction registry address', {
+        chainId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return undefined;
+    }
+  }, [chainId]);
 
   /**
    * Validates that wallet is connected and contract is configured.

@@ -137,10 +137,17 @@ export function TransactionSelector({
   chainId,
   className,
 }: TransactionSelectorProps) {
-  const transactionHashSet = new Set(transactions.map((tx) => tx.hash));
-  const selectedSet = useMemo(() => new Set(selectedHashes), [selectedHashes]);
-  // Count only selected hashes that exist in the current transaction list
-  const validSelectedCount = selectedHashes.filter((h) => transactionHashSet.has(h)).length;
+  const transactionHashSet = useMemo(
+    () => new Set(transactions.map((tx) => tx.hash)),
+    [transactions]
+  );
+  // Normalize selectedHashes to only include hashes that exist in current transaction list
+  const normalizedSelectedHashes = useMemo(
+    () => selectedHashes.filter((h) => transactionHashSet.has(h)),
+    [selectedHashes, transactionHashSet]
+  );
+  const selectedSet = useMemo(() => new Set(normalizedSelectedHashes), [normalizedSelectedHashes]);
+  const validSelectedCount = normalizedSelectedHashes.length;
 
   const handleToggle = useCallback(
     (hash: Hash) => {

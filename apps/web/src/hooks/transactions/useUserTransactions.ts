@@ -159,7 +159,8 @@ export function useUserTransactions(
           chainId,
         });
 
-        // For now, return empty array - implement when alchemy-sdk is added
+        // For now, set error state - implement when alchemy-sdk is added
+        setError(new Error('Transaction history not available for this network yet'));
         setTransactions([]);
       }
     } catch (err) {

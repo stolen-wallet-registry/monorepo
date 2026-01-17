@@ -501,7 +501,10 @@ export function DevTools() {
                         </label>
                         <button
                           type="button"
-                          onClick={fetchNonce}
+                          onClick={() => {
+                            setBlockchainNonce(null);
+                            fetchNonce();
+                          }}
                           disabled={nonceLoading}
                           className={cn(
                             'rounded px-2 py-0.5 text-xs',

@@ -150,9 +150,10 @@ export function TransactionStandardRegistrationPage() {
     if (chainId) {
       setReportedChainId(chainId);
       setSelectedTxHashes([]);
+      setSelectedTxDetails([]);
       setMerkleRoot(null);
     }
-  }, [chainId, setReportedChainId, setSelectedTxHashes, setMerkleRoot]);
+  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setMerkleRoot]);
 
   // Set reporter address when connected
   useEffect(() => {
@@ -160,9 +161,17 @@ export function TransactionStandardRegistrationPage() {
       setReporter(address);
       setForwarder(address); // Standard registration: same address pays
       setSelectedTxHashes([]);
+      setSelectedTxDetails([]);
       setMerkleRoot(null);
     }
-  }, [address, setReporter, setForwarder, setSelectedTxHashes, setMerkleRoot]);
+  }, [
+    address,
+    setReporter,
+    setForwarder,
+    setSelectedTxHashes,
+    setSelectedTxDetails,
+    setMerkleRoot,
+  ]);
 
   // Redirect if not connected
   useEffect(() => {

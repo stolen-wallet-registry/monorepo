@@ -12,9 +12,11 @@ import { getNetworkOrUndefined, allNetworks } from '../networks';
  * Multicall3 addresses per chain.
  *
  * Canonical address for most chains: 0xcA11bde05977b3631167028862bE2a173976CA11
+ * (CREATE2-based, deployed by Multicall3 team)
  *
- * Local Anvil chains use deterministic addresses from cross-chain deployment
- * (DeployCrossChain.s.sol). These are CREATE2-based and don't change.
+ * Local Anvil chains use deterministic addresses from our cross-chain deployment
+ * script (DeployCrossChain.s.sol). These are CREATE (nonce-dependent) addresses
+ * that remain fixed due to our deployment process always using the same nonces.
  */
 const MULTICALL3_ADDRESSES: Record<number, `0x${string}`> = {
   // Local Anvil chains - deterministic cross-chain deployment addresses
@@ -41,7 +43,7 @@ function getMulticall3Address(chainId: number): `0x${string}` {
  * @returns A wagmi-compatible Chain object
  *
  * Configures multicall3 for all chains:
- * - Local Anvil uses our deployed address (configurable via env var)
+ * - Local Anvil uses deterministic addresses from deployment script
  * - All other chains use the canonical multicall3 address
  */
 export function toWagmiChain(config: NetworkConfig): Chain {

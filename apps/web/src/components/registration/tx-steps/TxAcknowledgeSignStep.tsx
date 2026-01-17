@@ -17,7 +17,6 @@ import {
   useTransactionAcknowledgementHashStruct,
   useTxContractNonce,
 } from '@/hooks/transactions';
-import type { TxHashStructData } from '@/hooks/transactions/useTransactionHashStruct';
 import { storeTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
 import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
 import { logger } from '@/lib/logger';
@@ -108,8 +107,14 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
     // Refetch hash struct to get fresh deadline
     logger.contract.debug('Refetching hash struct for fresh deadline');
     const refetchResult = await refetchHashStruct();
-    const refetchedData = refetchResult?.data as TxHashStructData | undefined;
-    const freshDeadline = refetchedData?.deadline ?? hashStructData?.deadline;
+    // Extract deadline from refetch result - data shape matches TxHashStructData
+    const refetchedDeadline =
+      refetchResult?.data &&
+      typeof refetchResult.data === 'object' &&
+      'deadline' in refetchResult.data
+        ? (refetchResult.data.deadline as bigint)
+        : undefined;
+    const freshDeadline = refetchedDeadline ?? hashStructData?.deadline;
 
     if (freshDeadline === undefined) {
       logger.signature.error('Failed to get hash struct data');

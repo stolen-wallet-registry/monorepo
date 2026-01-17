@@ -81,6 +81,15 @@ export const useTransactionRegistrationStore = create<
 
         setStep: (step) =>
           set((state) => {
+            const allowedSteps = TX_STEP_SEQUENCES[state.registrationType];
+            if (!allowedSteps.includes(step)) {
+              logger.registration.warn('Attempted to set invalid step for registration type', {
+                registrationType: state.registrationType,
+                attemptedStep: step,
+                allowedSteps,
+              });
+              return;
+            }
             logger.registration.info('Transaction step transition', { from: state.step, to: step });
             state.step = step;
           }),

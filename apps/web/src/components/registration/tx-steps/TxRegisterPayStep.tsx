@@ -129,7 +129,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
    * Submit the registration transaction.
    */
   const handleSubmit = async () => {
-    if (isSubmitting) {
+    if (isSubmitting || isPending || isConfirming) {
       return;
     }
 

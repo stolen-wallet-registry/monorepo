@@ -4,6 +4,7 @@
  * Used to determine the grace period window for transaction batch registration.
  */
 
+import { useEffect, useRef } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
 import { stolenTransactionRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenTransactionRegistryAddress } from '@/lib/contracts/addresses';
@@ -84,25 +85,35 @@ export function useTxContractDeadlines(
     },
   });
 
-  // Log results
-  if (isError) {
-    logger.contract.error('Failed to read deadlines from transaction registry', {
-      chainId,
-      contractAddress,
-      reporter,
-      error: error?.message,
-    });
-  } else if (contractData) {
-    logger.contract.debug('Transaction registry deadlines read', {
-      reporter,
-      currentBlock: contractData[0]?.toString(),
-      expiryBlock: contractData[1]?.toString(),
-      startBlock: contractData[2]?.toString(),
-      graceStartsAt: contractData[3]?.toString(),
-      timeLeft: contractData[4]?.toString(),
-      isExpired: contractData[5],
-    });
-  }
+  // Track previous log key to avoid duplicate logs
+  const prevLogKeyRef = useRef<string | null>(null);
+
+  // Log results in effect to avoid render-time side effects
+  useEffect(() => {
+    if (isError) {
+      logger.contract.error('Failed to read deadlines from transaction registry', {
+        chainId,
+        contractAddress,
+        reporter,
+        error: error?.message,
+      });
+    } else if (contractData) {
+      // Create a key to detect changes and avoid duplicate logs
+      const logKey = `${reporter}-${contractData[0]?.toString()}`;
+      if (logKey !== prevLogKeyRef.current) {
+        prevLogKeyRef.current = logKey;
+        logger.contract.debug('Transaction registry deadlines read', {
+          reporter,
+          currentBlock: contractData[0]?.toString(),
+          expiryBlock: contractData[1]?.toString(),
+          startBlock: contractData[2]?.toString(),
+          graceStartsAt: contractData[3]?.toString(),
+          timeLeft: contractData[4]?.toString(),
+          isExpired: contractData[5],
+        });
+      }
+    }
+  }, [isError, contractData, chainId, contractAddress, reporter, error?.message]);
 
   // Map contract result to TxDeadlineData
   // getDeadlines returns: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
