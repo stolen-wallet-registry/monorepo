@@ -19,7 +19,7 @@ import {
   Skeleton,
 } from '@swr/ui';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Loader2, RefreshCw } from 'lucide-react';
 import type { UserTransaction } from '@/hooks/transactions/useUserTransactions';
 import type { Hash } from '@/lib/types/ethereum';
 import { formatEther } from 'viem';
@@ -48,10 +48,18 @@ export interface TransactionSelectorProps {
   onSelectionChange: (hashes: Hash[]) => void;
   /** Whether transactions are loading */
   isLoading?: boolean;
+  /** Whether more transactions are being loaded */
+  isLoadingMore?: boolean;
   /** Error message if fetch failed */
   error?: string | null;
   /** Callback to refresh transactions */
   onRefresh?: () => void;
+  /** Callback to load more transactions from earlier blocks */
+  onLoadMore?: () => void;
+  /** Whether there are more transactions to load */
+  hasMore?: boolean;
+  /** Lowest block number scanned (for display) */
+  lowestBlockScanned?: bigint | null;
   /** Maximum transactions that can be selected (default: 100) */
   maxSelections?: number;
   /** Chain ID for building explorer links */
@@ -131,8 +139,12 @@ export function TransactionSelector({
   selectedHashes,
   onSelectionChange,
   isLoading = false,
+  isLoadingMore = false,
   error,
   onRefresh,
+  onLoadMore,
+  hasMore = false,
+  lowestBlockScanned,
   maxSelections = 100,
   chainId,
   className,
@@ -319,6 +331,43 @@ export function TransactionSelector({
                 })}
               </div>
             </div>
+
+            {/* Load More History button */}
+            {hasMore && onLoadMore && (
+              <div className="flex flex-col items-center gap-2 pt-2 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onLoadMore}
+                  disabled={isLoadingMore}
+                  className="w-full sm:w-auto"
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4 mr-2" />
+                      Load More History
+                    </>
+                  )}
+                </Button>
+                {lowestBlockScanned !== null && lowestBlockScanned !== undefined && (
+                  <p className="text-xs text-muted-foreground">
+                    Scanned down to block {lowestBlockScanned.toString()}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Show when all blocks scanned */}
+            {!hasMore && lowestBlockScanned !== null && lowestBlockScanned !== undefined && (
+              <p className="text-xs text-muted-foreground text-center pt-2 border-t">
+                All blocks scanned (down to block 0)
+              </p>
+            )}
 
             {validSelectedCount >= maxSelections && (
               <p className="text-sm text-amber-600">

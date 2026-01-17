@@ -51,3 +51,10 @@ export {
 } from './useTxContractDeadlines';
 
 export { useTxQuoteFee, type TxQuoteFeeData, type UseTxQuoteFeeResult } from './useTxQuoteFee';
+
+export {
+  useTxGasEstimate,
+  type TxGasEstimate,
+  type UseTxGasEstimateParams,
+  type UseTxGasEstimateResult,
+} from './useTxGasEstimate';

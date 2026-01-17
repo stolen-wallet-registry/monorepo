@@ -217,7 +217,7 @@ export function WalletSoulboundMintCard({
           Wallet Soulbound Token
         </CardTitle>
         <CardDescription>
-          Optionally mint a soulbound token as on-chain proof of your registration
+          Optionally mint a soulbound token as on-chain proof of your wallet registration
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

@@ -272,29 +272,43 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
             <span className="font-mono font-medium">{selectedTxHashes.length}</span>
           </div>
           {reportedChainId && (
-            <div className="flex items-start gap-2">
-              <span className="text-muted-foreground flex items-center gap-1 shrink-0">
-                Reported Chain ID:
-                <InfoTooltip
-                  content={
-                    <p className="text-xs">
-                      The CAIP-2 formatted chain identifier where these transactions occurred. This
-                      is hashed on-chain as{' '}
-                      <code className="text-[10px]">
-                        keccak256("{chainIdToCAIP2String(reportedChainId)}")
-                      </code>
-                      .
-                    </p>
-                  }
-                  side="right"
-                />
-              </span>
-              <span className="font-mono font-medium">
-                {getChainName(reportedChainId)}{' '}
-                <span className="text-muted-foreground text-xs">
-                  ({chainIdToCAIP2String(reportedChainId)})
+            <div className="flex flex-col gap-1">
+              <div className="flex items-start gap-2">
+                <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+                  Reported Chain:
+                  <InfoTooltip
+                    content={
+                      <p className="text-xs">
+                        The network where these transactions occurred. The CAIP-2 identifier is
+                        hashed on-chain as the <code>reportedChainId</code> field in the EIP-712
+                        signed message.
+                      </p>
+                    }
+                    side="right"
+                  />
                 </span>
-              </span>
+                <span className="font-mono font-medium">
+                  {getChainName(reportedChainId)}{' '}
+                  <span className="text-muted-foreground text-xs">
+                    ({chainIdToCAIP2String(reportedChainId)})
+                  </span>
+                </span>
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <code className="font-mono text-xs text-muted-foreground break-all cursor-default">
+                    {chainIdToCAIP2(reportedChainId)}
+                  </code>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-md">
+                  <p className="text-xs">
+                    keccak256 hash of "{chainIdToCAIP2String(reportedChainId)}"
+                  </p>
+                  <p className="text-xs font-mono break-all mt-1">
+                    {chainIdToCAIP2(reportedChainId)}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             </div>
           )}
           <div className="flex items-start gap-2">

@@ -49,26 +49,26 @@ import type { Hash } from '@/lib/types/ethereum';
  * Step descriptions for standard transaction flow.
  */
 const STEP_DESCRIPTIONS: Partial<Record<TransactionRegistrationStep, string>> = {
-  'select-transactions': 'Choose fraudulent transactions to report',
-  'acknowledge-sign': 'Sign the EIP-712 acknowledgement message',
-  'acknowledge-pay': 'Submit the acknowledgement transaction',
-  'grace-period': 'Wait for the grace period to complete',
-  'register-sign': 'Sign the EIP-712 registration message',
-  'register-pay': 'Submit the registration transaction',
-  success: 'Registration successful',
+  'select-transactions': 'Select transactions that were fraudulent or represent stolen funds',
+  'acknowledge-sign': 'Sign EIP-712 message to report these transactions as fraudulent',
+  'acknowledge-pay': 'Submit acknowledgement to begin fraud report',
+  'grace-period': 'Anti-phishing waiting period',
+  'register-sign': 'Sign final message to confirm fraud report',
+  'register-pay': 'Submit to permanently register as fraudulent',
+  success: 'Fraud report submitted to registry',
 };
 
 /**
  * Step titles for standard transaction flow.
  */
 const STEP_TITLES: Partial<Record<TransactionRegistrationStep, string>> = {
-  'select-transactions': 'Select Transactions',
-  'acknowledge-sign': 'Sign Acknowledgement',
-  'acknowledge-pay': 'Submit Acknowledgement',
+  'select-transactions': 'Select Fraudulent Transactions',
+  'acknowledge-sign': 'Sign Fraud Report',
+  'acknowledge-pay': 'Submit Report',
   'grace-period': 'Grace Period',
-  'register-sign': 'Sign Registration',
-  'register-pay': 'Submit Registration',
-  success: 'Complete',
+  'register-sign': 'Confirm Registration',
+  'register-pay': 'Finalize Registration',
+  success: 'Report Complete',
 };
 
 /**
@@ -76,17 +76,19 @@ const STEP_TITLES: Partial<Record<TransactionRegistrationStep, string>> = {
  */
 const STEP_TOOLTIPS: Partial<Record<TransactionRegistrationStep, string>> = {
   'select-transactions':
-    'Select the transactions you want to report as fraudulent. These will be batched together and registered on-chain.',
+    'Choose transactions where your funds were stolen, transferred without authorization, or involved in fraud. These will be cryptographically batched and permanently recorded on-chain as evidence of fraudulent activity.',
   'acknowledge-sign':
-    'Sign an EIP-712 message acknowledging your intent to register these transactions as fraudulent.',
+    'Sign an EIP-712 typed message acknowledging your intent to report these transactions as fraudulent. This signature proves you control the wallet that originated these transactions.',
   'acknowledge-pay':
-    'Submit the acknowledgement transaction to the blockchain. This starts a mandatory grace period.',
-  'grace-period': 'A randomized waiting period (1-4 minutes) designed to prevent phishing attacks.',
+    'Submit the acknowledgement transaction to the blockchain. This begins a mandatory grace period designed to prevent phishing attacks.',
+  'grace-period':
+    'A randomized waiting period (1-4 minutes) that prevents single-transaction phishing attacks. This security measure ensures you have time to recognize if you were tricked into signing.',
   'register-sign':
-    'Sign the final registration message to confirm your intent after the grace period.',
+    'Sign the final registration message after the grace period. This confirms your intent to permanently record these transactions as fraudulent.',
   'register-pay':
-    'Submit the registration transaction to permanently record these transactions as fraudulent.',
-  success: 'Your fraudulent transactions have been successfully registered on-chain.',
+    'Submit the final registration transaction. This permanently records your fraud report on-chain, making it publicly verifiable and available to exchanges, wallets, and other services.',
+  success:
+    'Your fraud report has been permanently recorded on the blockchain. Exchanges and wallets can now query this data to help prevent further fraud.',
 };
 
 export function TransactionStandardRegistrationPage() {
@@ -110,8 +112,12 @@ export function TransactionStandardRegistrationPage() {
   const {
     transactions,
     isLoading: isLoadingTx,
+    isLoadingMore: isLoadingMoreTx,
     error: txError,
     refetch: refetchTx,
+    loadMore: loadMoreTx,
+    hasMore: hasMoreTx,
+    lowestBlockScanned,
   } = useUserTransactions(address);
 
   // Build Merkle tree from selected transactions
@@ -228,20 +234,27 @@ export function TransactionStandardRegistrationPage() {
             {/* How it works - above the table */}
             <Alert>
               <Info className="h-4 w-4" />
-              <AlertTitle>How Transaction Registration Works</AlertTitle>
+              <AlertTitle>Report Fraudulent Transactions</AlertTitle>
               <AlertDescription className="text-sm mt-2">
+                <p className="mb-2 text-muted-foreground">
+                  Select transactions where your funds were stolen or transferred without your
+                  authorization. This creates a permanent, on-chain fraud report that exchanges and
+                  wallets can use to help prevent further fraud.
+                </p>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>
-                    <strong>Select Transactions</strong> - Choose the transactions to report
+                    <strong>Select Transactions</strong> - Choose fraudulent or unauthorized
+                    transfers
                   </li>
                   <li>
-                    <strong>Sign Acknowledgement</strong> - Sign an EIP-712 message
+                    <strong>Sign Fraud Report</strong> - Sign an EIP-712 message proving wallet
+                    ownership
                   </li>
                   <li>
-                    <strong>Wait for Grace Period</strong> - Short waiting period to prevent abuse
+                    <strong>Grace Period</strong> - Anti-phishing delay to protect against scams
                   </li>
                   <li>
-                    <strong>Sign & Submit Registration</strong> - Complete on-chain registration
+                    <strong>Finalize Registration</strong> - Permanently record report on-chain
                   </li>
                 </ol>
               </AlertDescription>
@@ -253,8 +266,12 @@ export function TransactionStandardRegistrationPage() {
               selectedHashes={selectedTxHashes}
               onSelectionChange={handleSelectionChange}
               isLoading={isLoadingTx}
+              isLoadingMore={isLoadingMoreTx}
               error={txError?.message ?? null}
               onRefresh={refetchTx}
+              onLoadMore={loadMoreTx}
+              hasMore={hasMoreTx}
+              lowestBlockScanned={lowestBlockScanned}
               chainId={chainId}
               maxSelections={100}
             />
@@ -282,55 +299,42 @@ export function TransactionStandardRegistrationPage() {
                       <span className="font-mono font-medium">{selectedTxHashes.length}</span>
                     </div>
 
-                    {/* Reported Chain */}
-                    <div className="flex items-start gap-2">
-                      <span className="text-muted-foreground flex items-center gap-1 shrink-0">
-                        Reported Chain ID:
-                        <InfoTooltip
-                          content={
-                            <p className="text-xs">
-                              The CAIP-2 formatted chain identifier where these transactions
-                              occurred. This is hashed on-chain as{' '}
-                              <code className="text-[10px]">
-                                keccak256("{chainIdToCAIP2String(chainId)}")
-                              </code>
-                              .
-                            </p>
-                          }
-                          side="right"
-                        />
-                      </span>
-                      <span className="font-mono font-medium">
-                        {getChainName(chainId)}{' '}
-                        <span className="text-muted-foreground text-xs">
-                          ({chainIdToCAIP2String(chainId)})
+                    {/* Reported Chain - consolidated with hash */}
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-start gap-2">
+                        <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+                          Reported Chain:
+                          <InfoTooltip
+                            content={
+                              <p className="text-xs">
+                                The network where these transactions occurred. The CAIP-2 identifier
+                                is hashed on-chain as the <code>reportedChainId</code> field in the
+                                EIP-712 signed message.
+                              </p>
+                            }
+                            side="right"
+                          />
                         </span>
-                      </span>
-                    </div>
-
-                    {/* Chain ID Hash */}
-                    <div className="flex items-start gap-2">
-                      <span className="text-muted-foreground flex items-center gap-1 shrink-0">
-                        Chain ID Hash:
-                        <InfoTooltip
-                          content={
-                            <p className="text-xs">
-                              The keccak256 hash of the CAIP-2 chain identifier. This is the value
-                              stored on-chain and shown in the EIP-712 signed message as{' '}
-                              <code className="text-[10px]">reportedChainId</code>.
-                            </p>
-                          }
-                          side="right"
-                        />
-                      </span>
+                        <span className="font-mono font-medium">
+                          {getChainName(chainId)}{' '}
+                          <span className="text-muted-foreground text-xs">
+                            ({chainIdToCAIP2String(chainId)})
+                          </span>
+                        </span>
+                      </div>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <code className="font-mono text-xs break-all cursor-default">
+                          <code className="font-mono text-xs text-muted-foreground break-all cursor-default ml-0">
                             {chainIdToCAIP2(chainId)}
                           </code>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-md">
-                          <p className="text-xs font-mono break-all">{chainIdToCAIP2(chainId)}</p>
+                          <p className="text-xs">
+                            keccak256 hash of "{chainIdToCAIP2String(chainId)}"
+                          </p>
+                          <p className="text-xs font-mono break-all mt-1">
+                            {chainIdToCAIP2(chainId)}
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </div>
@@ -365,13 +369,13 @@ export function TransactionStandardRegistrationPage() {
 
                 {/* Selected Transactions Table */}
                 <div className="rounded-lg border overflow-hidden">
-                  <div className="px-4 py-2 bg-muted/30 border-b">
+                  <div className="px-4 py-2 bg-muted/50 border-b">
                     <p className="text-sm font-medium">Selected Transactions</p>
                   </div>
                   <div className="max-h-40 overflow-y-auto">
                     <table className="w-full text-xs">
-                      <thead className="bg-muted/20 sticky top-0">
-                        <tr className="border-b">
+                      <thead className="bg-background sticky top-0 z-10">
+                        <tr className="border-b bg-muted">
                           <th className="text-left px-3 py-2 font-medium text-muted-foreground">
                             #
                           </th>

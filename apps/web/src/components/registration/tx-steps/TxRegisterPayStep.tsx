@@ -22,6 +22,7 @@ import { useTransactionSelection } from '@/stores/transactionFormStore';
 import {
   useTransactionRegistration,
   useTxQuoteFee,
+  useTxGasEstimate,
   type TxRegistrationParams,
 } from '@/hooks/transactions';
 import { getTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
@@ -84,6 +85,35 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
 
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : undefined;
+
+  // Build chain IDs array for gas estimation
+  const chainIdsArray = reportedChainIdHash
+    ? selectedTxHashes.map(() => reportedChainIdHash)
+    : undefined;
+
+  // Parse signature for gas estimation (need the parsed v, r, s values)
+  const parsedSigForEstimate = storedSignatureState
+    ? parseSignature(storedSignatureState.signature)
+    : undefined;
+
+  // Get gas estimate
+  const {
+    data: gasEstimate,
+    isLoading: gasLoading,
+    isError: gasError,
+    refetch: refetchGas,
+  } = useTxGasEstimate({
+    step: 'registration',
+    merkleRoot: merkleRoot ?? undefined,
+    reportedChainId: reportedChainIdHash,
+    transactionHashes: selectedTxHashes.length > 0 ? selectedTxHashes : undefined,
+    chainIds: chainIdsArray,
+    reporter: storedSignatureState?.reporter,
+    deadline: storedSignatureState?.deadline,
+    signature: parsedSigForEstimate,
+    value: feeWei,
+    enabled: !!storedSignatureState && !!merkleRoot && !!reportedChainIdHash && !!feeWei,
+  });
 
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
@@ -290,29 +320,43 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
             <span className="font-mono font-medium">{selectedTxHashes.length}</span>
           </div>
           {reportedChainId && (
-            <div className="flex items-start gap-2">
-              <span className="text-muted-foreground flex items-center gap-1 shrink-0">
-                Reported Chain ID:
-                <InfoTooltip
-                  content={
-                    <p className="text-xs">
-                      The CAIP-2 formatted chain identifier where these transactions occurred. This
-                      is hashed on-chain as{' '}
-                      <code className="text-[10px]">
-                        keccak256("{chainIdToCAIP2String(reportedChainId)}")
-                      </code>
-                      .
-                    </p>
-                  }
-                  side="right"
-                />
-              </span>
-              <span className="font-mono font-medium">
-                {getChainName(reportedChainId)}{' '}
-                <span className="text-muted-foreground text-xs">
-                  ({chainIdToCAIP2String(reportedChainId)})
+            <div className="flex flex-col gap-1">
+              <div className="flex items-start gap-2">
+                <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+                  Reported Chain:
+                  <InfoTooltip
+                    content={
+                      <p className="text-xs">
+                        The network where these transactions occurred. The CAIP-2 identifier is
+                        hashed on-chain as the <code>reportedChainId</code> field in the EIP-712
+                        signed message.
+                      </p>
+                    }
+                    side="right"
+                  />
                 </span>
-              </span>
+                <span className="font-mono font-medium">
+                  {getChainName(reportedChainId)}{' '}
+                  <span className="text-muted-foreground text-xs">
+                    ({chainIdToCAIP2String(reportedChainId)})
+                  </span>
+                </span>
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <code className="font-mono text-xs text-muted-foreground break-all cursor-default">
+                    {chainIdToCAIP2(reportedChainId)}
+                  </code>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-md">
+                  <p className="text-xs">
+                    keccak256 hash of "{chainIdToCAIP2String(reportedChainId)}"
+                  </p>
+                  <p className="text-xs font-mono break-all mt-1">
+                    {chainIdToCAIP2(reportedChainId)}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             </div>
           )}
           <div className="flex items-start gap-2">
@@ -365,23 +409,39 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
                   },
                   bridgeFee: null,
                   bridgeName: null,
-                  gasCost: {
-                    wei: 0n,
-                    eth: '—',
-                    usd: '—',
-                    gwei: '—',
-                  },
-                  total: {
-                    wei: feeData.feeWei,
-                    eth: feeData.feeEth,
-                    usd: feeData.feeUsd,
-                  },
+                  gasCost: gasEstimate
+                    ? {
+                        wei: gasEstimate.gasCostWei,
+                        eth: gasEstimate.gasCostEth,
+                        usd: gasEstimate.gasCostUsd,
+                        gwei: gasEstimate.gasPriceGwei,
+                      }
+                    : {
+                        wei: 0n,
+                        eth: '—',
+                        usd: '—',
+                        gwei: '—',
+                      },
+                  total: gasEstimate
+                    ? {
+                        wei: feeData.feeWei + gasEstimate.gasCostWei,
+                        eth: `${(Number(feeData.feeWei + gasEstimate.gasCostWei) / 1e18).toFixed(8)}`,
+                        usd: `$${(((Number(feeData.feeWei + gasEstimate.gasCostWei) / 1e18) * (ethPrice?.usdCents ?? 0)) / 100).toFixed(2)}`,
+                      }
+                    : {
+                        wei: feeData.feeWei,
+                        eth: feeData.feeEth,
+                        usd: feeData.feeUsd,
+                      },
                   ethPriceUsd: ethPrice?.usdFormatted ?? '—',
                   isCrossChain: false,
                 } as TransactionCost,
-                isLoading: feeLoading,
-                isError: feeError,
-                refetch: refetchFee,
+                isLoading: feeLoading || gasLoading,
+                isError: feeError || gasError,
+                refetch: () => {
+                  refetchFee();
+                  refetchGas();
+                },
               }
             : undefined
         }

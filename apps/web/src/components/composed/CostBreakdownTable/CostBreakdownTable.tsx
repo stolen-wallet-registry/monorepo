@@ -111,22 +111,24 @@ export function CostBreakdownTable({
         </div>
       )}
 
-      {/* Network Gas */}
-      <div className="flex justify-between items-center text-sm">
-        <span className="text-muted-foreground flex items-center gap-1">
-          Network Gas
-          <InfoTooltip
-            content="Standard network fee paid to validators for processing your transaction on the blockchain."
-            size="sm"
-          />
-        </span>
-        <div className="text-right">
-          <span className="font-medium">{costEstimate.gasCost.usd}</span>
-          <span className="text-xs text-muted-foreground ml-2">
-            ({costEstimate.gasCost.eth} ETH)
+      {/* Network Gas - only show if gas estimate is available */}
+      {costEstimate.gasCost.wei > 0n && (
+        <div className="flex justify-between items-center text-sm">
+          <span className="text-muted-foreground flex items-center gap-1">
+            Network Gas
+            <InfoTooltip
+              content="Standard network fee paid to validators for processing your transaction on the blockchain."
+              size="sm"
+            />
           </span>
+          <div className="text-right">
+            <span className="font-medium">{costEstimate.gasCost.usd}</span>
+            <span className="text-xs text-muted-foreground ml-2">
+              ({costEstimate.gasCost.eth} ETH)
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Total (if any fees besides gas) */}
       {(costEstimate.protocolFee || costEstimate.bridgeFee) && (

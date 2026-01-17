@@ -73,8 +73,8 @@ export function SelectedTransactionsTable({
       </div>
       <div className={`${maxHeight} overflow-y-auto`}>
         <table className="w-full text-xs">
-          <thead className="bg-muted/20 sticky top-0">
-            <tr className="border-b">
+          <thead className="bg-background sticky top-0 z-10">
+            <tr className="border-b bg-muted">
               <th className="text-left px-3 py-2 font-medium text-muted-foreground w-8">#</th>
               <th className="text-left px-3 py-2 font-medium text-muted-foreground">Hash</th>
               <th className="text-left px-3 py-2 font-medium text-muted-foreground">To</th>
