@@ -19,11 +19,25 @@ import {
   Skeleton,
 } from '@swr/ui';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, RefreshCw, ExternalLink } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import type { UserTransaction } from '@/hooks/transactions/useUserTransactions';
 import type { Hash } from '@/lib/types/ethereum';
 import { formatEther } from 'viem';
 import { getChainName } from '@/lib/caip';
+
+/**
+ * Format a transaction hash for display (truncated).
+ */
+function formatTxHash(hash: Hash): string {
+  return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
+}
+
+/**
+ * Format an address for display (truncated).
+ */
+function formatAddress(address: string): string {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
 
 export interface TransactionSelectorProps {
   /** List of transactions to display */
@@ -47,13 +61,6 @@ export interface TransactionSelectorProps {
 }
 
 /**
- * Format a transaction hash for display (truncated).
- */
-function formatTxHash(hash: Hash): string {
-  return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
-}
-
-/**
  * Format ETH value for display.
  */
 function formatValue(value: bigint): string {
@@ -62,40 +69,6 @@ function formatValue(value: bigint): string {
   if (numEth === 0) return '0 ETH';
   if (numEth < 0.001) return '< 0.001 ETH';
   return `${numEth.toFixed(4)} ETH`;
-}
-
-/**
- * Explorer base URLs by chain ID.
- */
-const EXPLORER_URLS: Record<number, string | undefined> = {
-  1: 'https://etherscan.io',
-  8453: 'https://basescan.org',
-  84532: 'https://sepolia.basescan.org',
-  10: 'https://optimistic.etherscan.io',
-  11155420: 'https://sepolia-optimistic.etherscan.io',
-  42161: 'https://arbiscan.io',
-  421614: 'https://sepolia.arbiscan.io',
-  // Local Anvil chains have no explorer
-};
-
-/**
- * Get explorer URL for a transaction.
- */
-function getExplorerTxUrl(hash: Hash, chainId?: number): string | null {
-  if (!chainId) return null;
-  const baseUrl = EXPLORER_URLS[chainId];
-  if (!baseUrl) return null;
-  return `${baseUrl}/tx/${hash}`;
-}
-
-/**
- * Get explorer URL for an address.
- */
-function getExplorerAddressUrl(address: string, chainId?: number): string | null {
-  if (!chainId || !address) return null;
-  const baseUrl = EXPLORER_URLS[chainId];
-  if (!baseUrl) return null;
-  return `${baseUrl}/address/${address}`;
 }
 
 /**
@@ -108,14 +81,6 @@ function formatShortTimestamp(timestamp?: number): string {
   const ms = timestamp < 1e12 ? timestamp * 1000 : timestamp;
   const date = new Date(ms);
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-/**
- * Format address for compact display.
- */
-function formatShortAddress(address: string | null): string {
-  if (!address) return '--';
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
 /**
@@ -285,87 +250,67 @@ export function TransactionSelector({
               </Button>
             </div>
 
-            {/* Column headers */}
-            <div className="grid grid-cols-[auto_1fr_minmax(80px,auto)_minmax(60px,auto)_minmax(70px,auto)_minmax(50px,auto)] gap-2 px-3 py-1.5 text-xs font-medium text-muted-foreground border-b">
-              <div className="w-4" />
-              <div>Hash</div>
-              <div>To</div>
-              <div>Date</div>
-              <div className="text-right">Value</div>
-              <div className="text-right">Block</div>
-            </div>
+            {/* Table with borders */}
+            <div className="border rounded-lg overflow-hidden">
+              {/* Column headers */}
+              <div className="grid grid-cols-[auto_1fr_minmax(120px,auto)_minmax(60px,auto)_minmax(70px,auto)_minmax(50px,auto)] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground bg-muted/30 border-b">
+                <div className="w-4" />
+                <div>Hash</div>
+                <div>To</div>
+                <div>Date</div>
+                <div className="text-right">Value</div>
+                <div className="text-right">Block</div>
+              </div>
 
-            {/* Transaction list - compact single-line rows */}
-            <div className="space-y-0.5 max-h-80 overflow-y-auto">
-              {transactions.map((tx) => {
-                const isSelected = selectedSet.has(tx.hash);
-                const txExplorerUrl = getExplorerTxUrl(tx.hash, chainId ?? tx.chainId);
-                const toExplorerUrl = tx.to
-                  ? getExplorerAddressUrl(tx.to, chainId ?? tx.chainId)
-                  : null;
+              {/* Transaction list */}
+              <div className="max-h-80 overflow-y-auto divide-y divide-border">
+                {transactions.map((tx) => {
+                  const isSelected = selectedSet.has(tx.hash);
 
-                return (
-                  <div
-                    key={tx.hash}
-                    className={cn(
-                      'grid grid-cols-[auto_1fr_minmax(80px,auto)_minmax(60px,auto)_minmax(70px,auto)_minmax(50px,auto)] gap-2 items-center px-3 py-2 rounded transition-all text-sm',
-                      isSelected ? 'bg-primary/10 ring-1 ring-primary/50' : 'hover:bg-muted/50'
-                    )}
-                  >
-                    <Checkbox
-                      checked={isSelected}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggle(tx.hash);
-                      }}
-                      aria-label={`Select transaction ${formatTxHash(tx.hash)}`}
-                      className="h-4 w-4 cursor-pointer"
-                    />
-
-                    <div className="flex items-center gap-1 min-w-0">
-                      <code className="text-xs font-mono truncate">{formatTxHash(tx.hash)}</code>
-                      {txExplorerUrl && (
-                        <a
-                          href={txExplorerUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-primary flex-shrink-0"
-                          title="View transaction on explorer"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
+                  return (
+                    <div
+                      key={tx.hash}
+                      className={cn(
+                        'grid grid-cols-[auto_1fr_minmax(120px,auto)_minmax(60px,auto)_minmax(70px,auto)_minmax(50px,auto)] gap-2 items-center px-3 py-2 transition-all text-sm',
+                        isSelected ? 'bg-primary/10' : 'hover:bg-muted/50'
                       )}
-                    </div>
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggle(tx.hash);
+                        }}
+                        aria-label={`Select transaction ${formatTxHash(tx.hash)}`}
+                        className="h-4 w-4 cursor-pointer"
+                      />
 
-                    <div className="flex items-center gap-1 min-w-0">
-                      <code className="text-xs font-mono text-muted-foreground truncate">
-                        {formatShortAddress(tx.to)}
+                      <code className="text-xs font-mono truncate" title={tx.hash}>
+                        {formatTxHash(tx.hash)}
                       </code>
-                      {toExplorerUrl && (
-                        <a
-                          href={toExplorerUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-primary flex-shrink-0"
-                          title="View address on explorer"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
+
+                      <code
+                        className="text-xs font-mono text-muted-foreground truncate"
+                        title={tx.to ?? undefined}
+                      >
+                        {tx.to ? formatAddress(tx.to) : '--'}
+                      </code>
+
+                      <span className="text-xs text-muted-foreground">
+                        {formatShortTimestamp(tx.timestamp)}
+                      </span>
+
+                      <span className="text-xs font-medium text-right">
+                        {formatValue(tx.value)}
+                      </span>
+
+                      <span className="text-xs text-muted-foreground text-right">
+                        {tx.blockNumber.toString()}
+                      </span>
                     </div>
-
-                    <span className="text-xs text-muted-foreground">
-                      {formatShortTimestamp(tx.timestamp)}
-                    </span>
-
-                    <span className="text-xs font-medium text-right">{formatValue(tx.value)}</span>
-
-                    <span className="text-xs text-muted-foreground text-right">
-                      {tx.blockNumber.toString()}
-                    </span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
 
             {validSelectedCount >= maxSelections && (

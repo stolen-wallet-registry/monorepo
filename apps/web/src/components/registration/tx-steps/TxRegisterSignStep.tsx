@@ -7,8 +7,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
-import { Alert, AlertDescription } from '@swr/ui';
+import { Alert, AlertDescription, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
+import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { SignatureCard, type SignatureStatus } from '@/components/composed/SignatureCard';
+import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
 import { useTransactionSelection } from '@/stores/transactionFormStore';
 import {
   useSignTxEIP712,
@@ -16,7 +18,7 @@ import {
   useTxContractNonce,
 } from '@/hooks/transactions';
 import { storeTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
-import { chainIdToCAIP2 } from '@/lib/caip';
+import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import type { Hex } from '@/lib/types/ethereum';
@@ -33,7 +35,8 @@ export interface TxRegisterSignStepProps {
 export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
-  const { selectedTxHashes, reportedChainId, merkleRoot } = useTransactionSelection();
+  const { selectedTxHashes, selectedTxDetails, reportedChainId, merkleRoot } =
+    useTransactionSelection();
 
   // Local state
   const [signatureStatus, setSignatureStatus] = useState<SignatureStatus>('idle');
@@ -213,16 +216,77 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
     <div className="space-y-4">
       {/* Summary */}
       <div className="rounded-lg border p-4 bg-muted/30">
-        <p className="text-sm font-medium mb-2">Ready to Register</p>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <span className="text-muted-foreground">Transactions:</span>
-          <span className="font-mono">{selectedTxHashes.length}</span>
-          <span className="text-muted-foreground">Merkle Root:</span>
-          <span className="font-mono text-xs truncate" title={merkleRoot}>
-            {merkleRoot.slice(0, 10)}...{merkleRoot.slice(-8)}
-          </span>
+        <p className="text-sm font-medium mb-3">Ready to Register</p>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-start gap-2">
+            <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+              Transactions:
+              <InfoTooltip
+                content={
+                  <p className="text-xs">
+                    The number of transactions included in this fraud report batch.
+                  </p>
+                }
+                side="right"
+              />
+            </span>
+            <span className="font-mono font-medium">{selectedTxHashes.length}</span>
+          </div>
+          {reportedChainId && (
+            <div className="flex items-start gap-2">
+              <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+                Reported Chain ID:
+                <InfoTooltip
+                  content={
+                    <p className="text-xs">
+                      The CAIP-2 formatted chain identifier where these transactions occurred. This
+                      is hashed on-chain as{' '}
+                      <code className="text-[10px]">
+                        keccak256("{chainIdToCAIP2String(reportedChainId)}")
+                      </code>
+                      .
+                    </p>
+                  }
+                  side="right"
+                />
+              </span>
+              <span className="font-mono font-medium">
+                {getChainName(reportedChainId)}{' '}
+                <span className="text-muted-foreground text-xs">
+                  ({chainIdToCAIP2String(reportedChainId)})
+                </span>
+              </span>
+            </div>
+          )}
+          <div className="flex items-start gap-2">
+            <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+              Merkle Root:
+              <InfoTooltip
+                content={
+                  <p className="text-xs">
+                    A cryptographic hash representing all selected transactions. This is stored
+                    on-chain as tamper-proof evidence of your fraud report.
+                  </p>
+                }
+                side="right"
+              />
+            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <code className="font-mono text-xs break-all cursor-default">{merkleRoot}</code>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-md">
+                <p className="text-xs font-mono break-all">{merkleRoot}</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
       </div>
+
+      {/* Selected Transactions Table */}
+      {selectedTxDetails.length > 0 && (
+        <SelectedTransactionsTable transactions={selectedTxDetails} showValue showBlock />
+      )}
 
       {/* Loading state for contract data */}
       {isContractDataLoading && (

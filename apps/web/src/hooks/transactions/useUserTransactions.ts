@@ -32,11 +32,10 @@ export interface UseUserTransactionsResult {
 }
 
 /**
- * Number of recent blocks to scan for transactions on local Anvil.
- * Increase if you need more transaction history.
+ * Batch size for parallel block fetches on local Anvil.
+ * Higher = faster but more concurrent RPC calls.
  */
-const LOCAL_BLOCK_SCAN_DEPTH = 50;
-const LOCAL_BLOCK_BATCH_SIZE = 10;
+const LOCAL_BLOCK_BATCH_SIZE = 20;
 
 /**
  * Check if chainId is a local Anvil chain.
@@ -77,27 +76,27 @@ export function useUserTransactions(
 
     try {
       if (isLocalChain(chainId)) {
-        // Local Anvil: Query RPC directly
-        logger.store.debug('Fetching transactions from local Anvil RPC', {
+        // Local Anvil: Query RPC directly from genesis
+        // On Anvil, total block count is typically <1000, so full scan is feasible
+        const latestBlock = await publicClient.getBlockNumber();
+        const totalBlocks = Number(latestBlock) + 1;
+
+        logger.store.debug('Scanning local Anvil chain from genesis', {
           address,
           chainId,
-          scanDepth: LOCAL_BLOCK_SCAN_DEPTH,
+          totalBlocks,
         });
 
-        const latestBlock = await publicClient.getBlockNumber();
         const userTransactions: UserTransaction[] = [];
 
-        // Scan recent blocks for transactions from this address
-        const startBlock =
-          latestBlock > BigInt(LOCAL_BLOCK_SCAN_DEPTH)
-            ? latestBlock - BigInt(LOCAL_BLOCK_SCAN_DEPTH)
-            : 0n;
-
+        // Scan ALL blocks from genesis (block 0) to latest
         const blockNumbers: bigint[] = [];
-        for (let blockNum = latestBlock; blockNum >= startBlock; blockNum--) {
+        for (let blockNum = latestBlock; blockNum >= 0n; blockNum--) {
           blockNumbers.push(blockNum);
         }
 
+        // Process in batches for efficiency
+        let processedBlocks = 0;
         for (let i = 0; i < blockNumbers.length; i += LOCAL_BLOCK_BATCH_SIZE) {
           const batch = blockNumbers.slice(i, i + LOCAL_BLOCK_BATCH_SIZE);
           const blocks = await Promise.all(
@@ -129,6 +128,16 @@ export function useUserTransactions(
               }
             }
           }
+
+          processedBlocks += batch.length;
+          // Log progress for larger chains (every 100 blocks)
+          if (totalBlocks > 100 && processedBlocks % 100 === 0) {
+            logger.store.debug('Scan progress', {
+              processed: processedBlocks,
+              total: totalBlocks,
+              found: userTransactions.length,
+            });
+          }
         }
 
         // Sort by block number descending (most recent first)
@@ -136,7 +145,8 @@ export function useUserTransactions(
 
         logger.store.info('Fetched local transactions', {
           address,
-          count: userTransactions.length,
+          blocksScanned: totalBlocks,
+          transactionsFound: userTransactions.length,
         });
 
         setTransactions(userTransactions);

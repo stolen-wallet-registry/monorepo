@@ -106,6 +106,7 @@ export function useTxContractDeadlines(
 
   // Map contract result to TxDeadlineData
   // getDeadlines returns: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
+  // Note: Contract returns uint32 (mapped to number by viem), convert to bigint for interface
   const data: TxDeadlineData | undefined = contractData
     ? {
         currentBlock: BigInt(contractData[0]),

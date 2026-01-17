@@ -7,18 +7,26 @@
 import { useEffect, useState } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
-import { Alert, AlertDescription } from '@swr/ui';
+import { Alert, AlertDescription, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
+import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import {
   TransactionCard,
   type TransactionStatus,
   type SignedMessageData,
 } from '@/components/composed/TransactionCard';
+import type { TransactionCost } from '@/hooks/useTransactionCost';
+import { useEthPrice } from '@/hooks/useEthPrice';
+import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
 import { useTransactionSelection } from '@/stores/transactionFormStore';
-import { useTransactionRegistration, type TxRegistrationParams } from '@/hooks/transactions';
+import {
+  useTransactionRegistration,
+  useTxQuoteFee,
+  type TxRegistrationParams,
+} from '@/hooks/transactions';
 import { getTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
 import { parseSignature } from '@/lib/signatures';
-import { chainIdToCAIP2 } from '@/lib/caip';
+import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
@@ -36,11 +44,24 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
   const { setRegistrationHash } = useTransactionRegistrationStore();
-  const { selectedTxHashes, reportedChainId, merkleRoot } = useTransactionSelection();
+  const { selectedTxHashes, selectedTxDetails, reportedChainId, merkleRoot } =
+    useTransactionSelection();
 
-  // Contract hook
+  // Contract hooks
   const { submitRegistration, hash, isPending, isConfirming, isConfirmed, isError, error, reset } =
     useTransactionRegistration();
+
+  // Get registration fee
+  const {
+    feeWei,
+    data: feeData,
+    isLoading: feeLoading,
+    isError: feeError,
+    refetch: refetchFee,
+  } = useTxQuoteFee(address);
+
+  // Get ETH price for cost display
+  const { data: ethPrice } = useEthPrice();
 
   // Local state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -144,6 +165,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         transactionCount: selectedTxHashes.length,
         deadline: storedSignatureState.deadline.toString(),
         chainId,
+        feeWei: (feeWei ?? 0n).toString(),
       });
 
       const params: TxRegistrationParams = {
@@ -154,7 +176,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         reporter: storedSignatureState.reporter,
         deadline: storedSignatureState.deadline,
         signature: parsedSig,
-        feeWei: 0n, // No fee for now
+        feeWei: feeWei ?? 0n,
       };
 
       await submitRegistration(params);
@@ -240,18 +262,79 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     <div className="space-y-4">
       {/* Summary */}
       <div className="rounded-lg border p-4 bg-muted/30">
-        <p className="text-sm font-medium mb-2">Submitting Registration</p>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <span className="text-muted-foreground">Transactions:</span>
-          <span className="font-mono">{selectedTxHashes.length}</span>
-          <span className="text-muted-foreground">Merkle Root:</span>
-          <span className="font-mono text-xs truncate" title={merkleRoot}>
-            {merkleRoot.slice(0, 10)}...{merkleRoot.slice(-8)}
-          </span>
+        <p className="text-sm font-medium mb-3">Submitting Registration</p>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-start gap-2">
+            <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+              Transactions:
+              <InfoTooltip
+                content={
+                  <p className="text-xs">
+                    The number of transactions included in this fraud report batch.
+                  </p>
+                }
+                side="right"
+              />
+            </span>
+            <span className="font-mono font-medium">{selectedTxHashes.length}</span>
+          </div>
+          {reportedChainId && (
+            <div className="flex items-start gap-2">
+              <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+                Reported Chain ID:
+                <InfoTooltip
+                  content={
+                    <p className="text-xs">
+                      The CAIP-2 formatted chain identifier where these transactions occurred. This
+                      is hashed on-chain as{' '}
+                      <code className="text-[10px]">
+                        keccak256("{chainIdToCAIP2String(reportedChainId)}")
+                      </code>
+                      .
+                    </p>
+                  }
+                  side="right"
+                />
+              </span>
+              <span className="font-mono font-medium">
+                {getChainName(reportedChainId)}{' '}
+                <span className="text-muted-foreground text-xs">
+                  ({chainIdToCAIP2String(reportedChainId)})
+                </span>
+              </span>
+            </div>
+          )}
+          <div className="flex items-start gap-2">
+            <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+              Merkle Root:
+              <InfoTooltip
+                content={
+                  <p className="text-xs">
+                    A cryptographic hash representing all selected transactions. This is stored
+                    on-chain as tamper-proof evidence of your fraud report.
+                  </p>
+                }
+                side="right"
+              />
+            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <code className="font-mono text-xs break-all cursor-default">{merkleRoot}</code>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-md">
+                <p className="text-xs font-mono break-all">{merkleRoot}</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
       </div>
 
-      {/* Transaction card */}
+      {/* Selected Transactions Table */}
+      {selectedTxDetails.length > 0 && (
+        <SelectedTransactionsTable transactions={selectedTxDetails} showValue showBlock />
+      )}
+
+      {/* Transaction card with cost breakdown */}
       <TransactionCard
         type="registration"
         status={getStatus()}
@@ -260,6 +343,37 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         explorerUrl={explorerUrl}
         signedMessage={signedMessageData}
         chainId={chainId}
+        costEstimate={
+          feeData
+            ? {
+                data: {
+                  protocolFee: {
+                    wei: feeData.feeWei,
+                    eth: feeData.feeEth,
+                    usd: feeData.feeUsd,
+                  },
+                  bridgeFee: null,
+                  bridgeName: null,
+                  gasCost: {
+                    wei: 0n,
+                    eth: '—',
+                    usd: '—',
+                    gwei: '—',
+                  },
+                  total: {
+                    wei: feeData.feeWei,
+                    eth: feeData.feeEth,
+                    usd: feeData.feeUsd,
+                  },
+                  ethPriceUsd: ethPrice?.usdFormatted ?? '—',
+                  isCrossChain: false,
+                } as TransactionCost,
+                isLoading: feeLoading,
+                isError: feeError,
+                refetch: refetchFee,
+              }
+            : undefined
+        }
         onSubmit={handleSubmit}
         onRetry={handleRetry}
       />

@@ -20,6 +20,9 @@ import {
   Alert,
   AlertDescription,
   AlertTitle,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from '@swr/ui';
 import { TransactionStepIndicator } from '@/components/composed/TransactionStepIndicator';
 import { TransactionSelector } from '@/components/composed/TransactionSelector';
@@ -33,6 +36,7 @@ import {
   TxSuccessStep,
 } from '@/components/registration/tx-steps';
 import { useUserTransactions, useMerkleTree, type TransactionLeaf } from '@/hooks/transactions';
+import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import {
   useTransactionRegistrationFlow,
@@ -90,8 +94,13 @@ export function TransactionStandardRegistrationPage() {
   const { isConnected, address } = useAccount();
   const chainId = useChainId();
   const { registrationType, step, setStep, reset: resetFlow } = useTransactionRegistrationFlow();
-  const { selectedTxHashes, setSelectedTxHashes, setReportedChainId, setMerkleRoot } =
-    useTransactionSelection();
+  const {
+    selectedTxHashes,
+    setSelectedTxHashes,
+    setSelectedTxDetails,
+    setReportedChainId,
+    setMerkleRoot,
+  } = useTransactionSelection();
   // Use stable selectors for form actions to avoid unnecessary re-renders
   const resetForm = useTransactionFormStore((s) => s.reset);
   const setReporter = useTransactionFormStore((s) => s.setReporter);
@@ -174,6 +183,17 @@ export function TransactionStandardRegistrationPage() {
 
   const handleSelectionChange = (hashes: Hash[]) => {
     setSelectedTxHashes(hashes);
+    // Also store full transaction details for display in subsequent steps
+    const selectedDetails = transactions
+      .filter((tx) => hashes.includes(tx.hash))
+      .map((tx) => ({
+        hash: tx.hash,
+        to: tx.to,
+        value: tx.value.toString(),
+        blockNumber: tx.blockNumber.toString(),
+        timestamp: tx.timestamp,
+      }));
+    setSelectedTxDetails(selectedDetails);
   };
 
   const handleContinue = () => {
@@ -228,22 +248,145 @@ export function TransactionStandardRegistrationPage() {
               maxSelections={100}
             />
 
-            {/* Summary and Continue */}
+            {/* Transaction Batch Summary */}
             {selectedTxHashes.length > 0 && merkleTree && (
-              <div className="flex items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg">
-                <div className="text-sm min-w-0 flex-1">
-                  <span className="font-medium">{selectedTxHashes.length} transactions</span>
-                  <span className="text-muted-foreground"> selected</span>
-                  <div
-                    className="text-xs text-muted-foreground mt-1 font-mono break-all"
-                    title={merkleTree.root}
-                  >
-                    Root: {merkleTree.root}
+              <div className="space-y-4">
+                {/* Summary Card */}
+                <div className="rounded-lg border p-4 bg-muted/30">
+                  <p className="text-sm font-medium mb-3">Transaction Batch Summary</p>
+                  <div className="space-y-3 text-sm">
+                    {/* Transaction Count */}
+                    <div className="flex items-start gap-2">
+                      <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+                        Transactions:
+                        <InfoTooltip
+                          content={
+                            <p className="text-xs">
+                              The number of transactions selected for this fraud report batch.
+                            </p>
+                          }
+                          side="right"
+                        />
+                      </span>
+                      <span className="font-mono font-medium">{selectedTxHashes.length}</span>
+                    </div>
+
+                    {/* Reported Chain */}
+                    <div className="flex items-start gap-2">
+                      <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+                        Reported Chain ID:
+                        <InfoTooltip
+                          content={
+                            <p className="text-xs">
+                              The CAIP-2 formatted chain identifier where these transactions
+                              occurred. This is hashed on-chain as{' '}
+                              <code className="text-[10px]">
+                                keccak256("{chainIdToCAIP2String(chainId)}")
+                              </code>
+                              .
+                            </p>
+                          }
+                          side="right"
+                        />
+                      </span>
+                      <span className="font-mono font-medium">
+                        {getChainName(chainId)}{' '}
+                        <span className="text-muted-foreground text-xs">
+                          ({chainIdToCAIP2String(chainId)})
+                        </span>
+                      </span>
+                    </div>
+
+                    {/* Chain ID Hash */}
+                    <div className="flex items-start gap-2">
+                      <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+                        Chain ID Hash:
+                        <InfoTooltip
+                          content={
+                            <p className="text-xs">
+                              The keccak256 hash of the CAIP-2 chain identifier. This is the value
+                              stored on-chain and shown in the EIP-712 signed message as{' '}
+                              <code className="text-[10px]">reportedChainId</code>.
+                            </p>
+                          }
+                          side="right"
+                        />
+                      </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <code className="font-mono text-xs break-all cursor-default">
+                            {chainIdToCAIP2(chainId)}
+                          </code>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-md">
+                          <p className="text-xs font-mono break-all">{chainIdToCAIP2(chainId)}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+
+                    {/* Merkle Root */}
+                    <div className="flex items-start gap-2">
+                      <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+                        Merkle Root:
+                        <InfoTooltip
+                          content={
+                            <p className="text-xs">
+                              A cryptographic hash representing all selected transactions. This is
+                              stored on-chain as tamper-proof evidence of your fraud report.
+                            </p>
+                          }
+                          side="right"
+                        />
+                      </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <code className="font-mono text-xs break-all cursor-default">
+                            {merkleTree.root}
+                          </code>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-md">
+                          <p className="text-xs font-mono break-all">{merkleTree.root}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   </div>
                 </div>
-                <Button onClick={handleContinue} className="flex-shrink-0">
-                  Continue to Sign
-                </Button>
+
+                {/* Selected Transactions Table */}
+                <div className="rounded-lg border overflow-hidden">
+                  <div className="px-4 py-2 bg-muted/30 border-b">
+                    <p className="text-sm font-medium">Selected Transactions</p>
+                  </div>
+                  <div className="max-h-40 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/20 sticky top-0">
+                        <tr className="border-b">
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                            #
+                          </th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                            Transaction Hash
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {selectedTxHashes.map((hash, index) => (
+                          <tr key={hash} className="hover:bg-muted/30">
+                            <td className="px-3 py-1.5 text-muted-foreground">{index + 1}</td>
+                            <td className="px-3 py-1.5">
+                              <code className="font-mono">{hash}</code>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Continue Button */}
+                <div className="flex justify-end">
+                  <Button onClick={handleContinue}>Continue to Sign</Button>
+                </div>
               </div>
             )}
 

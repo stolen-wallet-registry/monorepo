@@ -49,3 +49,5 @@ export {
   type TxDeadlineData,
   type UseTxContractDeadlinesResult,
 } from './useTxContractDeadlines';
+
+export { useTxQuoteFee, type TxQuoteFeeData, type UseTxQuoteFeeResult } from './useTxQuoteFee';
