@@ -3,11 +3,6 @@
  */
 
 // Read hooks
-export {
-  useSupportedLanguages,
-  type UseSupportedLanguagesResult,
-  type UseSupportedLanguagesOptions,
-} from './useSupportedLanguages';
 export { useHasMinted, type UseHasMintedResult, type UseHasMintedOptions } from './useHasMinted';
 export { useCanMint, type UseCanMintResult, type UseCanMintOptions } from './useCanMint';
 export {

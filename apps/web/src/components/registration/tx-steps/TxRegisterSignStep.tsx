@@ -102,21 +102,23 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
       return;
     }
 
-    // Refetch to get fresh deadline
+    // Refetch to get fresh deadline - do not use stale data
     logger.contract.debug('Refetching hash struct for fresh registration deadline');
     const refetchResult = await refetchHashStruct();
     const rawData = refetchResult?.data;
-    const freshDeadline =
-      Array.isArray(rawData) && typeof rawData[0] === 'bigint'
-        ? rawData[0]
-        : hashStructData?.deadline;
 
-    if (freshDeadline === undefined) {
-      logger.signature.error('Failed to get hash struct data');
-      setSignatureError('Failed to load signing data. Please try again.');
+    // Require fresh deadline - do not fall back to stale hashStructData
+    if (!Array.isArray(rawData) || typeof rawData[0] !== 'bigint') {
+      logger.signature.error('Failed to get fresh hash struct data', {
+        hasData: !!rawData,
+        dataType: Array.isArray(rawData) ? 'array' : typeof rawData,
+      });
+      setSignatureError('Failed to load fresh signing data. Please try again.');
       setSignatureStatus('error');
       return;
     }
+
+    const freshDeadline = rawData[0];
 
     setSignatureStatus('signing');
     setSignatureError(null);
@@ -142,24 +144,34 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
       });
 
-      // Store signature
-      storeTxSignature({
-        signature: sig,
-        deadline: freshDeadline,
-        nonce,
-        merkleRoot,
-        reportedChainId: reportedChainIdHash,
-        transactionCount: selectedTxHashes.length,
-        reporter: address,
-        forwarder: address,
-        chainId,
-        step: TX_SIGNATURE_STEP.REGISTRATION,
-        storedAt: Date.now(),
-      });
-      logger.signature.debug('Transaction batch registration signature stored in sessionStorage');
-
+      // Set signature state first so UI reflects success even if storage fails
       setSignature(sig);
       setSignatureStatus('success');
+
+      // Store signature - don't let storage failure discard the signature
+      try {
+        storeTxSignature({
+          signature: sig,
+          deadline: freshDeadline,
+          nonce,
+          merkleRoot,
+          reportedChainId: reportedChainIdHash,
+          transactionCount: selectedTxHashes.length,
+          reporter: address,
+          forwarder: address,
+          chainId,
+          step: TX_SIGNATURE_STEP.REGISTRATION,
+          storedAt: Date.now(),
+        });
+        logger.signature.debug('Transaction batch registration signature stored in sessionStorage');
+      } catch (storageErr) {
+        logger.signature.error(
+          'Failed to store signature in sessionStorage',
+          { error: storageErr instanceof Error ? storageErr.message : String(storageErr) },
+          storageErr instanceof Error ? storageErr : undefined
+        );
+        // Don't rethrow - signature is still valid and usable
+      }
 
       logger.registration.info(
         'Transaction batch registration signing complete, advancing to payment step'

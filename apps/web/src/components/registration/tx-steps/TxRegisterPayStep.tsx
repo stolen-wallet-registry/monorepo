@@ -30,7 +30,7 @@ import { parseSignature } from '@/lib/signatures';
 import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
-import { sanitizeErrorMessage } from '@/lib/utils';
+import { sanitizeErrorMessage, formatEthConsistent, formatCentsToUsd } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
 
 export interface TxRegisterPayStepProps {
@@ -112,7 +112,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     deadline: storedSignatureState?.deadline,
     signature: parsedSigForEstimate,
     value: feeWei,
-    enabled: !!storedSignatureState && !!merkleRoot && !!reportedChainIdHash && !!feeWei,
+    enabled:
+      !!storedSignatureState && !!merkleRoot && !!reportedChainIdHash && feeWei !== undefined,
   });
 
   // Map hook state to TransactionStatus
@@ -425,8 +426,15 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
                   total: gasEstimate
                     ? {
                         wei: feeData.feeWei + gasEstimate.gasCostWei,
-                        eth: `${(Number(feeData.feeWei + gasEstimate.gasCostWei) / 1e18).toFixed(8)}`,
-                        usd: `$${(((Number(feeData.feeWei + gasEstimate.gasCostWei) / 1e18) * (ethPrice?.usdCents ?? 0)) / 100).toFixed(2)}`,
+                        eth: formatEthConsistent(feeData.feeWei + gasEstimate.gasCostWei),
+                        usd: ethPrice?.usdCents
+                          ? formatCentsToUsd(
+                              Math.round(
+                                (Number(feeData.feeWei + gasEstimate.gasCostWei) / 1e18) *
+                                  ethPrice.usdCents
+                              )
+                            )
+                          : '—',
                       }
                     : {
                         wei: feeData.feeWei,

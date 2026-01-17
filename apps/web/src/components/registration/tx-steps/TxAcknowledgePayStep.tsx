@@ -110,6 +110,14 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
    * Submit the acknowledgement transaction.
    */
   const handleSubmit = useCallback(async () => {
+    // Re-entrancy guard
+    if (isSubmitting) {
+      logger.contract.warn(
+        'Acknowledgement submission already in progress, ignoring duplicate call'
+      );
+      return;
+    }
+
     logger.contract.info('Transaction batch acknowledgement submission initiated', {
       merkleRoot,
       transactionCount: selectedTxHashes.length,
@@ -185,6 +193,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
       setIsSubmitting(false);
     }
   }, [
+    isSubmitting,
     storedSignature,
     merkleRoot,
     reportedChainIdHash,

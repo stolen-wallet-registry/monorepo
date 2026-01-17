@@ -1,12 +1,14 @@
 /**
- * Language selector component for soulbound token minting.
+ * Language selector component for soulbound token preview.
  *
- * Allows users to select their preferred language for the on-chain SVG artwork.
+ * Allows users to select their preferred language for the on-chain SVG artwork preview.
  */
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@swr/ui';
-import { useSupportedLanguages } from '@/hooks/soulbound';
-import { getLanguageName } from '@/lib/constants/languages';
+import { getLanguageName, LANGUAGE_NAMES } from '@/lib/constants/languages';
+
+/** Supported language codes */
+const LANGUAGES = Object.keys(LANGUAGE_NAMES);
 
 export interface LanguageSelectorProps {
   /** Currently selected language code */
@@ -22,9 +24,6 @@ export interface LanguageSelectorProps {
 /**
  * Dropdown selector for choosing soulbound token language.
  *
- * Fetches available languages from the TranslationRegistry contract
- * and displays them with localized names.
- *
  * @example
  * ```tsx
  * const [language, setLanguage] = useState('en');
@@ -37,18 +36,13 @@ export function LanguageSelector({
   disabled = false,
   className,
 }: LanguageSelectorProps) {
-  const { languages, isLoading } = useSupportedLanguages();
-
-  // Use fetched languages if available, otherwise fallback to English
-  const availableLanguages = languages.length > 0 ? languages : ['en'];
-
   return (
-    <Select value={value} onValueChange={onChange} disabled={disabled || isLoading}>
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger className={className}>
-        <SelectValue placeholder={isLoading ? 'Loading...' : 'Select language'} />
+        <SelectValue placeholder="Select language" />
       </SelectTrigger>
       <SelectContent>
-        {availableLanguages.map((lang) => (
+        {LANGUAGES.map((lang) => (
           <SelectItem key={lang} value={lang}>
             {getLanguageName(lang)}
           </SelectItem>

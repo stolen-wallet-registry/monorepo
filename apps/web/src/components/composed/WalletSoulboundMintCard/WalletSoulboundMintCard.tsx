@@ -145,7 +145,7 @@ export function WalletSoulboundMintCard({
           {tokenId > 0n && walletSoulboundAddress && (
             <div className="flex justify-center py-4">
               <MintedTokenDisplay
-                contractAddress={walletSoulboundAddress!}
+                contractAddress={walletSoulboundAddress}
                 tokenId={tokenId}
                 type="wallet"
                 size={320}
@@ -184,7 +184,7 @@ export function WalletSoulboundMintCard({
           {tokenId > 0n && walletSoulboundAddress && (
             <div className="flex justify-center py-4">
               <MintedTokenDisplay
-                contractAddress={walletSoulboundAddress!}
+                contractAddress={walletSoulboundAddress}
                 tokenId={tokenId}
                 type="wallet"
                 size={320}
