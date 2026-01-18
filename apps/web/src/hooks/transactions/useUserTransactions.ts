@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useChainId, usePublicClient } from 'wagmi';
+import { isLocalChain } from '@swr/chains';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
@@ -52,13 +53,6 @@ const INITIAL_BLOCKS_TO_SCAN = 200;
  * Number of additional blocks to scan when user clicks "Load More".
  */
 const LOAD_MORE_BLOCKS = 200;
-
-/**
- * Check if chainId is a local Anvil chain.
- */
-function isLocalChain(chainId: number): boolean {
-  return chainId === 31337 || chainId === 31338;
-}
 
 /**
  * Hook to fetch user's transaction history with pagination support.

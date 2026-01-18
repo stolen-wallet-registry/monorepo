@@ -11,6 +11,7 @@ export { P2PRelayerRegistrationPage } from './P2PRelayerRegistrationPage';
 // Transaction registration pages
 export { TransactionHomePage } from './TransactionHomePage';
 export { TransactionStandardRegistrationPage } from './TransactionStandardRegistrationPage';
+export { TransactionSelfRelayRegistrationPage } from './TransactionSelfRelayRegistrationPage';
 // Other pages
 export { SoulboundPage } from './SoulboundPage';
 export { NotFoundPage } from './NotFoundPage';

@@ -15,7 +15,9 @@ import {
   type SignedMessageData,
 } from '@/components/composed/TransactionCard';
 import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
+import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
+import { areAddressesEqual } from '@/lib/address';
 import { useTransactionSelection } from '@/stores/transactionFormStore';
 import { useTransactionAcknowledgement, type TxAcknowledgementParams } from '@/hooks/transactions';
 import { getTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
@@ -37,9 +39,11 @@ export interface TxAcknowledgePayStepProps {
 export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
-  const { setAcknowledgementHash } = useTransactionRegistrationStore();
+  const { registrationType, setAcknowledgementHash } = useTransactionRegistrationStore();
   const { selectedTxHashes, selectedTxDetails, reportedChainId, merkleRoot } =
     useTransactionSelection();
+
+  const isSelfRelay = registrationType === 'selfRelay';
 
   // Contract hook
   const {
@@ -67,6 +71,18 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
       setStoredSignature(null);
     }
   }, [merkleRoot, chainId]);
+
+  // Expected wallet for this step: forwarder (gas wallet) for self-relay, reporter for standard
+  const expectedWallet = storedSignature
+    ? isSelfRelay
+      ? storedSignature.forwarder
+      : storedSignature.reporter
+    : undefined;
+
+  // Check if correct wallet is connected
+  const isCorrectWallet = Boolean(
+    address && expectedWallet && areAddressesEqual(address, expectedWallet)
+  );
 
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : undefined;
@@ -122,7 +138,10 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
       merkleRoot,
       transactionCount: selectedTxHashes.length,
       hasStoredSignature: !!storedSignature,
+      registrationType,
       connectedWallet: address,
+      expectedWallet,
+      isCorrectWallet,
     });
 
     if (!storedSignature || !merkleRoot || !reportedChainIdHash) {
@@ -201,6 +220,9 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     address,
     chainId,
     submitAcknowledgement,
+    registrationType,
+    expectedWallet,
+    isCorrectWallet,
   ]);
 
   /**
@@ -262,6 +284,18 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
 
   return (
     <div className="space-y-4">
+      {/* Wallet switch prompt (self-relay only) */}
+      {isSelfRelay && expectedWallet && (
+        <WalletSwitchPrompt
+          currentAddress={address}
+          expectedAddress={expectedWallet}
+          expectedLabel="Gas Wallet"
+          currentLabel="Compromised Wallet"
+          currentChainId={chainId}
+          expectedChainId={chainId}
+        />
+      )}
+
       {/* Summary of transaction batch */}
       <div className="rounded-lg border p-4 bg-muted/30">
         <p className="text-sm font-medium mb-3">Submitting Acknowledgement</p>
@@ -361,7 +395,15 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         chainId={chainId}
         onSubmit={handleSubmit}
         onRetry={handleRetry}
+        disabled={!isCorrectWallet}
       />
+
+      {/* Disabled state message when wrong wallet connected */}
+      {!isCorrectWallet && getStatus() === 'idle' && (
+        <p className="text-sm text-muted-foreground text-center">
+          Switch to the correct wallet above to submit the transaction.
+        </p>
+      )}
     </div>
   );
 }

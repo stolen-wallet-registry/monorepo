@@ -110,23 +110,62 @@ function TransactionSkeleton() {
   );
 }
 
+interface EmptyStateProps {
+  onRefresh?: () => void;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
+  hasMore?: boolean;
+  lowestBlockScanned?: bigint | null;
+}
+
 /**
  * Empty state when no transactions found.
  */
-function EmptyState({ onRefresh }: { onRefresh?: () => void }) {
+function EmptyState({
+  onRefresh,
+  onLoadMore,
+  isLoadingMore,
+  hasMore,
+  lowestBlockScanned,
+}: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center p-8 text-center border rounded-lg border-dashed">
       <AlertTriangle className="h-12 w-12 text-muted-foreground mb-4" />
       <p className="text-lg font-medium text-muted-foreground mb-2">No transactions found</p>
       <p className="text-sm text-muted-foreground mb-4">
-        No recent transactions were found for this wallet.
+        No transactions were found in recent blocks.
+        {hasMore && ' Try scanning further back in history.'}
       </p>
-      {onRefresh && (
-        <Button variant="outline" onClick={onRefresh}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
-      )}
+      <div className="flex flex-col items-center gap-2">
+        {hasMore && onLoadMore ? (
+          <Button variant="outline" onClick={onLoadMore} disabled={isLoadingMore}>
+            {isLoadingMore ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Scanning...
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-4 w-4 mr-2" />
+                Scan Earlier Blocks
+              </>
+            )}
+          </Button>
+        ) : onRefresh ? (
+          <Button variant="outline" onClick={onRefresh}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        ) : null}
+        {lowestBlockScanned !== null && lowestBlockScanned !== undefined && (
+          <p className="text-xs text-muted-foreground">
+            Scanned down to block {lowestBlockScanned.toString()}
+          </p>
+        )}
+        {!hasMore && lowestBlockScanned !== null && lowestBlockScanned !== undefined && (
+          <p className="text-xs text-muted-foreground">All blocks have been scanned.</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -243,7 +282,13 @@ export function TransactionSelector({
       </CardHeader>
       <CardContent>
         {transactions.length === 0 ? (
-          <EmptyState onRefresh={onRefresh} />
+          <EmptyState
+            onRefresh={onRefresh}
+            onLoadMore={onLoadMore}
+            isLoadingMore={isLoadingMore}
+            hasMore={hasMore}
+            lowestBlockScanned={lowestBlockScanned}
+          />
         ) : (
           <div className="space-y-4">
             {/* Batch selection controls */}

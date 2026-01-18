@@ -11,7 +11,10 @@ import { Alert, AlertDescription, Tooltip, TooltipContent, TooltipTrigger } from
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { SignatureCard, type SignatureStatus } from '@/components/composed/SignatureCard';
 import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
-import { useTransactionSelection } from '@/stores/transactionFormStore';
+import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
+import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
+import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
+import { areAddressesEqual } from '@/lib/address';
 import {
   useSignTxEIP712,
   useTransactionRegistrationHashStruct,
@@ -37,6 +40,20 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   const chainId = useChainId();
   const { selectedTxHashes, selectedTxDetails, reportedChainId, merkleRoot } =
     useTransactionSelection();
+  const { registrationType } = useTransactionRegistrationStore();
+  const storedReporter = useTransactionFormStore((s) => s.reporter);
+  const storedForwarder = useTransactionFormStore((s) => s.forwarder);
+
+  const isSelfRelay = registrationType === 'selfRelay';
+  // For self-relay, use stored addresses; otherwise use connected wallet for both
+  const reporterAddress = isSelfRelay && storedReporter ? storedReporter : address;
+  const forwarderAddress = isSelfRelay && storedForwarder ? storedForwarder : address;
+
+  // In self-relay, the reporter wallet must be connected to sign
+  // The reporter is the one who signs, not the forwarder
+  const isCorrectWallet = isSelfRelay
+    ? Boolean(address && reporterAddress && areAddressesEqual(address, reporterAddress))
+    : true; // For standard, current wallet is always correct
 
   // Local state
   const [signatureStatus, setSignatureStatus] = useState<SignatureStatus>('idle');
@@ -58,8 +75,12 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : undefined;
 
-  // Contract hooks
-  const { nonce, isLoading: nonceLoading, isError: nonceError } = useTxContractNonce(address);
+  // Contract hooks - use reporter address for nonce since they're the signer
+  const {
+    nonce,
+    isLoading: nonceLoading,
+    isError: nonceError,
+  } = useTxContractNonce(reporterAddress);
 
   const {
     data: hashStructData,
@@ -70,7 +91,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
     merkleRoot ?? undefined,
     reportedChainIdHash,
     selectedTxHashes.length,
-    address // forwarder is connected wallet for standard registration
+    forwarderAddress ?? undefined // forwarder from store for self-relay, connected wallet for standard
   );
 
   const { signTxRegistration, reset: resetSigning } = useSignTxEIP712();
@@ -87,15 +108,24 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
       hasHashStructData: !!hashStructData,
       hasNonce: nonce !== undefined,
       connectedAddress: address,
+      forwarder: forwarderAddress,
+      isSelfRelay,
     });
 
-    if (!address || !merkleRoot || !reportedChainIdHash || nonce === undefined) {
+    if (
+      !address ||
+      !merkleRoot ||
+      !reportedChainIdHash ||
+      nonce === undefined ||
+      !forwarderAddress
+    ) {
       logger.signature.error('Missing required data for transaction registration signing', {
         address,
         merkleRoot,
         reportedChainIdHash,
         hashStructData: !!hashStructData,
         nonce,
+        forwarderAddress,
       });
       setSignatureError('Missing required data for signing');
       setSignatureStatus('error');
@@ -126,7 +156,9 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
     try {
       logger.signature.info('Requesting EIP-712 transaction batch registration signature', {
         merkleRoot,
-        forwarder: address,
+        reporter: address,
+        forwarder: forwarderAddress,
+        isSelfRelay,
         nonce: nonce.toString(),
         deadline: freshDeadline.toString(),
         chainId,
@@ -135,7 +167,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
       const sig = await signTxRegistration({
         merkleRoot,
         reportedChainId: reportedChainIdHash,
-        forwarder: address,
+        forwarder: forwarderAddress,
         nonce,
         deadline: freshDeadline,
       });
@@ -158,7 +190,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
           reportedChainId: reportedChainIdHash,
           transactionCount: selectedTxHashes.length,
           reporter: address,
-          forwarder: address,
+          forwarder: forwarderAddress,
           chainId,
           step: TX_SIGNATURE_STEP.REGISTRATION,
           storedAt: Date.now(),
@@ -226,6 +258,18 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
 
   return (
     <div className="space-y-4">
+      {/* Wallet switch prompt (self-relay only) - user must switch back to reporter wallet */}
+      {isSelfRelay && reporterAddress && (
+        <WalletSwitchPrompt
+          currentAddress={address}
+          expectedAddress={reporterAddress}
+          expectedLabel="Reporter Wallet"
+          currentLabel="Gas Wallet"
+          currentChainId={chainId}
+          expectedChainId={chainId}
+        />
+      )}
+
       {/* Summary */}
       <div className="rounded-lg border p-4 bg-muted/30">
         <p className="text-sm font-medium mb-3">Ready to Register</p>
@@ -335,22 +379,36 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
       )}
 
       {/* Signature card */}
-      {!isContractDataLoading && !hasContractError && hashStructData && nonce !== undefined && (
-        <SignatureCard
-          type="registration"
-          data={{
-            registeree: address,
-            forwarder: address,
-            nonce,
-            deadline: hashStructData.deadline,
-            chainId,
-          }}
-          status={signatureStatus}
-          error={signatureError}
-          signature={signature}
-          onSign={handleSign}
-          onRetry={handleRetry}
-        />
+      {!isContractDataLoading &&
+        !hasContractError &&
+        hashStructData &&
+        nonce !== undefined &&
+        reporterAddress &&
+        forwarderAddress && (
+          <SignatureCard
+            type="registration"
+            data={{
+              registeree: reporterAddress,
+              forwarder: forwarderAddress,
+              nonce,
+              deadline: hashStructData.deadline,
+              chainId,
+            }}
+            status={signatureStatus}
+            error={signatureError}
+            signature={signature}
+            onSign={handleSign}
+            onRetry={handleRetry}
+            registryType="transaction"
+            disabled={!isCorrectWallet}
+          />
+        )}
+
+      {/* Message when wrong wallet connected */}
+      {isSelfRelay && !isCorrectWallet && signatureStatus === 'idle' && (
+        <p className="text-sm text-muted-foreground text-center">
+          Switch to your reporter wallet above to sign the registration.
+        </p>
       )}
     </div>
   );

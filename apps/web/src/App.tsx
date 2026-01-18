@@ -17,6 +17,7 @@ import {
   SoulboundPage,
   TransactionHomePage,
   TransactionStandardRegistrationPage,
+  TransactionSelfRelayRegistrationPage,
   NotFoundPage,
 } from '@/pages';
 
@@ -45,6 +46,10 @@ function App() {
             <Route
               path="/registration/transactions/standard"
               component={TransactionStandardRegistrationPage}
+            />
+            <Route
+              path="/registration/transactions/self-relay"
+              component={TransactionSelfRelayRegistrationPage}
             />
             {/* Other routes */}
             <Route path="/search" component={SearchPage} />

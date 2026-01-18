@@ -116,26 +116,5 @@ export function computeTransactionLeafFromChainId(txHash: Hash, chainId: number)
 // Chain Name Utilities
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CHAIN_NAMES: Record<number, string> = {
-  1: 'Ethereum',
-  8453: 'Base',
-  84532: 'Base Sepolia',
-  10: 'Optimism',
-  11155420: 'Optimism Sepolia',
-  42161: 'Arbitrum One',
-  421614: 'Arbitrum Sepolia',
-  137: 'Polygon',
-  80002: 'Polygon Amoy',
-  31337: 'Anvil (Local)',
-  31338: 'Anvil Spoke (Local)',
-};
-
-/**
- * Get a human-readable chain name from chain ID.
- *
- * @param chainId - EIP-155 chain ID
- * @returns Chain name or "Unknown Chain (ID)"
- */
-export function getChainName(chainId: number): string {
-  return CHAIN_NAMES[chainId] ?? `Unknown Chain (${chainId})`;
-}
+// Re-export from @swr/chains for backward compatibility
+export { getChainName } from '@swr/chains';

@@ -11,7 +11,8 @@ import { Alert, AlertDescription, Button, Tooltip, TooltipContent, TooltipTrigge
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { SignatureCard, type SignatureStatus } from '@/components/composed/SignatureCard';
 import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
-import { useTransactionSelection } from '@/stores/transactionFormStore';
+import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
+import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
 import {
   useSignTxEIP712,
   useTransactionAcknowledgementHashStruct,
@@ -39,6 +40,12 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   const chainId = useChainId();
   const { selectedTxHashes, selectedTxDetails, reportedChainId, merkleRoot } =
     useTransactionSelection();
+  const { registrationType } = useTransactionRegistrationStore();
+  const storedForwarder = useTransactionFormStore((s) => s.forwarder);
+
+  const isSelfRelay = registrationType === 'selfRelay';
+  // For self-relay, use the stored forwarder; otherwise use connected wallet
+  const forwarderAddress = isSelfRelay && storedForwarder ? storedForwarder : address;
 
   // Local state
   const [signatureStatus, setSignatureStatus] = useState<SignatureStatus>('idle');
@@ -72,7 +79,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
     merkleRoot ?? undefined,
     reportedChainIdHash,
     selectedTxHashes.length,
-    address // forwarder is the connected wallet for standard registration
+    forwarderAddress ?? undefined // forwarder from store for self-relay, connected wallet for standard
   );
 
   const { signTxAcknowledgement, isPending: isSigning, reset: resetSigning } = useSignTxEIP712();
@@ -92,7 +99,13 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
       transactionCount: selectedTxHashes.length,
     });
 
-    if (!address || nonce === undefined || !merkleRoot || !reportedChainIdHash) {
+    if (
+      !address ||
+      nonce === undefined ||
+      !merkleRoot ||
+      !reportedChainIdHash ||
+      !forwarderAddress
+    ) {
       logger.signature.error('Missing required data for transaction acknowledgement signing', {
         address,
         merkleRoot,
@@ -130,7 +143,9 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
       logger.signature.info('Requesting EIP-712 transaction batch acknowledgement signature', {
         merkleRoot,
         transactionCount: selectedTxHashes.length,
-        forwarder: address,
+        reporter: address,
+        forwarder: forwarderAddress,
+        isSelfRelay,
         nonce: nonce.toString(),
         deadline: freshDeadline.toString(),
         chainId,
@@ -140,7 +155,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
         merkleRoot,
         reportedChainId: reportedChainIdHash,
         transactionCount: selectedTxHashes.length,
-        forwarder: address,
+        forwarder: forwarderAddress,
         nonce,
         deadline: freshDeadline,
       });
@@ -158,7 +173,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
         reportedChainId: reportedChainIdHash,
         transactionCount: selectedTxHashes.length,
         reporter: address,
-        forwarder: address,
+        forwarder: forwarderAddress,
         chainId,
         step: TX_SIGNATURE_STEP.ACKNOWLEDGEMENT,
         storedAt: Date.now(),
@@ -356,23 +371,28 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
       )}
 
       {/* Signature card */}
-      {!isContractDataLoading && !hasContractError && hashStructData && nonce !== undefined && (
-        <SignatureCard
-          type="acknowledgement"
-          data={{
-            registeree: address,
-            forwarder: address,
-            nonce,
-            deadline: hashStructData.deadline,
-            chainId,
-          }}
-          status={signatureStatus}
-          error={signatureError}
-          signature={signature}
-          onSign={handleSign}
-          onRetry={handleRetry}
-        />
-      )}
+      {!isContractDataLoading &&
+        !hasContractError &&
+        hashStructData &&
+        nonce !== undefined &&
+        forwarderAddress && (
+          <SignatureCard
+            type="acknowledgement"
+            data={{
+              registeree: address,
+              forwarder: forwarderAddress,
+              nonce,
+              deadline: hashStructData.deadline,
+              chainId,
+            }}
+            status={signatureStatus}
+            error={signatureError}
+            signature={signature}
+            onSign={handleSign}
+            onRetry={handleRetry}
+            registryType="transaction"
+          />
+        )}
     </div>
   );
 }

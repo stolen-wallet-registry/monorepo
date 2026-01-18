@@ -41,6 +41,12 @@ export interface SignatureCardProps {
   onRetry?: () => void;
   /** Whether the sign button is disabled */
   disabled?: boolean;
+  /**
+   * Registry type context for label display.
+   * - 'wallet': Shows "Registeree" (default) - wallet being registered as stolen
+   * - 'transaction': Shows "Reporter" - wallet reporting stolen transactions
+   */
+  registryType?: 'wallet' | 'transaction';
   /** Additional class names */
   className?: string;
 }
@@ -66,6 +72,7 @@ export function SignatureCard({
   onSign,
   onRetry,
   disabled = false,
+  registryType = 'wallet',
   className,
 }: SignatureCardProps) {
   const { copied: signatureCopied, copy: copySignature } = useCopyToClipboard({ resetMs: 2000 });
@@ -84,7 +91,7 @@ export function SignatureCard({
   return (
     <div className={cn('space-y-4', className)}>
       {/* Data being signed */}
-      <SignatureDetails data={data} />
+      <SignatureDetails data={data} registryType={registryType} />
 
       {/* Error message */}
       {isError && (
