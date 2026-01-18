@@ -62,7 +62,10 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   const [localError, setLocalError] = useState<string | null>(null);
 
   // SSR-safe signature retrieval - sessionStorage not available during SSR
-  const [storedSignature, setStoredSignature] = useState<ReturnType<typeof getTxSignature>>(null);
+  // Use undefined for "not yet loaded" vs null for "loaded but not found"
+  const [storedSignature, setStoredSignature] = useState<
+    ReturnType<typeof getTxSignature> | undefined
+  >(undefined);
 
   useEffect(() => {
     if (merkleRoot) {
@@ -71,6 +74,9 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
       setStoredSignature(null);
     }
   }, [merkleRoot, chainId]);
+
+  // Signature is still loading from sessionStorage
+  const isSignatureLoading = storedSignature === undefined;
 
   // Expected wallet for this step: forwarder (gas wallet) for self-relay, reporter for standard
   const expectedWallet = storedSignature
@@ -255,7 +261,16 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     );
   }
 
-  // Missing signature
+  // Signature loading
+  if (isSignatureLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <span className="text-muted-foreground">Loading signature data...</span>
+      </div>
+    );
+  }
+
+  // Missing signature (loaded but not found)
   if (!storedSignature) {
     return (
       <Alert variant="destructive">

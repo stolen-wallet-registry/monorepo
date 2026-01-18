@@ -11,6 +11,7 @@ import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { getChainShortName } from '@/lib/explorer';
 import { cn } from '@/lib/utils';
 import type { Address } from '@/lib/types/ethereum';
+import type { RegistryType } from '@/lib/types';
 
 export interface SignatureDetailsData {
   /** Wallet being registered (wallet registry) or reporting (transaction registry) */
@@ -28,12 +29,8 @@ export interface SignatureDetailsData {
 export interface SignatureDetailsProps {
   /** The signature data to display */
   data: SignatureDetailsData;
-  /**
-   * Registry type context for label display.
-   * - 'wallet': Shows "Registeree" (default) - wallet being registered as stolen
-   * - 'transaction': Shows "Reporter" - wallet reporting stolen transactions
-   */
-  registryType?: 'wallet' | 'transaction';
+  /** Registry type context for label display */
+  registryType?: RegistryType;
   /** Additional class names */
   className?: string;
 }

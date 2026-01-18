@@ -161,7 +161,7 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
   '0xb05e92fa': {
     name: 'InvalidMerkleProof',
     message: 'Merkle proof verification failed.',
-    action: 'The transaction could not be verified against the batch.',
+    action: 'Please reselect your transactions and try again.',
   },
 
   '0x5601467a': {
