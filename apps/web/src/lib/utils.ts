@@ -118,3 +118,15 @@ export function sanitizeErrorMessage(error: unknown): string {
 
   return sanitized;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI Content Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Tooltip content for Merkle root display in transaction registry.
+ *
+ * Explains what the merkle root is, how it can be verified, and that
+ * transactions emit events for external services to monitor.
+ */
+export const MERKLE_ROOT_TOOLTIP = `A cryptographic fingerprint of your selected transactions, stored on-chain as tamper-proof evidence. This root can be verified against the original transaction hashes using Merkle proofs, enabling anyone to confirm exactly which transactions you reported. When registered, each transaction emits a blockchain event that off-ramps, wallets, and other services can monitor to identify potentially stolen funds.`;

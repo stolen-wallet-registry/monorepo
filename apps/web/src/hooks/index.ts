@@ -96,14 +96,11 @@ export {
 
 // Soulbound token hooks
 export {
-  useSupportedLanguages,
   useHasMinted,
   useCanMint,
   useMinDonation,
   useMintWalletSoulbound,
   useMintSupportSoulbound,
-  type UseSupportedLanguagesResult,
-  type UseSupportedLanguagesOptions,
   type UseHasMintedResult,
   type UseHasMintedOptions,
   type UseCanMintResult,

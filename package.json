@@ -40,6 +40,7 @@
     "hyperlane:init": "dotenv -e packages/contracts/.env -- hyperlane registry init",
     "deploy:dev": "pnpm --filter @swr/contracts deploy:local",
     "deploy:crosschain": "pnpm --filter @swr/contracts deploy:crosschain",
+    "seed:transactions": "pnpm --filter @swr/contracts seed:transactions",
     "deploy:testnet:hub": "pnpm --filter @swr/contracts deploy:testnet:hub",
     "deploy:testnet:spoke": "pnpm --filter @swr/contracts deploy:testnet:spoke",
     "deploy:testnet:trust": "pnpm --filter @swr/contracts deploy:testnet:trust",

@@ -17,16 +17,16 @@ const REGISTRIES = [
       'Register wallets you no longer control. Self-attestation with wallet signature provides high trust signal for fraud prevention.',
     status: 'active' as const,
     icon: <Wallet className="size-6" />,
-    path: '/register',
+    path: '/register/wallet',
   },
   {
     id: 'transaction',
     title: 'Stolen Transactions',
     description:
       'Report specific fraudulent transactions like phishing attacks, address poisoning, or unauthorized transfers.',
-    status: 'coming-soon' as const,
+    status: 'active' as const,
     icon: <FileText className="size-6" />,
-    path: null,
+    path: '/register/transactions',
   },
   {
     id: 'contract',

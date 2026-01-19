@@ -178,6 +178,24 @@ export function SoulboundPage() {
               </p>
             </div>
           </div>
+          <div className="pt-4 border-t">
+            <h4 className="font-medium text-foreground mb-1">Built for a Global Community</h4>
+            <p>
+              These tokens feature on-chain internationalization using SVG's native{' '}
+              <a
+                href="https://developer.mozilla.org/en-US/docs/Web/SVG/Element/switch"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline underline-offset-2 hover:text-primary/80"
+              >
+                systemLanguage
+              </a>{' '}
+              feature. All 20+ translations are embedded directly in the on-chain artwork, allowing
+              wallets and NFT platforms to automatically display text in the viewer's preferred
+              language. If we're building borderless technology, it should be accessible to
+              everyone.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

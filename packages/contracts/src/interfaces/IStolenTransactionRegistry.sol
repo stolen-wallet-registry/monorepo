@@ -3,21 +3,392 @@ pragma solidity ^0.8.24;
 
 /// @title IStolenTransactionRegistry
 /// @author Stolen Wallet Registry Team
-/// @notice Interface for the Stolen Transaction Registry subregistry (STUB - Phase 8)
-/// @dev Marks specific fraudulent transactions (phishing, address poisoning, etc.)
-///      Deferred due to higher gaming risk - requires robust dispute mechanism.
+/// @notice Interface for the Stolen Transaction Registry subregistry
+/// @dev Implements two-phase registration for transaction batches using Merkle trees.
+///      Uses Merkle trees for efficient batch storage - only the root is stored on-chain,
+///      while individual transaction hashes are emitted in events for indexer reconstruction.
 ///
-/// IMPLEMENTATION NOTES (for future development):
-/// - Gaming risk: Higher than wallet registry, needs dispute resolution
-/// - Transaction types: Phishing, address poisoning, fraudulent approvals
-/// - Trust model: May weight operator submissions higher than individuals
-/// - Dispute mechanism: TBD - on-chain arbitration vs DAO voting
+/// KEY DESIGN:
+/// - Merkle leaf = keccak256(abi.encodePacked(txHash, chainId)) for multi-chain support
+/// - Single batch can contain transactions from multiple chains
+/// - Events emit parallel arrays: txHashes[] + chainIds[] for data availability
+/// - CAIP-2 chain identifiers (bytes32) support EVM and non-EVM blockchains
 interface IStolenTransactionRegistry {
-    // Placeholder - detailed interface to be designed in Phase 8
-    // See docs/manifesto.md for requirements and gaming concerns
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ENUMS
+    // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Check if a transaction is registered as fraudulent
-    /// @param txHash The transaction hash to query
-    /// @return True if the transaction is registered as fraudulent
-    function isRegistered(bytes32 txHash) external view returns (bool);
+    /// @notice Bridge identifier enum
+    /// @dev Indicates which bridge delivered a cross-chain registration (NONE for native)
+    enum BridgeId {
+        NONE, // 0 - Native registration (no bridge)
+        HYPERLANE, // 1 - Hyperlane bridge
+        CCIP, // 2 - Chainlink CCIP
+        WORMHOLE // 3 - Wormhole bridge
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STRUCTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Data stored for a registered transaction batch
+    /// @dev Optimized for storage efficiency - individual txHashes NOT stored, only in events
+    /// @param merkleRoot Root of transaction hash tree (leaf = keccak256(txHash || chainId))
+    /// @param reporter Address that reported this batch
+    /// @param reportedChainId CAIP-2 chain identifier: keccak256("eip155:8453") for Base
+    /// @param sourceChainId Source chain CAIP-2 identifier (0x0 if native registration)
+    /// @param registeredAt Block number when registration was finalized (uint64)
+    /// @param transactionCount Number of transactions in the batch (uint32)
+    /// @param bridgeId Which bridge delivered the message (BridgeId enum)
+    /// @param isSponsored True if a third party paid gas on behalf of reporter
+    /// @param operatorVerified Future: True if an operator has verified this batch
+    /// @param crossChainMessageId Bridge message ID for explorer linking (0x0 for native)
+    struct TransactionBatch {
+        // === Slot 1 ===
+        bytes32 merkleRoot;
+        // === Slot 2 ===
+        address reporter; // 20 bytes
+        uint64 registeredAt; // 8 bytes
+        uint32 transactionCount; // 4 bytes
+        // === Slot 3 ===
+        bytes32 reportedChainId;
+        // === Slot 4 ===
+        bytes32 sourceChainId;
+        // === Slot 5 (packed - 3 bytes used) ===
+        uint8 bridgeId; // 1 byte
+        bool isSponsored; // 1 byte
+        bool operatorVerified; // 1 byte
+        // === Slot 6 ===
+        bytes32 crossChainMessageId;
+    }
+
+    /// @notice Data stored for a pending acknowledgement (before registration completes)
+    /// @dev Optimized for storage: 3 slots instead of 6 by using uint32 for block numbers.
+    ///      uint32 supports ~4.3B blocks = ~1,600 years at 12s/block - sufficient for all chains.
+    /// @param pendingMerkleRoot Root of the Merkle tree being registered
+    /// @param pendingChainId CAIP-2 chain identifier for the batch
+    /// @param trustedForwarder Address authorized to submit the registration transaction
+    /// @param pendingTxCount Number of transactions in the batch
+    /// @param startBlock Block number when grace period ends and registration can begin
+    /// @param expiryBlock Block number after which the registration window closes
+    struct AcknowledgementData {
+        // === Slot 1 (32 bytes) ===
+        bytes32 pendingMerkleRoot;
+        // === Slot 2 (32 bytes) ===
+        bytes32 pendingChainId;
+        // === Slot 3 (32 bytes packed) ===
+        address trustedForwarder; // 20 bytes
+        uint32 pendingTxCount; // 4 bytes
+        uint32 startBlock; // 4 bytes
+        uint32 expiryBlock; // 4 bytes
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ERRORS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Thrown when the provided nonce doesn't match the expected nonce
+    error InvalidNonce();
+
+    /// @notice Thrown when the acknowledgement signature deadline has passed
+    error Acknowledgement__Expired();
+
+    /// @notice Thrown when the acknowledgement signature is invalid or signer doesn't match
+    error Acknowledgement__InvalidSigner();
+
+    /// @notice Thrown when the registration signature deadline has passed
+    error Registration__SignatureExpired();
+
+    /// @notice Thrown when the registration signature is invalid or signer doesn't match
+    error Registration__InvalidSigner();
+
+    /// @notice Thrown when msg.sender is not the authorized forwarder for this registration
+    error Registration__InvalidForwarder();
+
+    /// @notice Thrown when attempting to register after the grace period has expired
+    error Registration__ForwarderExpired();
+
+    /// @notice Thrown when attempting to register before the grace period has started
+    error Registration__GracePeriodNotStarted();
+
+    /// @notice Thrown when the batch is already registered
+    error AlreadyRegistered();
+
+    /// @notice Thrown when the reporter address is the zero address
+    error InvalidReporter();
+
+    /// @notice Thrown when the provided fee is less than required
+    error InsufficientFee();
+
+    /// @notice Thrown when fee forwarding to RegistryHub fails
+    error FeeForwardFailed();
+
+    /// @notice Thrown when caller is not authorized (not RegistryHub for cross-chain registration)
+    error UnauthorizedCaller();
+
+    /// @notice Thrown when an invalid bridge ID is provided
+    error InvalidBridgeId();
+
+    /// @notice Thrown when chain ID is invalid
+    error InvalidChainId();
+
+    /// @notice Thrown when timing configuration is invalid
+    error InvalidTimingConfig();
+
+    /// @notice Thrown when fee configuration is invalid
+    error InvalidFeeConfig();
+
+    /// @notice Thrown when the Merkle root is zero
+    error InvalidMerkleRoot();
+
+    /// @notice Thrown when transaction count is zero
+    error InvalidTransactionCount();
+
+    /// @notice Thrown when the Merkle root doesn't match the computed root from tx hashes
+    error MerkleRootMismatch();
+
+    /// @notice Thrown when txHashes and chainIds arrays have different lengths
+    error ArrayLengthMismatch();
+
+    /// @notice Thrown when Merkle proof verification fails
+    error InvalidMerkleProof();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // EVENTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Emitted when a reporter acknowledges intent to register a transaction batch
+    /// @param merkleRoot The Merkle root of the batch being acknowledged
+    /// @param reporter The address reporting the fraudulent transactions
+    /// @param forwarder The address authorized to complete the registration
+    /// @param reportedChainId CAIP-2 chain identifier where transactions occurred
+    /// @param transactionCount Number of transactions in the batch
+    /// @param isSponsored True if forwarder is different from reporter
+    event TransactionBatchAcknowledged(
+        bytes32 indexed merkleRoot,
+        address indexed reporter,
+        address indexed forwarder,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        bool isSponsored
+    );
+
+    /// @notice Emitted when a transaction batch registration is finalized
+    /// @dev Transaction hashes emitted here for data availability (not stored on-chain)
+    /// @param batchId Unique identifier for this batch
+    /// @param merkleRoot The Merkle root of the registered batch
+    /// @param reporter The address that reported the batch
+    /// @param reportedChainId Primary chain CAIP-2 identifier
+    /// @param transactionCount Number of transactions in the batch
+    /// @param isSponsored True if registration was submitted by a third party
+    /// @param transactionHashes Raw tx hashes (parallel with chainIds)
+    /// @param chainIds CAIP-2 chainId for each txHash (parallel with transactionHashes)
+    event TransactionBatchRegistered(
+        bytes32 indexed batchId,
+        bytes32 indexed merkleRoot,
+        address indexed reporter,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        bool isSponsored,
+        bytes32[] transactionHashes,
+        bytes32[] chainIds
+    );
+
+    /// @notice Emitted when an operator verifies a batch (future feature)
+    /// @param batchId The batch that was verified
+    /// @param operator The operator that verified the batch
+    event OperatorVerified(bytes32 indexed batchId, address indexed operator);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WRITE FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Phase 1: Submit acknowledgement of intent to register a transaction batch
+    /// @dev Creates a trusted forwarder relationship and starts the grace period.
+    ///      The reporter must sign an EIP-712 message authorizing this submission.
+    ///      Verifies Merkle root matches computed root from txHashes and chainIds.
+    /// @param merkleRoot Root of the Merkle tree (leaf = keccak256(txHash || chainId))
+    /// @param reportedChainId CAIP-2 chain identifier where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param transactionHashes Full list of tx hashes
+    /// @param chainIds CAIP-2 chainId for each txHash (parallel array)
+    /// @param reporter Address of the reporter (for signature verification)
+    /// @param deadline Timestamp after which the signature is no longer valid
+    /// @param v ECDSA signature component
+    /// @param r ECDSA signature component
+    /// @param s ECDSA signature component
+    function acknowledge(
+        bytes32 merkleRoot,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds,
+        address reporter,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+
+    /// @notice Phase 2: Complete the registration after grace period
+    /// @dev Must be called by the same forwarder that was authorized in acknowledge().
+    ///      Must be called after grace period starts but before it expires.
+    ///      Transaction hashes are emitted in event for data availability.
+    /// @param merkleRoot Root of the Merkle tree being registered
+    /// @param reportedChainId CAIP-2 chain identifier
+    /// @param transactionHashes Full list of tx hashes
+    /// @param chainIds CAIP-2 chainId for each txHash (parallel array)
+    /// @param reporter Address of the reporter (for signature verification)
+    /// @param deadline Timestamp after which the signature is no longer valid
+    /// @param v ECDSA signature component
+    /// @param r ECDSA signature component
+    /// @param s ECDSA signature component
+    function register(
+        bytes32 merkleRoot,
+        bytes32 reportedChainId,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds,
+        address reporter,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external payable;
+
+    /// @notice Register a transaction batch from a cross-chain spoke registration
+    /// @dev Only callable by the RegistryHub contract. Used for cross-chain registrations
+    ///      where the two-phase flow already completed on the spoke chain.
+    /// @param merkleRoot Root of the Merkle tree
+    /// @param reporter The address that reported the batch
+    /// @param reportedChainId CAIP-2 chain identifier where transactions occurred
+    /// @param sourceChainId Source chain CAIP-2 identifier
+    /// @param transactionCount Number of transactions in batch
+    /// @param transactionHashes Full list of tx hashes
+    /// @param chainIds CAIP-2 chainId for each txHash (parallel array)
+    /// @param isSponsored True if a third party paid gas
+    /// @param bridgeId Which bridge delivered the message
+    /// @param crossChainMessageId Bridge message ID for explorer linking
+    function registerFromHub(
+        bytes32 merkleRoot,
+        address reporter,
+        bytes32 reportedChainId,
+        bytes32 sourceChainId,
+        uint32 transactionCount,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds,
+        bool isSponsored,
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    ) external;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEW FUNCTIONS - Primary Query Interface
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Check if a batch has been registered
+    /// @param batchId The batch ID to query (keccak256(merkleRoot, reporter, reportedChainId))
+    /// @return True if the batch is registered
+    function isBatchRegistered(bytes32 batchId) external view returns (bool);
+
+    /// @notice Check if a reporter has a pending acknowledgement
+    /// @param reporter The address to query
+    /// @return True if there is a pending acknowledgement
+    function isPending(address reporter) external view returns (bool);
+
+    /// @notice Get full batch data for a registered batch
+    /// @param batchId The batch ID to query
+    /// @return data The batch data (zeroed struct if not registered)
+    function getBatch(bytes32 batchId) external view returns (TransactionBatch memory data);
+
+    /// @notice Get pending acknowledgement data for a reporter
+    /// @param reporter The address to query
+    /// @return data The acknowledgement data (zeroed struct if no pending acknowledgement)
+    function getAcknowledgement(address reporter) external view returns (AcknowledgementData memory data);
+
+    /// @notice Verify a transaction is in a registered batch
+    /// @dev Reconstructs leaf as keccak256(abi.encodePacked(txHash, chainId))
+    /// @param txHash Transaction hash to verify
+    /// @param chainId CAIP-2 chain identifier for this transaction
+    /// @param batchId Batch ID to check against
+    /// @param merkleProof Proof of inclusion
+    /// @return True if the transaction is in the registered batch
+    function verifyTransaction(bytes32 txHash, bytes32 chainId, bytes32 batchId, bytes32[] calldata merkleProof)
+        external
+        view
+        returns (bool);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEW FUNCTIONS - Fee Configuration
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Fee manager address (address(0) = free registrations)
+    /// @return The fee manager contract address
+    function feeManager() external view returns (address);
+
+    /// @notice Registry hub address for fee forwarding
+    /// @return The registry hub contract address
+    function registryHub() external view returns (address);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEW FUNCTIONS - Frontend Compatibility
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Get the current nonce for a reporter
+    /// @param reporter The address to query
+    /// @return The current nonce value
+    function nonces(address reporter) external view returns (uint256);
+
+    /// @notice Generate hash struct for EIP-712 signature
+    /// @dev Used by frontend to prepare typed data for signing.
+    ///      SECURITY: Uses msg.sender as the reporter in the hash struct.
+    /// @param merkleRoot Root of the Merkle tree
+    /// @param reportedChainId CAIP-2 chain identifier
+    /// @param transactionCount Number of transactions in batch
+    /// @param forwarder The address that will submit the transaction
+    /// @param step 1 for acknowledgement, any other value for registration
+    /// @return deadline The signature expiry timestamp
+    /// @return hashStruct The EIP-712 hash struct to sign
+    function generateHashStruct(
+        bytes32 merkleRoot,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        address forwarder,
+        uint8 step
+    ) external view returns (uint256 deadline, bytes32 hashStruct);
+
+    /// @notice Get grace period timing information for a pending acknowledgement
+    /// @param reporter The reporter address to query
+    /// @return currentBlock Current block number
+    /// @return expiryBlock Block when registration window closes
+    /// @return startBlock Block when grace period ends (registration can begin)
+    /// @return graceStartsAt Blocks remaining until grace period ends (0 if already passed)
+    /// @return timeLeft Blocks remaining until registration expires (0 if expired)
+    /// @return isExpired True if the registration window has closed
+    function getDeadlines(address reporter)
+        external
+        view
+        returns (
+            uint32 currentBlock,
+            uint32 expiryBlock,
+            uint32 startBlock,
+            uint32 graceStartsAt,
+            uint32 timeLeft,
+            bool isExpired
+        );
+
+    /// @notice Quote total cost for registration
+    /// @dev Returns only the registration fee (no bridge fee on hub chain)
+    /// @param reporter The address that will register (unused, for interface compatibility)
+    /// @return Total fee required in native token
+    function quoteRegistration(address reporter) external view returns (uint256);
+
+    /// @notice Compute batch ID from batch parameters
+    /// @param merkleRoot Root of the Merkle tree
+    /// @param reporter Address that reported the batch
+    /// @param reportedChainId CAIP-2 chain identifier
+    /// @return batchId The computed batch ID
+    function computeBatchId(bytes32 merkleRoot, address reporter, bytes32 reportedChainId)
+        external
+        pure
+        returns (bytes32 batchId);
 }

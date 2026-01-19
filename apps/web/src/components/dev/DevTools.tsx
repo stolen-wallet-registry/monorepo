@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { useAccount, useChainId, usePublicClient } from 'wagmi';
 
 import { useTheme, type ColorScheme, type ThemeVariant } from '@/providers';
 import { cn } from '@/lib/utils';
 import { SoulboundSvgPreview } from '@/components/composed/SoulboundSvgPreview';
 
-type DevToolsTab = 'theme' | 'tests' | 'soulbound';
+type DevToolsTab = 'theme' | 'tests' | 'soulbound' | 'wallet';
 
 /**
  * Component that throws an error on mount.
@@ -30,9 +31,39 @@ export function DevTools() {
   const [errorKey, setErrorKey] = useState<number | null>(() => null);
   // Soulbound preview state
   const [previewType, setPreviewType] = useState<'wallet' | 'support'>('wallet');
+  // Wallet nonce state
+  const [blockchainNonce, setBlockchainNonce] = useState<bigint | null>(null);
+  const [nonceLoading, setNonceLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { colorScheme, setColorScheme, themeVariant, setThemeVariant, resolvedColorScheme } =
     useTheme();
+
+  // Wallet hooks for nonce display
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const publicClient = usePublicClient();
+
+  // Fetch blockchain nonce
+  const fetchNonce = useCallback(async () => {
+    if (!address || !publicClient) return;
+    setNonceLoading(true);
+    try {
+      const nonce = await publicClient.getTransactionCount({ address });
+      setBlockchainNonce(BigInt(nonce));
+    } catch (err) {
+      console.error('Failed to fetch nonce:', err);
+      setBlockchainNonce(null);
+    } finally {
+      setNonceLoading(false);
+    }
+  }, [address, publicClient]);
+
+  // Auto-fetch nonce when wallet tab is active and connected
+  useEffect(() => {
+    if (isOpen && activeTab === 'wallet' && isConnected) {
+      fetchNonce();
+    }
+  }, [isOpen, activeTab, isConnected, fetchNonce]);
 
   const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
 
@@ -122,7 +153,7 @@ export function DevTools() {
             role="tablist"
             aria-label="DevTools sections"
             onKeyDown={(e) => {
-              const tabs: DevToolsTab[] = ['theme', 'tests', 'soulbound'];
+              const tabs: DevToolsTab[] = ['theme', 'tests', 'soulbound', 'wallet'];
               const currentIndex = tabs.indexOf(activeTab);
               if (e.key === 'ArrowRight') {
                 e.preventDefault();
@@ -141,7 +172,7 @@ export function DevTools() {
               }
             }}
           >
-            {(['theme', 'tests', 'soulbound'] as DevToolsTab[]).map((tab) => (
+            {(['theme', 'tests', 'soulbound', 'wallet'] as DevToolsTab[]).map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -432,6 +463,87 @@ export function DevTools() {
                     </p>
                   </div>
                 </div>
+              </>
+            )}
+
+            {/* Wallet Tab */}
+            {activeTab === 'wallet' && (
+              <>
+                {!isConnected ? (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-muted-foreground">
+                      Connect wallet to view nonce info
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Connected Wallet Info */}
+                    <div className="mb-4">
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Connected Wallet
+                      </label>
+                      <p className="font-mono text-xs text-foreground break-all">{address}</p>
+                    </div>
+
+                    {/* Chain ID */}
+                    <div className="mb-4">
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Chain ID
+                      </label>
+                      <p className="font-mono text-sm text-foreground">{chainId}</p>
+                    </div>
+
+                    {/* Blockchain Nonce */}
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Blockchain Nonce
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBlockchainNonce(null);
+                            fetchNonce();
+                          }}
+                          disabled={nonceLoading}
+                          className={cn(
+                            'rounded px-2 py-0.5 text-xs',
+                            'bg-muted text-muted-foreground hover:bg-muted/80',
+                            'disabled:opacity-50 disabled:cursor-not-allowed'
+                          )}
+                        >
+                          {nonceLoading ? 'Loading...' : 'Refresh'}
+                        </button>
+                      </div>
+                      <p className="font-mono text-2xl font-bold text-foreground">
+                        {blockchainNonce !== null ? blockchainNonce.toString() : '—'}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        This is the next nonce the blockchain expects for your wallet.
+                      </p>
+                    </div>
+
+                    {/* MetaMask Reset Instructions */}
+                    <div className="border-t border-border pt-3">
+                      <h4 className="mb-2 text-xs font-medium text-muted-foreground">
+                        MetaMask Nonce Sync
+                      </h4>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        If MetaMask shows "Internal JSON-RPC error", your local nonce may be stale.
+                        Reset MetaMask's account nonce:
+                      </p>
+                      <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                        <li>Open MetaMask → click account icon</li>
+                        <li>Settings → Advanced</li>
+                        <li>Click "Clear activity tab data"</li>
+                        <li>Confirm and retry the transaction</li>
+                      </ol>
+                      <p className="mt-2 text-xs text-yellow-600 dark:text-yellow-400">
+                        Note: This only affects local history, not your on-chain balance.
+                      </p>
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>

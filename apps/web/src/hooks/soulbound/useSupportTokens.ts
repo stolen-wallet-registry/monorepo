@@ -17,8 +17,10 @@ export interface UseSupportTokensResult {
   tokenIds: bigint[];
   /** The latest (most recently minted) token ID, or null if none */
   latestTokenId: bigint | null;
-  /** Loading state */
+  /** Loading state (initial load only) */
   isLoading: boolean;
+  /** Fetching state (includes refetches) */
+  isFetching: boolean;
   /** Error state */
   isError: boolean;
   /** Error object if query failed */
@@ -76,6 +78,7 @@ export function useSupportTokens({
   const {
     data,
     isLoading,
+    isFetching,
     isError,
     error,
     refetch: queryRefetch,
@@ -124,6 +127,7 @@ export function useSupportTokens({
     tokenIds,
     latestTokenId,
     isLoading,
+    isFetching,
     isError,
     error: error ?? null,
     refetch,

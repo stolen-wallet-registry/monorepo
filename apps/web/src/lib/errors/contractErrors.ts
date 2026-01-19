@@ -125,6 +125,52 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // IStolenTransactionRegistry errors (7 additional, others shared with wallet)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  '0x3ae6ee0a': {
+    name: 'InvalidReporter',
+    message: 'Invalid reporter address provided.',
+    action: 'Please check the address and try again.',
+  },
+
+  '0x9dd854d3': {
+    name: 'InvalidMerkleRoot',
+    message: 'Invalid Merkle root provided.',
+    action: 'Please reselect your transactions and try again.',
+  },
+
+  '0xd61c47ce': {
+    name: 'InvalidTransactionCount',
+    message: 'Transaction count does not match.',
+    action: 'Please reselect your transactions and try again.',
+  },
+
+  '0x0432f01c': {
+    name: 'MerkleRootMismatch',
+    message: 'Merkle root does not match the selected transactions.',
+    action: 'Your transaction selection may have changed. Please start over.',
+  },
+
+  '0xa24a13a6': {
+    name: 'ArrayLengthMismatch',
+    message: 'Transaction data arrays have mismatched lengths.',
+    action: 'Please try again. If the issue persists, contact support.',
+  },
+
+  '0xb05e92fa': {
+    name: 'InvalidMerkleProof',
+    message: 'Merkle proof verification failed.',
+    action: 'Please reselect your transactions and try again.',
+  },
+
+  '0x5601467a': {
+    name: 'InvalidFeeConfig',
+    message: 'Invalid fee configuration.',
+    action: 'Please contact support.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // ISpokeRegistry errors (10)
   // ═══════════════════════════════════════════════════════════════════════════
 

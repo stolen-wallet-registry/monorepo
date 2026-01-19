@@ -9,7 +9,7 @@ import { SupportSoulbound } from "../src/soulbound/SupportSoulbound.sol";
 
 /// @title DeploySoulbound
 /// @notice Standalone deployment script for soulbound token contracts
-/// @dev Inherits from DeployBase to reuse MIN_DONATION and _seedLanguages
+/// @dev Inherits from DeployBase to reuse MIN_DONATION
 ///
 /// Use this script when:
 /// - Deploying soulbound contracts separately from core contracts

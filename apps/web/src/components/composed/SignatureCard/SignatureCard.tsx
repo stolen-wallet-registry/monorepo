@@ -15,6 +15,7 @@ import { SIGNATURE_TTL_MS } from '@/lib/signatures';
 import { Check, AlertCircle, Loader2, Copy, Clock } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import type { Hex } from '@/lib/types/ethereum';
+import type { RegistryType } from '@/lib/types';
 
 /** Signature session TTL in minutes (derived from single source of truth) */
 const SIGNATURE_TTL_MINUTES = SIGNATURE_TTL_MS / 60000;
@@ -41,6 +42,8 @@ export interface SignatureCardProps {
   onRetry?: () => void;
   /** Whether the sign button is disabled */
   disabled?: boolean;
+  /** Registry type context for label display */
+  registryType?: RegistryType;
   /** Additional class names */
   className?: string;
 }
@@ -66,6 +69,7 @@ export function SignatureCard({
   onSign,
   onRetry,
   disabled = false,
+  registryType = 'wallet',
   className,
 }: SignatureCardProps) {
   const { copied: signatureCopied, copy: copySignature } = useCopyToClipboard({ resetMs: 2000 });
@@ -84,7 +88,7 @@ export function SignatureCard({
   return (
     <div className={cn('space-y-4', className)}>
       {/* Data being signed */}
-      <SignatureDetails data={data} />
+      <SignatureDetails data={data} registryType={registryType} />
 
       {/* Error message */}
       {isError && (

@@ -25,14 +25,14 @@ contract Deploy is DeployBase {
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy core contracts (no cross-chain inbox)
-        (address priceFeed, address feeManager, address payable hub, address registry) =
+        (address priceFeed, address feeManager, address payable hub, address walletRegistry, address txRegistry) =
             deployCore(deployer, address(0));
 
         // Deploy Multicall3 for local chains (needed for viem/wagmi batch calls)
         address multicall3 = deployMulticall3();
 
         // Deploy soulbound contracts (fee collector = hub for unified treasury)
-        (address translations, address walletSoulbound, address supportSoulbound) = deploySoulbound(registry, hub);
+        (address translations, address walletSoulbound, address supportSoulbound) = deploySoulbound(walletRegistry, hub);
 
         vm.stopBroadcast();
 
@@ -40,7 +40,8 @@ contract Deploy is DeployBase {
         console2.log("");
         console2.log("=== DEPLOYMENT COMPLETE ===");
         console2.log("--- Core ---");
-        console2.log("StolenWalletRegistry:", registry);
+        console2.log("StolenWalletRegistry:", walletRegistry);
+        console2.log("StolenTransactionRegistry:", txRegistry);
         console2.log("FeeManager:", feeManager);
         console2.log("RegistryHub:", hub);
         console2.log("Price Feed:", priceFeed);

@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import { Script, console2 } from "forge-std/Script.sol";
 import { IMulticall3 } from "forge-std/interfaces/IMulticall3.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
+import { StolenTransactionRegistry } from "../src/registries/StolenTransactionRegistry.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { TranslationRegistry } from "../src/soulbound/TranslationRegistry.sol";
@@ -14,13 +15,17 @@ import { SupportSoulbound } from "../src/soulbound/SupportSoulbound.sol";
 /// @notice Shared deployment logic for core SWR contracts
 /// @dev Inherit from this to ensure consistent addresses across deploy scripts
 ///
-/// Nonce order (Account 0):
-///   0: MockAggregator       → 0x5FbDB2315678afecb367f032d93F642f64180aa3
-///   1: FeeManager           → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-///   2: RegistryHub          → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
-///   3: StolenWalletRegistry → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
-///   4: (setRegistry tx)
-///   5: Multicall3           → 0x9A676e781A523b5d0C0e43731313A708CB607508
+/// Core deployment nonce order (Account 0):
+///   0: MockAggregator            → 0x5FbDB2315678afecb367f032d93F642f64180aa3
+///   1: FeeManager                → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+///   2: RegistryHub               → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+///   3: StolenWalletRegistry      → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+///   4: StolenTransactionRegistry → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
+///   5: (setRegistry STOLEN_WALLET tx)
+///   6: (setRegistry STOLEN_TRANSACTION tx)
+///
+/// Additional deployments (nonces continue from 7+):
+///   See DeployCrossChain.s.sol for CrossChainInbox, Soulbound, and Multicall3 nonces.
 abstract contract DeployBase is Script {
     // ═══════════════════════════════════════════════════════════════════════════
     // BLOCK TIMING CONFIGURATION
@@ -102,10 +107,11 @@ abstract contract DeployBase is Script {
     /// @return priceFeed The price feed address (mock or Chainlink)
     /// @return feeManager The FeeManager address
     /// @return hub The RegistryHub address
-    /// @return registry The StolenWalletRegistry address
+    /// @return walletRegistry The StolenWalletRegistry address
+    /// @return txRegistry The StolenTransactionRegistry address
     function deployCore(address deployer, address crossChainInbox)
         internal
-        returns (address priceFeed, address feeManager, address payable hub, address registry)
+        returns (address priceFeed, address feeManager, address payable hub, address walletRegistry, address txRegistry)
     {
         uint256 chainId = block.chainid;
 
@@ -133,11 +139,16 @@ abstract contract DeployBase is Script {
         console2.log("RegistryHub:", hub);
 
         // nonce 3: Deploy StolenWalletRegistry (with chain-specific timing)
-        registry = address(new StolenWalletRegistry(feeManager, hub, graceBlocks, deadlineBlocks));
-        console2.log("StolenWalletRegistry:", registry);
+        walletRegistry = address(new StolenWalletRegistry(feeManager, hub, graceBlocks, deadlineBlocks));
+        console2.log("StolenWalletRegistry:", walletRegistry);
 
-        // nonce 4: Wire up hub to registry
-        hubContract.setRegistry(hubContract.STOLEN_WALLET(), registry);
+        // nonce 4: Deploy StolenTransactionRegistry (with same chain-specific timing)
+        txRegistry = address(new StolenTransactionRegistry(feeManager, hub, graceBlocks, deadlineBlocks));
+        console2.log("StolenTransactionRegistry:", txRegistry);
+
+        // nonce 5-6: Wire up hub to registries
+        hubContract.setRegistry(hubContract.STOLEN_WALLET(), walletRegistry);
+        hubContract.setRegistry(hubContract.STOLEN_TRANSACTION(), txRegistry);
     }
 
     /// @notice Canonical Multicall3 address (pre-deployed on all major chains)
@@ -145,13 +156,15 @@ abstract contract DeployBase is Script {
     address internal constant CANONICAL_MULTICALL3 = 0xcA11bde05977b3631167028862bE2a173976CA11;
 
     /// @notice Deploy Multicall3 for local chains (mainnet/testnets have it pre-deployed)
-    /// @dev Call this AFTER deployCore to maintain deterministic nonce ordering
+    /// @dev Call this AFTER deployCore to maintain deterministic nonce ordering.
+    ///      On hub chain with CrossChainInbox, this will be nonce 9.
+    ///      On spoke chain, nonce varies by deployment script.
     /// @return multicall3 The deployed Multicall3 address
     function deployMulticall3() internal returns (address multicall3) {
         // On mainnet/testnets, Multicall3 is deployed at canonical address
         // Only deploy for local chains
         if (block.chainid == 31_337 || block.chainid == 31_338) {
-            // nonce 5: Deploy Multicall3
+            // Deploy Multicall3 (nonce depends on what was deployed before)
             multicall3 = address(new Multicall3());
             console2.log("Multicall3:", multicall3);
         } else {
@@ -204,12 +217,9 @@ abstract contract DeployBase is Script {
         console2.log("Domain:", domain);
 
         // Deploy TranslationRegistry (no dependencies)
+        // Note: Languages are seeded separately via SeedLanguages.s.sol to keep addresses deterministic
         translations = address(new TranslationRegistry());
         console2.log("TranslationRegistry:", translations);
-
-        // Seed initial languages
-        _seedLanguages(TranslationRegistry(translations));
-        console2.log("Languages seeded: en, es, zh, fr, de, ja, ko, pt, ru, ar");
 
         // Deploy WalletSoulbound (gated by registry)
         walletSoulbound = address(new WalletSoulbound(registry, translations, feeCollector, domain));
@@ -218,100 +228,6 @@ abstract contract DeployBase is Script {
         // Deploy SupportSoulbound (donation-based, no gate)
         supportSoulbound = address(new SupportSoulbound(MIN_DONATION, translations, feeCollector, domain));
         console2.log("SupportSoulbound:", supportSoulbound);
-    }
-
-    /// @dev Seeds additional languages beyond the default English
-    /// @notice Subtitles shortened to ~25 chars max to fit in SVG without wrapping
-    function _seedLanguages(TranslationRegistry t) internal {
-        // Spanish
-        t.addLanguage(
-            "es",
-            "CARTERA ROBADA",
-            "Firmado como robado",
-            "Gracias por tu apoyo",
-            unicode"No envíe fondos a esta dirección",
-            "Registro de Carteras Robadas"
-        );
-
-        // Chinese (Simplified)
-        t.addLanguage(
-            "zh",
-            unicode"被盗钱包",
-            unicode"已签名为被盗",
-            unicode"感谢您的支持",
-            unicode"请勿向此地址发送资金",
-            unicode"被盗钱包登记处"
-        );
-
-        // French
-        t.addLanguage(
-            "fr",
-            unicode"PORTEFEUILLE VOLÉ",
-            unicode"Signé comme volé",
-            "Merci pour votre soutien",
-            unicode"N'envoyez pas de fonds à cette adresse",
-            "Registre des Portefeuilles Voles"
-        );
-
-        // German
-        t.addLanguage(
-            "de",
-            "GESTOHLENE WALLET",
-            "Als gestohlen signiert",
-            unicode"Danke für Ihre Unterstützung",
-            "Senden Sie keine Gelder an diese Adresse",
-            "Gestohlene Wallet Registrierung"
-        );
-
-        // Japanese
-        t.addLanguage(
-            "ja",
-            unicode"盗まれたウォレット",
-            unicode"盗難として署名済み",
-            unicode"ご支援ありがとうございます",
-            unicode"このアドレスに資金を送らないでください",
-            unicode"盗難ウォレット登録"
-        );
-
-        // Korean
-        t.addLanguage(
-            "ko",
-            unicode"도난 지갑",
-            unicode"도난으로 서명됨",
-            unicode"지원해 주셔서 감사합니다",
-            unicode"이 주소로 자금을 보내지 마세요",
-            unicode"도난 지갑 등록소"
-        );
-
-        // Portuguese
-        t.addLanguage(
-            "pt",
-            "CARTEIRA ROUBADA",
-            "Assinado como roubado",
-            "Obrigado pelo seu apoio",
-            unicode"Não envie fundos para este endereço",
-            "Registro de Carteiras Roubadas"
-        );
-
-        // Russian
-        t.addLanguage(
-            "ru",
-            unicode"УКРАДЕННЫЙ КОШЕЛЕК",
-            unicode"Подписан как украден",
-            unicode"Спасибо за вашу поддержку",
-            unicode"Не отправляйте средства на этот адрес",
-            unicode"Реестр Украденных Кошельков"
-        );
-
-        // Arabic
-        t.addLanguage(
-            "ar",
-            unicode"محفظة مسروقة",
-            unicode"موقع كمسروق",
-            unicode"شكرا لدعمكم",
-            unicode"لا ترسل أموالاً إلى هذا العنوان",
-            unicode"سجل المحافظ المسروقة"
-        );
     }
 }
 

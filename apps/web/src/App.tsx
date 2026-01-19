@@ -15,6 +15,9 @@ import {
   P2PRegistereeRegistrationPage,
   P2PRelayerRegistrationPage,
   SoulboundPage,
+  TransactionHomePage,
+  TransactionStandardRegistrationPage,
+  TransactionSelfRelayRegistrationPage,
   NotFoundPage,
 } from '@/pages';
 
@@ -25,16 +28,31 @@ function App() {
         <Layout>
           <Switch>
             <Route path="/" component={RegistrySelectionPage} />
-            <Route path="/register" component={HomePage} />
-            <Route path="/search" component={SearchPage} />
-            <Route path="/registration/standard" component={StandardRegistrationPage} />
-            <Route path="/registration/self-relay" component={SelfRelayRegistrationPage} />
-            <Route path="/registration/p2p-relay" component={P2PRoleSelectionPage} />
+            {/* Wallet registration routes */}
+            <Route path="/register/wallet" component={HomePage} />
+            <Route path="/registration/wallet/standard" component={StandardRegistrationPage} />
+            <Route path="/registration/wallet/self-relay" component={SelfRelayRegistrationPage} />
+            <Route path="/registration/wallet/p2p-relay" component={P2PRoleSelectionPage} />
             <Route
-              path="/registration/p2p-relay/registeree"
+              path="/registration/wallet/p2p-relay/registeree"
               component={P2PRegistereeRegistrationPage}
             />
-            <Route path="/registration/p2p-relay/relayer" component={P2PRelayerRegistrationPage} />
+            <Route
+              path="/registration/wallet/p2p-relay/relayer"
+              component={P2PRelayerRegistrationPage}
+            />
+            {/* Transaction registration routes */}
+            <Route path="/register/transactions" component={TransactionHomePage} />
+            <Route
+              path="/registration/transactions/standard"
+              component={TransactionStandardRegistrationPage}
+            />
+            <Route
+              path="/registration/transactions/self-relay"
+              component={TransactionSelfRelayRegistrationPage}
+            />
+            {/* Other routes */}
+            <Route path="/search" component={SearchPage} />
             <Route path="/soulbound" component={SoulboundPage} />
             <Route component={NotFoundPage} />
           </Switch>

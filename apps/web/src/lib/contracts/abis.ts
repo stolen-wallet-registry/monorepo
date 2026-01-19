@@ -7,6 +7,7 @@
 
 // Hub contracts
 export { StolenWalletRegistryABI as stolenWalletRegistryAbi } from '@swr/abis';
+export { StolenTransactionRegistryABI as stolenTransactionRegistryAbi } from '@swr/abis';
 export { FeeManagerABI as feeManagerAbi } from '@swr/abis';
 export { RegistryHubABI as registryHubAbi } from '@swr/abis';
 export { CrossChainInboxABI as crossChainInboxAbi } from '@swr/abis';

@@ -33,14 +33,20 @@ import { MockInterchainGasPaymaster } from "../test/mocks/MockInterchainGasPayma
 ///   - Account 9 (0xa0Ee...): Hyperlane infrastructure (separate nonce space)
 ///
 /// Hub deployment order (Account 0 nonces):
-///   0: MockAggregator       → 0x5FbDB2315678afecb367f032d93F642f64180aa3
-///   1: FeeManager           → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-///   2: RegistryHub          → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
-///   3: StolenWalletRegistry → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
-///   4: (setRegistry tx)
-///   5: CrossChainInbox      → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
-///   6: (setCrossChainInbox tx)
-///   7: Multicall3           → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
+///   0: MockAggregator            → 0x5FbDB2315678afecb367f032d93F642f64180aa3
+///   1: FeeManager                → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+///   2: RegistryHub               → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+///   3: StolenWalletRegistry      → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+///   4: StolenTransactionRegistry → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
+///   5-6: (setRegistry txs)
+///   7: CrossChainInbox           → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
+///   8: (setCrossChainInbox tx)
+///   9: Multicall3                → 0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
+///  10: TranslationRegistry       → 0x610178dA211FEF7D417bC0e6FeD39F05609AD788
+///  11: WalletSoulbound           → 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
+///  12: SupportSoulbound          → 0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0
+///
+/// Language seeding runs separately via SeedLanguages.s.sol (doesn't affect addresses)
 ///
 /// Spoke deployment order (Account 0 nonces):
 ///   0: MockGasPaymaster     → 0x5FbDB2315678afecb367f032d93F642f64180aa3
@@ -68,6 +74,7 @@ contract DeployCrossChain is DeployBase {
     address feeManager;
     address payable hubRegistry;
     address stolenWalletRegistry;
+    address stolenTransactionRegistry;
     address crossChainInbox;
     address hubMulticall3;
     // Soulbound addresses (Hub only)
@@ -113,7 +120,8 @@ contract DeployCrossChain is DeployBase {
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy core contracts (CrossChainInbox set to address(0) initially, updated after)
-        (priceFeed, feeManager, hubRegistry, stolenWalletRegistry) = deployCore(deployer, address(0));
+        (priceFeed, feeManager, hubRegistry, stolenWalletRegistry, stolenTransactionRegistry) =
+            deployCore(deployer, address(0));
 
         // ═══════════════════════════════════════════════════════════════════════════
         // PHASE 1b: DEPLOY CROSS-CHAIN INBOX TO HUB
@@ -122,15 +130,15 @@ contract DeployCrossChain is DeployBase {
         console2.log("");
         console2.log("--- HUB CHAIN (31337) - Cross-Chain Contracts ---");
 
-        // nonce 5: Deploy CrossChainInbox
+        // nonce 7: Deploy CrossChainInbox
         CrossChainInbox inbox = new CrossChainInbox(hubMailbox, hubRegistry, deployer);
         crossChainInbox = address(inbox);
         console2.log("CrossChainInbox:", crossChainInbox);
 
-        // nonce 6: Wire CrossChainInbox to hub
+        // nonce 8: Wire CrossChainInbox to hub
         RegistryHub(hubRegistry).setCrossChainInbox(crossChainInbox);
 
-        // nonce 7: Deploy Multicall3 for local development (viem/wagmi batch calls)
+        // nonce 9: Deploy Multicall3 for local development (viem/wagmi batch calls)
         hubMulticall3 = deployMulticall3();
 
         // nonces 8-17: Deploy soulbound contracts (fee collector = hub for unified treasury)
@@ -227,15 +235,16 @@ contract DeployCrossChain is DeployBase {
         console2.log("  Spoke Mailbox: ", spokeMailbox);
         console2.log("");
         console2.log("Hub Chain (31337) - http://localhost:8545:");
-        console2.log("  MockAggregator:       ", priceFeed);
-        console2.log("  FeeManager:           ", feeManager);
-        console2.log("  RegistryHub:          ", hubRegistry);
-        console2.log("  StolenWalletRegistry: ", stolenWalletRegistry);
-        console2.log("  CrossChainInbox:      ", crossChainInbox);
-        console2.log("  Multicall3:           ", hubMulticall3);
-        console2.log("  TranslationRegistry:  ", translationRegistry);
-        console2.log("  WalletSoulbound:      ", walletSoulbound);
-        console2.log("  SupportSoulbound:     ", supportSoulbound);
+        console2.log("  MockAggregator:            ", priceFeed);
+        console2.log("  FeeManager:                ", feeManager);
+        console2.log("  RegistryHub:               ", hubRegistry);
+        console2.log("  StolenWalletRegistry:      ", stolenWalletRegistry);
+        console2.log("  StolenTransactionRegistry: ", stolenTransactionRegistry);
+        console2.log("  CrossChainInbox:           ", crossChainInbox);
+        console2.log("  Multicall3:                ", hubMulticall3);
+        console2.log("  TranslationRegistry:       ", translationRegistry);
+        console2.log("  WalletSoulbound:           ", walletSoulbound);
+        console2.log("  SupportSoulbound:          ", supportSoulbound);
         console2.log("");
         console2.log("Spoke Chain (31338) - http://localhost:8546:");
         console2.log("  MockInterchainGasPaymaster:", spokeGasPaymaster);

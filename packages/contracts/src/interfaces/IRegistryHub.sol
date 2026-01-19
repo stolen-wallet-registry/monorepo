@@ -62,6 +62,15 @@ interface IRegistryHub {
     /// @param messageId Bridge message identifier for tracking
     event CrossChainRegistration(address indexed wallet, uint32 indexed sourceChainId, bytes32 messageId);
 
+    /// @notice Emitted when a transaction batch is registered via cross-chain message
+    /// @param reporter The reporter address who registered the batch
+    /// @param sourceChainId Source chain ID as bytes32 (CAIP-2 format, not truncated)
+    /// @param reportedChainId Reported chain ID as bytes32 (where transactions occurred)
+    /// @param messageId Bridge message identifier for tracking
+    event CrossChainBatchRegistration(
+        address indexed reporter, bytes32 indexed sourceChainId, bytes32 indexed reportedChainId, bytes32 messageId
+    );
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -96,6 +105,18 @@ interface IRegistryHub {
     /// @param wallet The address to query
     /// @return True if there is a pending acknowledgement
     function isWalletPending(address wallet) external view returns (bool);
+
+    /// @notice Check if a transaction batch is registered
+    /// @dev Delegates to StolenTransactionRegistry.isBatchRegistered()
+    /// @param batchId The batch ID to query
+    /// @return True if the batch is registered
+    function isTransactionBatchRegistered(bytes32 batchId) external view returns (bool);
+
+    /// @notice Check if a reporter has a pending transaction batch acknowledgement
+    /// @dev Delegates to StolenTransactionRegistry.isPending()
+    /// @param reporter The address to query
+    /// @return True if there is a pending acknowledgement
+    function isTransactionBatchPending(address reporter) external view returns (bool);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - Hub State
@@ -133,6 +154,32 @@ interface IRegistryHub {
     function registerFromSpoke(
         address wallet,
         uint32 sourceChainId,
+        bool isSponsored,
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    ) external;
+
+    /// @notice Register a transaction batch from a spoke chain via cross-chain message
+    /// @dev Only callable by the CrossChainInbox contract.
+    ///      Routes the registration to StolenTransactionRegistry.registerFromHub().
+    /// @param merkleRoot Root of the Merkle tree
+    /// @param reporter The address that reported the batch
+    /// @param reportedChainId CAIP-2 chain identifier where transactions occurred
+    /// @param sourceChainId Source chain CAIP-2 identifier
+    /// @param transactionCount Number of transactions in batch
+    /// @param transactionHashes Full list of tx hashes
+    /// @param chainIds CAIP-2 chainId for each txHash (parallel array)
+    /// @param isSponsored True if a third party paid gas
+    /// @param bridgeId Which bridge delivered the message
+    /// @param crossChainMessageId Bridge message ID for explorer linking
+    function registerTransactionBatchFromSpoke(
+        bytes32 merkleRoot,
+        address reporter,
+        bytes32 reportedChainId,
+        bytes32 sourceChainId,
+        uint32 transactionCount,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds,
         bool isSponsored,
         uint8 bridgeId,
         bytes32 crossChainMessageId

@@ -25,13 +25,13 @@ export function HomePage() {
     // Navigate to the appropriate registration flow
     switch (type) {
       case 'standard':
-        setLocation('/registration/standard');
+        setLocation('/registration/wallet/standard');
         break;
       case 'selfRelay':
-        setLocation('/registration/self-relay');
+        setLocation('/registration/wallet/self-relay');
         break;
       case 'p2pRelay':
-        setLocation('/registration/p2p-relay');
+        setLocation('/registration/wallet/p2p-relay');
         break;
     }
   };
