@@ -20,8 +20,9 @@ import { getNetworkOrUndefined, allNetworks } from '../networks';
  */
 const MULTICALL3_ADDRESSES: Record<number, `0x${string}`> = {
   // Local Anvil chains - deterministic cross-chain deployment addresses
-  31337: '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318', // Hub chain
-  31338: '0x0165878A594ca255338adfa4d48449f69242Eb8F', // Spoke chain
+  // See DeployCrossChain.s.sol for nonce-based address derivation
+  31337: '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318', // Hub chain (nonce 9)
+  31338: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853', // Spoke chain (nonce 7)
   // All other chains use canonical address (pre-deployed)
 };
 

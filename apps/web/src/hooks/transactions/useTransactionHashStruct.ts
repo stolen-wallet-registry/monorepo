@@ -1,5 +1,6 @@
 /**
  * Hook to read deadline and hash struct from the transaction registry contract.
+ * Supports both hub (StolenTransactionRegistry) and spoke (SpokeTransactionRegistry) chains.
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  * The transaction registry has a different generateHashStruct signature that includes
@@ -7,8 +8,8 @@
  */
 
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
-import { stolenTransactionRegistryAbi } from '@/lib/contracts/abis';
-import { getStolenTransactionRegistryAddress } from '@/lib/contracts/addresses';
+import { stolenTransactionRegistryAbi, spokeTransactionRegistryAbi } from '@/lib/contracts/abis';
+import { getTransactionRegistryAddress, isSpokeChain } from '@/lib/contracts/addresses';
 import { TX_SIGNATURE_STEP, type TxSignatureStep } from '@/lib/signatures/transactions';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -44,23 +45,29 @@ export function useTransactionHashStruct(
   step: TxSignatureStep
 ): UseTxHashStructResult {
   const chainId = useChainId();
+  const isSpoke = isSpokeChain(chainId);
 
   let contractAddress: Address | undefined;
   try {
-    contractAddress = getStolenTransactionRegistryAddress(chainId);
+    contractAddress = getTransactionRegistryAddress(chainId);
     logger.contract.debug('Transaction registry address resolved for hash struct', {
       chainId,
       contractAddress,
       step,
+      isSpoke,
     });
   } catch (error) {
     contractAddress = undefined;
     logger.contract.error('Failed to resolve transaction registry address for hash struct', {
       chainId,
       step,
+      isSpoke,
       error: error instanceof Error ? error.message : String(error),
     });
   }
+
+  // Use the correct ABI for hub vs spoke
+  const abi = isSpoke ? spokeTransactionRegistryAbi : stolenTransactionRegistryAbi;
 
   const enabled =
     !!merkleRoot &&
@@ -72,7 +79,7 @@ export function useTransactionHashStruct(
 
   const result = useReadContract({
     address: contractAddress,
-    abi: stolenTransactionRegistryAbi,
+    abi,
     chainId,
     functionName: 'generateHashStruct',
     args: enabled

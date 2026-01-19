@@ -23,7 +23,7 @@ import { areAddressesEqual } from '@/lib/address';
 import { useTransactionSelection } from '@/stores/transactionFormStore';
 import {
   useTransactionRegistration,
-  useTxQuoteFee,
+  useTxQuoteFeeBreakdown,
   useTxGasEstimate,
   type TxRegistrationParams,
 } from '@/hooks/transactions';
@@ -57,14 +57,14 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   const { submitRegistration, hash, isPending, isConfirming, isConfirmed, isError, error, reset } =
     useTransactionRegistration();
 
-  // Get registration fee
+  // Get registration fee breakdown (chain-aware: hub vs spoke)
   const {
-    feeWei,
-    data: feeData,
+    data: feeBreakdown,
+    totalWei: feeWei,
     isLoading: feeLoading,
     isError: feeError,
     refetch: refetchFee,
-  } = useTxQuoteFee(address);
+  } = useTxQuoteFeeBreakdown(address, selectedTxHashes.length);
 
   // Get ETH price for cost display
   const { data: ethPrice } = useEthPrice();
@@ -424,16 +424,24 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         signedMessage={signedMessageData}
         chainId={chainId}
         costEstimate={
-          feeData
+          feeBreakdown
             ? {
                 data: {
-                  protocolFee: {
-                    wei: feeData.feeWei,
-                    eth: feeData.feeEth,
-                    usd: feeData.feeUsd,
-                  },
-                  bridgeFee: null,
-                  bridgeName: null,
+                  protocolFee: feeBreakdown.registrationFee
+                    ? {
+                        wei: feeBreakdown.registrationFee.wei,
+                        eth: feeBreakdown.registrationFee.eth,
+                        usd: feeBreakdown.registrationFee.usd,
+                      }
+                    : { wei: 0n, eth: '0', usd: '$0.00' },
+                  bridgeFee: feeBreakdown.bridgeFee
+                    ? {
+                        wei: feeBreakdown.bridgeFee.wei,
+                        eth: feeBreakdown.bridgeFee.eth,
+                        usd: feeBreakdown.bridgeFee.usd,
+                      }
+                    : null,
+                  bridgeName: feeBreakdown.bridgeName,
                   gasCost: gasEstimate
                     ? {
                         wei: gasEstimate.gasCostWei,
@@ -449,24 +457,24 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
                       },
                   total: gasEstimate
                     ? {
-                        wei: feeData.feeWei + gasEstimate.gasCostWei,
-                        eth: formatEthConsistent(feeData.feeWei + gasEstimate.gasCostWei),
+                        wei: feeBreakdown.total.wei + gasEstimate.gasCostWei,
+                        eth: formatEthConsistent(feeBreakdown.total.wei + gasEstimate.gasCostWei),
                         usd: ethPrice?.usdCents
                           ? formatCentsToUsd(
                               Math.round(
-                                (Number(feeData.feeWei + gasEstimate.gasCostWei) / 1e18) *
+                                (Number(feeBreakdown.total.wei + gasEstimate.gasCostWei) / 1e18) *
                                   ethPrice.usdCents
                               )
                             )
                           : '—',
                       }
                     : {
-                        wei: feeData.feeWei,
-                        eth: feeData.feeEth,
-                        usd: feeData.feeUsd,
+                        wei: feeBreakdown.total.wei,
+                        eth: feeBreakdown.total.eth,
+                        usd: feeBreakdown.total.usd,
                       },
                   ethPriceUsd: ethPrice?.usdFormatted ?? '—',
-                  isCrossChain: false,
+                  isCrossChain: feeBreakdown.isCrossChain,
                 } as TransactionCost,
                 isLoading: feeLoading || gasLoading,
                 isError: feeError || gasError,

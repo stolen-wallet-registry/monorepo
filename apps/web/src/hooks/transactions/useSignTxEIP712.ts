@@ -1,5 +1,6 @@
 /**
- * Hook for signing EIP-712 typed data for the StolenTransactionRegistry.
+ * Hook for signing EIP-712 typed data for the transaction registry.
+ * Supports both hub (StolenTransactionRegistry) and spoke (SpokeTransactionRegistry) chains.
  *
  * Provides convenient wrappers around wagmi's useSignTypedData for:
  * - Acknowledgement signatures (Phase 1)
@@ -14,7 +15,7 @@ import {
   type TxAcknowledgementMessage,
   type TxRegistrationMessage,
 } from '@/lib/signatures/transactions';
-import { getStolenTransactionRegistryAddress } from '@/lib/contracts/addresses';
+import { getTransactionRegistryAddress, isSpokeChain } from '@/lib/contracts/addresses';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
@@ -52,25 +53,28 @@ export interface UseSignTxEIP712Result {
 export function useSignTxEIP712(): UseSignTxEIP712Result {
   const { address } = useAccount();
   const chainId = useChainId();
+  const isSpoke = isSpokeChain(chainId);
 
   const { signTypedDataAsync, isPending, isError, error, reset } = useSignTypedData();
 
   const contractAddress = useMemo(() => {
     try {
-      const address = getStolenTransactionRegistryAddress(chainId);
+      const address = getTransactionRegistryAddress(chainId);
       logger.signature.debug('useSignTxEIP712: Transaction registry address resolved', {
         chainId,
         contractAddress: address,
+        isSpoke,
       });
       return address;
     } catch (err) {
       logger.signature.error('useSignTxEIP712: Failed to resolve transaction registry address', {
         chainId,
+        isSpoke,
         error: err instanceof Error ? err.message : String(err),
       });
       return undefined;
     }
-  }, [chainId]);
+  }, [chainId, isSpoke]);
 
   /**
    * Validates that wallet is connected and contract is configured.

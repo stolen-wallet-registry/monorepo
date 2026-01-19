@@ -94,6 +94,7 @@ export const HUB_CROSSCHAIN_ADDRESSES = {
 //   3: MockAggregator       → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
 //   4: FeeManager           → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
 //   5: SpokeRegistry        → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
+//   6: SpokeTransactionRegistry → 0x0165878A594ca255338adfa4d48449f69242Eb8F
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -121,6 +122,10 @@ export const SPOKE_ADDRESSES = {
   },
   spokeRegistry: {
     [anvilSpoke.chainId]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
+    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  spokeTransactionRegistry: {
+    [anvilSpoke.chainId]: '0x0165878A594ca255338adfa4d48449f69242Eb8F' as Address,
     [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;
@@ -165,6 +170,11 @@ export function getBridgeAdapterAddress(
 export function getSpokeRegistryAddress(chainId: number): Address | null {
   if (!isSpokeChain(chainId)) return null;
   return getSpokeAddress('spokeRegistry', chainId);
+}
+
+export function getSpokeTransactionRegistryAddress(chainId: number): Address | null {
+  if (!isSpokeChain(chainId)) return null;
+  return getSpokeAddress('spokeTransactionRegistry', chainId);
 }
 
 export function getHyperlaneMailbox(chainId: number): Address {

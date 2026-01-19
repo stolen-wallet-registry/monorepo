@@ -1,13 +1,14 @@
 /**
  * Hook to get the registration fee for transaction batch registration.
  *
- * Calls quoteRegistration() on StolenTransactionRegistry to get the required fee.
+ * Calls quoteRegistration() on the transaction registry to get the required fee.
+ * Supports both hub (StolenTransactionRegistry) and spoke (SpokeTransactionRegistry) chains.
  */
 
 import { useMemo } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
-import { stolenTransactionRegistryAbi } from '@/lib/contracts/abis';
-import { getStolenTransactionRegistryAddress } from '@/lib/contracts/addresses';
+import { stolenTransactionRegistryAbi, spokeTransactionRegistryAbi } from '@/lib/contracts/abis';
+import { getTransactionRegistryAddress, isSpokeChain } from '@/lib/contracts/addresses';
 import { formatEthConsistent } from '@/lib/utils';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { logger } from '@/lib/logger';
@@ -42,14 +43,16 @@ export interface UseTxQuoteFeeResult {
 export function useTxQuoteFee(reporterAddress: Address | null | undefined): UseTxQuoteFeeResult {
   const chainId = useChainId();
   const { data: ethPrice } = useEthPrice();
+  const isSpoke = isSpokeChain(chainId);
 
-  // Resolve contract address
+  // Resolve contract address (spoke-aware)
   let contractAddress: Address | undefined;
   try {
-    contractAddress = getStolenTransactionRegistryAddress(chainId);
+    contractAddress = getTransactionRegistryAddress(chainId);
     logger.contract.debug('useTxQuoteFee: Registry address resolved', {
       chainId,
       contractAddress,
+      isSpoke,
     });
   } catch (error) {
     contractAddress = undefined;
@@ -62,6 +65,9 @@ export function useTxQuoteFee(reporterAddress: Address | null | undefined): UseT
   // Convert null to undefined for wagmi compatibility
   const normalizedAddress = reporterAddress ?? undefined;
 
+  // Select correct ABI based on chain type
+  const abi = isSpoke ? spokeTransactionRegistryAbi : stolenTransactionRegistryAbi;
+
   const {
     data: rawFee,
     isLoading,
@@ -70,7 +76,7 @@ export function useTxQuoteFee(reporterAddress: Address | null | undefined): UseT
     refetch,
   } = useReadContract({
     address: contractAddress,
-    abi: stolenTransactionRegistryAbi,
+    abi,
     chainId,
     functionName: 'quoteRegistration',
     args: normalizedAddress ? [normalizedAddress] : undefined,

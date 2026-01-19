@@ -141,5 +141,21 @@ export function getRegistryType(chainId: number): RegistryType {
   return isSpokeChain(chainId) ? 'spoke' : 'hub';
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// UNIFIED TRANSACTION REGISTRY ADDRESS (Hub or Spoke depending on chain)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Get the appropriate transaction registry address for the current chain.
+ * - Hub chains: returns StolenTransactionRegistry address
+ * - Spoke chains: returns SpokeTransactionRegistry address
+ */
+export function getTransactionRegistryAddress(chainId: number): Address {
+  if (isSpokeChain(chainId)) {
+    return getSpokeAddress('spokeTransactionRegistry', chainId);
+  }
+  return getStolenTransactionRegistryAddress(chainId);
+}
+
 // Re-export cross-chain helpers for convenience
 export { isSpokeChain, isHubChain } from '@swr/chains';

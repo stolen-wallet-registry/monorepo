@@ -41,7 +41,8 @@ export function DevTools() {
   // Wallet hooks for nonce display
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const publicClient = usePublicClient();
+  // CRITICAL: Must pass chainId for correct cross-chain client
+  const publicClient = usePublicClient({ chainId });
 
   // Fetch blockchain nonce
   const fetchNonce = useCallback(async () => {

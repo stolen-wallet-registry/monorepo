@@ -470,6 +470,37 @@ export const RegistryHubABI = [
   },
   {
     type: 'event',
+    name: 'CrossChainBatchRegistration',
+    inputs: [
+      {
+        name: 'reporter',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'sourceChainId',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'messageId',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'CrossChainInboxUpdated',
     inputs: [
       {

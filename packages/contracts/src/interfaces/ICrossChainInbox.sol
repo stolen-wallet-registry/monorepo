@@ -11,11 +11,20 @@ interface ICrossChainInbox {
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Emitted when a registration message is received from a spoke chain
+    /// @notice Emitted when a wallet registration message is received from a spoke chain
     /// @param sourceChain Origin chain domain ID
     /// @param wallet The wallet being registered as stolen
     /// @param messageId Bridge message identifier
     event RegistrationReceived(uint32 indexed sourceChain, address indexed wallet, bytes32 messageId);
+
+    /// @notice Emitted when a transaction batch message is received from a spoke chain
+    /// @param sourceChain Origin chain domain ID
+    /// @param reporter The reporter who submitted the batch
+    /// @param merkleRoot Merkle root of the transaction batch
+    /// @param messageId Bridge message identifier
+    event TransactionBatchReceived(
+        uint32 indexed sourceChain, address indexed reporter, bytes32 indexed merkleRoot, bytes32 messageId
+    );
 
     /// @notice Emitted when a trusted source is added or removed
     /// @param chainId Source chain domain ID
@@ -41,6 +50,9 @@ interface ICrossChainInbox {
 
     /// @notice Thrown when payload sourceChainId doesn't match Hyperlane origin domain
     error CrossChainInbox__SourceChainMismatch();
+
+    /// @notice Thrown when message type is not recognized
+    error CrossChainInbox__UnknownMessageType();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ADMIN FUNCTIONS

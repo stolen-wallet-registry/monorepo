@@ -111,24 +111,28 @@ export function CostBreakdownTable({
         </div>
       )}
 
-      {/* Network Gas - only show if gas estimate is available */}
-      {costEstimate.gasCost.wei > 0n && (
-        <div className="flex justify-between items-center text-sm">
-          <span className="text-muted-foreground flex items-center gap-1">
-            Network Gas
-            <InfoTooltip
-              content="Standard network fee paid to validators for processing your transaction on the blockchain."
-              size="sm"
-            />
-          </span>
-          <div className="text-right">
-            <span className="font-medium">{costEstimate.gasCost.usd}</span>
-            <span className="text-xs text-muted-foreground ml-2">
-              ({costEstimate.gasCost.eth} ETH)
-            </span>
-          </div>
+      {/* Network Gas - always show, display "—" if unavailable */}
+      <div className="flex justify-between items-center text-sm">
+        <span className="text-muted-foreground flex items-center gap-1">
+          Network Gas
+          <InfoTooltip
+            content="Standard network fee paid to validators for processing your transaction on the blockchain."
+            size="sm"
+          />
+        </span>
+        <div className="text-right">
+          {costEstimate.gasCost.wei > 0n ? (
+            <>
+              <span className="font-medium">{costEstimate.gasCost.usd}</span>
+              <span className="text-xs text-muted-foreground ml-2">
+                ({costEstimate.gasCost.eth} ETH)
+              </span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">Estimating...</span>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Total (if any fees besides gas) */}
       {(costEstimate.protocolFee || costEstimate.bridgeFee) && (
@@ -149,7 +153,8 @@ export function CostBreakdownTable({
       {/* Footer */}
       <div className="flex items-center justify-between pt-1">
         <p className="text-xs text-muted-foreground">
-          ETH: {costEstimate.ethPriceUsd} • Gas: {costEstimate.gasCost.gwei} gwei
+          ETH: {costEstimate.ethPriceUsd}
+          {costEstimate.gasCost.gwei !== '—' && ` • Gas: ${costEstimate.gasCost.gwei} gwei`}
         </p>
         {onRefresh && (
           <Tooltip>

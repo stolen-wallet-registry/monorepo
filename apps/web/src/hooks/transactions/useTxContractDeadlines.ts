@@ -1,13 +1,14 @@
 /**
- * Hook to read deadline data from the StolenTransactionRegistry contract.
+ * Hook to read deadline data from the transaction registry contract.
  *
+ * Supports both hub (StolenTransactionRegistry) and spoke (SpokeTransactionRegistry) chains.
  * Used to determine the grace period window for transaction batch registration.
  */
 
 import { useEffect, useRef } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
-import { stolenTransactionRegistryAbi } from '@/lib/contracts/abis';
-import { getStolenTransactionRegistryAddress } from '@/lib/contracts/addresses';
+import { stolenTransactionRegistryAbi, spokeTransactionRegistryAbi } from '@/lib/contracts/abis';
+import { getTransactionRegistryAddress, isSpokeChain } from '@/lib/contracts/addresses';
 import type { Address } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
@@ -47,13 +48,15 @@ export function useTxContractDeadlines(
   reporter: Address | undefined
 ): UseTxContractDeadlinesResult {
   const chainId = useChainId();
+  const isSpoke = isSpokeChain(chainId);
 
   let contractAddress: Address | undefined;
   try {
-    contractAddress = getStolenTransactionRegistryAddress(chainId);
+    contractAddress = getTransactionRegistryAddress(chainId);
     logger.contract.debug('Transaction registry address resolved for deadlines', {
       chainId,
       contractAddress,
+      isSpoke,
     });
   } catch (err) {
     contractAddress = undefined;
@@ -65,6 +68,9 @@ export function useTxContractDeadlines(
 
   const enabled = !!reporter && !!contractAddress;
 
+  // Select correct ABI based on chain type (hub vs spoke)
+  const abi = isSpoke ? spokeTransactionRegistryAbi : stolenTransactionRegistryAbi;
+
   // Read deadlines from contract using getDeadlines(reporter)
   const {
     data: contractData,
@@ -74,7 +80,7 @@ export function useTxContractDeadlines(
     refetch,
   } = useReadContract({
     address: contractAddress,
-    abi: stolenTransactionRegistryAbi,
+    abi,
     functionName: 'getDeadlines',
     args: reporter ? [reporter] : undefined,
     chainId,

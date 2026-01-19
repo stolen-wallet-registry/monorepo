@@ -7,6 +7,7 @@ export { StolenTransactionRegistryABI } from './StolenTransactionRegistry';
 export { FeeManagerABI } from './FeeManager';
 export { CrossChainInboxABI } from './CrossChainInbox';
 export { SpokeRegistryABI } from './SpokeRegistry';
+export { SpokeTransactionRegistryABI } from './SpokeTransactionRegistry';
 export { HyperlaneAdapterABI } from './HyperlaneAdapter';
 export { TranslationRegistryABI } from './TranslationRegistry';
 export { WalletSoulboundABI } from './WalletSoulbound';

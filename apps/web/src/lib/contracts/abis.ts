@@ -14,6 +14,7 @@ export { CrossChainInboxABI as crossChainInboxAbi } from '@swr/abis';
 
 // Spoke contracts (cross-chain)
 export { SpokeRegistryABI as spokeRegistryAbi } from '@swr/abis';
+export { SpokeTransactionRegistryABI as spokeTransactionRegistryAbi } from '@swr/abis';
 export { HyperlaneAdapterABI as hyperlaneAdapterAbi } from '@swr/abis';
 
 // Soulbound contracts

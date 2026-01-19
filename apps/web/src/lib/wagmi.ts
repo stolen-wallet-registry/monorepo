@@ -68,8 +68,9 @@ const getChains = (): readonly [Chain, ...Chain[]] => {
 const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
 
 // Build transports based on mode
+// NOTE: Batching is disabled for local Anvil chains to avoid viem parsing issues
 const getTransports = () => {
-  // Testnet mode: Base Sepolia + Optimism Sepolia
+  // Testnet mode: Base Sepolia + Optimism Sepolia (batching OK for real RPCs)
   if (isTestnetMode) {
     return {
       [baseSepolia.chainId]: http(getRpcUrl(baseSepolia.chainId)),
@@ -78,8 +79,11 @@ const getTransports = () => {
   }
 
   const hubRpc = getRpcUrl(anvilHub.chainId);
+  // Disable batching for local Anvil - causes viem to misinterpret responses
+  const localHttpOptions = { batch: false };
+
   const base = {
-    [anvilHub.chainId]: http(hubRpc),
+    [anvilHub.chainId]: http(hubRpc, localHttpOptions),
   };
 
   if (isCrossChainMode) {
@@ -89,11 +93,12 @@ const getTransports = () => {
       logger.wallet.debug('Transport RPCs configured', {
         hub: { chainId: anvilHub.chainId, rpc: hubRpc },
         spoke: { chainId: anvilSpoke.chainId, rpc: spokeRpc },
+        batchingDisabled: true,
       });
     }
     return {
       ...base,
-      [anvilSpoke.chainId]: http(spokeRpc),
+      [anvilSpoke.chainId]: http(spokeRpc, localHttpOptions),
     };
   }
 

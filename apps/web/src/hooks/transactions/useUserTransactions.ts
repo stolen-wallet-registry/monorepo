@@ -66,7 +66,8 @@ export function useUserTransactions(
   enabled: boolean = true
 ): UseUserTransactionsResult {
   const chainId = useChainId();
-  const publicClient = usePublicClient();
+  // CRITICAL: Must pass chainId to get the correct client for cross-chain support
+  const publicClient = usePublicClient({ chainId });
 
   const [transactions, setTransactions] = useState<UserTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
