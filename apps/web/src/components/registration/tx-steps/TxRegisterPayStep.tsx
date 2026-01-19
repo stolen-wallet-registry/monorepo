@@ -212,8 +212,10 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   };
 
   // Build cross-chain progress data for UI
+  // Include both 'relaying' and 'hub-timeout' so the explorer link stays visible during timeout
+  const currentStatus = getStatus();
   const crossChainProgress: CrossChainProgress | undefined =
-    isCrossChain && getStatus() === 'relaying'
+    isCrossChain && (currentStatus === 'relaying' || currentStatus === 'hub-timeout')
       ? {
           elapsedTime: crossChainConfirmation.elapsedTime,
           hubChainName: hubChainId ? getChainNameFromExplorer(hubChainId) : undefined,

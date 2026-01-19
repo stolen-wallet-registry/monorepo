@@ -25,7 +25,7 @@ import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
-import type { Hex } from '@/lib/types/ethereum';
+import type { Hex, Hash } from '@/lib/types/ethereum';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 export interface TxRegisterSignStepProps {
@@ -162,10 +162,12 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
     }
 
     // Require fresh deadline - do not fall back to stale hashStructData
-    if (!Array.isArray(rawData) || typeof rawData[0] !== 'bigint') {
+    // Contract returns tuple [deadline: bigint, hashStruct: Hash] - validate structure
+    if (!Array.isArray(rawData) || rawData.length < 2 || typeof rawData[0] !== 'bigint') {
       logger.signature.error('Failed to get fresh hash struct data', {
         hasData: !!rawData,
         dataType: Array.isArray(rawData) ? 'array' : typeof rawData,
+        arrayLength: Array.isArray(rawData) ? rawData.length : 0,
         hashStructStatus: hashStructResult.status,
       });
       setSignatureError('Failed to load fresh signing data. Please try again.');
@@ -173,7 +175,8 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
       return;
     }
 
-    const freshDeadline = rawData[0];
+    // Explicit tuple destructuring for clarity and type safety
+    const [freshDeadline] = rawData as [bigint, Hash];
 
     logger.contract.debug('Fresh registration data fetched', {
       freshNonce: freshNonce.toString(),

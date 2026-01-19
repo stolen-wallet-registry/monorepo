@@ -119,8 +119,10 @@ export function useTxCrossChainConfirmation({
     hubRegistryAddress = undefined;
   }
 
-  // Determine if we should be actively polling
-  const shouldPoll = enabled && elapsedTime >= INITIAL_DELAY;
+  // Determine if we should be actively auto-polling
+  // Stop auto-polling once max time exceeded to avoid unnecessary network requests
+  // Manual refetch() still works after timeout for user-initiated retries
+  const shouldPoll = enabled && elapsedTime >= INITIAL_DELAY && elapsedTime < maxPollingTime;
 
   // Query hub chain for transaction batch registration status using computed batchId
   const {
@@ -134,7 +136,9 @@ export function useTxCrossChainConfirmation({
     args: batchId ? [batchId] : undefined,
     chainId: hubChainId,
     query: {
+      // Keep enabled independent of shouldPoll so manual refetch() works after timeout
       enabled: enabled && !!batchId && !!hubChainId && !!hubRegistryAddress,
+      // Auto-polling stops after timeout, but manual refresh still works
       refetchInterval: shouldPoll ? pollInterval : false,
       staleTime: 1000, // Consider data stale after 1 second
     },

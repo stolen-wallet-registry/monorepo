@@ -466,4 +466,70 @@ contract SpokeTransactionRegistryTest is Test {
         assertGt(largeFee, 0, "Large fee should be non-zero");
         assertGe(largeFee, smallFee, "Large fee should be >= small fee");
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // END-TO-END TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Complete happy-path test: acknowledge → grace period → register → verify cross-chain message
+    /// @dev Validates the full two-phase registration flow and state cleanup
+    function test_EndToEnd_SuccessfulRegistration() public {
+        // Phase 1: Acknowledgement
+        uint256 ackDeadline = block.timestamp + 1 hours;
+        uint256 ackNonce = registry.nonces(reporter);
+        (uint8 v1, bytes32 r1, bytes32 s1) =
+            _signAck(merkleRoot, reportedChainId, uint32(transactionHashes.length), forwarder, ackNonce, ackDeadline);
+
+        vm.prank(forwarder);
+        registry.acknowledge(
+            merkleRoot,
+            reportedChainId,
+            uint32(transactionHashes.length),
+            transactionHashes,
+            chainIds,
+            reporter,
+            ackDeadline,
+            v1,
+            r1,
+            s1
+        );
+
+        // Verify acknowledgement state
+        assertTrue(registry.isPending(reporter), "Should have pending acknowledgement");
+        assertEq(registry.nonces(reporter), ackNonce + 1, "Nonce should increment after ack");
+
+        ISpokeTransactionRegistry.AcknowledgementData memory ack = registry.getAcknowledgement(reporter);
+        assertEq(ack.trustedForwarder, forwarder, "Forwarder should match");
+        assertEq(ack.pendingMerkleRoot, merkleRoot, "Merkle root should match");
+        assertEq(ack.pendingTxCount, uint32(transactionHashes.length), "Tx count should match");
+
+        // Phase 2: Wait for grace period
+        _skipToWindow(reporter);
+
+        // Phase 3: Registration
+        uint256 regDeadline = block.timestamp + 1 hours;
+        uint256 regNonce = registry.nonces(reporter);
+        (uint8 v2, bytes32 r2, bytes32 s2) = _signReg(merkleRoot, reportedChainId, forwarder, regNonce, regDeadline);
+
+        uint256 fee = registry.quoteRegistration(uint32(transactionHashes.length));
+        assertGt(fee, 0, "Fee should be non-zero");
+
+        // Execute registration
+        vm.prank(forwarder);
+        registry.register{ value: fee }(
+            merkleRoot, reportedChainId, transactionHashes, chainIds, reporter, regDeadline, v2, r2, s2
+        );
+
+        // Verify post-registration state
+        assertFalse(registry.isPending(reporter), "Should clear pending state after registration");
+        assertEq(registry.nonces(reporter), regNonce + 1, "Nonce should increment after registration");
+
+        // Verify acknowledgement data was cleaned up
+        ISpokeTransactionRegistry.AcknowledgementData memory clearedAck = registry.getAcknowledgement(reporter);
+        assertEq(clearedAck.trustedForwarder, address(0), "Forwarder should be cleared");
+        assertEq(clearedAck.pendingMerkleRoot, bytes32(0), "Merkle root should be cleared");
+
+        // Verify cross-chain message was dispatched (check mailbox received message)
+        assertGt(mailbox.messageCount(), 0, "Mailbox should have dispatched a message");
+    }
 }

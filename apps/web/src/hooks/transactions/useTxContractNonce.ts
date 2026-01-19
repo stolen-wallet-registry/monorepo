@@ -3,6 +3,7 @@
  * Supports both hub (StolenTransactionRegistry) and spoke (SpokeTransactionRegistry) chains.
  */
 
+import { useEffect } from 'react';
 import { useChainId, useReadContract } from 'wagmi';
 import type { QueryObserverResult } from '@tanstack/react-query';
 import { stolenTransactionRegistryAbi, spokeTransactionRegistryAbi } from '@/lib/contracts/abis';
@@ -69,12 +70,15 @@ export function useTxContractNonce(address: Address | undefined): UseTxContractN
     },
   });
 
-  if (nonce !== undefined) {
-    logger.contract.debug('Transaction registry nonce read', {
-      address,
-      nonce: nonce.toString(),
-    });
-  }
+  // Log nonce changes in useEffect to avoid logging on every render
+  useEffect(() => {
+    if (nonce !== undefined) {
+      logger.contract.debug('Transaction registry nonce read', {
+        address,
+        nonce: nonce.toString(),
+      });
+    }
+  }, [nonce, address]);
 
   return {
     nonce: nonce as bigint | undefined,

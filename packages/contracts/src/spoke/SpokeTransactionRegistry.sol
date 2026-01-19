@@ -582,6 +582,7 @@ contract SpokeTransactionRegistry is ISpokeTransactionRegistry, EIP712, Ownable2
     /// @param amount Amount to withdraw
     function withdrawFees(address to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert SpokeTransactionRegistry__ZeroAddress();
+        if (amount > address(this).balance) revert SpokeTransactionRegistry__WithdrawalFailed();
         (bool success,) = to.call{ value: amount }("");
         if (!success) revert SpokeTransactionRegistry__WithdrawalFailed();
     }
