@@ -165,26 +165,35 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
       });
 
-      // Store signature
-      storeTxSignature({
-        signature: sig,
-        deadline: freshDeadline,
-        nonce,
-        merkleRoot,
-        reportedChainId: reportedChainIdHash,
-        transactionCount: selectedTxHashes.length,
-        reporter: address,
-        forwarder: forwarderAddress,
-        chainId,
-        step: TX_SIGNATURE_STEP.ACKNOWLEDGEMENT,
-        storedAt: Date.now(),
-      });
-      logger.signature.debug(
-        'Transaction batch acknowledgement signature stored in sessionStorage'
-      );
-
+      // Set signature state first so UI reflects success even if storage fails.
       setSignature(sig);
       setSignatureStatus('success');
+
+      // Store signature without letting storage failure discard the signature.
+      try {
+        storeTxSignature({
+          signature: sig,
+          deadline: freshDeadline,
+          nonce,
+          merkleRoot,
+          reportedChainId: reportedChainIdHash,
+          transactionCount: selectedTxHashes.length,
+          reporter: address,
+          forwarder: forwarderAddress,
+          chainId,
+          step: TX_SIGNATURE_STEP.ACKNOWLEDGEMENT,
+          storedAt: Date.now(),
+        });
+        logger.signature.debug(
+          'Transaction batch acknowledgement signature stored in sessionStorage'
+        );
+      } catch (storageErr) {
+        logger.signature.error(
+          'Failed to store signature in sessionStorage',
+          { error: storageErr instanceof Error ? storageErr.message : String(storageErr) },
+          storageErr instanceof Error ? storageErr : undefined
+        );
+      }
 
       logger.registration.info(
         'Transaction batch acknowledgement signing complete, advancing to next step'

@@ -182,16 +182,30 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
     }
   };
 
-  // Refetch tokens after successful mint to get the new token ID
-  // Small delay ensures the blockchain has indexed the new token
+  // Refetch tokens after successful mint to get the new token ID.
+  // Poll briefly to handle slow indexing and stop when the token shows up or attempts cap out.
   useEffect(() => {
-    if (isConfirmed) {
-      const timer = setTimeout(() => {
-        refetchTokens();
-      }, 1000);
-      return () => clearTimeout(timer);
+    if (!isConfirmed || latestTokenId !== null) {
+      return;
     }
-  }, [isConfirmed, refetchTokens]);
+
+    const maxAttempts = 10;
+    const intervalMs = 500;
+    let attempts = 0;
+
+    refetchTokens();
+
+    const intervalId = setInterval(() => {
+      attempts += 1;
+      refetchTokens();
+
+      if (latestTokenId !== null || attempts >= maxAttempts) {
+        clearInterval(intervalId);
+      }
+    }, intervalMs);
+
+    return () => clearInterval(intervalId);
+  }, [isConfirmed, latestTokenId, refetchTokens]);
 
   // Success state
   if (isConfirmed && hash) {

@@ -226,6 +226,8 @@ export function TransactionStandardRegistrationPage() {
     : 'Follow the steps in the sidebar to complete your registration.';
   const currentTooltip = step ? STEP_TOOLTIPS[step] : undefined;
 
+  // SECURITY REVIEW REQUIRED: Do not modify the two-phase EIP-712 flow (acknowledge → grace → register)
+  // without explicit security review.
   // Render step content based on current step
   const renderStepContent = () => {
     switch (step) {

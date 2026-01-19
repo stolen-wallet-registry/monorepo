@@ -44,6 +44,8 @@ export function TxSuccessStep() {
   const { selectedTxHashes, selectedTxDetails, merkleRoot, reportedChainId } =
     useTransactionSelection();
   const formStore = useTransactionFormStore();
+  const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : null;
+  const reportedChainIdString = reportedChainId ? chainIdToCAIP2String(reportedChainId) : null;
 
   /**
    * Reset all state and go home.
@@ -139,24 +141,18 @@ export function TxSuccessStep() {
                   </span>
                   <span className="font-mono font-medium">
                     {getChainName(reportedChainId)}{' '}
-                    <span className="text-muted-foreground text-xs">
-                      ({chainIdToCAIP2String(reportedChainId)})
-                    </span>
+                    <span className="text-muted-foreground text-xs">({reportedChainIdString})</span>
                   </span>
                 </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <code className="font-mono text-xs text-muted-foreground break-all cursor-default">
-                      {chainIdToCAIP2(reportedChainId)}
+                      {reportedChainIdHash}
                     </code>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-md">
-                    <p className="text-xs">
-                      keccak256 hash of "{chainIdToCAIP2String(reportedChainId)}"
-                    </p>
-                    <p className="text-xs font-mono break-all mt-1">
-                      {chainIdToCAIP2(reportedChainId)}
-                    </p>
+                    <p className="text-xs">keccak256 hash of "{reportedChainIdString}"</p>
+                    <p className="text-xs font-mono break-all mt-1">{reportedChainIdHash}</p>
                   </TooltipContent>
                 </Tooltip>
               </div>

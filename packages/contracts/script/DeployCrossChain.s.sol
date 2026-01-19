@@ -130,15 +130,15 @@ contract DeployCrossChain is DeployBase {
         console2.log("");
         console2.log("--- HUB CHAIN (31337) - Cross-Chain Contracts ---");
 
-        // nonce 5: Deploy CrossChainInbox
+        // nonce 7: Deploy CrossChainInbox
         CrossChainInbox inbox = new CrossChainInbox(hubMailbox, hubRegistry, deployer);
         crossChainInbox = address(inbox);
         console2.log("CrossChainInbox:", crossChainInbox);
 
-        // nonce 6: Wire CrossChainInbox to hub
+        // nonce 8: Wire CrossChainInbox to hub
         RegistryHub(hubRegistry).setCrossChainInbox(crossChainInbox);
 
-        // nonce 7: Deploy Multicall3 for local development (viem/wagmi batch calls)
+        // nonce 9: Deploy Multicall3 for local development (viem/wagmi batch calls)
         hubMulticall3 = deployMulticall3();
 
         // nonces 8-17: Deploy soulbound contracts (fee collector = hub for unified treasury)

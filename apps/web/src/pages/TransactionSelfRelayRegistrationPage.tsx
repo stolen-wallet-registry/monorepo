@@ -48,6 +48,7 @@ import {
   useTransactionRegistrationFlow,
   useTransactionRegistrationType,
   getTxNextStep,
+  TX_STEP_SEQUENCES,
   type TransactionRegistrationStep,
 } from '@/stores/transactionRegistrationStore';
 import type { Hash } from '@/lib/types/ethereum';
@@ -144,19 +145,17 @@ export function TransactionSelfRelayRegistrationPage() {
 
   const merkleTree = useMerkleTree(transactionLeaves);
 
-  // Initialize registration type on mount
+  // Initialize registration type on mount and normalize step for self-relay flow.
   useEffect(() => {
     if (registrationType !== 'selfRelay') {
       setRegistrationType('selfRelay');
     }
-  }, [registrationType, setRegistrationType]);
 
-  // Set initial step if null
-  useEffect(() => {
-    if (step === null) {
+    const allowedSteps = TX_STEP_SEQUENCES.selfRelay;
+    if (step === null || !allowedSteps.includes(step)) {
       setStep('select-transactions');
     }
-  }, [step, setStep]);
+  }, [registrationType, setRegistrationType, step, setStep]);
 
   // Update form state when merkle tree changes
   useEffect(() => {
