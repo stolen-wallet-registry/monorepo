@@ -36,6 +36,7 @@ export {
 } from './RegistrySearch';
 export { ConnectedWalletStatus, type ConnectedWalletStatusProps } from './ConnectedWalletStatus';
 export { ChainIndicator, type ChainIndicatorProps } from './ChainIndicator';
+export { ChainIcon, type ChainIconProps, type ChainIconSize } from './ChainIcon';
 
 // Transaction components
 export { TransactionSelector, type TransactionSelectorProps } from './TransactionSelector';

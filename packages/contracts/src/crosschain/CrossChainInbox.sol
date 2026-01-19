@@ -5,6 +5,7 @@ import { ICrossChainInbox } from "../interfaces/ICrossChainInbox.sol";
 import { IRegistryHub } from "../interfaces/IRegistryHub.sol";
 import { IMessageRecipient } from "@hyperlane-xyz/core/contracts/interfaces/IMessageRecipient.sol";
 import { CrossChainMessage } from "../libraries/CrossChainMessage.sol";
+import { CAIP2 } from "../libraries/CAIP2.sol";
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 /// @title CrossChainInbox
@@ -121,6 +122,13 @@ contract CrossChainInbox is IMessageRecipient, ICrossChainInbox, Ownable2Step {
         // Decode the transaction batch payload
         CrossChainMessage.TransactionBatchPayload memory payload =
             CrossChainMessage.decodeTransactionBatch(_messageBody);
+
+        // Defense in depth: verify payload sourceChainId matches Hyperlane origin
+        // Convert _origin (EIP-155) to CAIP-2 bytes32 format for comparison
+        bytes32 expectedSourceChainId = CAIP2.fromEIP155(uint256(_origin));
+        if (payload.sourceChainId != expectedSourceChainId) {
+            revert CrossChainInbox__SourceChainMismatch();
+        }
 
         // Forward to RegistryHub with full batch data
         IRegistryHub(registryHub)

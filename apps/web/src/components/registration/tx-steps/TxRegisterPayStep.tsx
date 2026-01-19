@@ -2,10 +2,11 @@
  * Transaction batch registration payment step.
  *
  * Submits the registration transaction using the stored signature.
+ * For spoke chains, waits for cross-chain confirmation on the hub.
  */
 
 import { useEffect, useState } from 'react';
-import { useAccount, useChainId } from 'wagmi';
+import { useAccount, useChainId, useWaitForTransactionReceipt } from 'wagmi';
 
 import { Alert, AlertDescription, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
@@ -13,6 +14,7 @@ import {
   TransactionCard,
   type TransactionStatus,
   type SignedMessageData,
+  type CrossChainProgress,
 } from '@/components/composed/TransactionCard';
 import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import type { TransactionCost } from '@/hooks/useTransactionCost';
@@ -25,13 +27,21 @@ import {
   useTransactionRegistration,
   useTxQuoteFeeBreakdown,
   useTxGasEstimate,
+  useTxCrossChainConfirmation,
+  needsTxCrossChainConfirmation,
   type TxRegistrationParams,
 } from '@/hooks/transactions';
 import { getTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
 import { parseSignature } from '@/lib/signatures';
 import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
+import { getHubChainId } from '@/lib/chains/config';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
-import { getExplorerTxUrl } from '@/lib/explorer';
+import {
+  getExplorerTxUrl,
+  getChainName as getChainNameFromExplorer,
+  getBridgeMessageByIdUrl,
+} from '@/lib/explorer';
+import { extractBridgeMessageId } from '@/lib/bridge/messageId';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage, formatEthConsistent, formatCentsToUsd } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -47,7 +57,8 @@ export interface TxRegisterPayStepProps {
 export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
-  const { registrationType, setRegistrationHash } = useTransactionRegistrationStore();
+  const { registrationType, bridgeMessageId, setRegistrationHash, setBridgeMessageId } =
+    useTransactionRegistrationStore();
   const { selectedTxHashes, selectedTxDetails, reportedChainId, merkleRoot } =
     useTransactionSelection();
 
@@ -56,6 +67,16 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   // Contract hooks
   const { submitRegistration, hash, isPending, isConfirming, isConfirmed, isError, error, reset } =
     useTransactionRegistration();
+
+  // Get transaction receipt for bridge message ID extraction
+  const { data: receipt } = useWaitForTransactionReceipt({
+    hash,
+    query: { enabled: !!hash },
+  });
+
+  // Check if this is a cross-chain registration (spoke → hub)
+  const isCrossChain = needsTxCrossChainConfirmation(chainId);
+  const hubChainId = getHubChainId(chainId);
 
   // Get registration fee breakdown (chain-aware: hub vs spoke)
   const {
@@ -133,8 +154,56 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       !!storedSignatureState && !!merkleRoot && !!reportedChainIdHash && feeWei !== undefined,
   });
 
+  // Cross-chain confirmation - polls hub chain after spoke tx confirms
+  // Must pass reporter and reportedChainId to compute the correct batchId
+  const crossChainConfirmation = useTxCrossChainConfirmation({
+    merkleRoot: merkleRoot ?? undefined,
+    reporter: storedSignatureState?.reporter,
+    reportedChainId: reportedChainIdHash,
+    spokeChainId: chainId,
+    enabled:
+      isCrossChain &&
+      isConfirmed &&
+      !!merkleRoot &&
+      !!storedSignatureState?.reporter &&
+      !!reportedChainIdHash,
+    pollInterval: 3000,
+    maxPollingTime: 120000, // 2 minutes
+  });
+
+  // Extract bridge message ID from receipt logs (for cross-chain explorer links)
+  useEffect(() => {
+    if (!isCrossChain || !receipt?.logs) return;
+
+    const extractMessage = async () => {
+      const messageId = await extractBridgeMessageId(receipt.logs);
+      if (messageId) {
+        logger.registration.info('Stored bridge message ID for explorer link', { messageId });
+        setBridgeMessageId(messageId);
+      } else {
+        logger.registration.debug('Could not extract bridge message ID from receipt', {
+          logCount: receipt.logs.length,
+        });
+      }
+    };
+    void extractMessage();
+  }, [isCrossChain, receipt, setBridgeMessageId]);
+
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
+    // Cross-chain states
+    if (isCrossChain && isConfirmed) {
+      if (crossChainConfirmation.status === 'confirmed') return 'hub-confirmed';
+      if (
+        crossChainConfirmation.status === 'polling' ||
+        crossChainConfirmation.status === 'waiting'
+      ) {
+        return 'relaying';
+      }
+      // timeout - show warning state, don't auto-advance
+      if (crossChainConfirmation.status === 'timeout') return 'hub-timeout';
+    }
+    // Local states
     if (isConfirmed) return 'confirmed';
     if (isConfirming) return 'pending';
     if (isPending || isSubmitting) return 'submitting';
@@ -142,9 +211,60 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     return 'idle';
   };
 
+  // Build cross-chain progress data for UI
+  const crossChainProgress: CrossChainProgress | undefined =
+    isCrossChain && getStatus() === 'relaying'
+      ? {
+          elapsedTime: crossChainConfirmation.elapsedTime,
+          hubChainName: hubChainId ? getChainNameFromExplorer(hubChainId) : undefined,
+          bridgeName: feeBreakdown?.bridgeName ?? 'Hyperlane',
+          messageId: bridgeMessageId ?? undefined,
+          explorerUrl: bridgeMessageId ? getBridgeMessageByIdUrl(bridgeMessageId) : null,
+        }
+      : undefined;
+
   // Handle confirmed transaction
   useEffect(() => {
-    if (isConfirmed && hash) {
+    // For cross-chain: wait for hub confirmation
+    if (isCrossChain && isConfirmed && hash) {
+      logger.contract.info('Transaction batch registration confirmed on spoke chain', {
+        hash,
+        merkleRoot,
+        transactionCount: selectedTxHashes.length,
+        isCrossChain: true,
+      });
+      setRegistrationHash(hash, chainId);
+
+      // Wait for hub confirmation before completing
+      if (crossChainConfirmation.status === 'confirmed') {
+        logger.registration.info('Cross-chain tx batch registration confirmed on hub!', {
+          merkleRoot,
+          transactionCount: selectedTxHashes.length,
+          transactionHash: hash,
+          elapsedTime: crossChainConfirmation.elapsedTime,
+        });
+        const timerId = window.setTimeout(onComplete, 1500);
+        return () => clearTimeout(timerId);
+      }
+
+      // Handle timeout - show warning state, don't auto-advance
+      // User must click "Continue Anyway" to proceed
+      if (crossChainConfirmation.status === 'timeout') {
+        logger.registration.warn('Cross-chain tx batch confirmation timed out', {
+          merkleRoot,
+          transactionCount: selectedTxHashes.length,
+          transactionHash: hash,
+          elapsedTime: crossChainConfirmation.elapsedTime,
+        });
+        // Don't auto-advance - user must click "Continue Anyway"
+        return;
+      }
+
+      return; // Still waiting for hub confirmation
+    }
+
+    // For local (hub chain): complete immediately
+    if (!isCrossChain && isConfirmed && hash) {
       logger.contract.info('Transaction batch registration transaction confirmed', {
         hash,
         merkleRoot,
@@ -159,10 +279,13 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
           transactionHash: hash,
         }
       );
-      // Advance to success step after delay
-      const timerId = setTimeout(onComplete, 1500);
+      const timerId = window.setTimeout(onComplete, 1500);
       return () => clearTimeout(timerId);
     }
+    // NOTE: crossChainConfirmation.elapsedTime intentionally excluded - it updates
+    // every second and would cause this effect to re-run, canceling the setTimeout
+    // before onComplete fires. Only status changes matter for completion logic.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isConfirmed,
     hash,
@@ -171,6 +294,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     onComplete,
     merkleRoot,
     selectedTxHashes.length,
+    isCrossChain,
+    crossChainConfirmation.status,
   ]);
 
   /**
@@ -267,6 +392,20 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   const handleRetry = () => {
     reset();
     setLocalError(null);
+  };
+
+  /**
+   * Handle "Continue Anyway" after cross-chain timeout.
+   * User acknowledges the timeout and proceeds to success screen.
+   */
+  const handleContinueAnyway = () => {
+    logger.registration.info('User clicked Continue Anyway after cross-chain timeout', {
+      merkleRoot,
+      transactionCount: selectedTxHashes.length,
+      transactionHash: hash,
+      elapsedTime: crossChainConfirmation.elapsedTime,
+    });
+    onComplete();
   };
 
   // Not connected
@@ -423,6 +562,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         explorerUrl={explorerUrl}
         signedMessage={signedMessageData}
         chainId={chainId}
+        crossChainProgress={crossChainProgress}
         costEstimate={
           feeBreakdown
             ? {
@@ -487,6 +627,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         }
         onSubmit={handleSubmit}
         onRetry={handleRetry}
+        onContinueAnyway={handleContinueAnyway}
         disabled={!isCorrectWallet}
       />
 

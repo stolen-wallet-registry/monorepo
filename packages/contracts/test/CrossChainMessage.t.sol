@@ -382,6 +382,35 @@ contract CrossChainMessageTest is Test {
         decoder.decodeBatch(truncated);
     }
 
+    function test_DecodeTransactionBatch_BatchSizeMismatch_Reverts() public {
+        // Decode should reject payloads where transactionCount doesn't match array lengths.
+        // Create arrays with 2 elements but set transactionCount to 3
+        bytes32[] memory txHashes = new bytes32[](2);
+        bytes32[] memory chainIdArray = new bytes32[](2);
+        txHashes[0] = keccak256("tx0");
+        txHashes[1] = keccak256("tx1");
+        chainIdArray[0] = keccak256("eip155:1");
+        chainIdArray[1] = keccak256("eip155:1");
+
+        bytes memory mismatchedPayload = abi.encode(
+            CrossChainMessage.MESSAGE_VERSION,
+            CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH,
+            bytes32(0), // merkleRoot
+            address(0x1234), // reporter
+            keccak256("eip155:1"), // reportedChainId
+            keccak256("eip155:31338"), // sourceChainId
+            uint32(3), // transactionCount (mismatched - arrays have 2 elements)
+            false, // isSponsored
+            uint256(0), // nonce
+            uint64(block.timestamp), // timestamp
+            txHashes,
+            chainIdArray
+        );
+
+        vm.expectRevert(CrossChainMessage.CrossChainMessage__BatchSizeMismatch.selector);
+        decoder.decodeBatch(mismatchedPayload);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MESSAGE TYPE ROUTING TESTS
     // ═══════════════════════════════════════════════════════════════════════════

@@ -12,17 +12,20 @@ interface ISpokeTransactionRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Data stored for a pending acknowledgement
+    /// @dev Struct is packed for gas efficiency: address (20) + uint32 (4) fit in one slot
     /// @param trustedForwarder Address authorized to complete the registration
+    /// @param pendingTxCount Number of transactions in the batch
     /// @param pendingMerkleRoot Merkle root of the batch being registered
     /// @param pendingReportedChainId CAIP-2 chain ID where transactions occurred
-    /// @param pendingTxCount Number of transactions in the batch
     /// @param startBlock Block number when grace period ends
     /// @param expiryBlock Block number when registration window closes
     struct AcknowledgementData {
+        // Slot 1: address (20 bytes) + uint32 (4 bytes) = 24 bytes
         address trustedForwarder;
+        uint32 pendingTxCount;
+        // Slot 2-5: 32-byte values
         bytes32 pendingMerkleRoot;
         bytes32 pendingReportedChainId;
-        uint32 pendingTxCount;
         uint256 startBlock;
         uint256 expiryBlock;
     }
@@ -144,11 +147,18 @@ interface ISpokeTransactionRegistry {
 
     /// @notice Phase 1: Acknowledge intent to register transaction batch (starts grace period)
     /// @dev Creates trusted forwarder relationship and validates batch data.
+    ///
+    ///      CAIP-2 Encoding Note:
+    ///      - reportedChainId and chainIds are bytes32 keccak256 hashes of CAIP-2 strings
+    ///      - Example: keccak256("eip155:1") for Ethereum mainnet
+    ///      - This matches the EIP-712 typed data format used in signatures
+    ///      - Off-chain signers/indexers should use: keccak256(abi.encodePacked(caip2String))
+    ///
     /// @param merkleRoot Root of the Merkle tree (leaf = keccak256(txHash || chainId))
-    /// @param reportedChainId CAIP-2 chain ID where transactions occurred
+    /// @param reportedChainId keccak256 hash of CAIP-2 chain ID where transactions occurred
     /// @param transactionCount Number of transactions in the batch
     /// @param transactionHashes Full list of transaction hashes
-    /// @param chainIds Parallel array of CAIP-2 chain IDs per transaction
+    /// @param chainIds Parallel array of keccak256 hashes of CAIP-2 chain IDs per transaction
     /// @param reporter Address of the reporter (must sign the acknowledgement)
     /// @param deadline EIP-712 signature deadline (timestamp)
     /// @param v Signature component

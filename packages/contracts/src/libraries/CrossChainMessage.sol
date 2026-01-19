@@ -43,15 +43,20 @@ library CrossChainMessage {
     /// @notice Cross-chain transaction batch payload sent from spoke to hub
     /// @dev Includes full transaction hashes and chain IDs for hub-side event emission.
     ///      All batch data is forwarded to enable single-indexer architecture on hub.
+    ///      Struct is packed for gas efficiency: address (20) + uint32 (4) + uint64 (8) = 32 bytes
     struct TransactionBatchPayload {
+        // Slot 1-4: 32-byte values grouped together
         bytes32 merkleRoot; // Root of the Merkle tree (leaf = keccak256(txHash || chainId))
-        address reporter; // Address that submitted the registration
         bytes32 reportedChainId; // CAIP-2 chain ID where transactions occurred
         bytes32 sourceChainId; // CAIP-2 chain ID where registration was submitted
-        uint32 transactionCount; // Number of transactions in the batch
-        bool isSponsored; // True if third party paid gas
         uint256 nonce; // Registration nonce (for replay protection)
+        // Slot 5: address (20) + uint32 (4) + uint64 (8) = 32 bytes exactly
+        address reporter; // Address that submitted the registration
+        uint32 transactionCount; // Number of transactions in the batch
         uint64 timestamp; // Block timestamp on spoke
+        // Slot 6: bool (1 byte)
+        bool isSponsored; // True if third party paid gas
+        // Slots 7-8: dynamic array pointers
         bytes32[] transactionHashes; // Full list of transaction hashes
         bytes32[] chainIds; // Parallel array of CAIP-2 chain IDs per transaction
     }
@@ -68,6 +73,9 @@ library CrossChainMessage {
 
     /// @notice Thrown when message data is too short (must be at least 256 bytes)
     error CrossChainMessage__InvalidMessageLength();
+
+    /// @notice Thrown when transactionCount doesn't match array lengths
+    error CrossChainMessage__BatchSizeMismatch();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ENCODING
@@ -178,6 +186,11 @@ library CrossChainMessage {
         // Validate header
         if (version != MESSAGE_VERSION) revert CrossChainMessage__UnsupportedVersion();
         if (msgType != MSG_TYPE_TRANSACTION_BATCH) revert CrossChainMessage__InvalidMessageType();
+
+        // Validate batch size consistency to prevent corrupted state/events
+        if (transactionCount != transactionHashes.length || transactionCount != chainIds.length) {
+            revert CrossChainMessage__BatchSizeMismatch();
+        }
 
         // Build payload struct
         payload = TransactionBatchPayload({

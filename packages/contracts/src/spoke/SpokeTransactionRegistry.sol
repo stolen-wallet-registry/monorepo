@@ -273,6 +273,7 @@ contract SpokeTransactionRegistry is ISpokeTransactionRegistry, EIP712, Ownable2
         // Validate inputs
         if (params.reporter == address(0)) revert SpokeTransactionRegistry__InvalidReporter();
         if (hubInbox == bytes32(0)) revert SpokeTransactionRegistry__HubNotConfigured();
+        if (hubChainId == 0) revert SpokeTransactionRegistry__HubNotConfigured();
         if (params.deadline <= block.timestamp) revert SpokeTransactionRegistry__SignatureExpired();
         if (params.transactionHashes.length != params.chainIds.length) {
             revert SpokeTransactionRegistry__ArrayLengthMismatch();

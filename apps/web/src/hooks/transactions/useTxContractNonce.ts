@@ -4,6 +4,7 @@
  */
 
 import { useChainId, useReadContract } from 'wagmi';
+import type { QueryObserverResult } from '@tanstack/react-query';
 import { stolenTransactionRegistryAbi, spokeTransactionRegistryAbi } from '@/lib/contracts/abis';
 import { getTransactionRegistryAddress, isSpokeChain } from '@/lib/contracts/addresses';
 import type { Address } from '@/lib/types/ethereum';
@@ -14,7 +15,7 @@ export interface UseTxContractNonceResult {
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
-  refetch: () => void;
+  refetch: () => Promise<QueryObserverResult<bigint, Error>>;
 }
 
 /**
@@ -80,8 +81,7 @@ export function useTxContractNonce(address: Address | undefined): UseTxContractN
     isLoading,
     isError,
     error: error as Error | null,
-    refetch: () => {
-      refetch();
-    },
+    // Cast refetch to match our interface - wagmi's type is more complex
+    refetch: refetch as unknown as () => Promise<QueryObserverResult<bigint, Error>>,
   };
 }

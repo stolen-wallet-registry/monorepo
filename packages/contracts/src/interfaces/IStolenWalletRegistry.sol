@@ -154,6 +154,7 @@ interface IStolenWalletRegistry {
     /// @param v ECDSA signature component
     /// @param r ECDSA signature component
     /// @param s ECDSA signature component
+    // solhint-disable-next-line max-line-length
     function acknowledge(uint256 deadline, uint256 nonce, address owner, uint8 v, bytes32 r, bytes32 s) external payable;
 
     /// @notice Phase 2: Complete the registration after grace period

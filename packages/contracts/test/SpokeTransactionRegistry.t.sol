@@ -467,15 +467,3 @@ contract SpokeTransactionRegistryTest is Test {
         assertGe(largeFee, smallFee, "Large fee should be >= small fee");
     }
 }
-
-contract RefundRejector {
-    SpokeTransactionRegistry public registry;
-
-    constructor(SpokeTransactionRegistry _registry) {
-        registry = _registry;
-    }
-
-    receive() external payable {
-        revert("refund rejected");
-    }
-}

@@ -63,3 +63,11 @@ export {
   type UseTxGasEstimateParams,
   type UseTxGasEstimateResult,
 } from './useTxGasEstimate';
+
+export {
+  useTxCrossChainConfirmation,
+  needsTxCrossChainConfirmation,
+  type TxCrossChainStatus,
+  type UseTxCrossChainConfirmationOptions,
+  type UseTxCrossChainConfirmationResult,
+} from './useTxCrossChainConfirmation';

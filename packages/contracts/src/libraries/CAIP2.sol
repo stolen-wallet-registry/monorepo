@@ -94,6 +94,8 @@ library CAIP2 {
         bytes memory buffer = new bytes(digits);
         while (value != 0) {
             digits -= 1;
+            // Safe cast: (48 + (value % 10)) is always 48-57, fits in uint8
+            // forge-lint: disable-next-line unsafe-typecast
             buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
             value /= 10;
         }

@@ -18,11 +18,9 @@ import {
   TooltipTrigger,
   TooltipContent,
   HyperlaneLogo,
-  NetworkEthereum,
-  NetworkBase,
-  NetworkOptimism,
 } from '@swr/ui';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
+import { ChainIcon } from '@/components/composed/ChainIcon';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { clearAllSignatures } from '@/lib/signatures';
@@ -37,32 +35,6 @@ import { isSpokeChain, getHubChainId } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import { CheckCircle2, Home, RefreshCw, ArrowRight, Award, ExternalLink } from 'lucide-react';
 import { WalletSoulboundMintCard } from '@/components/composed/WalletSoulboundMintCard';
-
-/**
- * Get chain icon component for a given chain ID.
- * Wrapped in a circular background for visibility.
- */
-function ChainIcon({ chainId }: { chainId: number }) {
-  const icon = (() => {
-    switch (chainId) {
-      case 8453: // Base mainnet
-      case 84532: // Base Sepolia
-        return <NetworkBase className="size-3" />;
-      case 10: // Optimism mainnet
-      case 11155420: // Optimism Sepolia
-        return <NetworkOptimism className="size-3" />;
-      default:
-        // Fallback to Ethereum for local/unknown chains
-        return <NetworkEthereum className="size-3" />;
-    }
-  })();
-
-  return (
-    <span className="inline-flex items-center justify-center size-5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-      {icon}
-    </span>
-  );
-}
 
 /**
  * Success step - shows confirmation after registration.
@@ -211,10 +183,10 @@ export function SuccessStep() {
                 <ExplorerLink value={bridgeMessageId} type="message" href={bridgeExplorerUrl} />
               )}
               <div className="flex items-center gap-2 text-sm text-teal-600 dark:text-teal-400 mt-2">
-                <ChainIcon chainId={registrationChainId} />
+                <ChainIcon chainId={registrationChainId} badge />
                 <span>{getChainName(registrationChainId)}</span>
                 <ArrowRight className="h-3 w-3" />
-                <ChainIcon chainId={hubChainId} />
+                <ChainIcon chainId={hubChainId} badge />
                 <span>{getChainName(hubChainId)}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-2">

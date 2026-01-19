@@ -59,9 +59,9 @@ export interface UseTxRegistrationResult {
 export function useTransactionRegistration(): UseTxRegistrationResult {
   const chainId = useChainId();
 
-  // Determine chain role
-  const isSpoke = useMemo(() => isSpokeChain(chainId), [chainId]);
-  const isHub = useMemo(() => isHubChain(chainId), [chainId]);
+  // Determine chain role - simple lookups, no memoization needed
+  const isSpoke = isSpokeChain(chainId);
+  const isHub = isHubChain(chainId);
 
   // Resolve contract address based on chain role
   const { contractAddress, contractAbi } = useMemo(() => {
