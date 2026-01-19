@@ -42,6 +42,7 @@ import {
 } from '@/components/registration/tx-steps';
 import { useUserTransactions, useMerkleTree, type TransactionLeaf } from '@/hooks/transactions';
 import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
+import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import {
   useTransactionRegistrationFlow,
@@ -414,14 +415,7 @@ export function TransactionSelfRelayRegistrationPage() {
                     <div className="flex items-start gap-2">
                       <span className="text-muted-foreground flex items-center gap-1 shrink-0">
                         Merkle Root:
-                        <InfoTooltip
-                          content={
-                            <p className="text-xs">
-                              A cryptographic hash representing all selected transactions.
-                            </p>
-                          }
-                          side="right"
-                        />
+                        <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
                       </span>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -467,23 +461,37 @@ export function TransactionSelfRelayRegistrationPage() {
                     </table>
                   </div>
                 </div>
-
-                {/* Continue Button */}
-                <div className="flex justify-end">
-                  <Button onClick={handleContinue}>Continue to Sign</Button>
-                </div>
               </div>
             )}
 
-            {(selectedTxHashes.length === 0 || !isForwarderValid || isForwarderSameAsReporter) && (
-              <div className="flex justify-end">
-                <Button disabled>
-                  {!isForwarderValid || isForwarderSameAsReporter
-                    ? 'Enter a valid gas wallet address'
-                    : 'Select transactions to continue'}
-                </Button>
-              </div>
-            )}
+            {/* Continue Button - single button with conditional state */}
+            <div className="flex justify-end">
+              {selectedTxHashes.length > 0 &&
+              merkleTree &&
+              isForwarderValid &&
+              !isForwarderSameAsReporter ? (
+                <Button onClick={handleContinue}>Continue to Sign</Button>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span tabIndex={0}>
+                      <Button disabled>
+                        {selectedTxHashes.length === 0
+                          ? 'Select transactions to continue'
+                          : 'Enter a valid gas wallet address'}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    {selectedTxHashes.length === 0
+                      ? 'Select at least one transaction to report as fraudulent'
+                      : !isForwarderValid
+                        ? 'Enter a valid Ethereum address for the gas wallet'
+                        : 'Gas wallet must be different from the reporter wallet'}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           </div>
         );
 

@@ -5,13 +5,13 @@
  */
 
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
-import { useAccount, useChainId } from 'wagmi';
+import { useChainId } from 'wagmi';
 
 import { Alert, AlertDescription, Skeleton } from '@swr/ui';
 import { GracePeriodTimer } from '@/components/composed/GracePeriodTimer';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
-import { useTransactionSelection } from '@/stores/transactionFormStore';
+import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { useTxContractDeadlines } from '@/hooks/transactions';
@@ -32,9 +32,11 @@ export interface TxGracePeriodStepProps {
  * Transaction batch grace period step - shows countdown until registration can proceed.
  */
 export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepProps) {
-  const { address } = useAccount();
   const chainId = useChainId();
   const { merkleRoot } = useTransactionSelection();
+  // Use reporter from form store - this is the address deadlines are stored under in the contract
+  // In self-relay, the connected wallet may be the gas wallet (forwarder), not the reporter
+  const reporter = useTransactionFormStore((s) => s.reporter);
   const { acknowledgementHash } = useTransactionRegistrationStore();
   const { themeVariant, triggerThemeAnimation, setThemeVariant } = useTheme();
 
@@ -60,12 +62,13 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
   // This state is intentionally set in an effect when the external timer first provides a value
   const [initialTotalMs, setInitialTotalMs] = useState<number | undefined>(undefined);
 
-  // Fetch deadlines from contract using reporter address
+  // Fetch deadlines from contract using reporter address (not connected wallet)
+  // In self-relay, the connected wallet may be the gas wallet, but deadlines are stored under reporter
   const {
     data: deadlines,
     isLoading: deadlinesLoading,
     isError: deadlinesError,
-  } = useTxContractDeadlines(address);
+  } = useTxContractDeadlines(reporter ?? undefined);
 
   // Log when deadlines are loaded
   useEffect(() => {
@@ -130,8 +133,8 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
     }
   }, [totalMs, blocksLeft, initialTotalMs]);
 
-  // Missing merkle root
-  if (!merkleRoot) {
+  // Missing merkle root or reporter
+  if (!merkleRoot || !reporter) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />

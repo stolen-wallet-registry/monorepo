@@ -20,6 +20,7 @@ import {
 } from '@/hooks/transactions';
 import { storeTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
 import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
+import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import type { Hex } from '@/lib/types/ethereum';
@@ -318,15 +319,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
           <div className="flex items-start gap-2">
             <span className="text-muted-foreground flex items-center gap-1 shrink-0">
               Merkle Root:
-              <InfoTooltip
-                content={
-                  <p className="text-xs">
-                    A cryptographic hash representing all selected transactions. This is stored
-                    on-chain as tamper-proof evidence of your fraud report.
-                  </p>
-                }
-                side="right"
-              />
+              <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
             </span>
             <Tooltip>
               <TooltipTrigger asChild>

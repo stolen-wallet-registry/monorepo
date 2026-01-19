@@ -30,6 +30,7 @@ import {
 import { getTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
 import { parseSignature } from '@/lib/signatures';
 import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
+import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage, formatEthConsistent, formatCentsToUsd } from '@/lib/utils';
@@ -394,15 +395,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
           <div className="flex items-start gap-2">
             <span className="text-muted-foreground flex items-center gap-1 shrink-0">
               Merkle Root:
-              <InfoTooltip
-                content={
-                  <p className="text-xs">
-                    A cryptographic hash representing all selected transactions. This is stored
-                    on-chain as tamper-proof evidence of your fraud report.
-                  </p>
-                }
-                side="right"
-              />
+              <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
             </span>
             <Tooltip>
               <TooltipTrigger asChild>

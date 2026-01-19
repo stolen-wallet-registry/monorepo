@@ -37,6 +37,7 @@ import {
 } from '@/components/registration/tx-steps';
 import { useUserTransactions, useMerkleTree, type TransactionLeaf } from '@/hooks/transactions';
 import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
+import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import {
   useTransactionRegistrationFlow,
@@ -343,15 +344,7 @@ export function TransactionStandardRegistrationPage() {
                     <div className="flex items-start gap-2">
                       <span className="text-muted-foreground flex items-center gap-1 shrink-0">
                         Merkle Root:
-                        <InfoTooltip
-                          content={
-                            <p className="text-xs">
-                              A cryptographic hash representing all selected transactions. This is
-                              stored on-chain as tamper-proof evidence of your fraud report.
-                            </p>
-                          }
-                          side="right"
-                        />
+                        <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
                       </span>
                       <Tooltip>
                         <TooltipTrigger asChild>

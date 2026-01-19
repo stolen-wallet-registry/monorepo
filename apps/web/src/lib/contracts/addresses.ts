@@ -43,16 +43,17 @@ export const CONTRACT_ADDRESSES = {
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   // Soulbound contracts - deployed via DeployCrossChain.s.sol (hub chain only)
+  // Languages seeded separately via SeedLanguages.s.sol (keeps addresses deterministic)
   translationRegistry: {
-    [anvilHub.chainId]: '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6' as Address,
+    [anvilHub.chainId]: '0x610178dA211FEF7D417bC0e6FeD39F05609AD788' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   walletSoulbound: {
-    [anvilHub.chainId]: '0x68B1D87F95878fE05B998F19b66F4baba5De1aed' as Address,
+    [anvilHub.chainId]: '0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   supportSoulbound: {
-    [anvilHub.chainId]: '0x3Aa5ebB10DC797CAC828524e59A333d0A371443c' as Address,
+    [anvilHub.chainId]: '0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;

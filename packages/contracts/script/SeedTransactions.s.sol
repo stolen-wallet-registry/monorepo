@@ -49,23 +49,18 @@ contract SeedTransactions is Script {
         console2.log("  Mallory (attacker):", MALLORY);
         console2.log("");
 
-        // Phase 1: Legitimate transactions from Alice (before compromise) - 5 txs
-        console2.log("Phase 1: Creating legitimate transactions from Alice (5 txs)...");
+        // All Alice transactions in one broadcast (batched into fewer blocks)
+        console2.log("Creating Alice's transactions (10 txs - 5 legit + 5 fraudulent)...");
         vm.startBroadcast(ALICE_KEY);
 
+        // Legitimate transactions (before compromise)
         _sendEther(BOB, 0.5 ether, "Alice -> Bob (payment)");
         _sendEther(CAROL, 0.25 ether, "Alice -> Carol (payment)");
         _sendEther(BOB, 0.1 ether, "Alice -> Bob (tip)");
         _sendEther(DAVE, 0.08 ether, "Alice -> Dave");
         _sendEther(CAROL, 0.15 ether, "Alice -> Carol (refund)");
 
-        vm.stopBroadcast();
-
-        // Phase 2: Fraudulent transactions from Alice (wallet compromised) - 5 txs
-        console2.log("");
-        console2.log("Phase 2: Creating fraudulent transactions (5 drains to Mallory)...");
-        vm.startBroadcast(ALICE_KEY);
-
+        // Fraudulent transactions (wallet compromised - drains to Mallory)
         _sendEther(MALLORY, 1.0 ether, "FRAUDULENT: drain 1");
         _sendEther(MALLORY, 0.5 ether, "FRAUDULENT: drain 2");
         _sendEther(MALLORY, 2.3 ether, "FRAUDULENT: drain 3");
@@ -74,9 +69,9 @@ contract SeedTransactions is Script {
 
         vm.stopBroadcast();
 
-        // Phase 3: Transactions from Bob - 5 txs
+        // Bob's transactions in one broadcast
         console2.log("");
-        console2.log("Phase 3: Creating transactions from Bob (5 txs)...");
+        console2.log("Creating Bob's transactions (5 txs)...");
         vm.startBroadcast(BOB_KEY);
 
         _sendEther(CAROL, 0.1 ether, "Bob -> Carol");
@@ -87,9 +82,9 @@ contract SeedTransactions is Script {
 
         vm.stopBroadcast();
 
-        // Phase 4: Transactions from Carol - 3 txs
+        // Carol's transactions in one broadcast
         console2.log("");
-        console2.log("Phase 4: Creating transactions from Carol (3 txs)...");
+        console2.log("Creating Carol's transactions (3 txs)...");
         vm.startBroadcast(CAROL_KEY);
 
         _sendEther(BOB, 0.15 ether, "Carol -> Bob");

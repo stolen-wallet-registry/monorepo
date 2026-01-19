@@ -39,9 +39,14 @@ import { MockInterchainGasPaymaster } from "../test/mocks/MockInterchainGasPayma
 ///   3: StolenWalletRegistry      → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
 ///   4: StolenTransactionRegistry → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
 ///   5-6: (setRegistry txs)
-///   7: CrossChainInbox           → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
+///   7: CrossChainInbox           → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
 ///   8: (setCrossChainInbox tx)
-///   9: Multicall3                → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
+///   9: Multicall3                → 0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
+///  10: TranslationRegistry       → 0x610178dA211FEF7D417bC0e6FeD39F05609AD788
+///  11: WalletSoulbound           → 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
+///  12: SupportSoulbound          → 0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0
+///
+/// Language seeding runs separately via SeedLanguages.s.sol (doesn't affect addresses)
 ///
 /// Spoke deployment order (Account 0 nonces):
 ///   0: MockGasPaymaster     → 0x5FbDB2315678afecb367f032d93F642f64180aa3

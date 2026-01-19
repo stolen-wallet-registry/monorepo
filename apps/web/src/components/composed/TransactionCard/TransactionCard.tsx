@@ -280,7 +280,13 @@ export function TransactionCard({
             </div>
             <div className="pt-2 border-t">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-muted-foreground">Signature</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  Signature
+                  <InfoTooltip
+                    content="This cryptographic signature proves that the owner of the reporter wallet authorized this submission. It secures the registration by verifying ownership before any data is recorded on-chain."
+                    size="sm"
+                  />
+                </p>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button

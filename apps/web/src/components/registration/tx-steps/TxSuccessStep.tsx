@@ -25,8 +25,9 @@ import { useTransactionSelection, useTransactionFormStore } from '@/stores/trans
 import { clearAllTxSignatures } from '@/lib/signatures/transactions';
 import { getExplorerTxUrl, getChainName } from '@/lib/explorer';
 import { chainIdToCAIP2, chainIdToCAIP2String } from '@/lib/caip';
+import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
-import { CheckCircle2, Home, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Home, RefreshCw, Heart } from 'lucide-react';
 
 /**
  * Transaction batch registration success step.
@@ -166,15 +167,7 @@ export function TxSuccessStep() {
               <div className="flex items-start gap-2">
                 <span className="text-muted-foreground flex items-center gap-1 shrink-0">
                   Merkle Root:
-                  <InfoTooltip
-                    content={
-                      <p className="text-xs">
-                        A cryptographic hash representing all selected transactions. This is stored
-                        on-chain as tamper-proof evidence of your fraud report.
-                      </p>
-                    }
-                    side="right"
-                  />
+                  <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
                 </span>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -233,6 +226,24 @@ export function TxSuccessStep() {
             <li>Exchanges and services can query this registry</li>
             <li>This helps track and potentially recover stolen funds</li>
           </ul>
+        </div>
+
+        {/* Support the registry */}
+        <div className="rounded-lg bg-pink-50 dark:bg-pink-950 border border-pink-200 dark:border-pink-800 p-4">
+          <p className="text-sm font-medium text-pink-700 dark:text-pink-300 mb-2 flex items-center gap-2">
+            <Heart className="h-4 w-4" fill="currentColor" />
+            Support the Registry
+          </p>
+          <p className="text-sm text-pink-600 dark:text-pink-400 mb-3">
+            Mint a commemorative soulbound token to show your support for fraud prevention in Web3.
+          </p>
+          <Button
+            onClick={() => setLocation('/soulbound')}
+            className="w-full bg-pink-500 hover:bg-pink-600 text-white"
+          >
+            <Heart className="mr-2 h-4 w-4" fill="currentColor" />
+            Mint Support Token
+          </Button>
         </div>
 
         {/* Actions */}

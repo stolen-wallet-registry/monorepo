@@ -97,8 +97,9 @@ export function SoulboundPreviewModal({
               onChange={handleLanguageChange}
               className="w-full max-w-xs"
             />
-            <p className="text-xs text-muted-foreground text-center">
-              The token will display text in your selected language
+            <p className="text-xs text-muted-foreground text-center max-w-md">
+              All translations are embedded in the on-chain SVG. Wallets and NFT platforms detect
+              your browser's language to display the appropriate translation automatically.
             </p>
           </div>
 
@@ -136,6 +137,20 @@ export function SoulboundPreviewModal({
                   <li>Unlimited - mint as many as you like</li>
                 )}
               </ul>
+              <p className="mt-3 pt-3 border-t text-xs">
+                <span className="font-medium text-foreground">Why internationalization?</span>{' '}
+                Borderless technology should be accessible to everyone. These tokens use SVG's
+                native{' '}
+                <a
+                  href="https://developer.mozilla.org/en-US/docs/Web/SVG/Element/switch"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-foreground"
+                >
+                  systemLanguage
+                </a>{' '}
+                feature to automatically display in the viewer's preferred language.
+              </p>
             </div>
           </div>
         </div>

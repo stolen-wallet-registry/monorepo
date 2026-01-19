@@ -217,12 +217,9 @@ abstract contract DeployBase is Script {
         console2.log("Domain:", domain);
 
         // Deploy TranslationRegistry (no dependencies)
+        // Note: Languages are seeded separately via SeedLanguages.s.sol to keep addresses deterministic
         translations = address(new TranslationRegistry());
         console2.log("TranslationRegistry:", translations);
-
-        // Seed initial languages
-        _seedLanguages(TranslationRegistry(translations));
-        console2.log("Languages seeded: en, es, zh, fr, de, ja, ko, pt, ru, ar");
 
         // Deploy WalletSoulbound (gated by registry)
         walletSoulbound = address(new WalletSoulbound(registry, translations, feeCollector, domain));

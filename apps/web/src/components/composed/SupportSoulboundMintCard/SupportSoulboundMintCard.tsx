@@ -82,6 +82,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
     latestTokenId,
     refetch: refetchTokens,
     isLoading: isLoadingTokens,
+    isFetching: isFetchingTokens,
   } = useSupportTokens({
     supporter: connectedAddress,
     enabled: !!connectedAddress,
@@ -182,9 +183,13 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
   };
 
   // Refetch tokens after successful mint to get the new token ID
+  // Small delay ensures the blockchain has indexed the new token
   useEffect(() => {
     if (isConfirmed) {
-      refetchTokens();
+      const timer = setTimeout(() => {
+        refetchTokens();
+      }, 1000);
+      return () => clearTimeout(timer);
     }
   }, [isConfirmed, refetchTokens]);
 
@@ -206,8 +211,8 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
             </AlertDescription>
           </Alert>
 
-          {/* Display minted NFT */}
-          {latestTokenId !== null && supportSoulboundAddress && (
+          {/* Display minted NFT - show spinner while fetching/refetching */}
+          {latestTokenId !== null && supportSoulboundAddress && !isFetchingTokens && (
             <div className="flex justify-center py-4">
               <MintedTokenDisplay
                 contractAddress={supportSoulboundAddress}
@@ -217,7 +222,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
               />
             </div>
           )}
-          {isLoadingTokens && (
+          {(isLoadingTokens || isFetchingTokens) && (
             <div className="flex justify-center py-4">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
@@ -249,7 +254,12 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
       <CardContent className="space-y-4">
         {/* Donation amount inputs */}
         <div className="space-y-3">
-          <Label>Donation Amount</Label>
+          <div>
+            <Label>Donation Amount</Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              Enter any amount you'd like to donate
+            </p>
+          </div>
 
           {/* ETH and USD inputs */}
           <div className="grid grid-cols-2 gap-3">
@@ -287,20 +297,23 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
           </div>
 
           {/* Quick amount buttons - centered */}
-          <div className="flex flex-wrap justify-center gap-2">
-            {DONATION_PRESETS.map((amount) => (
-              <Button
-                key={amount}
-                type="button"
-                variant={ethInput === amount.toString() ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => handlePresetClick(amount)}
-                disabled={isMinting}
-                className="text-xs"
-              >
-                {amount} ETH
-              </Button>
-            ))}
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground text-center">Suggested amounts</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {DONATION_PRESETS.map((amount) => (
+                <Button
+                  key={amount}
+                  type="button"
+                  variant={ethInput === amount.toString() ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handlePresetClick(amount)}
+                  disabled={isMinting}
+                  className="text-xs"
+                >
+                  {amount} ETH
+                </Button>
+              ))}
+            </div>
           </div>
 
           {/* Minimum amount warning */}
@@ -407,7 +420,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
             )}
           </div>
         )}
-        {isLoadingTokens && !isConfirmed && (
+        {(isLoadingTokens || isFetchingTokens) && !isConfirmed && (
           <div className="flex justify-center py-2">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
