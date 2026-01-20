@@ -19,7 +19,8 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from '@swr/ui';
-import { RegistrySearch, type SearchResult } from '@/components/composed/RegistrySearch';
+import { RegistrySearch } from '@/components/composed/RegistrySearch';
+import type { SearchResult as IndexerSearchResult, SearchType } from '@/hooks';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import {
   ArrowRight,
@@ -262,34 +263,42 @@ export function SearchPage() {
     getRecentSearches,
     getServerSnapshot
   );
-  const [searchAddress, setSearchAddress] = useState<Address | ''>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Handle when a search is initiated (save to recent searches with unknown status initially)
   const handleSearch = useCallback(
-    (address: Address) => {
-      logger.ui.info('Search initiated from input', { address: redactAddress(address), chainId });
-      saveRecentSearch({ address, chainId, type: 'wallet', resultStatus: 'unknown' });
-      notifyRecentSearchesChange();
-      setSearchAddress(address);
+    (query: string, type: SearchType) => {
+      // Only save wallet searches to recent (they're the primary use case)
+      if (type === 'wallet' || type === 'caip10') {
+        const address = type === 'caip10' ? query.split(':')[2] : query;
+        logger.ui.info('Search initiated from input', { address: redactAddress(address), chainId });
+        saveRecentSearch({ address, chainId, type: 'wallet', resultStatus: 'unknown' });
+        notifyRecentSearchesChange();
+      } else {
+        logger.ui.info('Transaction search initiated', { query, type });
+      }
+      setSearchQuery(query);
     },
     [chainId]
   );
 
   // Handle search result - update the recent search with actual result status
-  const handleResult = useCallback(({ address, status }: SearchResult) => {
-    const resultStatus: SearchResultStatus = status.isRegistered
-      ? 'registered'
-      : status.isPending
-        ? 'pending'
-        : 'clean';
-    logger.ui.info('Search result received', {
-      address: redactAddress(address),
-      isRegistered: status.isRegistered,
-      isPending: status.isPending,
-      resultStatus,
-    });
-    updateRecentSearchResult(address, resultStatus);
-    notifyRecentSearchesChange();
+  const handleResult = useCallback((result: IndexerSearchResult) => {
+    if (result.type === 'wallet' && result.data) {
+      const resultStatus: SearchResultStatus = result.found ? 'registered' : 'clean';
+      logger.ui.info('Wallet search result received', {
+        address: redactAddress(result.data.address),
+        found: result.found,
+        resultStatus,
+      });
+      updateRecentSearchResult(result.data.address, resultStatus);
+      notifyRecentSearchesChange();
+    } else if (result.type === 'transaction') {
+      logger.ui.info('Transaction search result received', {
+        found: result.found,
+        chains: result.data?.chains.length ?? 0,
+      });
+    }
   }, []);
 
   // Handle clicking "Check your wallet" quick action
@@ -298,7 +307,7 @@ export function SearchPage() {
       logger.ui.info('Quick action: check wallet', { address: redactAddress(address) });
       saveRecentSearch({ address, chainId, type: 'wallet', resultStatus: 'unknown' });
       notifyRecentSearchesChange();
-      setSearchAddress(address);
+      setSearchQuery(address);
     },
     [chainId]
   );
@@ -309,7 +318,7 @@ export function SearchPage() {
       address: redactAddress(search.address),
       chainId: search.chainId,
     });
-    setSearchAddress(search.address);
+    setSearchQuery(search.address);
     saveRecentSearch({
       address: search.address,
       chainId: search.chainId ?? 31337,
@@ -350,8 +359,8 @@ export function SearchPage() {
         </CardHeader>
         <CardContent>
           <RegistrySearch
-            key={searchAddress} // Force re-render when address changes
-            defaultAddress={searchAddress}
+            key={searchQuery} // Force re-render when query changes
+            defaultQuery={searchQuery}
             onSearch={handleSearch}
             onResult={handleResult}
           />
