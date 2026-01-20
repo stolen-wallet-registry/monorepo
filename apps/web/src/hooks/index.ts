@@ -110,3 +110,16 @@ export {
   type UseMintSupportSoulboundResult,
   type MintSupportSoulboundParams,
 } from './soulbound';
+
+// Indexer hooks (Ponder GraphQL)
+export {
+  useRegistrySearch,
+  useSearchType,
+  detectSearchType,
+  type SearchType,
+  type SearchResult,
+  type WalletSearchResult,
+  type TransactionSearchResult,
+  type WalletSearchData,
+  type TransactionSearchData,
+} from './indexer';

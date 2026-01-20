@@ -28,33 +28,34 @@ import { anvilHub, anvilSpoke, base, baseSepolia, optimism, optimismSepolia } fr
 export const CAIP2_LOOKUP: Record<string, string> = {
   // ═══════════════════════════════════════════════════════════════
   // LOCAL DEVELOPMENT
+  // Hashes computed via: keccak256(encodePacked(['string'], ['eip155:CHAIN_ID']))
   // ═══════════════════════════════════════════════════════════════
   // Anvil Hub (chainId 31337)
-  '0x5f8e5e5c3b5c9f8d7e6a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e': `eip155:${anvilHub.chainId}`,
+  '0x318e51c37247d03bad135571413b06a083591bcc680967d80bf587ac928cf369': `eip155:${anvilHub.chainId}`,
   // Anvil Spoke (chainId 31338)
-  '0x6e7d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d': `eip155:${anvilSpoke.chainId}`,
+  '0x6fb84c7948e7a13a872038b4362f7a1ede72e8075ef49d57592e1888652b0443': `eip155:${anvilSpoke.chainId}`,
 
   // ═══════════════════════════════════════════════════════════════
   // TESTNETS
   // ═══════════════════════════════════════════════════════════════
   // Base Sepolia (hub testnet)
-  '0x7d3e8a4b2c1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d': `eip155:${baseSepolia.chainId}`,
+  '0x8a9a9c58b754a98f1ff302a7ead652cfd23eb36a5791767b5d185067dd9481c2': `eip155:${baseSepolia.chainId}`,
   // Optimism Sepolia (spoke testnet)
-  '0x5b4a9c8d0e1f2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c': `eip155:${optimismSepolia.chainId}`,
+  '0xed0d19ae6067b72db99bcb0dc8751b7d9a0733d390cef703366aa5c2ab3cc467': `eip155:${optimismSepolia.chainId}`,
 
   // ═══════════════════════════════════════════════════════════════
   // MAINNETS
   // ═══════════════════════════════════════════════════════════════
   // Ethereum Mainnet
-  '0x9f41dd64bc85c0baee47f3f3c4c1e95f3ed9d8c7e3d3c0b2a1f7e8d9c6b5a4f3': 'eip155:1',
+  '0x38b2caf37cccf00b6fbc0feb1e534daf567950e4d48066d0e3669028fe5f83e6': 'eip155:1',
   // Base
-  '0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925': `eip155:${base.chainId}`,
+  '0x43b48883ef7be0f98fe7f98fafb2187e42caab4063697b32816f95e09d69b3ec': `eip155:${base.chainId}`,
   // Optimism
-  '0x6c5a8b7c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a': `eip155:${optimism.chainId}`,
+  '0x83153bb1dd0a48bb74b01b90ac672ee6185cc64877b9c948eec5e4e5f11585f0': `eip155:${optimism.chainId}`,
   // Arbitrum One
-  '0x4a3b8c7d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b': 'eip155:42161',
+  '0x1fca116f439fa7af0604ced8c7a6239cdcabb5070838cbc80cdba0089733e472': 'eip155:42161',
   // Polygon
-  '0x3f2a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a': 'eip155:137',
+  '0x5fe63a02668caaabe84ca512d75c3f07cc1feebf41438c74a4968608b451809e': 'eip155:137',
 
   // ═══════════════════════════════════════════════════════════════
   // FUTURE: NON-EVM CHAINS
