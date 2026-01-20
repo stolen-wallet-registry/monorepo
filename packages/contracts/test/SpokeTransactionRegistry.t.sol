@@ -266,6 +266,34 @@ contract SpokeTransactionRegistryTest is Test {
         );
     }
 
+    // Acknowledgement should reject empty transaction batches.
+    function test_Acknowledge_EmptyBatch_Reverts() public {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = registry.nonces(reporter);
+
+        // Empty arrays
+        bytes32[] memory emptyHashes = new bytes32[](0);
+        bytes32[] memory emptyChainIds = new bytes32[](0);
+
+        // Sign with zero transaction count
+        (uint8 v, bytes32 r, bytes32 s) = _signAck(merkleRoot, reportedChainId, 0, forwarder, nonce, deadline);
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeTransactionRegistry.SpokeTransactionRegistry__EmptyBatch.selector);
+        registry.acknowledge(
+            merkleRoot,
+            reportedChainId,
+            0, // Empty batch
+            emptyHashes,
+            emptyChainIds,
+            reporter,
+            deadline,
+            v,
+            r,
+            s
+        );
+    }
+
     // Acknowledgement should reject invalid signatures.
     function test_Acknowledge_InvalidSigner_Reverts() public {
         uint256 deadline = block.timestamp + 1 hours;

@@ -23,6 +23,9 @@ const contracts = [
   'TranslationRegistry.sol/TranslationRegistry.json',
   'WalletSoulbound.sol/WalletSoulbound.json',
   'SupportSoulbound.sol/SupportSoulbound.json',
+  // Cross-chain soulbound contracts
+  'SpokeSoulboundForwarder.sol/SpokeSoulboundForwarder.json',
+  'SoulboundReceiver.sol/SoulboundReceiver.json',
 ];
 
 mkdirSync(abiDir, { recursive: true });

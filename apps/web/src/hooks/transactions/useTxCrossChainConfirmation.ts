@@ -170,14 +170,14 @@ export function useTxCrossChainConfirmation({
   useEffect(() => {
     if (!enabled) {
       // Cleanup when disabled - clear interval and refs
-      // NOTE: We intentionally do NOT call setElapsedTime(0) here
-      // to avoid synchronous setState in effect body (lint rule).
-      // The stale elapsedTime value doesn't matter when !enabled (status = 'idle').
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
       startTimeRef.current = null;
+      // Reset elapsed time asynchronously to avoid synchronous setState in effect
+      // This clears stale state while satisfying the react-hooks lint rule
+      queueMicrotask(() => setElapsedTime(0));
       return;
     }
 

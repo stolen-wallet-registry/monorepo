@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSwitchChain } from 'wagmi';
+import { formatEther } from 'viem';
 import {
   Card,
   CardHeader,
@@ -23,6 +24,8 @@ import {
   useHasMinted,
   useMintWalletSoulbound,
   useWalletTokenId,
+  useQuoteCrossChainMintFee,
+  useCrossChainWalletMint,
 } from '@/hooks/soulbound';
 import { ExplorerLink, getExplorerTxUrl } from '@/components/composed/ExplorerLink';
 import { SoulboundPreviewModal } from '@/components/composed/SoulboundPreviewModal';
@@ -31,7 +34,7 @@ import { cn, sanitizeErrorMessage } from '@/lib/utils';
 import { getChainName } from '@/lib/chains/config';
 import { getWalletSoulboundAddress } from '@/lib/contracts/addresses';
 import { getBrowserLanguage } from '@/lib/browser';
-import { Loader2, Check, AlertCircle, Award, ArrowRightLeft } from 'lucide-react';
+import { Loader2, Check, AlertCircle, Award, ArrowRightLeft, Send } from 'lucide-react';
 import type { Address, Hash } from '@/lib/types/ethereum';
 
 export interface WalletSoulboundMintCardProps {
@@ -72,6 +75,8 @@ export function WalletSoulboundMintCard({
   } = useHasMinted({
     address: wallet,
   });
+
+  // Direct hub mint hook
   const {
     mint,
     isPending,
@@ -84,6 +89,20 @@ export function WalletSoulboundMintCard({
     isOnHubChain,
     hubChainId,
   } = useMintWalletSoulbound();
+
+  // Cross-chain mint hooks (for spoke chains)
+  const { data: crossChainFee, isOnSpokeChain, currentChainId } = useQuoteCrossChainMintFee();
+  const {
+    requestMint: requestCrossChainMint,
+    isPending: isCrossChainPending,
+    isConfirming: isCrossChainConfirming,
+    isConfirmed: isCrossChainConfirmed,
+    isError: isCrossChainError,
+    error: crossChainError,
+    hash: crossChainHash,
+    reset: resetCrossChain,
+  } = useCrossChainWalletMint();
+
   const { switchChain, isPending: isSwitching } = useSwitchChain();
 
   // Get tokenId for displaying minted NFT (enabled when already minted OR after confirmation)
@@ -102,7 +121,9 @@ export function WalletSoulboundMintCard({
 
   const isLoading = isCheckingEligibility || isCheckingMinted;
   const isMinting = isPending || isConfirming;
+  const isCrossChainMinting = isCrossChainPending || isCrossChainConfirming;
   const hubChainName = getChainName(hubChainId);
+  const currentChainName = currentChainId ? getChainName(currentChainId) : 'current chain';
 
   const handleSwitchChain = () => {
     switchChain({ chainId: hubChainId });
@@ -115,6 +136,7 @@ export function WalletSoulboundMintCard({
     }
   }, [isConfirmed, refetchHasMinted]);
 
+  // Direct hub mint handler
   const handleMint = async () => {
     try {
       const txHash = await mint({ wallet });
@@ -122,6 +144,26 @@ export function WalletSoulboundMintCard({
     } catch {
       // Error is handled by the hook
     }
+  };
+
+  // Cross-chain mint handler
+  const handleCrossChainMint = async () => {
+    if (!crossChainFee) return;
+    try {
+      const txHash = await requestCrossChainMint({
+        wallet,
+        feeWei: crossChainFee.feeWei,
+      });
+      onSuccess?.(txHash);
+    } catch {
+      // Error is handled by the hook
+    }
+  };
+
+  // Reset handler for both mint types
+  const handleReset = () => {
+    reset();
+    resetCrossChain();
   };
 
   // Already minted state - show the minted NFT
@@ -162,7 +204,49 @@ export function WalletSoulboundMintCard({
     );
   }
 
-  // Success state
+  // Cross-chain mint confirmation state (message dispatched, waiting for hub mint)
+  if (isCrossChainConfirmed && crossChainHash) {
+    return (
+      <Card className={cn('', className)}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Award className="h-5 w-5 text-primary" />
+            Wallet Soulbound Token
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950">
+            <Send className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-700 dark:text-blue-300">
+              Cross-chain mint request sent! Your token will be minted on {hubChainName} in ~1-2
+              minutes.
+            </AlertDescription>
+          </Alert>
+
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">
+              Transaction on {currentChainName}
+            </Label>
+            <ExplorerLink
+              value={crossChainHash}
+              href={getExplorerTxUrl(currentChainId ?? hubChainId, crossChainHash)}
+            />
+          </div>
+
+          <p className="text-xs text-center text-muted-foreground">
+            The Hyperlane relayer will deliver your mint request to {hubChainName}. You can check
+            back in a few minutes to see your minted token.
+          </p>
+
+          <Button variant="outline" onClick={handleReset} className="w-full">
+            Done
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Direct hub mint success state
   if (isConfirmed && hash) {
     return (
       <Card className={cn('', className)}>
@@ -201,7 +285,7 @@ export function WalletSoulboundMintCard({
             <Label className="text-xs text-muted-foreground">Transaction</Label>
             <ExplorerLink value={hash} href={getExplorerTxUrl(hubChainId, hash)} />
           </div>
-          <Button variant="outline" onClick={reset} className="w-full">
+          <Button variant="outline" onClick={handleReset} className="w-full">
             Done
           </Button>
         </CardContent>
@@ -260,8 +344,20 @@ export function WalletSoulboundMintCard({
               />
             </div>
 
-            {/* Wrong chain warning */}
-            {!isOnHubChain && (
+            {/* Spoke chain info - show cross-chain option */}
+            {isOnSpokeChain && (
+              <Alert>
+                <Send className="h-4 w-4" />
+                <AlertDescription>
+                  Wallet soulbound tokens are minted on {hubChainName}. You can switch to{' '}
+                  {hubChainName} to avoid cross-chain fees, or mint directly from {currentChainName}
+                  .
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Wrong chain warning (not hub, not spoke - unsupported chain) */}
+            {!isOnHubChain && !isOnSpokeChain && (
               <Alert>
                 <ArrowRightLeft className="h-4 w-4" />
                 <AlertDescription>
@@ -271,7 +367,7 @@ export function WalletSoulboundMintCard({
               </Alert>
             )}
 
-            {/* Error state */}
+            {/* Error state - direct mint */}
             {isError && error && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
@@ -279,8 +375,91 @@ export function WalletSoulboundMintCard({
               </Alert>
             )}
 
-            {/* Show switch button when on wrong chain, mint button when on hub */}
-            {!isOnHubChain ? (
+            {/* Error state - cross-chain mint */}
+            {isCrossChainError && crossChainError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{sanitizeErrorMessage(crossChainError)}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* On hub chain - direct mint */}
+            {isOnHubChain && (
+              <>
+                <Button onClick={handleMint} disabled={isMinting} className="w-full" size="lg">
+                  {isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Confirm in wallet...
+                    </>
+                  ) : isConfirming ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Minting...
+                    </>
+                  ) : (
+                    'Mint Soulbound Token'
+                  )}
+                </Button>
+                <p className="text-xs text-center text-muted-foreground">
+                  Free to mint - you only pay gas
+                </p>
+              </>
+            )}
+
+            {/* On spoke chain - show both options */}
+            {isOnSpokeChain && (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleSwitchChain}
+                    disabled={isSwitching || isCrossChainMinting}
+                    className="flex-1"
+                  >
+                    {isSwitching ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Switching...
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRightLeft className="mr-2 h-4 w-4" />
+                        Switch to {hubChainName}
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={handleCrossChainMint}
+                    disabled={isCrossChainMinting || !crossChainFee || isSwitching}
+                    className="flex-1"
+                  >
+                    {isCrossChainPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Confirm...
+                      </>
+                    ) : isCrossChainConfirming ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="mr-2 h-4 w-4" />
+                        Mint from Here
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-center text-muted-foreground">
+                  Cross-chain fee: ~{crossChainFee ? formatEther(crossChainFee.feeWei) : '...'} ETH
+                </p>
+              </div>
+            )}
+
+            {/* Unsupported chain - just switch button */}
+            {!isOnHubChain && !isOnSpokeChain && (
               <Button
                 onClick={handleSwitchChain}
                 disabled={isSwitching}
@@ -299,27 +478,7 @@ export function WalletSoulboundMintCard({
                   </>
                 )}
               </Button>
-            ) : (
-              <Button onClick={handleMint} disabled={isMinting} className="w-full" size="lg">
-                {isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Confirm in wallet...
-                  </>
-                ) : isConfirming ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Minting...
-                  </>
-                ) : (
-                  'Mint Soulbound Token'
-                )}
-              </Button>
             )}
-
-            <p className="text-xs text-center text-muted-foreground">
-              Free to mint - you only pay gas
-            </p>
           </>
         )}
       </CardContent>

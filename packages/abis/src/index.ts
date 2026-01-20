@@ -12,3 +12,5 @@ export { HyperlaneAdapterABI } from './HyperlaneAdapter';
 export { TranslationRegistryABI } from './TranslationRegistry';
 export { WalletSoulboundABI } from './WalletSoulbound';
 export { SupportSoulboundABI } from './SupportSoulbound';
+export { SpokeSoulboundForwarderABI } from './SpokeSoulboundForwarder';
+export { SoulboundReceiverABI } from './SoulboundReceiver';

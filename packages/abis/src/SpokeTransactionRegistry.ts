@@ -257,6 +257,11 @@ export const SpokeTransactionRegistryABI = [
             internalType: 'address',
           },
           {
+            name: 'pendingTxCount',
+            type: 'uint32',
+            internalType: 'uint32',
+          },
+          {
             name: 'pendingMerkleRoot',
             type: 'bytes32',
             internalType: 'bytes32',
@@ -265,11 +270,6 @@ export const SpokeTransactionRegistryABI = [
             name: 'pendingReportedChainId',
             type: 'bytes32',
             internalType: 'bytes32',
-          },
-          {
-            name: 'pendingTxCount',
-            type: 'uint32',
-            internalType: 'uint32',
           },
           {
             name: 'startBlock',

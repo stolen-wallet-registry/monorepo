@@ -27,7 +27,7 @@ export {
   type UseSupportTokensOptions,
 } from './useSupportTokens';
 
-// Write hooks
+// Write hooks (direct hub mint)
 export {
   useMintWalletSoulbound,
   type UseMintWalletSoulboundResult,
@@ -38,3 +38,20 @@ export {
   type UseMintSupportSoulboundResult,
   type MintSupportSoulboundParams,
 } from './useMintSupportSoulbound';
+
+// Cross-chain mint hooks (spoke → hub)
+export {
+  useQuoteCrossChainMintFee,
+  type UseQuoteCrossChainMintFeeResult,
+  type CrossChainMintFee,
+} from './useQuoteCrossChainMintFee';
+export {
+  useCrossChainWalletMint,
+  type UseCrossChainWalletMintResult,
+  type CrossChainWalletMintParams,
+} from './useCrossChainWalletMint';
+export {
+  useCrossChainSupportMint,
+  type UseCrossChainSupportMintResult,
+  type CrossChainSupportMintParams,
+} from './useCrossChainSupportMint';

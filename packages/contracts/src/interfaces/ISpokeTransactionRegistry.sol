@@ -141,6 +141,9 @@ interface ISpokeTransactionRegistry {
     /// @notice Thrown when withdrawal fails
     error SpokeTransactionRegistry__WithdrawalFailed();
 
+    /// @notice Thrown when transaction count is zero (empty batch)
+    error SpokeTransactionRegistry__EmptyBatch();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════

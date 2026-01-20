@@ -153,7 +153,9 @@ contract SpokeTransactionRegistry is ISpokeTransactionRegistry, EIP712, Ownable2
         bytes32 r,
         bytes32 s
     ) external {
-        // Validate array lengths first (before packing to struct)
+        // Validate transaction count > 0 (no empty batches)
+        if (transactionCount == 0) revert SpokeTransactionRegistry__EmptyBatch();
+        // Validate array lengths (before packing to struct)
         if (transactionHashes.length != chainIds.length) revert SpokeTransactionRegistry__ArrayLengthMismatch();
         if (transactionCount != transactionHashes.length) revert SpokeTransactionRegistry__ArrayLengthMismatch();
 
@@ -275,6 +277,7 @@ contract SpokeTransactionRegistry is ISpokeTransactionRegistry, EIP712, Ownable2
         if (hubInbox == bytes32(0)) revert SpokeTransactionRegistry__HubNotConfigured();
         if (hubChainId == 0) revert SpokeTransactionRegistry__HubNotConfigured();
         if (params.deadline <= block.timestamp) revert SpokeTransactionRegistry__SignatureExpired();
+        if (params.transactionHashes.length == 0) revert SpokeTransactionRegistry__EmptyBatch();
         if (params.transactionHashes.length != params.chainIds.length) {
             revert SpokeTransactionRegistry__ArrayLengthMismatch();
         }

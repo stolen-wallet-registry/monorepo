@@ -21,3 +21,7 @@ export { HyperlaneAdapterABI as hyperlaneAdapterAbi } from '@swr/abis';
 export { TranslationRegistryABI as translationRegistryAbi } from '@swr/abis';
 export { WalletSoulboundABI as walletSoulboundAbi } from '@swr/abis';
 export { SupportSoulboundABI as supportSoulboundAbi } from '@swr/abis';
+
+// Cross-chain soulbound contracts
+export { SpokeSoulboundForwarderABI as spokeSoulboundForwarderAbi } from '@swr/abis';
+export { SoulboundReceiverABI as soulboundReceiverAbi } from '@swr/abis';

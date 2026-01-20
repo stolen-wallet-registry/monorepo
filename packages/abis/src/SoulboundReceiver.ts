@@ -1,19 +1,24 @@
-export const CrossChainInboxABI = [
+export const SoulboundReceiverABI = [
   {
     type: 'constructor',
     inputs: [
+      {
+        name: '_owner',
+        type: 'address',
+        internalType: 'address',
+      },
       {
         name: '_mailbox',
         type: 'address',
         internalType: 'address',
       },
       {
-        name: '_registryHub',
+        name: '_walletSoulbound',
         type: 'address',
         internalType: 'address',
       },
       {
-        name: '_owner',
+        name: '_supportSoulbound',
         type: 'address',
         internalType: 'address',
       },
@@ -21,8 +26,25 @@ export const CrossChainInboxABI = [
     stateMutability: 'nonpayable',
   },
   {
+    type: 'receive',
+    stateMutability: 'payable',
+  },
+  {
     type: 'function',
-    name: 'BRIDGE_ID',
+    name: 'MSG_TYPE_SUPPORT',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'MSG_TYPE_WALLET',
     inputs: [],
     outputs: [
       {
@@ -42,19 +64,6 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'function',
-    name: 'bridgeId',
-    inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'uint8',
-        internalType: 'uint8',
-      },
-    ],
-    stateMutability: 'pure',
-  },
-  {
-    type: 'function',
     name: 'handle',
     inputs: [
       {
@@ -68,37 +77,13 @@ export const CrossChainInboxABI = [
         internalType: 'bytes32',
       },
       {
-        name: '_messageBody',
+        name: '_message',
         type: 'bytes',
         internalType: 'bytes',
       },
     ],
     outputs: [],
     stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    name: 'isTrustedSource',
-    inputs: [
-      {
-        name: 'chainId',
-        type: 'uint32',
-        internalType: 'uint32',
-      },
-      {
-        name: 'sender',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-    ],
-    outputs: [
-      {
-        name: '',
-        type: 'bool',
-        internalType: 'bool',
-      },
-    ],
-    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -141,7 +126,32 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'function',
-    name: 'registryHub',
+    name: 'renounceOwnership',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setTrustedForwarder',
+    inputs: [
+      {
+        name: 'domain',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'forwarder',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'supportSoulbound',
     inputs: [],
     outputs: [
       {
@@ -151,36 +161,6 @@ export const CrossChainInboxABI = [
       },
     ],
     stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'renounceOwnership',
-    inputs: [],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    name: 'setTrustedSource',
-    inputs: [
-      {
-        name: 'chainId',
-        type: 'uint32',
-        internalType: 'uint32',
-      },
-      {
-        name: 'spokeRegistry',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: 'trusted',
-        type: 'bool',
-        internalType: 'bool',
-      },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -194,6 +174,63 @@ export const CrossChainInboxABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'trustedForwarders',
+    inputs: [
+      {
+        name: 'domain',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'walletSoulbound',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    name: 'CrossChainMintExecuted',
+    inputs: [
+      {
+        name: 'mintType',
+        type: 'uint8',
+        indexed: true,
+        internalType: 'enum ISoulboundReceiver.MintType',
+      },
+      {
+        name: 'wallet',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'originDomain',
+        type: 'uint32',
+        indexed: true,
+        internalType: 'uint32',
+      },
+    ],
+    anonymous: false,
   },
   {
     type: 'event',
@@ -235,139 +272,22 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'event',
-    name: 'RegistrationReceived',
+    name: 'TrustedForwarderUpdated',
     inputs: [
       {
-        name: 'sourceChain',
+        name: 'domain',
         type: 'uint32',
         indexed: true,
         internalType: 'uint32',
       },
       {
-        name: 'wallet',
+        name: 'forwarder',
         type: 'address',
-        indexed: true,
+        indexed: false,
         internalType: 'address',
       },
-      {
-        name: 'messageId',
-        type: 'bytes32',
-        indexed: false,
-        internalType: 'bytes32',
-      },
     ],
     anonymous: false,
-  },
-  {
-    type: 'event',
-    name: 'TransactionBatchReceived',
-    inputs: [
-      {
-        name: 'sourceChain',
-        type: 'uint32',
-        indexed: true,
-        internalType: 'uint32',
-      },
-      {
-        name: 'reporter',
-        type: 'address',
-        indexed: true,
-        internalType: 'address',
-      },
-      {
-        name: 'merkleRoot',
-        type: 'bytes32',
-        indexed: true,
-        internalType: 'bytes32',
-      },
-      {
-        name: 'messageId',
-        type: 'bytes32',
-        indexed: false,
-        internalType: 'bytes32',
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: 'event',
-    name: 'TrustedSourceUpdated',
-    inputs: [
-      {
-        name: 'chainId',
-        type: 'uint32',
-        indexed: true,
-        internalType: 'uint32',
-      },
-      {
-        name: 'spokeRegistry',
-        type: 'bytes32',
-        indexed: true,
-        internalType: 'bytes32',
-      },
-      {
-        name: 'trusted',
-        type: 'bool',
-        indexed: false,
-        internalType: 'bool',
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: 'error',
-    name: 'CrossChainInbox__InvalidMessage',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'CrossChainInbox__OnlyBridge',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'CrossChainInbox__SourceChainMismatch',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'CrossChainInbox__UnknownMessageType',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'CrossChainInbox__UntrustedSource',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'CrossChainInbox__ZeroAddress',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'CrossChainMessage__BatchSizeMismatch',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'CrossChainMessage__InvalidMessageLength',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'CrossChainMessage__InvalidMessageType',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'CrossChainMessage__UnsupportedVersion',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'InvalidChainId',
-    inputs: [],
   },
   {
     type: 'error',
@@ -390,5 +310,35 @@ export const CrossChainInboxABI = [
         internalType: 'address',
       },
     ],
+  },
+  {
+    type: 'error',
+    name: 'SoulboundReceiver__InvalidMintType',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SoulboundReceiver__OnlyMailbox',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SoulboundReceiver__SupportMintFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SoulboundReceiver__UntrustedForwarder',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SoulboundReceiver__WalletMintFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SoulboundReceiver__ZeroAddress',
+    inputs: [],
   },
 ] as const;

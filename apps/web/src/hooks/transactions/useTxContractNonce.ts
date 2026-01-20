@@ -3,20 +3,27 @@
  * Supports both hub (StolenTransactionRegistry) and spoke (SpokeTransactionRegistry) chains.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useChainId, useReadContract } from 'wagmi';
-import type { QueryObserverResult } from '@tanstack/react-query';
 import { stolenTransactionRegistryAbi, spokeTransactionRegistryAbi } from '@/lib/contracts/abis';
 import { getTransactionRegistryAddress, isSpokeChain } from '@/lib/contracts/addresses';
 import type { Address } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
+
+/** Result of refetch operation with status information */
+export interface RefetchResult<T> {
+  status: 'success' | 'error';
+  data: T | undefined;
+  error: Error | null;
+}
 
 export interface UseTxContractNonceResult {
   nonce: bigint | undefined;
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
-  refetch: () => Promise<QueryObserverResult<bigint, Error>>;
+  /** Refetch the nonce from the contract with typed result */
+  refetch: () => Promise<RefetchResult<bigint>>;
 }
 
 /**
@@ -80,12 +87,29 @@ export function useTxContractNonce(address: Address | undefined): UseTxContractN
     }
   }, [nonce, address]);
 
+  // Type-safe wrapper for refetch that returns a properly typed result
+  const wrappedRefetch = useCallback(async (): Promise<RefetchResult<bigint>> => {
+    try {
+      const result = await refetch();
+      return {
+        status: result.status === 'success' ? 'success' : 'error',
+        data: result.data as bigint | undefined,
+        error: result.error as Error | null,
+      };
+    } catch (err) {
+      return {
+        status: 'error',
+        data: undefined,
+        error: err instanceof Error ? err : new Error(String(err)),
+      };
+    }
+  }, [refetch]);
+
   return {
     nonce: nonce as bigint | undefined,
     isLoading,
     isError,
     error: error as Error | null,
-    // Cast refetch to match our interface - wagmi's type is more complex
-    refetch: refetch as unknown as () => Promise<QueryObserverResult<bigint, Error>>,
+    refetch: wrappedRefetch,
   };
 }

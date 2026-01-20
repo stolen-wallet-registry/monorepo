@@ -18,7 +18,13 @@ import {
   Label,
   Input,
 } from '@swr/ui';
-import { useMinDonation, useMintSupportSoulbound, useSupportTokens } from '@/hooks/soulbound';
+import {
+  useMinDonation,
+  useMintSupportSoulbound,
+  useSupportTokens,
+  useQuoteCrossChainMintFee,
+  useCrossChainSupportMint,
+} from '@/hooks/soulbound';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { ExplorerLink, getExplorerTxUrl } from '@/components/composed/ExplorerLink';
 import { SoulboundPreviewModal } from '@/components/composed/SoulboundPreviewModal';
@@ -28,7 +34,7 @@ import { getChainName } from '@/lib/chains/config';
 import { getSupportSoulboundAddress } from '@/lib/contracts/addresses';
 import { getBrowserLanguage } from '@/lib/browser';
 import { useAccount, useSwitchChain } from 'wagmi';
-import { Loader2, Check, AlertCircle, Heart, ArrowRightLeft } from 'lucide-react';
+import { Loader2, Check, AlertCircle, Heart, ArrowRightLeft, Send } from 'lucide-react';
 import { formatEther, parseEther } from 'viem';
 import type { Hash } from '@/lib/types/ethereum';
 
@@ -62,6 +68,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
   const { address: connectedAddress } = useAccount();
   const { minWei, isLoading: isLoadingMin } = useMinDonation();
   const { data: ethPriceData } = useEthPrice();
+  // Direct hub mint hook
   const {
     mint,
     isPending,
@@ -74,6 +81,20 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
     isOnHubChain,
     hubChainId,
   } = useMintSupportSoulbound();
+
+  // Cross-chain mint hooks (for spoke chains)
+  const { data: crossChainFee, isOnSpokeChain, currentChainId } = useQuoteCrossChainMintFee();
+  const {
+    requestMint: requestCrossChainMint,
+    isPending: isCrossChainPending,
+    isConfirming: isCrossChainConfirming,
+    isConfirmed: isCrossChainConfirmed,
+    isError: isCrossChainError,
+    error: crossChainError,
+    hash: crossChainHash,
+    reset: resetCrossChain,
+  } = useCrossChainSupportMint();
+
   const { switchChain, isPending: isSwitching } = useSwitchChain();
 
   // Get tokens for displaying minted NFT (always enabled if connected)
@@ -92,6 +113,8 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
   const hasPreviousTokens = existingTokenIds.length > 0 && !isConfirmed;
 
   const hubChainName = getChainName(hubChainId);
+  const currentChainName = currentChainId ? getChainName(currentChainId) : 'current chain';
+  const isCrossChainMinting = isCrossChainPending || isCrossChainConfirming;
 
   const handleSwitchChain = () => {
     switchChain({ chainId: hubChainId });
@@ -170,6 +193,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
   // Check if valid (meets minimum)
   const isValidAmount = donationWei > 0n && donationWei >= minWei;
 
+  // Direct hub mint handler
   const handleMint = async () => {
     if (!isValidAmount) return;
     reset();
@@ -180,6 +204,28 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
     } catch {
       // Error is handled by the hook
     }
+  };
+
+  // Cross-chain mint handler
+  const handleCrossChainMint = async () => {
+    if (!isValidAmount || !crossChainFee) return;
+    resetCrossChain();
+
+    try {
+      const txHash = await requestCrossChainMint({
+        donationWei,
+        feeWei: crossChainFee.feeWei,
+      });
+      onSuccess?.(txHash);
+    } catch {
+      // Error is handled by the hook
+    }
+  };
+
+  // Reset handler for both mint types
+  const handleReset = () => {
+    reset();
+    resetCrossChain();
   };
 
   // Refetch tokens after successful mint to get the new token ID.
@@ -207,7 +253,49 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
     return () => clearInterval(intervalId);
   }, [isConfirmed, latestTokenId, refetchTokens]);
 
-  // Success state
+  // Cross-chain mint confirmation state (message dispatched, waiting for hub mint)
+  if (isCrossChainConfirmed && crossChainHash) {
+    return (
+      <Card className={cn('', className)}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Heart className="h-5 w-5 text-pink-500" fill="currentColor" />
+            Support the Registry
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950">
+            <Send className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-700 dark:text-blue-300">
+              Cross-chain support request sent! Your token will be minted on {hubChainName} in ~1-2
+              minutes.
+            </AlertDescription>
+          </Alert>
+
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">
+              Transaction on {currentChainName}
+            </Label>
+            <ExplorerLink
+              value={crossChainHash}
+              href={getExplorerTxUrl(currentChainId ?? hubChainId, crossChainHash)}
+            />
+          </div>
+
+          <p className="text-xs text-center text-muted-foreground">
+            The Hyperlane relayer will deliver your donation request to {hubChainName}. Your
+            donation is held on {currentChainName} and will be collected by the treasury.
+          </p>
+
+          <Button variant="outline" onClick={handleReset} className="w-full">
+            Make Another Donation
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Direct hub mint success state
   if (isConfirmed && hash) {
     return (
       <Card className={cn('', className)}>
@@ -246,7 +334,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
             <Label className="text-xs text-muted-foreground">Transaction</Label>
             <ExplorerLink value={hash} href={getExplorerTxUrl(hubChainId, hash)} />
           </div>
-          <Button variant="outline" onClick={reset} className="w-full">
+          <Button variant="outline" onClick={handleReset} className="w-full">
             Mint Another
           </Button>
         </CardContent>
@@ -347,8 +435,19 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
           />
         </div>
 
-        {/* Wrong chain warning */}
-        {!isOnHubChain && (
+        {/* Spoke chain info - show cross-chain option */}
+        {isOnSpokeChain && (
+          <Alert>
+            <Send className="h-4 w-4" />
+            <AlertDescription>
+              Support tokens are minted on {hubChainName}. You can switch to {hubChainName} to avoid
+              cross-chain fees, or donate directly from {currentChainName}.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Wrong chain warning (not hub, not spoke - unsupported chain) */}
+        {!isOnHubChain && !isOnSpokeChain && (
           <Alert>
             <ArrowRightLeft className="h-4 w-4" />
             <AlertDescription>
@@ -357,7 +456,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
           </Alert>
         )}
 
-        {/* Error state */}
+        {/* Error state - direct mint */}
         {isError && error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -365,8 +464,100 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
           </Alert>
         )}
 
-        {/* Show switch button when on wrong chain, mint button when on hub */}
-        {!isOnHubChain ? (
+        {/* Error state - cross-chain mint */}
+        {isCrossChainError && crossChainError && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{sanitizeErrorMessage(crossChainError)}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* On hub chain - direct mint */}
+        {isOnHubChain && (
+          <>
+            <Button
+              onClick={handleMint}
+              disabled={isMinting || !isValidAmount}
+              className="w-full"
+              size="lg"
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Confirm in wallet...
+                </>
+              ) : isConfirming ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing donation...
+                </>
+              ) : (
+                <>
+                  <Heart className="mr-2 h-4 w-4" />
+                  Donate & Mint
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-center text-muted-foreground">
+              100% of donations go to supporting the registry infrastructure
+            </p>
+          </>
+        )}
+
+        {/* On spoke chain - show both options */}
+        {isOnSpokeChain && (
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleSwitchChain}
+                disabled={isSwitching || isCrossChainMinting}
+                className="flex-1"
+              >
+                {isSwitching ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Switching...
+                  </>
+                ) : (
+                  <>
+                    <ArrowRightLeft className="mr-2 h-4 w-4" />
+                    Switch to {hubChainName}
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={handleCrossChainMint}
+                disabled={isCrossChainMinting || !crossChainFee || !isValidAmount || isSwitching}
+                className="flex-1"
+              >
+                {isCrossChainPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Confirm...
+                  </>
+                ) : isCrossChainConfirming ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Donate from Here
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-center text-muted-foreground">
+              Cross-chain fee: ~{crossChainFee ? formatEther(crossChainFee.feeWei) : '...'} ETH +
+              your donation
+            </p>
+          </div>
+        )}
+
+        {/* Unsupported chain - just switch button */}
+        {!isOnHubChain && !isOnSpokeChain && (
           <Button onClick={handleSwitchChain} disabled={isSwitching} className="w-full" size="lg">
             {isSwitching ? (
               <>
@@ -380,35 +571,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
               </>
             )}
           </Button>
-        ) : (
-          <Button
-            onClick={handleMint}
-            disabled={isMinting || !isValidAmount}
-            className="w-full"
-            size="lg"
-          >
-            {isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Confirm in wallet...
-              </>
-            ) : isConfirming ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing donation...
-              </>
-            ) : (
-              <>
-                <Heart className="mr-2 h-4 w-4" />
-                Donate & Mint
-              </>
-            )}
-          </Button>
         )}
-
-        <p className="text-xs text-center text-muted-foreground">
-          100% of donations go to supporting the registry infrastructure
-        </p>
 
         {/* Show previously minted tokens */}
         {hasPreviousTokens && supportSoulboundAddress && (
