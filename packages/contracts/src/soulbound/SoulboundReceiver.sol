@@ -142,6 +142,6 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, Ownable2Ste
         return _trustedForwarders[domain];
     }
 
-    /// @notice Allow contract to receive ETH for support mints
-    receive() external payable { }
+    // Note: No receive() function - this contract doesn't need to accept ETH.
+    // Cross-chain support mints use mintTo() which doesn't transfer ETH (donations stay on spoke).
 }

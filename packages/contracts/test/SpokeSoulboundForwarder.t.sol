@@ -232,4 +232,39 @@ contract SpokeSoulboundForwarderTest is Test {
         vm.expectRevert(ISpokeSoulboundForwarder.SpokeSoulboundForwarder__ZeroAddress.selector);
         forwarder.withdrawDonations(address(0), 1 ether);
     }
+
+    function test_WithdrawDonations_RevertsOnInsufficientBalance() public {
+        // Contract has 0 balance, try to withdraw 1 ether
+        vm.prank(owner);
+        vm.expectRevert(ISpokeSoulboundForwarder.SpokeSoulboundForwarder__InsufficientBalance.selector);
+        forwarder.withdrawDonations(makeAddr("treasury"), 1 ether);
+    }
+
+    function test_SetHubConfig_OnlyOwner() public {
+        vm.prank(makeAddr("attacker"));
+        vm.expectRevert();
+        forwarder.setHubConfig(1, bytes32(uint256(1)));
+    }
+
+    function test_SetMinDonation_OnlyOwner() public {
+        vm.prank(makeAddr("attacker"));
+        vm.expectRevert();
+        forwarder.setMinDonation(0.1 ether);
+    }
+
+    function test_WithdrawDonations_OnlyOwner() public {
+        vm.prank(makeAddr("attacker"));
+        vm.expectRevert();
+        forwarder.withdrawDonations(makeAddr("treasury"), 1 ether);
+    }
+
+    function test_SetMinDonation_EmitsEvent() public {
+        uint256 oldMin = forwarder.minDonation();
+        uint256 newMin = 0.1 ether;
+
+        vm.prank(owner);
+        vm.expectEmit(true, true, true, true);
+        emit ISpokeSoulboundForwarder.MinDonationUpdated(oldMin, newMin);
+        forwarder.setMinDonation(newMin);
+    }
 }

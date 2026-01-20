@@ -132,9 +132,7 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712 {
         if (_computeMerkleRoot(transactionHashes, chainIds) != merkleRoot) revert MerkleRootMismatch();
 
         // Check if batch already registered
-        if (registeredBatches[_computeBatchId(merkleRoot, reporter, reportedChainId)].registeredAt != 0) {
-            revert AlreadyRegistered();
-        }
+        _requireNotRegistered(merkleRoot, reporter, reportedChainId);
 
         // Increment nonce AFTER validation to prevent replay
         nonces[reporter]++;
@@ -373,6 +371,13 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712 {
         returns (bytes32)
     {
         return keccak256(abi.encode(merkleRoot, reporter, reportedChainId));
+    }
+
+    /// @notice Check if batch is already registered (reduces stack depth at call sites)
+    function _requireNotRegistered(bytes32 merkleRoot, address reporter, bytes32 reportedChainId) internal view {
+        if (registeredBatches[_computeBatchId(merkleRoot, reporter, reportedChainId)].registeredAt != 0) {
+            revert AlreadyRegistered();
+        }
     }
 
     /// @notice Compute Merkle root from transaction hashes and chain IDs

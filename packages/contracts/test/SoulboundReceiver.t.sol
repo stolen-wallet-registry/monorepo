@@ -64,6 +64,9 @@ contract SoulboundReceiverTest is Test {
         // Set trusted forwarder
         receiver.setTrustedForwarder(SPOKE_DOMAIN, spokeForwarder);
 
+        // Authorize receiver to mint support tokens (for cross-chain mints)
+        supportSoulbound.setAuthorizedMinter(address(receiver), true);
+
         // Fund receiver for support mints
         vm.deal(address(receiver), 1 ether);
 
@@ -195,11 +198,9 @@ contract SoulboundReceiverTest is Test {
     // SUPPORT MINT TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Test that support mint attempt reaches the correct code path
-    /// @dev This test documents a known limitation: SupportSoulbound.mint() mints to msg.sender,
-    ///      not a specified recipient. A future improvement would add mintTo() to SupportSoulbound.
-    ///      For now, the cross-chain support mint flow is partially implemented.
-    function test_HandleSupportMint_ReachesCorrectCodePath() public {
+    /// @notice Test that cross-chain support mint successfully mints to the supporter
+    /// @dev Uses mintTo() which doesn't require ETH - donation is tracked via metadata.
+    function test_HandleSupportMint_Success() public {
         address supporter = makeAddr("supporter");
         uint256 donation = 0.05 ether;
 
@@ -210,11 +211,12 @@ contract SoulboundReceiverTest is Test {
             donation
         );
 
-        // The mint will fail because SupportSoulbound.mint() requires msg.value >= minWei
-        // but the receiver's call doesn't transfer enough ETH internally.
-        // This is expected behavior documenting the limitation.
-        vm.expectRevert(ISoulboundReceiver.SoulboundReceiver__SupportMintFailed.selector);
+        // Should succeed - receiver is authorized to mint
         mailbox.simulateReceive(address(receiver), SPOKE_DOMAIN, bytes32(uint256(uint160(spokeForwarder))), payload);
+
+        // Verify token was minted to supporter
+        assertEq(supportSoulbound.balanceOf(supporter), 1);
+        assertEq(supportSoulbound.tokenDonation(1), donation);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

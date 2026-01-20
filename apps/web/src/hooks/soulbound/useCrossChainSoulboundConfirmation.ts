@@ -82,9 +82,11 @@ export function useCrossChainSoulboundConfirmation({
 }: UseCrossChainSoulboundConfirmationOptions): UseCrossChainSoulboundConfirmationResult {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [messageId, setMessageId] = useState<Hex | undefined>(undefined);
+  const [pollingActive, setPollingActive] = useState(true);
   const startTimeRef = useRef<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasLoggedConfirmationRef = useRef(false);
+  const startingBalanceRef = useRef<bigint | null>(null);
 
   const hubChainId = getHubChainIdForEnvironment();
   const spokeClient = usePublicClient({ chainId: spokeChainId });
@@ -153,12 +155,13 @@ export function useCrossChainSoulboundConfirmation({
     }
   }, [messageId]);
 
-  // Determine if we should poll
-  const shouldPoll = enabled && elapsedTime >= INITIAL_DELAY && elapsedTime < maxPollingTime;
+  // Determine if we should poll (stops after confirmation/timeout)
+  const shouldPoll =
+    enabled && pollingActive && elapsedTime >= INITIAL_DELAY && elapsedTime < maxPollingTime;
 
   // Query hub chain for mint status
   // For wallet mints: use hasMinted(wallet) - one per wallet
-  // For support mints: use balanceOf(wallet) > 0 - multiple per wallet allowed
+  // For support mints: use balanceOf(wallet) > starting balance - multiple per wallet allowed
   const {
     data: mintQueryResult,
     refetch,
@@ -170,20 +173,33 @@ export function useCrossChainSoulboundConfirmation({
     args: wallet ? [wallet] : undefined,
     chainId: hubChainId,
     query: {
-      enabled: enabled && !!wallet && !!hubContractAddress,
+      enabled: enabled && pollingActive && !!wallet && !!hubContractAddress,
       refetchInterval: shouldPoll ? pollInterval : false,
       staleTime: 1000,
     },
   });
 
-  // Normalize result: hasMinted returns boolean, balanceOf returns bigint
+  // Record starting balance for support mints (to detect new mints vs existing tokens)
+  useEffect(() => {
+    if (
+      mintType === 'support' &&
+      mintQueryResult !== undefined &&
+      startingBalanceRef.current === null
+    ) {
+      startingBalanceRef.current = mintQueryResult as bigint;
+    }
+  }, [mintType, mintQueryResult]);
+
+  // Normalize result: hasMinted returns boolean, balanceOf compares to starting balance
   const isMintedOnHub = useMemo(() => {
     if (mintQueryResult === undefined) return false;
     if (mintType === 'wallet') {
       return mintQueryResult as boolean;
     }
-    // Support: balanceOf > 0 means minted
-    return (mintQueryResult as bigint) > 0n;
+    // Support: current balance > starting balance means new token minted
+    const currentBalance = mintQueryResult as bigint;
+    const startingBalance = startingBalanceRef.current ?? 0n;
+    return currentBalance > startingBalance;
   }, [mintQueryResult, mintType]);
 
   // Derive status
@@ -236,6 +252,7 @@ export function useCrossChainSoulboundConfirmation({
   useEffect(() => {
     if (status === 'confirmed' && !hasLoggedConfirmationRef.current) {
       hasLoggedConfirmationRef.current = true;
+      setPollingActive(false);
       // Stop the elapsed time interval
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -249,6 +266,7 @@ export function useCrossChainSoulboundConfirmation({
       });
     }
     if (status === 'timeout') {
+      setPollingActive(false);
       // Stop the elapsed time interval
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -286,6 +304,8 @@ export function useCrossChainSoulboundConfirmation({
     setElapsedTime(0);
     setMessageId(undefined);
     hasLoggedConfirmationRef.current = false;
+    setPollingActive(true);
+    startingBalanceRef.current = null;
   }, []);
 
   return {

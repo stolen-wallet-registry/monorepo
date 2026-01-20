@@ -163,7 +163,9 @@ contract SpokeSoulboundForwarder is ISpokeSoulboundForwarder, Ownable2Step {
     /// @notice Update minimum donation amount
     /// @param _minDonation New minimum in wei
     function setMinDonation(uint256 _minDonation) external onlyOwner {
+        uint256 oldMinDonation = minDonation;
         minDonation = _minDonation;
+        emit MinDonationUpdated(oldMinDonation, _minDonation);
     }
 
     /// @notice Withdraw accumulated donations to treasury
@@ -172,7 +174,7 @@ contract SpokeSoulboundForwarder is ISpokeSoulboundForwarder, Ownable2Step {
     /// @param amount Amount to withdraw
     function withdrawDonations(address to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert SpokeSoulboundForwarder__ZeroAddress();
-        if (amount > address(this).balance) revert SpokeSoulboundForwarder__RefundFailed();
+        if (amount > address(this).balance) revert SpokeSoulboundForwarder__InsufficientBalance();
         (bool success,) = to.call{ value: amount }("");
         if (!success) revert SpokeSoulboundForwarder__RefundFailed();
     }

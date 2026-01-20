@@ -183,9 +183,9 @@ interface ISpokeTransactionRegistry {
     /// @notice Phase 2: Complete registration after grace period (sends to hub)
     /// @dev Validates grace period timing and sends cross-chain message with full batch data.
     /// @param merkleRoot Root of the Merkle tree (must match acknowledgement)
-    /// @param reportedChainId CAIP-2 chain ID (must match acknowledgement)
+    /// @param reportedChainId keccak256 hash of the CAIP-2 chain ID where transactions occurred (must match acknowledgement)
     /// @param transactionHashes Full list of transaction hashes
-    /// @param chainIds Parallel array of CAIP-2 chain IDs per transaction
+    /// @param chainIds Parallel array of keccak256 hashes of CAIP-2 chain IDs per transaction
     /// @param reporter Address of the reporter (must sign the registration)
     /// @param deadline EIP-712 signature deadline (timestamp)
     /// @param v Signature component
@@ -263,8 +263,9 @@ interface ISpokeTransactionRegistry {
     /// @notice Generate hash struct for EIP-712 signing (frontend compatibility)
     /// @dev Used by frontend to get deadline and hash for offline signing.
     ///      Step 1 = acknowledgement, Step 2 = registration.
+    ///      IMPORTANT: Must be called by the reporter address since it uses msg.sender for nonce lookup.
     /// @param merkleRoot Root of the Merkle tree for this batch
-    /// @param reportedChainId CAIP-2 chain ID where transactions occurred
+    /// @param reportedChainId keccak256 hash of the CAIP-2 chain ID where transactions occurred
     /// @param transactionCount Number of transactions in the batch
     /// @param forwarder Address authorized to submit the transaction
     /// @param step 1 for acknowledgement, 2 for registration

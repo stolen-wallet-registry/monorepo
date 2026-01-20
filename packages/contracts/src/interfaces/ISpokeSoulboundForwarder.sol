@@ -36,6 +36,11 @@ interface ISpokeSoulboundForwarder {
     /// @param hubReceiver Address of SoulboundReceiver on hub
     event HubConfigUpdated(uint32 indexed hubDomain, address hubReceiver);
 
+    /// @notice Emitted when minimum donation is updated
+    /// @param oldMinDonation Previous minimum donation
+    /// @param newMinDonation New minimum donation
+    event MinDonationUpdated(uint256 oldMinDonation, uint256 newMinDonation);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -45,6 +50,9 @@ interface ISpokeSoulboundForwarder {
 
     /// @notice Thrown when refund transfer fails
     error SpokeSoulboundForwarder__RefundFailed();
+
+    /// @notice Thrown when withdrawal amount exceeds contract balance
+    error SpokeSoulboundForwarder__InsufficientBalance();
 
     /// @notice Thrown when a zero address is provided
     error SpokeSoulboundForwarder__ZeroAddress();

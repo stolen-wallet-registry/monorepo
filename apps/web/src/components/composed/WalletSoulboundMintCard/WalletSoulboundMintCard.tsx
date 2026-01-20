@@ -152,10 +152,10 @@ export function WalletSoulboundMintCard({
     enabled: isOnSpokeChain && !!crossChainFee,
   });
 
-  // Get tokenId for displaying minted NFT (enabled when already minted OR after confirmation)
+  // Get tokenId for displaying minted NFT (enabled when already minted OR after confirmation, including cross-chain)
   const { tokenId, isLoading: isLoadingTokenId } = useWalletTokenId({
     wallet,
-    enabled: hasMinted || isConfirmed,
+    enabled: hasMinted || isConfirmed || isMintedOnHub,
   });
 
   // Resolve contract address safely (can throw for unconfigured chains)
@@ -176,12 +176,12 @@ export function WalletSoulboundMintCard({
     switchChain({ chainId: hubChainId });
   };
 
-  // Refetch hasMinted when mint confirms so "Done" shows correct state
+  // Refetch hasMinted when mint confirms so "Done" shows correct state (both direct and cross-chain)
   useEffect(() => {
-    if (isConfirmed) {
+    if (isConfirmed || isMintedOnHub) {
       refetchHasMinted();
     }
-  }, [isConfirmed, refetchHasMinted]);
+  }, [isConfirmed, isMintedOnHub, refetchHasMinted]);
 
   // Direct hub mint handler
   const handleMint = async () => {
@@ -585,7 +585,7 @@ export function WalletSoulboundMintCard({
                         </span>
                         <span className="text-right">
                           <span className="font-medium text-foreground">
-                            {crossChainFee.feeEth} ETH
+                            {parseFloat(crossChainFee.feeEth).toFixed(6)} ETH
                           </span>
                           {ethPrice > 0 && (
                             <span className="ml-1 text-muted-foreground">

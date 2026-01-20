@@ -14,9 +14,10 @@ import {
   getTransactionRegistryAddress,
   type RegistryType,
 } from '@/lib/contracts/addresses';
+import type { RegistryVariant } from '@/lib/contracts/registryMetadata';
 import type { Address } from '@/lib/types/ethereum';
 
-export type RegistryVariant = 'wallet' | 'transaction';
+export type { RegistryVariant };
 
 export interface ResolvedRegistry {
   /** The resolved contract address (undefined if resolution failed) */

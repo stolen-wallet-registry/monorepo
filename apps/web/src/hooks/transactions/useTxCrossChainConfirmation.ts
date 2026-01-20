@@ -181,8 +181,9 @@ export function useTxCrossChainConfirmation({
       return;
     }
 
-    // Starting fresh - set start time (but don't call setState synchronously)
+    // Starting fresh - set start time and reset status tracking
     startTimeRef.current = Date.now();
+    prevStatusRef.current = 'idle';
 
     logger.registration.info('Starting cross-chain tx batch confirmation polling', {
       merkleRoot,

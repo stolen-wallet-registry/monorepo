@@ -5,6 +5,7 @@
  * from a spoke chain to the hub chain.
  */
 
+import { useEffect } from 'react';
 import { useReadContract, useAccount } from 'wagmi';
 import { formatEther } from 'viem';
 import { spokeSoulboundForwarderAbi } from '@/lib/contracts/abis';
@@ -71,31 +72,47 @@ export function useQuoteCrossChainMintFee(): UseQuoteCrossChainMintFeeResult {
   const isOnHubChain = currentChainId === hubChainId;
   const isOnSpokeChain = currentChainId ? isSpokeChain(currentChainId) : false;
 
-  // Debug logging for cross-chain fee hook state
-  logger.contract.debug('useQuoteCrossChainMintFee state', {
-    currentChainId,
-    hubChainId,
-    isOnHubChain,
-    isOnSpokeChain,
-    chainName: chain?.name,
-  });
-
   // Get spoke forwarder address for current chain
   let forwarderAddress: Address | null = null;
+  let forwarderError: unknown = null;
   if (isOnSpokeChain && currentChainId) {
     try {
       forwarderAddress = getSpokeSoulboundForwarderAddress(currentChainId);
+    } catch (error) {
+      forwarderError = error;
+    }
+  }
+
+  // Debug logging - only when chain changes
+  useEffect(() => {
+    logger.contract.debug('useQuoteCrossChainMintFee state', {
+      currentChainId,
+      hubChainId,
+      isOnHubChain,
+      isOnSpokeChain,
+      chainName: chain?.name,
+    });
+
+    if (forwarderAddress) {
       logger.contract.debug('SpokeSoulboundForwarder address resolved', {
         chainId: currentChainId,
         forwarderAddress,
       });
-    } catch (error) {
+    } else if (forwarderError) {
       logger.contract.warn('SpokeSoulboundForwarder not configured for chain', {
         chainId: currentChainId,
-        error,
+        error: forwarderError,
       });
     }
-  }
+  }, [
+    currentChainId,
+    hubChainId,
+    isOnHubChain,
+    isOnSpokeChain,
+    chain?.name,
+    forwarderAddress,
+    forwarderError,
+  ]);
 
   const enabled = isOnSpokeChain && !!forwarderAddress;
 
@@ -123,13 +140,18 @@ export function useQuoteCrossChainMintFee(): UseQuoteCrossChainMintFeeResult {
       feeWei,
       feeEth: formatEther(feeWei),
     };
-
-    logger.contract.debug('Cross-chain mint fee quoted', {
-      feeWei: feeWei.toString(),
-      feeEth: feeData.feeEth,
-      chainId: currentChainId,
-    });
   }
+
+  // Log fee changes
+  useEffect(() => {
+    if (feeWei !== undefined) {
+      logger.contract.debug('Cross-chain mint fee quoted', {
+        feeWei: feeWei.toString(),
+        feeEth: formatEther(feeWei),
+        chainId: currentChainId,
+      });
+    }
+  }, [feeWei, currentChainId]);
 
   return {
     data: feeData,

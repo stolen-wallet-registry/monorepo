@@ -123,7 +123,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     isError: hashError,
     refetch: refetchHashStruct,
   } = useGenerateHashStruct(
-    forwarderAddress && isAddress(forwarderAddress) ? forwarderAddress : undefined,
+    forwarderAddress, // Already validated via isAddress check above
     SIGNATURE_STEP.ACKNOWLEDGEMENT
   );
 

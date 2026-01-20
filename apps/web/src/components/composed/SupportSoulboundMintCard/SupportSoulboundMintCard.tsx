@@ -276,8 +276,9 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
 
   // Refetch tokens after successful mint to get the new token ID.
   // Poll briefly to handle slow indexing and stop when the token shows up or attempts cap out.
+  // Triggers for both direct hub mints (isConfirmed) and cross-chain mints (isMintedOnHub).
   useEffect(() => {
-    if (!isConfirmed || latestTokenId !== null) {
+    if ((!isConfirmed && !isMintedOnHub) || latestTokenId !== null) {
       return;
     }
 
@@ -297,7 +298,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
     }, intervalMs);
 
     return () => clearInterval(intervalId);
-  }, [isConfirmed, latestTokenId, refetchTokens]);
+  }, [isConfirmed, isMintedOnHub, latestTokenId, refetchTokens]);
 
   // Cross-chain mint confirmation state (message dispatched, waiting for hub mint)
   if (isCrossChainConfirmed && crossChainHash) {
@@ -680,7 +681,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
                     </span>
                     <span className="text-right">
                       <span className="font-medium text-foreground">
-                        {crossChainFee.feeEth} ETH
+                        {parseFloat(crossChainFee.feeEth).toFixed(6)} ETH
                       </span>
                       {ethPrice > 0 && (
                         <span className="ml-1 text-muted-foreground">
