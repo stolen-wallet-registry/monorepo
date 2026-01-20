@@ -53,6 +53,7 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, Ownable2Ste
     /// @param _walletSoulbound WalletSoulbound contract address
     /// @param _supportSoulbound SupportSoulbound contract address
     constructor(address _owner, address _mailbox, address _walletSoulbound, address _supportSoulbound) Ownable(_owner) {
+        if (_owner == address(0)) revert SoulboundReceiver__ZeroAddress();
         if (_mailbox == address(0)) revert SoulboundReceiver__ZeroAddress();
         if (_walletSoulbound == address(0)) revert SoulboundReceiver__ZeroAddress();
         if (_supportSoulbound == address(0)) revert SoulboundReceiver__ZeroAddress();
@@ -103,7 +104,8 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, Ownable2Ste
         // or if already minted (those checks are in WalletSoulbound)
         try WalletSoulbound(walletSoulbound).mintTo(wallet) {
             emit CrossChainMintExecuted(MintType.WALLET, wallet, origin);
-        } catch {
+        } catch (bytes memory reason) {
+            emit MintFailed(MintType.WALLET, wallet, origin, reason);
             revert SoulboundReceiver__WalletMintFailed();
         }
     }
@@ -118,7 +120,8 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, Ownable2Ste
         // We call mintTo which doesn't require ETH - donation is tracked via metadata.
         try SupportSoulbound(supportSoulbound).mintTo(supporter, donationAmount) {
             emit CrossChainMintExecuted(MintType.SUPPORT, supporter, origin);
-        } catch {
+        } catch (bytes memory reason) {
+            emit MintFailed(MintType.SUPPORT, supporter, origin, reason);
             revert SoulboundReceiver__SupportMintFailed();
         }
     }

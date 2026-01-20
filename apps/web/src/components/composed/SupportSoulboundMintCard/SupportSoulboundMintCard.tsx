@@ -78,6 +78,8 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
   const [ethInput, setEthInput] = useState('0.01');
   const [usdInput, setUsdInput] = useState('');
   const lastInputRef = useRef<'eth' | 'usd'>('eth');
+  // Capture spoke chain ID at mint time so confirmation uses correct chain even if user switches
+  const [mintedSpokeChainId, setMintedSpokeChainId] = useState<number | undefined>(undefined);
 
   const { address: connectedAddress } = useAccount();
   const { minWei, isLoading: isLoadingMin } = useMinDonation();
@@ -126,7 +128,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
     reset: resetConfirmation,
   } = useCrossChainSoulboundConfirmation({
     spokeHash: crossChainHash,
-    spokeChainId: currentChainId,
+    spokeChainId: mintedSpokeChainId,
     mintType: 'support',
     wallet: connectedAddress,
     enabled: isCrossChainConfirmed && !!crossChainHash && !!connectedAddress,
@@ -151,6 +153,10 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
 
   const hubChainName = getChainName(hubChainId);
   const currentChainName = currentChainId ? getChainName(currentChainId) : 'current chain';
+  // Use the captured spoke chain for display after mint is initiated
+  const mintedSpokeChainName = mintedSpokeChainId
+    ? getChainName(mintedSpokeChainId)
+    : currentChainName;
   const isCrossChainMinting = isCrossChainPending || isCrossChainConfirming;
 
   const handleSwitchChain = () => {
@@ -255,6 +261,8 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
   const handleCrossChainMint = async () => {
     if (!isValidAmount || !crossChainFee) return;
     resetCrossChain();
+    // Capture current chain at mint time so confirmation uses correct chain
+    setMintedSpokeChainId(currentChainId);
 
     try {
       const txHash = await requestCrossChainMint({
@@ -272,6 +280,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
     reset();
     resetCrossChain();
     resetConfirmation();
+    setMintedSpokeChainId(undefined);
   };
 
   // Refetch tokens after successful mint to get the new token ID.
@@ -367,11 +376,11 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
           <div className="space-y-2">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">
-                Transaction on {currentChainName}
+                Transaction on {mintedSpokeChainName}
               </Label>
               <ExplorerLink
                 value={crossChainHash}
-                href={getExplorerTxUrl(currentChainId ?? hubChainId, crossChainHash)}
+                href={getExplorerTxUrl(mintedSpokeChainId ?? hubChainId, crossChainHash)}
               />
             </div>
 
@@ -395,7 +404,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
           {!isConfirmedOnHub && (
             <p className="text-xs text-center text-muted-foreground">
               The Hyperlane relayer will deliver your donation request to {hubChainName}. Your
-              donation is held on {currentChainName} and will be collected by the treasury.
+              donation is held on {mintedSpokeChainName} and will be collected by the treasury.
             </p>
           )}
 

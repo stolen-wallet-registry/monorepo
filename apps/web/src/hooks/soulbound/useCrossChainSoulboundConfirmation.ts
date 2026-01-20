@@ -87,9 +87,29 @@ export function useCrossChainSoulboundConfirmation({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasLoggedConfirmationRef = useRef(false);
   const startingBalanceRef = useRef<bigint | null>(null);
+  const prevRunKeyRef = useRef<string | null>(null);
 
   const hubChainId = getHubChainIdForEnvironment();
   const spokeClient = usePublicClient({ chainId: spokeChainId });
+
+  // Reset state when a new confirmation run begins (different spokeHash or wallet)
+  const runKey = `${spokeHash ?? ''}-${wallet ?? ''}`;
+  useEffect(() => {
+    if (runKey !== prevRunKeyRef.current && enabled) {
+      // New run - reset all state
+      prevRunKeyRef.current = runKey;
+      setElapsedTime(0);
+      setMessageId(undefined);
+      setPollingActive(true);
+      hasLoggedConfirmationRef.current = false;
+      startingBalanceRef.current = null;
+      startTimeRef.current = null;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
+  }, [runKey, enabled]);
 
   // Get contract addresses on hub
   let hubContractAddress: Address | undefined;

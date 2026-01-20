@@ -67,8 +67,8 @@ contract SoulboundReceiverTest is Test {
         // Authorize receiver to mint support tokens (for cross-chain mints)
         supportSoulbound.setAuthorizedMinter(address(receiver), true);
 
-        // Fund receiver for support mints
-        vm.deal(address(receiver), 1 ether);
+        // Note: No vm.deal needed - cross-chain mints use mintTo() which doesn't require ETH
+        // (donations stay on spoke chain)
 
         vm.stopPrank();
     }
@@ -217,6 +217,27 @@ contract SoulboundReceiverTest is Test {
         // Verify token was minted to supporter
         assertEq(supportSoulbound.balanceOf(supporter), 1);
         assertEq(supportSoulbound.tokenDonation(1), donation);
+    }
+
+    /// @notice Test that support mint fails when receiver is not authorized
+    function test_HandleSupportMint_RevertsWhenNotAuthorized() public {
+        // Revoke minter authorization
+        vm.prank(owner);
+        supportSoulbound.setAuthorizedMinter(address(receiver), false);
+
+        address supporter = makeAddr("supporter2");
+        uint256 donation = 0.05 ether;
+
+        bytes memory payload = abi.encode(
+            uint8(2), // MSG_TYPE_SUPPORT
+            supporter,
+            supporter,
+            donation
+        );
+
+        // Should fail - receiver is no longer authorized
+        vm.expectRevert(ISoulboundReceiver.SoulboundReceiver__SupportMintFailed.selector);
+        mailbox.simulateReceive(address(receiver), SPOKE_DOMAIN, bytes32(uint256(uint160(spokeForwarder))), payload);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

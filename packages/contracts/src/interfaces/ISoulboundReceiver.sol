@@ -32,6 +32,13 @@ interface ISoulboundReceiver {
     /// @param forwarder SpokeSoulboundForwarder address
     event TrustedForwarderUpdated(uint32 indexed domain, address forwarder);
 
+    /// @notice Emitted when a mint fails (for debugging cross-chain issues)
+    /// @param mintType Type of token that failed to mint
+    /// @param wallet Target wallet address
+    /// @param originDomain Hyperlane domain ID of the spoke chain
+    /// @param reason ABI-encoded revert reason from the soulbound contract
+    event MintFailed(MintType indexed mintType, address indexed wallet, uint32 indexed originDomain, bytes reason);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════

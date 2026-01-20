@@ -176,7 +176,7 @@ contract SpokeSoulboundForwarder is ISpokeSoulboundForwarder, Ownable2Step {
         if (to == address(0)) revert SpokeSoulboundForwarder__ZeroAddress();
         if (amount > address(this).balance) revert SpokeSoulboundForwarder__InsufficientBalance();
         (bool success,) = to.call{ value: amount }("");
-        if (!success) revert SpokeSoulboundForwarder__RefundFailed();
+        if (!success) revert SpokeSoulboundForwarder__WithdrawalFailed();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

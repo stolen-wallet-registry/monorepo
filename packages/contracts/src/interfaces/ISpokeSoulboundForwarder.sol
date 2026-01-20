@@ -54,6 +54,9 @@ interface ISpokeSoulboundForwarder {
     /// @notice Thrown when withdrawal amount exceeds contract balance
     error SpokeSoulboundForwarder__InsufficientBalance();
 
+    /// @notice Thrown when withdrawal transfer fails
+    error SpokeSoulboundForwarder__WithdrawalFailed();
+
     /// @notice Thrown when a zero address is provided
     error SpokeSoulboundForwarder__ZeroAddress();
 

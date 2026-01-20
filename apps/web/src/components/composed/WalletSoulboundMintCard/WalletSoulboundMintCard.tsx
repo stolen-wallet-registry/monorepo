@@ -80,6 +80,8 @@ export function WalletSoulboundMintCard({
 }: WalletSoulboundMintCardProps) {
   // Language defaults to browser language, can be overridden via preview modal
   const [language, setLanguage] = useState(getBrowserLanguage);
+  // Capture spoke chain ID at mint time so confirmation uses correct chain even if user switches
+  const [mintedSpokeChainId, setMintedSpokeChainId] = useState<number | undefined>(undefined);
 
   const { canMint, reason, isLoading: isCheckingEligibility } = useCanMint({ address: wallet });
   const {
@@ -134,7 +136,7 @@ export function WalletSoulboundMintCard({
     reset: resetConfirmation,
   } = useCrossChainSoulboundConfirmation({
     spokeHash: crossChainHash,
-    spokeChainId: currentChainId,
+    spokeChainId: mintedSpokeChainId,
     mintType: 'wallet',
     wallet,
     enabled: isCrossChainConfirmed && !!crossChainHash,
@@ -171,6 +173,10 @@ export function WalletSoulboundMintCard({
   const isCrossChainMinting = isCrossChainPending || isCrossChainConfirming;
   const hubChainName = getChainName(hubChainId);
   const currentChainName = currentChainId ? getChainName(currentChainId) : 'current chain';
+  // Use the captured spoke chain for display after mint is initiated
+  const mintedSpokeChainName = mintedSpokeChainId
+    ? getChainName(mintedSpokeChainId)
+    : currentChainName;
 
   const handleSwitchChain = () => {
     switchChain({ chainId: hubChainId });
@@ -196,6 +202,8 @@ export function WalletSoulboundMintCard({
   // Cross-chain mint handler
   const handleCrossChainMint = async () => {
     if (!crossChainFee) return;
+    // Capture current chain at mint time so confirmation uses correct chain
+    setMintedSpokeChainId(currentChainId);
     try {
       const txHash = await requestCrossChainMint({
         wallet,
@@ -212,6 +220,7 @@ export function WalletSoulboundMintCard({
     reset();
     resetCrossChain();
     resetConfirmation();
+    setMintedSpokeChainId(undefined);
   };
 
   // Already minted state - show the minted NFT
@@ -319,11 +328,11 @@ export function WalletSoulboundMintCard({
           <div className="space-y-2">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">
-                Transaction on {currentChainName}
+                Transaction on {mintedSpokeChainName}
               </Label>
               <ExplorerLink
                 value={crossChainHash}
-                href={getExplorerTxUrl(currentChainId ?? hubChainId, crossChainHash)}
+                href={getExplorerTxUrl(mintedSpokeChainId ?? hubChainId, crossChainHash)}
               />
             </div>
 
