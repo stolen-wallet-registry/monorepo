@@ -628,12 +628,34 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
         {/* On spoke chain - show both options */}
         {isOnSpokeChain && (
           <div className="space-y-3">
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2">
+              <Button
+                onClick={handleCrossChainMint}
+                disabled={isCrossChainMinting || !crossChainFee || !isValidAmount || isSwitching}
+                className="w-full"
+              >
+                {isCrossChainPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Confirm in wallet...
+                  </>
+                ) : isCrossChainConfirming ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending cross-chain...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Donate from {currentChainName}
+                  </>
+                )}
+              </Button>
               <Button
                 variant="outline"
                 onClick={handleSwitchChain}
                 disabled={isSwitching || isCrossChainMinting}
-                className="flex-1"
+                className="w-full"
               >
                 {isSwitching ? (
                   <>
@@ -644,28 +666,6 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
                   <>
                     <ArrowRightLeft className="mr-2 h-4 w-4" />
                     Switch to {hubChainName}
-                  </>
-                )}
-              </Button>
-              <Button
-                onClick={handleCrossChainMint}
-                disabled={isCrossChainMinting || !crossChainFee || !isValidAmount || isSwitching}
-                className="flex-1"
-              >
-                {isCrossChainPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Confirm...
-                  </>
-                ) : isCrossChainConfirming ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="mr-2 h-4 w-4" />
-                    Donate from Here
                   </>
                 )}
               </Button>

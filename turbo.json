@@ -72,6 +72,18 @@
     },
     "@swr/docs#format:check": {
       "outputs": []
+    },
+    "@swr/indexer#dev": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["@swr/abis#build"]
+    },
+    "@swr/indexer#start": {
+      "dependsOn": ["@swr/abis#build"]
+    },
+    "@swr/indexer#codegen": {
+      "outputs": ["src/**/*.gen.ts"],
+      "dependsOn": ["@swr/abis#build"]
     }
   }
 }
