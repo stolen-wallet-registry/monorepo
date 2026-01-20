@@ -260,6 +260,37 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'event',
+    name: 'TransactionBatchReceived',
+    inputs: [
+      {
+        name: 'sourceChain',
+        type: 'uint32',
+        indexed: true,
+        internalType: 'uint32',
+      },
+      {
+        name: 'reporter',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'merkleRoot',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'messageId',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'TrustedSourceUpdated',
     inputs: [
       {
@@ -300,12 +331,22 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'error',
+    name: 'CrossChainInbox__UnknownMessageType',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'CrossChainInbox__UntrustedSource',
     inputs: [],
   },
   {
     type: 'error',
     name: 'CrossChainInbox__ZeroAddress',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'CrossChainMessage__BatchSizeMismatch',
     inputs: [],
   },
   {
@@ -321,6 +362,11 @@ export const CrossChainInboxABI = [
   {
     type: 'error',
     name: 'CrossChainMessage__UnsupportedVersion',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'InvalidChainId',
     inputs: [],
   },
   {

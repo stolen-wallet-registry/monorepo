@@ -53,8 +53,21 @@ export {
 export { useTxQuoteFee, type TxQuoteFeeData, type UseTxQuoteFeeResult } from './useTxQuoteFee';
 
 export {
+  useTxQuoteFeeBreakdown,
+  type UseTxQuoteFeeBreakdownResult,
+} from './useTxQuoteFeeBreakdown';
+
+export {
   useTxGasEstimate,
   type TxGasEstimate,
   type UseTxGasEstimateParams,
   type UseTxGasEstimateResult,
 } from './useTxGasEstimate';
+
+export {
+  useTxCrossChainConfirmation,
+  needsTxCrossChainConfirmation,
+  type TxCrossChainStatus,
+  type UseTxCrossChainConfirmationOptions,
+  type UseTxCrossChainConfirmationResult,
+} from './useTxCrossChainConfirmation';

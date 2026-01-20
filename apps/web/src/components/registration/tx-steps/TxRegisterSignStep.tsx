@@ -25,7 +25,7 @@ import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
-import type { Hex } from '@/lib/types/ethereum';
+import type { Hex, Hash } from '@/lib/types/ethereum';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 export interface TxRegisterSignStepProps {
@@ -81,6 +81,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
     nonce,
     isLoading: nonceLoading,
     isError: nonceError,
+    refetch: refetchNonce,
   } = useTxContractNonce(reporterAddress);
 
   const {
@@ -133,23 +134,55 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
       return;
     }
 
-    // Refetch to get fresh deadline - do not use stale data
-    logger.contract.debug('Refetching hash struct for fresh registration deadline');
-    const refetchResult = await refetchHashStruct();
-    const rawData = refetchResult?.data;
+    // Refetch nonce and deadline to get fresh values - do not use stale data
+    // CRITICAL: After acknowledgement, nonce is incremented. Must refetch!
+    logger.contract.debug('Refetching nonce and hash struct for fresh registration data');
+
+    // Refetch both in parallel
+    const [nonceResult, hashStructResult] = await Promise.all([
+      refetchNonce(),
+      refetchHashStruct(),
+    ]);
+
+    // Extract fresh nonce from refetch result
+    const freshNonce = nonceResult.status === 'success' ? (nonceResult.data as bigint) : undefined;
+
+    // Extract fresh deadline from refetch result
+    const rawData = hashStructResult.status === 'success' ? hashStructResult.data : undefined;
+
+    // Require fresh nonce - registration uses incremented nonce after ack
+    if (freshNonce === undefined) {
+      logger.signature.error('Failed to get fresh nonce', {
+        nonceStatus: nonceResult.status,
+        nonceError: nonceResult.error?.message,
+      });
+      setSignatureError('Failed to load fresh nonce. Please try again.');
+      setSignatureStatus('error');
+      return;
+    }
 
     // Require fresh deadline - do not fall back to stale hashStructData
-    if (!Array.isArray(rawData) || typeof rawData[0] !== 'bigint') {
+    // Contract returns tuple [deadline: bigint, hashStruct: Hash] - validate structure
+    if (!Array.isArray(rawData) || rawData.length < 2 || typeof rawData[0] !== 'bigint') {
       logger.signature.error('Failed to get fresh hash struct data', {
         hasData: !!rawData,
         dataType: Array.isArray(rawData) ? 'array' : typeof rawData,
+        arrayLength: Array.isArray(rawData) ? rawData.length : 0,
+        hashStructStatus: hashStructResult.status,
       });
       setSignatureError('Failed to load fresh signing data. Please try again.');
       setSignatureStatus('error');
       return;
     }
 
-    const freshDeadline = rawData[0];
+    // Explicit tuple destructuring for clarity and type safety
+    const [freshDeadline] = rawData as [bigint, Hash];
+
+    logger.contract.debug('Fresh registration data fetched', {
+      freshNonce: freshNonce.toString(),
+      freshDeadline: freshDeadline.toString(),
+      previousNonce: nonce?.toString(),
+    });
 
     setSignatureStatus('signing');
     setSignatureError(null);
@@ -160,7 +193,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
         reporter: address,
         forwarder: forwarderAddress,
         isSelfRelay,
-        nonce: nonce.toString(),
+        nonce: freshNonce.toString(),
         deadline: freshDeadline.toString(),
         chainId,
       });
@@ -169,7 +202,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
         merkleRoot,
         reportedChainId: reportedChainIdHash,
         forwarder: forwarderAddress,
-        nonce,
+        nonce: freshNonce,
         deadline: freshDeadline,
       });
 
@@ -186,7 +219,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
         storeTxSignature({
           signature: sig,
           deadline: freshDeadline,
-          nonce,
+          nonce: freshNonce,
           merkleRoot,
           reportedChainId: reportedChainIdHash,
           transactionCount: selectedTxHashes.length,

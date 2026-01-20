@@ -235,6 +235,82 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // ISpokeTransactionRegistry errors (14)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  '0x4554de53': {
+    name: 'SpokeTransactionRegistry__InvalidNonce',
+    message: 'Transaction nonce mismatch.',
+    action: 'Please refresh the page and try again.',
+  },
+
+  '0xa5ee6714': {
+    name: 'SpokeTransactionRegistry__SignatureExpired',
+    message: 'Your signature has expired.',
+    action: 'Please sign again to continue.',
+  },
+
+  '0xed04f3ed': {
+    name: 'SpokeTransactionRegistry__InvalidSigner',
+    message: 'Signature verification failed.',
+    action: 'Ensure you are signing with the correct wallet.',
+  },
+
+  '0x1aeaa3f0': {
+    name: 'SpokeTransactionRegistry__InvalidForwarder',
+    message: 'Wrong wallet connected for this registration.',
+    action: 'Switch to your gas wallet to submit this transaction.',
+  },
+
+  '0x9d8060a9': {
+    name: 'SpokeTransactionRegistry__RegistrationExpired',
+    message: 'Your registration window has expired.',
+    action: 'Please start the registration process again from the beginning.',
+  },
+
+  '0x29f7e570': {
+    name: 'SpokeTransactionRegistry__GracePeriodNotStarted',
+    message: 'The grace period has not ended yet.',
+    action: 'Please wait for the countdown to complete before registering.',
+  },
+
+  '0x19e686fd': {
+    name: 'SpokeTransactionRegistry__NoPendingAcknowledgement',
+    message: 'No pending acknowledgement found.',
+    action: 'Please complete the acknowledgement step first.',
+  },
+
+  '0x3cbd2693': {
+    name: 'SpokeTransactionRegistry__MerkleRootMismatch',
+    message: 'Merkle root does not match the selected transactions.',
+    action: 'Your transaction selection may have changed. Please start over.',
+  },
+
+  '0x7da842e2': {
+    name: 'SpokeTransactionRegistry__ReportedChainIdMismatch',
+    message: 'Chain ID mismatch in transaction data.',
+    action: 'Please reselect your transactions and try again.',
+  },
+
+  '0xbb119f75': {
+    name: 'SpokeTransactionRegistry__ArrayLengthMismatch',
+    message: 'Transaction data arrays have mismatched lengths.',
+    action: 'Please try again. If the issue persists, contact support.',
+  },
+
+  '0xa66a0ad1': {
+    name: 'SpokeTransactionRegistry__InsufficientFee',
+    message: 'Insufficient fee for cross-chain registration.',
+    action: 'Ensure you have enough ETH for registration and bridge fees.',
+  },
+
+  '0x7577b0b3': {
+    name: 'SpokeTransactionRegistry__InvalidReporter',
+    message: 'Invalid reporter address provided.',
+    action: 'Please check the address and try again.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // IBridgeAdapter errors (3)
   // ═══════════════════════════════════════════════════════════════════════════
 

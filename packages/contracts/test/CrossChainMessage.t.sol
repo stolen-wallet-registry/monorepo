@@ -9,10 +9,23 @@ contract DecoderHelper {
     function decode(bytes calldata data) external pure returns (CrossChainMessage.RegistrationPayload memory payload) {
         return CrossChainMessage.decodeRegistration(data);
     }
+
+    function decodeBatch(bytes calldata data)
+        external
+        pure
+        returns (CrossChainMessage.TransactionBatchPayload memory payload)
+    {
+        return CrossChainMessage.decodeTransactionBatch(data);
+    }
+
+    function getMessageType(bytes calldata data) external pure returns (bytes1) {
+        return CrossChainMessage.getMessageType(data);
+    }
 }
 
 contract CrossChainMessageTest is Test {
     using CrossChainMessage for CrossChainMessage.RegistrationPayload;
+    using CrossChainMessage for CrossChainMessage.TransactionBatchPayload;
 
     DecoderHelper decoder;
 
@@ -206,5 +219,248 @@ contract CrossChainMessageTest is Test {
         // Message constants should match expected values.
         assertEq(CrossChainMessage.MESSAGE_VERSION, 1, "version should be 1");
         assertEq(CrossChainMessage.MSG_TYPE_REGISTRATION, bytes1(0x01), "registration type should be 0x01");
+        assertEq(CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH, bytes1(0x02), "transaction batch type should be 0x02");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TRANSACTION BATCH ENCODING TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function test_EncodeTransactionBatch_Success() public pure {
+        // Encoding should handle dynamic arrays correctly.
+        bytes32[] memory txHashes = new bytes32[](3);
+        bytes32[] memory chainIdArray = new bytes32[](3);
+        for (uint256 i = 0; i < 3; i++) {
+            txHashes[i] = keccak256(abi.encodePacked("tx", i));
+            chainIdArray[i] = keccak256("eip155:1");
+        }
+
+        CrossChainMessage.TransactionBatchPayload memory payload = CrossChainMessage.TransactionBatchPayload({
+            merkleRoot: keccak256("merkleRoot"),
+            reporter: address(0x1234567890123456789012345678901234567890),
+            reportedChainId: keccak256("eip155:1"),
+            sourceChainId: keccak256("eip155:11155420"),
+            transactionCount: 3,
+            isSponsored: true,
+            nonce: 42,
+            timestamp: 1_700_000_000,
+            transactionHashes: txHashes,
+            chainIds: chainIdArray
+        });
+
+        bytes memory encoded = payload.encodeTransactionBatch();
+
+        // Should be > 384 bytes (minimum with dynamic arrays)
+        assertGt(encoded.length, 384, "Encoded length should be > 384 bytes");
+    }
+
+    function test_DecodeTransactionBatch_Success() public view {
+        // Decoding should recover the original payload values including arrays.
+        bytes32[] memory txHashes = new bytes32[](5);
+        bytes32[] memory chainIdArray = new bytes32[](5);
+        bytes32 reportedChainId = keccak256("eip155:1");
+        for (uint256 i = 0; i < 5; i++) {
+            txHashes[i] = keccak256(abi.encodePacked("transaction", i));
+            chainIdArray[i] = reportedChainId;
+        }
+
+        CrossChainMessage.TransactionBatchPayload memory original = CrossChainMessage.TransactionBatchPayload({
+            merkleRoot: keccak256("batchRoot"),
+            reporter: address(0xabCDeF0123456789AbcdEf0123456789aBCDEF01),
+            reportedChainId: reportedChainId,
+            sourceChainId: keccak256("eip155:84532"),
+            transactionCount: 5,
+            isSponsored: false,
+            nonce: 100,
+            timestamp: 1_700_000_000,
+            transactionHashes: txHashes,
+            chainIds: chainIdArray
+        });
+
+        bytes memory encoded = original.encodeTransactionBatch();
+
+        // Decode using helper
+        CrossChainMessage.TransactionBatchPayload memory decoded = decoder.decodeBatch(encoded);
+
+        // Verify all fixed fields match
+        assertEq(decoded.merkleRoot, original.merkleRoot, "merkleRoot mismatch");
+        assertEq(decoded.reporter, original.reporter, "reporter mismatch");
+        assertEq(decoded.reportedChainId, original.reportedChainId, "reportedChainId mismatch");
+        assertEq(decoded.sourceChainId, original.sourceChainId, "sourceChainId mismatch");
+        assertEq(decoded.transactionCount, original.transactionCount, "transactionCount mismatch");
+        assertEq(decoded.isSponsored, original.isSponsored, "isSponsored mismatch");
+        assertEq(decoded.nonce, original.nonce, "nonce mismatch");
+        assertEq(decoded.timestamp, original.timestamp, "timestamp mismatch");
+
+        // Verify arrays
+        assertEq(decoded.transactionHashes.length, original.transactionHashes.length, "txHashes length mismatch");
+        assertEq(decoded.chainIds.length, original.chainIds.length, "chainIds length mismatch");
+        for (uint256 i = 0; i < 5; i++) {
+            assertEq(decoded.transactionHashes[i], original.transactionHashes[i], "txHash mismatch");
+            assertEq(decoded.chainIds[i], original.chainIds[i], "chainId mismatch");
+        }
+    }
+
+    function test_DecodeTransactionBatch_EmptyArrays() public view {
+        // Empty arrays should encode/decode correctly.
+        bytes32[] memory emptyHashes = new bytes32[](0);
+        bytes32[] memory emptyChainIds = new bytes32[](0);
+
+        CrossChainMessage.TransactionBatchPayload memory original = CrossChainMessage.TransactionBatchPayload({
+            merkleRoot: bytes32(0),
+            reporter: address(0x1234),
+            reportedChainId: bytes32(0),
+            sourceChainId: bytes32(0),
+            transactionCount: 0,
+            isSponsored: false,
+            nonce: 0,
+            timestamp: 0,
+            transactionHashes: emptyHashes,
+            chainIds: emptyChainIds
+        });
+
+        bytes memory encoded = original.encodeTransactionBatch();
+        CrossChainMessage.TransactionBatchPayload memory decoded = decoder.decodeBatch(encoded);
+
+        assertEq(decoded.transactionHashes.length, 0, "should have empty txHashes");
+        assertEq(decoded.chainIds.length, 0, "should have empty chainIds");
+    }
+
+    function test_DecodeTransactionBatch_InvalidVersion_Reverts() public {
+        // Decode should reject unsupported message versions.
+        bytes32[] memory txHashes = new bytes32[](0);
+        bytes32[] memory chainIdArray = new bytes32[](0);
+
+        bytes memory invalidPayload = abi.encode(
+            uint8(99), // Wrong version
+            CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH,
+            bytes32(0),
+            address(0),
+            bytes32(0),
+            bytes32(0),
+            uint32(0),
+            false,
+            uint256(0),
+            uint64(0),
+            txHashes,
+            chainIdArray
+        );
+
+        vm.expectRevert(CrossChainMessage.CrossChainMessage__UnsupportedVersion.selector);
+        decoder.decodeBatch(invalidPayload);
+    }
+
+    function test_DecodeTransactionBatch_InvalidMessageType_Reverts() public {
+        // Decode should reject wrong message type.
+        bytes32[] memory txHashes = new bytes32[](0);
+        bytes32[] memory chainIdArray = new bytes32[](0);
+
+        bytes memory invalidPayload = abi.encode(
+            CrossChainMessage.MESSAGE_VERSION,
+            bytes1(0x99), // Wrong type
+            bytes32(0),
+            address(0),
+            bytes32(0),
+            bytes32(0),
+            uint32(0),
+            false,
+            uint256(0),
+            uint64(0),
+            txHashes,
+            chainIdArray
+        );
+
+        vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageType.selector);
+        decoder.decodeBatch(invalidPayload);
+    }
+
+    function test_DecodeTransactionBatch_TruncatedData_Reverts() public {
+        // Decode should reject too-short payloads.
+        bytes memory truncated = new bytes(100);
+
+        vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector);
+        decoder.decodeBatch(truncated);
+    }
+
+    function test_DecodeTransactionBatch_BatchSizeMismatch_Reverts() public {
+        // Decode should reject payloads where transactionCount doesn't match array lengths.
+        // Create arrays with 2 elements but set transactionCount to 3
+        bytes32[] memory txHashes = new bytes32[](2);
+        bytes32[] memory chainIdArray = new bytes32[](2);
+        txHashes[0] = keccak256("tx0");
+        txHashes[1] = keccak256("tx1");
+        chainIdArray[0] = keccak256("eip155:1");
+        chainIdArray[1] = keccak256("eip155:1");
+
+        bytes memory mismatchedPayload = abi.encode(
+            CrossChainMessage.MESSAGE_VERSION,
+            CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH,
+            bytes32(0), // merkleRoot
+            address(0x1234), // reporter
+            keccak256("eip155:1"), // reportedChainId
+            keccak256("eip155:31338"), // sourceChainId
+            uint32(3), // transactionCount (mismatched - arrays have 2 elements)
+            false, // isSponsored
+            uint256(0), // nonce
+            uint64(block.timestamp), // timestamp
+            txHashes,
+            chainIdArray
+        );
+
+        vm.expectRevert(CrossChainMessage.CrossChainMessage__BatchSizeMismatch.selector);
+        decoder.decodeBatch(mismatchedPayload);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MESSAGE TYPE ROUTING TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function test_GetMessageType_Registration() public view {
+        // getMessageType should return registration type for registration payloads.
+        CrossChainMessage.RegistrationPayload memory payload = CrossChainMessage.RegistrationPayload({
+            wallet: address(0x1234),
+            sourceChainId: 1,
+            isSponsored: false,
+            nonce: 0,
+            timestamp: 0,
+            registrationHash: bytes32(0)
+        });
+
+        bytes memory encoded = payload.encodeRegistration();
+        bytes1 msgType = decoder.getMessageType(encoded);
+
+        assertEq(msgType, CrossChainMessage.MSG_TYPE_REGISTRATION);
+    }
+
+    function test_GetMessageType_TransactionBatch() public view {
+        // getMessageType should return transaction batch type for batch payloads.
+        bytes32[] memory txHashes = new bytes32[](0);
+        bytes32[] memory chainIdArray = new bytes32[](0);
+
+        CrossChainMessage.TransactionBatchPayload memory payload = CrossChainMessage.TransactionBatchPayload({
+            merkleRoot: bytes32(0),
+            reporter: address(0x1234),
+            reportedChainId: bytes32(0),
+            sourceChainId: bytes32(0),
+            transactionCount: 0,
+            isSponsored: false,
+            nonce: 0,
+            timestamp: 0,
+            transactionHashes: txHashes,
+            chainIds: chainIdArray
+        });
+
+        bytes memory encoded = payload.encodeTransactionBatch();
+        bytes1 msgType = decoder.getMessageType(encoded);
+
+        assertEq(msgType, CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH);
+    }
+
+    function test_GetMessageType_TooShort_Reverts() public {
+        // getMessageType should revert on too-short data.
+        bytes memory tooShort = new bytes(32);
+
+        vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector);
+        decoder.getMessageType(tooShort);
     }
 }

@@ -19,7 +19,13 @@ import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
 import { areAddressesEqual } from '@/lib/address';
 import { useTransactionSelection } from '@/stores/transactionFormStore';
-import { useTransactionAcknowledgement, type TxAcknowledgementParams } from '@/hooks/transactions';
+import {
+  useTransactionAcknowledgement,
+  useTxGasEstimate,
+  type TxAcknowledgementParams,
+} from '@/hooks/transactions';
+import type { TransactionCost } from '@/hooks/useTransactionCost';
+import { useEthPrice } from '@/hooks/useEthPrice';
 import { getTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
 import { parseSignature } from '@/lib/signatures';
 import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
@@ -58,6 +64,9 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     reset,
   } = useTransactionAcknowledgement();
 
+  // Get ETH price for cost display
+  const { data: ethPrice } = useEthPrice();
+
   // Local state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -93,6 +102,35 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
 
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : undefined;
+
+  // Build chain IDs array for gas estimation
+  const chainIdsArray = reportedChainIdHash
+    ? selectedTxHashes.map(() => reportedChainIdHash)
+    : undefined;
+
+  // Parse signature for gas estimation
+  const parsedSigForEstimate = storedSignature
+    ? parseSignature(storedSignature.signature)
+    : undefined;
+
+  // Get gas estimate (acknowledgement step - no fees, just gas)
+  const {
+    data: gasEstimate,
+    isLoading: gasLoading,
+    isError: gasError,
+    refetch: refetchGas,
+  } = useTxGasEstimate({
+    step: 'acknowledgement',
+    merkleRoot: merkleRoot ?? undefined,
+    reportedChainId: reportedChainIdHash,
+    transactionCount: selectedTxHashes.length,
+    transactionHashes: selectedTxHashes.length > 0 ? selectedTxHashes : undefined,
+    chainIds: chainIdsArray,
+    reporter: storedSignature?.reporter,
+    deadline: storedSignature?.deadline,
+    signature: parsedSigForEstimate,
+    enabled: !!storedSignature && !!merkleRoot && !!reportedChainIdHash,
+  });
 
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
@@ -392,7 +430,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         <SelectedTransactionsTable transactions={selectedTxDetails} showValue showBlock />
       )}
 
-      {/* Transaction card */}
+      {/* Transaction card with cost estimate */}
       <TransactionCard
         type="acknowledgement"
         status={getStatus()}
@@ -401,6 +439,42 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         explorerUrl={explorerUrl}
         signedMessage={signedMessageData}
         chainId={chainId}
+        costEstimate={{
+          data: {
+            protocolFee: null, // No protocol fee for acknowledgement
+            bridgeFee: null, // No bridge fee for acknowledgement
+            bridgeName: null,
+            gasCost: gasEstimate
+              ? {
+                  wei: gasEstimate.gasCostWei,
+                  eth: gasEstimate.gasCostEth,
+                  usd: gasEstimate.gasCostUsd,
+                  gwei: gasEstimate.gasPriceGwei,
+                }
+              : {
+                  wei: 0n,
+                  eth: '—',
+                  usd: '—',
+                  gwei: '—',
+                },
+            total: gasEstimate
+              ? {
+                  wei: gasEstimate.gasCostWei,
+                  eth: gasEstimate.gasCostEth,
+                  usd: gasEstimate.gasCostUsd,
+                }
+              : {
+                  wei: 0n,
+                  eth: '—',
+                  usd: '—',
+                },
+            ethPriceUsd: ethPrice?.usdFormatted ?? '—',
+            isCrossChain: false,
+          } as TransactionCost,
+          isLoading: gasLoading,
+          isError: gasError,
+          refetch: refetchGas,
+        }}
         onSubmit={handleSubmit}
         onRetry={handleRetry}
         disabled={!isCorrectWallet}

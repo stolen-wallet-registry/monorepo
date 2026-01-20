@@ -17,11 +17,15 @@ const contracts = [
   // Cross-chain contracts
   'CrossChainInbox.sol/CrossChainInbox.json',
   'SpokeRegistry.sol/SpokeRegistry.json',
+  'SpokeTransactionRegistry.sol/SpokeTransactionRegistry.json',
   'HyperlaneAdapter.sol/HyperlaneAdapter.json',
   // Soulbound contracts
   'TranslationRegistry.sol/TranslationRegistry.json',
   'WalletSoulbound.sol/WalletSoulbound.json',
   'SupportSoulbound.sol/SupportSoulbound.json',
+  // Cross-chain soulbound contracts
+  'SpokeSoulboundForwarder.sol/SpokeSoulboundForwarder.json',
+  'SoulboundReceiver.sol/SoulboundReceiver.json',
 ];
 
 mkdirSync(abiDir, { recursive: true });

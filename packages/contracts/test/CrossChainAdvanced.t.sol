@@ -385,7 +385,7 @@ contract CrossChainAdvancedTest is Test {
         bytes32 sender = CrossChainMessage.addressToBytes32(address(spoke1Registry));
 
         vm.chainId(HUB_DOMAIN);
-        vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageType.selector);
+        vm.expectRevert(ICrossChainInbox.CrossChainInbox__UnknownMessageType.selector);
         hubMailbox.simulateReceive(address(inbox), SPOKE1_DOMAIN, sender, invalidMessage);
     }
 

@@ -12,8 +12,9 @@ import { SignatureCard, type SignatureStatus } from '@/components/composed/Signa
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { Alert, AlertDescription } from '@swr/ui';
 import { useSignEIP712 } from '@/hooks/useSignEIP712';
-import { useAcknowledgementHashStruct } from '@/hooks/useGenerateHashStruct';
+import { useGenerateHashStruct } from '@/hooks/useGenerateHashStruct';
 import { useContractNonce } from '@/hooks/useContractNonce';
+import { SIGNATURE_STEP } from '@/lib/signatures';
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
 import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
@@ -51,7 +52,7 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
     data: hashData,
     isLoading: isLoadingHash,
     error: hashError,
-  } = useAcknowledgementHashStruct(relayer || undefined);
+  } = useGenerateHashStruct(relayer || undefined, SIGNATURE_STEP.ACKNOWLEDGEMENT);
 
   // Get nonce for the registeree
   const {

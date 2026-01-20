@@ -5,13 +5,15 @@
  * - Gas units needed for the transaction
  * - Current gas price
  * - Total gas cost in ETH and USD
+ *
+ * Supports both hub (StolenTransactionRegistry) and spoke (SpokeTransactionRegistry) chains.
  */
 
 import { useMemo } from 'react';
 import { useEstimateGas, useGasPrice, useChainId } from 'wagmi';
 import { formatGwei, encodeFunctionData } from 'viem';
-import { stolenTransactionRegistryAbi } from '@/lib/contracts/abis';
-import { getStolenTransactionRegistryAddress } from '@/lib/contracts/addresses';
+import { stolenTransactionRegistryAbi, spokeTransactionRegistryAbi } from '@/lib/contracts/abis';
+import { getTransactionRegistryAddress, isSpokeChain } from '@/lib/contracts/addresses';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { logger } from '@/lib/logger';
 import { formatCentsToUsd, formatEthConsistent } from '@/lib/utils';
@@ -99,11 +101,15 @@ export function useTxGasEstimate({
 }: UseTxGasEstimateParams): UseTxGasEstimateResult {
   const chainId = useChainId();
   const ethPrice = useEthPrice();
+  const isSpoke = isSpokeChain(chainId);
 
-  // Get contract address
+  // Select correct ABI based on chain type
+  const abi = isSpoke ? spokeTransactionRegistryAbi : stolenTransactionRegistryAbi;
+
+  // Get contract address (spoke-aware)
   const contractAddress = useMemo(() => {
     try {
-      return getStolenTransactionRegistryAddress(chainId);
+      return getTransactionRegistryAddress(chainId);
     } catch {
       return undefined;
     }
@@ -141,7 +147,7 @@ export function useTxGasEstimate({
         // acknowledge has transactionCount as 3rd param (uint32)
         const txCount = transactionCount ?? transactionHashes.length;
         return encodeFunctionData({
-          abi: stolenTransactionRegistryAbi,
+          abi,
           functionName: 'acknowledge',
           args: [
             merkleRoot,
@@ -159,7 +165,7 @@ export function useTxGasEstimate({
       } else {
         // register does NOT have transactionCount
         return encodeFunctionData({
-          abi: stolenTransactionRegistryAbi,
+          abi,
           functionName: 'register',
           args: [
             merkleRoot,
@@ -192,6 +198,7 @@ export function useTxGasEstimate({
     deadline,
     signature,
     hasAllParams,
+    abi,
   ]);
 
   const estimateEnabled = enabled && !!contractAddress && !!callData;

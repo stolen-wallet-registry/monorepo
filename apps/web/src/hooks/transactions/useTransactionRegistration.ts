@@ -3,12 +3,18 @@
  *
  * This is Phase 2 of the two-phase registration flow for transaction batches.
  * Must be called after the grace period has elapsed following acknowledgement.
+ *
+ * Supports both:
+ * - Hub chains: Uses StolenTransactionRegistry (on-chain only, local fee)
+ * - Spoke chains: Uses SpokeTransactionRegistry (cross-chain, bridge + registration fee)
  */
 
 import { useMemo } from 'react';
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
-import { stolenTransactionRegistryAbi } from '@/lib/contracts/abis';
+import { stolenTransactionRegistryAbi, spokeTransactionRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenTransactionRegistryAddress } from '@/lib/contracts/addresses';
+import { getSpokeTransactionRegistryAddress } from '@/lib/contracts/crosschain-addresses';
+import { isHubChain, isSpokeChain } from '@swr/chains';
 import type { ParsedSignature } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -41,6 +47,8 @@ export interface UseTxRegistrationResult {
   isError: boolean;
   error: Error | null;
   reset: () => void;
+  /** Whether using spoke chain (cross-chain) vs hub chain (on-chain only) */
+  isSpokeChain: boolean;
 }
 
 /**
@@ -51,22 +59,45 @@ export interface UseTxRegistrationResult {
 export function useTransactionRegistration(): UseTxRegistrationResult {
   const chainId = useChainId();
 
-  const contractAddress = useMemo(() => {
+  // Determine chain role - simple lookups, no memoization needed
+  const isSpoke = isSpokeChain(chainId);
+  const isHub = isHubChain(chainId);
+
+  // Resolve contract address based on chain role
+  const { contractAddress, contractAbi } = useMemo(() => {
     try {
-      const address = getStolenTransactionRegistryAddress(chainId);
-      logger.contract.debug('useTransactionRegistration: Registry address resolved', {
-        chainId,
-        contractAddress: address,
-      });
-      return address;
+      if (isSpoke) {
+        // Spoke chain: use SpokeTransactionRegistry
+        const address = getSpokeTransactionRegistryAddress(chainId);
+        if (!address) {
+          throw new Error(`SpokeTransactionRegistry not configured for chain ${chainId}`);
+        }
+        logger.contract.debug('useTransactionRegistration: Spoke registry resolved', {
+          chainId,
+          contractAddress: address,
+        });
+        return { contractAddress: address, contractAbi: spokeTransactionRegistryAbi };
+      } else if (isHub) {
+        // Hub chain: use StolenTransactionRegistry
+        const address = getStolenTransactionRegistryAddress(chainId);
+        logger.contract.debug('useTransactionRegistration: Hub registry resolved', {
+          chainId,
+          contractAddress: address,
+        });
+        return { contractAddress: address, contractAbi: stolenTransactionRegistryAbi };
+      } else {
+        throw new Error(`Chain ${chainId} is neither hub nor spoke`);
+      }
     } catch (error) {
-      logger.contract.error('useTransactionRegistration: Failed to resolve registry address', {
+      logger.contract.error('useTransactionRegistration: Failed to resolve registry', {
         chainId,
+        isSpoke,
+        isHub,
         error: error instanceof Error ? error.message : String(error),
       });
-      return undefined;
+      return { contractAddress: undefined, contractAbi: stolenTransactionRegistryAbi };
     }
-  }, [chainId]);
+  }, [chainId, isSpoke, isHub]);
 
   const {
     writeContractAsync,
@@ -114,12 +145,13 @@ export function useTransactionRegistration(): UseTxRegistrationResult {
       transactionCount: transactionHashes.length,
       deadline: deadline.toString(),
       feeWei: feeWei?.toString() ?? '0',
+      isSpoke,
     });
 
     try {
       const txHash = await writeContractAsync({
         address: contractAddress,
-        abi: stolenTransactionRegistryAbi,
+        abi: contractAbi,
         functionName: 'register',
         args: [
           merkleRoot,
@@ -163,5 +195,6 @@ export function useTransactionRegistration(): UseTxRegistrationResult {
     isError: isWriteError || isReceiptError,
     error: writeError || receiptError,
     reset,
+    isSpokeChain: isSpoke,
   };
 }

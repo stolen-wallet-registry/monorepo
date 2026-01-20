@@ -5,6 +5,7 @@ import { ICrossChainInbox } from "../interfaces/ICrossChainInbox.sol";
 import { IRegistryHub } from "../interfaces/IRegistryHub.sol";
 import { IMessageRecipient } from "@hyperlane-xyz/core/contracts/interfaces/IMessageRecipient.sol";
 import { CrossChainMessage } from "../libraries/CrossChainMessage.sol";
+import { CAIP2 } from "../libraries/CAIP2.sol";
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 /// @title CrossChainInbox
@@ -72,16 +73,35 @@ contract CrossChainInbox is IMessageRecipient, ICrossChainInbox, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Handle incoming cross-chain message from Hyperlane
-    /// @dev Only callable by Hyperlane mailbox. Validates source and routes to RegistryHub.
+    /// @dev Only callable by Hyperlane mailbox. Validates source and routes to RegistryHub based on message type.
     /// @param _origin Origin chain domain ID
     /// @param _sender Sender address on origin chain (bytes32)
-    /// @param _messageBody Encoded registration payload
+    /// @param _messageBody Encoded payload (wallet registration or transaction batch)
     function handle(uint32 _origin, bytes32 _sender, bytes calldata _messageBody) external onlyMailbox {
         // Validate source is trusted
         if (!_trustedSources[_origin][_sender]) {
             revert CrossChainInbox__UntrustedSource();
         }
 
+        // Generate message ID from payload hash
+        bytes32 messageId = keccak256(_messageBody);
+
+        // Extract message type to determine routing
+        bytes1 msgType = CrossChainMessage.getMessageType(_messageBody);
+
+        if (msgType == CrossChainMessage.MSG_TYPE_REGISTRATION) {
+            // Wallet registration flow
+            _handleWalletRegistration(_origin, _messageBody, messageId);
+        } else if (msgType == CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH) {
+            // Transaction batch flow
+            _handleTransactionBatch(_origin, _messageBody, messageId);
+        } else {
+            revert CrossChainInbox__UnknownMessageType();
+        }
+    }
+
+    /// @dev Handle wallet registration messages
+    function _handleWalletRegistration(uint32 _origin, bytes calldata _messageBody, bytes32 messageId) internal {
         // Decode the registration payload
         CrossChainMessage.RegistrationPayload memory payload = CrossChainMessage.decodeRegistration(_messageBody);
 
@@ -90,14 +110,42 @@ contract CrossChainInbox is IMessageRecipient, ICrossChainInbox, Ownable2Step {
             revert CrossChainInbox__SourceChainMismatch();
         }
 
-        // Generate message ID from payload hash
-        bytes32 messageId = keccak256(_messageBody);
-
         // Forward to RegistryHub with bridge context
         IRegistryHub(registryHub)
             .registerFromSpoke(payload.wallet, payload.sourceChainId, payload.isSponsored, BRIDGE_ID, messageId);
 
         emit RegistrationReceived(_origin, payload.wallet, messageId);
+    }
+
+    /// @dev Handle transaction batch messages
+    function _handleTransactionBatch(uint32 _origin, bytes calldata _messageBody, bytes32 messageId) internal {
+        // Decode the transaction batch payload
+        CrossChainMessage.TransactionBatchPayload memory payload =
+            CrossChainMessage.decodeTransactionBatch(_messageBody);
+
+        // Defense in depth: verify payload sourceChainId matches Hyperlane origin
+        // Convert _origin (EIP-155) to CAIP-2 bytes32 format for comparison
+        bytes32 expectedSourceChainId = CAIP2.fromEIP155(uint256(_origin));
+        if (payload.sourceChainId != expectedSourceChainId) {
+            revert CrossChainInbox__SourceChainMismatch();
+        }
+
+        // Forward to RegistryHub with full batch data
+        IRegistryHub(registryHub)
+            .registerTransactionBatchFromSpoke(
+                payload.merkleRoot,
+                payload.reporter,
+                payload.reportedChainId,
+                payload.sourceChainId,
+                payload.transactionCount,
+                payload.transactionHashes,
+                payload.chainIds,
+                payload.isSponsored,
+                BRIDGE_ID,
+                messageId
+            );
+
+        emit TransactionBatchReceived(_origin, payload.reporter, payload.merkleRoot, messageId);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

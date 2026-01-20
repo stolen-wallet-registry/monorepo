@@ -16,18 +16,26 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
+  HyperlaneLogo,
 } from '@swr/ui';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
+import { ChainIcon } from '@/components/composed/ChainIcon';
 import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import { clearAllTxSignatures } from '@/lib/signatures/transactions';
-import { getExplorerTxUrl, getChainName } from '@/lib/explorer';
+import {
+  getExplorerTxUrl,
+  getChainName,
+  getBridgeMessageByIdUrl,
+  getBridgeMessageUrl,
+} from '@/lib/explorer';
+import { isSpokeChain, getHubChainId } from '@/lib/chains/config';
 import { chainIdToCAIP2, chainIdToCAIP2String } from '@/lib/caip';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
-import { CheckCircle2, Home, RefreshCw, Heart } from 'lucide-react';
+import { CheckCircle2, Home, RefreshCw, Heart, ArrowRight } from 'lucide-react';
 
 /**
  * Transaction batch registration success step.
@@ -39,6 +47,7 @@ export function TxSuccessStep() {
     acknowledgementChainId,
     registrationHash,
     registrationChainId,
+    bridgeMessageId,
     reset: resetRegistration,
   } = useTransactionRegistrationStore();
   const { selectedTxHashes, selectedTxDetails, merkleRoot, reportedChainId } =
@@ -46,6 +55,17 @@ export function TxSuccessStep() {
   const formStore = useTransactionFormStore();
   const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : null;
   const reportedChainIdString = reportedChainId ? chainIdToCAIP2String(reportedChainId) : null;
+
+  // Determine if this was a cross-chain registration
+  const isCrossChain = registrationChainId ? isSpokeChain(registrationChainId) : false;
+  const hubChainId = registrationChainId ? getHubChainId(registrationChainId) : undefined;
+
+  // Get bridge explorer URL - prefer direct message ID link if available
+  const bridgeExplorerUrl = bridgeMessageId
+    ? getBridgeMessageByIdUrl(bridgeMessageId)
+    : registrationHash && registrationChainId
+      ? getBridgeMessageUrl(registrationHash, registrationChainId)
+      : null;
 
   /**
    * Reset all state and go home.
@@ -208,6 +228,39 @@ export function TxSuccessStep() {
                 </span>
               </p>
               <ExplorerLink value={registrationHash} href={regExplorerUrl} />
+            </div>
+          )}
+
+          {/* Cross-chain bridge info */}
+          {isCrossChain && hubChainId && registrationHash && registrationChainId && (
+            <div className="rounded-lg bg-teal-50 dark:bg-teal-950 border border-teal-200 dark:border-teal-800 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-sm font-medium">Cross-Chain Message</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center justify-center size-5 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 cursor-help">
+                      <HyperlaneLogo className="size-3" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Relayed via Hyperlane</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              {bridgeMessageId && (
+                <ExplorerLink value={bridgeMessageId} type="message" href={bridgeExplorerUrl} />
+              )}
+              <div className="flex items-center gap-2 text-sm text-teal-600 dark:text-teal-400 mt-2">
+                <ChainIcon chainId={registrationChainId} badge />
+                <span>{getChainName(registrationChainId)}</span>
+                <ArrowRight className="h-3 w-3" />
+                <ChainIcon chainId={hubChainId} badge />
+                <span>{getChainName(hubChainId)}</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Registration submitted on {getChainName(registrationChainId)}, settled on{' '}
+                {getChainName(hubChainId)}.
+              </p>
             </div>
           )}
         </div>

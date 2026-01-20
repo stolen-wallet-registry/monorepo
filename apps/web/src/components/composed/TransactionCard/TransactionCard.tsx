@@ -24,7 +24,15 @@ import { CrossChainRelayProgress } from '@/components/composed/CrossChainRelayPr
 import { cn } from '@/lib/utils';
 import { truncateAddress } from '@/lib/address';
 import { getChainName, getChainShortName } from '@/lib/explorer';
-import { Check, AlertCircle, Loader2, FileSignature, Globe, Copy } from 'lucide-react';
+import {
+  Check,
+  AlertCircle,
+  AlertTriangle,
+  Loader2,
+  FileSignature,
+  Globe,
+  Copy,
+} from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
@@ -36,7 +44,8 @@ export type TransactionStatus =
   | 'failed'
   // Cross-chain states (spoke → hub)
   | 'relaying' // Spoke tx confirmed, waiting for hub delivery
-  | 'hub-confirmed'; // Hub chain shows wallet as registered
+  | 'hub-confirmed' // Hub chain shows wallet as registered
+  | 'hub-timeout'; // Cross-chain confirmation timed out (spoke tx confirmed, hub unconfirmed)
 
 /** Signed message data to display */
 export interface SignedMessageData {
@@ -98,6 +107,8 @@ export interface TransactionCardProps {
   onSubmit: () => void;
   /** Callback to retry after failure */
   onRetry?: () => void;
+  /** Callback when user clicks "Continue Anyway" after cross-chain timeout */
+  onContinueAnyway?: () => void;
   /** Whether the submit button is disabled */
   disabled?: boolean;
   /** Additional class names */
@@ -124,6 +135,7 @@ const STATUS_CONFIG = {
   // Cross-chain states
   relaying: { label: 'Relaying', variant: 'default' as const },
   'hub-confirmed': { label: 'Confirmed', variant: 'default' as const },
+  'hub-timeout': { label: 'Pending Confirmation', variant: 'outline' as const },
 };
 
 /**
@@ -142,6 +154,7 @@ export function TransactionCard({
   crossChainProgress,
   onSubmit,
   onRetry,
+  onContinueAnyway,
   disabled = false,
   className,
 }: TransactionCardProps) {
@@ -169,6 +182,7 @@ export function TransactionCard({
   const isFailed = status === 'failed';
   const isRelaying = status === 'relaying';
   const isHubConfirmed = status === 'hub-confirmed';
+  const isHubTimeout = status === 'hub-timeout';
 
   // Resolve chainId from props or signedMessage
   const resolvedChainId = chainId ?? signedMessage?.chainId;
@@ -181,6 +195,9 @@ export function TransactionCard({
 
   const getDescription = () => {
     if (isHubConfirmed) return 'Registration confirmed on hub chain';
+    if (isHubTimeout) {
+      return 'Cross-chain confirmation timed out - spoke transaction was confirmed but hub confirmation could not be verified';
+    }
     if (isRelaying) {
       const hubName = crossChainProgress?.hubChainName ?? 'hub chain';
       const bridgeName = crossChainProgress?.bridgeName ?? 'bridge';
@@ -331,8 +348,8 @@ export function TransactionCard({
         </p>
       )}
 
-      {/* Cost estimate section */}
-      {costEstimate && status === 'idle' && (
+      {/* Cost estimate section - show during idle and submitting */}
+      {costEstimate && (status === 'idle' || status === 'submitting') && (
         <CostBreakdownTable
           costEstimate={costEstimate.data}
           isLoading={costEstimate.isLoading}
@@ -418,6 +435,46 @@ export function TransactionCard({
               !isHubConfirmed &&
               'Registration complete. Your wallet has been registered.'}
           </p>
+        </div>
+      )}
+
+      {/* Cross-chain timeout warning */}
+      {isHubTimeout && (
+        <div className="space-y-3">
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                  Cross-chain Confirmation Pending
+                </p>
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  Your transaction was confirmed on the spoke chain, but we couldn&apos;t verify the
+                  hub chain confirmation within the timeout period. This is usually due to network
+                  delays.
+                </p>
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  Your registration is likely successful. You can check the bridge explorer or
+                  continue and verify later.
+                </p>
+              </div>
+            </div>
+          </div>
+          {crossChainProgress?.explorerUrl && (
+            <a
+              href={crossChainProgress.explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block text-center text-sm text-primary hover:underline"
+            >
+              View on Bridge Explorer →
+            </a>
+          )}
+          {onContinueAnyway && (
+            <Button onClick={onContinueAnyway} className="w-full" variant="outline" size="lg">
+              Continue Anyway
+            </Button>
+          )}
         </div>
       )}
     </div>
