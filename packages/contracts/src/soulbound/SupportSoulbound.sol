@@ -92,6 +92,27 @@ contract SupportSoulbound is BaseSoulbound {
         emit SupportSoulboundMinted(tokenId, msg.sender, msg.value);
     }
 
+    /// @notice Mint a support soulbound token to a specific address (cross-chain mints)
+    /// @dev Only callable by authorized minters (SoulboundReceiver).
+    ///      No ETH required - donation is held on spoke chain.
+    /// @param supporter Address to mint the token to
+    /// @param donationAmount Amount donated on spoke chain (for metadata tracking)
+    function mintTo(address supporter, uint256 donationAmount) external {
+        // Only authorized minters can call this (set via BaseSoulbound.setAuthorizedMinter)
+        if (!authorizedMinters[msg.sender]) revert NotAuthorizedMinter();
+        if (supporter == address(0)) revert ZeroAddress();
+
+        // Mint token to supporter
+        uint256 tokenId = _mintAndLock(supporter);
+
+        // Store metadata - donation amount from spoke chain
+        tokenDonation[tokenId] = donationAmount;
+        // Note: Don't add to _totalDonationsReceived since ETH is on spoke chain
+        // That will be reconciled when spoke donations are withdrawn and bridged
+
+        emit SupportSoulboundMinted(tokenId, supporter, donationAmount);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════

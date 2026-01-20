@@ -110,28 +110,13 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, Ownable2Ste
 
     /// @dev Execute support soulbound mint
     /// @param supporter Address to mint for
-    /// @param _donationAmount Donation amount (informational only - Hyperlane doesn't transfer value cross-chain)
+    /// @param donationAmount Donation amount (for metadata tracking - actual ETH stays on spoke)
     /// @param origin Origin domain for event
-    function _handleSupportMint(address supporter, uint256 _donationAmount, uint32 origin) internal {
-        // Silence unused parameter warning - donationAmount is decoded from message for future use
-        // when Hyperlane Interchain Token transfer is implemented
-        (_donationAmount);
+    function _handleSupportMint(address supporter, uint256 donationAmount, uint32 origin) internal {
         // Note: Hyperlane doesn't transfer value cross-chain by default.
         // Donation accumulates on spoke chain and is withdrawn separately.
-        // This mint uses minWei from SupportSoulbound contract.
-        //
-        // Future improvement: Implement Hyperlane Interchain Token transfer
-        // to actually send the donation value cross-chain.
-
-        uint256 minWei = SupportSoulbound(supportSoulbound).minWei();
-
-        // If donation covers minWei, use donation; otherwise use minWei from contract
-        // Since we can't transfer value cross-chain easily, we mint with minWei
-        // Donation tracking happens on spoke chain
-        try SupportSoulbound(supportSoulbound).mint{ value: minWei }() {
-            // Note: Token goes to this contract, but we want it to go to supporter
-            // This is a limitation - SupportSoulbound.mint() mints to msg.sender
-            // We may need to add a mintTo function to SupportSoulbound
+        // We call mintTo which doesn't require ETH - donation is tracked via metadata.
+        try SupportSoulbound(supportSoulbound).mintTo(supporter, donationAmount) {
             emit CrossChainMintExecuted(MintType.SUPPORT, supporter, origin);
         } catch {
             revert SoulboundReceiver__SupportMintFailed();

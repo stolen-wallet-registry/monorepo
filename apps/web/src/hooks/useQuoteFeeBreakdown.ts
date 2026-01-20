@@ -10,10 +10,10 @@ import { useMemo } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
 import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
-import { formatEthConsistent } from '@/lib/utils';
+import { formatFeeLineItem } from '@/lib/utils';
 import { useEthPrice } from './useEthPrice';
 import type { Address } from '@/lib/types/ethereum';
-import type { FeeBreakdown, FeeLineItem, RawFeeBreakdown } from '@/lib/types/fees';
+import type { FeeBreakdown, RawFeeBreakdown } from '@/lib/types/fees';
 import { logger } from '@/lib/logger';
 
 export interface UseQuoteFeeBreakdownResult {
@@ -25,28 +25,6 @@ export interface UseQuoteFeeBreakdownResult {
   isError: boolean;
   error: Error | null;
   refetch: () => void;
-}
-
-/**
- * Format a fee amount into a FeeLineItem with wei, eth, and usd.
- */
-function formatFeeLineItem(wei: bigint, ethPriceUsd: number | undefined): FeeLineItem {
-  const eth = formatEthConsistent(wei);
-  const ethAsNumber = Number(eth);
-
-  let usd: string;
-  if (ethPriceUsd && ethPriceUsd > 0) {
-    const usdValue = ethAsNumber * ethPriceUsd;
-    usd = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(usdValue);
-  } else {
-    // Fallback if no price data
-    usd = '—';
-  }
-
-  return { wei, eth, usd };
 }
 
 /**

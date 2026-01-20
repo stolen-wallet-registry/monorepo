@@ -79,11 +79,9 @@ const getTransports = () => {
   }
 
   const hubRpc = getRpcUrl(anvilHub.chainId);
-  // Disable batching for local Anvil - causes viem to misinterpret responses
-  const localHttpOptions = { batch: false };
 
   const base = {
-    [anvilHub.chainId]: http(hubRpc, localHttpOptions),
+    [anvilHub.chainId]: http(hubRpc),
   };
 
   if (isCrossChainMode) {
@@ -93,12 +91,11 @@ const getTransports = () => {
       logger.wallet.debug('Transport RPCs configured', {
         hub: { chainId: anvilHub.chainId, rpc: hubRpc },
         spoke: { chainId: anvilSpoke.chainId, rpc: spokeRpc },
-        batchingDisabled: true,
       });
     }
     return {
       ...base,
-      [anvilSpoke.chainId]: http(spokeRpc, localHttpOptions),
+      [anvilSpoke.chainId]: http(spokeRpc),
     };
   }
 

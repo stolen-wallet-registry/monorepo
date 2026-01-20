@@ -55,3 +55,15 @@ export {
   type UseCrossChainSupportMintResult,
   type CrossChainSupportMintParams,
 } from './useCrossChainSupportMint';
+export {
+  useCrossChainMintGasEstimate,
+  type UseCrossChainMintGasEstimateResult,
+  type UseCrossChainMintGasEstimateParams,
+  type CrossChainMintGasEstimate,
+} from './useCrossChainMintGasEstimate';
+export {
+  useCrossChainSoulboundConfirmation,
+  type UseCrossChainSoulboundConfirmationOptions,
+  type UseCrossChainSoulboundConfirmationResult,
+  type SoulboundConfirmationStatus,
+} from './useCrossChainSoulboundConfirmation';

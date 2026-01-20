@@ -33,6 +33,9 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
     /// @dev Counter for token IDs
     uint256 internal _tokenIdCounter;
 
+    /// @notice Addresses authorized to call mintTo (e.g., SoulboundReceiver for cross-chain mints)
+    mapping(address => bool) public authorizedMinters;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -49,12 +52,21 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
     /// @notice Thrown when translations address is zero
     error InvalidTranslations();
 
+    /// @notice Thrown when caller is not an authorized minter
+    error NotAuthorizedMinter();
+
+    /// @notice Thrown when a zero address is provided
+    error ZeroAddress();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when domain is updated
     event DomainUpdated(string oldDomain, string newDomain);
+
+    /// @notice Emitted when an authorized minter is added or removed
+    event AuthorizedMinterUpdated(address indexed minter, bool authorized);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -136,6 +148,16 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
         string memory oldDomain = domain;
         domain = _domain;
         emit DomainUpdated(oldDomain, _domain);
+    }
+
+    /// @notice Add or remove an authorized minter (for cross-chain mints)
+    /// @dev Only owner can manage authorized minters
+    /// @param minter Address to authorize/deauthorize
+    /// @param authorized True to authorize, false to revoke
+    function setAuthorizedMinter(address minter, bool authorized) external onlyOwner {
+        if (minter == address(0)) revert ZeroAddress();
+        authorizedMinters[minter] = authorized;
+        emit AuthorizedMinterUpdated(minter, authorized);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

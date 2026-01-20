@@ -13,7 +13,7 @@ import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { useSignEIP712 } from '@/hooks/useSignEIP712';
-import { useRegistrationHashStruct } from '@/hooks/useGenerateHashStruct';
+import { useGenerateHashStruct } from '@/hooks/useGenerateHashStruct';
 import { useContractNonce } from '@/hooks/useContractNonce';
 import { storeSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
@@ -70,7 +70,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
     isLoading: hashLoading,
     isError: hashError,
     refetch: refetchHashStruct,
-  } = useRegistrationHashStruct(forwarder ?? undefined);
+  } = useGenerateHashStruct(forwarder ?? undefined, SIGNATURE_STEP.REGISTRATION);
 
   const { signRegistration, reset: resetSigning } = useSignEIP712();
 

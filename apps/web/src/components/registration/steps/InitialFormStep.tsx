@@ -29,7 +29,7 @@ import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { useSignEIP712 } from '@/hooks/useSignEIP712';
-import { useAcknowledgementHashStruct } from '@/hooks/useGenerateHashStruct';
+import { useGenerateHashStruct } from '@/hooks/useGenerateHashStruct';
 import { useContractNonce } from '@/hooks/useContractNonce';
 import { storeSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
@@ -122,8 +122,9 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     isLoading: hashLoading,
     isError: hashError,
     refetch: refetchHashStruct,
-  } = useAcknowledgementHashStruct(
-    forwarderAddress && isAddress(forwarderAddress) ? forwarderAddress : undefined
+  } = useGenerateHashStruct(
+    forwarderAddress && isAddress(forwarderAddress) ? forwarderAddress : undefined,
+    SIGNATURE_STEP.ACKNOWLEDGEMENT
   );
 
   const { signAcknowledgement, isPending: isSigning, reset: resetSigning } = useSignEIP712();

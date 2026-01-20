@@ -71,11 +71,24 @@ export function useQuoteCrossChainMintFee(): UseQuoteCrossChainMintFeeResult {
   const isOnHubChain = currentChainId === hubChainId;
   const isOnSpokeChain = currentChainId ? isSpokeChain(currentChainId) : false;
 
+  // Debug logging for cross-chain fee hook state
+  logger.contract.debug('useQuoteCrossChainMintFee state', {
+    currentChainId,
+    hubChainId,
+    isOnHubChain,
+    isOnSpokeChain,
+    chainName: chain?.name,
+  });
+
   // Get spoke forwarder address for current chain
   let forwarderAddress: Address | null = null;
   if (isOnSpokeChain && currentChainId) {
     try {
       forwarderAddress = getSpokeSoulboundForwarderAddress(currentChainId);
+      logger.contract.debug('SpokeSoulboundForwarder address resolved', {
+        chainId: currentChainId,
+        forwarderAddress,
+      });
     } catch (error) {
       logger.contract.warn('SpokeSoulboundForwarder not configured for chain', {
         chainId: currentChainId,

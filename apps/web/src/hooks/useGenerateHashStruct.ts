@@ -10,7 +10,7 @@
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
 import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
-import { SIGNATURE_STEP, type SignatureStep } from '@/lib/signatures';
+import type { SignatureStep } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
@@ -111,22 +111,4 @@ export function useGenerateHashStruct(
     error: result.error,
     refetch: result.refetch,
   };
-}
-
-/**
- * Helper to get hash struct for acknowledgement step.
- */
-export function useAcknowledgementHashStruct(
-  forwarderAddress: Address | undefined
-): UseGenerateHashStructResult {
-  return useGenerateHashStruct(forwarderAddress, SIGNATURE_STEP.ACKNOWLEDGEMENT);
-}
-
-/**
- * Helper to get hash struct for registration step.
- */
-export function useRegistrationHashStruct(
-  forwarderAddress: Address | undefined
-): UseGenerateHashStructResult {
-  return useGenerateHashStruct(forwarderAddress, SIGNATURE_STEP.REGISTRATION);
 }

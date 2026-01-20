@@ -9,8 +9,6 @@ export { useContractNonce, type UseContractNonceResult } from './useContractNonc
 
 export {
   useGenerateHashStruct,
-  useAcknowledgementHashStruct,
-  useRegistrationHashStruct,
   type HashStructData,
   type UseGenerateHashStructResult,
 } from './useGenerateHashStruct';

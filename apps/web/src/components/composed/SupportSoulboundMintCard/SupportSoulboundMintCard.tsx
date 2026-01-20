@@ -17,6 +17,9 @@ import {
   AlertDescription,
   Label,
   Input,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
 } from '@swr/ui';
 import {
   useMinDonation,
@@ -24,6 +27,8 @@ import {
   useSupportTokens,
   useQuoteCrossChainMintFee,
   useCrossChainSupportMint,
+  useCrossChainMintGasEstimate,
+  useCrossChainSoulboundConfirmation,
 } from '@/hooks/soulbound';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { ExplorerLink, getExplorerTxUrl } from '@/components/composed/ExplorerLink';
@@ -34,7 +39,16 @@ import { getChainName } from '@/lib/chains/config';
 import { getSupportSoulboundAddress } from '@/lib/contracts/addresses';
 import { getBrowserLanguage } from '@/lib/browser';
 import { useAccount, useSwitchChain } from 'wagmi';
-import { Loader2, Check, AlertCircle, Heart, ArrowRightLeft, Send } from 'lucide-react';
+import {
+  Loader2,
+  Check,
+  AlertCircle,
+  Heart,
+  ArrowRightLeft,
+  Send,
+  HelpCircle,
+  ExternalLink,
+} from 'lucide-react';
 import { formatEther, parseEther } from 'viem';
 import type { Hash } from '@/lib/types/ethereum';
 
@@ -83,7 +97,14 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
   } = useMintSupportSoulbound();
 
   // Cross-chain mint hooks (for spoke chains)
-  const { data: crossChainFee, isOnSpokeChain, currentChainId } = useQuoteCrossChainMintFee();
+  const {
+    data: crossChainFee,
+    isOnSpokeChain,
+    currentChainId,
+    isLoading: isLoadingFee,
+    isError: isFeeError,
+    error: feeError,
+  } = useQuoteCrossChainMintFee();
   const {
     requestMint: requestCrossChainMint,
     isPending: isCrossChainPending,
@@ -94,6 +115,22 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
     hash: crossChainHash,
     reset: resetCrossChain,
   } = useCrossChainSupportMint();
+
+  // Cross-chain confirmation tracking (polls hub chain for mint completion)
+  const {
+    status: confirmationStatus,
+    messageId,
+    explorerUrl,
+    isMintedOnHub,
+    elapsedTime,
+    reset: resetConfirmation,
+  } = useCrossChainSoulboundConfirmation({
+    spokeHash: crossChainHash,
+    spokeChainId: currentChainId,
+    mintType: 'support',
+    wallet: connectedAddress,
+    enabled: isCrossChainConfirmed && !!crossChainHash && !!connectedAddress,
+  });
 
   const { switchChain, isPending: isSwitching } = useSwitchChain();
 
@@ -141,6 +178,14 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
       return 0n;
     }
   }, [ethInput]);
+
+  // Gas estimate for cross-chain mint
+  const { data: gasEstimate, isLoading: isLoadingGas } = useCrossChainMintGasEstimate({
+    mintType: 'support',
+    donationWei,
+    feeWei: crossChainFee?.feeWei,
+    enabled: isOnSpokeChain && !!crossChainFee && donationWei > 0n,
+  });
 
   // Calculate USD from ETH
   const calculatedUsd = useMemo(() => {
@@ -226,6 +271,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
   const handleReset = () => {
     reset();
     resetCrossChain();
+    resetConfirmation();
   };
 
   // Refetch tokens after successful mint to get the new token ID.
@@ -255,6 +301,11 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
 
   // Cross-chain mint confirmation state (message dispatched, waiting for hub mint)
   if (isCrossChainConfirmed && crossChainHash) {
+    const isConfirmedOnHub = isMintedOnHub || confirmationStatus === 'confirmed';
+    const isPolling = confirmationStatus === 'polling' || confirmationStatus === 'waiting';
+    const isTimeout = confirmationStatus === 'timeout';
+    const elapsedSeconds = Math.floor(elapsedTime / 1000);
+
     return (
       <Card className={cn('', className)}>
         <CardHeader>
@@ -264,31 +315,91 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Alert className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950">
-            <Send className="h-4 w-4 text-blue-600" />
-            <AlertDescription className="text-blue-700 dark:text-blue-300">
-              Cross-chain support request sent! Your token will be minted on {hubChainName} in ~1-2
-              minutes.
-            </AlertDescription>
-          </Alert>
+          {/* Show different alert based on confirmation status */}
+          {isConfirmedOnHub ? (
+            <Alert className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950">
+              <Check className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-700 dark:text-green-300">
+                Success! Your support token has been minted on {hubChainName}.
+              </AlertDescription>
+            </Alert>
+          ) : isTimeout ? (
+            <Alert className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-700 dark:text-amber-300">
+                Confirmation timeout. Your token may still be minting - check the explorer link
+                below.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Alert className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950">
+              <Send className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-700 dark:text-blue-300">
+                Cross-chain request sent! Waiting for confirmation on {hubChainName}...
+                {isPolling && elapsedSeconds > 0 && (
+                  <span className="ml-1">({elapsedSeconds}s)</span>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
 
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">
-              Transaction on {currentChainName}
-            </Label>
-            <ExplorerLink
-              value={crossChainHash}
-              href={getExplorerTxUrl(currentChainId ?? hubChainId, crossChainHash)}
-            />
+          {/* Display minted token when confirmed */}
+          {isConfirmedOnHub && latestTokenId !== null && supportSoulboundAddress && (
+            <div className="flex justify-center py-4">
+              <MintedTokenDisplay
+                contractAddress={supportSoulboundAddress}
+                tokenId={latestTokenId}
+                type="support"
+                size={320}
+              />
+            </div>
+          )}
+
+          {/* Show loading spinner while polling */}
+          {isPolling && (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {/* Transaction links */}
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">
+                Transaction on {currentChainName}
+              </Label>
+              <ExplorerLink
+                value={crossChainHash}
+                href={getExplorerTxUrl(currentChainId ?? hubChainId, crossChainHash)}
+              />
+            </div>
+
+            {/* Hyperlane explorer link */}
+            {messageId && explorerUrl && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Track cross-chain message</Label>
+                <a
+                  href={explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-sm text-primary hover:underline"
+                >
+                  View on Hyperlane Explorer
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            )}
           </div>
 
-          <p className="text-xs text-center text-muted-foreground">
-            The Hyperlane relayer will deliver your donation request to {hubChainName}. Your
-            donation is held on {currentChainName} and will be collected by the treasury.
-          </p>
+          {!isConfirmedOnHub && (
+            <p className="text-xs text-center text-muted-foreground">
+              The Hyperlane relayer will deliver your donation request to {hubChainName}. Your
+              donation is held on {currentChainName} and will be collected by the treasury.
+            </p>
+          )}
 
           <Button variant="outline" onClick={handleReset} className="w-full">
-            Make Another Donation
+            {isConfirmedOnHub ? 'Make Another Donation' : 'Done'}
           </Button>
         </CardContent>
       </Card>
@@ -499,7 +610,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
               )}
             </Button>
             <p className="text-xs text-center text-muted-foreground">
-              100% of donations go to supporting the registry infrastructure
+              You pay: {ethInput || '0'} ETH donation + gas. 100% goes to registry infrastructure.
             </p>
           </>
         )}
@@ -549,10 +660,133 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
                 )}
               </Button>
             </div>
-            <p className="text-xs text-center text-muted-foreground">
-              Cross-chain fee: ~{crossChainFee ? formatEther(crossChainFee.feeWei) : '...'} ETH +
-              your donation
-            </p>
+            {/* Fee breakdown for spoke chain */}
+            <div className="text-xs text-muted-foreground">
+              {crossChainFee ? (
+                <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                  {/* Cross-chain fee */}
+                  <div className="flex justify-between items-center">
+                    <span className="flex items-center gap-1">
+                      Cross-chain fee
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-[200px]">
+                          Support tokens are minted on {hubChainName}. Switch to {hubChainName} to
+                          avoid this fee.
+                        </TooltipContent>
+                      </Tooltip>
+                    </span>
+                    <span className="text-right">
+                      <span className="font-medium text-foreground">
+                        {crossChainFee.feeEth} ETH
+                      </span>
+                      {ethPrice > 0 && (
+                        <span className="ml-1 text-muted-foreground">
+                          (~${(parseFloat(crossChainFee.feeEth) * ethPrice).toFixed(2)})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {/* Donation amount */}
+                  <div className="flex justify-between items-center">
+                    <span className="flex items-center gap-1">
+                      Donation
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-[200px]">
+                          100% of donations support the Stolen Wallet Registry infrastructure and
+                          development.
+                        </TooltipContent>
+                      </Tooltip>
+                    </span>
+                    <span className="text-right">
+                      <span className="font-medium text-foreground">{ethInput || '0'} ETH</span>
+                      {ethPrice > 0 && (
+                        <span className="ml-1 text-muted-foreground">
+                          (~${(parseFloat(ethInput || '0') * ethPrice).toFixed(2)})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {/* Gas estimate */}
+                  <div className="flex justify-between items-center">
+                    <span className="flex items-center gap-1">
+                      Est. gas
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-[200px]">
+                          Network fee paid to {currentChainName} validators. Actual cost may vary.
+                        </TooltipContent>
+                      </Tooltip>
+                    </span>
+                    <span className="text-right">
+                      {isLoadingGas ? (
+                        <span className="flex items-center gap-1">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        </span>
+                      ) : gasEstimate ? (
+                        <>
+                          <span className="font-medium text-foreground">
+                            {parseFloat(gasEstimate.gasCostEth).toFixed(6)} ETH
+                          </span>
+                          {ethPrice > 0 && (
+                            <span className="ml-1 text-muted-foreground">
+                              (~${gasEstimate.gasCostUsd.toFixed(2)})
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </span>
+                  </div>
+                  {/* Divider */}
+                  <div className="border-t border-border/50" />
+                  {/* Total */}
+                  <div className="flex justify-between font-medium">
+                    <span className="text-foreground">Total</span>
+                    <span className="text-right">
+                      <span className="text-foreground">
+                        {(
+                          parseFloat(crossChainFee.feeEth) +
+                          parseFloat(ethInput || '0') +
+                          (gasEstimate ? parseFloat(gasEstimate.gasCostEth) : 0)
+                        ).toFixed(6)}{' '}
+                        ETH
+                      </span>
+                      {ethPrice > 0 && (
+                        <span className="ml-1 text-muted-foreground">
+                          (~$
+                          {(
+                            (parseFloat(crossChainFee.feeEth) + parseFloat(ethInput || '0')) *
+                              ethPrice +
+                            (gasEstimate?.gasCostUsd ?? 0)
+                          ).toFixed(2)}
+                          )
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              ) : isFeeError ? (
+                <p className="text-destructive text-center">
+                  Failed to load fee: {feeError?.message || 'Unknown error'}
+                </p>
+              ) : isLoadingFee ? (
+                <p className="flex items-center justify-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Loading cross-chain fee...
+                </p>
+              ) : (
+                <p className="text-muted-foreground/70 text-center">Cross-chain fee unavailable</p>
+              )}
+            </div>
           </div>
         )}
 
