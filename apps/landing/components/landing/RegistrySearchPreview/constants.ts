@@ -23,5 +23,22 @@ export const EXAMPLE_CLEAN_ADDRESS = '0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe
 export const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL ?? 'http://localhost:42069';
 
 // Hub chain ID for explorer links
-// Base mainnet (8453) for production, Base Sepolia (84532) for staging
-export const HUB_CHAIN_ID = process.env.NODE_ENV === 'production' ? 8453 : 84532;
+// Prefer explicit env var, fall back to mode-based selection
+// Base mainnet (8453) for production, Base Sepolia (84532) for development/staging
+function getHubChainId(): number {
+  // Explicit env var takes precedence
+  const envChainId = process.env.NEXT_PUBLIC_HUB_CHAIN_ID;
+  if (envChainId) {
+    const parsed = parseInt(envChainId, 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+
+  // Fall back to mode-based selection
+  // Use NEXT_PUBLIC_VERCEL_ENV for Vercel deployments, otherwise check NODE_ENV
+  const isProduction =
+    process.env.NEXT_PUBLIC_VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production';
+
+  return isProduction ? 8453 : 84532;
+}
+
+export const HUB_CHAIN_ID = getHubChainId();

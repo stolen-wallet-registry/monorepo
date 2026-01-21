@@ -214,8 +214,8 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
         {/* Error Message */}
         {error && <p className="mt-2 text-center text-sm text-destructive">{error}</p>}
 
-        {/* Result Display */}
-        {result && result.type !== 'invalid' && resultStatus && searchedQuery && (
+        {/* Result Display - resultStatus implies result is valid (non-invalid) */}
+        {result && resultStatus && searchedQuery && (
           <div className={`mt-3 rounded-lg border p-3 ${getResultBgClass(resultStatus)}`}>
             <div className="flex items-center justify-center gap-2">
               <StatusIcon status={resultStatus} />

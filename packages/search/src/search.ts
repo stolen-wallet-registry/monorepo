@@ -22,8 +22,39 @@ import type {
   SearchConfig,
   SearchResult,
   WalletSearchResult,
+  WalletSearchData,
   TransactionSearchResult,
 } from './types';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Map raw wallet response to WalletSearchData.
+ * Shared between searchWallet and searchWalletByCAIP10.
+ */
+function mapWalletData(wallet: {
+  id: string;
+  caip10: string;
+  registeredAt: string;
+  transactionHash: string;
+  isSponsored: boolean;
+  sourceChainCAIP2?: string | null;
+}): WalletSearchData {
+  // Normalize null to undefined for consistent API
+  const sourceChainCAIP2 = wallet.sourceChainCAIP2 ?? undefined;
+
+  return {
+    address: wallet.id as Address,
+    caip10: wallet.caip10,
+    registeredAt: BigInt(wallet.registeredAt),
+    transactionHash: wallet.transactionHash as Hash,
+    isSponsored: wallet.isSponsored,
+    sourceChainCAIP2,
+    sourceChainName: sourceChainCAIP2 ? getCAIP2ChainName(sourceChainCAIP2) : undefined,
+  };
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // WALLET SEARCH
@@ -52,17 +83,7 @@ export async function searchWallet(
   return {
     type: 'wallet',
     found: true,
-    data: {
-      address: wallet.id as Address,
-      caip10: wallet.caip10,
-      registeredAt: BigInt(wallet.registeredAt),
-      transactionHash: wallet.transactionHash as Hash,
-      isSponsored: wallet.isSponsored,
-      sourceChainCAIP2: wallet.sourceChainCAIP2,
-      sourceChainName: wallet.sourceChainCAIP2
-        ? getCAIP2ChainName(wallet.sourceChainCAIP2)
-        : undefined,
-    },
+    data: mapWalletData(wallet),
   };
 }
 
@@ -93,17 +114,7 @@ export async function searchWalletByCAIP10(
   return {
     type: 'wallet',
     found: true,
-    data: {
-      address: wallet.id as Address,
-      caip10: wallet.caip10,
-      registeredAt: BigInt(wallet.registeredAt),
-      transactionHash: wallet.transactionHash as Hash,
-      isSponsored: wallet.isSponsored,
-      sourceChainCAIP2: wallet.sourceChainCAIP2,
-      sourceChainName: wallet.sourceChainCAIP2
-        ? getCAIP2ChainName(wallet.sourceChainCAIP2)
-        : undefined,
-    },
+    data: mapWalletData(wallet),
   };
 }
 

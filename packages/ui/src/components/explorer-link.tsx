@@ -16,9 +16,8 @@ import { ExternalLink, Copy, Check } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 import { cn } from '../lib/utils';
 
-// Local type definitions for hex strings
-// Accept both strict template literal and plain string for flexibility
-type HexString = `0x${string}` | string;
+// Accept any string for flexibility with external data sources
+type HexString = string;
 
 /**
  * Type of blockchain identifier.

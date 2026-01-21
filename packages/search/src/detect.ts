@@ -12,13 +12,13 @@ import type { SearchType } from './types';
  *
  * @example
  * ```ts
- * detectSearchType('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb')
+ * detectSearchType('0x742d35Cc6634C0532925a3b844Bc454e83c4b3a1')
  * // => 'wallet'
  *
- * detectSearchType('0x1234...64 hex chars...')
+ * detectSearchType('0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef')
  * // => 'transaction'
  *
- * detectSearchType('eip155:8453:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb')
+ * detectSearchType('eip155:8453:0x742d35Cc6634C0532925a3b844Bc454e83c4b3a1')
  * // => 'caip10'
  * ```
  */
@@ -83,23 +83,25 @@ export function isCAIP10(value: string): boolean {
 
 /**
  * Parse a CAIP-10 identifier into its components.
+ * Preserves original address casing (important for checksum addresses).
  *
  * @returns Object with namespace, chainId, address, or null if invalid
  */
 export function parseCAIP10(
   value: string
 ): { namespace: string; chainId: number; address: string } | null {
-  const parts = value.toLowerCase().split(':');
+  const parts = value.split(':');
   if (parts.length !== 3) return null;
 
   const [namespace, chainIdStr, address] = parts;
+  const namespaceLower = namespace.toLowerCase();
 
-  if (namespace !== 'eip155') return null;
+  if (namespaceLower !== 'eip155') return null;
   if (!/^\d+$/.test(chainIdStr)) return null;
-  if (!/^0x[0-9a-f]{40}$/.test(address)) return null;
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return null;
 
   return {
-    namespace,
+    namespace: namespaceLower,
     chainId: parseInt(chainIdStr, 10),
     address,
   };

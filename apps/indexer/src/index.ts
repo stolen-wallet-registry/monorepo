@@ -389,7 +389,11 @@ ponder.on('RegistryHub:CrossChainBatchRegistration', async ({ event, context }) 
     });
   } else {
     // Create a new cross-chain message record if one doesn't exist
-    // This can happen if the inbox event wasn't indexed
+    // This can happen if the inbox event wasn't indexed (late message or indexer started after inbox event)
+    console.warn(
+      `[CrossChainBatchRegistration] Creating message record for ${messageId} without prior inbox event. ` +
+        `This may indicate the indexer started after the TransactionBatchReceived event was emitted.`
+    );
     await db.insert(crossChainMessage).values({
       id: messageId,
       sourceChainId: 0, // sourceChainId is bytes32 here, we can't convert directly
@@ -459,14 +463,18 @@ ponder.on('WalletSoulbound:WalletSoulboundMinted', async ({ event, context }) =>
   const { tokenId, wallet, minter } = event.args;
   const { db } = context;
 
-  await db.insert(walletSoulboundToken).values({
-    id: tokenId.toString(),
-    wallet: wallet.toLowerCase() as Address,
-    minter: minter.toLowerCase() as Address,
-    mintedAt: event.block.timestamp,
-    mintedAtBlock: event.block.number,
-    transactionHash: event.transaction.hash,
-  });
+  // Use onConflictDoNothing for idempotency - same event may be replayed during reorg
+  await db
+    .insert(walletSoulboundToken)
+    .values({
+      id: tokenId.toString(),
+      wallet: wallet.toLowerCase() as Address,
+      minter: minter.toLowerCase() as Address,
+      mintedAt: event.block.timestamp,
+      mintedAtBlock: event.block.number,
+      transactionHash: event.transaction.hash,
+    })
+    .onConflictDoNothing();
 
   await updateGlobalStats(db, { walletSoulbounds: 1 }, event.block.timestamp);
 });
@@ -476,14 +484,18 @@ ponder.on('SupportSoulbound:SupportSoulboundMinted', async ({ event, context }) 
   const { tokenId, supporter, amount } = event.args;
   const { db } = context;
 
-  await db.insert(supportSoulboundToken).values({
-    id: tokenId.toString(),
-    supporter: supporter.toLowerCase() as Address,
-    amount,
-    mintedAt: event.block.timestamp,
-    mintedAtBlock: event.block.number,
-    transactionHash: event.transaction.hash,
-  });
+  // Use onConflictDoNothing for idempotency - same event may be replayed during reorg
+  await db
+    .insert(supportSoulboundToken)
+    .values({
+      id: tokenId.toString(),
+      supporter: supporter.toLowerCase() as Address,
+      amount,
+      mintedAt: event.block.timestamp,
+      mintedAtBlock: event.block.number,
+      transactionHash: event.transaction.hash,
+    })
+    .onConflictDoNothing();
 
   await updateGlobalStats(
     db,
