@@ -3,10 +3,14 @@ pragma solidity ^0.8.24;
 
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import { MerkleProof } from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 import { IStolenWalletRegistry } from "../interfaces/IStolenWalletRegistry.sol";
+import { IOperatorRegistry } from "../interfaces/IOperatorRegistry.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
 import { TimingConfig } from "../libraries/TimingConfig.sol";
+import { MerkleRootComputation } from "../libraries/MerkleRootComputation.sol";
 
 /// @title StolenWalletRegistry
 /// @author Stolen Wallet Registry Team
@@ -16,7 +20,9 @@ import { TimingConfig } from "../libraries/TimingConfig.sol";
 ///      1. Acknowledgement: Owner signs intent, establishes trusted forwarder
 ///      2. Grace period: Randomized delay (1-4 minutes)
 ///      3. Registration: Owner signs again, wallet marked as stolen permanently
-contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
+///
+///      Operators (DAO-approved) can bypass two-phase via single-phase batch registration.
+contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
     // TYPE HASHES
     // ═══════════════════════════════════════════════════════════════════════════
@@ -61,18 +67,39 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
     mapping(address => uint256) public nonces;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // OPERATOR BATCH STATE
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev Capability bit required for wallet registry operators
+    uint8 private constant WALLET_REGISTRY_CAPABILITY = 0x01;
+
+    /// @notice Operator registry for permission checks
+    address public operatorRegistry;
+
+    /// @notice Operator wallet batches: batchId => WalletBatch
+    mapping(bytes32 => WalletBatch) private _walletBatches;
+
+    /// @notice Invalidated wallet entries: entryHash => invalidated
+    mapping(bytes32 => bool) private _invalidatedWalletEntries;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Initialize the registry with EIP-712 domain separator and fee configuration
     /// @dev Version "4" for frontend compatibility with existing signatures
+    /// @param _owner Initial owner address (typically DAO multisig)
     /// @param _feeManager FeeManager contract address (address(0) for free registrations)
     /// @param _registryHub RegistryHub contract address for fee forwarding
     /// @param _graceBlocks Base blocks for grace period (chain-specific, see TimingConfig.sol)
     /// @param _deadlineBlocks Base blocks for deadline window (chain-specific, see TimingConfig.sol)
-    constructor(address _feeManager, address _registryHub, uint256 _graceBlocks, uint256 _deadlineBlocks)
-        EIP712("StolenWalletRegistry", "4")
-    {
+    constructor(
+        address _owner,
+        address _feeManager,
+        address _registryHub,
+        uint256 _graceBlocks,
+        uint256 _deadlineBlocks
+    ) EIP712("StolenWalletRegistry", "4") Ownable(_owner) {
         // Validate fee configuration consistency:
         // If feeManager is set, registryHub must also be set to forward fees.
         // Otherwise, register() could accept fees that can never be forwarded.
@@ -236,6 +263,110 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // OPERATOR BATCH FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @inheritdoc IStolenWalletRegistry
+    function registerBatchAsOperator(
+        bytes32 merkleRoot,
+        bytes32 reportedChainId,
+        address[] calldata walletAddresses,
+        bytes32[] calldata chainIds
+    ) external payable {
+        // Check operator approval
+        if (
+            operatorRegistry == address(0)
+                || !IOperatorRegistry(operatorRegistry).isApprovedFor(msg.sender, WALLET_REGISTRY_CAPABILITY)
+        ) {
+            revert StolenWalletRegistry__NotApprovedOperator();
+        }
+
+        // Validate inputs
+        if (merkleRoot == bytes32(0)) revert StolenWalletRegistry__InvalidMerkleRoot();
+        if (reportedChainId == bytes32(0)) revert InvalidChainId();
+        if (walletAddresses.length == 0) revert StolenWalletRegistry__InvalidWalletCount();
+        if (walletAddresses.length != chainIds.length) revert StolenWalletRegistry__ArrayLengthMismatch();
+
+        // Validate each entry - reject zero addresses and zero chainIds
+        for (uint256 i = 0; i < walletAddresses.length; i++) {
+            if (walletAddresses[i] == address(0)) revert StolenWalletRegistry__InvalidWalletAddress();
+            if (chainIds[i] == bytes32(0)) revert StolenWalletRegistry__InvalidChainIdEntry();
+        }
+
+        // Verify merkle root matches provided data
+        bytes32 computedRoot = _computeWalletMerkleRoot(walletAddresses, chainIds);
+        if (computedRoot != merkleRoot) revert StolenWalletRegistry__MerkleRootMismatch();
+
+        // Compute batch ID
+        bytes32 batchId = _computeWalletBatchId(merkleRoot, msg.sender, reportedChainId);
+
+        // Check not already registered
+        if (_walletBatches[batchId].registeredAt != 0) revert StolenWalletRegistry__BatchAlreadyRegistered();
+
+        // Validate operator batch fee
+        if (feeManager != address(0)) {
+            uint256 requiredFee = IFeeManager(feeManager).operatorBatchFeeWei();
+            if (msg.value < requiredFee) revert InsufficientFee();
+        }
+
+        // Store batch
+        _walletBatches[batchId] = WalletBatch({
+            merkleRoot: merkleRoot,
+            operator: msg.sender,
+            reportedChainId: reportedChainId,
+            registeredAt: uint64(block.number),
+            walletCount: uint32(walletAddresses.length),
+            invalidated: false
+        });
+
+        emit WalletBatchRegistered(
+            batchId, merkleRoot, msg.sender, reportedChainId, uint32(walletAddresses.length), walletAddresses, chainIds
+        );
+
+        // Forward fee to RegistryHub
+        if (registryHub != address(0) && msg.value > 0) {
+            (bool success,) = registryHub.call{ value: msg.value }("");
+            if (!success) revert FeeForwardFailed();
+        }
+    }
+
+    /// @inheritdoc IStolenWalletRegistry
+    function setOperatorRegistry(address _operatorRegistry) external onlyOwner {
+        operatorRegistry = _operatorRegistry;
+        emit OperatorRegistrySet(_operatorRegistry);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // INVALIDATION FUNCTIONS (DAO only)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @inheritdoc IStolenWalletRegistry
+    function invalidateWalletBatch(bytes32 batchId) external onlyOwner {
+        WalletBatch storage batch = _walletBatches[batchId];
+        if (batch.registeredAt == 0) revert StolenWalletRegistry__BatchNotFound();
+        if (batch.invalidated) revert StolenWalletRegistry__AlreadyInvalidated();
+
+        batch.invalidated = true;
+        emit WalletBatchInvalidated(batchId, msg.sender);
+    }
+
+    /// @inheritdoc IStolenWalletRegistry
+    function invalidateWalletEntry(bytes32 entryHash) external onlyOwner {
+        if (_invalidatedWalletEntries[entryHash]) revert StolenWalletRegistry__AlreadyInvalidated();
+
+        _invalidatedWalletEntries[entryHash] = true;
+        emit WalletEntryInvalidated(entryHash, msg.sender);
+    }
+
+    /// @inheritdoc IStolenWalletRegistry
+    function reinstateWalletEntry(bytes32 entryHash) external onlyOwner {
+        if (!_invalidatedWalletEntries[entryHash]) revert StolenWalletRegistry__EntryNotInvalidated();
+
+        _invalidatedWalletEntries[entryHash] = false;
+        emit WalletEntryReinstated(entryHash, msg.sender);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - Primary Query Interface
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -323,5 +454,106 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712 {
             return 0;
         }
         return IFeeManager(feeManager).currentFeeWei();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEW FUNCTIONS - Operator Batch
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @inheritdoc IStolenWalletRegistry
+    function isWalletBatchRegistered(bytes32 batchId) external view returns (bool) {
+        WalletBatch memory batch = _walletBatches[batchId];
+        return batch.registeredAt != 0 && !batch.invalidated;
+    }
+
+    /// @inheritdoc IStolenWalletRegistry
+    function getWalletBatch(bytes32 batchId) external view returns (WalletBatch memory) {
+        return _walletBatches[batchId];
+    }
+
+    /// @inheritdoc IStolenWalletRegistry
+    function verifyWalletInBatch(address wallet, bytes32 chainId, bytes32 batchId, bytes32[] calldata merkleProof)
+        external
+        view
+        returns (bool)
+    {
+        WalletBatch memory batch = _walletBatches[batchId];
+        if (batch.registeredAt == 0 || batch.invalidated) return false;
+
+        bytes32 entryHash = _computeWalletEntryHash(wallet, chainId);
+        if (_invalidatedWalletEntries[entryHash]) return false;
+
+        bytes32 leaf = keccak256(abi.encodePacked(wallet, chainId));
+        return MerkleProof.verify(merkleProof, batch.merkleRoot, leaf);
+    }
+
+    /// @inheritdoc IStolenWalletRegistry
+    function isWalletEntryInvalidated(bytes32 entryHash) external view returns (bool) {
+        return _invalidatedWalletEntries[entryHash];
+    }
+
+    /// @inheritdoc IStolenWalletRegistry
+    function computeWalletBatchId(bytes32 merkleRoot, address operator, bytes32 reportedChainId)
+        external
+        pure
+        returns (bytes32)
+    {
+        return _computeWalletBatchId(merkleRoot, operator, reportedChainId);
+    }
+
+    /// @inheritdoc IStolenWalletRegistry
+    function computeWalletEntryHash(address wallet, bytes32 chainId) external pure returns (bytes32) {
+        return _computeWalletEntryHash(wallet, chainId);
+    }
+
+    /// @inheritdoc IStolenWalletRegistry
+    function quoteOperatorBatchRegistration() external view returns (uint256) {
+        if (feeManager == address(0)) return 0;
+        return IFeeManager(feeManager).operatorBatchFeeWei();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // INTERNAL HELPERS - Registry-Specific Merkle Functions
+    // ═══════════════════════════════════════════════════════════════════════════
+    // These functions are intentionally per-registry because:
+    // - Batch IDs: Include registry-specific identifiers (merkleRoot + operator + chainId)
+    // - Entry hashes (leaves): Use registry-specific types (address for wallets, bytes32 for txs)
+    // - The MerkleRootComputation library handles the tree-building algorithm only
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Compute batch ID from parameters
+    /// @dev Registry-specific: includes reportedChainId for batch uniqueness across chains
+    function _computeWalletBatchId(bytes32 merkleRoot, address operator, bytes32 reportedChainId)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encode(merkleRoot, operator, reportedChainId));
+    }
+
+    /// @notice Compute entry hash (Merkle leaf) for a wallet
+    /// @dev Registry-specific: uses address type for wallet entries
+    function _computeWalletEntryHash(address wallet, bytes32 chainId) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(wallet, chainId));
+    }
+
+    /// @notice Compute Merkle root from wallet addresses and chain IDs
+    /// @dev Registry-specific leaf construction (address + chainId), then delegates
+    ///      to MerkleRootComputation library for tree building with OZ compatibility
+    function _computeWalletMerkleRoot(address[] calldata wallets, bytes32[] calldata walletChainIds)
+        internal
+        pure
+        returns (bytes32)
+    {
+        uint256 length = wallets.length;
+        if (length == 0) return bytes32(0);
+
+        // Build leaves: keccak256(abi.encodePacked(wallet, chainId))
+        bytes32[] memory leaves = new bytes32[](length);
+        for (uint256 i = 0; i < length; i++) {
+            leaves[i] = keccak256(abi.encodePacked(wallets[i], walletChainIds[i]));
+        }
+
+        return MerkleRootComputation.computeRoot(leaves);
     }
 }

@@ -39,7 +39,8 @@ contract RegistryHubTest is Test {
         vm.startPrank(owner);
         feeManager = new FeeManager(owner, address(mockOracle));
         hub = new RegistryHub(owner, address(feeManager), address(0));
-        walletRegistry = new StolenWalletRegistry(address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        walletRegistry =
+            new StolenWalletRegistry(owner, address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
         hub.setRegistry(hub.STOLEN_WALLET(), address(walletRegistry));
         vm.stopPrank();
     }
@@ -213,7 +214,7 @@ contract RegistryHubTest is Test {
     // setRegistry should update mapping and emit event.
     function test_SetRegistry_Success() public {
         StolenWalletRegistry newRegistry =
-            new StolenWalletRegistry(address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
+            new StolenWalletRegistry(owner, address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
         bytes32 registryType = hub.STOLEN_WALLET();
 
         vm.startPrank(owner);

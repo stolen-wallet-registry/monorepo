@@ -139,11 +139,11 @@ abstract contract DeployBase is Script {
         console2.log("RegistryHub:", hub);
 
         // nonce 3: Deploy StolenWalletRegistry (with chain-specific timing)
-        walletRegistry = address(new StolenWalletRegistry(feeManager, hub, graceBlocks, deadlineBlocks));
+        walletRegistry = address(new StolenWalletRegistry(deployer, feeManager, hub, graceBlocks, deadlineBlocks));
         console2.log("StolenWalletRegistry:", walletRegistry);
 
         // nonce 4: Deploy StolenTransactionRegistry (with same chain-specific timing)
-        txRegistry = address(new StolenTransactionRegistry(feeManager, hub, graceBlocks, deadlineBlocks));
+        txRegistry = address(new StolenTransactionRegistry(deployer, feeManager, hub, graceBlocks, deadlineBlocks));
         console2.log("StolenTransactionRegistry:", txRegistry);
 
         // nonce 5-6: Wire up hub to registries

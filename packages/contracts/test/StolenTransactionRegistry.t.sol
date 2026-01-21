@@ -45,7 +45,7 @@ contract StolenTransactionRegistryTest is Test {
 
     function setUp() public {
         // Deploy registry without fee collection for base tests
-        registry = new StolenTransactionRegistry(address(0), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        registry = new StolenTransactionRegistry(address(this), address(0), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         // Create test accounts with known private key for signing
         reporterPrivateKey = 0xA11CE;
@@ -551,21 +551,21 @@ contract StolenTransactionRegistryTest is Test {
     /// @notice Should reject invalid timing config
     function test_Constructor_InvalidTimingConfig() public {
         vm.expectRevert(IStolenTransactionRegistry.InvalidTimingConfig.selector);
-        new StolenTransactionRegistry(address(0), address(0), 0, 50);
+        new StolenTransactionRegistry(address(this), address(0), address(0), 0, 50);
 
         vm.expectRevert(IStolenTransactionRegistry.InvalidTimingConfig.selector);
-        new StolenTransactionRegistry(address(0), address(0), 10, 0);
+        new StolenTransactionRegistry(address(this), address(0), address(0), 10, 0);
 
         // deadlineBlocks must be >= 2 * graceBlocks
         vm.expectRevert(IStolenTransactionRegistry.InvalidTimingConfig.selector);
-        new StolenTransactionRegistry(address(0), address(0), 10, 15);
+        new StolenTransactionRegistry(address(this), address(0), address(0), 10, 15);
     }
 
     /// @notice Should reject fee manager without registry hub
     function test_Constructor_InvalidFeeConfig() public {
         address fakeFeeManager = makeAddr("feeManager");
         vm.expectRevert(IStolenTransactionRegistry.InvalidFeeConfig.selector);
-        new StolenTransactionRegistry(fakeFeeManager, address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        new StolenTransactionRegistry(address(this), fakeFeeManager, address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
     }
 }
 
@@ -619,7 +619,8 @@ contract StolenTransactionRegistryFeeTest is Test {
         hub = new RegistryHub(hubOwner, address(feeManager), address(0));
 
         // Deploy registry with fee collection
-        registry = new StolenTransactionRegistry(address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        registry =
+            new StolenTransactionRegistry(hubOwner, address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         // Register transaction registry in hub
         hub.setRegistry(hub.STOLEN_TRANSACTION(), address(registry));

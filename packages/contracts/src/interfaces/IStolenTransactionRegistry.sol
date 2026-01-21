@@ -83,6 +83,27 @@ interface IStolenTransactionRegistry {
         uint32 expiryBlock; // 4 bytes
     }
 
+    /// @notice Data stored for an operator-submitted transaction batch
+    /// @dev Operator batches bypass two-phase registration (operators are DAO-vetted)
+    /// @param merkleRoot Root of the Merkle tree (leaf = keccak256(txHash || chainId))
+    /// @param operator Address of the operator who submitted the batch
+    /// @param reportedChainId CAIP-2 chain identifier where transactions occurred
+    /// @param registeredAt Block number when the batch was registered
+    /// @param transactionCount Number of transactions in the batch
+    /// @param invalidated True if batch was soft-deleted by owner
+    struct OperatorTransactionBatch {
+        // === Slot 1 ===
+        bytes32 merkleRoot;
+        // === Slot 2 ===
+        address operator; // 20 bytes
+        uint64 registeredAt; // 8 bytes
+        uint32 transactionCount; // 4 bytes
+        // === Slot 3 ===
+        bytes32 reportedChainId;
+        // === Slot 4 (1 byte used) ===
+        bool invalidated; // 1 byte
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -153,6 +174,43 @@ interface IStolenTransactionRegistry {
     /// @notice Thrown when Merkle proof verification fails
     error InvalidMerkleProof();
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // OPERATOR BATCH ERRORS
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// @notice Thrown when caller is not an approved operator for transaction registry
+    error StolenTransactionRegistry__NotApprovedOperator();
+
+    /// @notice Thrown when operator batch is not found
+    error StolenTransactionRegistry__BatchNotFound();
+
+    /// @notice Thrown when operator batch is already registered
+    error StolenTransactionRegistry__BatchAlreadyRegistered();
+
+    /// @notice Thrown when batch or entry is already invalidated
+    error StolenTransactionRegistry__AlreadyInvalidated();
+
+    /// @notice Thrown when trying to reinstate an entry that isn't invalidated
+    error StolenTransactionRegistry__EntryNotInvalidated();
+
+    /// @notice Thrown when computed Merkle root doesn't match provided root
+    error StolenTransactionRegistry__MerkleRootMismatch();
+
+    /// @notice Thrown when array lengths don't match
+    error StolenTransactionRegistry__ArrayLengthMismatch();
+
+    /// @notice Thrown when transaction count is invalid
+    error StolenTransactionRegistry__InvalidTransactionCount();
+
+    /// @notice Thrown when Merkle root is zero
+    error StolenTransactionRegistry__InvalidMerkleRoot();
+
+    /// @notice Thrown when a transaction hash in the batch is zero
+    error StolenTransactionRegistry__InvalidTransactionHash();
+
+    /// @notice Thrown when a chain ID entry in the batch is zero
+    error StolenTransactionRegistry__InvalidChainIdEntry();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -198,6 +256,45 @@ interface IStolenTransactionRegistry {
     /// @param batchId The batch that was verified
     /// @param operator The operator that verified the batch
     event OperatorVerified(bytes32 indexed batchId, address indexed operator);
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // OPERATOR BATCH EVENTS
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// @notice Emitted when an operator registers a transaction batch (single-phase)
+    /// @param batchId Unique identifier for this batch
+    /// @param merkleRoot Root of the Merkle tree
+    /// @param operator Address of the operator who submitted the batch
+    /// @param reportedChainId CAIP-2 chain identifier where transactions occurred
+    /// @param transactionCount Number of transactions in the batch
+    /// @param transactionHashes Array of transaction hashes in the batch
+    /// @param chainIds Array of chain IDs for each transaction
+    event TransactionBatchRegisteredByOperator(
+        bytes32 indexed batchId,
+        bytes32 indexed merkleRoot,
+        address indexed operator,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        bytes32[] transactionHashes,
+        bytes32[] chainIds
+    );
+
+    /// @notice Emitted when an operator batch is invalidated
+    /// @param batchId The batch that was invalidated
+    event TransactionBatchInvalidated(bytes32 indexed batchId);
+
+    /// @notice Emitted when an individual transaction entry is invalidated
+    /// @param entryHash The keccak256(txHash, chainId) that was invalidated
+    event TransactionEntryInvalidated(bytes32 indexed entryHash);
+
+    /// @notice Emitted when an individual transaction entry is reinstated
+    /// @param entryHash The keccak256(txHash, chainId) that was reinstated
+    event TransactionEntryReinstated(bytes32 indexed entryHash);
+
+    /// @notice Emitted when the operator registry address is updated
+    /// @param oldRegistry Previous operator registry address
+    /// @param newRegistry New operator registry address
+    event OperatorRegistrySet(address indexed oldRegistry, address indexed newRegistry);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
@@ -280,6 +377,44 @@ interface IStolenTransactionRegistry {
         uint8 bridgeId,
         bytes32 crossChainMessageId
     ) external;
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // OPERATOR BATCH FUNCTIONS
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// @notice Register a batch of stolen transactions as an approved operator (single-phase)
+    /// @dev Operators bypass two-phase registration since they are DAO-vetted.
+    ///      The Merkle root is computed on-chain and verified against the provided root.
+    /// @param merkleRoot Pre-computed Merkle root for verification
+    /// @param reportedChainId CAIP-2 chain identifier where transactions occurred
+    /// @param transactionHashes Array of transaction hashes in the batch
+    /// @param chainIds Array of CAIP-2 chain IDs for each transaction
+    function registerBatchAsOperator(
+        bytes32 merkleRoot,
+        bytes32 reportedChainId,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds
+    ) external payable;
+
+    /// @notice Invalidate an entire operator batch (soft delete)
+    /// @dev Only callable by contract owner. Marks batch as invalidated.
+    /// @param batchId The batch ID to invalidate
+    function invalidateTransactionBatch(bytes32 batchId) external;
+
+    /// @notice Invalidate a single transaction entry
+    /// @dev Only callable by contract owner. For surgical removal of false positives.
+    /// @param entryHash The keccak256(txHash, chainId) to invalidate
+    function invalidateTransactionEntry(bytes32 entryHash) external;
+
+    /// @notice Reinstate a previously invalidated transaction entry
+    /// @dev Only callable by contract owner. Allows reversal of incorrect invalidations.
+    /// @param entryHash The keccak256(txHash, chainId) to reinstate
+    function reinstateTransactionEntry(bytes32 entryHash) external;
+
+    /// @notice Set the operator registry address
+    /// @dev Only callable by contract owner
+    /// @param _operatorRegistry The new operator registry address
+    function setOperatorRegistry(address _operatorRegistry) external;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - Primary Query Interface
@@ -391,4 +526,39 @@ interface IStolenTransactionRegistry {
         external
         pure
         returns (bytes32 batchId);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEW FUNCTIONS - Operator Batch Queries
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Get the operator registry address
+    /// @return The current operator registry contract address
+    function operatorRegistry() external view returns (address);
+
+    /// @notice Get operator batch data
+    /// @param batchId The batch ID to query
+    /// @return The operator batch data (zeroed if not found)
+    function getOperatorBatch(bytes32 batchId) external view returns (OperatorTransactionBatch memory);
+
+    /// @notice Check if an operator batch is registered
+    /// @param batchId The batch ID to check
+    /// @return True if the batch is registered
+    function isOperatorBatchRegistered(bytes32 batchId) external view returns (bool);
+
+    /// @notice Check if a transaction entry has been individually invalidated
+    /// @param entryHash The keccak256(txHash, chainId) to check
+    /// @return True if the entry is invalidated
+    function isTransactionEntryInvalidated(bytes32 entryHash) external view returns (bool);
+
+    /// @notice Verify a transaction in an operator batch with invalidation checks
+    /// @dev Returns false if batch or entry is invalidated
+    /// @param txHash Transaction hash to verify
+    /// @param chainId CAIP-2 chain identifier for this transaction
+    /// @param batchId Batch ID to check against
+    /// @param merkleProof Proof of inclusion
+    /// @return True if transaction is in a valid (non-invalidated) operator batch
+    function verifyOperatorTransaction(bytes32 txHash, bytes32 chainId, bytes32 batchId, bytes32[] calldata merkleProof)
+        external
+        view
+        returns (bool);
 }

@@ -71,7 +71,7 @@ contract CrossChainIntegrationTest is Test {
         hub = new RegistryHub(owner, address(0), address(0));
 
         // Deploy hub registry with hub address
-        hubRegistry = new StolenWalletRegistry(address(0), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        hubRegistry = new StolenWalletRegistry(address(this), address(0), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         // Set registry in hub
         vm.startPrank(owner);

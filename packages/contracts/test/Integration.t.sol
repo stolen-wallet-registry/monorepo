@@ -59,7 +59,8 @@ contract IntegrationTest is Test {
         hub = new RegistryHub(deployer, address(feeManager), address(0));
 
         // 4. Deploy StolenWalletRegistry with fee collection
-        walletRegistry = new StolenWalletRegistry(address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        walletRegistry =
+            new StolenWalletRegistry(deployer, address(feeManager), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         // 5. Wire hub to registry
         hub.setRegistry(hub.STOLEN_WALLET(), address(walletRegistry));

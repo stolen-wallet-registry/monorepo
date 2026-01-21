@@ -20,19 +20,19 @@ contract StolenWalletRegistryHubPathTest is Test {
     // Constructor should reject feeManager set without a registry hub.
     function test_Constructor_InvalidFeeConfig_Reverts() public {
         vm.expectRevert(IStolenWalletRegistry.InvalidFeeConfig.selector);
-        new StolenWalletRegistry(makeAddr("feeManager"), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        new StolenWalletRegistry(address(this), makeAddr("feeManager"), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
     }
 
     // Constructor should reject invalid timing configuration.
     function test_Constructor_InvalidTiming_Reverts() public {
         vm.expectRevert(IStolenWalletRegistry.InvalidTimingConfig.selector);
-        new StolenWalletRegistry(address(0), address(0), 0, DEADLINE_BLOCKS);
+        new StolenWalletRegistry(address(this), address(0), address(0), 0, DEADLINE_BLOCKS);
     }
 
     // registerFromHub should only be callable by the registry hub.
     function test_RegisterFromHub_Unauthorized_Reverts() public {
         StolenWalletRegistry registry =
-            new StolenWalletRegistry(address(0), makeAddr("hub"), GRACE_BLOCKS, DEADLINE_BLOCKS);
+            new StolenWalletRegistry(address(this), address(0), makeAddr("hub"), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         vm.expectRevert(IStolenWalletRegistry.UnauthorizedCaller.selector);
         registry.registerFromHub(makeAddr("wallet"), 1, false, 1, bytes32(0));
@@ -41,7 +41,8 @@ contract StolenWalletRegistryHubPathTest is Test {
     // registerFromHub should reject a zero wallet address.
     function test_RegisterFromHub_InvalidOwner_Reverts() public {
         address hub = makeAddr("hub");
-        StolenWalletRegistry registry = new StolenWalletRegistry(address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
+        StolenWalletRegistry registry =
+            new StolenWalletRegistry(address(this), address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         vm.prank(hub);
         vm.expectRevert(IStolenWalletRegistry.InvalidOwner.selector);
@@ -51,7 +52,8 @@ contract StolenWalletRegistryHubPathTest is Test {
     // Cross-chain registration must include a non-zero source chain ID.
     function test_RegisterFromHub_InvalidChainId_Reverts() public {
         address hub = makeAddr("hub");
-        StolenWalletRegistry registry = new StolenWalletRegistry(address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
+        StolenWalletRegistry registry =
+            new StolenWalletRegistry(address(this), address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         vm.prank(hub);
         vm.expectRevert(IStolenWalletRegistry.InvalidChainId.selector);
@@ -61,7 +63,8 @@ contract StolenWalletRegistryHubPathTest is Test {
     // registerFromHub should reject unsupported bridge IDs.
     function test_RegisterFromHub_InvalidBridgeId_Reverts() public {
         address hub = makeAddr("hub");
-        StolenWalletRegistry registry = new StolenWalletRegistry(address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
+        StolenWalletRegistry registry =
+            new StolenWalletRegistry(address(this), address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         vm.prank(hub);
         vm.expectRevert(IStolenWalletRegistry.InvalidBridgeId.selector);
@@ -72,7 +75,8 @@ contract StolenWalletRegistryHubPathTest is Test {
     // A wallet cannot be registered twice via the hub path.
     function test_RegisterFromHub_AlreadyRegistered_Reverts() public {
         address hub = makeAddr("hub");
-        StolenWalletRegistry registry = new StolenWalletRegistry(address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
+        StolenWalletRegistry registry =
+            new StolenWalletRegistry(address(this), address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
         address wallet = makeAddr("wallet");
 
         vm.prank(hub);
@@ -87,7 +91,8 @@ contract StolenWalletRegistryHubPathTest is Test {
     // bridge ID, sponsorship). This is the audit trail for registrations.
     function test_RegisterFromHub_Success() public {
         address hub = makeAddr("hub");
-        StolenWalletRegistry registry = new StolenWalletRegistry(address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
+        StolenWalletRegistry registry =
+            new StolenWalletRegistry(address(this), address(0), hub, GRACE_BLOCKS, DEADLINE_BLOCKS);
         address wallet = makeAddr("wallet");
 
         vm.prank(hub);
@@ -101,7 +106,8 @@ contract StolenWalletRegistryHubPathTest is Test {
 
     // quoteRegistration should return 0 when no fee manager is set.
     function test_QuoteRegistration_NoFeeManager_ReturnsZero() public {
-        StolenWalletRegistry registry = new StolenWalletRegistry(address(0), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        StolenWalletRegistry registry =
+            new StolenWalletRegistry(address(this), address(0), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
         assertEq(registry.quoteRegistration(makeAddr("wallet")), 0);
     }
 
@@ -109,8 +115,9 @@ contract StolenWalletRegistryHubPathTest is Test {
     function test_QuoteRegistration_WithFeeManager_ReturnsFee() public {
         MockAggregator oracle = new MockAggregator(300_000_000_000);
         FeeManager feeManager = new FeeManager(makeAddr("owner"), address(oracle));
-        StolenWalletRegistry registry =
-            new StolenWalletRegistry(address(feeManager), makeAddr("hub"), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        StolenWalletRegistry registry = new StolenWalletRegistry(
+            address(this), address(feeManager), makeAddr("hub"), GRACE_BLOCKS, DEADLINE_BLOCKS
+        );
 
         assertEq(registry.quoteRegistration(makeAddr("wallet")), feeManager.currentFeeWei());
     }
@@ -118,7 +125,8 @@ contract StolenWalletRegistryHubPathTest is Test {
     // getDeadlines should return zeroed/expired values for sessions with no
     // acknowledgement so the UI doesn't misinterpret timing state.
     function test_GetDeadlines_NoAcknowledgement_ReturnsExpired() public {
-        StolenWalletRegistry registry = new StolenWalletRegistry(address(0), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        StolenWalletRegistry registry =
+            new StolenWalletRegistry(address(this), address(0), address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         (
             uint256 currentBlock,
@@ -143,8 +151,9 @@ contract StolenWalletRegistryHubPathTest is Test {
         RejectingReceiver rejectingHub = new RejectingReceiver();
         MockAggregator oracle = new MockAggregator(300_000_000_000);
         FeeManager feeManager = new FeeManager(makeAddr("owner"), address(oracle));
-        StolenWalletRegistry registry =
-            new StolenWalletRegistry(address(feeManager), address(rejectingHub), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        StolenWalletRegistry registry = new StolenWalletRegistry(
+            address(this), address(feeManager), address(rejectingHub), GRACE_BLOCKS, DEADLINE_BLOCKS
+        );
 
         uint256 ownerPk = 0xA11CE;
         address owner = vm.addr(ownerPk);

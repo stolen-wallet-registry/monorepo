@@ -47,6 +47,7 @@ interface IFraudulentContractRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     error FraudulentContractRegistry__NotApprovedOperator();
+    error FraudulentContractRegistry__InvalidOperatorRegistry();
     error FraudulentContractRegistry__InvalidMerkleRoot();
     error FraudulentContractRegistry__InvalidChainId();
     error FraudulentContractRegistry__InvalidContractCount();

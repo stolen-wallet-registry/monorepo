@@ -55,7 +55,7 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
     /// @param _feeManager FeeManager contract address (address(0) for free)
     /// @param _registryHub RegistryHub for fee forwarding
     constructor(address _owner, address _operatorRegistry, address _feeManager, address _registryHub) Ownable(_owner) {
-        require(_operatorRegistry != address(0), "Invalid operator registry");
+        if (_operatorRegistry == address(0)) revert FraudulentContractRegistry__InvalidOperatorRegistry();
 
         operatorRegistry = _operatorRegistry;
         feeManager = _feeManager;
@@ -227,9 +227,16 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // INTERNAL FUNCTIONS
+    // INTERNAL FUNCTIONS - Registry-Specific Merkle Functions
+    // ═══════════════════════════════════════════════════════════════════════════
+    // These functions are intentionally per-registry because:
+    // - Batch IDs: Include registry-specific identifiers (merkleRoot + operator + chainId)
+    // - Entry hashes (leaves): Use registry-specific types (address for contracts)
+    // - The MerkleRootComputation library handles the tree-building algorithm only
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Compute batch ID from parameters
+    /// @dev Registry-specific: includes reportedChainId for batch uniqueness across chains
     function _computeBatchId(bytes32 merkleRoot, address operator, bytes32 reportedChainId)
         internal
         pure
@@ -238,6 +245,8 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
         return keccak256(abi.encode(merkleRoot, operator, reportedChainId));
     }
 
+    /// @notice Compute entry hash (Merkle leaf) for a contract address
+    /// @dev Registry-specific: uses address type for contract entries
     function _computeEntryHash(address contractAddress, bytes32 chainId) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(contractAddress, chainId));
     }
@@ -250,7 +259,8 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
     }
 
     /// @notice Compute Merkle root from contract addresses and chain IDs
-    /// @dev Uses MerkleRootComputation library for OZ MerkleProof compatibility
+    /// @dev Registry-specific leaf construction (address + chainId), then delegates
+    ///      to MerkleRootComputation library for tree building with OZ compatibility
     function _computeMerkleRoot(address[] calldata contractAddresses, bytes32[] calldata chainIds)
         internal
         pure

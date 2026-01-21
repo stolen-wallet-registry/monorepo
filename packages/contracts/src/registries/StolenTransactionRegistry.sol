@@ -4,8 +4,10 @@ pragma solidity ^0.8.24;
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { MerkleProof } from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import { Ownable, Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 import { IStolenTransactionRegistry } from "../interfaces/IStolenTransactionRegistry.sol";
+import { IOperatorRegistry } from "../interfaces/IOperatorRegistry.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
 import { TimingConfig } from "../libraries/TimingConfig.sol";
 import { MerkleRootComputation } from "../libraries/MerkleRootComputation.sol";
@@ -24,7 +26,7 @@ import { MerkleRootComputation } from "../libraries/MerkleRootComputation.sol";
 /// - Only merkleRoot stored on-chain (gas efficient)
 /// - Full txHashes and chainIds emitted in events for data availability
 /// - Verification requires both txHash AND chainId
-contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712 {
+contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
     // TYPE HASHES
     // ═══════════════════════════════════════════════════════════════════════════
@@ -73,18 +75,41 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712 {
     mapping(address => uint256) public nonces;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // OPERATOR STATE
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev Capability bit for transaction registry operator approval (0x02)
+    uint8 private constant TX_REGISTRY_CAPABILITY = 0x02;
+
+    /// @notice Operator registry contract for checking operator approvals
+    address public operatorRegistry;
+
+    /// @notice Operator-submitted batches (separate from user two-phase batches)
+    /// @dev Key is batchId = keccak256(merkleRoot, operator)
+    mapping(bytes32 => OperatorTransactionBatch) private _operatorBatches;
+
+    /// @notice Individually invalidated transaction entries
+    /// @dev Key is keccak256(abi.encodePacked(txHash, chainId))
+    mapping(bytes32 => bool) private _invalidatedTransactionEntries;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Initialize the registry with EIP-712 domain separator and fee configuration
     /// @dev Version "4" to align with frontend EIP-712 domain
+    /// @param _owner Initial owner address (for Ownable2Step)
     /// @param _feeManager FeeManager contract address (address(0) for free registrations)
     /// @param _registryHub RegistryHub contract address for fee forwarding
     /// @param _graceBlocks Base blocks for grace period (chain-specific)
     /// @param _deadlineBlocks Base blocks for deadline window (chain-specific)
-    constructor(address _feeManager, address _registryHub, uint256 _graceBlocks, uint256 _deadlineBlocks)
-        EIP712("StolenTransactionRegistry", "4")
-    {
+    constructor(
+        address _owner,
+        address _feeManager,
+        address _registryHub,
+        uint256 _graceBlocks,
+        uint256 _deadlineBlocks
+    ) EIP712("StolenTransactionRegistry", "4") Ownable(_owner) {
         // Validate fee configuration consistency
         if (_feeManager != address(0) && _registryHub == address(0)) {
             revert InvalidFeeConfig();
@@ -234,6 +259,101 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712 {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // OPERATOR BATCH FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @inheritdoc IStolenTransactionRegistry
+    function registerBatchAsOperator(
+        bytes32 merkleRoot,
+        bytes32 reportedChainId,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds
+    ) external payable {
+        // Validate operator approval
+        if (operatorRegistry == address(0)) revert StolenTransactionRegistry__NotApprovedOperator();
+        if (!IOperatorRegistry(operatorRegistry).isApprovedFor(msg.sender, TX_REGISTRY_CAPABILITY)) {
+            revert StolenTransactionRegistry__NotApprovedOperator();
+        }
+
+        // Validate inputs
+        if (merkleRoot == bytes32(0)) revert StolenTransactionRegistry__InvalidMerkleRoot();
+        if (reportedChainId == bytes32(0)) revert InvalidChainId();
+        uint256 length = transactionHashes.length;
+        if (length == 0) revert StolenTransactionRegistry__InvalidTransactionCount();
+        if (length != chainIds.length) revert StolenTransactionRegistry__ArrayLengthMismatch();
+
+        // Validate each entry
+        for (uint256 i = 0; i < length; i++) {
+            if (transactionHashes[i] == bytes32(0)) revert StolenTransactionRegistry__InvalidTransactionHash();
+            if (chainIds[i] == bytes32(0)) revert StolenTransactionRegistry__InvalidChainIdEntry();
+        }
+
+        // Compute batch ID (operator batches use operator address instead of reporter)
+        bytes32 batchId = keccak256(abi.encode(merkleRoot, msg.sender));
+
+        // Check not already registered
+        if (_operatorBatches[batchId].registeredAt != 0) revert StolenTransactionRegistry__BatchAlreadyRegistered();
+
+        // Verify Merkle root matches computed root
+        if (_computeMerkleRoot(transactionHashes, chainIds) != merkleRoot) {
+            revert StolenTransactionRegistry__MerkleRootMismatch();
+        }
+
+        // Store the batch
+        _operatorBatches[batchId] = OperatorTransactionBatch({
+            merkleRoot: merkleRoot,
+            operator: msg.sender,
+            reportedChainId: reportedChainId,
+            registeredAt: uint64(block.number),
+            transactionCount: uint32(length),
+            invalidated: false
+        });
+
+        emit TransactionBatchRegisteredByOperator(
+            batchId, merkleRoot, msg.sender, reportedChainId, uint32(length), transactionHashes, chainIds
+        );
+
+        // Forward fee to RegistryHub if applicable
+        if (registryHub != address(0) && msg.value > 0) {
+            (bool success,) = registryHub.call{ value: msg.value }("");
+            if (!success) revert FeeForwardFailed();
+        }
+    }
+
+    /// @inheritdoc IStolenTransactionRegistry
+    function invalidateTransactionBatch(bytes32 batchId) external onlyOwner {
+        OperatorTransactionBatch storage batch = _operatorBatches[batchId];
+        if (batch.registeredAt == 0) revert StolenTransactionRegistry__BatchNotFound();
+        if (batch.invalidated) revert StolenTransactionRegistry__AlreadyInvalidated();
+
+        batch.invalidated = true;
+        emit TransactionBatchInvalidated(batchId);
+    }
+
+    /// @inheritdoc IStolenTransactionRegistry
+    function invalidateTransactionEntry(bytes32 entryHash) external onlyOwner {
+        if (_invalidatedTransactionEntries[entryHash]) revert StolenTransactionRegistry__AlreadyInvalidated();
+
+        _invalidatedTransactionEntries[entryHash] = true;
+        emit TransactionEntryInvalidated(entryHash);
+    }
+
+    /// @inheritdoc IStolenTransactionRegistry
+    function reinstateTransactionEntry(bytes32 entryHash) external onlyOwner {
+        if (!_invalidatedTransactionEntries[entryHash]) revert StolenTransactionRegistry__EntryNotInvalidated();
+
+        _invalidatedTransactionEntries[entryHash] = false;
+        emit TransactionEntryReinstated(entryHash);
+    }
+
+    /// @inheritdoc IStolenTransactionRegistry
+    function setOperatorRegistry(address _operatorRegistry) external onlyOwner {
+        address oldRegistry = operatorRegistry;
+        operatorRegistry = _operatorRegistry;
+        emit OperatorRegistrySet(oldRegistry, _operatorRegistry);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - Primary Query Interface
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -362,10 +482,54 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712 {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // INTERNAL FUNCTIONS
+    // VIEW FUNCTIONS - Operator Batch Queries
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @inheritdoc IStolenTransactionRegistry
+    function getOperatorBatch(bytes32 batchId) external view returns (OperatorTransactionBatch memory) {
+        return _operatorBatches[batchId];
+    }
+
+    /// @inheritdoc IStolenTransactionRegistry
+    function isOperatorBatchRegistered(bytes32 batchId) external view returns (bool) {
+        return _operatorBatches[batchId].registeredAt != 0;
+    }
+
+    /// @inheritdoc IStolenTransactionRegistry
+    function isTransactionEntryInvalidated(bytes32 entryHash) external view returns (bool) {
+        return _invalidatedTransactionEntries[entryHash];
+    }
+
+    /// @inheritdoc IStolenTransactionRegistry
+    function verifyOperatorTransaction(bytes32 txHash, bytes32 chainId, bytes32 batchId, bytes32[] calldata merkleProof)
+        external
+        view
+        returns (bool)
+    {
+        OperatorTransactionBatch memory batch = _operatorBatches[batchId];
+
+        // Batch must exist and not be invalidated
+        if (batch.registeredAt == 0 || batch.invalidated) return false;
+
+        // Reconstruct leaf and check entry-level invalidation
+        bytes32 leaf = keccak256(abi.encodePacked(txHash, chainId));
+        if (_invalidatedTransactionEntries[leaf]) return false;
+
+        // Verify proof against stored Merkle root
+        return MerkleProof.verify(merkleProof, batch.merkleRoot, leaf);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // INTERNAL FUNCTIONS - Registry-Specific Merkle Functions
+    // ═══════════════════════════════════════════════════════════════════════════
+    // These functions are intentionally per-registry because:
+    // - Batch IDs: Include registry-specific identifiers (merkleRoot + reporter + chainId)
+    // - Entry hashes (leaves): Use registry-specific types (bytes32 for txHashes vs address)
+    // - The MerkleRootComputation library handles the tree-building algorithm only
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Compute batch ID from batch parameters
+    /// @dev Registry-specific: uses reporter (not operator) for two-phase registration batches
     function _computeBatchId(bytes32 merkleRoot, address reporter, bytes32 reportedChainId)
         internal
         pure
@@ -382,7 +546,8 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712 {
     }
 
     /// @notice Compute Merkle root from transaction hashes and chain IDs
-    /// @dev Uses MerkleRootComputation library for OZ MerkleProof compatibility
+    /// @dev Registry-specific leaf construction (bytes32 txHash + chainId), then delegates
+    ///      to MerkleRootComputation library for tree building with OZ compatibility
     function _computeMerkleRoot(bytes32[] calldata txHashes, bytes32[] calldata chainIds)
         internal
         pure
