@@ -6,6 +6,7 @@ export { StolenWalletRegistryABI } from './StolenWalletRegistry';
 export { StolenTransactionRegistryABI } from './StolenTransactionRegistry';
 export { FeeManagerABI } from './FeeManager';
 export { OperatorRegistryABI } from './OperatorRegistry';
+export { FraudulentContractRegistryABI } from './FraudulentContractRegistry';
 export { CrossChainInboxABI } from './CrossChainInbox';
 export { SpokeRegistryABI } from './SpokeRegistry';
 export { SpokeTransactionRegistryABI } from './SpokeTransactionRegistry';

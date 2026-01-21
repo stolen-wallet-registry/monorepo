@@ -60,6 +60,10 @@ interface IRegistryHub {
     /// @param operatorRegistry New OperatorRegistry address
     event OperatorRegistryUpdated(address indexed operatorRegistry);
 
+    /// @notice Emitted when the fraudulent contract registry is updated
+    /// @param registry New FraudulentContractRegistry address
+    event FraudulentContractRegistrySet(address indexed registry);
+
     /// @notice Emitted when a wallet is registered via cross-chain message
     /// @param wallet The wallet address registered as stolen
     /// @param sourceChainId EIP-155 chain ID where registration originated
@@ -158,6 +162,10 @@ interface IRegistryHub {
     /// @return True if operator has the specified capability
     function isOperatorApprovedFor(address operator, uint8 registryType) external view returns (bool);
 
+    /// @notice Get the fraudulent contract registry address
+    /// @return The FraudulentContractRegistry address
+    function fraudulentContractRegistry() external view returns (address);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CROSS-CHAIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -236,6 +244,10 @@ interface IRegistryHub {
     /// @dev Only callable by owner. Set to address(0) to disable operator features.
     /// @param _operatorRegistry The new OperatorRegistry address
     function setOperatorRegistry(address _operatorRegistry) external;
+
+    /// @notice Set the fraudulent contract registry address (owner only)
+    /// @param _registry The new FraudulentContractRegistry address
+    function setFraudulentContractRegistry(address _registry) external;
 
     /// @notice Withdraw accumulated fees to a specified address
     /// @dev Only callable by owner. Implementations MUST validate:

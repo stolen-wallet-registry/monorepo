@@ -10,6 +10,7 @@ import { CrossChainInbox } from "../src/crosschain/CrossChainInbox.sol";
 import { SoulboundReceiver } from "../src/soulbound/SoulboundReceiver.sol";
 import { SupportSoulbound } from "../src/soulbound/SupportSoulbound.sol";
 import { OperatorRegistry } from "../src/OperatorRegistry.sol";
+import { FraudulentContractRegistry } from "../src/registries/FraudulentContractRegistry.sol";
 
 // Spoke contracts
 import { SpokeRegistry } from "../src/spoke/SpokeRegistry.sol";
@@ -55,6 +56,8 @@ import { MockInterchainGasPaymaster } from "../test/mocks/MockInterchainGasPayma
 ///  15: OperatorRegistry          → 0x0B306BF915C4d645ff596e518fAf3F9669b97016
 ///  16: (setOperatorRegistry tx)
 ///  17-18: (approveOperator txs for test operators)
+///  19: FraudulentContractRegistry → 0x3Aa5ebB10DC797CAC828524e59A333d0A371443c
+///  20: (setFraudulentContractRegistry tx)
 ///
 /// Language seeding runs separately via SeedLanguages.s.sol (doesn't affect addresses)
 ///
@@ -104,6 +107,11 @@ contract DeployCrossChain is DeployBase {
     address payable soulboundReceiver;
     // Operator Registry (Hub only)
     address operatorRegistry;
+    // Fraudulent Contract Registry (Hub only)
+    address fraudulentContractRegistry;
+    // Hyperlane Mailbox addresses (stored to avoid stack too deep)
+    address hubMailbox;
+    address spokeMailbox;
     // Deployed addresses - Spoke
     address spokeGasPaymaster;
     address hyperlaneAdapter;
@@ -120,9 +128,9 @@ contract DeployCrossChain is DeployBase {
 
         // Read Hyperlane Mailbox addresses from environment
         // These must be set in packages/contracts/.env after running hyperlane:deploy
-        address hubMailbox = vm.envAddress("HUB_MAILBOX");
+        hubMailbox = vm.envAddress("HUB_MAILBOX");
         require(hubMailbox != address(0), "HUB_MAILBOX env var must be set to a non-zero address");
-        address spokeMailbox = vm.envAddress("SPOKE_MAILBOX");
+        spokeMailbox = vm.envAddress("SPOKE_MAILBOX");
         require(spokeMailbox != address(0), "SPOKE_MAILBOX env var must be set to a non-zero address");
 
         console2.log("=== CROSS-CHAIN DEPLOYMENT (Real Hyperlane) ===");
@@ -204,6 +212,23 @@ contract DeployCrossChain is DeployBase {
         console2.log("Operator B (CONTRACT):", OPERATOR_B);
 
         console2.log("Approved operator count:", opReg.approvedOperatorCount());
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 1d: DEPLOY FRAUDULENT CONTRACT REGISTRY TO HUB
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        console2.log("");
+        console2.log("--- HUB CHAIN (31337) - Fraudulent Contract Registry ---");
+
+        // nonce 19: Deploy FraudulentContractRegistry
+        FraudulentContractRegistry fcReg =
+            new FraudulentContractRegistry(deployer, operatorRegistry, feeManager, hubRegistry);
+        fraudulentContractRegistry = address(fcReg);
+        console2.log("FraudulentContractRegistry:", fraudulentContractRegistry);
+
+        // nonce 20: Wire FraudulentContractRegistry to hub
+        RegistryHub(hubRegistry).setFraudulentContractRegistry(fraudulentContractRegistry);
+        console2.log("FraudulentContractRegistry wired to RegistryHub");
 
         vm.stopBroadcast();
 
@@ -344,6 +369,7 @@ contract DeployCrossChain is DeployBase {
         console2.log("  SupportSoulbound:          ", supportSoulbound);
         console2.log("  SoulboundReceiver:         ", soulboundReceiver);
         console2.log("  OperatorRegistry:          ", operatorRegistry);
+        console2.log("  FraudulentContractRegistry:", fraudulentContractRegistry);
         console2.log("");
         console2.log("Spoke Chain (31338) - http://localhost:8546:");
         console2.log("  MockInterchainGasPaymaster:", spokeGasPaymaster);

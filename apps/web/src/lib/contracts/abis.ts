@@ -12,6 +12,7 @@ export { FeeManagerABI as feeManagerAbi } from '@swr/abis';
 export { RegistryHubABI as registryHubAbi } from '@swr/abis';
 export { CrossChainInboxABI as crossChainInboxAbi } from '@swr/abis';
 export { OperatorRegistryABI as operatorRegistryAbi } from '@swr/abis';
+export { FraudulentContractRegistryABI as fraudulentContractRegistryAbi } from '@swr/abis';
 
 // Spoke contracts (cross-chain)
 export { SpokeRegistryABI as spokeRegistryAbi } from '@swr/abis';

@@ -111,6 +111,19 @@ export const RegistryHubABI = [
   },
   {
     type: 'function',
+    name: 'fraudulentContractRegistry',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'fraudulentContractRegistryType',
     inputs: [],
     outputs: [
@@ -438,6 +451,19 @@ export const RegistryHubABI = [
   },
   {
     type: 'function',
+    name: 'setFraudulentContractRegistry',
+    inputs: [
+      {
+        name: '_registry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'setOperatorRegistry',
     inputs: [
       {
@@ -634,6 +660,19 @@ export const RegistryHubABI = [
         type: 'uint256',
         indexed: false,
         internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'FraudulentContractRegistrySet',
+    inputs: [
+      {
+        name: 'registry',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
       },
     ],
     anonymous: false,

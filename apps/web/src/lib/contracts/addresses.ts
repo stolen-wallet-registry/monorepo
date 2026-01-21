@@ -24,8 +24,9 @@ import { getSpokeAddress } from './crosschain-addresses';
 //   11: TranslationRegistry     → 0x610178dA211FEF7D417bC0e6FeD39F05609AD788
 //   12: WalletSoulbound         → 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
 //   13: SupportSoulbound        → 0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0
-//   14: SoulboundReceiver       → 0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82
-//   15: OperatorRegistry        → 0x0B306BF915C4d645ff596e518fAf3F9669b97016
+//   14: SoulboundReceiver            → 0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82
+//   15: OperatorRegistry             → 0x0B306BF915C4d645ff596e518fAf3F9669b97016
+//   19: FraudulentContractRegistry   → 0x3Aa5ebB10DC797CAC828524e59A333d0A371443c
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const CONTRACT_ADDRESSES = {
@@ -66,6 +67,11 @@ export const CONTRACT_ADDRESSES = {
   // Operator Registry - manages DAO-approved operators for batch submissions
   operatorRegistry: {
     [anvilHub.chainId]: '0x0B306BF915C4d645ff596e518fAf3F9669b97016' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  // Fraudulent Contract Registry - operator-only registry for malicious contracts
+  fraudulentContractRegistry: {
+    [anvilHub.chainId]: '0x3Aa5ebB10DC797CAC828524e59A333d0A371443c' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;
@@ -129,6 +135,10 @@ export function getSupportSoulboundAddress(chainId: number): Address {
 
 export function getOperatorRegistryAddress(chainId: number): Address {
   return getContractAddress('operatorRegistry', chainId);
+}
+
+export function getFraudulentContractRegistryAddress(chainId: number): Address {
+  return getContractAddress('fraudulentContractRegistry', chainId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

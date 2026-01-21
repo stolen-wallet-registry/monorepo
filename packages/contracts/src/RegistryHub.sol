@@ -41,6 +41,9 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
     /// @notice Operator registry address (address(0) = operator features disabled)
     address public operatorRegistry;
 
+    /// @notice Fraudulent contract registry address
+    address public fraudulentContractRegistry;
+
     /// @notice Mapping of registry type -> registry address
     mapping(bytes32 => address) private subRegistries;
 
@@ -253,6 +256,12 @@ contract RegistryHub is IRegistryHub, Ownable2Step {
     function setOperatorRegistry(address _operatorRegistry) external onlyOwner {
         operatorRegistry = _operatorRegistry;
         emit OperatorRegistryUpdated(_operatorRegistry);
+    }
+
+    /// @inheritdoc IRegistryHub
+    function setFraudulentContractRegistry(address _registry) external onlyOwner {
+        fraudulentContractRegistry = _registry;
+        emit FraudulentContractRegistrySet(_registry);
     }
 
     /// @inheritdoc IRegistryHub
