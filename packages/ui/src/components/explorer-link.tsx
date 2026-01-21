@@ -15,7 +15,9 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { ExternalLink, Copy, Check } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 import { cn } from '../lib/utils';
-import type { Address, Hash, Hex } from 'viem';
+
+// Accept any string for flexibility with external data sources
+type HexString = string;
 
 /**
  * Type of blockchain identifier.
@@ -73,8 +75,8 @@ function inferType(value: string): ExplorerLinkType {
 }
 
 export interface ExplorerLinkProps {
-  /** The hash or address to display (accepts Address, Hash, or generic Hex) */
-  value: Address | Hash | Hex;
+  /** The hash or address to display */
+  value: HexString;
   /** Type of value - inferred from length if not provided */
   type?: ExplorerLinkType;
   /** Explorer URL (if null/undefined, shows disabled icon) */

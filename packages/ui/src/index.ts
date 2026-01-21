@@ -1,9 +1,6 @@
 // Utilities
 export { cn } from './lib/utils';
 
-// Viem utilities (re-exported for convenience)
-export { isAddress } from 'viem';
-
 // Chain configuration (re-exported from @swr/chains)
 export {
   getLocalChainIds,
@@ -12,21 +9,6 @@ export {
   getExplorerTxUrl,
   getExplorerName,
 } from './lib/chains';
-
-// Registry utilities
-export {
-  queryRegistryStatus,
-  queryRegistryStatusSimple,
-  getResultStatus,
-  getStatusLabel,
-  getStatusDescription,
-  formatBlockAsTime,
-  isWalletCompromised,
-  type RegistrationData,
-  type AcknowledgementData,
-  type RegistryStatusResult,
-  type ResultStatus,
-} from './lib/registry';
 
 // Components
 export { Alert, AlertTitle, AlertDescription } from './components/alert';

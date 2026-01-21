@@ -4,39 +4,49 @@
  * Registry search preview for landing page.
  *
  * Allows visitors to immediately search the registry without connecting a wallet.
- * Uses the shared queryRegistryStatusSimple from @swr/ui.
+ * Uses the Ponder indexer via @swr/search for rich search results.
  */
 
-import { useState, useCallback, type FormEvent } from 'react';
-import { Search, Loader2, AlertTriangle, CheckCircle, Clock, HelpCircle } from 'lucide-react';
+import { useState, useCallback, useRef, type FormEvent } from 'react';
+import { Search, Loader2, AlertTriangle, CheckCircle, Link as LinkIcon } from 'lucide-react';
 import {
   Button,
   Input,
   ExplorerLink,
   getExplorerAddressUrl,
+  getExplorerTxUrl,
   TooltipProvider,
   Tooltip,
   TooltipTrigger,
   TooltipContent,
-  queryRegistryStatusSimple,
+} from '@swr/ui';
+import {
+  search,
   getResultStatus,
   getStatusLabel,
   getStatusDescription,
-  isAddress,
-  type RegistryStatusResult,
+  formatTimestamp,
+  truncateHash,
+  type SearchConfig,
+  type SearchResult,
   type ResultStatus,
-} from '@swr/ui';
-import { StolenWalletRegistryABI } from '@swr/abis';
+} from '@swr/search';
 import {
   EXAMPLE_REGISTERED_ADDRESS,
   EXAMPLE_CLEAN_ADDRESS,
-  REGISTRY_CHAIN_ID,
-  REGISTRY_CONTRACT_ADDRESS,
+  EXAMPLE_REPORTED_TX,
+  EXAMPLE_CLEAN_TX,
+  INDEXER_URL,
+  HUB_CHAIN_ID,
 } from './constants';
 
 interface RegistrySearchPreviewProps {
   className?: string;
 }
+
+const searchConfig: SearchConfig = {
+  indexerUrl: INDEXER_URL,
+};
 
 /**
  * Get background color class based on status.
@@ -60,52 +70,121 @@ function StatusIcon({ status }: { status: ResultStatus }) {
     case 'registered':
       return <AlertTriangle className="h-4 w-4 text-destructive" />;
     case 'pending':
-      return <Clock className="h-4 w-4 text-yellow-500" />;
+      return <LinkIcon className="h-4 w-4 text-yellow-500" />;
     case 'not-found':
       return <CheckCircle className="h-4 w-4 text-green-500" />;
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// STUB DATA FOR EXAMPLES
+// ═══════════════════════════════════════════════════════════════════════════
+// These stub results are used for the example buttons to demonstrate the UI
+// without requiring actual registered entries in the indexer.
+
+function createStubbedWalletResult(address: string): SearchResult {
+  return {
+    type: 'wallet',
+    found: true,
+    data: {
+      address: address.toLowerCase() as `0x${string}`,
+      caip10: `eip155:${HUB_CHAIN_ID}:${address.toLowerCase()}`,
+      registeredAt: BigInt(Math.floor(Date.now() / 1000) - 86400 * 7), // 7 days ago
+      transactionHash:
+        '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`,
+      isSponsored: false,
+    },
+  };
+}
+
+function createStubbedTransactionResult(txHash: string): SearchResult {
+  return {
+    type: 'transaction',
+    found: true,
+    data: {
+      txHash: txHash.toLowerCase() as `0x${string}`,
+      chains: [
+        {
+          caip2ChainId: `eip155:${HUB_CHAIN_ID}`,
+          chainName: HUB_CHAIN_ID === 8453 ? 'Base' : 'Base Sepolia',
+          numericChainId: HUB_CHAIN_ID,
+          batchId:
+            '0x0000000000000000000000000000000000000000000000000000000000000001' as `0x${string}`,
+          reporter: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+          reportedAt: BigInt(Math.floor(Date.now() / 1000) - 86400 * 3), // 3 days ago
+        },
+      ],
+    },
+  };
+}
+
 export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps) {
   const [inputValue, setInputValue] = useState('');
-  const [result, setResult] = useState<RegistryStatusResult | null>(null);
-  const [searchedAddress, setSearchedAddress] = useState<string | null>(null);
+  const [result, setResult] = useState<SearchResult | null>(null);
+  const [searchedQuery, setSearchedQuery] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const latestQueryRef = useRef<string | null>(null);
 
-  const handleSearch = useCallback(async (address: string) => {
-    const trimmed = address.trim();
+  const handleSearch = useCallback(async (query: string, useStub?: 'wallet' | 'transaction') => {
+    const trimmed = query.trim();
 
     if (!trimmed) {
-      setError('Please enter a wallet address');
+      setError('Please enter a wallet address or transaction hash');
       setResult(null);
       return;
     }
 
-    if (!isAddress(trimmed)) {
-      setError('Invalid address format. Must be 0x followed by 40 hex characters.');
+    // Basic validation - at least looks like a hex value
+    if (!trimmed.startsWith('0x')) {
+      setError('Invalid format. Must start with 0x');
       setResult(null);
       return;
     }
 
     setError(null);
+    setSearchedQuery(trimmed);
+    latestQueryRef.current = trimmed;
+
+    // Use stubbed data for example "stolen/reported" buttons
+    if (useStub === 'wallet') {
+      setResult(createStubbedWalletResult(trimmed));
+      return;
+    }
+    if (useStub === 'transaction') {
+      setResult(createStubbedTransactionResult(trimmed));
+      return;
+    }
+
+    // Real search for user input and "clean" examples
     setIsLoading(true);
-    setSearchedAddress(trimmed);
 
     try {
-      const queryResult = await queryRegistryStatusSimple(
-        REGISTRY_CHAIN_ID,
-        trimmed,
-        REGISTRY_CONTRACT_ADDRESS,
-        StolenWalletRegistryABI
-      );
-      setResult(queryResult);
+      const searchResult = await search(searchConfig, trimmed);
+
+      // Ignore stale responses from previous searches
+      if (latestQueryRef.current !== trimmed) return;
+
+      setResult(searchResult);
+
+      // Show error for invalid input type
+      if (searchResult.type === 'invalid') {
+        setError(
+          'Invalid format. Enter a wallet address (42 chars) or transaction hash (66 chars).'
+        );
+      }
     } catch (err) {
-      console.error('Registry query failed:', err);
-      setError('Failed to query registry. Please try again.');
+      // Ignore errors from stale searches
+      if (latestQueryRef.current !== trimmed) return;
+
+      console.error('Registry search failed:', err);
+      setError('Failed to search registry. Please try again.');
       setResult(null);
     } finally {
-      setIsLoading(false);
+      // Only clear loading if this is still the latest query
+      if (latestQueryRef.current === trimmed) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -118,34 +197,29 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
   );
 
   const handleExampleClick = useCallback(
-    (address: string, forceStolen = false) => {
-      const trimmed = address.trim();
+    (value: string, stub?: 'wallet' | 'transaction') => {
+      const trimmed = value.trim();
       setInputValue(trimmed);
-
-      // For demo purposes: force "Stolen Wallet" example to show as registered
-      // since we don't have a production registry with actual stolen wallets yet
-      if (forceStolen) {
-        setError(null);
-        setSearchedAddress(trimmed);
-        // Mock a "registered" result for demo
-        setResult({
-          isRegistered: true,
-          isPending: false,
-          registrationData: null,
-          acknowledgementData: null,
-        });
-        return;
-      }
-
-      void handleSearch(trimmed);
+      void handleSearch(trimmed, stub);
     },
     [handleSearch]
   );
 
-  const resultStatus = result ? getResultStatus(result) : null;
-  const explorerUrl = searchedAddress
-    ? getExplorerAddressUrl(REGISTRY_CHAIN_ID, searchedAddress)
-    : null;
+  const resultStatus = result && result.type !== 'invalid' ? getResultStatus(result) : null;
+
+  // Get explorer URL based on result type
+  const getExplorerUrl = () => {
+    if (!searchedQuery || !result || result.type === 'invalid') return null;
+
+    if (result.type === 'wallet') {
+      return getExplorerAddressUrl(HUB_CHAIN_ID, searchedQuery);
+    } else if (result.type === 'transaction') {
+      return getExplorerTxUrl(HUB_CHAIN_ID, searchedQuery);
+    }
+    return null;
+  };
+
+  const explorerUrl = getExplorerUrl();
 
   return (
     <TooltipProvider>
@@ -161,10 +235,10 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
                 setInputValue(e.target.value);
                 if (error) setError(null);
               }}
-              placeholder="Search wallet address (0x...)"
+              placeholder="Search wallet or transaction (0x...)"
               className="pl-10 font-mono text-sm"
               disabled={isLoading}
-              aria-label="Wallet address to search"
+              aria-label="Address or transaction hash to search"
             />
           </div>
           <Button
@@ -174,41 +248,24 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
           >
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
           </Button>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="text-muted-foreground hover:text-foreground"
-                tabIndex={-1}
-              >
-                <HelpCircle className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right" className="max-w-xs text-center">
-              <p>
-                Enter any wallet address to check if it&apos;s been reported as stolen in our
-                registry.
-              </p>
-            </TooltipContent>
-          </Tooltip>
         </form>
 
         {/* Example Buttons - Centered */}
         <div
           className="mt-2 flex flex-wrap items-center justify-center gap-2"
           role="group"
-          aria-label="Example addresses to search"
+          aria-label="Example searches"
         >
-          <span className="text-xs text-muted-foreground">Examples:</span>
+          <span className="text-xs text-muted-foreground">Wallets:</span>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleExampleClick(EXAMPLE_REGISTERED_ADDRESS, true)}
+            onClick={() => handleExampleClick(EXAMPLE_REGISTERED_ADDRESS, 'wallet')}
             disabled={isLoading}
             className="h-7 px-3 text-xs"
             aria-label="Search example stolen wallet address"
           >
-            Stolen Wallet
+            Stolen
           </Button>
           <Button
             variant="outline"
@@ -218,32 +275,91 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
             className="h-7 px-3 text-xs"
             aria-label="Search example clean wallet address"
           >
-            Clean Wallet
+            Clean
+          </Button>
+          <span className="text-xs text-muted-foreground ml-2">Transactions:</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExampleClick(EXAMPLE_REPORTED_TX, 'transaction')}
+            disabled={isLoading}
+            className="h-7 px-3 text-xs"
+            aria-label="Search example reported transaction"
+          >
+            Reported
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExampleClick(EXAMPLE_CLEAN_TX)}
+            disabled={isLoading}
+            className="h-7 px-3 text-xs"
+            aria-label="Search example clean transaction"
+          >
+            Clean
           </Button>
         </div>
 
         {/* Error Message */}
         {error && <p className="mt-2 text-center text-sm text-destructive">{error}</p>}
 
-        {/* Result Display - Compact with colored background */}
-        {result && resultStatus && searchedAddress && (
+        {/* Result Display - resultStatus implies result is valid (non-invalid) */}
+        {result && resultStatus && searchedQuery && (
           <div className={`mt-3 rounded-lg border p-3 ${getResultBgClass(resultStatus)}`}>
             <div className="flex items-center justify-center gap-2">
               <StatusIcon status={resultStatus} />
-              <span className="font-medium text-sm">{getStatusLabel(resultStatus)}</span>
+              <span className="font-medium text-sm">{getStatusLabel(result)}</span>
             </div>
             <p className="mt-1 text-center text-xs text-muted-foreground">
-              {getStatusDescription(resultStatus)}
+              {getStatusDescription(result)}
             </p>
+
+            {/* Additional details for found results */}
+            {result.found && result.data && (
+              <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                {result.type === 'wallet' && (
+                  <>
+                    <p className="text-center">
+                      Registered: {formatTimestamp(result.data.registeredAt)}
+                    </p>
+                    {result.data.isSponsored && (
+                      <p className="text-center italic">Sponsored registration</p>
+                    )}
+                    {result.data.sourceChainName && (
+                      <p className="text-center">Source: {result.data.sourceChainName}</p>
+                    )}
+                  </>
+                )}
+                {result.type === 'transaction' && (
+                  <p className="text-center">
+                    Reported on {result.data.chains.length} chain
+                    {result.data.chains.length > 1 ? 's' : ''}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Explorer link */}
             <div className="mt-2 flex justify-center">
-              <ExplorerLink
-                value={searchedAddress as `0x${string}`}
-                type="address"
-                href={explorerUrl}
-                truncate={false}
-                showDisabledIcon={false}
-                className="text-xs break-all"
-              />
+              {result.type === 'wallet' ? (
+                <ExplorerLink
+                  value={searchedQuery as `0x${string}`}
+                  type="address"
+                  href={explorerUrl}
+                  truncate={false}
+                  showDisabledIcon={false}
+                  className="text-xs break-all"
+                />
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="font-mono text-xs">{truncateHash(searchedQuery, 10, 8)}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="font-mono text-xs">{searchedQuery}</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
           </div>
         )}

@@ -24,9 +24,9 @@ vi.mock('@/lib/contracts/addresses', () => ({
   },
 }));
 
-// Mock the shared queryRegistryStatus function
-vi.mock('@swr/ui', async () => {
-  const actual = await vi.importActual('@swr/ui');
+// Mock the contract query function
+vi.mock('@/lib/contracts/query', async () => {
+  const actual = await vi.importActual('@/lib/contracts/query');
   return {
     ...actual,
     queryRegistryStatus: vi.fn(),
@@ -34,7 +34,7 @@ vi.mock('@swr/ui', async () => {
 });
 
 // Import the mocked function to control its behavior
-import { queryRegistryStatus } from '@swr/ui';
+import { queryRegistryStatus } from '@/lib/contracts/query';
 const mockQueryRegistryStatus = vi.mocked(queryRegistryStatus);
 
 // Create a wrapper with QueryClient for testing hooks that use useQuery

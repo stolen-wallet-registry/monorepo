@@ -27,8 +27,7 @@
   "peerDependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwindcss": "^4.0.0",
-    "viem": "^2.0.0"
+    "tailwindcss": "^4.0.0"
   },
   "dependencies": {
     "@swr/chains": "workspace:*",
@@ -72,7 +71,6 @@
     "tsup": "^8.5.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
-    "viem": "^2.41.2",
     "vite": "^7.2.4"
   }
 }

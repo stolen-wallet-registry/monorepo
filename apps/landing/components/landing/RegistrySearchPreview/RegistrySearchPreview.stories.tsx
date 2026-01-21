@@ -1,18 +1,33 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { Search, Loader2, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
-import {
-  Button,
-  Input,
-  Alert,
-  AlertTitle,
-  AlertDescription,
-  type ResultStatus,
-  getStatusLabel,
-  getStatusDescription,
-} from '@swr/ui';
+import { Button, Input, Alert, AlertTitle, AlertDescription } from '@swr/ui';
+import { type ResultStatus } from '@swr/search';
 
 import { RegistrySearchPreview } from './index';
 import { EXAMPLE_REGISTERED_ADDRESS, EXAMPLE_CLEAN_ADDRESS } from './constants';
+
+// Local helpers for stories (avoiding @swr/search dependency for static display)
+function getStatusLabel(status: ResultStatus): string {
+  switch (status) {
+    case 'registered':
+      return 'Stolen Wallet';
+    case 'pending':
+      return 'Pending';
+    case 'not-found':
+      return 'Not Found';
+  }
+}
+
+function getStatusDescription(status: ResultStatus): string {
+  switch (status) {
+    case 'registered':
+      return 'This wallet is registered as stolen.';
+    case 'pending':
+      return 'This wallet has a pending registration.';
+    case 'not-found':
+      return 'This wallet is not in the registry.';
+  }
+}
 
 const meta = {
   title: 'Landing/RegistrySearchPreview',

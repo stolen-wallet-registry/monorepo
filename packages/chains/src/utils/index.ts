@@ -69,3 +69,24 @@ export {
   getBridgeAdapterAddressOrNull,
   getAllBridgeAdapters,
 } from './bridges';
+
+// CAIP-2 / CAIP-10 utilities
+export {
+  // Lookup tables
+  CAIP2_LOOKUP,
+  HYPERLANE_DOMAIN_TO_CAIP2,
+  CAIP2_CHAIN_NAMES,
+  // CAIP-2 functions
+  resolveChainIdHash,
+  caip2ToNumericChainId,
+  toCAIP2,
+  hyperlaneDomainToCAIP2,
+  getCAIP2ChainName,
+  computeCAIP2Hash,
+  // CAIP-10 functions
+  toCAIP10,
+  toCAIP10FromCAIP2,
+  parseCAIP10,
+  extractAddressFromCAIP10,
+  extractCAIP2FromCAIP10,
+} from './caip';

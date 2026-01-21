@@ -1,8 +1,8 @@
 /**
  * Hook to query registry status for a wallet address.
  *
- * Uses the shared queryRegistryStatus function from @swr/ui
- * with wagmi's client management and TanStack Query caching.
+ * Uses contract multicall for real-time on-chain status checks.
+ * For indexed search results, use useRegistrySearch instead.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -12,7 +12,7 @@ import {
   type RegistrationData,
   type AcknowledgementData,
   type RegistryStatusResult,
-} from '@swr/ui';
+} from '@/lib/contracts/query';
 import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
 import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
 import { registryStaleTime, registryKeys } from '@/lib/contracts/queryKeys';

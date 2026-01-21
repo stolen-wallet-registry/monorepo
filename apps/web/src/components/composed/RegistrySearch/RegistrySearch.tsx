@@ -1,12 +1,12 @@
 /**
  * Registry search component.
  *
- * Allows users to search for a wallet address and see its registry status.
+ * Allows users to search for wallet addresses or transaction hashes
+ * and see their registry status using the Ponder indexer.
  * Uses InputGroup for a composable search input with loading states.
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { isAddress } from 'viem';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   InputGroup,
   InputGroupAddon,
@@ -15,29 +15,25 @@ import {
   Skeleton,
   Button,
 } from '@swr/ui';
-import { Search, X, Loader2, Check, AlertCircle } from 'lucide-react';
-import { useRegistryStatus, type RegistryStatus } from '@/hooks';
-import { getHubChainIdForEnvironment } from '@/lib/chains/config';
+import { Search, X, Loader2, Wallet, FileText, AlertCircle } from 'lucide-react';
+import {
+  useRegistrySearch as useIndexerSearch,
+  detectSearchType,
+  type SearchResult as IndexerSearchResult,
+  type SearchType,
+} from '@/hooks';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
-import type { Address } from '@/lib/types/ethereum';
-import { RegistrySearchResult, type ResultStatus } from './RegistrySearchResult';
-
-/** Result passed to onSearch callback */
-export interface SearchResult {
-  /** The searched address */
-  address: Address;
-  /** Registry status for the address */
-  status: RegistryStatus;
-}
+import { WalletSearchResult } from './WalletSearchResult';
+import { TransactionSearchResult } from './TransactionSearchResult';
 
 export interface RegistrySearchProps {
-  /** Pre-fill address (optional) */
-  defaultAddress?: string;
-  /** Called when a search is initiated with a valid address */
-  onSearch?: (address: Address) => void;
+  /** Pre-fill query (optional) */
+  defaultQuery?: string;
+  /** Called when a search is initiated */
+  onSearch?: (query: string, type: SearchType) => void;
   /** Called when search completes with result */
-  onResult?: (result: SearchResult) => void;
+  onResult?: (result: IndexerSearchResult) => void;
   /** Compact mode for header/navbar */
   compact?: boolean;
   /** Additional class names */
@@ -45,16 +41,24 @@ export interface RegistrySearchProps {
 }
 
 /**
- * Determines result status from registry status.
+ * Get validation indicator based on search type
  */
-function getResultStatus(status: RegistryStatus): ResultStatus {
-  if (status.isRegistered) return 'registered';
-  if (status.isPending) return 'pending';
-  return 'not-found';
+function getSearchTypeIndicator(type: SearchType) {
+  switch (type) {
+    case 'wallet':
+    case 'caip10':
+      return { Icon: Wallet, label: 'Valid wallet address', valid: true };
+    case 'transaction':
+      return { Icon: FileText, label: 'Valid transaction hash', valid: true };
+    case 'invalid':
+    default:
+      return { Icon: AlertCircle, label: 'Invalid input', valid: false };
+  }
 }
 
 /**
- * Search component for querying wallet addresses in the registry.
+ * Search component for querying the registry via Ponder indexer.
+ * Supports wallet addresses, transaction hashes, and CAIP-10 identifiers.
  *
  * @example
  * ```tsx
@@ -64,96 +68,63 @@ function getResultStatus(status: RegistryStatus): ResultStatus {
  * ```
  */
 export function RegistrySearch({
-  defaultAddress = '',
+  defaultQuery = '',
   onSearch,
   onResult,
   compact = false,
   className,
 }: RegistrySearchProps) {
-  const [inputValue, setInputValue] = useState(defaultAddress);
-  const [searchAddress, setSearchAddress] = useState<Address | undefined>(
-    isAddress(defaultAddress) ? (defaultAddress as Address) : undefined
-  );
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [hasSearched, setHasSearched] = useState(!!defaultAddress && isAddress(defaultAddress));
+  const [inputValue, setInputValue] = useState(defaultQuery);
+  const [searchQuery, setSearchQuery] = useState(defaultQuery);
+  const [hasSearched, setHasSearched] = useState(!!defaultQuery);
 
-  // Track which address we've notified for to prevent duplicate callbacks
-  const lastNotifiedAddressRef = useRef<string | null>(null);
+  // Track which query we've notified for to prevent duplicate callbacks
+  const lastNotifiedQueryRef = useRef<string | null>(null);
 
-  // Real-time address validation (null = empty/no state, true = valid, false = invalid)
-  const addressValidation = useMemo(() => {
-    const trimmed = inputValue.trim();
-    if (!trimmed) return null; // Empty = no validation state
-    return isAddress(trimmed);
-  }, [inputValue]);
+  // Real-time input type detection
+  const inputType = detectSearchType(inputValue);
 
-  // Memoize hub chain ID (reads env vars which are constant at runtime)
-  const hubChainId = useMemo(() => getHubChainIdForEnvironment(), []);
+  // Query the indexer
+  const { data, isLoading, error } = useIndexerSearch(searchQuery);
 
-  // Always query the hub chain for unified registry (cross-chain registrations settle there)
-  const registryStatus = useRegistryStatus({
-    address: searchAddress,
-    chainId: hubChainId,
-  });
-
-  // Notify parent when result changes (using effect to properly track notifications)
+  // Notify parent when result changes
   useEffect(() => {
-    if (
-      onResult &&
-      searchAddress &&
-      !registryStatus.isLoading &&
-      !registryStatus.isError &&
-      lastNotifiedAddressRef.current !== searchAddress
-    ) {
-      lastNotifiedAddressRef.current = searchAddress;
+    if (onResult && data && lastNotifiedQueryRef.current !== searchQuery) {
+      lastNotifiedQueryRef.current = searchQuery;
       logger.ui.info('Search result ready', {
-        address: searchAddress,
-        isRegistered: registryStatus.isRegistered,
-        isPending: registryStatus.isPending,
+        query: searchQuery,
+        type: data.type,
+        found: data.found,
       });
-      onResult({ address: searchAddress, status: registryStatus });
+      onResult(data);
     }
-  }, [onResult, searchAddress, registryStatus]);
+  }, [onResult, searchQuery, data]);
 
   const handleSearch = useCallback(() => {
     const trimmed = inputValue.trim();
     logger.ui.debug('Search initiated', { inputValue: trimmed });
 
-    // Validate address format
     if (!trimmed) {
-      logger.ui.debug('Search validation failed: empty input');
-      setValidationError('Please enter a wallet address');
-      setSearchAddress(undefined);
-      setHasSearched(false);
       return;
     }
 
-    if (!isAddress(trimmed)) {
-      logger.ui.debug('Search validation failed: invalid address format', { input: trimmed });
-      setValidationError('Invalid Ethereum address. Must be 0x followed by 40 hex characters.');
-      setSearchAddress(undefined);
-      setHasSearched(false);
+    const type = detectSearchType(trimmed);
+    if (type === 'invalid') {
+      logger.ui.debug('Search validation failed: invalid input format', { input: trimmed });
       return;
     }
 
-    const validAddress = trimmed as Address;
-    logger.ui.info('Search started', { address: validAddress });
-
-    setValidationError(null);
-    setSearchAddress(validAddress);
+    logger.ui.info('Search started', { query: trimmed, type });
+    setSearchQuery(trimmed);
     setHasSearched(true);
-    // Reset notification tracking so effect will fire for new address
-    lastNotifiedAddressRef.current = null;
-
-    // Notify parent that search was initiated
-    onSearch?.(validAddress);
+    lastNotifiedQueryRef.current = null;
+    onSearch?.(trimmed, type);
   }, [inputValue, onSearch]);
 
   const handleClear = useCallback(() => {
     logger.ui.debug('Search cleared');
     setInputValue('');
-    setSearchAddress(undefined);
-    setValidationError(null);
+    setSearchQuery('');
     setHasSearched(false);
   }, []);
 
@@ -167,17 +138,20 @@ export function RegistrySearch({
     [handleSearch]
   );
 
-  const isLoading = hasSearched && searchAddress && registryStatus.isLoading;
-  const showResult =
-    hasSearched && searchAddress && !registryStatus.isLoading && !registryStatus.isError;
-  const showError = validationError || (registryStatus.isError && registryStatus.error);
+  const showLoading = hasSearched && isLoading;
+  const showResult = hasSearched && data && !isLoading;
+  const showError = error && !isLoading;
+  const canSearch = inputValue.trim().length >= 10 && inputType !== 'invalid';
+
+  // Get indicator for current input
+  const indicator = inputValue.trim() ? getSearchTypeIndicator(inputType) : null;
 
   return (
     <div className={cn('space-y-4', className)}>
       {/* Search Input */}
       <div className="space-y-2">
         <div className="flex gap-2">
-          <InputGroup data-disabled={isLoading} className="flex-1">
+          <InputGroup data-disabled={showLoading} className="flex-1">
             <InputGroupAddon>
               <Search className="h-4 w-4" />
             </InputGroupAddon>
@@ -185,34 +159,26 @@ export function RegistrySearch({
               value={inputValue}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 setInputValue(e.target.value);
-                if (validationError) setValidationError(null);
               }}
               onKeyDown={handleKeyDown}
-              placeholder="Search wallet address (0x...)"
-              disabled={!!isLoading}
+              placeholder="Search wallet or transaction (0x...)"
+              disabled={showLoading}
               aria-invalid={!!showError}
-              aria-describedby={
-                validationError
-                  ? 'search-error-validation'
-                  : registryStatus.isError
-                    ? 'search-error-contract'
-                    : undefined
-              }
+              aria-describedby={showError ? 'search-error' : undefined}
               className={compact ? 'text-sm' : ''}
             />
-            {/* Validation indicator */}
-            {addressValidation !== null && !isLoading && (
+            {/* Type indicator */}
+            {indicator && !showLoading && (
               <InputGroupAddon align="inline-end">
-                {addressValidation ? (
-                  <Check className="h-4 w-4 text-green-500" aria-label="Valid address" />
-                ) : (
-                  <AlertCircle className="h-4 w-4 text-destructive" aria-label="Invalid address" />
-                )}
+                <indicator.Icon
+                  className={cn('h-4 w-4', indicator.valid ? 'text-green-500' : 'text-destructive')}
+                  aria-label={indicator.label}
+                />
               </InputGroupAddon>
             )}
             {/* Clear button */}
             <InputGroupAddon align="inline-end">
-              {inputValue && !isLoading ? (
+              {inputValue && !showLoading ? (
                 <InputGroupButton size="icon-xs" onClick={handleClear} aria-label="Clear search">
                   <X className="h-3 w-3" />
                 </InputGroupButton>
@@ -221,51 +187,49 @@ export function RegistrySearch({
           </InputGroup>
           <Button
             onClick={handleSearch}
-            disabled={!!isLoading || !inputValue.trim()}
+            disabled={showLoading || !canSearch}
             size={compact ? 'sm' : 'default'}
           >
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>Search</span>}
+            {showLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>Search</span>}
           </Button>
         </div>
 
-        {/* Validation Error */}
-        {validationError && (
-          <p id="search-error-validation" className="text-sm text-destructive">
-            {validationError}
-          </p>
-        )}
-
-        {/* Contract Error */}
-        {registryStatus.isError && registryStatus.error && (
-          <p id="search-error-contract" className="text-sm text-destructive">
-            Error querying registry: {registryStatus.error.message}
+        {/* Error */}
+        {showError && (
+          <p id="search-error" className="text-sm text-destructive">
+            Error querying indexer: {error.message}
           </p>
         )}
       </div>
 
       {/* Screen reader announcements */}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-        {isLoading && 'Searching registry...'}
-        {showResult && `Search complete. Wallet is ${getResultStatus(registryStatus)}.`}
+        {showLoading && 'Searching registry...'}
+        {showResult &&
+          data &&
+          `Search complete. ${data.found ? 'Match found.' : 'No match found.'}`}
         {showError && 'Search error occurred.'}
       </div>
 
       {/* Loading Skeleton */}
-      {isLoading && (
+      {showLoading && (
         <div className="space-y-2">
           <Skeleton className="h-4 w-32" />
           <Skeleton className="h-20 w-full" />
         </div>
       )}
 
-      {/* Search Result */}
-      {showResult && (
-        <RegistrySearchResult
-          address={searchAddress}
-          status={getResultStatus(registryStatus)}
-          registrationData={registryStatus.registrationData}
-          acknowledgementData={registryStatus.acknowledgementData}
-        />
+      {/* Search Results */}
+      {showResult && data && (
+        <>
+          {data.type === 'wallet' && <WalletSearchResult found={data.found} data={data.data} />}
+          {data.type === 'transaction' && (
+            <TransactionSearchResult found={data.found} data={data.data} />
+          )}
+          {data.type === 'invalid' && (
+            <p className="text-sm text-muted-foreground">Invalid search input.</p>
+          )}
+        </>
       )}
     </div>
   );
