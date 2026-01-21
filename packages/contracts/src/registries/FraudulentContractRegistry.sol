@@ -8,6 +8,7 @@ import { IFraudulentContractRegistry } from "../interfaces/IFraudulentContractRe
 import { IOperatorRegistry } from "../interfaces/IOperatorRegistry.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
 import { MerkleRootComputation } from "../libraries/MerkleRootComputation.sol";
+import { RegistryCapabilities } from "../libraries/RegistryCapabilities.sol";
 
 /// @title FraudulentContractRegistry
 /// @author Stolen Wallet Registry Team
@@ -19,8 +20,8 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Capability bit required for this registry
-    uint8 private constant CONTRACT_REGISTRY_CAPABILITY = 0x04;
+    /// @dev Capability bit required for this registry (from shared library)
+    uint8 private constant CONTRACT_REGISTRY_CAPABILITY = RegistryCapabilities.CONTRACT_REGISTRY;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLE STATE
@@ -56,6 +57,10 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
     /// @param _registryHub RegistryHub for fee forwarding
     constructor(address _owner, address _operatorRegistry, address _feeManager, address _registryHub) Ownable(_owner) {
         if (_operatorRegistry == address(0)) revert FraudulentContractRegistry__InvalidOperatorRegistry();
+        // If fees are enabled, registryHub must be set to receive them (otherwise fees are trapped)
+        if (_feeManager != address(0) && _registryHub == address(0)) {
+            revert FraudulentContractRegistry__MissingRegistryHub();
+        }
 
         operatorRegistry = _operatorRegistry;
         feeManager = _feeManager;

@@ -3,26 +3,27 @@ pragma solidity ^0.8.24;
 
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { IOperatorRegistry } from "./interfaces/IOperatorRegistry.sol";
+import { RegistryCapabilities } from "./libraries/RegistryCapabilities.sol";
 
 /// @title OperatorRegistry
 /// @notice Manages DAO-approved operators who can batch-submit fraud data to registries
 /// @dev Owner should be DAO multisig or governance contract
 contract OperatorRegistry is IOperatorRegistry, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
-    // CONSTANTS
+    // CONSTANTS (from RegistryCapabilities library - single source of truth)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Capability bit for StolenWalletRegistry submissions
-    uint8 public constant override WALLET_REGISTRY = 0x01;
+    uint8 public constant override WALLET_REGISTRY = RegistryCapabilities.WALLET_REGISTRY;
 
     /// @notice Capability bit for StolenTransactionRegistry submissions
-    uint8 public constant override TX_REGISTRY = 0x02;
+    uint8 public constant override TX_REGISTRY = RegistryCapabilities.TX_REGISTRY;
 
     /// @notice Capability bit for FraudulentContractRegistry submissions
-    uint8 public constant override CONTRACT_REGISTRY = 0x04;
+    uint8 public constant override CONTRACT_REGISTRY = RegistryCapabilities.CONTRACT_REGISTRY;
 
     /// @notice All registry capabilities combined
-    uint8 public constant override ALL_REGISTRIES = 0x07;
+    uint8 public constant override ALL_REGISTRIES = RegistryCapabilities.ALL_REGISTRIES;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // STORAGE

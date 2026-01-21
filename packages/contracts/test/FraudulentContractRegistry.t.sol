@@ -6,6 +6,7 @@ import { FraudulentContractRegistry } from "../src/registries/FraudulentContract
 import { IFraudulentContractRegistry } from "../src/interfaces/IFraudulentContractRegistry.sol";
 import { OperatorRegistry } from "../src/OperatorRegistry.sol";
 import { FeeManager } from "../src/FeeManager.sol";
+import { MerkleRootComputation } from "../src/libraries/MerkleRootComputation.sol";
 
 contract FraudulentContractRegistryTest is Test {
     FraudulentContractRegistry public registry;
@@ -571,6 +572,34 @@ contract FraudulentContractRegistryTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // CONSTRUCTOR VALIDATION TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Constructor should revert if feeManager is set but registryHub is zero
+    /// @dev Fees would be trapped in contract with no way to forward them
+    function test_Constructor_FeeManagerWithoutRegistryHub_Reverts() public {
+        vm.expectRevert(IFraudulentContractRegistry.FraudulentContractRegistry__MissingRegistryHub.selector);
+        new FraudulentContractRegistry(
+            dao,
+            address(operatorRegistry),
+            address(feeManager), // feeManager is set
+            address(0) // but registryHub is zero - fees would be trapped
+        );
+    }
+
+    /// @notice Constructor should allow free registry (both feeManager and registryHub zero)
+    function test_Constructor_FreeRegistry_Succeeds() public {
+        FraudulentContractRegistry freeRegistry = new FraudulentContractRegistry(
+            dao,
+            address(operatorRegistry),
+            address(0), // no feeManager
+            address(0) // no registryHub - OK because no fees
+        );
+        assertEq(freeRegistry.feeManager(), address(0));
+        assertEq(freeRegistry.registryHub(), address(0));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // HELPER FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -590,47 +619,18 @@ contract FraudulentContractRegistryTest is Test {
         batchId = registry.computeBatchId(merkleRoot, operator, chainId);
     }
 
-    /// @notice Compute merkle root matching the contract's implementation
+    /// @notice Compute merkle root using shared MerkleRootComputation library
+    /// @dev Ensures test/prod parity - leaf construction is registry-specific (contract + chainId)
     function _computeRoot(address[] memory contracts, bytes32[] memory chainIds) internal pure returns (bytes32) {
         uint256 length = contracts.length;
         if (length == 0) return bytes32(0);
 
-        // Build leaves
+        // Build leaves (registry-specific: contract + chainId)
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
             leaves[i] = keccak256(abi.encodePacked(contracts[i], chainIds[i]));
         }
 
-        // Sort leaves (insertion sort)
-        for (uint256 i = 1; i < length; i++) {
-            bytes32 key = leaves[i];
-            uint256 j = i;
-            while (j > 0 && leaves[j - 1] > key) {
-                leaves[j] = leaves[j - 1];
-                j--;
-            }
-            leaves[j] = key;
-        }
-
-        // Build tree bottom-up
-        while (length > 1) {
-            uint256 newLength = (length + 1) / 2;
-            for (uint256 i = 0; i < newLength; i++) {
-                uint256 left = i * 2;
-                uint256 right = left + 1;
-                if (right < length) {
-                    if (leaves[left] < leaves[right]) {
-                        leaves[i] = keccak256(abi.encodePacked(leaves[left], leaves[right]));
-                    } else {
-                        leaves[i] = keccak256(abi.encodePacked(leaves[right], leaves[left]));
-                    }
-                } else {
-                    leaves[i] = leaves[left];
-                }
-            }
-            length = newLength;
-        }
-
-        return leaves[0];
+        return MerkleRootComputation.computeRoot(leaves);
     }
 }

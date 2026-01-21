@@ -10,6 +10,8 @@ import { CrossChainInbox } from "../src/crosschain/CrossChainInbox.sol";
 import { SoulboundReceiver } from "../src/soulbound/SoulboundReceiver.sol";
 import { SupportSoulbound } from "../src/soulbound/SupportSoulbound.sol";
 import { OperatorRegistry } from "../src/OperatorRegistry.sol";
+import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
+import { StolenTransactionRegistry } from "../src/registries/StolenTransactionRegistry.sol";
 import { FraudulentContractRegistry } from "../src/registries/FraudulentContractRegistry.sol";
 
 // Spoke contracts
@@ -54,10 +56,11 @@ import { MockInterchainGasPaymaster } from "../test/mocks/MockInterchainGasPayma
 ///  13: SoulboundReceiver         → 0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE
 ///  14: (setAuthorizedMinter tx)
 ///  15: OperatorRegistry          → 0x0B306BF915C4d645ff596e518fAf3F9669b97016
-///  16: (setOperatorRegistry tx)
-///  17-18: (approveOperator txs for test operators)
-///  19: FraudulentContractRegistry → 0x3Aa5ebB10DC797CAC828524e59A333d0A371443c
-///  20: (setFraudulentContractRegistry tx)
+///  16: (setOperatorRegistry to hub tx)
+///  17-18: (setOperatorRegistry to wallet/tx registries)
+///  19-20: (approveOperator txs for test operators)
+///  21: FraudulentContractRegistry → 0x3Aa5ebB10DC797CAC828524e59A333d0A371443c
+///  22: (setFraudulentContractRegistry tx)
 ///
 /// Language seeding runs separately via SeedLanguages.s.sol (doesn't affect addresses)
 ///
@@ -202,7 +205,12 @@ contract DeployCrossChain is DeployBase {
         RegistryHub(hubRegistry).setOperatorRegistry(operatorRegistry);
         console2.log("OperatorRegistry wired to RegistryHub");
 
-        // nonces 17-18: Seed test operators (Anvil accounts 3 and 4)
+        // nonces 17-18: Wire OperatorRegistry to individual registries (for operator batch paths)
+        StolenWalletRegistry(stolenWalletRegistry).setOperatorRegistry(operatorRegistry);
+        StolenTransactionRegistry(stolenTransactionRegistry).setOperatorRegistry(operatorRegistry);
+        console2.log("OperatorRegistry wired to StolenWalletRegistry and StolenTransactionRegistry");
+
+        // nonces 19-20: Seed test operators (Anvil accounts 3 and 4)
         // Account 3: Operator A with ALL capabilities (0x07)
         opReg.approveOperator(OPERATOR_A, opReg.ALL_REGISTRIES(), "TestOperatorA-ALL");
         console2.log("Operator A (ALL):", OPERATOR_A);
@@ -220,13 +228,13 @@ contract DeployCrossChain is DeployBase {
         console2.log("");
         console2.log("--- HUB CHAIN (31337) - Fraudulent Contract Registry ---");
 
-        // nonce 19: Deploy FraudulentContractRegistry
+        // nonce 21: Deploy FraudulentContractRegistry
         FraudulentContractRegistry fcReg =
             new FraudulentContractRegistry(deployer, operatorRegistry, feeManager, hubRegistry);
         fraudulentContractRegistry = address(fcReg);
         console2.log("FraudulentContractRegistry:", fraudulentContractRegistry);
 
-        // nonce 20: Wire FraudulentContractRegistry to hub
+        // nonce 22: Wire FraudulentContractRegistry to hub
         RegistryHub(hubRegistry).setFraudulentContractRegistry(fraudulentContractRegistry);
         console2.log("FraudulentContractRegistry wired to RegistryHub");
 

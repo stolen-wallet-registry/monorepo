@@ -11,6 +11,7 @@ import { IOperatorRegistry } from "../interfaces/IOperatorRegistry.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
 import { TimingConfig } from "../libraries/TimingConfig.sol";
 import { MerkleRootComputation } from "../libraries/MerkleRootComputation.sol";
+import { RegistryCapabilities } from "../libraries/RegistryCapabilities.sol";
 
 /// @title StolenTransactionRegistry
 /// @author Stolen Wallet Registry Team
@@ -78,8 +79,8 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     // OPERATOR STATE
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Capability bit for transaction registry operator approval (0x02)
-    uint8 private constant TX_REGISTRY_CAPABILITY = 0x02;
+    /// @dev Capability bit for transaction registry operator approval (from shared library)
+    uint8 private constant TX_REGISTRY_CAPABILITY = RegistryCapabilities.TX_REGISTRY;
 
     /// @notice Operator registry contract for checking operator approvals
     address public operatorRegistry;

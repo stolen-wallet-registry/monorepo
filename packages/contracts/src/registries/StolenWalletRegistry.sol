@@ -11,6 +11,7 @@ import { IOperatorRegistry } from "../interfaces/IOperatorRegistry.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
 import { TimingConfig } from "../libraries/TimingConfig.sol";
 import { MerkleRootComputation } from "../libraries/MerkleRootComputation.sol";
+import { RegistryCapabilities } from "../libraries/RegistryCapabilities.sol";
 
 /// @title StolenWalletRegistry
 /// @author Stolen Wallet Registry Team
@@ -70,8 +71,8 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
     // OPERATOR BATCH STATE
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Capability bit required for wallet registry operators
-    uint8 private constant WALLET_REGISTRY_CAPABILITY = 0x01;
+    /// @dev Capability bit required for wallet registry operators (from shared library)
+    uint8 private constant WALLET_REGISTRY_CAPABILITY = RegistryCapabilities.WALLET_REGISTRY;
 
     /// @notice Operator registry for permission checks
     address public operatorRegistry;

@@ -9,6 +9,7 @@ import { IOperatorRegistry } from "../src/interfaces/IOperatorRegistry.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
+import { MerkleRootComputation } from "../src/libraries/MerkleRootComputation.sol";
 
 /// @title StolenWalletRegistryOperatorTest
 /// @notice Unit tests for operator batch registration in StolenWalletRegistry
@@ -535,47 +536,18 @@ contract StolenWalletRegistryOperatorTest is Test {
     // HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Compute merkle root matching the contract's MerkleRootComputation library
+    /// @notice Compute merkle root using shared MerkleRootComputation library
+    /// @dev Ensures test/prod parity - leaf construction is registry-specific (wallet + chainId)
     function _computeRoot(address[] memory wallets, bytes32[] memory walletChainIds) internal pure returns (bytes32) {
         uint256 length = wallets.length;
         if (length == 0) return bytes32(0);
 
-        // Build leaves
+        // Build leaves (registry-specific: wallet + chainId)
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
             leaves[i] = keccak256(abi.encodePacked(wallets[i], walletChainIds[i]));
         }
 
-        // Sort leaves
-        for (uint256 i = 1; i < length; i++) {
-            bytes32 key = leaves[i];
-            uint256 j = i;
-            while (j > 0 && leaves[j - 1] > key) {
-                leaves[j] = leaves[j - 1];
-                j--;
-            }
-            leaves[j] = key;
-        }
-
-        // Build tree
-        while (length > 1) {
-            uint256 newLength = (length + 1) / 2;
-            for (uint256 i = 0; i < newLength; i++) {
-                uint256 left = i * 2;
-                uint256 right = left + 1;
-                if (right < length) {
-                    if (leaves[left] < leaves[right]) {
-                        leaves[i] = keccak256(abi.encodePacked(leaves[left], leaves[right]));
-                    } else {
-                        leaves[i] = keccak256(abi.encodePacked(leaves[right], leaves[left]));
-                    }
-                } else {
-                    leaves[i] = leaves[left];
-                }
-            }
-            length = newLength;
-        }
-
-        return leaves[0];
+        return MerkleRootComputation.computeRoot(leaves);
     }
 }

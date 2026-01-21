@@ -8,6 +8,7 @@ import { FeeManager } from "../src/FeeManager.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 import { CAIP2 } from "../src/libraries/CAIP2.sol";
+import { MerkleRootComputation } from "../src/libraries/MerkleRootComputation.sol";
 
 /// @title StolenTransactionRegistryTest
 /// @notice Comprehensive unit and fuzz tests for StolenTransactionRegistry
@@ -133,47 +134,18 @@ contract StolenTransactionRegistryTest is Test {
         return _computeMerkleRoot(txHashes, chainIds);
     }
 
+    /// @dev Uses shared MerkleRootComputation library to ensure test/prod parity
     function _computeMerkleRoot(bytes32[] memory txHashes, bytes32[] memory chainIds) internal pure returns (bytes32) {
         uint256 length = txHashes.length;
         if (length == 0) return bytes32(0);
 
-        // Build leaves
+        // Build leaves (registry-specific: txHash + chainId)
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
             leaves[i] = keccak256(abi.encodePacked(txHashes[i], chainIds[i]));
         }
 
-        // Sort leaves
-        for (uint256 i = 1; i < length; i++) {
-            bytes32 key = leaves[i];
-            uint256 j = i;
-            while (j > 0 && leaves[j - 1] > key) {
-                leaves[j] = leaves[j - 1];
-                j--;
-            }
-            leaves[j] = key;
-        }
-
-        // Build tree
-        while (length > 1) {
-            uint256 newLength = (length + 1) / 2;
-            for (uint256 i = 0; i < newLength; i++) {
-                uint256 left = i * 2;
-                uint256 right = left + 1;
-                if (right < length) {
-                    if (leaves[left] < leaves[right]) {
-                        leaves[i] = keccak256(abi.encodePacked(leaves[left], leaves[right]));
-                    } else {
-                        leaves[i] = keccak256(abi.encodePacked(leaves[right], leaves[left]));
-                    }
-                } else {
-                    leaves[i] = leaves[left];
-                }
-            }
-            length = newLength;
-        }
-
-        return leaves[0];
+        return MerkleRootComputation.computeRoot(leaves);
     }
 
     function _doAcknowledgement(address _forwarder) internal {
@@ -708,44 +680,14 @@ contract StolenTransactionRegistryFeeTest is Test {
         return chainIds;
     }
 
+    /// @dev Uses shared MerkleRootComputation library to ensure test/prod parity
     function _computeMerkleRoot(bytes32[] memory txHashes, bytes32[] memory chainIds) internal pure returns (bytes32) {
         uint256 length = txHashes.length;
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
             leaves[i] = keccak256(abi.encodePacked(txHashes[i], chainIds[i]));
         }
-
-        // Sort
-        for (uint256 i = 1; i < length; i++) {
-            bytes32 key = leaves[i];
-            uint256 j = i;
-            while (j > 0 && leaves[j - 1] > key) {
-                leaves[j] = leaves[j - 1];
-                j--;
-            }
-            leaves[j] = key;
-        }
-
-        // Build tree
-        while (length > 1) {
-            uint256 newLength = (length + 1) / 2;
-            for (uint256 i = 0; i < newLength; i++) {
-                uint256 left = i * 2;
-                uint256 right = left + 1;
-                if (right < length) {
-                    if (leaves[left] < leaves[right]) {
-                        leaves[i] = keccak256(abi.encodePacked(leaves[left], leaves[right]));
-                    } else {
-                        leaves[i] = keccak256(abi.encodePacked(leaves[right], leaves[left]));
-                    }
-                } else {
-                    leaves[i] = leaves[left];
-                }
-            }
-            length = newLength;
-        }
-
-        return leaves[0];
+        return MerkleRootComputation.computeRoot(leaves);
     }
 
     /// @notice Registration should require fee payment
