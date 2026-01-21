@@ -139,8 +139,10 @@ export const transactionInBatch = onchainTable(
 export const transactionBatchAcknowledgement = onchainTable(
   'transaction_batch_acknowledgement',
   (t) => ({
-    /** merkleRoot (used as ID since batchId not available at acknowledgement) */
+    /** Computed batchId: keccak256(merkleRoot, reporter, reportedChainId) */
     id: t.hex().primaryKey(),
+    /** Merkle root of tx hashes */
+    merkleRoot: t.hex().notNull(),
     /** Reporter address */
     reporter: t.hex().notNull(),
     /** Trusted forwarder address */

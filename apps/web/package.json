@@ -41,6 +41,7 @@
     "@rainbow-me/rainbowkit": "^2.2.10",
     "@swr/abis": "workspace:*",
     "@swr/chains": "workspace:*",
+    "@swr/search": "workspace:*",
     "@swr/ui": "workspace:*",
     "@tailwindcss/vite": "^4.1.17",
     "@tanstack/react-query": "^5.90.12",

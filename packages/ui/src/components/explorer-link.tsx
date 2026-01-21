@@ -15,7 +15,10 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { ExternalLink, Copy, Check } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 import { cn } from '../lib/utils';
-import type { Address, Hash, Hex } from 'viem';
+
+// Local type definitions for hex strings
+// Accept both strict template literal and plain string for flexibility
+type HexString = `0x${string}` | string;
 
 /**
  * Type of blockchain identifier.
@@ -73,8 +76,8 @@ function inferType(value: string): ExplorerLinkType {
 }
 
 export interface ExplorerLinkProps {
-  /** The hash or address to display (accepts Address, Hash, or generic Hex) */
-  value: Address | Hash | Hex;
+  /** The hash or address to display */
+  value: HexString;
   /** Type of value - inferred from length if not provided */
   type?: ExplorerLinkType;
   /** Explorer URL (if null/undefined, shows disabled icon) */

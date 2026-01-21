@@ -17,7 +17,7 @@ import {
   hyperlaneDomainToCAIP2,
   anvilHub,
 } from '@swr/chains';
-import type { Address, Hex } from 'viem';
+import { keccak256, encodePacked, type Address, type Hex } from 'viem';
 
 // Hub chain configuration - determined by environment
 // TODO: Make this configurable via PONDER_ENV environment variable
@@ -25,6 +25,20 @@ const HUB_CHAIN_ID = anvilHub.chainId;
 
 // Helper to lowercase addresses while preserving type
 const toLowerAddress = (addr: Address): Address => addr.toLowerCase() as Address;
+
+/**
+ * Compute deterministic batch acknowledgement ID.
+ * Matches on-chain batchId computation: keccak256(abi.encodePacked(merkleRoot, reporter, reportedChainId))
+ */
+function computeBatchAcknowledgementId(
+  merkleRoot: Hex,
+  reporter: Address,
+  reportedChainId: Hex
+): Hex {
+  return keccak256(
+    encodePacked(['bytes32', 'address', 'bytes32'], [merkleRoot, reporter, reportedChainId])
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPER: Update global stats
@@ -46,33 +60,41 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
   const existing = await db.find(registryStats, { id });
 
   if (existing) {
+    // Compute new totals first
+    const newTotalWalletRegistrations =
+      existing.totalWalletRegistrations + (delta.walletRegistrations ?? 0);
+    const newSponsored = existing.sponsoredRegistrations + (delta.sponsored ?? 0);
+    const newCrossChain = existing.crossChainRegistrations + (delta.crossChain ?? 0);
+    // Direct = total wallets - sponsored (cross-chain is a subset of sponsored)
+    const newDirectRegistrations = newTotalWalletRegistrations - newSponsored;
+
     await db.update(registryStats, { id }).set({
-      totalWalletRegistrations:
-        existing.totalWalletRegistrations + (delta.walletRegistrations ?? 0),
+      totalWalletRegistrations: newTotalWalletRegistrations,
       totalTransactionBatches: existing.totalTransactionBatches + (delta.transactionBatches ?? 0),
       totalTransactionsReported:
         existing.totalTransactionsReported + (delta.transactionsReported ?? 0),
-      sponsoredRegistrations: existing.sponsoredRegistrations + (delta.sponsored ?? 0),
-      directRegistrations:
-        existing.directRegistrations +
-        (delta.walletRegistrations ?? 0) -
-        (delta.sponsored ?? 0) -
-        (delta.crossChain ?? 0),
-      crossChainRegistrations: existing.crossChainRegistrations + (delta.crossChain ?? 0),
+      sponsoredRegistrations: newSponsored,
+      directRegistrations: newDirectRegistrations,
+      crossChainRegistrations: newCrossChain,
       walletSoulboundsMinted: existing.walletSoulboundsMinted + (delta.walletSoulbounds ?? 0),
       supportSoulboundsMinted: existing.supportSoulboundsMinted + (delta.supportSoulbounds ?? 0),
       totalSupportDonations: existing.totalSupportDonations + (delta.supportDonations ?? 0n),
       lastUpdated: timestamp,
     });
   } else {
+    // First entry - compute initial values
+    const totalWallets = delta.walletRegistrations ?? 0;
+    const sponsored = delta.sponsored ?? 0;
+    // Direct = total - sponsored
+    const directRegistrations = totalWallets - sponsored;
+
     await db.insert(registryStats).values({
       id,
-      totalWalletRegistrations: delta.walletRegistrations ?? 0,
+      totalWalletRegistrations: totalWallets,
       totalTransactionBatches: delta.transactionBatches ?? 0,
       totalTransactionsReported: delta.transactionsReported ?? 0,
-      sponsoredRegistrations: delta.sponsored ?? 0,
-      directRegistrations:
-        (delta.walletRegistrations ?? 0) - (delta.sponsored ?? 0) - (delta.crossChain ?? 0),
+      sponsoredRegistrations: sponsored,
+      directRegistrations,
       crossChainRegistrations: delta.crossChain ?? 0,
       walletSoulboundsMinted: delta.walletSoulbounds ?? 0,
       supportSoulboundsMinted: delta.supportSoulbounds ?? 0,
@@ -163,7 +185,7 @@ ponder.on('StolenWalletRegistry:WalletRegistered', async ({ event, context }) =>
 // ═══════════════════════════════════════════════════════════════════════════
 
 // TransactionBatchAcknowledged event
-// Note: This event doesn't include batchId - we use merkleRoot+reporter as composite key
+// Compute the same deterministic batchId used on-chain for consistent lookups
 ponder.on('StolenTransactionRegistry:TransactionBatchAcknowledged', async ({ event, context }) => {
   const { merkleRoot, reporter, forwarder, reportedChainId, transactionCount, isSponsored } =
     event.args;
@@ -172,12 +194,14 @@ ponder.on('StolenTransactionRegistry:TransactionBatchAcknowledged', async ({ eve
   const gracePeriodStart = event.block.number + 5n;
   const gracePeriodEnd = gracePeriodStart + 20n;
 
-  // Use merkleRoot as the ID since batchId isn't available at acknowledgement time
-  // The actual batchId is computed on-chain as keccak256(merkleRoot, reporter, reportedChainId)
+  // Compute deterministic batch ID matching on-chain computation
+  const batchId = computeBatchAcknowledgementId(merkleRoot, reporter, reportedChainId);
+
   await db
     .insert(transactionBatchAcknowledgement)
     .values({
-      id: merkleRoot, // Use merkleRoot as temporary ID
+      id: batchId,
+      merkleRoot,
       reporter: reporter.toLowerCase() as Address,
       forwarder: forwarder.toLowerCase() as Address,
       reportedChainIdHash: reportedChainId,
@@ -191,7 +215,6 @@ ponder.on('StolenTransactionRegistry:TransactionBatchAcknowledged', async ({ eve
       status: 'pending',
     })
     .onConflictDoUpdate({
-      reporter: reporter.toLowerCase() as Address,
       forwarder: forwarder.toLowerCase() as Address,
       acknowledgedAt: event.block.timestamp,
       status: 'pending',
@@ -215,20 +238,23 @@ ponder.on('StolenTransactionRegistry:TransactionBatchRegistered', async ({ event
   // Resolve the reported chain ID
   const reportedChainCAIP2 = resolveChainIdHash(reportedChainId);
 
-  // Create batch record
-  await db.insert(transactionBatch).values({
-    id: batchId,
-    merkleRoot,
-    reporter: reporter.toLowerCase() as Address,
-    reportedChainIdHash: reportedChainId,
-    reportedChainCAIP2,
-    transactionCount: Number(transactionCount),
-    isSponsored,
-    isOperatorVerified: false,
-    registeredAt: event.block.timestamp,
-    registeredAtBlock: event.block.number,
-    transactionHash: event.transaction.hash,
-  });
+  // Create batch record - use onConflictDoNothing for idempotency (batch may be reported multiple times)
+  await db
+    .insert(transactionBatch)
+    .values({
+      id: batchId,
+      merkleRoot,
+      reporter: reporter.toLowerCase() as Address,
+      reportedChainIdHash: reportedChainId,
+      reportedChainCAIP2,
+      transactionCount: Number(transactionCount),
+      isSponsored,
+      isOperatorVerified: false,
+      registeredAt: event.block.timestamp,
+      registeredAtBlock: event.block.number,
+      transactionHash: event.transaction.hash,
+    })
+    .onConflictDoNothing();
 
   // Index individual transactions from event data
   for (let i = 0; i < transactionHashes.length; i++) {
@@ -260,14 +286,12 @@ ponder.on('StolenTransactionRegistry:TransactionBatchRegistered', async ({ event
       .onConflictDoNothing();
   }
 
-  // Update acknowledgement status - lookup by merkleRoot since that's our acknowledgement key
+  // Update acknowledgement status - lookup by the deterministic batchId
   const pending = await db.find(transactionBatchAcknowledgement, {
-    id: merkleRoot,
+    id: batchId,
   });
   if (pending) {
-    await db
-      .update(transactionBatchAcknowledgement, { id: merkleRoot })
-      .set({ status: 'registered' });
+    await db.update(transactionBatchAcknowledgement, { id: batchId }).set({ status: 'registered' });
   }
 
   // Update stats

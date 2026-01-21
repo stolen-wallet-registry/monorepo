@@ -140,7 +140,7 @@ export function RegistrySearch({
 
   const showLoading = hasSearched && isLoading;
   const showResult = hasSearched && data && !isLoading;
-  const showError = error;
+  const showError = error && !isLoading;
   const canSearch = inputValue.trim().length >= 10 && inputType !== 'invalid';
 
   // Get indicator for current input

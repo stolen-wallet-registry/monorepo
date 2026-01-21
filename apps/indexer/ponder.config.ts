@@ -83,18 +83,24 @@ const CHAIN_CONFIG: Record<
   staging: {
     name: 'baseSepolia',
     chainId: baseSepolia.chainId,
-    rpc: process.env.PONDER_RPC_URL_84532!,
+    rpc: process.env.PONDER_RPC_URL_84532 ?? '',
   },
   production: {
     name: 'base',
     chainId: base.chainId,
-    rpc: process.env.PONDER_RPC_URL_8453!,
+    rpc: process.env.PONDER_RPC_URL_8453 ?? '',
   },
 };
 
 // Get current config
 const chainConfig = CHAIN_CONFIG[PONDER_ENV];
 const addresses = ADDRESSES[PONDER_ENV];
+
+// Validate RPC URL for non-development environments
+if (PONDER_ENV !== 'development' && !chainConfig.rpc) {
+  const envVar = PONDER_ENV === 'staging' ? 'PONDER_RPC_URL_84532' : 'PONDER_RPC_URL_8453';
+  throw new Error(`${envVar} is required for ${PONDER_ENV} environment`);
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PONDER CONFIG

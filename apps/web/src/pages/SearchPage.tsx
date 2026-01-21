@@ -270,7 +270,8 @@ export function SearchPage() {
     (query: string, type: SearchType) => {
       // Only save wallet searches to recent (they're the primary use case)
       if (type === 'wallet' || type === 'caip10') {
-        const address = type === 'caip10' ? query.split(':')[2] : query;
+        // Extract address from CAIP-10 (format: namespace:chainId:address)
+        const address = type === 'caip10' ? (query.split(':')[2] ?? query) : query;
         logger.ui.info('Search initiated from input', { address: redactAddress(address), chainId });
         saveRecentSearch({ address, chainId, type: 'wallet', resultStatus: 'unknown' });
         notifyRecentSearchesChange();
