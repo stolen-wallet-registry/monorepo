@@ -95,15 +95,13 @@ const CHAIN_CONFIG: Record<
     name: 'baseSepolia',
     chainId: baseSepolia.chainId,
     rpc: process.env.PONDER_RPC_URL_84532 ?? '',
-    // TODO: Update after deployment - use contract deployment block
-    startBlock: 0,
+    startBlock: parseInt(process.env.PONDER_START_BLOCK_84532 ?? '0', 10),
   },
   production: {
     name: 'base',
     chainId: base.chainId,
     rpc: process.env.PONDER_RPC_URL_8453 ?? '',
-    // TODO: Update after deployment - use contract deployment block
-    startBlock: 0,
+    startBlock: parseInt(process.env.PONDER_START_BLOCK_8453 ?? '0', 10),
   },
 };
 
@@ -128,6 +126,16 @@ if (PONDER_ENV !== 'development') {
     throw new Error(
       `${PONDER_ENV} environment has unconfigured contract addresses: ${zeroAddresses.join(', ')}. ` +
         'Deploy contracts and update ADDRESSES in ponder.config.ts.'
+    );
+  }
+
+  // Validate start block is set to avoid full-chain sync
+  if (chainConfig.startBlock <= 0) {
+    const envVar =
+      PONDER_ENV === 'staging' ? 'PONDER_START_BLOCK_84532' : 'PONDER_START_BLOCK_8453';
+    throw new Error(
+      `${envVar} must be set to the contract deployment block for ${PONDER_ENV} environment. ` +
+        'Syncing from block 0 would be extremely slow and costly.'
     );
   }
 }

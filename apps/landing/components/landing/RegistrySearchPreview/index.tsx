@@ -7,7 +7,7 @@
  * Uses the Ponder indexer via @swr/search for rich search results.
  */
 
-import { useState, useCallback, type FormEvent } from 'react';
+import { useState, useCallback, useRef, type FormEvent } from 'react';
 import { Search, Loader2, AlertTriangle, CheckCircle, Link as LinkIcon } from 'lucide-react';
 import {
   Button,
@@ -34,6 +34,8 @@ import {
 import {
   EXAMPLE_REGISTERED_ADDRESS,
   EXAMPLE_CLEAN_ADDRESS,
+  EXAMPLE_REPORTED_TX,
+  EXAMPLE_CLEAN_TX,
   INDEXER_URL,
   HUB_CHAIN_ID,
 } from './constants';
@@ -74,14 +76,57 @@ function StatusIcon({ status }: { status: ResultStatus }) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// STUB DATA FOR EXAMPLES
+// ═══════════════════════════════════════════════════════════════════════════
+// These stub results are used for the example buttons to demonstrate the UI
+// without requiring actual registered entries in the indexer.
+
+function createStubbedWalletResult(address: string): SearchResult {
+  return {
+    type: 'wallet',
+    found: true,
+    data: {
+      address: address.toLowerCase() as `0x${string}`,
+      caip10: `eip155:${HUB_CHAIN_ID}:${address.toLowerCase()}`,
+      registeredAt: BigInt(Math.floor(Date.now() / 1000) - 86400 * 7), // 7 days ago
+      transactionHash:
+        '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`,
+      isSponsored: false,
+    },
+  };
+}
+
+function createStubbedTransactionResult(txHash: string): SearchResult {
+  return {
+    type: 'transaction',
+    found: true,
+    data: {
+      txHash: txHash.toLowerCase() as `0x${string}`,
+      chains: [
+        {
+          caip2ChainId: `eip155:${HUB_CHAIN_ID}`,
+          chainName: HUB_CHAIN_ID === 8453 ? 'Base' : 'Base Sepolia',
+          numericChainId: HUB_CHAIN_ID,
+          batchId:
+            '0x0000000000000000000000000000000000000000000000000000000000000001' as `0x${string}`,
+          reporter: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+          reportedAt: BigInt(Math.floor(Date.now() / 1000) - 86400 * 3), // 3 days ago
+        },
+      ],
+    },
+  };
+}
+
 export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps) {
   const [inputValue, setInputValue] = useState('');
   const [result, setResult] = useState<SearchResult | null>(null);
   const [searchedQuery, setSearchedQuery] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const latestQueryRef = useRef<string | null>(null);
 
-  const handleSearch = useCallback(async (query: string) => {
+  const handleSearch = useCallback(async (query: string, useStub?: 'wallet' | 'transaction') => {
     const trimmed = query.trim();
 
     if (!trimmed) {
@@ -98,11 +143,28 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
     }
 
     setError(null);
-    setIsLoading(true);
     setSearchedQuery(trimmed);
+    latestQueryRef.current = trimmed;
+
+    // Use stubbed data for example "stolen/reported" buttons
+    if (useStub === 'wallet') {
+      setResult(createStubbedWalletResult(trimmed));
+      return;
+    }
+    if (useStub === 'transaction') {
+      setResult(createStubbedTransactionResult(trimmed));
+      return;
+    }
+
+    // Real search for user input and "clean" examples
+    setIsLoading(true);
 
     try {
       const searchResult = await search(searchConfig, trimmed);
+
+      // Ignore stale responses from previous searches
+      if (latestQueryRef.current !== trimmed) return;
+
       setResult(searchResult);
 
       // Show error for invalid input type
@@ -112,11 +174,17 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
         );
       }
     } catch (err) {
+      // Ignore errors from stale searches
+      if (latestQueryRef.current !== trimmed) return;
+
       console.error('Registry search failed:', err);
       setError('Failed to search registry. Please try again.');
       setResult(null);
     } finally {
-      setIsLoading(false);
+      // Only clear loading if this is still the latest query
+      if (latestQueryRef.current === trimmed) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -129,10 +197,10 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
   );
 
   const handleExampleClick = useCallback(
-    (address: string) => {
-      const trimmed = address.trim();
+    (value: string, stub?: 'wallet' | 'transaction') => {
+      const trimmed = value.trim();
       setInputValue(trimmed);
-      void handleSearch(trimmed);
+      void handleSearch(trimmed, stub);
     },
     [handleSearch]
   );
@@ -186,18 +254,18 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
         <div
           className="mt-2 flex flex-wrap items-center justify-center gap-2"
           role="group"
-          aria-label="Example addresses to search"
+          aria-label="Example searches"
         >
-          <span className="text-xs text-muted-foreground">Examples:</span>
+          <span className="text-xs text-muted-foreground">Wallets:</span>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleExampleClick(EXAMPLE_REGISTERED_ADDRESS)}
+            onClick={() => handleExampleClick(EXAMPLE_REGISTERED_ADDRESS, 'wallet')}
             disabled={isLoading}
             className="h-7 px-3 text-xs"
             aria-label="Search example stolen wallet address"
           >
-            Stolen Wallet
+            Stolen
           </Button>
           <Button
             variant="outline"
@@ -207,7 +275,28 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
             className="h-7 px-3 text-xs"
             aria-label="Search example clean wallet address"
           >
-            Clean Wallet
+            Clean
+          </Button>
+          <span className="text-xs text-muted-foreground ml-2">Transactions:</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExampleClick(EXAMPLE_REPORTED_TX, 'transaction')}
+            disabled={isLoading}
+            className="h-7 px-3 text-xs"
+            aria-label="Search example reported transaction"
+          >
+            Reported
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExampleClick(EXAMPLE_CLEAN_TX)}
+            disabled={isLoading}
+            className="h-7 px-3 text-xs"
+            aria-label="Search example clean transaction"
+          >
+            Clean
           </Button>
         </div>
 
@@ -228,7 +317,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
             {/* Additional details for found results */}
             {result.found && result.data && (
               <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                {result.type === 'wallet' && result.data && (
+                {result.type === 'wallet' && (
                   <>
                     <p className="text-center">
                       Registered: {formatTimestamp(result.data.registeredAt)}
@@ -241,7 +330,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
                     )}
                   </>
                 )}
-                {result.type === 'transaction' && result.data && (
+                {result.type === 'transaction' && (
                   <p className="text-center">
                     Reported on {result.data.chains.length} chain
                     {result.data.chains.length > 1 ? 's' : ''}

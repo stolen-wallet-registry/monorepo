@@ -3,7 +3,7 @@
  */
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EXAMPLE ADDRESSES
+// EXAMPLE WALLET ADDRESSES
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Placeholder - will show "not found" until we register a demo wallet
@@ -12,6 +12,18 @@ export const EXAMPLE_REGISTERED_ADDRESS = '0x00000000000000000000000000000000000
 
 // Any valid address not in registry - using a well-known Ethereum foundation address
 export const EXAMPLE_CLEAN_ADDRESS = '0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXAMPLE TRANSACTION HASHES
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Placeholder - update with an actual reported transaction hash from your indexer
+export const EXAMPLE_REPORTED_TX =
+  '0x0000000000000000000000000000000000000000000000000000000000000001';
+
+// Any valid tx hash not in registry - using a placeholder
+export const EXAMPLE_CLEAN_TX =
+  '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INDEXER CONFIGURATION

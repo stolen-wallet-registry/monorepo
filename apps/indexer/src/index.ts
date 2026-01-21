@@ -16,12 +16,22 @@ import {
   caip2ToNumericChainId,
   hyperlaneDomainToCAIP2,
   anvilHub,
+  baseSepolia,
+  base,
+  type Environment,
 } from '@swr/chains';
 import { keccak256, encodePacked, type Address, type Hex } from 'viem';
 
 // Hub chain configuration - determined by environment
-// TODO: Make this configurable via PONDER_ENV environment variable
-const HUB_CHAIN_ID = anvilHub.chainId;
+const PONDER_ENV = (process.env.PONDER_ENV ?? 'development') as Environment;
+
+const HUB_CHAIN_IDS: Record<Environment, number> = {
+  development: anvilHub.chainId,
+  staging: baseSepolia.chainId,
+  production: base.chainId,
+};
+
+const HUB_CHAIN_ID = HUB_CHAIN_IDS[PONDER_ENV];
 
 // Helper to lowercase addresses while preserving type
 const toLowerAddress = (addr: Address): Address => addr.toLowerCase() as Address;
@@ -390,13 +400,17 @@ ponder.on('RegistryHub:CrossChainBatchRegistration', async ({ event, context }) 
   } else {
     // Create a new cross-chain message record if one doesn't exist
     // This can happen if the inbox event wasn't indexed (late message or indexer started after inbox event)
+    // Try to resolve the bytes32 sourceChainId to a numeric chain ID
+    const sourceCAIP2 = resolveChainIdHash(sourceChainId);
+    const sourceNumeric = sourceCAIP2 ? caip2ToNumericChainId(sourceCAIP2) : null;
+
     console.warn(
       `[CrossChainBatchRegistration] Creating message record for ${messageId} without prior inbox event. ` +
         `This may indicate the indexer started after the TransactionBatchReceived event was emitted.`
     );
     await db.insert(crossChainMessage).values({
       id: messageId,
-      sourceChainId: 0, // sourceChainId is bytes32 here, we can't convert directly
+      sourceChainId: sourceNumeric ?? 0, // fallback to 0 only if unresolved
       targetChainId: HUB_CHAIN_ID,
       status: 'registered',
       registeredAt: event.block.timestamp,

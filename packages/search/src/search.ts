@@ -193,21 +193,14 @@ export async function search(config: SearchConfig, query: string): Promise<Searc
   const trimmed = query.trim();
   const searchType = detectSearchType(trimmed);
 
-  if (searchType === 'invalid' || !trimmed) {
-    return { type: 'invalid', found: false, data: null };
+  switch (searchType) {
+    case 'wallet':
+      return searchWallet(config, trimmed);
+    case 'caip10':
+      return searchWalletByCAIP10(config, trimmed);
+    case 'transaction':
+      return searchTransaction(config, trimmed);
+    case 'invalid':
+      return { type: 'invalid', found: false, data: null };
   }
-
-  if (searchType === 'wallet') {
-    return searchWallet(config, trimmed);
-  }
-
-  if (searchType === 'caip10') {
-    return searchWalletByCAIP10(config, trimmed);
-  }
-
-  if (searchType === 'transaction') {
-    return searchTransaction(config, trimmed);
-  }
-
-  return { type: 'invalid', found: false, data: null };
 }
