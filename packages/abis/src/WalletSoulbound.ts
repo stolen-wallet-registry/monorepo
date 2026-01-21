@@ -52,6 +52,25 @@ export const WalletSoulboundABI = [
   },
   {
     type: 'function',
+    name: 'authorizedMinters',
+    inputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'balanceOf',
     inputs: [
       {
@@ -381,6 +400,24 @@ export const WalletSoulboundABI = [
   },
   {
     type: 'function',
+    name: 'setAuthorizedMinter',
+    inputs: [
+      {
+        name: 'minter',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'authorized',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'setDomain',
     inputs: [
       {
@@ -574,6 +611,25 @@ export const WalletSoulboundABI = [
       },
       {
         name: 'approved',
+        type: 'bool',
+        indexed: false,
+        internalType: 'bool',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'AuthorizedMinterUpdated',
+    inputs: [
+      {
+        name: 'minter',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'authorized',
         type: 'bool',
         indexed: false,
         internalType: 'bool',
@@ -844,6 +900,11 @@ export const WalletSoulboundABI = [
   },
   {
     type: 'error',
+    name: 'NotAuthorizedMinter',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'NotRegisteredOrPending',
     inputs: [],
   },
@@ -888,6 +949,11 @@ export const WalletSoulboundABI = [
   {
     type: 'error',
     name: 'WithdrawFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'ZeroAddress',
     inputs: [],
   },
 ] as const;

@@ -32,6 +32,11 @@ interface IFeeManager {
     /// @param newFee New base fee in USD cents
     event BaseFeeUpdated(uint256 oldFee, uint256 newFee);
 
+    /// @notice Emitted when the operator batch fee (in USD cents) is updated
+    /// @param oldFee Previous batch fee in USD cents
+    /// @param newFee New batch fee in USD cents
+    event OperatorBatchFeeUpdated(uint256 oldFee, uint256 newFee);
+
     /// @notice Emitted when the fallback ETH price is manually updated by owner
     /// @param oldPrice Previous fallback price in USD cents
     /// @param newPrice New fallback price in USD cents
@@ -72,6 +77,16 @@ interface IFeeManager {
     /// @dev Default is $5.00 = 500 cents. Zero means free registrations.
     /// @return The base fee in USD cents (e.g., 500 = $5.00)
     function baseFeeUsdCents() external view returns (uint256);
+
+    /// @notice Get the operator batch fee in USD cents
+    /// @dev Default is $25.00 = 2500 cents. Flat fee per batch submission.
+    /// @return The operator batch fee in USD cents (e.g., 2500 = $25.00)
+    function operatorBatchFeeUsdCents() external view returns (uint256);
+
+    /// @notice Get the operator batch fee in wei
+    /// @dev Calculates based on batch fee (USD) and current ETH price
+    /// @return The batch fee amount in wei
+    function operatorBatchFeeWei() external view returns (uint256);
 
     /// @notice Get the fallback ETH price in USD cents
     /// @dev Used when Chainlink is unavailable, stale, or not configured
@@ -134,6 +149,11 @@ interface IFeeManager {
     /// @dev Only callable by owner
     /// @param _baseFeeUsdCents The new base fee in USD cents
     function setBaseFee(uint256 _baseFeeUsdCents) external;
+
+    /// @notice Set the operator batch fee in USD cents (0 = free batch submissions)
+    /// @dev Only callable by owner
+    /// @param _operatorBatchFeeUsdCents The new batch fee in USD cents
+    function setOperatorBatchFee(uint256 _operatorBatchFeeUsdCents) external;
 
     /// @notice Set the fallback ETH price manually
     /// @dev Only callable by owner. Used when Chainlink unavailable.

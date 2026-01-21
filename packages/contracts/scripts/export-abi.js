@@ -14,6 +14,7 @@ const contracts = [
   'StolenWalletRegistry.sol/StolenWalletRegistry.json',
   'StolenTransactionRegistry.sol/StolenTransactionRegistry.json',
   'FeeManager.sol/FeeManager.json',
+  'OperatorRegistry.sol/OperatorRegistry.json',
   // Cross-chain contracts
   'CrossChainInbox.sol/CrossChainInbox.json',
   'SpokeRegistry.sol/SpokeRegistry.json',

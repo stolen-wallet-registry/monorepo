@@ -836,6 +836,11 @@ export const SpokeTransactionRegistryABI = [
   },
   {
     type: 'error',
+    name: 'SpokeTransactionRegistry__EmptyBatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'SpokeTransactionRegistry__GracePeriodNotStarted',
     inputs: [],
   },

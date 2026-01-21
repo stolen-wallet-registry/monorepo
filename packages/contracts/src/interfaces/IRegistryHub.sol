@@ -56,6 +56,10 @@ interface IRegistryHub {
     /// @param inbox New CrossChainInbox address
     event CrossChainInboxUpdated(address indexed inbox);
 
+    /// @notice Emitted when the operator registry is updated
+    /// @param operatorRegistry New OperatorRegistry address
+    event OperatorRegistryUpdated(address indexed operatorRegistry);
+
     /// @notice Emitted when a wallet is registered via cross-chain message
     /// @param wallet The wallet address registered as stolen
     /// @param sourceChainId EIP-155 chain ID where registration originated
@@ -139,6 +143,21 @@ interface IRegistryHub {
     /// @return The CrossChainInbox address
     function crossChainInbox() external view returns (address);
 
+    /// @notice Get the operator registry contract address
+    /// @return The OperatorRegistry address
+    function operatorRegistry() external view returns (address);
+
+    /// @notice Check if an address is an approved operator
+    /// @param operator Address to check
+    /// @return True if operator is currently approved
+    function isApprovedOperator(address operator) external view returns (bool);
+
+    /// @notice Check if an operator is approved for a specific registry type
+    /// @param operator Address to check
+    /// @param registryType Registry capability bit (0x01=wallet, 0x02=tx, 0x04=contract)
+    /// @return True if operator has the specified capability
+    function isOperatorApprovedFor(address operator, uint8 registryType) external view returns (bool);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CROSS-CHAIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -212,6 +231,11 @@ interface IRegistryHub {
     /// @dev Only callable by owner. Set to address(0) to disable cross-chain registrations.
     /// @param _inbox The new CrossChainInbox address
     function setCrossChainInbox(address _inbox) external;
+
+    /// @notice Update the operator registry contract
+    /// @dev Only callable by owner. Set to address(0) to disable operator features.
+    /// @param _operatorRegistry The new OperatorRegistry address
+    function setOperatorRegistry(address _operatorRegistry) external;
 
     /// @notice Withdraw accumulated fees to a specified address
     /// @dev Only callable by owner. Implementations MUST validate:

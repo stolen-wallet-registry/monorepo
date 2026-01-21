@@ -143,6 +143,49 @@ export const RegistryHubABI = [
   },
   {
     type: 'function',
+    name: 'isApprovedOperator',
+    inputs: [
+      {
+        name: 'operator',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isOperatorApprovedFor',
+    inputs: [
+      {
+        name: 'operator',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'registryType',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'isTransactionBatchPending',
     inputs: [
       {
@@ -213,6 +256,19 @@ export const RegistryHubABI = [
         name: '',
         type: 'bool',
         internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'operatorRegistry',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
       },
     ],
     stateMutability: 'view',
@@ -373,6 +429,19 @@ export const RegistryHubABI = [
     inputs: [
       {
         name: '_feeManager',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setOperatorRegistry',
+    inputs: [
+      {
+        name: '_operatorRegistry',
         type: 'address',
         internalType: 'address',
       },
@@ -578,6 +647,19 @@ export const RegistryHubABI = [
         type: 'bool',
         indexed: false,
         internalType: 'bool',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'OperatorRegistryUpdated',
+    inputs: [
+      {
+        name: 'operatorRegistry',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
       },
     ],
     anonymous: false,

@@ -7,18 +7,25 @@ import { getSpokeAddress } from './crosschain-addresses';
 // DETERMINISTIC ADDRESSES
 // ═══════════════════════════════════════════════════════════════════════════
 // Anvil default deployer (0xf39F...2266) produces deterministic addresses.
-// Both Deploy.s.sol and DeployCrossChain.s.sol deploy core contracts in the
-// SAME ORDER so addresses are identical:
+// Both Deploy.s.sol and DeployCrossChain.s.sol deploy CORE contracts (nonces 0-6)
+// in the SAME ORDER so core addresses are identical:
 //
-//   0: MockAggregator         → 0x5FbDB2315678afecb367f032d93F642f64180aa3
-//   1: FeeManager             → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-//   2: RegistryHub            → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
-//   3: StolenWalletReg        → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
-//   4: StolenTransactionReg   → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
+//   0: MockAggregator           → 0x5FbDB2315678afecb367f032d93F642f64180aa3
+//   1: FeeManager               → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+//   2: RegistryHub              → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+//   3: StolenWalletReg          → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+//   4: StolenTransactionReg     → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
 //   5-6: (setRegistry txs)
 //
-// Cross-chain deploy adds after core:
-//   7: CrossChainInbox   → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
+// After core, DeployCrossChain adds CrossChainInbox (nonce 7) which shifts
+// subsequent addresses. For cross-chain dev, use these addresses:
+//   7: CrossChainInbox          → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
+//   8: Multicall3               → 0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
+//   11: TranslationRegistry     → 0x610178dA211FEF7D417bC0e6FeD39F05609AD788
+//   12: WalletSoulbound         → 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
+//   13: SupportSoulbound        → 0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0
+//   14: SoulboundReceiver       → 0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82
+//   15: OperatorRegistry        → 0x0B306BF915C4d645ff596e518fAf3F9669b97016
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const CONTRACT_ADDRESSES = {
@@ -54,6 +61,11 @@ export const CONTRACT_ADDRESSES = {
   },
   supportSoulbound: {
     [anvilHub.chainId]: '0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  // Operator Registry - manages DAO-approved operators for batch submissions
+  operatorRegistry: {
+    [anvilHub.chainId]: '0x0B306BF915C4d645ff596e518fAf3F9669b97016' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;
@@ -113,6 +125,10 @@ export function getWalletSoulboundAddress(chainId: number): Address {
 
 export function getSupportSoulboundAddress(chainId: number): Address {
   return getContractAddress('supportSoulbound', chainId);
+}
+
+export function getOperatorRegistryAddress(chainId: number): Address {
+  return getContractAddress('operatorRegistry', chainId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

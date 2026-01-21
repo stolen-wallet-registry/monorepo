@@ -289,6 +289,25 @@ export const SpokeSoulboundForwarderABI = [
   },
   {
     type: 'event',
+    name: 'MinDonationUpdated',
+    inputs: [
+      {
+        name: 'oldMinDonation',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+      {
+        name: 'newMinDonation',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'MintRequestForwarded',
     inputs: [
       {
@@ -390,12 +409,22 @@ export const SpokeSoulboundForwarderABI = [
   },
   {
     type: 'error',
+    name: 'SpokeSoulboundForwarder__InsufficientBalance',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'SpokeSoulboundForwarder__InsufficientPayment',
     inputs: [],
   },
   {
     type: 'error',
     name: 'SpokeSoulboundForwarder__RefundFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeSoulboundForwarder__WithdrawalFailed',
     inputs: [],
   },
   {

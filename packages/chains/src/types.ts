@@ -100,6 +100,7 @@ export interface HubContracts {
   feeManager: Address;
   registryHub: Address;
   crossChainInbox?: Address;
+  operatorRegistry?: Address;
 }
 
 /** Spoke chain contract addresses */
