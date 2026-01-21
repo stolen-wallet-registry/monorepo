@@ -387,4 +387,13 @@ contract OperatorRegistryTest is Test {
         bool expected = (capabilities & checkBit) == checkBit;
         assertEq(registry.isApprovedFor(operatorA, checkBit), expected);
     }
+
+    /// @notice Zero registryType should always return false (no valid capability)
+    function test_IsApprovedFor_ZeroRegistryType() public {
+        vm.prank(owner);
+        registry.approveOperator(operatorA, 0x07, "FullOp"); // All capabilities
+
+        // Even with all capabilities, zero registryType check should fail
+        assertFalse(registry.isApprovedFor(operatorA, 0));
+    }
 }

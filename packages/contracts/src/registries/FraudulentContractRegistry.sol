@@ -7,6 +7,7 @@ import { MerkleProof } from "@openzeppelin/contracts/utils/cryptography/MerklePr
 import { IFraudulentContractRegistry } from "../interfaces/IFraudulentContractRegistry.sol";
 import { IOperatorRegistry } from "../interfaces/IOperatorRegistry.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
+import { MerkleRootComputation } from "../libraries/MerkleRootComputation.sol";
 
 /// @title FraudulentContractRegistry
 /// @author Stolen Wallet Registry Team
@@ -89,6 +90,12 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
         if (reportedChainId == bytes32(0)) revert FraudulentContractRegistry__InvalidChainId();
         if (contractAddresses.length == 0) revert FraudulentContractRegistry__InvalidContractCount();
         if (contractAddresses.length != chainIds.length) revert FraudulentContractRegistry__ArrayLengthMismatch();
+
+        // Validate each entry - reject zero addresses and zero chainIds
+        for (uint256 i = 0; i < contractAddresses.length; i++) {
+            if (contractAddresses[i] == address(0)) revert FraudulentContractRegistry__InvalidContractAddress();
+            if (chainIds[i] == bytes32(0)) revert FraudulentContractRegistry__InvalidChainIdEntry();
+        }
 
         // Verify merkle root matches provided data
         bytes32 computedRoot = _computeMerkleRoot(contractAddresses, chainIds);
@@ -243,7 +250,7 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
     }
 
     /// @notice Compute Merkle root from contract addresses and chain IDs
-    /// @dev Uses sorted leaf insertion for consistent ordering (OpenZeppelin standard)
+    /// @dev Uses MerkleRootComputation library for OZ MerkleProof compatibility
     function _computeMerkleRoot(address[] calldata contractAddresses, bytes32[] calldata chainIds)
         internal
         pure
@@ -252,49 +259,12 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
         uint256 length = contractAddresses.length;
         if (length == 0) return bytes32(0);
 
-        // Build leaves
+        // Build leaves: keccak256(abi.encodePacked(address, chainId))
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
             leaves[i] = keccak256(abi.encodePacked(contractAddresses[i], chainIds[i]));
         }
 
-        // Sort leaves for consistent ordering
-        _sortBytes32Array(leaves);
-
-        // Build tree bottom-up
-        while (length > 1) {
-            uint256 newLength = (length + 1) / 2;
-            for (uint256 i = 0; i < newLength; i++) {
-                uint256 left = i * 2;
-                uint256 right = left + 1;
-                if (right < length) {
-                    // Hash pair in sorted order
-                    if (leaves[left] < leaves[right]) {
-                        leaves[i] = keccak256(abi.encodePacked(leaves[left], leaves[right]));
-                    } else {
-                        leaves[i] = keccak256(abi.encodePacked(leaves[right], leaves[left]));
-                    }
-                } else {
-                    leaves[i] = leaves[left];
-                }
-            }
-            length = newLength;
-        }
-
-        return leaves[0];
-    }
-
-    /// @notice Sort bytes32 array in ascending order
-    function _sortBytes32Array(bytes32[] memory arr) internal pure {
-        uint256 n = arr.length;
-        for (uint256 i = 1; i < n; i++) {
-            bytes32 key = arr[i];
-            uint256 j = i;
-            while (j > 0 && arr[j - 1] > key) {
-                arr[j] = arr[j - 1];
-                j--;
-            }
-            arr[j] = key;
-        }
+        return MerkleRootComputation.computeRoot(leaves);
     }
 }

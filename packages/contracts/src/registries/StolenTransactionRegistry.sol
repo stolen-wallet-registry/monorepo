@@ -8,6 +8,7 @@ import { MerkleProof } from "@openzeppelin/contracts/utils/cryptography/MerklePr
 import { IStolenTransactionRegistry } from "../interfaces/IStolenTransactionRegistry.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
 import { TimingConfig } from "../libraries/TimingConfig.sol";
+import { MerkleRootComputation } from "../libraries/MerkleRootComputation.sol";
 
 /// @title StolenTransactionRegistry
 /// @author Stolen Wallet Registry Team
@@ -381,7 +382,7 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712 {
     }
 
     /// @notice Compute Merkle root from transaction hashes and chain IDs
-    /// @dev Uses sorted leaf insertion for consistent ordering
+    /// @dev Uses MerkleRootComputation library for OZ MerkleProof compatibility
     function _computeMerkleRoot(bytes32[] calldata txHashes, bytes32[] calldata chainIds)
         internal
         pure
@@ -396,45 +397,7 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712 {
             leaves[i] = keccak256(abi.encodePacked(txHashes[i], chainIds[i]));
         }
 
-        // Sort leaves for consistent ordering (OpenZeppelin merkle-tree does this)
-        _sortBytes32Array(leaves);
-
-        // Build tree bottom-up
-        while (length > 1) {
-            uint256 newLength = (length + 1) / 2;
-            for (uint256 i = 0; i < newLength; i++) {
-                uint256 left = i * 2;
-                uint256 right = left + 1;
-                if (right < length) {
-                    // Hash pair in sorted order (OpenZeppelin standard)
-                    if (leaves[left] < leaves[right]) {
-                        leaves[i] = keccak256(abi.encodePacked(leaves[left], leaves[right]));
-                    } else {
-                        leaves[i] = keccak256(abi.encodePacked(leaves[right], leaves[left]));
-                    }
-                } else {
-                    // Odd node - promote to next level
-                    leaves[i] = leaves[left];
-                }
-            }
-            length = newLength;
-        }
-
-        return leaves[0];
-    }
-
-    /// @notice Sort bytes32 array in ascending order (insertion sort for small arrays)
-    function _sortBytes32Array(bytes32[] memory arr) internal pure {
-        uint256 n = arr.length;
-        for (uint256 i = 1; i < n; i++) {
-            bytes32 key = arr[i];
-            uint256 j = i;
-            while (j > 0 && arr[j - 1] > key) {
-                arr[j] = arr[j - 1];
-                j--;
-            }
-            arr[j] = key;
-        }
+        return MerkleRootComputation.computeRoot(leaves);
     }
 
     /// @notice Validate acknowledgement inputs (helper to reduce stack depth)

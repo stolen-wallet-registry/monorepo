@@ -221,6 +221,40 @@ contract FraudulentContractRegistryTest is Test {
         registry.registerBatch{ value: fee }(merkleRoot, chainId, contracts, chainIds);
     }
 
+    function test_registerBatch_revert_zeroContractAddress() public {
+        address[] memory contracts = new address[](2);
+        contracts[0] = malicious1;
+        contracts[1] = address(0); // Invalid zero address
+
+        bytes32[] memory chainIds = new bytes32[](2);
+        chainIds[0] = chainId;
+        chainIds[1] = chainId;
+
+        bytes32 merkleRoot = _computeRoot(contracts, chainIds);
+        uint256 fee = registry.quoteRegistration();
+
+        vm.prank(operator);
+        vm.expectRevert(IFraudulentContractRegistry.FraudulentContractRegistry__InvalidContractAddress.selector);
+        registry.registerBatch{ value: fee }(merkleRoot, chainId, contracts, chainIds);
+    }
+
+    function test_registerBatch_revert_zeroChainIdEntry() public {
+        address[] memory contracts = new address[](2);
+        contracts[0] = malicious1;
+        contracts[1] = malicious2;
+
+        bytes32[] memory chainIds = new bytes32[](2);
+        chainIds[0] = chainId;
+        chainIds[1] = bytes32(0); // Invalid zero chainId
+
+        bytes32 merkleRoot = _computeRoot(contracts, chainIds);
+        uint256 fee = registry.quoteRegistration();
+
+        vm.prank(operator);
+        vm.expectRevert(IFraudulentContractRegistry.FraudulentContractRegistry__InvalidChainIdEntry.selector);
+        registry.registerBatch{ value: fee }(merkleRoot, chainId, contracts, chainIds);
+    }
+
     function test_registerBatch_revert_invalidMerkleRoot() public {
         address[] memory contracts = new address[](1);
         contracts[0] = malicious1;
@@ -459,8 +493,10 @@ contract FraudulentContractRegistryTest is Test {
 
     function test_quoteRegistration() public view {
         uint256 fee = registry.quoteRegistration();
-        // FeeManager operatorBatchFeeWei() returns based on $25 at configured ETH price
-        assertTrue(fee > 0);
+        // FeeManager with fallback price: (2500 cents * 1e18) / 300_000 cents
+        // Default: $25 fee at $3000 ETH = 0.00833... ETH
+        uint256 expectedFee = (uint256(2500) * 1e18) / uint256(300_000);
+        assertEq(fee, expectedFee);
     }
 
     function test_computeBatchId() public view {

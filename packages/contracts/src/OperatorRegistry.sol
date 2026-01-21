@@ -116,6 +116,8 @@ contract OperatorRegistry is IOperatorRegistry, Ownable2Step {
 
     /// @inheritdoc IOperatorRegistry
     function isApprovedFor(address operator, uint8 registryType) external view override returns (bool) {
+        // Reject zero registryType - no valid capability check
+        if (registryType == 0) return false;
         Operator storage op = _operators[operator];
         if (!op.approved) return false;
         return (op.capabilities & registryType) == registryType;

@@ -58,6 +58,8 @@ interface IFraudulentContractRegistry {
     error FraudulentContractRegistry__BatchNotFound();
     error FraudulentContractRegistry__AlreadyInvalidated();
     error FraudulentContractRegistry__NotInvalidated();
+    error FraudulentContractRegistry__InvalidContractAddress();
+    error FraudulentContractRegistry__InvalidChainIdEntry();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
