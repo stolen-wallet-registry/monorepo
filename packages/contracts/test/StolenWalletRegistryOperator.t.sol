@@ -504,7 +504,7 @@ contract StolenWalletRegistryOperatorTest is Test {
 
     function test_computeWalletEntryHash() public view {
         bytes32 entryHash = registry.computeWalletEntryHash(stolen1, chainId);
-        assertEq(entryHash, keccak256(abi.encodePacked(stolen1, chainId)));
+        assertEq(entryHash, MerkleRootComputation.hashLeaf(stolen1, chainId));
     }
 
     function test_quoteOperatorBatchRegistration() public view {
@@ -537,15 +537,15 @@ contract StolenWalletRegistryOperatorTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Compute merkle root using shared MerkleRootComputation library
-    /// @dev Ensures test/prod parity - leaf construction is registry-specific (wallet + chainId)
+    /// @dev Ensures test/prod parity - uses OZ StandardMerkleTree leaf format
     function _computeRoot(address[] memory wallets, bytes32[] memory walletChainIds) internal pure returns (bytes32) {
         uint256 length = wallets.length;
         if (length == 0) return bytes32(0);
 
-        // Build leaves (registry-specific: wallet + chainId)
+        // Build leaves in OZ StandardMerkleTree format
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
-            leaves[i] = keccak256(abi.encodePacked(wallets[i], walletChainIds[i]));
+            leaves[i] = MerkleRootComputation.hashLeaf(wallets[i], walletChainIds[i]);
         }
 
         return MerkleRootComputation.computeRoot(leaves);

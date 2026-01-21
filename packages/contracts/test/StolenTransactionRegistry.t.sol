@@ -139,10 +139,10 @@ contract StolenTransactionRegistryTest is Test {
         uint256 length = txHashes.length;
         if (length == 0) return bytes32(0);
 
-        // Build leaves (registry-specific: txHash + chainId)
+        // Build leaves in OZ StandardMerkleTree format
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
-            leaves[i] = keccak256(abi.encodePacked(txHashes[i], chainIds[i]));
+            leaves[i] = MerkleRootComputation.hashLeaf(txHashes[i], chainIds[i]);
         }
 
         return MerkleRootComputation.computeRoot(leaves);
@@ -685,7 +685,7 @@ contract StolenTransactionRegistryFeeTest is Test {
         uint256 length = txHashes.length;
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
-            leaves[i] = keccak256(abi.encodePacked(txHashes[i], chainIds[i]));
+            leaves[i] = MerkleRootComputation.hashLeaf(txHashes[i], chainIds[i]);
         }
         return MerkleRootComputation.computeRoot(leaves);
     }

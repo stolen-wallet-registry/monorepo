@@ -4,25 +4,54 @@ pragma solidity ^0.8.24;
 /// @title MerkleRootComputation
 /// @author Stolen Wallet Registry Team
 /// @notice Library for computing Merkle roots from leaf arrays
-/// @dev Uses sorted pair hashing for OpenZeppelin MerkleProof compatibility.
-///      OZ only provides verification (MerkleProof.verify) but not root computation.
-///      This library fills that gap for on-chain batch validation.
+/// @dev Fully compatible with OpenZeppelin's StandardMerkleTree (JS) and MerkleProof (Solidity).
 ///
-/// ALGORITHM:
+/// LEAF FORMAT (OpenZeppelin Standard):
+/// leaf = keccak256(bytes.concat(bytes1(0x00), keccak256(abi.encode(value1, value2))))
+///
+/// The 0x00 prefix prevents second-preimage attacks by distinguishing leaves from
+/// internal nodes. This matches OpenZeppelin merkle-tree JS library exactly.
+///
+/// TREE ALGORITHM:
 /// 1. Sort leaves in ascending order (consistent ordering)
 /// 2. Build tree bottom-up, hashing pairs in sorted order (commutative)
 /// 3. Odd nodes promoted to next level unchanged
 ///
 /// COMPATIBILITY:
-/// - Uses same sorted pair hashing as OZ's commutativeKeccak256
-/// - Proofs generated for this root will verify with MerkleProof.verify
+/// - Leaf format matches OpenZeppelin merkle-tree StandardMerkleTree
+/// - Tree building matches OZ's commutativeKeccak256
+/// - Proofs from OZ JS library verify with MerkleProof.verify
 ///
 /// GAS CONSIDERATIONS:
 /// - Insertion sort is O(n²) but acceptable for typical batch sizes (< 1000)
 /// - Library functions are `internal`, so they're inlined at compile time
-/// - For very large batches (1000+ entries), consider requiring pre-sorted
-///   inputs and validating monotonic order instead of sorting on-chain
 library MerkleRootComputation {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LEAF HASH FUNCTIONS (OpenZeppelin StandardMerkleTree Compatible)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Compute leaf hash for (address, bytes32) pair
+    /// @dev Matches OZ StandardMerkleTree.of(values, ['address', 'bytes32'])
+    /// @param addr The address value
+    /// @param value The bytes32 value (e.g., chainId)
+    /// @return The leaf hash in OZ standard format
+    function hashLeaf(address addr, bytes32 value) internal pure returns (bytes32) {
+        return keccak256(bytes.concat(bytes1(0x00), keccak256(abi.encode(addr, value))));
+    }
+
+    /// @notice Compute leaf hash for (bytes32, bytes32) pair
+    /// @dev Matches OZ StandardMerkleTree.of(values, ['bytes32', 'bytes32'])
+    /// @param value1 First bytes32 value (e.g., txHash)
+    /// @param value2 Second bytes32 value (e.g., chainId)
+    /// @return The leaf hash in OZ standard format
+    function hashLeaf(bytes32 value1, bytes32 value2) internal pure returns (bytes32) {
+        return keccak256(bytes.concat(bytes1(0x00), keccak256(abi.encode(value1, value2))));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ROOT COMPUTATION
+    // ═══════════════════════════════════════════════════════════════════════════
+
     /// @notice Compute Merkle root from pre-hashed leaves
     /// @dev Leaves array is modified in-place to avoid memory allocation.
     ///      Caller should not rely on leaves array contents after this call.

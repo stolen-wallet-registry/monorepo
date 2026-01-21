@@ -85,7 +85,7 @@ interface IFraudulentContractRegistry {
     function invalidateBatch(bytes32 batchId) external;
 
     /// @notice Invalidate a specific entry (DAO only)
-    /// @param entryHash keccak256(abi.encodePacked(contractAddress, chainId))
+    /// @param entryHash OZ StandardMerkleTree leaf hash of (contractAddress, chainId)
     function invalidateEntry(bytes32 entryHash) external;
 
     /// @notice Reinstate a previously invalidated entry (DAO only)

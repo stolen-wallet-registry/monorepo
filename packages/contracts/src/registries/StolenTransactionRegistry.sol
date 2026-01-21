@@ -22,8 +22,8 @@ import { RegistryCapabilities } from "../libraries/RegistryCapabilities.sol";
 ///      2. Grace period: Randomized delay (1-4 minutes)
 ///      3. Registration: Reporter signs again, batch marked as stolen permanently
 ///
-/// MERKLE TREE DESIGN:
-/// - Leaf = keccak256(abi.encodePacked(txHash, chainId)) for multi-chain support
+/// MERKLE TREE DESIGN (OpenZeppelin StandardMerkleTree Compatible):
+/// - Leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(txHash, chainId))))
 /// - Only merkleRoot stored on-chain (gas efficient)
 /// - Full txHashes and chainIds emitted in events for data availability
 /// - Verification requires both txHash AND chainId
@@ -90,7 +90,7 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     mapping(bytes32 => OperatorTransactionBatch) private _operatorBatches;
 
     /// @notice Individually invalidated transaction entries
-    /// @dev Key is keccak256(abi.encodePacked(txHash, chainId))
+    /// @dev Key is OZ StandardMerkleTree leaf hash
     mapping(bytes32 => bool) private _invalidatedTransactionEntries;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -394,8 +394,8 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
         TransactionBatch memory batch = registeredBatches[batchId];
         if (batch.registeredAt == 0) return false;
 
-        // Reconstruct leaf: keccak256(abi.encodePacked(txHash, chainId))
-        bytes32 leaf = keccak256(abi.encodePacked(txHash, chainId));
+        // Reconstruct leaf in OZ StandardMerkleTree format
+        bytes32 leaf = MerkleRootComputation.hashLeaf(txHash, chainId);
 
         // Verify proof against stored Merkle root
         return MerkleProof.verify(merkleProof, batch.merkleRoot, leaf);
@@ -518,8 +518,8 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
         // Batch must exist and not be invalidated
         if (batch.registeredAt == 0 || batch.invalidated) return false;
 
-        // Reconstruct leaf and check entry-level invalidation
-        bytes32 leaf = keccak256(abi.encodePacked(txHash, chainId));
+        // Reconstruct leaf in OZ StandardMerkleTree format and check entry-level invalidation
+        bytes32 leaf = MerkleRootComputation.hashLeaf(txHash, chainId);
         if (_invalidatedTransactionEntries[leaf]) return false;
 
         // Verify proof against stored Merkle root
@@ -553,8 +553,8 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     }
 
     /// @notice Compute Merkle root from transaction hashes and chain IDs
-    /// @dev Registry-specific leaf construction (bytes32 txHash + chainId), then delegates
-    ///      to MerkleRootComputation library for tree building with OZ compatibility
+    /// @dev Uses OZ StandardMerkleTree leaf format, then delegates to
+    ///      MerkleRootComputation library for tree building
     function _computeMerkleRoot(bytes32[] calldata txHashes, bytes32[] calldata chainIds)
         internal
         pure
@@ -563,10 +563,10 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
         uint256 length = txHashes.length;
         if (length == 0) return bytes32(0);
 
-        // Build leaves: keccak256(abi.encodePacked(txHash, chainId))
+        // Build leaves in OZ StandardMerkleTree format
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
-            leaves[i] = keccak256(abi.encodePacked(txHashes[i], chainIds[i]));
+            leaves[i] = MerkleRootComputation.hashLeaf(txHashes[i], chainIds[i]);
         }
 
         return MerkleRootComputation.computeRoot(leaves);

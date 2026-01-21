@@ -66,9 +66,9 @@ contract StolenTransactionRegistryOperatorTest is Test {
 
     function _computeTestMerkleRoot() internal view returns (bytes32) {
         bytes32[] memory leaves = new bytes32[](3);
-        leaves[0] = keccak256(abi.encodePacked(txHash1, chainId));
-        leaves[1] = keccak256(abi.encodePacked(txHash2, chainId));
-        leaves[2] = keccak256(abi.encodePacked(txHash3, chainId));
+        leaves[0] = MerkleRootComputation.hashLeaf(txHash1, chainId);
+        leaves[1] = MerkleRootComputation.hashLeaf(txHash2, chainId);
+        leaves[2] = MerkleRootComputation.hashLeaf(txHash3, chainId);
         return MerkleRootComputation.computeRoot(leaves);
     }
 
@@ -325,7 +325,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
 
     // Owner can invalidate individual transaction entries.
     function test_InvalidateTransactionEntry_Success() public {
-        bytes32 entryHash = keccak256(abi.encodePacked(txHash1, chainId));
+        bytes32 entryHash = MerkleRootComputation.hashLeaf(txHash1, chainId);
 
         vm.prank(dao);
         registry.invalidateTransactionEntry(entryHash);
@@ -335,7 +335,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
 
     // Entry invalidation should emit TransactionEntryInvalidated event.
     function test_InvalidateTransactionEntry_EmitsEvent() public {
-        bytes32 entryHash = keccak256(abi.encodePacked(txHash1, chainId));
+        bytes32 entryHash = MerkleRootComputation.hashLeaf(txHash1, chainId);
 
         vm.expectEmit(true, true, true, true);
         emit IStolenTransactionRegistry.TransactionEntryInvalidated(entryHash);
@@ -346,7 +346,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
 
     // Non-owner cannot invalidate entries.
     function test_InvalidateTransactionEntry_NotOwner_Reverts() public {
-        bytes32 entryHash = keccak256(abi.encodePacked(txHash1, chainId));
+        bytes32 entryHash = MerkleRootComputation.hashLeaf(txHash1, chainId);
 
         vm.prank(nonOperator);
         vm.expectRevert();
@@ -355,7 +355,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
 
     // Double entry invalidation must fail.
     function test_InvalidateTransactionEntry_AlreadyInvalidated_Reverts() public {
-        bytes32 entryHash = keccak256(abi.encodePacked(txHash1, chainId));
+        bytes32 entryHash = MerkleRootComputation.hashLeaf(txHash1, chainId);
 
         vm.prank(dao);
         registry.invalidateTransactionEntry(entryHash);
@@ -371,7 +371,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
 
     // Owner can reinstate invalidated entries.
     function test_ReinstateTransactionEntry_Success() public {
-        bytes32 entryHash = keccak256(abi.encodePacked(txHash1, chainId));
+        bytes32 entryHash = MerkleRootComputation.hashLeaf(txHash1, chainId);
 
         vm.prank(dao);
         registry.invalidateTransactionEntry(entryHash);
@@ -384,7 +384,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
 
     // Entry reinstatement should emit TransactionEntryReinstated event.
     function test_ReinstateTransactionEntry_EmitsEvent() public {
-        bytes32 entryHash = keccak256(abi.encodePacked(txHash1, chainId));
+        bytes32 entryHash = MerkleRootComputation.hashLeaf(txHash1, chainId);
 
         vm.prank(dao);
         registry.invalidateTransactionEntry(entryHash);
@@ -398,7 +398,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
 
     // Non-owner cannot reinstate entries.
     function test_ReinstateTransactionEntry_NotOwner_Reverts() public {
-        bytes32 entryHash = keccak256(abi.encodePacked(txHash1, chainId));
+        bytes32 entryHash = MerkleRootComputation.hashLeaf(txHash1, chainId);
 
         vm.prank(dao);
         registry.invalidateTransactionEntry(entryHash);
@@ -410,7 +410,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
 
     // Reinstating non-invalidated entry must fail.
     function test_ReinstateTransactionEntry_NotInvalidated_Reverts() public {
-        bytes32 entryHash = keccak256(abi.encodePacked(txHash1, chainId));
+        bytes32 entryHash = MerkleRootComputation.hashLeaf(txHash1, chainId);
 
         vm.prank(dao);
         vm.expectRevert(IStolenTransactionRegistry.StolenTransactionRegistry__EntryNotInvalidated.selector);
@@ -438,7 +438,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
 
     // isTransactionEntryInvalidated returns false for non-invalidated entries.
     function test_IsTransactionEntryInvalidated_False() public view {
-        bytes32 entryHash = keccak256(abi.encodePacked(txHash1, chainId));
+        bytes32 entryHash = MerkleRootComputation.hashLeaf(txHash1, chainId);
         assertFalse(registry.isTransactionEntryInvalidated(entryHash));
     }
 

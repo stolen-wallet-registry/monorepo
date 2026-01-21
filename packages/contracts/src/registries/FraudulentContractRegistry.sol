@@ -196,8 +196,8 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
         bytes32 entryHash = _computeEntryHash(contractAddress, chainId);
         if (_invalidatedEntries[entryHash]) return false;
 
-        // Verify merkle proof
-        bytes32 leaf = keccak256(abi.encodePacked(contractAddress, chainId));
+        // Verify merkle proof (OZ StandardMerkleTree leaf format)
+        bytes32 leaf = MerkleRootComputation.hashLeaf(contractAddress, chainId);
         return MerkleProof.verify(merkleProof, batch.merkleRoot, leaf);
     }
 
@@ -251,9 +251,9 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
     }
 
     /// @notice Compute entry hash (Merkle leaf) for a contract address
-    /// @dev Registry-specific: uses address type for contract entries
+    /// @dev Registry-specific: uses OZ StandardMerkleTree leaf format
     function _computeEntryHash(address contractAddress, bytes32 chainId) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(contractAddress, chainId));
+        return MerkleRootComputation.hashLeaf(contractAddress, chainId);
     }
 
     function _validateFeePayment() internal view {
@@ -264,8 +264,8 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
     }
 
     /// @notice Compute Merkle root from contract addresses and chain IDs
-    /// @dev Registry-specific leaf construction (address + chainId), then delegates
-    ///      to MerkleRootComputation library for tree building with OZ compatibility
+    /// @dev Uses OZ StandardMerkleTree leaf format, then delegates to
+    ///      MerkleRootComputation library for tree building
     function _computeMerkleRoot(address[] calldata contractAddresses, bytes32[] calldata chainIds)
         internal
         pure
@@ -274,10 +274,10 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
         uint256 length = contractAddresses.length;
         if (length == 0) return bytes32(0);
 
-        // Build leaves: keccak256(abi.encodePacked(address, chainId))
+        // Build leaves in OZ StandardMerkleTree format
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
-            leaves[i] = keccak256(abi.encodePacked(contractAddresses[i], chainIds[i]));
+            leaves[i] = MerkleRootComputation.hashLeaf(contractAddresses[i], chainIds[i]);
         }
 
         return MerkleRootComputation.computeRoot(leaves);

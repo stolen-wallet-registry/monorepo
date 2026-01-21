@@ -514,7 +514,7 @@ contract FraudulentContractRegistryTest is Test {
     function test_computeEntryHash() public view {
         bytes32 entryHash = registry.computeEntryHash(malicious1, chainId);
 
-        bytes32 expected = keccak256(abi.encodePacked(malicious1, chainId));
+        bytes32 expected = MerkleRootComputation.hashLeaf(malicious1, chainId);
         assertEq(entryHash, expected);
     }
 
@@ -620,15 +620,15 @@ contract FraudulentContractRegistryTest is Test {
     }
 
     /// @notice Compute merkle root using shared MerkleRootComputation library
-    /// @dev Ensures test/prod parity - leaf construction is registry-specific (contract + chainId)
+    /// @dev Ensures test/prod parity - uses OZ StandardMerkleTree leaf format
     function _computeRoot(address[] memory contracts, bytes32[] memory chainIds) internal pure returns (bytes32) {
         uint256 length = contracts.length;
         if (length == 0) return bytes32(0);
 
-        // Build leaves (registry-specific: contract + chainId)
+        // Build leaves in OZ StandardMerkleTree format
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
-            leaves[i] = keccak256(abi.encodePacked(contracts[i], chainIds[i]));
+            leaves[i] = MerkleRootComputation.hashLeaf(contracts[i], chainIds[i]);
         }
 
         return MerkleRootComputation.computeRoot(leaves);

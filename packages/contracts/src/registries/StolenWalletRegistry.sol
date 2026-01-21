@@ -484,7 +484,8 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
         bytes32 entryHash = _computeWalletEntryHash(wallet, chainId);
         if (_invalidatedWalletEntries[entryHash]) return false;
 
-        bytes32 leaf = keccak256(abi.encodePacked(wallet, chainId));
+        // OZ StandardMerkleTree leaf format
+        bytes32 leaf = MerkleRootComputation.hashLeaf(wallet, chainId);
         return MerkleProof.verify(merkleProof, batch.merkleRoot, leaf);
     }
 
@@ -533,14 +534,14 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
     }
 
     /// @notice Compute entry hash (Merkle leaf) for a wallet
-    /// @dev Registry-specific: uses address type for wallet entries
+    /// @dev Registry-specific: uses OZ StandardMerkleTree leaf format
     function _computeWalletEntryHash(address wallet, bytes32 chainId) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(wallet, chainId));
+        return MerkleRootComputation.hashLeaf(wallet, chainId);
     }
 
     /// @notice Compute Merkle root from wallet addresses and chain IDs
-    /// @dev Registry-specific leaf construction (address + chainId), then delegates
-    ///      to MerkleRootComputation library for tree building with OZ compatibility
+    /// @dev Uses OZ StandardMerkleTree leaf format, then delegates to
+    ///      MerkleRootComputation library for tree building
     function _computeWalletMerkleRoot(address[] calldata wallets, bytes32[] calldata walletChainIds)
         internal
         pure
@@ -549,10 +550,10 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
         uint256 length = wallets.length;
         if (length == 0) return bytes32(0);
 
-        // Build leaves: keccak256(abi.encodePacked(wallet, chainId))
+        // Build leaves in OZ StandardMerkleTree format
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
-            leaves[i] = keccak256(abi.encodePacked(wallets[i], walletChainIds[i]));
+            leaves[i] = MerkleRootComputation.hashLeaf(wallets[i], walletChainIds[i]);
         }
 
         return MerkleRootComputation.computeRoot(leaves);

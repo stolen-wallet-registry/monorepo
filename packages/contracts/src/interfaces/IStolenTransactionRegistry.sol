@@ -8,8 +8,8 @@ pragma solidity ^0.8.24;
 ///      Uses Merkle trees for efficient batch storage - only the root is stored on-chain,
 ///      while individual transaction hashes are emitted in events for indexer reconstruction.
 ///
-/// KEY DESIGN:
-/// - Merkle leaf = keccak256(abi.encodePacked(txHash, chainId)) for multi-chain support
+/// KEY DESIGN (OpenZeppelin StandardMerkleTree Compatible):
+/// - Merkle leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(txHash, chainId))))
 /// - Single batch can contain transactions from multiple chains
 /// - Events emit parallel arrays: txHashes[] + chainIds[] for data availability
 /// - CAIP-2 chain identifiers (bytes32) support EVM and non-EVM blockchains
@@ -441,7 +441,7 @@ interface IStolenTransactionRegistry {
     function getAcknowledgement(address reporter) external view returns (AcknowledgementData memory data);
 
     /// @notice Verify a transaction is in a registered batch
-    /// @dev Reconstructs leaf as keccak256(abi.encodePacked(txHash, chainId))
+    /// @dev Uses OZ StandardMerkleTree leaf format for proof verification
     /// @param txHash Transaction hash to verify
     /// @param chainId CAIP-2 chain identifier for this transaction
     /// @param batchId Batch ID to check against

@@ -405,7 +405,7 @@ interface IStolenWalletRegistry {
     function invalidateWalletBatch(bytes32 batchId) external;
 
     /// @notice Invalidate a specific wallet entry (DAO only)
-    /// @param entryHash keccak256(abi.encodePacked(wallet, chainId))
+    /// @param entryHash OZ StandardMerkleTree leaf hash of (wallet, chainId)
     function invalidateWalletEntry(bytes32 entryHash) external;
 
     /// @notice Reinstate a previously invalidated entry (DAO only)

@@ -157,7 +157,7 @@ interface ISpokeTransactionRegistry {
     ///      - This matches the EIP-712 typed data format used in signatures
     ///      - Off-chain signers/indexers should use: keccak256(abi.encodePacked(caip2String))
     ///
-    /// @param merkleRoot Root of the Merkle tree (leaf = keccak256(txHash || chainId))
+    /// @param merkleRoot Root of the Merkle tree (OZ StandardMerkleTree format)
     /// @param reportedChainId keccak256 hash of CAIP-2 chain ID where transactions occurred
     /// @param transactionCount Number of transactions in the batch
     /// @param transactionHashes Full list of transaction hashes
