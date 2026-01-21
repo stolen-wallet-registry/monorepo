@@ -40,7 +40,7 @@
     "function-max-lines": ["warn", 50],
     "no-inline-assembly": "warn",
     "import-path-check": "off",
-    "use-natspec": "off",
+    "use-natspec": "warn",
     "gas-indexed-events": "off",
     "gas-calldata-parameters": "off",
     "gas-strict-inequalities": "off",

@@ -30,6 +30,6 @@
     "slither:triage": "python3 -m slither . --config-file slither.config.json --triage-mode"
   },
   "devDependencies": {
-    "solhint": "^6.0.2"
+    "solhint": "^6.0.3"
   }
 }
