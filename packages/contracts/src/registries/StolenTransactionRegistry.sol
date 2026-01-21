@@ -289,11 +289,17 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
             if (chainIds[i] == bytes32(0)) revert StolenTransactionRegistry__InvalidChainIdEntry();
         }
 
-        // Compute batch ID (operator batches use operator address instead of reporter)
-        bytes32 batchId = keccak256(abi.encode(merkleRoot, msg.sender));
+        // Compute batch ID (includes reportedChainId for uniqueness across chains)
+        bytes32 batchId = keccak256(abi.encode(merkleRoot, msg.sender, reportedChainId));
 
         // Check not already registered
         if (_operatorBatches[batchId].registeredAt != 0) revert StolenTransactionRegistry__BatchAlreadyRegistered();
+
+        // Validate operator batch fee
+        if (feeManager != address(0)) {
+            uint256 requiredFee = IFeeManager(feeManager).operatorBatchFeeWei();
+            if (msg.value < requiredFee) revert StolenTransactionRegistry__InsufficientFee();
+        }
 
         // Verify Merkle root matches computed root
         if (_computeMerkleRoot(transactionHashes, chainIds) != merkleRoot) {
@@ -691,7 +697,7 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     function _validateFeePayment() internal view {
         if (feeManager != address(0)) {
             uint256 requiredFee = IFeeManager(feeManager).currentFeeWei();
-            if (msg.value < requiredFee) revert InsufficientFee();
+            if (msg.value < requiredFee) revert StolenTransactionRegistry__InsufficientFee();
         }
     }
 

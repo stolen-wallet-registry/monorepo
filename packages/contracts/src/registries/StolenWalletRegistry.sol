@@ -202,7 +202,7 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
         // Validate fee payment (if fee manager is configured)
         if (feeManager != address(0)) {
             uint256 requiredFee = IFeeManager(feeManager).currentFeeWei();
-            if (msg.value < requiredFee) revert InsufficientFee();
+            if (msg.value < requiredFee) revert StolenWalletRegistry__InsufficientFee();
         }
 
         // State changes (CEI: effects before interactions)
@@ -307,7 +307,7 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
         // Validate operator batch fee
         if (feeManager != address(0)) {
             uint256 requiredFee = IFeeManager(feeManager).operatorBatchFeeWei();
-            if (msg.value < requiredFee) revert InsufficientFee();
+            if (msg.value < requiredFee) revert StolenWalletRegistry__InsufficientFee();
         }
 
         // Store batch

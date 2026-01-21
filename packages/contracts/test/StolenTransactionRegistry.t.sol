@@ -724,7 +724,7 @@ contract StolenTransactionRegistryFeeTest is Test {
                 reporterPrivateKey, testMerkleRoot, testChainId, forwarder, registry.nonces(reporter), deadline
             );
             vm.prank(forwarder);
-            vm.expectRevert(IStolenTransactionRegistry.InsufficientFee.selector);
+            vm.expectRevert(IStolenTransactionRegistry.StolenTransactionRegistry__InsufficientFee.selector);
             registry.register(testMerkleRoot, testChainId, txHashes, chainIds, reporter, deadline, v, r, s);
         }
     }

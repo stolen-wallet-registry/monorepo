@@ -139,7 +139,7 @@ interface IStolenTransactionRegistry {
     error InvalidReporter();
 
     /// @notice Thrown when the provided fee is less than required
-    error InsufficientFee();
+    error StolenTransactionRegistry__InsufficientFee();
 
     /// @notice Thrown when fee forwarding to RegistryHub fails
     error FeeForwardFailed();

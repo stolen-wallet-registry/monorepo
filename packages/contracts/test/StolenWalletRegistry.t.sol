@@ -746,7 +746,7 @@ contract StolenWalletRegistryFeeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
-        vm.expectRevert(IStolenWalletRegistry.InsufficientFee.selector);
+        vm.expectRevert(IStolenWalletRegistry.StolenWalletRegistry__InsufficientFee.selector);
         registry.register{ value: insufficientFee }(deadline, nonce, owner, v, r, s);
     }
 

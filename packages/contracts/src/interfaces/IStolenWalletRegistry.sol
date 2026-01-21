@@ -109,7 +109,7 @@ interface IStolenWalletRegistry {
     error InvalidOwner();
 
     /// @notice Thrown when the provided fee is less than required
-    error InsufficientFee();
+    error StolenWalletRegistry__InsufficientFee();
 
     /// @notice Thrown when fee forwarding to RegistryHub fails
     error FeeForwardFailed();

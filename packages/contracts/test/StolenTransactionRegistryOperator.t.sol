@@ -83,8 +83,8 @@ contract StolenTransactionRegistryOperatorTest is Test {
         chainIds[2] = chainId;
     }
 
-    function _computeBatchId(bytes32 root, address op) internal pure returns (bytes32) {
-        return keccak256(abi.encode(root, op));
+    function _computeBatchId(bytes32 root, address op, bytes32 reportedChainId) internal pure returns (bytes32) {
+        return keccak256(abi.encode(root, op, reportedChainId));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -98,7 +98,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
         vm.prank(operator);
         registry.registerBatchAsOperator(merkleRoot, chainId, txHashes, chainIds);
 
-        bytes32 batchId = _computeBatchId(merkleRoot, operator);
+        bytes32 batchId = _computeBatchId(merkleRoot, operator, chainId);
         assertTrue(registry.isOperatorBatchRegistered(batchId));
 
         IStolenTransactionRegistry.OperatorTransactionBatch memory batch = registry.getOperatorBatch(batchId);
@@ -112,7 +112,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
     // Registration should emit TransactionBatchRegisteredByOperator event.
     function test_RegisterBatchAsOperator_EmitsEvent() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _getTestTransactions();
-        bytes32 batchId = _computeBatchId(merkleRoot, operator);
+        bytes32 batchId = _computeBatchId(merkleRoot, operator, chainId);
 
         vm.expectEmit(true, true, true, true);
         emit IStolenTransactionRegistry.TransactionBatchRegisteredByOperator(
@@ -254,7 +254,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
         vm.prank(operator);
         registry.registerBatchAsOperator(merkleRoot, chainId, txHashes, chainIds);
 
-        bytes32 batchId = _computeBatchId(merkleRoot, operator);
+        bytes32 batchId = _computeBatchId(merkleRoot, operator, chainId);
 
         vm.prank(dao);
         registry.invalidateTransactionBatch(batchId);
@@ -270,7 +270,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
         vm.prank(operator);
         registry.registerBatchAsOperator(merkleRoot, chainId, txHashes, chainIds);
 
-        bytes32 batchId = _computeBatchId(merkleRoot, operator);
+        bytes32 batchId = _computeBatchId(merkleRoot, operator, chainId);
 
         vm.expectEmit(true, true, true, true);
         emit IStolenTransactionRegistry.TransactionBatchInvalidated(batchId);
@@ -286,7 +286,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
         vm.prank(operator);
         registry.registerBatchAsOperator(merkleRoot, chainId, txHashes, chainIds);
 
-        bytes32 batchId = _computeBatchId(merkleRoot, operator);
+        bytes32 batchId = _computeBatchId(merkleRoot, operator, chainId);
 
         vm.prank(nonOperator);
         vm.expectRevert();
@@ -309,7 +309,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
         vm.prank(operator);
         registry.registerBatchAsOperator(merkleRoot, chainId, txHashes, chainIds);
 
-        bytes32 batchId = _computeBatchId(merkleRoot, operator);
+        bytes32 batchId = _computeBatchId(merkleRoot, operator, chainId);
 
         vm.prank(dao);
         registry.invalidateTransactionBatch(batchId);

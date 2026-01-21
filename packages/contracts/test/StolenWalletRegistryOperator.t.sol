@@ -264,7 +264,7 @@ contract StolenWalletRegistryOperatorTest is Test {
         uint256 fee = registry.quoteOperatorBatchRegistration();
 
         vm.prank(operator);
-        vm.expectRevert(IStolenWalletRegistry.InsufficientFee.selector);
+        vm.expectRevert(IStolenWalletRegistry.StolenWalletRegistry__InsufficientFee.selector);
         registry.registerBatchAsOperator{ value: fee - 1 }(merkleRoot, chainId, wallets, chainIds);
     }
 

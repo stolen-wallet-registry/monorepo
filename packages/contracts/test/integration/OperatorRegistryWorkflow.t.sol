@@ -160,7 +160,7 @@ contract OperatorRegistryWorkflowTest is Test {
 
         vm.prank(fullOperator);
         txRegistry.registerBatchAsOperator(txMerkleRoot, chainId, txHashes, txChainIds);
-        assertTrue(txRegistry.isOperatorBatchRegistered(keccak256(abi.encode(txMerkleRoot, fullOperator))));
+        assertTrue(txRegistry.isOperatorBatchRegistered(keccak256(abi.encode(txMerkleRoot, fullOperator, chainId))));
 
         // Register contract batch
         address[] memory contracts = new address[](1);
@@ -267,7 +267,7 @@ contract OperatorRegistryWorkflowTest is Test {
 
         vm.prank(fullOperator);
         txRegistry.registerBatchAsOperator(txMerkleRoot, chainId, txHashes, txChainIds);
-        bytes32 txBatchId = keccak256(abi.encode(txMerkleRoot, fullOperator));
+        bytes32 txBatchId = keccak256(abi.encode(txMerkleRoot, fullOperator, chainId));
 
         address[] memory contracts = new address[](1);
         bytes32[] memory contractChainIds = new bytes32[](1);
