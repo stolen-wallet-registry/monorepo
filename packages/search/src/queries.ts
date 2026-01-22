@@ -59,6 +59,7 @@ export const TRANSACTION_QUERY = gql`
 
 /**
  * Query fraudulent contracts by address.
+ * Note: entryHash is used to check invalidation status via separate query.
  */
 export const CONTRACT_QUERY = gql`
   query SearchContract($address: String!) {
@@ -70,7 +71,40 @@ export const CONTRACT_QUERY = gql`
         batchId
         operator
         reportedAt
-        entryInvalidated
+        entryHash
+      }
+    }
+  }
+`;
+
+/**
+ * Query invalidation status for a single entry hash.
+ */
+export const INVALIDATION_CHECK_QUERY = gql`
+  query CheckInvalidation($entryHash: String!) {
+    invalidatedEntry(id: $entryHash) {
+      id
+      invalidatedAt
+      invalidatedBy
+      reinstated
+      reinstatedAt
+    }
+  }
+`;
+
+/**
+ * Query invalidation status for multiple entry hashes.
+ * Used for batch checking after CONTRACT_QUERY.
+ */
+export const INVALIDATIONS_BATCH_QUERY = gql`
+  query CheckInvalidations($entryHashes: [String!]!) {
+    invalidatedEntrys(where: { id_in: $entryHashes }) {
+      items {
+        id
+        invalidatedAt
+        invalidatedBy
+        reinstated
+        reinstatedAt
       }
     }
   }
@@ -165,7 +199,29 @@ export interface RawContractResponse {
       batchId: string;
       operator: string;
       reportedAt: string;
-      entryInvalidated: boolean;
+      entryHash: string;
+    }>;
+  };
+}
+
+export interface RawInvalidationCheckResponse {
+  invalidatedEntry: {
+    id: string;
+    invalidatedAt: string;
+    invalidatedBy: string;
+    reinstated: boolean;
+    reinstatedAt: string | null;
+  } | null;
+}
+
+export interface RawInvalidationsBatchResponse {
+  invalidatedEntrys: {
+    items: Array<{
+      id: string;
+      invalidatedAt: string;
+      invalidatedBy: string;
+      reinstated: boolean;
+      reinstatedAt: string | null;
     }>;
   };
 }

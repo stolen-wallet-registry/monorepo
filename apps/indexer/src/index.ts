@@ -500,11 +500,12 @@ ponder.on(
         .onConflictDoNothing();
     }
 
-    // Update stats
+    // Update stats - operator batches count toward both operator-specific AND global batch counts
     await updateGlobalStats(
       db,
       {
-        totalOperatorTransactionBatches: 1,
+        transactionBatches: 1, // Counts toward totalTransactionBatches
+        totalOperatorTransactionBatches: 1, // Operator-specific count
         transactionsReported: Number(transactionCount),
       },
       event.block.timestamp

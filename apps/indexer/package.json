@@ -7,7 +7,8 @@
     "dev": "ponder dev --schema swr_dev",
     "start": "ponder start --schema swr_prod",
     "db": "ponder db",
-    "db:wipe": "dotenv -e .env.local -- bash -c \"psql $DATABASE_URL -c 'DROP SCHEMA IF EXISTS swr_dev CASCADE; DROP SCHEMA IF EXISTS swr_prod CASCADE; DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;'\"",
+    "db:wipe": "rm -rf .ponder && echo 'PGlite data wiped (.ponder folder deleted)'",
+    "db:wipe:postgres": "psql postgresql://postgres:password@localhost:5432/postgres -c 'DROP SCHEMA IF EXISTS ponder_sync CASCADE; DROP SCHEMA IF EXISTS swr_indexer CASCADE; DROP SCHEMA IF EXISTS swr_dev CASCADE; DROP SCHEMA IF EXISTS swr_prod CASCADE; DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;'",
     "codegen": "ponder codegen",
     "typecheck": "tsc"
   },

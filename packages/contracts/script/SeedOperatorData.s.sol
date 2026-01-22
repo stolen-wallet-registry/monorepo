@@ -34,8 +34,13 @@ contract SeedOperatorData is Script {
     address constant DEFAULT_FEE_MANAGER = 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // OPERATOR ACCOUNTS
+    // OPERATOR ACCOUNTS (Anvil Default Test Accounts)
     // ═══════════════════════════════════════════════════════════════════════════
+    // SECURITY NOTE: These are well-known Anvil/Hardhat test private keys.
+    // They are publicly documented and ONLY used for local development.
+    // See: https://book.getfoundry.sh/reference/anvil/#description
+    // NEVER use these keys on any real network - they have no real funds.
+    //
     // Account 3 (Operator A - ALL capabilities: WALLET + TX + CONTRACT)
     uint256 constant OPERATOR_A_PRIVATE_KEY = 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6;
     address constant OPERATOR_A_ADDRESS = 0x90F79bf6EB2c4f870365E785982E1f101E93b906;
@@ -45,12 +50,17 @@ contract SeedOperatorData is Script {
     address constant OPERATOR_B_ADDRESS = 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CHAIN IDS (CAIP-2 format as bytes32)
+    // CHAIN IDS (keccak256 hashes of CAIP-2 strings)
     // ═══════════════════════════════════════════════════════════════════════════
-    bytes32 constant CHAIN_ID_ETH_MAINNET = bytes32("eip155:1");
-    bytes32 constant CHAIN_ID_BASE = bytes32("eip155:8453");
-    bytes32 constant CHAIN_ID_ARBITRUM = bytes32("eip155:42161");
-    bytes32 constant CHAIN_ID_LOCAL = bytes32("eip155:31337");
+    // Pre-computed: keccak256(abi.encodePacked("eip155:1"))
+    // Must match CAIP2_LOOKUP in packages/chains/src/utils/caip.ts
+    bytes32 constant CHAIN_ID_ETH_MAINNET = 0x38b2caf37cccf00b6fbc0feb1e534daf567950e4d48066d0e3669028fe5f83e6;
+    // Pre-computed: keccak256(abi.encodePacked("eip155:8453"))
+    bytes32 constant CHAIN_ID_BASE = 0x43b48883ef7be0f98fe7f98fafb2187e42caab4063697b32816f95e09d69b3ec;
+    // Pre-computed: keccak256(abi.encodePacked("eip155:42161"))
+    bytes32 constant CHAIN_ID_ARBITRUM = 0x1fca116f439fa7af0604ced8c7a6239cdcabb5070838cbc80cdba0089733e472;
+    // Pre-computed: keccak256(abi.encodePacked("eip155:31337"))
+    bytes32 constant CHAIN_ID_LOCAL = 0x318e51c37247d03bad135571413b06a083591bcc680967d80bf587ac928cf369;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // TEST DATA - FRAUDULENT CONTRACTS
@@ -130,8 +140,10 @@ contract SeedOperatorData is Script {
         }
 
         // Check if already seeded (contract batch 1 would exist)
-        bytes32 checkBatchId =
-            _computeContractBatchId(OPERATOR_A_ADDRESS, CHAIN_ID_ETH_MAINNET, SCAM_CONTRACT_1, SCAM_CONTRACT_2);
+        // Uses registry's computeBatchId to stay in sync with any formula changes
+        bytes32 checkBatchId = _computeContractBatchId(
+            contractRegistry, OPERATOR_A_ADDRESS, CHAIN_ID_ETH_MAINNET, SCAM_CONTRACT_1, SCAM_CONTRACT_2
+        );
         if (contractRegistry.isBatchRegistered(checkBatchId)) {
             console2.log("");
             console2.log("Operator data already seeded, skipping...");
@@ -410,11 +422,14 @@ contract SeedOperatorData is Script {
     }
 
     /// @notice Compute batch ID for contract registry (for seeding check)
-    function _computeContractBatchId(address operator, bytes32 reportedChainId, address contract1, address contract2)
-        internal
-        pure
-        returns (bytes32)
-    {
+    /// @dev Uses registry's computeBatchId to stay in sync with any formula changes
+    function _computeContractBatchId(
+        FraudulentContractRegistry contractRegistry,
+        address operator,
+        bytes32 reportedChainId,
+        address contract1,
+        address contract2
+    ) internal view returns (bytes32) {
         address[] memory contracts = new address[](2);
         bytes32[] memory chainIds = new bytes32[](2);
         contracts[0] = contract1;
@@ -423,6 +438,6 @@ contract SeedOperatorData is Script {
         chainIds[1] = reportedChainId;
 
         bytes32 merkleRoot = _computeAddressMerkleRoot(contracts, chainIds);
-        return keccak256(abi.encode(merkleRoot, operator, reportedChainId));
+        return contractRegistry.computeBatchId(merkleRoot, operator, reportedChainId);
     }
 }
