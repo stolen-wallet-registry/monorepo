@@ -1,8 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { readFile, rm, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
 import { encodeFunctionData } from 'viem';
 import {
   StolenWalletRegistryABI,
@@ -23,21 +21,6 @@ describe('--build-only mode', () => {
   const walletsFixture = join(__dirname, 'fixtures', 'wallets.json');
   const contractsFixture = join(__dirname, 'fixtures', 'contracts.json');
   const transactionsFixture = join(__dirname, 'fixtures', 'transactions.json');
-  const testOutputDir = join(__dirname, '.test-output');
-
-  beforeEach(async () => {
-    // Clean up test output dir if it exists
-    if (existsSync(testOutputDir)) {
-      await rm(testOutputDir, { recursive: true });
-    }
-  });
-
-  afterEach(async () => {
-    // Clean up test output dir after tests
-    if (existsSync(testOutputDir)) {
-      await rm(testOutputDir, { recursive: true });
-    }
-  });
 
   describe('MultisigTransaction format', () => {
     it('generates correct wallet batch calldata', async () => {
@@ -148,9 +131,9 @@ describe('--build-only mode', () => {
       expect(txData.value).toBe('1000000000000000');
       expect(txData.data).toMatch(/^0x[a-f0-9]+$/);
       expect(txData.operation).toBe(0);
-      expect(txData.description).toContain('3 stolen wallets');
+      expect(txData.description).toContain(`${entries.length} stolen wallets`);
       expect(txData.merkleRoot).toBe(root);
-      expect(txData.entryCount).toBe(3);
+      expect(txData.entryCount).toBe(entries.length);
     });
 
     it('contract batch creates correct structure', async () => {
@@ -183,8 +166,8 @@ describe('--build-only mode', () => {
       expect(txData.to).toBe(targetContract);
       expect(txData.value).toBe('2000000000000000');
       expect(txData.operation).toBe(0);
-      expect(txData.description).toContain('3 fraudulent contracts');
-      expect(txData.entryCount).toBe(3);
+      expect(txData.description).toContain(`${entries.length} fraudulent contracts`);
+      expect(txData.entryCount).toBe(entries.length);
     });
   });
 

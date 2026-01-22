@@ -200,11 +200,17 @@ program
   .option('-c, --chain-id <id>', 'Chain ID', '8453')
   .option('-t, --type <type>', 'Registry type: wallet, contract', 'contract')
   .action(async (options) => {
+    const chainId = Number(options.chainId);
+    if (!Number.isInteger(chainId) || chainId <= 0) {
+      console.error(chalk.red(`Error: Invalid chain ID: ${options.chainId}`));
+      process.exit(1);
+    }
+
     try {
       await verify({
         address: options.address,
         env: options.env,
-        chainId: parseInt(options.chainId),
+        chainId,
         type: options.type,
       });
     } catch (error) {

@@ -142,6 +142,7 @@ interface IFraudulentContractRegistry {
     /// @param merkleRoot The merkle root
     /// @param operator The operator address
     /// @param reportedChainId The primary chain ID
+    /// @dev Batch ID = keccak256(abi.encodePacked(merkleRoot, operator, reportedChainId))
     /// @return The computed batch ID
     function computeBatchId(bytes32 merkleRoot, address operator, bytes32 reportedChainId)
         external
@@ -151,6 +152,8 @@ interface IFraudulentContractRegistry {
     /// @notice Compute entry hash from contract address and chain ID
     /// @param contractAddress The contract address
     /// @param chainId The chain ID
+    /// @dev Entry hash = keccak256(abi.encodePacked(contractAddress, chainId))
+    ///      Used as leaf values in Merkle tree construction.
     /// @return The entry hash
     function computeEntryHash(address contractAddress, bytes32 chainId) external pure returns (bytes32);
 
