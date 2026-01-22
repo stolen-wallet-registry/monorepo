@@ -537,6 +537,10 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
 
     /// @notice Compute batch ID from batch parameters
     /// @dev Registry-specific: uses reporter (not operator) for two-phase registration batches
+    /// @param merkleRoot The merkle root
+    /// @param reporter The reporter address
+    /// @param reportedChainId The reported chain ID
+    /// @return The computed batch ID
     function _computeBatchId(bytes32 merkleRoot, address reporter, bytes32 reportedChainId)
         internal
         pure
@@ -546,6 +550,9 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     }
 
     /// @notice Check if batch is already registered (reduces stack depth at call sites)
+    /// @param merkleRoot The merkle root
+    /// @param reporter The reporter address
+    /// @param reportedChainId The reported chain ID
     function _requireNotRegistered(bytes32 merkleRoot, address reporter, bytes32 reportedChainId) internal view {
         if (registeredBatches[_computeBatchId(merkleRoot, reporter, reportedChainId)].registeredAt != 0) {
             revert AlreadyRegistered();
@@ -555,6 +562,9 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     /// @notice Compute Merkle root from transaction hashes and chain IDs
     /// @dev Uses OZ StandardMerkleTree leaf format, then delegates to
     ///      MerkleRootComputation library for tree building
+    /// @param txHashes Array of transaction hashes
+    /// @param chainIds Array of chain IDs
+    /// @return The computed merkle root
     function _computeMerkleRoot(bytes32[] calldata txHashes, bytes32[] calldata chainIds)
         internal
         pure
@@ -573,6 +583,12 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     }
 
     /// @notice Validate acknowledgement inputs (helper to reduce stack depth)
+    /// @param merkleRoot The merkle root
+    /// @param reportedChainId The reported chain ID
+    /// @param transactionCount Number of transactions
+    /// @param transactionHashes Array of transaction hashes
+    /// @param chainIds Array of chain IDs
+    /// @param deadline Signature deadline
     function _validateAcknowledgementInputs(
         bytes32 merkleRoot,
         bytes32 reportedChainId,
@@ -590,6 +606,14 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     }
 
     /// @notice Verify acknowledgement signature from reporter
+    /// @param merkleRoot The merkle root
+    /// @param reportedChainId The reported chain ID
+    /// @param transactionCount Number of transactions
+    /// @param reporter The reporter address
+    /// @param deadline Signature deadline
+    /// @param v ECDSA v component
+    /// @param r ECDSA r component
+    /// @param s ECDSA s component
     function _verifyAcknowledgementSignature(
         bytes32 merkleRoot,
         bytes32 reportedChainId,
@@ -619,6 +643,13 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     }
 
     /// @notice Verify registration signature from reporter
+    /// @param merkleRoot The merkle root
+    /// @param reportedChainId The reported chain ID
+    /// @param reporter The reporter address
+    /// @param deadline Signature deadline
+    /// @param v ECDSA v component
+    /// @param r ECDSA r component
+    /// @param s ECDSA s component
     function _verifyRegistrationSignature(
         bytes32 merkleRoot,
         bytes32 reportedChainId,
@@ -646,6 +677,10 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     }
 
     /// @notice Store acknowledgement data (helper to reduce stack depth)
+    /// @param reporter The reporter address
+    /// @param merkleRoot The merkle root
+    /// @param reportedChainId The reported chain ID
+    /// @param transactionCount Number of transactions
     function _storeAcknowledgement(
         address reporter,
         bytes32 merkleRoot,
@@ -663,6 +698,11 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     }
 
     /// @notice Validate registration inputs (helper to reduce stack depth)
+    /// @param merkleRoot The merkle root
+    /// @param reportedChainId The reported chain ID
+    /// @param transactionHashes Array of transaction hashes
+    /// @param chainIds Array of chain IDs
+    /// @param deadline Signature deadline
     function _validateRegistrationInputs(
         bytes32 merkleRoot,
         bytes32 reportedChainId,
@@ -677,6 +717,10 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     }
 
     /// @notice Validate acknowledgement for registration (helper to reduce stack depth)
+    /// @param reporter The reporter address
+    /// @param merkleRoot The merkle root
+    /// @param reportedChainId The reported chain ID
+    /// @param txCount Number of transactions
     function _validateAcknowledgementForRegistration(
         address reporter,
         bytes32 merkleRoot,
@@ -702,6 +746,11 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
     }
 
     /// @notice Complete registration and emit event (helper to reduce stack depth)
+    /// @param reporter The reporter address
+    /// @param merkleRoot The merkle root
+    /// @param reportedChainId The reported chain ID
+    /// @param transactionHashes Array of transaction hashes
+    /// @param chainIds Array of chain IDs
     function _completeRegistration(
         address reporter,
         bytes32 merkleRoot,

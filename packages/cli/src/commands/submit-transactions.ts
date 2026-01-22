@@ -1,4 +1,4 @@
-import { formatEther } from 'viem';
+import { formatEther, zeroAddress } from 'viem';
 import chalk from 'chalk';
 import ora from 'ora';
 import { buildTransactionMerkleTree, serializeTree } from '../lib/merkle.js';
@@ -26,9 +26,7 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
     // 1. Load configuration
     const config = getConfig(options.network);
 
-    if (
-      config.contracts.stolenTransactionRegistry === '0x0000000000000000000000000000000000000000'
-    ) {
+    if (config.contracts.stolenTransactionRegistry === zeroAddress) {
       throw new Error(`Contract addresses not configured for network: ${options.network}`);
     }
 
@@ -56,7 +54,8 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
     const fee = await publicClient.readContract({
       address: config.contracts.stolenTransactionRegistry,
       abi: StolenTransactionRegistryABI,
-      functionName: 'quoteOperatorRegistration',
+      functionName: 'quoteRegistration',
+      args: [zeroAddress], // reporter param unused on hub, for interface compatibility
     });
     spinner.succeed(`Fee: ${chalk.yellow(formatEther(fee))} ETH`);
 
@@ -82,7 +81,7 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
       account,
       address: config.contracts.stolenTransactionRegistry,
       abi: StolenTransactionRegistryABI,
-      functionName: 'registerOperatorBatch',
+      functionName: 'registerBatchAsOperator',
       args: [root, reportedChainId, txHashes, chainIds],
       value: fee,
     });
@@ -90,7 +89,10 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
 
     // 8. Wait for confirmation
     spinner.start('Waiting for confirmation...');
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash,
+      timeout: 120_000, // 2 minute timeout
+    });
     spinner.succeed(`Confirmed in block ${receipt.blockNumber}`);
 
     // 9. Save tree for verification

@@ -481,6 +481,25 @@ export const FraudulentContractRegistryABI = [
   },
   {
     type: 'event',
+    name: 'OperatorRegistrySet',
+    inputs: [
+      {
+        name: 'oldRegistry',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'newRegistry',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'OwnershipTransferStarted',
     inputs: [
       {
@@ -539,6 +558,11 @@ export const FraudulentContractRegistryABI = [
   },
   {
     type: 'error',
+    name: 'FraudulentContractRegistry__BatchSizeExceedsLimit',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'FraudulentContractRegistry__FeeForwardFailed',
     inputs: [],
   },
@@ -554,6 +578,16 @@ export const FraudulentContractRegistryABI = [
   },
   {
     type: 'error',
+    name: 'FraudulentContractRegistry__InvalidChainIdEntry',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'FraudulentContractRegistry__InvalidContractAddress',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'FraudulentContractRegistry__InvalidContractCount',
     inputs: [],
   },
@@ -564,7 +598,17 @@ export const FraudulentContractRegistryABI = [
   },
   {
     type: 'error',
+    name: 'FraudulentContractRegistry__InvalidOperatorRegistry',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'FraudulentContractRegistry__MerkleRootMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'FraudulentContractRegistry__MissingRegistryHub',
     inputs: [],
   },
   {
@@ -575,6 +619,11 @@ export const FraudulentContractRegistryABI = [
   {
     type: 'error',
     name: 'FraudulentContractRegistry__NotInvalidated',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'FraudulentContractRegistry__UnexpectedEthWithFeesDisabled',
     inputs: [],
   },
   {

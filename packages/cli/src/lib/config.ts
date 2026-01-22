@@ -1,4 +1,4 @@
-import type { Address, Chain } from 'viem';
+import { zeroAddress, type Address, type Chain } from 'viem';
 import { base, baseSepolia } from 'viem/chains';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -68,14 +68,36 @@ export const BASE_CONFIG: NetworkConfig = {
   },
 };
 
+/**
+ * Validate that all required contract addresses are set (not zero address).
+ * Used for testnet/mainnet to fail fast if contracts aren't deployed.
+ */
+function validateContractAddresses(config: NetworkConfig, network: string): void {
+  const fields = Object.entries(config.contracts) as [string, Address][];
+  for (const [fieldName, address] of fields) {
+    if (address === zeroAddress) {
+      throw new Error(
+        `Contract address unset for network ${network}: ${fieldName} is zero address`
+      );
+    }
+  }
+}
+
 export function getConfig(network: 'local' | 'testnet' | 'mainnet'): NetworkConfig {
   switch (network) {
     case 'local':
+      // Local anvil allows zero addresses (contracts deployed on-demand)
       return ANVIL_CONFIG;
-    case 'testnet':
-      return BASE_SEPOLIA_CONFIG;
-    case 'mainnet':
-      return BASE_CONFIG;
+    case 'testnet': {
+      const config = BASE_SEPOLIA_CONFIG;
+      validateContractAddresses(config, network);
+      return config;
+    }
+    case 'mainnet': {
+      const config = BASE_CONFIG;
+      validateContractAddresses(config, network);
+      return config;
+    }
     default:
       throw new Error(`Unknown network: ${network}`);
   }

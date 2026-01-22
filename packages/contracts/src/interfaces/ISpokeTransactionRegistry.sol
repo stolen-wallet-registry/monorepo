@@ -81,6 +81,8 @@ interface ISpokeTransactionRegistry {
     );
 
     /// @notice Emitted when hub configuration is updated
+    /// @param hubChainId The hub chain ID
+    /// @param hubInbox The hub inbox address (as bytes32)
     event HubConfigUpdated(uint32 indexed hubChainId, bytes32 hubInbox);
 
     // ═══════════════════════════════════════════════════════════════════════════

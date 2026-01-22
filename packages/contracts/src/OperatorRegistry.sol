@@ -6,6 +6,7 @@ import { IOperatorRegistry } from "./interfaces/IOperatorRegistry.sol";
 import { RegistryCapabilities } from "./libraries/RegistryCapabilities.sol";
 
 /// @title OperatorRegistry
+/// @author Stolen Wallet Registry Team
 /// @notice Manages DAO-approved operators who can batch-submit fraud data to registries
 /// @dev Owner should be DAO multisig or governance contract
 contract OperatorRegistry is IOperatorRegistry, Ownable2Step {
@@ -39,6 +40,7 @@ contract OperatorRegistry is IOperatorRegistry, Ownable2Step {
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Initialize the operator registry
     /// @param _owner Initial owner (should be DAO or multisig)
     constructor(address _owner) Ownable(_owner) { }
 

@@ -1,4 +1,4 @@
-import { formatEther } from 'viem';
+import { formatEther, zeroAddress } from 'viem';
 import chalk from 'chalk';
 import ora from 'ora';
 import { buildContractMerkleTree, serializeTree } from '../lib/merkle.js';
@@ -26,9 +26,7 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
     // 1. Load configuration
     const config = getConfig(options.network);
 
-    if (
-      config.contracts.fraudulentContractRegistry === '0x0000000000000000000000000000000000000000'
-    ) {
+    if (config.contracts.fraudulentContractRegistry === zeroAddress) {
       throw new Error(`Contract addresses not configured for network: ${options.network}`);
     }
 
@@ -90,7 +88,10 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
 
     // 8. Wait for confirmation
     spinner.start('Waiting for confirmation...');
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash,
+      timeout: 120_000, // 2 minute timeout
+    });
     spinner.succeed(`Confirmed in block ${receipt.blockNumber}`);
 
     // 9. Save tree for verification

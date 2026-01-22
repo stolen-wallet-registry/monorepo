@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 /// @title IOperatorRegistry
+/// @author Stolen Wallet Registry Team
 /// @notice Interface for managing DAO-approved operators who can batch-submit fraud data
 interface IOperatorRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
@@ -20,21 +21,42 @@ interface IOperatorRegistry {
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // solhint-disable-next-line func-name-mixedcase
-    function WALLET_REGISTRY() external pure returns (uint8); // 0x01
-    // solhint-disable-next-line func-name-mixedcase
-    function TX_REGISTRY() external pure returns (uint8); // 0x02
-    // solhint-disable-next-line func-name-mixedcase
-    function CONTRACT_REGISTRY() external pure returns (uint8); // 0x04
-    // solhint-disable-next-line func-name-mixedcase
-    function ALL_REGISTRIES() external pure returns (uint8); // 0x07
+    /// @notice Capability bit for wallet registry (0x01)
+    /// @return The capability bit value
+    function WALLET_REGISTRY() external pure returns (uint8); // solhint-disable-line func-name-mixedcase
+
+    /// @notice Capability bit for transaction registry (0x02)
+    /// @return The capability bit value
+    function TX_REGISTRY() external pure returns (uint8); // solhint-disable-line func-name-mixedcase
+
+    /// @notice Capability bit for contract registry (0x04)
+    /// @return The capability bit value
+    function CONTRACT_REGISTRY() external pure returns (uint8); // solhint-disable-line func-name-mixedcase
+
+    /// @notice All registry capabilities combined (0x07)
+    /// @return The combined capability bits
+    function ALL_REGISTRIES() external pure returns (uint8); // solhint-disable-line func-name-mixedcase
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Emitted when a new operator is approved
+    /// @param operator The operator address
+    /// @param capabilities The capabilities bitmask granted
+    /// @param identifier Human-readable identifier for the operator
+    /// @param approvedAt Block number when approved
     event OperatorApproved(address indexed operator, uint8 capabilities, string identifier, uint64 approvedAt);
+
+    /// @notice Emitted when an operator is revoked
+    /// @param operator The operator address
+    /// @param revokedAt Block number when revoked
     event OperatorRevoked(address indexed operator, uint64 revokedAt);
+
+    /// @notice Emitted when an operator's capabilities are updated
+    /// @param operator The operator address
+    /// @param oldCapabilities Previous capabilities bitmask
+    /// @param newCapabilities New capabilities bitmask
     event OperatorCapabilitiesUpdated(address indexed operator, uint8 oldCapabilities, uint8 newCapabilities);
 
     // ═══════════════════════════════════════════════════════════════════════════

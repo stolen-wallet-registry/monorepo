@@ -186,6 +186,13 @@ interface IStolenWalletRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when an operator registers a batch of stolen wallets
+    /// @param batchId Unique identifier for this batch
+    /// @param merkleRoot Root of the Merkle tree
+    /// @param operator Address of the operator who submitted
+    /// @param reportedChainId Primary chain for this batch
+    /// @param walletCount Number of wallets in the batch
+    /// @param walletAddresses Array of wallet addresses
+    /// @param chainIds Array of chain IDs for each wallet
     event WalletBatchRegistered(
         bytes32 indexed batchId,
         bytes32 indexed merkleRoot,
@@ -197,15 +204,22 @@ interface IStolenWalletRegistry {
     );
 
     /// @notice Emitted when DAO invalidates an entire wallet batch
+    /// @param batchId The batch that was invalidated
+    /// @param invalidatedBy Address that performed the invalidation
     event WalletBatchInvalidated(bytes32 indexed batchId, address indexed invalidatedBy);
 
     /// @notice Emitted when DAO invalidates a specific wallet entry
+    /// @param entryHash The entry hash that was invalidated
+    /// @param invalidatedBy Address that performed the invalidation
     event WalletEntryInvalidated(bytes32 indexed entryHash, address indexed invalidatedBy);
 
     /// @notice Emitted when DAO reinstates a previously invalidated wallet entry
+    /// @param entryHash The entry hash that was reinstated
+    /// @param reinstatedBy Address that performed the reinstatement
     event WalletEntryReinstated(bytes32 indexed entryHash, address indexed reinstatedBy);
 
     /// @notice Emitted when operator registry address is set
+    /// @param operatorRegistry The new operator registry address
     event OperatorRegistrySet(address indexed operatorRegistry);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -238,7 +252,6 @@ interface IStolenWalletRegistry {
     /// @param v ECDSA signature component
     /// @param r ECDSA signature component
     /// @param s ECDSA signature component
-    // solhint-disable-next-line max-line-length
     function acknowledge(uint256 deadline, uint256 nonce, address owner, uint8 v, bytes32 r, bytes32 s) external payable;
 
     /// @notice Phase 2: Complete the registration after grace period

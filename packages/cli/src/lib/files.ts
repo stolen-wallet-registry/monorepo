@@ -1,6 +1,6 @@
 import { readFile } from 'fs/promises';
 import { parse as parseCSV } from 'csv-parse/sync';
-import { isAddress, type Address, type Hex } from 'viem';
+import { isAddress, isHash, type Address, type Hex } from 'viem';
 import { chainIdToBytes32, caip2ToBytes32 } from './caip.js';
 import type { WalletEntry, TransactionEntry, ContractEntry } from './merkle.js';
 
@@ -80,7 +80,9 @@ export async function parseTransactionFile(
   }
 
   return entries.map((e, i) => {
-    if (!e.txHash.startsWith('0x') || e.txHash.length !== 66) {
+    // Coerce to string for CSV-parsed values and validate with viem's isHash
+    const txHashString = String(e.txHash);
+    if (!isHash(txHashString)) {
       throw new Error(`Invalid tx hash at index ${i}: ${e.txHash}`);
     }
 
@@ -91,7 +93,7 @@ export async function parseTransactionFile(
       : chainIdToBytes32(defaultChainId);
 
     return {
-      txHash: e.txHash as Hex,
+      txHash: txHashString as Hex,
       chainId,
     };
   });

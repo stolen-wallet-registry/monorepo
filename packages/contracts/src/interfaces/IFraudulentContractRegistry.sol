@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 /// @title IFraudulentContractRegistry
+/// @author Stolen Wallet Registry Team
 /// @notice Interface for the operator-only fraudulent contract registry
 /// @dev Only DAO-approved operators can submit batches. No individual submissions.
 interface IFraudulentContractRegistry {
@@ -23,6 +24,13 @@ interface IFraudulentContractRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when an operator registers a batch of fraudulent contracts
+    /// @param batchId Unique identifier for this batch
+    /// @param merkleRoot Root of the Merkle tree
+    /// @param operator Address of the operator who submitted
+    /// @param reportedChainId Primary chain for this batch
+    /// @param contractCount Number of contracts in the batch
+    /// @param contractAddresses Array of contract addresses
+    /// @param chainIds Array of chain IDs for each contract
     event ContractBatchRegistered(
         bytes32 indexed batchId,
         bytes32 indexed merkleRoot,
@@ -34,13 +42,24 @@ interface IFraudulentContractRegistry {
     );
 
     /// @notice Emitted when DAO invalidates an entire batch
+    /// @param batchId The batch that was invalidated
+    /// @param invalidatedBy Address that performed the invalidation
     event BatchInvalidated(bytes32 indexed batchId, address indexed invalidatedBy);
 
     /// @notice Emitted when DAO invalidates a specific entry
+    /// @param entryHash The entry hash that was invalidated
+    /// @param invalidatedBy Address that performed the invalidation
     event EntryInvalidated(bytes32 indexed entryHash, address indexed invalidatedBy);
 
     /// @notice Emitted when DAO reinstates a previously invalidated entry
+    /// @param entryHash The entry hash that was reinstated
+    /// @param reinstatedBy Address that performed the reinstatement
     event EntryReinstated(bytes32 indexed entryHash, address indexed reinstatedBy);
+
+    /// @notice Emitted when operator registry address is updated
+    /// @param oldRegistry Previous operator registry address
+    /// @param newRegistry New operator registry address
+    event OperatorRegistrySet(address indexed oldRegistry, address indexed newRegistry);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
@@ -62,6 +81,8 @@ interface IFraudulentContractRegistry {
     error FraudulentContractRegistry__NotInvalidated();
     error FraudulentContractRegistry__InvalidContractAddress();
     error FraudulentContractRegistry__InvalidChainIdEntry();
+    error FraudulentContractRegistry__BatchSizeExceedsLimit();
+    error FraudulentContractRegistry__UnexpectedEthWithFeesDisabled();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
@@ -143,11 +164,14 @@ interface IFraudulentContractRegistry {
     function quoteRegistration() external view returns (uint256);
 
     /// @notice Get the operator registry address
+    /// @return The operator registry contract address
     function operatorRegistry() external view returns (address);
 
     /// @notice Get the fee manager address
+    /// @return The fee manager contract address
     function feeManager() external view returns (address);
 
     /// @notice Get the registry hub address
+    /// @return The registry hub contract address
     function registryHub() external view returns (address);
 }

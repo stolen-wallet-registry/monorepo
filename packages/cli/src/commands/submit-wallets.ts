@@ -1,4 +1,4 @@
-import { formatEther } from 'viem';
+import { formatEther, zeroAddress } from 'viem';
 import chalk from 'chalk';
 import ora from 'ora';
 import { buildWalletMerkleTree, serializeTree } from '../lib/merkle.js';
@@ -26,7 +26,7 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
     // 1. Load configuration
     const config = getConfig(options.network);
 
-    if (config.contracts.stolenWalletRegistry === '0x0000000000000000000000000000000000000000') {
+    if (config.contracts.stolenWalletRegistry === zeroAddress) {
       throw new Error(`Contract addresses not configured for network: ${options.network}`);
     }
 
@@ -49,12 +49,12 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
 
     console.log(chalk.gray(`Operator address: ${account}`));
 
-    // 5. Quote fee
+    // 5. Quote fee for operator batch registration
     spinner.start('Fetching fee quote...');
     const fee = await publicClient.readContract({
       address: config.contracts.stolenWalletRegistry,
       abi: StolenWalletRegistryABI,
-      functionName: 'quoteOperatorRegistration',
+      functionName: 'quoteOperatorBatchRegistration',
     });
     spinner.succeed(`Fee: ${chalk.yellow(formatEther(fee))} ETH`);
 
@@ -80,7 +80,7 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
       account,
       address: config.contracts.stolenWalletRegistry,
       abi: StolenWalletRegistryABI,
-      functionName: 'registerBatch',
+      functionName: 'registerBatchAsOperator',
       args: [root, reportedChainId, walletAddresses, chainIds],
       value: fee,
     });
@@ -88,7 +88,10 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
 
     // 8. Wait for confirmation
     spinner.start('Waiting for confirmation...');
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash,
+      timeout: 120_000, // 2 minute timeout
+    });
     spinner.succeed(`Confirmed in block ${receipt.blockNumber}`);
 
     // 9. Save tree for verification

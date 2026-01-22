@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 /// @title RegistryCapabilities
+/// @author Stolen Wallet Registry Team
 /// @notice Shared capability bit constants for operator permissions
 /// @dev Single source of truth for capability bits used by:
 ///      - OperatorRegistry (defines which capabilities exist)

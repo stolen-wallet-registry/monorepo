@@ -29,10 +29,10 @@ contract WalletSoulbound is BaseSoulbound {
     /// @notice Reference to the Stolen Wallet Registry
     IStolenWalletRegistry public immutable registry;
 
-    /// @dev Tracks which wallet each token represents
+    /// @notice Tracks which wallet each token represents
     mapping(uint256 tokenId => address wallet) public tokenWallet;
 
-    /// @dev Tracks if a wallet has already minted (1 per wallet enforcement)
+    /// @notice Tracks if a wallet has already minted (1 per wallet enforcement)
     mapping(address wallet => bool) public hasMinted;
 
     /// @dev Reverse mapping for O(1) token lookup by wallet
@@ -65,6 +65,7 @@ contract WalletSoulbound is BaseSoulbound {
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Initialize the wallet soulbound token contract
     /// @param _registry Address of the StolenWalletRegistry contract
     /// @param _translations Address of the TranslationRegistry contract
     /// @param _feeCollector Address to receive fees

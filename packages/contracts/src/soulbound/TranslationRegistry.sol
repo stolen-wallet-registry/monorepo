@@ -61,9 +61,11 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when a new language is added
+    /// @param languageCode The ISO 639-1 language code added
     event LanguageAdded(string indexed languageCode);
 
     /// @notice Emitted when an existing language is updated
+    /// @param languageCode The ISO 639-1 language code updated
     event LanguageUpdated(string indexed languageCode);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -224,7 +226,9 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
     // INTERNAL FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Internal function to add a language pack
+    /// @notice Internal function to add a language pack
+    /// @param languageCode The ISO 639-1 language code
+    /// @param pack The language pack containing all translations
     function _addLanguageInternal(string memory languageCode, LanguagePack memory pack) internal {
         _languages[languageCode] = pack;
         _supportedLanguages.push(languageCode);

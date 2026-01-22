@@ -26,6 +26,7 @@ library SVGRenderer {
     /// @param domain The domain to display (e.g., "stolenwallet.xyz")
     /// @param langCodes Array of ISO 639-1 language codes
     /// @param subtitles Array of subtitle translations (parallel to langCodes)
+    /// @return The complete SVG string
     function renderWalletSoulbound(
         address wallet,
         uint256 tokenId,
@@ -53,6 +54,7 @@ library SVGRenderer {
     /// @param domain The domain to display (e.g., "stolenwallet.xyz")
     /// @param langCodes Array of ISO 639-1 language codes
     /// @param supportSubtitles Array of support subtitle translations (parallel to langCodes)
+    /// @return The complete SVG string
     function renderSupportSoulbound(
         address supporter,
         uint256 tokenId,
@@ -88,9 +90,10 @@ library SVGRenderer {
         return "</svg>";
     }
 
-    /// @dev Defines a single rectangular border path for text to follow
-    /// @notice Path positioned in the gutter between outer edge (0) and inner rect (20)
-    /// @notice Path at y=12 gives 12px from edge and 8px from inner rect
+    /// @notice Defines a single rectangular border path for text to follow
+    /// @dev Path positioned in the gutter between outer edge (0) and inner rect (20)
+    /// @dev Path at y=12 gives 12px from edge and 8px from inner rect
+    /// @return SVG defs element with border path
     function _defs() private pure returns (string memory) {
         return string(
             abi.encodePacked(
@@ -103,8 +106,9 @@ library SVGRenderer {
         );
     }
 
-    /// @dev Black background with inner rectangle (both have rounded corners)
-    /// @notice Outer rect has white border for visibility on dark backgrounds
+    /// @notice Black background with inner rectangle (both have rounded corners)
+    /// @dev Outer rect has white border for visibility on dark backgrounds
+    /// @return SVG rect elements for background
     function _background() private pure returns (string memory) {
         return string(
             abi.encodePacked(
@@ -117,6 +121,9 @@ library SVGRenderer {
 
     /// @dev Animated text on BOTH sides of the border using single path with 50% offset
     /// @notice Creates seamless continuous loop - two textPaths on same path, opposite sides
+    /// @param text1 First text content (e.g., domain)
+    /// @param text2 Second text content (e.g., "STOLEN WALLET")
+    /// @return SVG markup for animated border text
     function _animatedBorderDual(string memory text1, string memory text2) private pure returns (string memory) {
         // Text content with separators (NO trailing dash)
         string memory content1 = string(abi.encodePacked(text1, " - ", text1, " - ", text1));
@@ -145,6 +152,12 @@ library SVGRenderer {
     /// @dev Wallet content with multilingual subtitle
     /// @notice English "STOLEN WALLET" + "Signed as stolen" ALWAYS displayed (no systemLanguage)
     /// @notice Other language translations shown below via <switch> with systemLanguage
+    /// @param wallet The wallet address
+    /// @param tokenId The token ID
+    /// @param domain The domain to display
+    /// @param langCodes Array of ISO 639-1 language codes
+    /// @param subtitles Array of subtitle translations
+    /// @return SVG markup for wallet content
     function _walletContentMultilang(
         address wallet,
         uint256 tokenId,
@@ -222,6 +235,9 @@ library SVGRenderer {
     /// @dev Build SVG <switch> element with systemLanguage for each translation
     /// @notice Shows translation below English title ONLY for non-English browsers
     /// @notice English browsers see nothing here (empty fallback)
+    /// @param langCodes Array of ISO 639-1 language codes
+    /// @param subtitles Array of subtitle translations
+    /// @return SVG switch element markup
     function _buildLanguageSwitch(string[] memory langCodes, string[] memory subtitles)
         private
         pure
@@ -270,6 +286,13 @@ library SVGRenderer {
     /// @dev Support content with multilingual subtitle
     /// @notice English "SUPPORTER" + "Registry Supporter" ALWAYS displayed (no systemLanguage)
     /// @notice Other language translations shown below via <switch> with systemLanguage
+    /// @param supporter The supporter address
+    /// @param tokenId The token ID
+    /// @param donation The formatted donation string
+    /// @param domain The domain to display
+    /// @param langCodes Array of ISO 639-1 language codes
+    /// @param supportSubtitles Array of support subtitle translations
+    /// @return SVG markup for support content
     function _supportContentMultilang(
         address supporter,
         uint256 tokenId,
@@ -355,6 +378,9 @@ library SVGRenderer {
 
     /// @dev Build SVG <switch> element for support soulbound translations
     /// @notice Shows translation below English subtitle ONLY for non-English browsers
+    /// @param langCodes Array of ISO 639-1 language codes
+    /// @param supportSubtitles Array of support subtitle translations
+    /// @return SVG switch element markup
     function _buildSupportLanguageSwitch(string[] memory langCodes, string[] memory supportSubtitles)
         private
         pure
@@ -406,6 +432,8 @@ library SVGRenderer {
 
     /// @dev Format wei to ETH string with up to 4 decimal places
     /// @notice Preserves leading zeros (e.g., 0.05 ETH displays correctly, not 0.5)
+    /// @param weiAmount The amount in wei to format
+    /// @return The formatted ETH string (e.g., "0.05 ETH")
     function _formatEther(uint256 weiAmount) private pure returns (string memory) {
         uint256 eth = weiAmount / 1e18;
         uint256 remainder = weiAmount % 1e18;

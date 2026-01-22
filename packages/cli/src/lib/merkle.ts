@@ -55,8 +55,12 @@ export function getWalletProof(
   address: Address,
   chainId: Hex
 ): Hex[] {
+  // Normalize inputs for case-insensitive comparison
+  const normalizedAddress = address.toLowerCase();
+  const normalizedChainId = chainId.toLowerCase();
+
   for (const [i, v] of tree.entries()) {
-    if (v[0].toLowerCase() === address.toLowerCase() && v[1] === chainId) {
+    if (v[0].toLowerCase() === normalizedAddress && v[1].toLowerCase() === normalizedChainId) {
       return tree.getProof(i) as Hex[];
     }
   }
@@ -90,8 +94,12 @@ export function getTransactionProof(
   txHash: Hex,
   chainId: Hex
 ): Hex[] {
+  // Normalize inputs for case-insensitive comparison
+  const normalizedTxHash = txHash.toLowerCase();
+  const normalizedChainId = chainId.toLowerCase();
+
   for (const [i, v] of tree.entries()) {
-    if (v[0] === txHash && v[1] === chainId) {
+    if (v[0].toLowerCase() === normalizedTxHash && v[1].toLowerCase() === normalizedChainId) {
       return tree.getProof(i) as Hex[];
     }
   }
@@ -123,8 +131,12 @@ export function getContractProof(
   address: Address,
   chainId: Hex
 ): Hex[] {
+  // Normalize inputs for case-insensitive comparison
+  const normalizedAddress = address.toLowerCase();
+  const normalizedChainId = chainId.toLowerCase();
+
   for (const [i, v] of tree.entries()) {
-    if (v[0].toLowerCase() === address.toLowerCase() && v[1] === chainId) {
+    if (v[0].toLowerCase() === normalizedAddress && v[1].toLowerCase() === normalizedChainId) {
       return tree.getProof(i) as Hex[];
     }
   }

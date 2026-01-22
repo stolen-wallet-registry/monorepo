@@ -1,7 +1,6 @@
 import chalk from 'chalk';
 import ora from 'ora';
-import { isAddress, type Address, type Hex } from 'viem';
-import { createClients } from '../lib/client.js';
+import { createPublicClient, http, isAddress, zeroAddress, type Address, type Hex } from 'viem';
 import { getConfig } from '../lib/config.js';
 import { chainIdToBytes32 } from '../lib/caip.js';
 import { FraudulentContractRegistryABI, StolenWalletRegistryABI } from '@swr/abis';
@@ -25,11 +24,11 @@ export async function verify(options: VerifyOptions): Promise<void> {
     const config = getConfig(options.network);
     const chainIdBytes = chainIdToBytes32(BigInt(options.chainId));
 
-    // Create a read-only client
-    const { publicClient } = createClients(
-      config,
-      '0x0000000000000000000000000000000000000000000000000000000000000001' as `0x${string}`
-    );
+    // Create a read-only client (no private key needed)
+    const publicClient = createPublicClient({
+      chain: config.chain,
+      transport: http(config.rpcUrl),
+    });
 
     spinner.start(`Checking ${options.type} registry...`);
 
@@ -38,18 +37,16 @@ export async function verify(options: VerifyOptions): Promise<void> {
     let registryName: string;
 
     switch (options.type) {
-      case 'wallet':
-        if (
-          config.contracts.stolenWalletRegistry === '0x0000000000000000000000000000000000000000'
-        ) {
+      case 'wallet': {
+        if (config.contracts.stolenWalletRegistry === zeroAddress) {
           throw new Error('Wallet registry not configured for this network');
         }
 
-        // First check if wallet is registered via legacy method
+        // Check if wallet is registered via individual registration
         const isRegistered = await publicClient.readContract({
           address: config.contracts.stolenWalletRegistry,
           abi: StolenWalletRegistryABI,
-          functionName: 'isWalletRegistered',
+          functionName: 'isRegistered',
           args: [options.address as Address],
         });
 
@@ -57,14 +54,14 @@ export async function verify(options: VerifyOptions): Promise<void> {
         entryHash = await publicClient.readContract({
           address: config.contracts.stolenWalletRegistry,
           abi: StolenWalletRegistryABI,
-          functionName: 'computeEntryHash',
+          functionName: 'computeWalletEntryHash',
           args: [options.address as Address, chainIdBytes],
         });
 
         isInvalidated = await publicClient.readContract({
           address: config.contracts.stolenWalletRegistry,
           abi: StolenWalletRegistryABI,
-          functionName: 'isEntryInvalidated',
+          functionName: 'isWalletEntryInvalidated',
           args: [entryHash],
         });
 
@@ -82,12 +79,10 @@ export async function verify(options: VerifyOptions): Promise<void> {
           `  Entry Invalidated: ${isInvalidated ? chalk.yellow('Yes') : chalk.green('No')}`
         );
         break;
+      }
 
-      case 'contract':
-        if (
-          config.contracts.fraudulentContractRegistry ===
-          '0x0000000000000000000000000000000000000000'
-        ) {
+      case 'contract': {
+        if (config.contracts.fraudulentContractRegistry === zeroAddress) {
           throw new Error('Contract registry not configured for this network');
         }
 
@@ -116,6 +111,7 @@ export async function verify(options: VerifyOptions): Promise<void> {
           `  Entry Invalidated: ${isInvalidated ? chalk.yellow('Yes') : chalk.green('No')}`
         );
         break;
+      }
 
       default:
         throw new Error(`Unknown registry type: ${options.type}`);

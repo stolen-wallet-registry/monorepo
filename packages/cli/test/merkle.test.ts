@@ -145,7 +145,8 @@ describe('Merkle Tree', () => {
         '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd' as Address,
         baseChainId
       );
-      expect(proof.length).toBeGreaterThanOrEqual(0);
+      // For a single-entry tree, proof may be empty but retrieval should succeed
+      expect(Array.isArray(proof)).toBe(true);
     });
   });
 });

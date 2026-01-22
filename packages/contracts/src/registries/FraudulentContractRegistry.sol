@@ -94,6 +94,7 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
         if (merkleRoot == bytes32(0)) revert FraudulentContractRegistry__InvalidMerkleRoot();
         if (reportedChainId == bytes32(0)) revert FraudulentContractRegistry__InvalidChainId();
         if (contractAddresses.length == 0) revert FraudulentContractRegistry__InvalidContractCount();
+        if (contractAddresses.length > 1000) revert FraudulentContractRegistry__BatchSizeExceedsLimit();
         if (contractAddresses.length != chainIds.length) revert FraudulentContractRegistry__ArrayLengthMismatch();
 
         // Validate each entry - reject zero addresses and zero chainIds
@@ -135,10 +136,15 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
             chainIds
         );
 
-        // Forward fee to RegistryHub
-        if (registryHub != address(0) && msg.value > 0) {
-            (bool success,) = registryHub.call{ value: msg.value }("");
-            if (!success) revert FraudulentContractRegistry__FeeForwardFailed();
+        // Forward fee to RegistryHub or revert if ETH would be trapped
+        if (msg.value > 0) {
+            if (feeManager == address(0) && registryHub == address(0)) {
+                revert FraudulentContractRegistry__UnexpectedEthWithFeesDisabled();
+            }
+            if (registryHub != address(0)) {
+                (bool success,) = registryHub.call{ value: msg.value }("");
+                if (!success) revert FraudulentContractRegistry__FeeForwardFailed();
+            }
         }
     }
 
@@ -242,6 +248,10 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
 
     /// @notice Compute batch ID from parameters
     /// @dev Registry-specific: includes reportedChainId for batch uniqueness across chains
+    /// @param merkleRoot The merkle root of the batch
+    /// @param operator The operator address
+    /// @param reportedChainId The reported chain ID
+    /// @return The computed batch ID
     function _computeBatchId(bytes32 merkleRoot, address operator, bytes32 reportedChainId)
         internal
         pure
@@ -252,10 +262,14 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
 
     /// @notice Compute entry hash (Merkle leaf) for a contract address
     /// @dev Registry-specific: uses OZ StandardMerkleTree leaf format
+    /// @param contractAddress The contract address
+    /// @param chainId The chain ID
+    /// @return The computed entry hash
     function _computeEntryHash(address contractAddress, bytes32 chainId) internal pure returns (bytes32) {
         return MerkleRootComputation.hashLeaf(contractAddress, chainId);
     }
 
+    /// @notice Validate that sufficient fee was provided
     function _validateFeePayment() internal view {
         if (feeManager != address(0)) {
             uint256 requiredFee = IFeeManager(feeManager).operatorBatchFeeWei();
@@ -266,6 +280,9 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
     /// @notice Compute Merkle root from contract addresses and chain IDs
     /// @dev Uses OZ StandardMerkleTree leaf format, then delegates to
     ///      MerkleRootComputation library for tree building
+    /// @param contractAddresses Array of contract addresses
+    /// @param chainIds Array of chain IDs
+    /// @return The computed merkle root
     function _computeMerkleRoot(address[] calldata contractAddresses, bytes32[] calldata chainIds)
         internal
         pure

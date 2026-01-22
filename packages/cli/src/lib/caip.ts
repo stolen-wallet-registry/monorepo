@@ -40,17 +40,26 @@ export function caip2ToBytes32(caip2: string): Hex {
 
 /**
  * Convert bytes32 back to CAIP-2 string.
+ * @throws If chainId exceeds Number.MAX_SAFE_INTEGER
  */
 export function bytes32ToCaip2(bytes32: Hex): string {
   const chainId = BigInt(bytes32);
+  if (chainId > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error(`Chain ID ${chainId} exceeds safe integer range`);
+  }
   return toCAIP2(Number(chainId));
 }
 
 /**
  * Get display name for a chain from its numeric ID.
+ * @throws If chainId exceeds Number.MAX_SAFE_INTEGER
  */
 export function getChainName(chainId: bigint | number): string {
-  const caip2 = toCAIP2(Number(chainId));
+  const numericId = typeof chainId === 'bigint' ? chainId : BigInt(chainId);
+  if (numericId > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error(`Chain ID ${numericId} exceeds safe integer range`);
+  }
+  const caip2 = toCAIP2(Number(numericId));
   return getCAIP2ChainName(caip2);
 }
 

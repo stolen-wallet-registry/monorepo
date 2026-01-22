@@ -39,12 +39,23 @@ program
       process.exit(1);
     }
 
+    const chainId = Number(options.chainId);
+    if (!Number.isInteger(chainId) || chainId <= 0) {
+      console.error(chalk.red(`Error: Invalid chain ID: ${options.chainId}`));
+      process.exit(1);
+    }
+
+    if (!/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
+      console.error(chalk.red('Error: Private key must be 32-byte hex with 0x prefix'));
+      process.exit(1);
+    }
+
     try {
       await submitContracts({
         file: options.file,
         network: options.network,
         privateKey,
-        chainId: parseInt(options.chainId),
+        chainId,
         outputDir: options.outputDir,
         dryRun: options.dryRun,
       });
@@ -72,12 +83,23 @@ program
       process.exit(1);
     }
 
+    const chainId = Number(options.chainId);
+    if (!Number.isInteger(chainId) || chainId <= 0) {
+      console.error(chalk.red(`Error: Invalid chain ID: ${options.chainId}`));
+      process.exit(1);
+    }
+
+    if (!/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
+      console.error(chalk.red('Error: Private key must be 32-byte hex with 0x prefix'));
+      process.exit(1);
+    }
+
     try {
       await submitWallets({
         file: options.file,
         network: options.network,
         privateKey,
-        chainId: parseInt(options.chainId),
+        chainId,
         outputDir: options.outputDir,
         dryRun: options.dryRun,
       });
@@ -105,12 +127,23 @@ program
       process.exit(1);
     }
 
+    const chainId = Number(options.chainId);
+    if (!Number.isInteger(chainId) || chainId <= 0) {
+      console.error(chalk.red(`Error: Invalid chain ID: ${options.chainId}`));
+      process.exit(1);
+    }
+
+    if (!/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
+      console.error(chalk.red('Error: Private key must be 32-byte hex with 0x prefix'));
+      process.exit(1);
+    }
+
     try {
       await submitTransactions({
         file: options.file,
         network: options.network,
         privateKey,
-        chainId: parseInt(options.chainId),
+        chainId,
         outputDir: options.outputDir,
         dryRun: options.dryRun,
       });

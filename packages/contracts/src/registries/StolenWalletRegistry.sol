@@ -525,6 +525,10 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
 
     /// @notice Compute batch ID from parameters
     /// @dev Registry-specific: includes reportedChainId for batch uniqueness across chains
+    /// @param merkleRoot The merkle root
+    /// @param operator The operator address
+    /// @param reportedChainId The reported chain ID
+    /// @return The computed batch ID
     function _computeWalletBatchId(bytes32 merkleRoot, address operator, bytes32 reportedChainId)
         internal
         pure
@@ -535,6 +539,9 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
 
     /// @notice Compute entry hash (Merkle leaf) for a wallet
     /// @dev Registry-specific: uses OZ StandardMerkleTree leaf format
+    /// @param wallet The wallet address
+    /// @param chainId The chain ID
+    /// @return The computed entry hash
     function _computeWalletEntryHash(address wallet, bytes32 chainId) internal pure returns (bytes32) {
         return MerkleRootComputation.hashLeaf(wallet, chainId);
     }
@@ -542,6 +549,9 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
     /// @notice Compute Merkle root from wallet addresses and chain IDs
     /// @dev Uses OZ StandardMerkleTree leaf format, then delegates to
     ///      MerkleRootComputation library for tree building
+    /// @param wallets Array of wallet addresses
+    /// @param walletChainIds Array of chain IDs
+    /// @return The computed merkle root
     function _computeWalletMerkleRoot(address[] calldata wallets, bytes32[] calldata walletChainIds)
         internal
         pure
