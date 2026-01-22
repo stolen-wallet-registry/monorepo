@@ -51,7 +51,7 @@
     "relay:setup": "pnpm --filter @swr/relay setup-keys",
     "indexer": "pnpm --filter @swr/indexer dev",
     "indexer:start": "pnpm --filter @swr/indexer start",
-    "indexer:reset": "pnpm --filter @swr/indexer db:reset",
+    "indexer:wipe": "pnpm --filter @swr/indexer db:wipe",
     "indexer:codegen": "pnpm --filter @swr/indexer codegen",
     "changeset": "changeset",
     "version": "changeset version",

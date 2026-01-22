@@ -80,6 +80,14 @@ contract SeedOperatorData is Script {
     bytes32 constant STOLEN_TX_4 = 0xbbbb000000000000000000000000000000000000000000000000000000000004;
 
     function run() external {
+        // Guard: This script uses hardcoded anvil keys - only run on local chains
+        if (block.chainid != 31_337 && block.chainid != 31_338) {
+            console2.log("ERROR: SeedOperatorData uses hardcoded anvil keys.");
+            console2.log("This script is only intended for local development (chain IDs 31337/31338).");
+            console2.log("Current chain ID:", block.chainid);
+            return;
+        }
+
         // Load contract addresses (env vars or defaults)
         address operatorRegistryAddr = vm.envOr("OPERATOR_REGISTRY", DEFAULT_OPERATOR_REGISTRY);
         address walletRegistryAddr = vm.envOr("STOLEN_WALLET_REGISTRY", DEFAULT_STOLEN_WALLET_REGISTRY);
@@ -223,7 +231,8 @@ contract SeedOperatorData is Script {
 
     function _submitTransactionBatches(StolenTransactionRegistry txRegistry) internal {
         // Use operator batch fee from FeeManager (StolenTransactionRegistry doesn't have dedicated method)
-        FeeManager feeManager = FeeManager(DEFAULT_FEE_MANAGER);
+        address feeManagerAddr = vm.envOr("FEE_MANAGER", DEFAULT_FEE_MANAGER);
+        FeeManager feeManager = FeeManager(feeManagerAddr);
         uint256 fee = feeManager.operatorBatchFeeWei();
         console2.log("  Operator batch fee (wei):", fee);
         console2.log("");
@@ -371,6 +380,7 @@ contract SeedOperatorData is Script {
         returns (bytes32)
     {
         uint256 length = addresses.length;
+        require(length == chainIds.length, "SeedOperatorData: addresses and chainIds length mismatch");
         if (length == 0) return bytes32(0);
 
         bytes32[] memory leaves = new bytes32[](length);
@@ -388,6 +398,7 @@ contract SeedOperatorData is Script {
         returns (bytes32)
     {
         uint256 length = txHashes.length;
+        require(length == chainIds.length, "SeedOperatorData: txHashes and chainIds length mismatch");
         if (length == 0) return bytes32(0);
 
         bytes32[] memory leaves = new bytes32[](length);

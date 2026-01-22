@@ -543,7 +543,7 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // IFraudulentContractRegistry errors (12)
+  // IFraudulentContractRegistry errors (18)
   // ═══════════════════════════════════════════════════════════════════════════
 
   '0xfa354622': {
@@ -602,7 +602,7 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
   '0xa58399f9': {
     name: 'FraudulentContractRegistry__BatchNotFound',
     message: 'Batch not found.',
-    action: 'The specified batch ID does not exist.',
+    action: 'Please verify the batch ID and try again.',
   },
 
   '0xee5affb2': {
@@ -614,6 +614,42 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
     name: 'FraudulentContractRegistry__NotInvalidated',
     message: 'This entry is not invalidated.',
     action: 'Only invalidated entries can be reinstated.',
+  },
+
+  '0x7020d8c8': {
+    name: 'FraudulentContractRegistry__InvalidOperatorRegistry',
+    message: 'Invalid operator registry address.',
+    action: 'Contact the DAO to verify contract configuration.',
+  },
+
+  '0x3e81b8ca': {
+    name: 'FraudulentContractRegistry__MissingRegistryHub',
+    message: 'Registry hub address not configured.',
+    action: 'Contact the DAO to verify contract configuration.',
+  },
+
+  '0x54689933': {
+    name: 'FraudulentContractRegistry__InvalidContractAddress',
+    message: 'Invalid contract address provided.',
+    action: 'Ensure the address is a valid Ethereum address.',
+  },
+
+  '0x4b2858dd': {
+    name: 'FraudulentContractRegistry__InvalidChainIdEntry',
+    message: 'Invalid chain ID in entry.',
+    action: 'Ensure each entry has a valid chain ID.',
+  },
+
+  '0x86eaeab5': {
+    name: 'FraudulentContractRegistry__BatchSizeExceedsLimit',
+    message: 'Batch size exceeds the maximum allowed.',
+    action: 'Split your submission into smaller batches.',
+  },
+
+  '0xf53a0b5c': {
+    name: 'FraudulentContractRegistry__UnexpectedEthWithFeesDisabled',
+    message: 'ETH sent but fees are disabled.',
+    action: 'Do not send ETH when fees are disabled.',
   },
 };
 

@@ -2,6 +2,7 @@ import { ponder } from 'ponder:registry';
 import {
   stolenWallet,
   walletAcknowledgement,
+  walletBatch,
   transactionBatch,
   transactionInBatch,
   transactionBatchAcknowledgement,
@@ -68,9 +69,12 @@ type StatsDelta = {
   walletSoulbounds?: number;
   supportSoulbounds?: number;
   supportDonations?: bigint;
-  // New fields for operators and fraudulent contracts
+  // Operator registry
   totalOperators?: number;
   activeOperators?: number;
+  // Operator batch submissions
+  totalWalletBatches?: number;
+  totalOperatorTransactionBatches?: number;
   totalContractBatches?: number;
   totalFraudulentContracts?: number;
   invalidatedContractBatches?: number;
@@ -102,6 +106,9 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
       totalSupportDonations: existing.totalSupportDonations + (delta.supportDonations ?? 0n),
       totalOperators: existing.totalOperators + (delta.totalOperators ?? 0),
       activeOperators: existing.activeOperators + (delta.activeOperators ?? 0),
+      totalWalletBatches: existing.totalWalletBatches + (delta.totalWalletBatches ?? 0),
+      totalOperatorTransactionBatches:
+        existing.totalOperatorTransactionBatches + (delta.totalOperatorTransactionBatches ?? 0),
       totalContractBatches: existing.totalContractBatches + (delta.totalContractBatches ?? 0),
       totalFraudulentContracts:
         existing.totalFraudulentContracts + (delta.totalFraudulentContracts ?? 0),
@@ -129,6 +136,8 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
       totalSupportDonations: delta.supportDonations ?? 0n,
       totalOperators: delta.totalOperators ?? 0,
       activeOperators: delta.activeOperators ?? 0,
+      totalWalletBatches: delta.totalWalletBatches ?? 0,
+      totalOperatorTransactionBatches: delta.totalOperatorTransactionBatches ?? 0,
       totalContractBatches: delta.totalContractBatches ?? 0,
       totalFraudulentContracts: delta.totalFraudulentContracts ?? 0,
       invalidatedContractBatches: delta.invalidatedContractBatches ?? 0,
@@ -208,6 +217,81 @@ ponder.on('StolenWalletRegistry:WalletRegistered', async ({ event, context }) =>
     {
       walletRegistrations: 1,
       sponsored: isSponsored ? 1 : 0,
+    },
+    event.block.timestamp
+  );
+});
+
+// WalletBatchRegistered event - operator batch submission
+ponder.on('StolenWalletRegistry:WalletBatchRegistered', async ({ event, context }) => {
+  const {
+    batchId,
+    merkleRoot,
+    operator: operatorAddress,
+    reportedChainId,
+    walletCount,
+    walletAddresses,
+    chainIds,
+  } = event.args;
+  const { db } = context;
+
+  // Resolve the reported chain ID
+  const reportedChainCAIP2 = resolveChainIdHash(reportedChainId);
+
+  // Insert batch record
+  await db
+    .insert(walletBatch)
+    .values({
+      id: batchId,
+      merkleRoot,
+      operator: operatorAddress.toLowerCase() as Address,
+      reportedChainIdHash: reportedChainId,
+      reportedChainCAIP2,
+      walletCount: Number(walletCount),
+      registeredAt: event.block.timestamp,
+      registeredAtBlock: event.block.number,
+      transactionHash: event.transaction.hash,
+    })
+    .onConflictDoNothing();
+
+  // Insert individual wallets from event data
+  for (let i = 0; i < walletAddresses.length; i++) {
+    const walletAddr = walletAddresses[i];
+    const chainIdHash = chainIds[i];
+
+    // Skip if array values are missing
+    if (!walletAddr || !chainIdHash) continue;
+
+    // Resolve chain ID hash to CAIP-2
+    const caip2ChainId = resolveChainIdHash(chainIdHash);
+    const numericChainId = caip2ChainId ? caip2ToNumericChainId(caip2ChainId) : null;
+
+    const walletAddress = walletAddr.toLowerCase() as Address;
+
+    // Create stolen wallet record with batch reference
+    await db
+      .insert(stolenWallet)
+      .values({
+        id: walletAddress,
+        caip10: numericChainId
+          ? toCAIP10(walletAddress, numericChainId)
+          : `unknown:${chainIdHash}:${walletAddress}`,
+        registeredAt: event.block.timestamp,
+        registeredAtBlock: event.block.number,
+        transactionHash: event.transaction.hash,
+        isSponsored: false, // Operator batches are not "sponsored" in the relay sense
+        batchId,
+        operator: operatorAddress.toLowerCase() as Address,
+      })
+      .onConflictDoNothing();
+  }
+
+  // Update stats
+  await updateGlobalStats(
+    db,
+    {
+      walletRegistrations: Number(walletCount),
+      totalWalletBatches: 1,
     },
     event.block.timestamp
   );
@@ -348,6 +432,85 @@ ponder.on('StolenTransactionRegistry:OperatorVerified', async ({ event, context 
     verifyingOperator: operator.toLowerCase() as Address,
   });
 });
+
+// TransactionBatchRegisteredByOperator event - operator direct batch submission
+ponder.on(
+  'StolenTransactionRegistry:TransactionBatchRegisteredByOperator',
+  async ({ event, context }) => {
+    const {
+      batchId,
+      merkleRoot,
+      operator: operatorAddress,
+      reportedChainId,
+      transactionCount,
+      transactionHashes,
+      chainIds,
+    } = event.args;
+    const { db } = context;
+
+    // Resolve the reported chain ID
+    const reportedChainCAIP2 = resolveChainIdHash(reportedChainId);
+
+    // Create batch record - operator batches are automatically operator-verified
+    await db
+      .insert(transactionBatch)
+      .values({
+        id: batchId,
+        merkleRoot,
+        reporter: operatorAddress.toLowerCase() as Address,
+        reportedChainIdHash: reportedChainId,
+        reportedChainCAIP2,
+        transactionCount: Number(transactionCount),
+        isSponsored: false, // Operator batches skip the sponsor flow
+        isOperatorVerified: true, // Operator submissions are auto-verified
+        verifyingOperator: operatorAddress.toLowerCase() as Address,
+        registeredAt: event.block.timestamp,
+        registeredAtBlock: event.block.number,
+        transactionHash: event.transaction.hash,
+      })
+      .onConflictDoNothing();
+
+    // Index individual transactions from event data
+    for (let i = 0; i < transactionHashes.length; i++) {
+      const txHash = transactionHashes[i];
+      const chainIdHash = chainIds[i];
+
+      // Skip if array values are missing
+      if (!txHash || !chainIdHash) continue;
+
+      // Resolve chain ID hash to CAIP-2
+      const caip2ChainId = resolveChainIdHash(chainIdHash);
+      const numericChainId = caip2ChainId ? caip2ToNumericChainId(caip2ChainId) : null;
+
+      // Composite key: txHash + resolved CAIP-2
+      const compositeId = `${txHash}-${caip2ChainId ?? chainIdHash}`;
+
+      await db
+        .insert(transactionInBatch)
+        .values({
+          id: compositeId,
+          txHash,
+          chainIdHash,
+          caip2ChainId: caip2ChainId ?? `unknown:${chainIdHash}`,
+          numericChainId,
+          batchId,
+          reporter: operatorAddress.toLowerCase() as Address,
+          reportedAt: event.block.timestamp,
+        })
+        .onConflictDoNothing();
+    }
+
+    // Update stats
+    await updateGlobalStats(
+      db,
+      {
+        totalOperatorTransactionBatches: 1,
+        transactionsReported: Number(transactionCount),
+      },
+      event.block.timestamp
+    );
+  }
+);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // REGISTRY HUB (Cross-Chain Registrations)
@@ -554,11 +717,29 @@ ponder.on('OperatorRegistry:OperatorApproved', async ({ event, context }) => {
   const { db } = context;
 
   const capabilitiesNum = Number(capabilities);
+  const operatorId = operatorAddress.toLowerCase() as Address;
+
+  // Check if operator already exists to avoid double-counting stats
+  const existing = await db.find(operator, { id: operatorId });
+
+  // Compute stat deltas based on prior state
+  let totalOperatorsDelta = 0;
+  let activeOperatorsDelta = 0;
+
+  if (!existing) {
+    // New operator: increment both counters
+    totalOperatorsDelta = 1;
+    activeOperatorsDelta = 1;
+  } else if (!existing.approved) {
+    // Previously revoked operator being re-approved: only increment active
+    activeOperatorsDelta = 1;
+  }
+  // If already approved, no stats change needed
 
   await db
     .insert(operator)
     .values({
-      id: operatorAddress.toLowerCase() as Address,
+      id: operatorId,
       identifier,
       capabilities: capabilitiesNum,
       approved: true,
@@ -581,15 +762,17 @@ ponder.on('OperatorRegistry:OperatorApproved', async ({ event, context }) => {
       canSubmitContract: (capabilitiesNum & 0x04) !== 0,
     });
 
-  // Update stats
-  await updateGlobalStats(
-    db,
-    {
-      totalOperators: 1,
-      activeOperators: 1,
-    },
-    event.block.timestamp
-  );
+  // Update stats with computed deltas
+  if (totalOperatorsDelta !== 0 || activeOperatorsDelta !== 0) {
+    await updateGlobalStats(
+      db,
+      {
+        totalOperators: totalOperatorsDelta,
+        activeOperators: activeOperatorsDelta,
+      },
+      event.block.timestamp
+    );
+  }
 });
 
 // OperatorRevoked event
@@ -597,19 +780,27 @@ ponder.on('OperatorRegistry:OperatorRevoked', async ({ event, context }) => {
   const { operator: operatorAddress, revokedAt } = event.args;
   const { db } = context;
 
-  await db.update(operator, { id: operatorAddress.toLowerCase() as Address }).set({
+  const operatorId = operatorAddress.toLowerCase() as Address;
+
+  // Check if operator was actually approved before decrementing stats
+  const existing = await db.find(operator, { id: operatorId });
+  const wasApproved = existing?.approved ?? false;
+
+  await db.update(operator, { id: operatorId }).set({
     approved: false,
     revokedAt: BigInt(revokedAt),
   });
 
-  // Update stats - decrease active operators
-  await updateGlobalStats(
-    db,
-    {
-      activeOperators: -1,
-    },
-    event.block.timestamp
-  );
+  // Only decrement active operators if they were actually approved
+  if (wasApproved) {
+    await updateGlobalStats(
+      db,
+      {
+        activeOperators: -1,
+      },
+      event.block.timestamp
+    );
+  }
 });
 
 // OperatorCapabilitiesUpdated event
@@ -694,10 +885,15 @@ ponder.on('FraudulentContractRegistry:ContractBatchRegistered', async ({ event, 
     // Composite key: contractAddress-chainIdHash
     const compositeId = `${contractAddr.toLowerCase()}-${chainIdHash}`;
 
+    // Compute entryHash for linking with invalidation events
+    // Matches contract: keccak256(abi.encode(contractAddress, chainId))
+    const entryHash = keccak256(encodePacked(['address', 'bytes32'], [contractAddr, chainIdHash]));
+
     await db
       .insert(fraudulentContract)
       .values({
         id: compositeId,
+        entryHash,
         contractAddress: contractAddr.toLowerCase() as Address,
         chainIdHash,
         caip2ChainId: caip2ChainId ?? `unknown:${chainIdHash}`,
@@ -705,7 +901,6 @@ ponder.on('FraudulentContractRegistry:ContractBatchRegistered', async ({ event, 
         batchId,
         operator: operatorAddress.toLowerCase() as Address,
         reportedAt: event.block.timestamp,
-        entryInvalidated: false,
       })
       .onConflictDoNothing();
   }
@@ -742,6 +937,8 @@ ponder.on('FraudulentContractRegistry:BatchInvalidated', async ({ event, context
 });
 
 // EntryInvalidated event
+// Note: fraudulentContract.entryHash can be used to join with this table
+// to determine invalidation status. The invalidatedEntry table is the source of truth.
 ponder.on('FraudulentContractRegistry:EntryInvalidated', async ({ event, context }) => {
   const { entryHash, invalidatedBy } = event.args;
   const { db } = context;

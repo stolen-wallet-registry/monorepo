@@ -146,6 +146,9 @@ export default createConfig({
     [chainConfig.name]: {
       id: chainConfig.chainId,
       rpc: chainConfig.rpc,
+      // Disable cache for local dev - anvil resets break cached block data
+      // See: https://ponder.sh/docs/guides/foundry
+      ...(PONDER_ENV === 'development' && { disableCache: true }),
     },
   },
   contracts: {

@@ -20,6 +20,10 @@ export const stolenWallet = onchainTable(
     transactionHash: t.hex().notNull(),
     /** Was gas sponsored (relay)? */
     isSponsored: t.boolean().notNull(),
+    /** If from operator batch, the batch ID */
+    batchId: t.hex(),
+    /** If from operator batch, the operator address */
+    operator: t.hex(),
     /** If cross-chain, source chain ID (numeric) */
     sourceChainId: t.integer(),
     /** If cross-chain, CAIP-2 string of source chain */
@@ -29,6 +33,36 @@ export const stolenWallet = onchainTable(
   }),
   (table) => ({
     caip10Idx: index().on(table.caip10),
+    registeredAtIdx: index().on(table.registeredAt),
+    batchIdIdx: index().on(table.batchId),
+  })
+);
+
+/** Operator-submitted wallet batches */
+export const walletBatch = onchainTable(
+  'wallet_batch',
+  (t) => ({
+    /** batchId (bytes32 as hex string) */
+    id: t.hex().primaryKey(),
+    /** Merkle root of wallet addresses */
+    merkleRoot: t.hex().notNull(),
+    /** Operator who submitted */
+    operator: t.hex().notNull(),
+    /** Reported chain ID (bytes32 hash) */
+    reportedChainIdHash: t.hex().notNull(),
+    /** CAIP-2 chain ID (resolved) */
+    reportedChainCAIP2: t.text(),
+    /** Number of wallets in batch */
+    walletCount: t.integer().notNull(),
+    /** Block timestamp when registered */
+    registeredAt: t.bigint().notNull(),
+    /** Block number when registered */
+    registeredAtBlock: t.bigint().notNull(),
+    /** Registration transaction hash */
+    transactionHash: t.hex().notNull(),
+  }),
+  (table) => ({
+    operatorIdx: index().on(table.operator),
     registeredAtIdx: index().on(table.registeredAt),
   })
 );
@@ -358,6 +392,11 @@ export const fraudulentContract = onchainTable(
   (t) => ({
     /** contractAddress-chainIdHash composite */
     id: t.text().primaryKey(),
+    /**
+     * Entry hash for joining with invalidatedEntry table (keccak256(address, chainId)).
+     * To check invalidation status, join: fraudulentContract.entryHash = invalidatedEntry.id
+     */
+    entryHash: t.hex().notNull(),
     /** Contract address */
     contractAddress: t.hex().notNull(),
     /** Chain ID hash (bytes32) */
@@ -372,10 +411,9 @@ export const fraudulentContract = onchainTable(
     operator: t.hex().notNull(),
     /** When batch was registered */
     reportedAt: t.bigint().notNull(),
-    /** Entry-level invalidation */
-    entryInvalidated: t.boolean().notNull(),
   }),
   (table) => ({
+    entryHashIdx: index().on(table.entryHash),
     contractAddressIdx: index().on(table.contractAddress),
     caip2ChainIdIdx: index().on(table.caip2ChainId),
     batchIdIdx: index().on(table.batchId),
@@ -429,6 +467,10 @@ export const registryStats = onchainTable('registry_stats', (t) => ({
   totalOperators: t.integer().notNull(),
   /** Active operators */
   activeOperators: t.integer().notNull(),
+  /** Total operator wallet batches */
+  totalWalletBatches: t.integer().notNull(),
+  /** Total operator transaction batches */
+  totalOperatorTransactionBatches: t.integer().notNull(),
   /** Total fraudulent contract batches */
   totalContractBatches: t.integer().notNull(),
   /** Total individual fraudulent contracts reported */

@@ -21,7 +21,7 @@ pnpm build
 
 ### Common Options
 
-```
+```text
 -e, --env <env>         Environment: local, testnet, mainnet [default: local]
 -k, --private-key <key> Operator private key (or set OPERATOR_PRIVATE_KEY env)
 -c, --chain-id <id>     Default chain ID [default: 8453]
@@ -48,7 +48,7 @@ pnpm deploy:crosschain
 
 After deployment, you'll see the pre-approved operators in the output:
 
-```
+```text
 Operator A (ALL): 0x90F79bf6EB2c4f870365E785982E1f101E93b906
 Operator B (CONTRACT): 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
 ```

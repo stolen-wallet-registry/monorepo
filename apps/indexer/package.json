@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "ponder dev",
-    "start": "ponder start",
+    "dev": "ponder dev --schema swr_dev",
+    "start": "ponder start --schema swr_prod",
     "db": "ponder db",
-    "db:reset": "psql $DATABASE_URL -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'",
+    "db:wipe": "dotenv -e .env.local -- bash -c \"psql $DATABASE_URL -c 'DROP SCHEMA IF EXISTS swr_dev CASCADE; DROP SCHEMA IF EXISTS swr_prod CASCADE; DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;'\"",
     "codegen": "ponder codegen",
     "typecheck": "tsc"
   },

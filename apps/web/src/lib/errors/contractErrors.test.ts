@@ -54,6 +54,19 @@ describe('contractErrors', () => {
     CrossChainInbox__InvalidMessage: '0x23e92f31',
     CrossChainInbox__ZeroAddress: '0x6d50853e',
     CrossChainInbox__SourceChainMismatch: '0x249d64fe',
+    // IOperatorRegistry errors (5)
+    OperatorRegistry__ZeroAddress: '0x2c2b0fe3',
+    OperatorRegistry__AlreadyApproved: '0x84fd1a86',
+    OperatorRegistry__NotApproved: '0x970753c1',
+    OperatorRegistry__InvalidCapabilities: '0x4f93924f',
+    OperatorRegistry__NotAuthorizedForRegistry: '0x0790c247',
+    // IFraudulentContractRegistry errors (6 additional)
+    FraudulentContractRegistry__InvalidOperatorRegistry: '0x7020d8c8',
+    FraudulentContractRegistry__MissingRegistryHub: '0x3e81b8ca',
+    FraudulentContractRegistry__InvalidContractAddress: '0x54689933',
+    FraudulentContractRegistry__InvalidChainIdEntry: '0x4b2858dd',
+    FraudulentContractRegistry__BatchSizeExceedsLimit: '0x86eaeab5',
+    FraudulentContractRegistry__UnexpectedEthWithFeesDisabled: '0xf53a0b5c',
   };
 
   describe('CONTRACT_ERROR_MAP', () => {
