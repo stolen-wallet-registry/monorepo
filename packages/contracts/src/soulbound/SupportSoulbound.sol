@@ -31,7 +31,7 @@ contract SupportSoulbound is BaseSoulbound {
     /// @dev Running total of all donations received (O(1) lookup)
     uint256 private _totalDonationsReceived;
 
-    /// @dev Amount donated per token
+    /// @notice Amount donated per token
     mapping(uint256 tokenId => uint256) public tokenDonation;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -49,6 +49,8 @@ contract SupportSoulbound is BaseSoulbound {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when minimum donation amount is updated
+    /// @param oldMin The previous minimum value
+    /// @param newMin The new minimum value
     event MinWeiUpdated(uint256 oldMin, uint256 newMin);
 
     /// @notice Emitted when a support soulbound token is minted
@@ -61,6 +63,7 @@ contract SupportSoulbound is BaseSoulbound {
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Initialize the support soulbound token contract
     /// @param _minWei Minimum donation in wei (spam prevention, must be > 0)
     /// @param _translations Address of the TranslationRegistry contract
     /// @param _feeCollector Address to receive fees
@@ -178,6 +181,8 @@ contract SupportSoulbound is BaseSoulbound {
 
     /// @dev Format wei to ETH string for JSON attribute
     /// @notice Preserves leading zeros (e.g., 0.05 ETH displays correctly, not 0.5)
+    /// @param weiAmount The amount in wei to format
+    /// @return The formatted ETH string (e.g., "0.05 ETH")
     function _formatEtherAttribute(uint256 weiAmount) internal pure returns (string memory) {
         uint256 eth = weiAmount / 1e18;
         uint256 remainder = weiAmount % 1e18;

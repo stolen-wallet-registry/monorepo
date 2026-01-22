@@ -25,13 +25,21 @@ export type {
   SearchType,
   SearchConfig,
   SearchResult,
-  // Wallet
+  // Address (combined wallet + contract)
+  AddressSearchData,
+  AddressSearchResult,
+  // Wallet (for internal use / backward compat)
   WalletSearchData,
   WalletSearchResult,
+  // Contract (for internal use)
+  ContractChainReport,
+  ContractSearchData,
   // Transaction
   TransactionChainReport,
   TransactionSearchData,
   TransactionSearchResult,
+  // Operator
+  OperatorData,
   // Invalid
   InvalidSearchResult,
   // Status
@@ -42,19 +50,31 @@ export type {
 export { detectSearchType, isAddress, isTransactionHash, isCAIP10, parseCAIP10 } from './detect';
 
 // Core search functions
-export { search, searchWallet, searchWalletByCAIP10, searchTransaction } from './search';
+export {
+  search,
+  searchAddress,
+  searchWallet,
+  searchWalletByCAIP10,
+  searchTransaction,
+  searchContract,
+  getOperator,
+  listOperators,
+} from './search';
 
 // Interpretation utilities
 export {
   getResultStatus,
   getWalletStatus,
   getTransactionStatus,
+  getAddressStatus,
   getStatusLabel,
   getWalletStatusLabel,
   getTransactionStatusLabel,
+  getAddressStatusLabel,
   getStatusDescription,
   getWalletStatusDescription,
   getTransactionStatusDescription,
+  getAddressStatusDescription,
   isCompromised,
   formatTimestamp,
   formatRelativeTime,
@@ -62,4 +82,13 @@ export {
 } from './interpret';
 
 // GraphQL queries (for advanced usage)
-export { WALLET_QUERY, WALLET_BY_CAIP10_QUERY, TRANSACTION_QUERY } from './queries';
+export {
+  WALLET_QUERY,
+  WALLET_BY_CAIP10_QUERY,
+  TRANSACTION_QUERY,
+  CONTRACT_QUERY,
+  INVALIDATION_CHECK_QUERY,
+  INVALIDATIONS_BATCH_QUERY,
+  OPERATOR_QUERY,
+  OPERATORS_LIST_QUERY,
+} from './queries';

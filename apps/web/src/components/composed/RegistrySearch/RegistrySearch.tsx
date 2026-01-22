@@ -24,7 +24,7 @@ import {
 } from '@/hooks';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
-import { WalletSearchResult } from './WalletSearchResult';
+import { AddressSearchResult } from './AddressSearchResult';
 import { TransactionSearchResult } from './TransactionSearchResult';
 
 export interface RegistrySearchProps {
@@ -45,9 +45,9 @@ export interface RegistrySearchProps {
  */
 function getSearchTypeIndicator(type: SearchType) {
   switch (type) {
-    case 'wallet':
+    case 'address':
     case 'caip10':
-      return { Icon: Wallet, label: 'Valid wallet address', valid: true };
+      return { Icon: Wallet, label: 'Valid address', valid: true };
     case 'transaction':
       return { Icon: FileText, label: 'Valid transaction hash', valid: true };
     case 'invalid':
@@ -222,7 +222,14 @@ export function RegistrySearch({
       {/* Search Results */}
       {showResult && data && (
         <>
-          {data.type === 'wallet' && <WalletSearchResult found={data.found} data={data.data} />}
+          {data.type === 'address' && (
+            <AddressSearchResult
+              found={data.found}
+              foundInWalletRegistry={data.foundInWalletRegistry}
+              foundInContractRegistry={data.foundInContractRegistry}
+              data={data.data}
+            />
+          )}
           {data.type === 'transaction' && (
             <TransactionSearchResult found={data.found} data={data.data} />
           )}

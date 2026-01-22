@@ -96,7 +96,7 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, Ownable2Ste
         }
     }
 
-    /// @dev Execute wallet soulbound mint
+    /// @notice Execute wallet soulbound mint
     /// @param wallet Wallet to mint for (must be registered in StolenWalletRegistry)
     /// @param origin Origin domain for event
     function _handleWalletMint(address wallet, uint32 origin) internal {
@@ -110,7 +110,7 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, Ownable2Ste
         }
     }
 
-    /// @dev Execute support soulbound mint
+    /// @notice Execute support soulbound mint
     /// @param supporter Address to mint for
     /// @param donationAmount Donation amount (for metadata tracking - actual ETH stays on spoke)
     /// @param origin Origin domain for event

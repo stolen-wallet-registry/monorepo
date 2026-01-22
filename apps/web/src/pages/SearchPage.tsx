@@ -268,8 +268,8 @@ export function SearchPage() {
   // Handle when a search is initiated (save to recent searches with unknown status initially)
   const handleSearch = useCallback(
     (query: string, type: SearchType) => {
-      // Only save wallet searches to recent (they're the primary use case)
-      if (type === 'wallet' || type === 'caip10') {
+      // Only save address searches to recent (they're the primary use case)
+      if (type === 'address' || type === 'caip10') {
         // Extract address from CAIP-10 (format: namespace:chainId:address)
         const address = type === 'caip10' ? (query.split(':')[2] ?? query) : query;
         logger.ui.info('Search initiated from input', { address: redactAddress(address), chainId });
@@ -285,11 +285,13 @@ export function SearchPage() {
 
   // Handle search result - update the recent search with actual result status
   const handleResult = useCallback((result: IndexerSearchResult) => {
-    if (result.type === 'wallet' && result.data) {
+    if (result.type === 'address' && result.data) {
       const resultStatus: SearchResultStatus = result.found ? 'registered' : 'clean';
-      logger.ui.info('Wallet search result received', {
+      logger.ui.info('Address search result received', {
         address: redactAddress(result.data.address),
         found: result.found,
+        foundInWalletRegistry: result.foundInWalletRegistry,
+        foundInContractRegistry: result.foundInContractRegistry,
         resultStatus,
       });
       updateRecentSearchResult(result.data.address, resultStatus);

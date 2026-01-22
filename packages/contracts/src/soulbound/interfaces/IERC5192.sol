@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 /// @title ERC-5192: Minimal Soulbound NFTs
+/// @author EIP-5192 Authors
 /// @notice Interface for Soulbound (non-transferable) tokens
 /// @dev See https://eips.ethereum.org/EIPS/eip-5192
 interface IERC5192 {

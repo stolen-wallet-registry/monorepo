@@ -12,9 +12,17 @@ import {
   WALLET_QUERY,
   WALLET_BY_CAIP10_QUERY,
   TRANSACTION_QUERY,
+  CONTRACT_QUERY,
+  INVALIDATIONS_BATCH_QUERY,
+  OPERATOR_QUERY,
+  OPERATORS_LIST_QUERY,
   type RawWalletResponse,
   type RawWalletByCAIP10Response,
   type RawTransactionResponse,
+  type RawContractResponse,
+  type RawInvalidationsBatchResponse,
+  type RawOperatorResponse,
+  type RawOperatorsListResponse,
 } from './queries';
 import type {
   Address,
@@ -24,6 +32,9 @@ import type {
   WalletSearchResult,
   WalletSearchData,
   TransactionSearchResult,
+  ContractSearchData,
+  AddressSearchResult,
+  OperatorData,
 } from './types';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -160,14 +171,216 @@ export async function searchTransaction(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// CONTRACT SEARCH
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Search for a fraudulent contract by address.
+ *
+ * Queries the fraudulent contract registry and checks invalidation status
+ * for each entry via a separate query to the invalidatedEntry table.
+ *
+ * @param config - Search configuration with indexer URL
+ * @param address - Contract address to search (will be lowercased)
+ * @returns Contract data if found, null otherwise
+ */
+export async function searchContract(
+  config: SearchConfig,
+  address: string
+): Promise<ContractSearchData | null> {
+  // First, query for contracts
+  const result = await request<RawContractResponse>(config.indexerUrl, CONTRACT_QUERY, {
+    address: address.toLowerCase(),
+  });
+
+  const contracts = result.fraudulentContracts?.items ?? [];
+
+  if (contracts.length === 0) {
+    return null;
+  }
+
+  // Collect all entryHashes to check invalidation status
+  const entryHashes = contracts.map((c) => c.entryHash);
+
+  // Batch query for invalidation status
+  // This is more efficient than individual queries per contract
+  const invalidatedSet = new Set<string>();
+
+  if (entryHashes.length > 0) {
+    try {
+      const invalidationResult = await request<RawInvalidationsBatchResponse>(
+        config.indexerUrl,
+        INVALIDATIONS_BATCH_QUERY,
+        { entryHashes }
+      );
+
+      // Build a set of invalidated (but not reinstated) entry hashes
+      for (const entry of invalidationResult.invalidatedEntrys?.items ?? []) {
+        // Entry is considered invalidated only if not reinstated
+        if (!entry.reinstated) {
+          invalidatedSet.add(entry.id.toLowerCase());
+        }
+      }
+    } catch {
+      // If invalidation query fails, assume not invalidated
+      // This is a graceful degradation - the contract was still found
+      console.warn('Failed to fetch invalidation status, assuming not invalidated');
+    }
+  }
+
+  return {
+    contractAddress: contracts[0].contractAddress as Address,
+    chains: contracts.map((c) => ({
+      caip2ChainId: c.caip2ChainId,
+      chainName: getCAIP2ChainName(c.caip2ChainId),
+      numericChainId: c.numericChainId,
+      batchId: c.batchId as Hash,
+      operator: c.operator as Address,
+      reportedAt: BigInt(c.reportedAt),
+      isInvalidated: invalidatedSet.has(c.entryHash.toLowerCase()),
+    })),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBINED ADDRESS SEARCH
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Search for an address in BOTH wallet and contract registries.
+ *
+ * This is the primary search function for addresses. It queries both the stolen
+ * wallet registry and fraudulent contract registry in parallel, returning a
+ * combined result that shows which registry(ies) the address was found in.
+ *
+ * @param config - Search configuration with indexer URL
+ * @param address - Address to search (will be lowercased)
+ *
+ * @example
+ * ```ts
+ * const result = await searchAddress(config, '0x742d35Cc...');
+ * if (result.foundInWalletRegistry) {
+ *   console.log('Address is a stolen wallet');
+ * }
+ * if (result.foundInContractRegistry) {
+ *   console.log('Address is a fraudulent contract');
+ * }
+ * ```
+ */
+export async function searchAddress(
+  config: SearchConfig,
+  address: string
+): Promise<AddressSearchResult> {
+  // Query both registries in parallel for performance
+  const [walletResult, contractData] = await Promise.all([
+    searchWallet(config, address),
+    searchContract(config, address),
+  ]);
+
+  const foundInWallet = walletResult.found;
+  const foundInContract = contractData !== null;
+  const found = foundInWallet || foundInContract;
+
+  if (!found) {
+    return {
+      type: 'address',
+      found: false,
+      foundInWalletRegistry: false,
+      foundInContractRegistry: false,
+      data: null,
+    };
+  }
+
+  return {
+    type: 'address',
+    found: true,
+    foundInWalletRegistry: foundInWallet,
+    foundInContractRegistry: foundInContract,
+    data: {
+      address: address.toLowerCase() as Address,
+      wallet: walletResult.data,
+      contract: contractData,
+    },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OPERATOR LOOKUPS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Get operator details by address.
+ *
+ * @param config - Search configuration with indexer URL
+ * @param address - Operator address (will be lowercased)
+ */
+export async function getOperator(
+  config: SearchConfig,
+  address: string
+): Promise<OperatorData | null> {
+  const result = await request<RawOperatorResponse>(config.indexerUrl, OPERATOR_QUERY, {
+    address: address.toLowerCase(),
+  });
+
+  const op = result.operator;
+
+  if (!op) {
+    return null;
+  }
+
+  return {
+    address: op.id as Address,
+    identifier: op.identifier,
+    capabilities: op.capabilities,
+    approved: op.approved,
+    canSubmitWallet: op.canSubmitWallet,
+    canSubmitTransaction: op.canSubmitTransaction,
+    canSubmitContract: op.canSubmitContract,
+    approvedAt: BigInt(op.approvedAt),
+  };
+}
+
+/**
+ * List all operators (optionally filtered by approval status).
+ *
+ * @param config - Search configuration with indexer URL
+ * @param approvedOnly - If true, only return approved operators
+ */
+export async function listOperators(
+  config: SearchConfig,
+  approvedOnly: boolean = true
+): Promise<OperatorData[]> {
+  const result = await request<RawOperatorsListResponse>(config.indexerUrl, OPERATORS_LIST_QUERY, {
+    approved: approvedOnly ? true : undefined,
+  });
+
+  const operators = result.operators?.items ?? [];
+
+  return operators.map((op) => ({
+    address: op.id as Address,
+    identifier: op.identifier,
+    capabilities: op.capabilities,
+    approved: op.approved,
+    canSubmitWallet: op.canSubmitWallet,
+    canSubmitTransaction: op.canSubmitTransaction,
+    canSubmitContract: op.canSubmitContract,
+    approvedAt: BigInt(op.approvedAt),
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // UNIFIED SEARCH
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * Search the registry with auto-detection of input type.
  *
- * Automatically detects if input is a wallet address, transaction hash,
- * or CAIP-10 identifier and routes to the appropriate search function.
+ * Automatically detects if input is an address, transaction hash, or CAIP-10
+ * identifier and routes to the appropriate search function.
+ *
+ * For addresses (42-char hex strings), this searches BOTH the stolen wallet
+ * registry AND the fraudulent contract registry simultaneously. Results indicate
+ * which registry(ies) the address was found in.
  *
  * @param config - Search configuration with indexer URL
  * @param query - Search query (address, tx hash, or CAIP-10)
@@ -176,10 +389,15 @@ export async function searchTransaction(
  * ```ts
  * const config = { indexerUrl: 'http://localhost:42069' };
  *
- * // Search by wallet address
+ * // Search by address (checks both wallet AND contract registries)
  * const result = await search(config, '0x742d35Cc...');
- * if (result.type === 'wallet' && result.found) {
- *   console.log('Wallet is stolen:', result.data.address);
+ * if (result.type === 'address' && result.found) {
+ *   if (result.foundInWalletRegistry) {
+ *     console.log('Found in stolen wallet registry');
+ *   }
+ *   if (result.foundInContractRegistry) {
+ *     console.log('Found in fraudulent contract registry');
+ *   }
  * }
  *
  * // Search by transaction hash
@@ -194,10 +412,28 @@ export async function search(config: SearchConfig, query: string): Promise<Searc
   const searchType = detectSearchType(trimmed);
 
   switch (searchType) {
-    case 'wallet':
-      return searchWallet(config, trimmed);
-    case 'caip10':
-      return searchWalletByCAIP10(config, trimmed);
+    case 'address':
+      // Searches BOTH wallet and contract registries in parallel
+      return searchAddress(config, trimmed);
+    case 'caip10': {
+      // CAIP-10 currently only searches wallet registry
+      // TODO: Add contract registry support for CAIP-10 if needed
+      const walletResult = await searchWalletByCAIP10(config, trimmed);
+      // Convert WalletSearchResult to AddressSearchResult for consistency
+      return {
+        type: 'address',
+        found: walletResult.found,
+        foundInWalletRegistry: walletResult.found,
+        foundInContractRegistry: false,
+        data: walletResult.data
+          ? {
+              address: walletResult.data.address,
+              wallet: walletResult.data,
+              contract: null,
+            }
+          : null,
+      };
+    }
     case 'transaction':
       return searchTransaction(config, trimmed);
     case 'invalid':

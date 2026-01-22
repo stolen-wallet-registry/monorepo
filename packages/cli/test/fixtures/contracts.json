@@ -1,0 +1,14 @@
+[
+  {
+    "address": "0x1234567890123456789012345678901234567890",
+    "chainId": 8453
+  },
+  {
+    "address": "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+    "chainId": "eip155:8453"
+  },
+  {
+    "address": "0x0987654321098765432109876543210987654321",
+    "chainId": 1
+  }
+]

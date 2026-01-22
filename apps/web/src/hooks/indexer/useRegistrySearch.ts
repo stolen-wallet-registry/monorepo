@@ -18,11 +18,20 @@ import {
 export type {
   SearchType,
   SearchResult,
+  // Address (combined wallet + contract)
+  AddressSearchData,
+  AddressSearchResult,
+  // Wallet (internal/backward compat)
   WalletSearchData,
   WalletSearchResult,
+  // Contract
+  ContractSearchData,
+  ContractChainReport,
+  // Transaction
   TransactionSearchData,
   TransactionSearchResult,
   TransactionChainReport,
+  // Invalid
   InvalidSearchResult,
 } from '@swr/search';
 
@@ -57,12 +66,15 @@ const searchConfig: SearchConfig = {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Search the registry for wallets or transactions.
+ * Search the registry for addresses or transactions.
  *
  * Uses TanStack Query for caching and request deduplication.
- * Auto-detects input type (wallet address, tx hash, or CAIP-10).
+ * Auto-detects input type (address, tx hash, or CAIP-10).
  *
- * @param query - Wallet address, transaction hash, or CAIP-10 identifier
+ * For addresses, queries BOTH stolen wallet registry AND fraudulent contract
+ * registry in parallel, returning combined results.
+ *
+ * @param query - Address, transaction hash, or CAIP-10 identifier
  * @returns TanStack Query result with search data
  *
  * @example
@@ -70,8 +82,14 @@ const searchConfig: SearchConfig = {
  * const { data, isLoading, error } = useRegistrySearch('0x123...');
  *
  * if (data?.found) {
- *   if (data.type === 'wallet') {
- *     console.log('Wallet is stolen:', data.data.address);
+ *   if (data.type === 'address') {
+ *     // Found in wallet and/or contract registry
+ *     if (data.foundInWalletRegistry) {
+ *       console.log('Found in stolen wallet registry');
+ *     }
+ *     if (data.foundInContractRegistry) {
+ *       console.log('Found in fraudulent contract registry');
+ *     }
  *   } else if (data.type === 'transaction') {
  *     console.log('Transaction is reported:', data.data.txHash);
  *   }
@@ -96,7 +114,7 @@ export function useRegistrySearch(query: string) {
  * Get the detected search type for an input.
  *
  * @param query - User input to analyze
- * @returns Detected type: 'wallet' | 'transaction' | 'caip10' | 'invalid'
+ * @returns Detected type: 'address' | 'transaction' | 'caip10' | 'invalid'
  */
 export function useSearchType(query: string): SearchType {
   return detectSearchType(query);

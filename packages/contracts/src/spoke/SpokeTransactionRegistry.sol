@@ -73,7 +73,8 @@ contract SpokeTransactionRegistry is ISpokeTransactionRegistry, EIP712, Ownable2
     // INTERNAL STRUCTS (for stack management)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Acknowledgement params packed to reduce stack usage
+    // solhint-disable-next-line gas-struct-packing
+    /// @dev Acknowledgement params to reduce stack depth. Memory-only, packing irrelevant.
     struct AcknowledgeParams {
         bytes32 merkleRoot;
         bytes32 reportedChainId;
@@ -85,7 +86,8 @@ contract SpokeTransactionRegistry is ISpokeTransactionRegistry, EIP712, Ownable2
         bytes32 s;
     }
 
-    /// @dev Registration params packed to reduce stack usage
+    // solhint-disable-next-line gas-struct-packing
+    /// @dev Registration params to reduce stack depth. Memory-only, packing irrelevant.
     struct RegisterParams {
         bytes32 merkleRoot;
         bytes32 reportedChainId;

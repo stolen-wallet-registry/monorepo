@@ -52,6 +52,25 @@ export const SupportSoulboundABI = [
   },
   {
     type: 'function',
+    name: 'authorizedMinters',
+    inputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'balanceOf',
     inputs: [
       {
@@ -198,6 +217,24 @@ export const SupportSoulboundABI = [
   },
   {
     type: 'function',
+    name: 'mintTo',
+    inputs: [
+      {
+        name: 'supporter',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'donationAmount',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'name',
     inputs: [],
     outputs: [
@@ -323,6 +360,24 @@ export const SupportSoulboundABI = [
       },
       {
         name: 'approved',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setAuthorizedMinter',
+    inputs: [
+      {
+        name: 'minter',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'authorized',
         type: 'bool',
         internalType: 'bool',
       },
@@ -551,6 +606,25 @@ export const SupportSoulboundABI = [
       },
       {
         name: 'approved',
+        type: 'bool',
+        indexed: false,
+        internalType: 'bool',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'AuthorizedMinterUpdated',
+    inputs: [
+      {
+        name: 'minter',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'authorized',
         type: 'bool',
         indexed: false,
         internalType: 'bool',
@@ -840,6 +914,11 @@ export const SupportSoulboundABI = [
   },
   {
     type: 'error',
+    name: 'NotAuthorizedMinter',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'OwnableInvalidOwner',
     inputs: [
       {
@@ -879,6 +958,11 @@ export const SupportSoulboundABI = [
   {
     type: 'error',
     name: 'WithdrawFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'ZeroAddress',
     inputs: [],
   },
 ] as const;

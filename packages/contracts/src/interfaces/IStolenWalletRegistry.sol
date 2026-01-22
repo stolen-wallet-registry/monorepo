@@ -55,6 +55,26 @@ interface IStolenWalletRegistry {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // OPERATOR BATCH TYPES
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Data stored for an operator-submitted wallet batch
+    /// @param merkleRoot Root of wallet addresses + chainIds Merkle tree
+    /// @param operator Address of the operator who submitted
+    /// @param reportedChainId Primary chain for this batch (CAIP-2 bytes32)
+    /// @param registeredAt Block number when registered
+    /// @param walletCount Number of wallets in batch
+    /// @param invalidated Soft delete flag for entire batch
+    struct WalletBatch {
+        bytes32 merkleRoot;
+        address operator;
+        bytes32 reportedChainId;
+        uint64 registeredAt;
+        uint32 walletCount;
+        bool invalidated;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -89,7 +109,7 @@ interface IStolenWalletRegistry {
     error InvalidOwner();
 
     /// @notice Thrown when the provided fee is less than required
-    error InsufficientFee();
+    error StolenWalletRegistry__InsufficientFee();
 
     /// @notice Thrown when fee forwarding to RegistryHub fails
     error FeeForwardFailed();
@@ -110,6 +130,43 @@ interface IStolenWalletRegistry {
     error InvalidFeeConfig();
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // OPERATOR BATCH ERRORS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Thrown when caller is not an approved operator with WALLET capability
+    error StolenWalletRegistry__NotApprovedOperator();
+
+    /// @notice Thrown when batch not found
+    error StolenWalletRegistry__BatchNotFound();
+
+    /// @notice Thrown when batch already registered
+    error StolenWalletRegistry__BatchAlreadyRegistered();
+
+    /// @notice Thrown when batch or entry already invalidated
+    error StolenWalletRegistry__AlreadyInvalidated();
+
+    /// @notice Thrown when entry is not invalidated (for reinstatement)
+    error StolenWalletRegistry__EntryNotInvalidated();
+
+    /// @notice Thrown when computed merkle root doesn't match provided root
+    error StolenWalletRegistry__MerkleRootMismatch();
+
+    /// @notice Thrown when array lengths don't match
+    error StolenWalletRegistry__ArrayLengthMismatch();
+
+    /// @notice Thrown when wallet count is zero
+    error StolenWalletRegistry__InvalidWalletCount();
+
+    /// @notice Thrown when merkle root is zero
+    error StolenWalletRegistry__InvalidMerkleRoot();
+
+    /// @notice Thrown when wallet address is zero
+    error StolenWalletRegistry__InvalidWalletAddress();
+
+    /// @notice Thrown when chain ID entry is zero
+    error StolenWalletRegistry__InvalidChainIdEntry();
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -123,6 +180,47 @@ interface IStolenWalletRegistry {
     /// @param owner The wallet address that was registered as stolen
     /// @param isSponsored True if registration was submitted by a third party
     event WalletRegistered(address indexed owner, bool indexed isSponsored);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPERATOR BATCH EVENTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Emitted when an operator registers a batch of stolen wallets
+    /// @param batchId Unique identifier for this batch
+    /// @param merkleRoot Root of the Merkle tree
+    /// @param operator Address of the operator who submitted
+    /// @param reportedChainId Primary chain for this batch
+    /// @param walletCount Number of wallets in the batch
+    /// @param walletAddresses Array of wallet addresses
+    /// @param chainIds Array of chain IDs for each wallet
+    event WalletBatchRegistered(
+        bytes32 indexed batchId,
+        bytes32 indexed merkleRoot,
+        address indexed operator,
+        bytes32 reportedChainId,
+        uint32 walletCount,
+        address[] walletAddresses,
+        bytes32[] chainIds
+    );
+
+    /// @notice Emitted when DAO invalidates an entire wallet batch
+    /// @param batchId The batch that was invalidated
+    /// @param invalidatedBy Address that performed the invalidation
+    event WalletBatchInvalidated(bytes32 indexed batchId, address indexed invalidatedBy);
+
+    /// @notice Emitted when DAO invalidates a specific wallet entry
+    /// @param entryHash The entry hash that was invalidated
+    /// @param invalidatedBy Address that performed the invalidation
+    event WalletEntryInvalidated(bytes32 indexed entryHash, address indexed invalidatedBy);
+
+    /// @notice Emitted when DAO reinstates a previously invalidated wallet entry
+    /// @param entryHash The entry hash that was reinstated
+    /// @param reinstatedBy Address that performed the reinstatement
+    event WalletEntryReinstated(bytes32 indexed entryHash, address indexed reinstatedBy);
+
+    /// @notice Emitted when operator registry address is set
+    /// @param operatorRegistry The new operator registry address
+    event OperatorRegistrySet(address indexed operatorRegistry);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
@@ -154,7 +252,6 @@ interface IStolenWalletRegistry {
     /// @param v ECDSA signature component
     /// @param r ECDSA signature component
     /// @param s ECDSA signature component
-    // solhint-disable-next-line max-line-length
     function acknowledge(uint256 deadline, uint256 nonce, address owner, uint8 v, bytes32 r, bytes32 s) external payable;
 
     /// @notice Phase 2: Complete the registration after grace period
@@ -256,4 +353,92 @@ interface IStolenWalletRegistry {
     /// @param owner The wallet being registered (unused on hub, included for interface compatibility)
     /// @return Total fee required in native token
     function quoteRegistration(address owner) external view returns (uint256);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPERATOR BATCH FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Register a batch of stolen wallets (operator only, single-phase)
+    /// @dev Operators bypass the two-phase registration since they're DAO-vetted.
+    ///      Uses Merkle tree for efficient batch verification.
+    /// @param merkleRoot Root of Merkle tree built from wallet addresses + chainIds
+    /// @param reportedChainId Primary chain for this batch (CAIP-2 format)
+    /// @param walletAddresses Array of stolen wallet addresses
+    /// @param chainIds Array of chain IDs (CAIP-2 bytes32) for each wallet
+    function registerBatchAsOperator(
+        bytes32 merkleRoot,
+        bytes32 reportedChainId,
+        address[] calldata walletAddresses,
+        bytes32[] calldata chainIds
+    ) external payable;
+
+    /// @notice Check if a wallet batch exists and is valid (not invalidated)
+    /// @param batchId The batch ID to check
+    /// @return True if batch exists and is not invalidated
+    function isWalletBatchRegistered(bytes32 batchId) external view returns (bool);
+
+    /// @notice Get wallet batch data
+    /// @param batchId The batch ID to query
+    /// @return The WalletBatch struct
+    function getWalletBatch(bytes32 batchId) external view returns (WalletBatch memory);
+
+    /// @notice Verify a wallet is in a batch using merkle proof
+    /// @param wallet The wallet address to verify
+    /// @param chainId The chain ID (CAIP-2 bytes32)
+    /// @param batchId The batch to check against
+    /// @param merkleProof The merkle proof for verification
+    /// @return True if wallet is in the batch and neither batch nor entry is invalidated
+    function verifyWalletInBatch(address wallet, bytes32 chainId, bytes32 batchId, bytes32[] calldata merkleProof)
+        external
+        view
+        returns (bool);
+
+    /// @notice Compute batch ID from parameters
+    /// @param merkleRoot The merkle root
+    /// @param operator The operator address
+    /// @param reportedChainId The primary chain ID
+    /// @return The computed batch ID
+    function computeWalletBatchId(bytes32 merkleRoot, address operator, bytes32 reportedChainId)
+        external
+        pure
+        returns (bytes32);
+
+    /// @notice Compute entry hash for a wallet
+    /// @param wallet The wallet address
+    /// @param chainId The chain ID
+    /// @return The entry hash
+    function computeWalletEntryHash(address wallet, bytes32 chainId) external pure returns (bytes32);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // INVALIDATION FUNCTIONS (DAO only)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Invalidate an operator batch (DAO only)
+    /// @param batchId The batch ID to invalidate
+    function invalidateWalletBatch(bytes32 batchId) external;
+
+    /// @notice Invalidate a specific wallet entry (DAO only)
+    /// @param entryHash OZ StandardMerkleTree leaf hash of (wallet, chainId)
+    function invalidateWalletEntry(bytes32 entryHash) external;
+
+    /// @notice Reinstate a previously invalidated entry (DAO only)
+    /// @param entryHash The entry hash to reinstate
+    function reinstateWalletEntry(bytes32 entryHash) external;
+
+    /// @notice Check if wallet entry is invalidated
+    /// @param entryHash The entry hash to check
+    /// @return True if entry is invalidated
+    function isWalletEntryInvalidated(bytes32 entryHash) external view returns (bool);
+
+    /// @notice Set operator registry address (owner only)
+    /// @param _operatorRegistry The operator registry address
+    function setOperatorRegistry(address _operatorRegistry) external;
+
+    /// @notice Get operator registry address
+    /// @return The operator registry address
+    function operatorRegistry() external view returns (address);
+
+    /// @notice Quote operator batch registration fee
+    /// @return Fee in wei
+    function quoteOperatorBatchRegistration() external view returns (uint256);
 }

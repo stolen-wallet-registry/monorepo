@@ -26,10 +26,6 @@ export const SoulboundReceiverABI = [
     stateMutability: 'nonpayable',
   },
   {
-    type: 'receive',
-    stateMutability: 'payable',
-  },
-  {
     type: 'function',
     name: 'MSG_TYPE_SUPPORT',
     inputs: [],
@@ -228,6 +224,37 @@ export const SoulboundReceiverABI = [
         type: 'uint32',
         indexed: true,
         internalType: 'uint32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'MintFailed',
+    inputs: [
+      {
+        name: 'mintType',
+        type: 'uint8',
+        indexed: true,
+        internalType: 'enum ISoulboundReceiver.MintType',
+      },
+      {
+        name: 'wallet',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'originDomain',
+        type: 'uint32',
+        indexed: true,
+        internalType: 'uint32',
+      },
+      {
+        name: 'reason',
+        type: 'bytes',
+        indexed: false,
+        internalType: 'bytes',
       },
     ],
     anonymous: false,

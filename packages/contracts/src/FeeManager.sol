@@ -18,6 +18,9 @@ contract FeeManager is IFeeManager, Ownable2Step {
     /// @notice Base fee in USD cents (500 = $5.00)
     uint256 public baseFeeUsdCents = 500;
 
+    /// @notice Operator batch fee in USD cents (2500 = $25.00)
+    uint256 public operatorBatchFeeUsdCents = 2500;
+
     /// @notice Fallback ETH price in USD cents (300000 = $3,000.00)
     /// @dev Used when Chainlink is unavailable, stale, or not configured
     uint256 public fallbackEthPriceUsdCents = 300_000;
@@ -143,6 +146,15 @@ contract FeeManager is IFeeManager, Ownable2Step {
     }
 
     /// @inheritdoc IFeeManager
+    /// @dev Formula: (operatorBatchFeeUsdCents * 1e18) / ethPriceUsdCents
+    function operatorBatchFeeWei() public view returns (uint256) {
+        if (operatorBatchFeeUsdCents == 0) return 0; // Free batch submissions
+        uint256 ethPrice = getEthPriceUsdCentsView();
+        if (ethPrice == 0) revert Fee__InvalidPrice();
+        return (operatorBatchFeeUsdCents * 1e18) / ethPrice;
+    }
+
+    /// @inheritdoc IFeeManager
     function validateFee(uint256 payment) external view returns (bool) {
         uint256 required = currentFeeWei();
         if (payment < required) revert Fee__Insufficient();
@@ -193,6 +205,17 @@ contract FeeManager is IFeeManager, Ownable2Step {
         uint256 oldFee = baseFeeUsdCents;
         baseFeeUsdCents = _baseFeeUsdCents;
         emit BaseFeeUpdated(oldFee, _baseFeeUsdCents);
+    }
+
+    /// @inheritdoc IFeeManager
+    function setOperatorBatchFee(uint256 _operatorBatchFeeUsdCents) external onlyOwner {
+        // Prevent overflow in operatorBatchFeeWei calculation
+        if (_operatorBatchFeeUsdCents > type(uint256).max / 1e18) {
+            revert Fee__InvalidPrice();
+        }
+        uint256 oldFee = operatorBatchFeeUsdCents;
+        operatorBatchFeeUsdCents = _operatorBatchFeeUsdCents;
+        emit OperatorBatchFeeUpdated(oldFee, _operatorBatchFeeUsdCents);
     }
 
     /// @inheritdoc IFeeManager

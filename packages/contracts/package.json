@@ -17,8 +17,9 @@
     "snapshot": "forge snapshot",
     "anvil": "anvil --block-time 13",
     "deploy:local": "forge script script/Deploy.s.sol --tc Deploy --rpc-url localhost --broadcast",
-    "deploy:crosschain": "forge script script/DeployCrossChain.s.sol --tc DeployCrossChain --broadcast && forge script script/SeedLanguages.s.sol --rpc-url localhost --broadcast && forge script script/SeedTransactions.s.sol --multi --broadcast --slow",
+    "deploy:crosschain": "forge script script/DeployCrossChain.s.sol --tc DeployCrossChain --broadcast && forge script script/SeedLanguages.s.sol --rpc-url localhost --broadcast && forge script script/SeedOperatorData.s.sol --rpc-url localhost --broadcast --slow && forge script script/SeedTransactions.s.sol --multi --broadcast --slow",
     "seed:languages": "forge script script/SeedLanguages.s.sol --rpc-url localhost --broadcast",
+    "seed:operators": "forge script script/SeedOperatorData.s.sol --rpc-url localhost --broadcast",
     "seed:transactions": "forge script script/SeedTransactions.s.sol --multi --broadcast --slow",
     "deploy:testnet:hub": "source .env.testnet && forge script script/DeployTestnet.s.sol:DeployTestnetHub --rpc-url $BASE_SEPOLIA_RPC --broadcast --verify --etherscan-api-key $BASESCAN_API_KEY",
     "deploy:testnet:spoke": "source .env.testnet && forge script script/DeployTestnet.s.sol:DeployTestnetSpoke --rpc-url $OPTIMISM_SEPOLIA_RPC --broadcast --verify --etherscan-api-key $OPTIMISM_ETHERSCAN_API_KEY",
@@ -30,6 +31,6 @@
     "slither:triage": "python3 -m slither . --config-file slither.config.json --triage-mode"
   },
   "devDependencies": {
-    "solhint": "^6.0.2"
+    "solhint": "^6.0.3"
   }
 }

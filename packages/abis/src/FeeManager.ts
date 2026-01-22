@@ -102,6 +102,32 @@ export const FeeManagerABI = [
   },
   {
     type: 'function',
+    name: 'operatorBatchFeeUsdCents',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'operatorBatchFeeWei',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'owner',
     inputs: [],
     outputs: [
@@ -185,6 +211,19 @@ export const FeeManagerABI = [
     inputs: [
       {
         name: '_fallbackSyncInterval',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setOperatorBatchFee',
+    inputs: [
+      {
+        name: '_operatorBatchFeeUsdCents',
         type: 'uint256',
         internalType: 'uint256',
       },
@@ -365,6 +404,25 @@ export const FeeManagerABI = [
       },
       {
         name: 'newInterval',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'OperatorBatchFeeUpdated',
+    inputs: [
+      {
+        name: 'oldFee',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+      {
+        name: 'newFee',
         type: 'uint256',
         indexed: false,
         internalType: 'uint256',

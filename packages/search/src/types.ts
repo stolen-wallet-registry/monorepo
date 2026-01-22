@@ -22,7 +22,7 @@ export type Hash = `0x${string}`;
 /**
  * Type of search input detected.
  */
-export type SearchType = 'wallet' | 'transaction' | 'caip10' | 'invalid';
+export type SearchType = 'address' | 'transaction' | 'caip10' | 'invalid';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // WALLET SEARCH
@@ -99,6 +99,97 @@ export interface TransactionSearchResult {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// CONTRACT DATA (used in combined address search)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Chain-specific report for a fraudulent contract.
+ */
+export interface ContractChainReport {
+  /** CAIP-2 chain ID (e.g., "eip155:8453") */
+  caip2ChainId: string;
+  /** Human-readable chain name */
+  chainName: string;
+  /** Numeric chain ID (if EVM) */
+  numericChainId?: number;
+  /** Batch ID this contract belongs to */
+  batchId: Hash;
+  /** Operator who submitted */
+  operator: Address;
+  /** Timestamp when reported (Unix seconds as bigint) */
+  reportedAt: bigint;
+  /** Whether entry is invalidated */
+  isInvalidated: boolean;
+}
+
+/**
+ * Data for a reported fraudulent contract.
+ */
+export interface ContractSearchData {
+  /** Contract address */
+  contractAddress: Address;
+  /** Reports across different chains */
+  chains: ContractChainReport[];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADDRESS SEARCH (combined wallet + contract lookup)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Combined result when searching an address.
+ * Checks BOTH stolen wallet registry AND fraudulent contract registry.
+ */
+export interface AddressSearchData {
+  /** The searched address */
+  address: Address;
+  /** Wallet data if found in stolen wallet registry */
+  wallet: WalletSearchData | null;
+  /** Contract data if found in fraudulent contract registry */
+  contract: ContractSearchData | null;
+}
+
+/**
+ * Result of an address search (unified across registries).
+ */
+export interface AddressSearchResult {
+  type: 'address';
+  /** True if found in EITHER wallet OR contract registry */
+  found: boolean;
+  /** Found in stolen wallet registry */
+  foundInWalletRegistry: boolean;
+  /** Found in fraudulent contract registry */
+  foundInContractRegistry: boolean;
+  data: AddressSearchData | null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OPERATOR TYPES
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Data for a DAO-approved operator.
+ */
+export interface OperatorData {
+  /** Operator address */
+  address: Address;
+  /** Human-readable identifier */
+  identifier: string;
+  /** Capabilities bitmask */
+  capabilities: number;
+  /** Is currently approved */
+  approved: boolean;
+  /** Can submit to wallet registry */
+  canSubmitWallet: boolean;
+  /** Can submit to transaction registry */
+  canSubmitTransaction: boolean;
+  /** Can submit to contract registry */
+  canSubmitContract: boolean;
+  /** Block number when approved */
+  approvedAt: bigint;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // COMBINED SEARCH RESULT
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -114,7 +205,10 @@ export interface InvalidSearchResult {
 /**
  * Union of all search result types.
  */
-export type SearchResult = WalletSearchResult | TransactionSearchResult | InvalidSearchResult;
+export type SearchResult = AddressSearchResult | TransactionSearchResult | InvalidSearchResult;
+
+// Legacy types for backward compatibility
+export type WalletSearchResultLegacy = WalletSearchResult;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATUS INTERPRETATION

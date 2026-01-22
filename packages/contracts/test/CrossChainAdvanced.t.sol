@@ -73,7 +73,7 @@ contract CrossChainAdvancedTest is Test {
 
         hubMailbox = new MockMailbox(HUB_DOMAIN);
         hub = new RegistryHub(owner, address(0), address(0));
-        hubRegistry = new StolenWalletRegistry(address(0), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        hubRegistry = new StolenWalletRegistry(owner, address(0), address(hub), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         vm.startPrank(owner);
         hub.setRegistry(hub.STOLEN_WALLET(), address(hubRegistry));

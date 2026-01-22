@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 /// @title ITranslationRegistry
+/// @author Stolen Wallet Registry Team
 /// @notice Interface for multilingual string storage used by soulbound token SVGs
 /// @dev Stores translations once, referenced by multiple soulbound contracts
 interface ITranslationRegistry {

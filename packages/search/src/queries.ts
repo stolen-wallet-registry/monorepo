@@ -57,6 +57,97 @@ export const TRANSACTION_QUERY = gql`
   }
 `;
 
+/**
+ * Query fraudulent contracts by address.
+ * Note: entryHash is used to check invalidation status via separate query.
+ */
+export const CONTRACT_QUERY = gql`
+  query SearchContract($address: String!) {
+    fraudulentContracts(where: { contractAddress: $address }, limit: 10) {
+      items {
+        contractAddress
+        caip2ChainId
+        numericChainId
+        batchId
+        operator
+        reportedAt
+        entryHash
+      }
+    }
+  }
+`;
+
+/**
+ * Query invalidation status for a single entry hash.
+ */
+export const INVALIDATION_CHECK_QUERY = gql`
+  query CheckInvalidation($entryHash: String!) {
+    invalidatedEntry(id: $entryHash) {
+      id
+      invalidatedAt
+      invalidatedBy
+      reinstated
+      reinstatedAt
+    }
+  }
+`;
+
+/**
+ * Query invalidation status for multiple entry hashes.
+ * Used for batch checking after CONTRACT_QUERY.
+ */
+export const INVALIDATIONS_BATCH_QUERY = gql`
+  query CheckInvalidations($entryHashes: [String!]!) {
+    invalidatedEntrys(where: { id_in: $entryHashes }) {
+      items {
+        id
+        invalidatedAt
+        invalidatedBy
+        reinstated
+        reinstatedAt
+      }
+    }
+  }
+`;
+
+/**
+ * Query a single operator by address.
+ */
+export const OPERATOR_QUERY = gql`
+  query GetOperator($address: String!) {
+    operator(id: $address) {
+      id
+      identifier
+      capabilities
+      approved
+      canSubmitWallet
+      canSubmitTransaction
+      canSubmitContract
+      approvedAt
+    }
+  }
+`;
+
+/**
+ * Query list of operators.
+ */
+export const OPERATORS_LIST_QUERY = gql`
+  query ListOperators($approved: Boolean) {
+    operators(where: { approved: $approved }, orderBy: "approvedAt", orderDirection: "desc") {
+      items {
+        id
+        identifier
+        capabilities
+        approved
+        canSubmitWallet
+        canSubmitTransaction
+        canSubmitContract
+        approvedAt
+      }
+    }
+  }
+`;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // RAW RESPONSE TYPES (from Ponder indexer)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -95,6 +186,70 @@ export interface RawTransactionResponse {
       batchId: string;
       reporter: string;
       reportedAt: string;
+    }>;
+  };
+}
+
+export interface RawContractResponse {
+  fraudulentContracts: {
+    items: Array<{
+      contractAddress: string;
+      caip2ChainId: string;
+      numericChainId?: number;
+      batchId: string;
+      operator: string;
+      reportedAt: string;
+      entryHash: string;
+    }>;
+  };
+}
+
+export interface RawInvalidationCheckResponse {
+  invalidatedEntry: {
+    id: string;
+    invalidatedAt: string;
+    invalidatedBy: string;
+    reinstated: boolean;
+    reinstatedAt: string | null;
+  } | null;
+}
+
+export interface RawInvalidationsBatchResponse {
+  invalidatedEntrys: {
+    items: Array<{
+      id: string;
+      invalidatedAt: string;
+      invalidatedBy: string;
+      reinstated: boolean;
+      reinstatedAt: string | null;
+    }>;
+  };
+}
+
+export interface RawOperatorResponse {
+  operator: {
+    id: string;
+    identifier: string;
+    capabilities: number;
+    approved: boolean;
+    canSubmitWallet: boolean;
+    canSubmitTransaction: boolean;
+    canSubmitContract: boolean;
+    approvedAt: string;
+  } | null;
+}
+
+export interface RawOperatorsListResponse {
+  operators: {
+    items: Array<{
+      id: string;
+      identifier: string;
+      capabilities: number;
+      approved: boolean;
+      canSubmitWallet: boolean;
+      canSubmitTransaction: boolean;
+      canSubmitContract: boolean;
+      approvedAt: string;
     }>;
   };
 }

@@ -4,6 +4,11 @@ pragma solidity ^0.8.24;
 import { console2 } from "forge-std/Script.sol";
 import { DeployBase } from "./DeployBase.s.sol";
 import { FeeManager } from "../src/FeeManager.sol";
+import { RegistryHub } from "../src/RegistryHub.sol";
+import { OperatorRegistry } from "../src/OperatorRegistry.sol";
+import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
+import { StolenTransactionRegistry } from "../src/registries/StolenTransactionRegistry.sol";
+import { FraudulentContractRegistry } from "../src/registries/FraudulentContractRegistry.sol";
 
 /// @title Deploy Script for Stolen Wallet Registry (Single-Chain)
 /// @notice Deploys core registry system without cross-chain infrastructure
@@ -34,6 +39,20 @@ contract Deploy is DeployBase {
         // Deploy soulbound contracts (fee collector = hub for unified treasury)
         (address translations, address walletSoulbound, address supportSoulbound) = deploySoulbound(walletRegistry, hub);
 
+        // Deploy OperatorRegistry and wire to hub + individual registries
+        OperatorRegistry opReg = new OperatorRegistry(deployer);
+        address operatorRegistry = address(opReg);
+        console2.log("OperatorRegistry:", operatorRegistry);
+        RegistryHub(hub).setOperatorRegistry(operatorRegistry);
+        StolenWalletRegistry(walletRegistry).setOperatorRegistry(operatorRegistry);
+        StolenTransactionRegistry(txRegistry).setOperatorRegistry(operatorRegistry);
+
+        // Deploy FraudulentContractRegistry and wire to hub
+        FraudulentContractRegistry fcReg = new FraudulentContractRegistry(deployer, operatorRegistry, feeManager, hub);
+        address fraudulentContractRegistry = address(fcReg);
+        console2.log("FraudulentContractRegistry:", fraudulentContractRegistry);
+        RegistryHub(hub).setFraudulentContractRegistry(fraudulentContractRegistry);
+
         vm.stopBroadcast();
 
         // Summary
@@ -52,5 +71,11 @@ contract Deploy is DeployBase {
         console2.log("TranslationRegistry:", translations);
         console2.log("WalletSoulbound:", walletSoulbound);
         console2.log("SupportSoulbound:", supportSoulbound);
+        console2.log("");
+        console2.log("--- Operator ---");
+        console2.log("OperatorRegistry:", operatorRegistry);
+        console2.log("");
+        console2.log("--- Registries ---");
+        console2.log("FraudulentContractRegistry:", fraudulentContractRegistry);
     }
 }

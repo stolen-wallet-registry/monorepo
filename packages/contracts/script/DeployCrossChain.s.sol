@@ -9,6 +9,10 @@ import { RegistryHub } from "../src/RegistryHub.sol";
 import { CrossChainInbox } from "../src/crosschain/CrossChainInbox.sol";
 import { SoulboundReceiver } from "../src/soulbound/SoulboundReceiver.sol";
 import { SupportSoulbound } from "../src/soulbound/SupportSoulbound.sol";
+import { OperatorRegistry } from "../src/OperatorRegistry.sol";
+import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
+import { StolenTransactionRegistry } from "../src/registries/StolenTransactionRegistry.sol";
+import { FraudulentContractRegistry } from "../src/registries/FraudulentContractRegistry.sol";
 
 // Spoke contracts
 import { SpokeRegistry } from "../src/spoke/SpokeRegistry.sol";
@@ -49,6 +53,14 @@ import { MockInterchainGasPaymaster } from "../test/mocks/MockInterchainGasPayma
 ///  10: TranslationRegistry       → 0x610178dA211FEF7D417bC0e6FeD39F05609AD788
 ///  11: WalletSoulbound           → 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
 ///  12: SupportSoulbound          → 0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0
+///  13: SoulboundReceiver         → 0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82
+///  14: (setAuthorizedMinter tx)
+///  15: OperatorRegistry          → 0x0B306BF915C4d645ff596e518fAf3F9669b97016
+///  16: (setOperatorRegistry to hub tx)
+///  17-18: (setOperatorRegistry to wallet/tx registries)
+///  19-20: (approveOperator txs for test operators)
+///  21: FraudulentContractRegistry → 0x59b670e9fA9D0A427751Af201D676719a970857b
+///  22: (setFraudulentContractRegistry tx)
 ///
 /// Language seeding runs separately via SeedLanguages.s.sol (doesn't affect addresses)
 ///
@@ -71,9 +83,17 @@ contract DeployCrossChain is DeployBase {
     uint32 constant HUB_CHAIN_ID = 31_337;
     uint32 constant SPOKE_CHAIN_ID = 31_338;
 
+    // Test operator addresses (Anvil accounts 3 and 4)
+    address constant OPERATOR_A = 0x90F79bf6EB2c4f870365E785982E1f101E93b906;
+    address constant OPERATOR_B = 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65;
+
     // Fork IDs
     uint256 hubForkId;
     uint256 spokeForkId;
+
+    // Deployer info (stored to reduce stack depth)
+    uint256 deployerPrivateKey;
+    address deployer;
 
     // Deployed addresses - Hub
     address priceFeed;
@@ -88,6 +108,13 @@ contract DeployCrossChain is DeployBase {
     address walletSoulbound;
     address supportSoulbound;
     address payable soulboundReceiver;
+    // Operator Registry (Hub only)
+    address operatorRegistry;
+    // Fraudulent Contract Registry (Hub only)
+    address fraudulentContractRegistry;
+    // Hyperlane Mailbox addresses (stored to avoid stack too deep)
+    address hubMailbox;
+    address spokeMailbox;
     // Deployed addresses - Spoke
     address spokeGasPaymaster;
     address hyperlaneAdapter;
@@ -97,16 +124,16 @@ contract DeployCrossChain is DeployBase {
     address spokeMulticall3;
 
     function run() external {
-        uint256 deployerPrivateKey =
+        deployerPrivateKey =
             vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
 
-        address deployer = vm.addr(deployerPrivateKey);
+        deployer = vm.addr(deployerPrivateKey);
 
         // Read Hyperlane Mailbox addresses from environment
         // These must be set in packages/contracts/.env after running hyperlane:deploy
-        address hubMailbox = vm.envAddress("HUB_MAILBOX");
+        hubMailbox = vm.envAddress("HUB_MAILBOX");
         require(hubMailbox != address(0), "HUB_MAILBOX env var must be set to a non-zero address");
-        address spokeMailbox = vm.envAddress("SPOKE_MAILBOX");
+        spokeMailbox = vm.envAddress("SPOKE_MAILBOX");
         require(spokeMailbox != address(0), "SPOKE_MAILBOX env var must be set to a non-zero address");
 
         console2.log("=== CROSS-CHAIN DEPLOYMENT (Real Hyperlane) ===");
@@ -161,6 +188,55 @@ contract DeployCrossChain is DeployBase {
         // nonce 14: Authorize SoulboundReceiver to call mintTo on SupportSoulbound
         SupportSoulbound(supportSoulbound).setAuthorizedMinter(soulboundReceiver, true);
         console2.log("SoulboundReceiver authorized to mint on SupportSoulbound");
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 1c: DEPLOY OPERATOR REGISTRY TO HUB
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        console2.log("");
+        console2.log("--- HUB CHAIN (31337) - Operator Registry ---");
+
+        // nonce 15: Deploy OperatorRegistry
+        OperatorRegistry opReg = new OperatorRegistry(deployer);
+        operatorRegistry = address(opReg);
+        console2.log("OperatorRegistry:", operatorRegistry);
+
+        // nonce 16: Wire OperatorRegistry to hub
+        RegistryHub(hubRegistry).setOperatorRegistry(operatorRegistry);
+        console2.log("OperatorRegistry wired to RegistryHub");
+
+        // nonces 17-18: Wire OperatorRegistry to individual registries (for operator batch paths)
+        StolenWalletRegistry(stolenWalletRegistry).setOperatorRegistry(operatorRegistry);
+        StolenTransactionRegistry(stolenTransactionRegistry).setOperatorRegistry(operatorRegistry);
+        console2.log("OperatorRegistry wired to StolenWalletRegistry and StolenTransactionRegistry");
+
+        // nonces 19-20: Seed test operators (Anvil accounts 3 and 4)
+        // Account 3: Operator A with ALL capabilities (0x07)
+        opReg.approveOperator(OPERATOR_A, opReg.ALL_REGISTRIES(), "TestOperatorA-ALL");
+        console2.log("Operator A (ALL):", OPERATOR_A);
+
+        // Account 4: Operator B with CONTRACT_REGISTRY only (0x04)
+        opReg.approveOperator(OPERATOR_B, opReg.CONTRACT_REGISTRY(), "TestOperatorB-CONTRACT");
+        console2.log("Operator B (CONTRACT):", OPERATOR_B);
+
+        console2.log("Approved operator count:", opReg.approvedOperatorCount());
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // PHASE 1d: DEPLOY FRAUDULENT CONTRACT REGISTRY TO HUB
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        console2.log("");
+        console2.log("--- HUB CHAIN (31337) - Fraudulent Contract Registry ---");
+
+        // nonce 21: Deploy FraudulentContractRegistry
+        FraudulentContractRegistry fcReg =
+            new FraudulentContractRegistry(deployer, operatorRegistry, feeManager, hubRegistry);
+        fraudulentContractRegistry = address(fcReg);
+        console2.log("FraudulentContractRegistry:", fraudulentContractRegistry);
+
+        // nonce 22: Wire FraudulentContractRegistry to hub
+        RegistryHub(hubRegistry).setFraudulentContractRegistry(fraudulentContractRegistry);
+        console2.log("FraudulentContractRegistry wired to RegistryHub");
 
         vm.stopBroadcast();
 
@@ -300,6 +376,8 @@ contract DeployCrossChain is DeployBase {
         console2.log("  WalletSoulbound:           ", walletSoulbound);
         console2.log("  SupportSoulbound:          ", supportSoulbound);
         console2.log("  SoulboundReceiver:         ", soulboundReceiver);
+        console2.log("  OperatorRegistry:          ", operatorRegistry);
+        console2.log("  FraudulentContractRegistry:", fraudulentContractRegistry);
         console2.log("");
         console2.log("Spoke Chain (31338) - http://localhost:8546:");
         console2.log("  MockInterchainGasPaymaster:", spokeGasPaymaster);

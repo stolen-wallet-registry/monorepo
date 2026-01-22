@@ -51,7 +51,7 @@ contract SoulboundReceiverTest is Test {
         translations = new TranslationRegistry();
 
         // Deploy wallet registry
-        walletRegistry = new StolenWalletRegistry(address(0), address(0), 5, 20);
+        walletRegistry = new StolenWalletRegistry(owner, address(0), address(0), 5, 20);
 
         // Deploy soulbound contracts
         walletSoulbound = new WalletSoulbound(address(walletRegistry), address(translations), owner, "stolenwallet.xyz");

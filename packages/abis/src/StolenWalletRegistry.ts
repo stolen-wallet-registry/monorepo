@@ -3,6 +3,11 @@ export const StolenWalletRegistryABI = [
     type: 'constructor',
     inputs: [
       {
+        name: '_owner',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
         name: '_feeManager',
         type: 'address',
         internalType: 'address',
@@ -23,6 +28,13 @@ export const StolenWalletRegistryABI = [
         internalType: 'uint256',
       },
     ],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'acceptOwnership',
+    inputs: [],
+    outputs: [],
     stateMutability: 'nonpayable',
   },
   {
@@ -62,6 +74,59 @@ export const StolenWalletRegistryABI = [
     ],
     outputs: [],
     stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'computeWalletBatchId',
+    inputs: [
+      {
+        name: 'merkleRoot',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'operator',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    name: 'computeWalletEntryHash',
+    inputs: [
+      {
+        name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'chainId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
   },
   {
     type: 'function',
@@ -289,6 +354,57 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
+    name: 'getWalletBatch',
+    inputs: [
+      {
+        name: 'batchId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        internalType: 'struct IStolenWalletRegistry.WalletBatch',
+        components: [
+          {
+            name: 'merkleRoot',
+            type: 'bytes32',
+            internalType: 'bytes32',
+          },
+          {
+            name: 'operator',
+            type: 'address',
+            internalType: 'address',
+          },
+          {
+            name: 'reportedChainId',
+            type: 'bytes32',
+            internalType: 'bytes32',
+          },
+          {
+            name: 'registeredAt',
+            type: 'uint64',
+            internalType: 'uint64',
+          },
+          {
+            name: 'walletCount',
+            type: 'uint32',
+            internalType: 'uint32',
+          },
+          {
+            name: 'invalidated',
+            type: 'bool',
+            internalType: 'bool',
+          },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'graceBlocks',
     inputs: [],
     outputs: [
@@ -299,6 +415,32 @@ export const StolenWalletRegistryABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'invalidateWalletBatch',
+    inputs: [
+      {
+        name: 'batchId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'invalidateWalletEntry',
+    inputs: [
+      {
+        name: 'entryHash',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -340,6 +482,44 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
+    name: 'isWalletBatchRegistered',
+    inputs: [
+      {
+        name: 'batchId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isWalletEntryInvalidated',
+    inputs: [
+      {
+        name: 'entryHash',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'nonces',
     inputs: [
       {
@@ -348,6 +528,58 @@ export const StolenWalletRegistryABI = [
         internalType: 'address',
       },
     ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'operatorRegistry',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'owner',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'pendingOwner',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'quoteOperatorBatchRegistration',
+    inputs: [],
     outputs: [
       {
         name: '',
@@ -416,6 +648,34 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
+    name: 'registerBatchAsOperator',
+    inputs: [
+      {
+        name: 'merkleRoot',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'walletAddresses',
+        type: 'address[]',
+        internalType: 'address[]',
+      },
+      {
+        name: 'chainIds',
+        type: 'bytes32[]',
+        internalType: 'bytes32[]',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
     name: 'registerFromHub',
     inputs: [
       {
@@ -461,9 +721,140 @@ export const StolenWalletRegistryABI = [
     stateMutability: 'view',
   },
   {
+    type: 'function',
+    name: 'reinstateWalletEntry',
+    inputs: [
+      {
+        name: 'entryHash',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'renounceOwnership',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setOperatorRegistry',
+    inputs: [
+      {
+        name: '_operatorRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'transferOwnership',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'verifyWalletInBatch',
+    inputs: [
+      {
+        name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'chainId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'batchId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'merkleProof',
+        type: 'bytes32[]',
+        internalType: 'bytes32[]',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
     type: 'event',
     name: 'EIP712DomainChanged',
     inputs: [],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'OperatorRegistrySet',
+    inputs: [
+      {
+        name: 'operatorRegistry',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'OwnershipTransferStarted',
+    inputs: [
+      {
+        name: 'previousOwner',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'newOwner',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'OwnershipTransferred',
+    inputs: [
+      {
+        name: 'previousOwner',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'newOwner',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+    ],
     anonymous: false,
   },
   {
@@ -487,6 +878,112 @@ export const StolenWalletRegistryABI = [
         type: 'bool',
         indexed: true,
         internalType: 'bool',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'WalletBatchInvalidated',
+    inputs: [
+      {
+        name: 'batchId',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'invalidatedBy',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'WalletBatchRegistered',
+    inputs: [
+      {
+        name: 'batchId',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'merkleRoot',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'operator',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'walletCount',
+        type: 'uint32',
+        indexed: false,
+        internalType: 'uint32',
+      },
+      {
+        name: 'walletAddresses',
+        type: 'address[]',
+        indexed: false,
+        internalType: 'address[]',
+      },
+      {
+        name: 'chainIds',
+        type: 'bytes32[]',
+        indexed: false,
+        internalType: 'bytes32[]',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'WalletEntryInvalidated',
+    inputs: [
+      {
+        name: 'entryHash',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'invalidatedBy',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'WalletEntryReinstated',
+    inputs: [
+      {
+        name: 'entryHash',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'reinstatedBy',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
       },
     ],
     anonymous: false,
@@ -559,11 +1056,6 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'error',
-    name: 'InsufficientFee',
-    inputs: [],
-  },
-  {
-    type: 'error',
     name: 'InvalidBridgeId',
     inputs: [],
   },
@@ -599,6 +1091,28 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'error',
+    name: 'OwnableInvalidOwner',
+    inputs: [
+      {
+        name: 'owner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+  },
+  {
+    type: 'error',
+    name: 'OwnableUnauthorizedAccount',
+    inputs: [
+      {
+        name: 'account',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+  },
+  {
+    type: 'error',
     name: 'Registration__ForwarderExpired',
     inputs: [],
   },
@@ -620,6 +1134,66 @@ export const StolenWalletRegistryABI = [
   {
     type: 'error',
     name: 'Registration__SignatureExpired',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'StolenWalletRegistry__AlreadyInvalidated',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'StolenWalletRegistry__ArrayLengthMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'StolenWalletRegistry__BatchAlreadyRegistered',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'StolenWalletRegistry__BatchNotFound',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'StolenWalletRegistry__EntryNotInvalidated',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'StolenWalletRegistry__InsufficientFee',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'StolenWalletRegistry__InvalidChainIdEntry',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'StolenWalletRegistry__InvalidMerkleRoot',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'StolenWalletRegistry__InvalidWalletAddress',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'StolenWalletRegistry__InvalidWalletCount',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'StolenWalletRegistry__MerkleRootMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'StolenWalletRegistry__NotApprovedOperator',
     inputs: [],
   },
   {

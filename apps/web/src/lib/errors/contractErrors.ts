@@ -509,6 +509,148 @@ export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = {
     name: 'EmptyLanguageCode',
     message: 'Language code cannot be empty.',
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IOperatorRegistry errors (5)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  '0x2c2b0fe3': {
+    name: 'OperatorRegistry__ZeroAddress',
+    message: 'Invalid operator address provided.',
+    action: 'A valid address is required.',
+  },
+
+  '0x84fd1a86': {
+    name: 'OperatorRegistry__AlreadyApproved',
+    message: 'This operator is already approved.',
+  },
+
+  '0x970753c1': {
+    name: 'OperatorRegistry__NotApproved',
+    message: 'This address is not an approved operator.',
+  },
+
+  '0x4f93924f': {
+    name: 'OperatorRegistry__InvalidCapabilities',
+    message: 'Invalid capability configuration.',
+    action: 'Capabilities must be between 0x01 and 0x07.',
+  },
+
+  '0x0790c247': {
+    name: 'OperatorRegistry__NotAuthorizedForRegistry',
+    message: 'Operator not authorized for this registry type.',
+    action: 'Contact DAO to request additional capabilities.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IFraudulentContractRegistry errors (18)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  '0xfa354622': {
+    name: 'FraudulentContractRegistry__NotApprovedOperator',
+    message: 'Only approved operators can submit fraudulent contracts.',
+    action: 'Contact the DAO to become an approved operator.',
+  },
+
+  '0x08d23496': {
+    name: 'FraudulentContractRegistry__InvalidMerkleRoot',
+    message: 'Invalid Merkle root provided.',
+    action: 'Please verify your contract data and try again.',
+  },
+
+  '0x6c3461c2': {
+    name: 'FraudulentContractRegistry__InvalidChainId',
+    message: 'Invalid chain ID provided.',
+    action: 'Please select a valid chain.',
+  },
+
+  '0x282a90eb': {
+    name: 'FraudulentContractRegistry__InvalidContractCount',
+    message: 'At least one contract address is required.',
+    action: 'Add contract addresses to your submission.',
+  },
+
+  '0x457236a0': {
+    name: 'FraudulentContractRegistry__ArrayLengthMismatch',
+    message: 'Contract and chain ID arrays must have the same length.',
+    action: 'Ensure each contract has a corresponding chain ID.',
+  },
+
+  '0xa94c12fa': {
+    name: 'FraudulentContractRegistry__MerkleRootMismatch',
+    message: 'Merkle root does not match the provided contracts.',
+    action: 'Your submission data may have changed. Please regenerate.',
+  },
+
+  '0x722f72d7': {
+    name: 'FraudulentContractRegistry__AlreadyRegistered',
+    message: 'This batch has already been registered.',
+  },
+
+  '0x724bf72c': {
+    name: 'FraudulentContractRegistry__InsufficientFee',
+    message: 'Insufficient fee for batch registration.',
+    action: 'Ensure you have enough ETH for the registration fee.',
+  },
+
+  '0x30a734b6': {
+    name: 'FraudulentContractRegistry__FeeForwardFailed',
+    message: 'Failed to forward fee to registry hub.',
+    action: 'Please try again.',
+  },
+
+  '0xa58399f9': {
+    name: 'FraudulentContractRegistry__BatchNotFound',
+    message: 'Batch not found.',
+    action: 'Please verify the batch ID and try again.',
+  },
+
+  '0xee5affb2': {
+    name: 'FraudulentContractRegistry__AlreadyInvalidated',
+    message: 'This entry has already been invalidated.',
+  },
+
+  '0x022c4b15': {
+    name: 'FraudulentContractRegistry__NotInvalidated',
+    message: 'This entry is not invalidated.',
+    action: 'Only invalidated entries can be reinstated.',
+  },
+
+  '0x7020d8c8': {
+    name: 'FraudulentContractRegistry__InvalidOperatorRegistry',
+    message: 'Invalid operator registry address.',
+    action: 'Contact the DAO to verify contract configuration.',
+  },
+
+  '0x3e81b8ca': {
+    name: 'FraudulentContractRegistry__MissingRegistryHub',
+    message: 'Registry hub address not configured.',
+    action: 'Contact the DAO to verify contract configuration.',
+  },
+
+  '0x54689933': {
+    name: 'FraudulentContractRegistry__InvalidContractAddress',
+    message: 'Invalid contract address provided.',
+    action: 'Ensure the address is a valid Ethereum address.',
+  },
+
+  '0x4b2858dd': {
+    name: 'FraudulentContractRegistry__InvalidChainIdEntry',
+    message: 'Invalid chain ID in entry.',
+    action: 'Ensure each entry has a valid chain ID.',
+  },
+
+  '0x86eaeab5': {
+    name: 'FraudulentContractRegistry__BatchSizeExceedsLimit',
+    message: 'Batch size exceeds the maximum allowed.',
+    action: 'Split your submission into smaller batches.',
+  },
+
+  '0xf53a0b5c': {
+    name: 'FraudulentContractRegistry__UnexpectedEthWithFeesDisabled',
+    message: 'ETH sent but fees are disabled.',
+    action: 'Do not send ETH when fees are disabled.',
+  },
 };
 
 /**

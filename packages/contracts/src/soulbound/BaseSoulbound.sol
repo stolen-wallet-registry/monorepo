@@ -63,15 +63,20 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when domain is updated
+    /// @param oldDomain The previous domain value
+    /// @param newDomain The new domain value
     event DomainUpdated(string oldDomain, string newDomain);
 
     /// @notice Emitted when an authorized minter is added or removed
+    /// @param minter The minter address
+    /// @param authorized True if authorized, false if revoked
     event AuthorizedMinterUpdated(address indexed minter, bool authorized);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Initialize the soulbound token contract
     /// @param name_ Token name
     /// @param symbol_ Token symbol
     /// @param _translations Address of the TranslationRegistry contract
@@ -164,7 +169,7 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
     // INTERNAL HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Mint a new token and emit the Locked event
+    /// @notice Mint a new token and emit the Locked event
     /// @param to The recipient address
     /// @return tokenId The newly minted token ID
     function _mintAndLock(address to) internal returns (uint256) {

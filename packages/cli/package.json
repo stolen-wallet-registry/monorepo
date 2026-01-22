@@ -1,0 +1,41 @@
+{
+  "name": "@swr/cli",
+  "version": "0.1.0",
+  "description": "CLI tools for SWR operators",
+  "type": "module",
+  "bin": {
+    "swr": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "swr": "node dist/index.js"
+  },
+  "dependencies": {
+    "@openzeppelin/merkle-tree": "^1.0.8",
+    "@swr/abis": "workspace:*",
+    "@swr/chains": "workspace:*",
+    "commander": "^12.1.0",
+    "viem": "^2.41.2",
+    "dotenv": "^16.4.5",
+    "chalk": "^5.3.0",
+    "ora": "^8.1.0",
+    "csv-parse": "^5.5.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.2",
+    "eslint": "^9.39.1",
+    "tsup": "^8.5.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vitest": "^4.0.15"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
