@@ -7,6 +7,8 @@ import {
   WalletSoulboundABI,
   SupportSoulboundABI,
   FeeManagerABI,
+  OperatorRegistryABI,
+  FraudulentContractRegistryABI,
 } from '@swr/abis';
 import { anvilHub, baseSepolia, base, type Environment } from '@swr/chains';
 
@@ -40,6 +42,8 @@ const ADDRESSES: Record<
     crossChainInbox: `0x${string}`;
     walletSoulbound: `0x${string}`;
     supportSoulbound: `0x${string}`;
+    operatorRegistry: `0x${string}`;
+    fraudulentContractRegistry: `0x${string}`;
   }
 > = {
   development: {
@@ -47,9 +51,11 @@ const ADDRESSES: Record<
     registryHub: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
     stolenWalletRegistry: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
     stolenTransactionRegistry: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9',
-    crossChainInbox: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707',
+    crossChainInbox: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
     walletSoulbound: '0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e',
     supportSoulbound: '0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0',
+    operatorRegistry: '0x0B306BF915C4d645ff596e518fAf3F9669b97016',
+    fraudulentContractRegistry: '0x3Aa5ebB10DC797CAC828524e59A333d0A371443c',
   },
   staging: {
     // Base Sepolia addresses - fill after deployment
@@ -60,6 +66,8 @@ const ADDRESSES: Record<
     crossChainInbox: '0x0000000000000000000000000000000000000000',
     walletSoulbound: '0x0000000000000000000000000000000000000000',
     supportSoulbound: '0x0000000000000000000000000000000000000000',
+    operatorRegistry: '0x0000000000000000000000000000000000000000',
+    fraudulentContractRegistry: '0x0000000000000000000000000000000000000000',
   },
   production: {
     // Base mainnet addresses - fill after deployment
@@ -70,6 +78,8 @@ const ADDRESSES: Record<
     crossChainInbox: '0x0000000000000000000000000000000000000000',
     walletSoulbound: '0x0000000000000000000000000000000000000000',
     supportSoulbound: '0x0000000000000000000000000000000000000000',
+    operatorRegistry: '0x0000000000000000000000000000000000000000',
+    fraudulentContractRegistry: '0x0000000000000000000000000000000000000000',
   },
 };
 
@@ -198,6 +208,22 @@ export default createConfig({
       chain: chainConfig.name,
       abi: FeeManagerABI,
       address: addresses.feeManager,
+      startBlock: chainConfig.startBlock,
+    },
+
+    // Operator Registry (for DAO-approved operators)
+    OperatorRegistry: {
+      chain: chainConfig.name,
+      abi: OperatorRegistryABI,
+      address: addresses.operatorRegistry,
+      startBlock: chainConfig.startBlock,
+    },
+
+    // Fraudulent Contract Registry (operator-only submissions)
+    FraudulentContractRegistry: {
+      chain: chainConfig.name,
+      abi: FraudulentContractRegistryABI,
+      address: addresses.fraudulentContractRegistry,
       startBlock: chainConfig.startBlock,
     },
   },

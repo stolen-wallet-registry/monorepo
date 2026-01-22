@@ -258,6 +258,148 @@ export const supportSoulboundToken = onchainTable(
 );
 
 // ═══════════════════════════════════════════════════════════════════════════
+// OPERATOR REGISTRY
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** DAO-approved operators who can batch-submit fraud data */
+export const operator = onchainTable(
+  'operator',
+  (t) => ({
+    /** Operator address (lowercase) */
+    id: t.hex().primaryKey(),
+    /** Human-readable identifier (e.g., "Coinbase", "ZachXBT") */
+    identifier: t.text().notNull(),
+    /** Capabilities bitmask: 0x01=wallet, 0x02=tx, 0x04=contract */
+    capabilities: t.integer().notNull(),
+    /** Is currently approved */
+    approved: t.boolean().notNull(),
+    /** Block number when approved */
+    approvedAt: t.bigint().notNull(),
+    /** Block number when revoked (null if active) */
+    revokedAt: t.bigint(),
+    /** Approval transaction hash */
+    approvalTxHash: t.hex().notNull(),
+    /** Can submit to wallet registry */
+    canSubmitWallet: t.boolean().notNull(),
+    /** Can submit to transaction registry */
+    canSubmitTransaction: t.boolean().notNull(),
+    /** Can submit to contract registry */
+    canSubmitContract: t.boolean().notNull(),
+  }),
+  (table) => ({
+    approvedIdx: index().on(table.approved),
+    identifierIdx: index().on(table.identifier),
+  })
+);
+
+/** History of operator capability changes */
+export const operatorCapabilityChange = onchainTable(
+  'operator_capability_change',
+  (t) => ({
+    /** txHash-logIndex composite */
+    id: t.text().primaryKey(),
+    /** Operator address */
+    operator: t.hex().notNull(),
+    /** Old capabilities */
+    oldCapabilities: t.integer().notNull(),
+    /** New capabilities */
+    newCapabilities: t.integer().notNull(),
+    /** Block timestamp */
+    changedAt: t.bigint().notNull(),
+    /** Transaction hash */
+    transactionHash: t.hex().notNull(),
+  }),
+  (table) => ({
+    operatorIdx: index().on(table.operator),
+  })
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FRAUDULENT CONTRACT REGISTRY
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Batches of fraudulent contracts submitted by operators */
+export const fraudulentContractBatch = onchainTable(
+  'fraudulent_contract_batch',
+  (t) => ({
+    /** batchId (bytes32 as hex) */
+    id: t.hex().primaryKey(),
+    /** Merkle root of contracts */
+    merkleRoot: t.hex().notNull(),
+    /** Operator who submitted */
+    operator: t.hex().notNull(),
+    /** Primary chain for batch (CAIP-2 bytes32 hash) */
+    reportedChainIdHash: t.hex().notNull(),
+    /** CAIP-2 chain ID (resolved) */
+    reportedChainCAIP2: t.text(),
+    /** Number of contracts in batch */
+    contractCount: t.integer().notNull(),
+    /** Block timestamp when registered */
+    registeredAt: t.bigint().notNull(),
+    /** Block number when registered */
+    registeredAtBlock: t.bigint().notNull(),
+    /** Registration transaction hash */
+    transactionHash: t.hex().notNull(),
+    /** Has batch been invalidated */
+    invalidated: t.boolean().notNull(),
+    /** Block when invalidated (null if valid) */
+    invalidatedAt: t.bigint(),
+  }),
+  (table) => ({
+    operatorIdx: index().on(table.operator),
+    registeredAtIdx: index().on(table.registeredAt),
+    invalidatedIdx: index().on(table.invalidated),
+  })
+);
+
+/** Individual fraudulent contracts (extracted from batch events) */
+export const fraudulentContract = onchainTable(
+  'fraudulent_contract',
+  (t) => ({
+    /** contractAddress-chainIdHash composite */
+    id: t.text().primaryKey(),
+    /** Contract address */
+    contractAddress: t.hex().notNull(),
+    /** Chain ID hash (bytes32) */
+    chainIdHash: t.hex().notNull(),
+    /** CAIP-2 chain ID (resolved) */
+    caip2ChainId: t.text().notNull(),
+    /** Numeric chain ID (EVM only) */
+    numericChainId: t.integer(),
+    /** Parent batch ID */
+    batchId: t.hex().notNull(),
+    /** Operator who submitted */
+    operator: t.hex().notNull(),
+    /** When batch was registered */
+    reportedAt: t.bigint().notNull(),
+    /** Entry-level invalidation */
+    entryInvalidated: t.boolean().notNull(),
+  }),
+  (table) => ({
+    contractAddressIdx: index().on(table.contractAddress),
+    caip2ChainIdIdx: index().on(table.caip2ChainId),
+    batchIdIdx: index().on(table.batchId),
+    operatorIdx: index().on(table.operator),
+  })
+);
+
+/** Invalidated entries (individual contract+chain combinations) */
+export const invalidatedEntry = onchainTable('invalidated_entry', (t) => ({
+  /** entryHash (keccak256(contract, chainId)) */
+  id: t.hex().primaryKey(),
+  /** When invalidated */
+  invalidatedAt: t.bigint().notNull(),
+  /** Who invalidated */
+  invalidatedBy: t.hex().notNull(),
+  /** Transaction hash */
+  transactionHash: t.hex().notNull(),
+  /** Has been reinstated */
+  reinstated: t.boolean().notNull(),
+  /** When reinstated (null if still invalid) */
+  reinstatedAt: t.bigint(),
+}));
+
+// ═══════════════════════════════════════════════════════════════════════════
 // STATISTICS
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -283,6 +425,16 @@ export const registryStats = onchainTable('registry_stats', (t) => ({
   supportSoulboundsMinted: t.integer().notNull(),
   /** Total wei donated */
   totalSupportDonations: t.bigint().notNull(),
+  /** Total operator approvals */
+  totalOperators: t.integer().notNull(),
+  /** Active operators */
+  activeOperators: t.integer().notNull(),
+  /** Total fraudulent contract batches */
+  totalContractBatches: t.integer().notNull(),
+  /** Total individual fraudulent contracts reported */
+  totalFraudulentContracts: t.integer().notNull(),
+  /** Invalidated contract batches */
+  invalidatedContractBatches: t.integer().notNull(),
   /** Last update timestamp */
   lastUpdated: t.bigint().notNull(),
 }));

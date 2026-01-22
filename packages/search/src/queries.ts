@@ -57,6 +57,63 @@ export const TRANSACTION_QUERY = gql`
   }
 `;
 
+/**
+ * Query fraudulent contracts by address.
+ */
+export const CONTRACT_QUERY = gql`
+  query SearchContract($address: String!) {
+    fraudulentContracts(where: { contractAddress: $address }, limit: 10) {
+      items {
+        contractAddress
+        caip2ChainId
+        numericChainId
+        batchId
+        operator
+        reportedAt
+        entryInvalidated
+      }
+    }
+  }
+`;
+
+/**
+ * Query a single operator by address.
+ */
+export const OPERATOR_QUERY = gql`
+  query GetOperator($address: String!) {
+    operator(id: $address) {
+      id
+      identifier
+      capabilities
+      approved
+      canSubmitWallet
+      canSubmitTransaction
+      canSubmitContract
+      approvedAt
+    }
+  }
+`;
+
+/**
+ * Query list of operators.
+ */
+export const OPERATORS_LIST_QUERY = gql`
+  query ListOperators($approved: Boolean) {
+    operators(where: { approved: $approved }, orderBy: "approvedAt", orderDirection: "desc") {
+      items {
+        id
+        identifier
+        capabilities
+        approved
+        canSubmitWallet
+        canSubmitTransaction
+        canSubmitContract
+        approvedAt
+      }
+    }
+  }
+`;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // RAW RESPONSE TYPES (from Ponder indexer)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -95,6 +152,48 @@ export interface RawTransactionResponse {
       batchId: string;
       reporter: string;
       reportedAt: string;
+    }>;
+  };
+}
+
+export interface RawContractResponse {
+  fraudulentContracts: {
+    items: Array<{
+      contractAddress: string;
+      caip2ChainId: string;
+      numericChainId?: number;
+      batchId: string;
+      operator: string;
+      reportedAt: string;
+      entryInvalidated: boolean;
+    }>;
+  };
+}
+
+export interface RawOperatorResponse {
+  operator: {
+    id: string;
+    identifier: string;
+    capabilities: number;
+    approved: boolean;
+    canSubmitWallet: boolean;
+    canSubmitTransaction: boolean;
+    canSubmitContract: boolean;
+    approvedAt: string;
+  } | null;
+}
+
+export interface RawOperatorsListResponse {
+  operators: {
+    items: Array<{
+      id: string;
+      identifier: string;
+      capabilities: number;
+      approved: boolean;
+      canSubmitWallet: boolean;
+      canSubmitTransaction: boolean;
+      canSubmitContract: boolean;
+      approvedAt: string;
     }>;
   };
 }

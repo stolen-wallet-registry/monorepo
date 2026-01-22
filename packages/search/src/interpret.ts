@@ -6,6 +6,7 @@ import type {
   SearchResult,
   WalletSearchResult,
   TransactionSearchResult,
+  AddressSearchResult,
   ResultStatus,
 } from './types';
 
@@ -26,6 +27,16 @@ export function getWalletStatus(result: WalletSearchResult): ResultStatus {
  * @returns 'registered' | 'not-found'
  */
 export function getTransactionStatus(result: TransactionSearchResult): ResultStatus {
+  return result.found ? 'registered' : 'not-found';
+}
+
+/**
+ * Get simplified status from an address search result.
+ *
+ * @param result - Address search result (combined wallet + contract)
+ * @returns 'registered' | 'not-found'
+ */
+export function getAddressStatus(result: AddressSearchResult): ResultStatus {
   return result.found ? 'registered' : 'not-found';
 }
 
@@ -59,12 +70,39 @@ export function getTransactionStatusLabel(result: TransactionSearchResult): stri
 }
 
 /**
+ * Get human-readable label for combined address result.
+ * Shows which registry(ies) the address was found in.
+ */
+export function getAddressStatusLabel(result: AddressSearchResult): string {
+  if (!result.found) return 'Not Found';
+
+  const labels: string[] = [];
+
+  if (result.foundInWalletRegistry) {
+    labels.push('Stolen Wallet');
+  }
+
+  if (result.foundInContractRegistry) {
+    const contractData = result.data?.contract;
+    const chainCount = contractData?.chains.length ?? 0;
+    const invalidatedCount = contractData?.chains.filter((c) => c.isInvalidated).length ?? 0;
+    if (invalidatedCount === chainCount && chainCount > 0) {
+      labels.push('Contract (Invalidated)');
+    } else {
+      labels.push('Fraudulent Contract');
+    }
+  }
+
+  return labels.join(' & ');
+}
+
+/**
  * Get human-readable label for any search result.
  */
 export function getStatusLabel(result: SearchResult): string {
   switch (result.type) {
-    case 'wallet':
-      return getWalletStatusLabel(result);
+    case 'address':
+      return getAddressStatusLabel(result);
     case 'transaction':
       return getTransactionStatusLabel(result);
     case 'invalid':
@@ -99,12 +137,48 @@ export function getTransactionStatusDescription(result: TransactionSearchResult)
 }
 
 /**
+ * Get description for combined address result.
+ * Describes findings from both wallet and contract registries.
+ */
+export function getAddressStatusDescription(result: AddressSearchResult): string {
+  if (!result.found) {
+    return 'This address is not in any registry.';
+  }
+
+  const descriptions: string[] = [];
+
+  if (result.foundInWalletRegistry) {
+    const walletData = result.data?.wallet;
+    if (walletData?.isSponsored) {
+      descriptions.push('Registered as a stolen wallet (sponsored registration).');
+    } else {
+      descriptions.push('Registered as a stolen wallet.');
+    }
+  }
+
+  if (result.foundInContractRegistry) {
+    const contractData = result.data?.contract;
+    const chainCount = contractData?.chains.length ?? 0;
+    const invalidatedCount = contractData?.chains.filter((c) => c.isInvalidated).length ?? 0;
+    if (invalidatedCount === chainCount && chainCount > 0) {
+      descriptions.push('Previously flagged as fraudulent contract (invalidated).');
+    } else if (chainCount === 1) {
+      descriptions.push('Flagged as a fraudulent contract.');
+    } else {
+      descriptions.push(`Flagged as a fraudulent contract on ${chainCount} chains.`);
+    }
+  }
+
+  return descriptions.join(' ');
+}
+
+/**
  * Get description for any search result.
  */
 export function getStatusDescription(result: SearchResult): string {
   switch (result.type) {
-    case 'wallet':
-      return getWalletStatusDescription(result);
+    case 'address':
+      return getAddressStatusDescription(result);
     case 'transaction':
       return getTransactionStatusDescription(result);
     case 'invalid':

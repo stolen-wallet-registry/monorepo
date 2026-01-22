@@ -84,15 +84,21 @@ function StatusIcon({ status }: { status: ResultStatus }) {
 
 function createStubbedWalletResult(address: string): SearchResult {
   return {
-    type: 'wallet',
+    type: 'address',
     found: true,
+    foundInWalletRegistry: true,
+    foundInContractRegistry: false,
     data: {
       address: address.toLowerCase() as `0x${string}`,
-      caip10: `eip155:${HUB_CHAIN_ID}:${address.toLowerCase()}`,
-      registeredAt: BigInt(Math.floor(Date.now() / 1000) - 86400 * 7), // 7 days ago
-      transactionHash:
-        '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`,
-      isSponsored: false,
+      wallet: {
+        address: address.toLowerCase() as `0x${string}`,
+        caip10: `eip155:${HUB_CHAIN_ID}:${address.toLowerCase()}`,
+        registeredAt: BigInt(Math.floor(Date.now() / 1000) - 86400 * 7), // 7 days ago
+        transactionHash:
+          '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`,
+        isSponsored: false,
+      },
+      contract: null,
     },
   };
 }
@@ -211,7 +217,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
   const getExplorerUrl = () => {
     if (!searchedQuery || !result || result.type === 'invalid') return null;
 
-    if (result.type === 'wallet') {
+    if (result.type === 'address') {
       return getExplorerAddressUrl(HUB_CHAIN_ID, searchedQuery);
     } else if (result.type === 'transaction') {
       return getExplorerTxUrl(HUB_CHAIN_ID, searchedQuery);
@@ -317,18 +323,24 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
             {/* Additional details for found results */}
             {result.found && result.data && (
               <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                {result.type === 'wallet' && (
+                {result.type === 'address' && result.data.wallet && (
                   <>
                     <p className="text-center">
-                      Registered: {formatTimestamp(result.data.registeredAt)}
+                      Registered: {formatTimestamp(result.data.wallet.registeredAt)}
                     </p>
-                    {result.data.isSponsored && (
+                    {result.data.wallet.isSponsored && (
                       <p className="text-center italic">Sponsored registration</p>
                     )}
-                    {result.data.sourceChainName && (
-                      <p className="text-center">Source: {result.data.sourceChainName}</p>
+                    {result.data.wallet.sourceChainName && (
+                      <p className="text-center">Source: {result.data.wallet.sourceChainName}</p>
                     )}
                   </>
+                )}
+                {result.type === 'address' && result.data.contract && (
+                  <p className="text-center">
+                    Flagged on {result.data.contract.chains.length} chain
+                    {result.data.contract.chains.length > 1 ? 's' : ''}
+                  </p>
                 )}
                 {result.type === 'transaction' && (
                   <p className="text-center">
@@ -341,7 +353,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
 
             {/* Explorer link */}
             <div className="mt-2 flex justify-center">
-              {result.type === 'wallet' ? (
+              {result.type === 'address' ? (
                 <ExplorerLink
                   value={searchedQuery as `0x${string}`}
                   type="address"

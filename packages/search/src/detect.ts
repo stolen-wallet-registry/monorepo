@@ -8,12 +8,12 @@ import type { SearchType } from './types';
  * Detect the type of search input.
  *
  * @param input - User input string
- * @returns Detected type: 'wallet' | 'transaction' | 'caip10' | 'invalid'
+ * @returns Detected type: 'address' | 'transaction' | 'caip10' | 'invalid'
  *
  * @example
  * ```ts
  * detectSearchType('0x742d35Cc6634C0532925a3b844Bc454e83c4b3a1')
- * // => 'wallet'
+ * // => 'address' (will search both wallet and contract registries)
  *
  * detectSearchType('0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef')
  * // => 'transaction'
@@ -41,9 +41,10 @@ export function detectSearchType(input: string): SearchType {
     }
   }
 
-  // Wallet address: 0x + 40 hex chars = 42 chars
+  // Address: 0x + 40 hex chars = 42 chars
+  // Will search BOTH stolen wallet registry AND fraudulent contract registry
   if (trimmed.length === 42 && trimmed.startsWith('0x') && /^0x[0-9a-f]{40}$/.test(trimmed)) {
-    return 'wallet';
+    return 'address';
   }
 
   // Transaction hash: 0x + 64 hex chars = 66 chars
