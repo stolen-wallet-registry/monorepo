@@ -53,13 +53,13 @@ import { MockInterchainGasPaymaster } from "../test/mocks/MockInterchainGasPayma
 ///  10: TranslationRegistry       → 0x610178dA211FEF7D417bC0e6FeD39F05609AD788
 ///  11: WalletSoulbound           → 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
 ///  12: SupportSoulbound          → 0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0
-///  13: SoulboundReceiver         → 0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE
+///  13: SoulboundReceiver         → 0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82
 ///  14: (setAuthorizedMinter tx)
 ///  15: OperatorRegistry          → 0x0B306BF915C4d645ff596e518fAf3F9669b97016
 ///  16: (setOperatorRegistry to hub tx)
 ///  17-18: (setOperatorRegistry to wallet/tx registries)
 ///  19-20: (approveOperator txs for test operators)
-///  21: FraudulentContractRegistry → 0x3Aa5ebB10DC797CAC828524e59A333d0A371443c
+///  21: FraudulentContractRegistry → 0x59b670e9fA9D0A427751Af201D676719a970857b
 ///  22: (setFraudulentContractRegistry tx)
 ///
 /// Language seeding runs separately via SeedLanguages.s.sol (doesn't affect addresses)

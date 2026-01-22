@@ -1,4 +1,5 @@
 import { createConfig } from 'ponder';
+import type { Address } from 'viem';
 import {
   StolenWalletRegistryABI,
   StolenTransactionRegistryABI,
@@ -10,7 +11,7 @@ import {
   OperatorRegistryABI,
   FraudulentContractRegistryABI,
 } from '@swr/abis';
-import { anvilHub, baseSepolia, base, type Environment } from '@swr/chains';
+import { anvilHub, baseSepolia, base, type Environment, type HubContracts } from '@swr/chains';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ENVIRONMENT CONFIGURATION
@@ -30,57 +31,34 @@ const PONDER_ENV = rawEnv as Environment;
 // ═══════════════════════════════════════════════════════════════════════════
 // CONTRACT ADDRESSES BY ENVIRONMENT
 // ═══════════════════════════════════════════════════════════════════════════
-// Anvil addresses are deterministic from DeployCrossChain.s.sol
-// Testnet/mainnet addresses are filled after deployment
-const ADDRESSES: Record<
+// Source of truth: @swr/chains hubContracts
+// Soulbound addresses are not yet in @swr/chains - kept hardcoded below
+// TODO: Add soulbound addresses to @swr/chains types and network configs
+
+/** Soulbound contract addresses (not yet in @swr/chains) */
+const SOULBOUND_ADDRESSES: Record<
   Environment,
-  {
-    feeManager: `0x${string}`;
-    registryHub: `0x${string}`;
-    stolenWalletRegistry: `0x${string}`;
-    stolenTransactionRegistry: `0x${string}`;
-    crossChainInbox: `0x${string}`;
-    walletSoulbound: `0x${string}`;
-    supportSoulbound: `0x${string}`;
-    operatorRegistry: `0x${string}`;
-    fraudulentContractRegistry: `0x${string}`;
-  }
+  { walletSoulbound: Address; supportSoulbound: Address }
 > = {
   development: {
-    feeManager: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512',
-    registryHub: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
-    stolenWalletRegistry: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
-    stolenTransactionRegistry: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9',
-    crossChainInbox: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
     walletSoulbound: '0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e',
     supportSoulbound: '0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0',
-    operatorRegistry: '0x0B306BF915C4d645ff596e518fAf3F9669b97016',
-    fraudulentContractRegistry: '0x3Aa5ebB10DC797CAC828524e59A333d0A371443c',
   },
   staging: {
-    // Base Sepolia addresses - fill after deployment
-    feeManager: '0x0000000000000000000000000000000000000000',
-    registryHub: '0x0000000000000000000000000000000000000000',
-    stolenWalletRegistry: '0x0000000000000000000000000000000000000000',
-    stolenTransactionRegistry: '0x0000000000000000000000000000000000000000',
-    crossChainInbox: '0x0000000000000000000000000000000000000000',
     walletSoulbound: '0x0000000000000000000000000000000000000000',
     supportSoulbound: '0x0000000000000000000000000000000000000000',
-    operatorRegistry: '0x0000000000000000000000000000000000000000',
-    fraudulentContractRegistry: '0x0000000000000000000000000000000000000000',
   },
   production: {
-    // Base mainnet addresses - fill after deployment
-    feeManager: '0x0000000000000000000000000000000000000000',
-    registryHub: '0x0000000000000000000000000000000000000000',
-    stolenWalletRegistry: '0x0000000000000000000000000000000000000000',
-    stolenTransactionRegistry: '0x0000000000000000000000000000000000000000',
-    crossChainInbox: '0x0000000000000000000000000000000000000000',
     walletSoulbound: '0x0000000000000000000000000000000000000000',
     supportSoulbound: '0x0000000000000000000000000000000000000000',
-    operatorRegistry: '0x0000000000000000000000000000000000000000',
-    fraudulentContractRegistry: '0x0000000000000000000000000000000000000000',
   },
+};
+
+/** Hub contracts from @swr/chains (single source of truth) */
+const HUB_CONTRACTS: Record<Environment, HubContracts | null> = {
+  development: anvilHub.hubContracts,
+  staging: baseSepolia.hubContracts,
+  production: base.hubContracts,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -117,7 +95,8 @@ const CHAIN_CONFIG: Record<
 
 // Get current config
 const chainConfig = CHAIN_CONFIG[PONDER_ENV];
-const addresses = ADDRESSES[PONDER_ENV];
+const hubContracts = HUB_CONTRACTS[PONDER_ENV];
+const soulboundAddresses = SOULBOUND_ADDRESSES[PONDER_ENV];
 
 // Validate RPC URL for non-development environments
 if (PONDER_ENV !== 'development' && !chainConfig.rpc) {
@@ -128,14 +107,23 @@ if (PONDER_ENV !== 'development' && !chainConfig.rpc) {
 // Validate contract addresses for non-development environments
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 if (PONDER_ENV !== 'development') {
-  const zeroAddresses = Object.entries(addresses)
+  // Check hub contracts from @swr/chains
+  if (!hubContracts) {
+    throw new Error(
+      `${PONDER_ENV} environment has no hub contracts configured in @swr/chains. ` +
+        'Deploy contracts and update network config in packages/chains.'
+    );
+  }
+
+  // Check soulbound addresses (not yet in @swr/chains)
+  const zeroSoulbound = Object.entries(soulboundAddresses)
     .filter(([_, addr]) => addr === ZERO_ADDRESS)
     .map(([name]) => name);
 
-  if (zeroAddresses.length > 0) {
+  if (zeroSoulbound.length > 0) {
     throw new Error(
-      `${PONDER_ENV} environment has unconfigured contract addresses: ${zeroAddresses.join(', ')}. ` +
-        'Deploy contracts and update ADDRESSES in ponder.config.ts.'
+      `${PONDER_ENV} environment has unconfigured soulbound addresses: ${zeroSoulbound.join(', ')}. ` +
+        'Deploy contracts and update SOULBOUND_ADDRESSES in ponder.config.ts.'
     );
   }
 
@@ -161,69 +149,69 @@ export default createConfig({
     },
   },
   contracts: {
-    // Core Registries
+    // Core Registries (from @swr/chains hubContracts)
     StolenWalletRegistry: {
       chain: chainConfig.name,
       abi: StolenWalletRegistryABI,
-      address: addresses.stolenWalletRegistry,
+      address: hubContracts!.stolenWalletRegistry,
       startBlock: chainConfig.startBlock,
     },
     StolenTransactionRegistry: {
       chain: chainConfig.name,
       abi: StolenTransactionRegistryABI,
-      address: addresses.stolenTransactionRegistry,
+      address: hubContracts!.stolenTransactionRegistry,
       startBlock: chainConfig.startBlock,
     },
     RegistryHub: {
       chain: chainConfig.name,
       abi: RegistryHubABI,
-      address: addresses.registryHub,
+      address: hubContracts!.registryHub,
       startBlock: chainConfig.startBlock,
     },
 
-    // Cross-Chain
+    // Cross-Chain (from @swr/chains hubContracts)
     CrossChainInbox: {
       chain: chainConfig.name,
       abi: CrossChainInboxABI,
-      address: addresses.crossChainInbox,
+      address: hubContracts!.crossChainInbox!,
       startBlock: chainConfig.startBlock,
     },
 
-    // Soulbound Tokens
+    // Soulbound Tokens (not yet in @swr/chains - hardcoded above)
     WalletSoulbound: {
       chain: chainConfig.name,
       abi: WalletSoulboundABI,
-      address: addresses.walletSoulbound,
+      address: soulboundAddresses.walletSoulbound,
       startBlock: chainConfig.startBlock,
     },
     SupportSoulbound: {
       chain: chainConfig.name,
       abi: SupportSoulboundABI,
-      address: addresses.supportSoulbound,
+      address: soulboundAddresses.supportSoulbound,
       startBlock: chainConfig.startBlock,
     },
 
-    // Fee Management (optional - for admin dashboards)
+    // Fee Management (from @swr/chains hubContracts)
     FeeManager: {
       chain: chainConfig.name,
       abi: FeeManagerABI,
-      address: addresses.feeManager,
+      address: hubContracts!.feeManager,
       startBlock: chainConfig.startBlock,
     },
 
-    // Operator Registry (for DAO-approved operators)
+    // Operator Registry (from @swr/chains hubContracts)
     OperatorRegistry: {
       chain: chainConfig.name,
       abi: OperatorRegistryABI,
-      address: addresses.operatorRegistry,
+      address: hubContracts!.operatorRegistry!,
       startBlock: chainConfig.startBlock,
     },
 
-    // Fraudulent Contract Registry (operator-only submissions)
+    // Fraudulent Contract Registry (from @swr/chains hubContracts)
     FraudulentContractRegistry: {
       chain: chainConfig.name,
       abi: FraudulentContractRegistryABI,
-      address: addresses.fraudulentContractRegistry,
+      address: hubContracts!.fraudulentContractRegistry,
       startBlock: chainConfig.startBlock,
     },
   },
