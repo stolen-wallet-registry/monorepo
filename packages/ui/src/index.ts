@@ -87,6 +87,7 @@ export {
   TableCell,
   TableCaption,
 } from './components/table';
+export { Tabs, TabsList, TabsTrigger, TabsContent } from './components/tabs';
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './components/tooltip';
 
 // Animation components

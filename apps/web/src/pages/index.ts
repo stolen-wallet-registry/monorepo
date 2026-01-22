@@ -14,4 +14,5 @@ export { TransactionStandardRegistrationPage } from './TransactionStandardRegist
 export { TransactionSelfRelayRegistrationPage } from './TransactionSelfRelayRegistrationPage';
 // Other pages
 export { SoulboundPage } from './SoulboundPage';
+export { DashboardPage } from './DashboardPage';
 export { NotFoundPage } from './NotFoundPage';

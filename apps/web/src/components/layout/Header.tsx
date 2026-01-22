@@ -58,6 +58,7 @@ export function Header() {
   const navItems = [
     { href: '/', label: 'Register', matchPaths: ['/', '/register', '/registration'] },
     { href: '/search', label: 'Search', matchPaths: ['/search'] },
+    { href: '/dashboard', label: 'Dashboard', matchPaths: ['/dashboard'] },
     { href: '/soulbound', label: 'Support', matchPaths: ['/soulbound'] },
   ];
 

@@ -26,7 +26,7 @@ import {
   base,
   type Environment,
 } from '@swr/chains';
-import { keccak256, encodePacked, type Address, type Hex } from 'viem';
+import { keccak256, encodePacked, encodeAbiParameters, concat, type Address, type Hex } from 'viem';
 
 // Hub chain configuration - determined by environment
 const PONDER_ENV = (process.env.PONDER_ENV ?? 'development') as Environment;
@@ -887,8 +887,12 @@ ponder.on('FraudulentContractRegistry:ContractBatchRegistered', async ({ event, 
     const compositeId = `${contractAddr.toLowerCase()}-${chainIdHash}`;
 
     // Compute entryHash for linking with invalidation events
-    // Matches contract: keccak256(abi.encode(contractAddress, chainId))
-    const entryHash = keccak256(encodePacked(['address', 'bytes32'], [contractAddr, chainIdHash]));
+    // Matches contract's MerkleRootComputation.hashLeaf (OpenZeppelin standard):
+    // keccak256(bytes.concat(bytes1(0x00), keccak256(abi.encode(address, bytes32))))
+    const innerHash = keccak256(
+      encodeAbiParameters([{ type: 'address' }, { type: 'bytes32' }], [contractAddr, chainIdHash])
+    );
+    const entryHash = keccak256(concat(['0x00', innerHash]));
 
     await db
       .insert(fraudulentContract)

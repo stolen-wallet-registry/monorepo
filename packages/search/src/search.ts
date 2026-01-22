@@ -221,10 +221,10 @@ export async function searchContract(
           invalidatedSet.add(entry.id.toLowerCase());
         }
       }
-    } catch {
+    } catch (err) {
       // If invalidation query fails, assume not invalidated
       // This is a graceful degradation - the contract was still found
-      console.warn('Failed to fetch invalidation status, assuming not invalidated');
+      console.warn('Failed to fetch invalidation status, assuming not invalidated', err);
     }
   }
 
@@ -272,10 +272,27 @@ export async function searchAddress(
   address: string
 ): Promise<AddressSearchResult> {
   // Query both registries in parallel for performance
-  const [walletResult, contractData] = await Promise.all([
+  // Use Promise.allSettled to handle partial failures gracefully
+  const [walletSettled, contractSettled] = await Promise.allSettled([
     searchWallet(config, address),
     searchContract(config, address),
   ]);
+
+  // Extract results, defaulting to "not found" on failure
+  const walletResult =
+    walletSettled.status === 'fulfilled'
+      ? walletSettled.value
+      : { found: false as const, data: null };
+
+  const contractData = contractSettled.status === 'fulfilled' ? contractSettled.value : null;
+
+  // Log any failures for debugging
+  if (walletSettled.status === 'rejected') {
+    console.warn('Wallet search failed:', walletSettled.reason);
+  }
+  if (contractSettled.status === 'rejected') {
+    console.warn('Contract search failed:', contractSettled.reason);
+  }
 
   const foundInWallet = walletResult.found;
   const foundInContract = contractData !== null;

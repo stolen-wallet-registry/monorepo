@@ -15,6 +15,7 @@ import {
   P2PRegistereeRegistrationPage,
   P2PRelayerRegistrationPage,
   SoulboundPage,
+  DashboardPage,
   TransactionHomePage,
   TransactionStandardRegistrationPage,
   TransactionSelfRelayRegistrationPage,
@@ -54,6 +55,7 @@ function App() {
             {/* Other routes */}
             <Route path="/search" component={SearchPage} />
             <Route path="/soulbound" component={SoulboundPage} />
+            <Route path="/dashboard" component={DashboardPage} />
             <Route component={NotFoundPage} />
           </Switch>
         </Layout>
