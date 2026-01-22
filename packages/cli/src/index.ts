@@ -25,16 +25,21 @@ program
   .command('submit-contracts')
   .description('Submit a batch of fraudulent contracts')
   .requiredOption('-f, --file <path>', 'Input file (JSON or CSV)')
-  .option('-n, --network <network>', 'Network: local, testnet, mainnet', 'local')
+  .option('-e, --env <env>', 'Environment: local, testnet, mainnet', 'local')
   .option('-k, --private-key <key>', 'Operator private key (or set OPERATOR_PRIVATE_KEY env)')
   .option('-c, --chain-id <id>', 'Default chain ID for entries', '8453')
-  .option('-o, --output-dir <path>', 'Directory to save Merkle tree')
+  .option('-o, --output-dir <path>', 'Directory to save Merkle tree and transaction data')
   .option('--dry-run', 'Simulate without submitting')
+  .option('--build-only', 'Build transaction data for multisig (no private key needed)')
   .action(async (options) => {
     const privateKey = options.privateKey || process.env.OPERATOR_PRIVATE_KEY;
-    if (!privateKey) {
+
+    // Private key only required if not using --build-only or --dry-run
+    if (!privateKey && !options.buildOnly && !options.dryRun) {
       console.error(
-        chalk.red('Error: Private key required. Use --private-key or set OPERATOR_PRIVATE_KEY')
+        chalk.red(
+          'Error: Private key required. Use --private-key, set OPERATOR_PRIVATE_KEY, or use --build-only for multisig'
+        )
       );
       process.exit(1);
     }
@@ -45,7 +50,7 @@ program
       process.exit(1);
     }
 
-    if (!/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
+    if (privateKey && !/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
       console.error(chalk.red('Error: Private key must be 32-byte hex with 0x prefix'));
       process.exit(1);
     }
@@ -53,11 +58,12 @@ program
     try {
       await submitContracts({
         file: options.file,
-        network: options.network,
+        env: options.env,
         privateKey,
         chainId,
         outputDir: options.outputDir,
         dryRun: options.dryRun,
+        buildOnly: options.buildOnly,
       });
     } catch (error) {
       console.error(chalk.red(`Error: ${(error as Error).message}`));
@@ -69,16 +75,21 @@ program
   .command('submit-wallets')
   .description('Submit a batch of stolen wallets')
   .requiredOption('-f, --file <path>', 'Input file (JSON or CSV)')
-  .option('-n, --network <network>', 'Network: local, testnet, mainnet', 'local')
+  .option('-e, --env <env>', 'Environment: local, testnet, mainnet', 'local')
   .option('-k, --private-key <key>', 'Operator private key')
   .option('-c, --chain-id <id>', 'Default chain ID', '8453')
-  .option('-o, --output-dir <path>', 'Directory to save Merkle tree')
+  .option('-o, --output-dir <path>', 'Directory to save Merkle tree and transaction data')
   .option('--dry-run', 'Simulate without submitting')
+  .option('--build-only', 'Build transaction data for multisig (no private key needed)')
   .action(async (options) => {
     const privateKey = options.privateKey || process.env.OPERATOR_PRIVATE_KEY;
-    if (!privateKey) {
+
+    // Private key only required if not using --build-only or --dry-run
+    if (!privateKey && !options.buildOnly && !options.dryRun) {
       console.error(
-        chalk.red('Error: Private key required. Use --private-key or set OPERATOR_PRIVATE_KEY')
+        chalk.red(
+          'Error: Private key required. Use --private-key, set OPERATOR_PRIVATE_KEY, or use --build-only for multisig'
+        )
       );
       process.exit(1);
     }
@@ -89,7 +100,7 @@ program
       process.exit(1);
     }
 
-    if (!/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
+    if (privateKey && !/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
       console.error(chalk.red('Error: Private key must be 32-byte hex with 0x prefix'));
       process.exit(1);
     }
@@ -97,11 +108,12 @@ program
     try {
       await submitWallets({
         file: options.file,
-        network: options.network,
+        env: options.env,
         privateKey,
         chainId,
         outputDir: options.outputDir,
         dryRun: options.dryRun,
+        buildOnly: options.buildOnly,
       });
     } catch (error) {
       console.error(chalk.red(`Error: ${(error as Error).message}`));
@@ -113,16 +125,21 @@ program
   .command('submit-transactions')
   .description('Submit a batch of stolen transactions')
   .requiredOption('-f, --file <path>', 'Input file (JSON or CSV)')
-  .option('-n, --network <network>', 'Network: local, testnet, mainnet', 'local')
+  .option('-e, --env <env>', 'Environment: local, testnet, mainnet', 'local')
   .option('-k, --private-key <key>', 'Operator private key')
   .option('-c, --chain-id <id>', 'Default chain ID', '8453')
-  .option('-o, --output-dir <path>', 'Directory to save Merkle tree')
+  .option('-o, --output-dir <path>', 'Directory to save Merkle tree and transaction data')
   .option('--dry-run', 'Simulate without submitting')
+  .option('--build-only', 'Build transaction data for multisig (no private key needed)')
   .action(async (options) => {
     const privateKey = options.privateKey || process.env.OPERATOR_PRIVATE_KEY;
-    if (!privateKey) {
+
+    // Private key only required if not using --build-only or --dry-run
+    if (!privateKey && !options.buildOnly && !options.dryRun) {
       console.error(
-        chalk.red('Error: Private key required. Use --private-key or set OPERATOR_PRIVATE_KEY')
+        chalk.red(
+          'Error: Private key required. Use --private-key, set OPERATOR_PRIVATE_KEY, or use --build-only for multisig'
+        )
       );
       process.exit(1);
     }
@@ -133,7 +150,7 @@ program
       process.exit(1);
     }
 
-    if (!/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
+    if (privateKey && !/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
       console.error(chalk.red('Error: Private key must be 32-byte hex with 0x prefix'));
       process.exit(1);
     }
@@ -141,11 +158,12 @@ program
     try {
       await submitTransactions({
         file: options.file,
-        network: options.network,
+        env: options.env,
         privateKey,
         chainId,
         outputDir: options.outputDir,
         dryRun: options.dryRun,
+        buildOnly: options.buildOnly,
       });
     } catch (error) {
       console.error(chalk.red(`Error: ${(error as Error).message}`));
@@ -160,12 +178,12 @@ program
 program
   .command('quote')
   .description('Get fee quote for batch submission')
-  .option('-n, --network <network>', 'Network: local, testnet, mainnet', 'local')
+  .option('-e, --env <env>', 'Environment: local, testnet, mainnet', 'local')
   .option('-t, --type <type>', 'Registry type: wallet, transaction, contract', 'contract')
   .action(async (options) => {
     try {
       await quote({
-        network: options.network,
+        env: options.env,
         type: options.type,
       });
     } catch (error) {
@@ -178,14 +196,14 @@ program
   .command('verify')
   .description('Verify an entry exists in the registry')
   .requiredOption('-a, --address <address>', 'Address to verify')
-  .option('-n, --network <network>', 'Network: local, testnet, mainnet', 'local')
+  .option('-e, --env <env>', 'Environment: local, testnet, mainnet', 'local')
   .option('-c, --chain-id <id>', 'Chain ID', '8453')
   .option('-t, --type <type>', 'Registry type: wallet, contract', 'contract')
   .action(async (options) => {
     try {
       await verify({
         address: options.address,
-        network: options.network,
+        env: options.env,
         chainId: parseInt(options.chainId),
         type: options.type,
       });

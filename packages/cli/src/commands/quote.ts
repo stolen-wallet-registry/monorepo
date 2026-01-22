@@ -9,7 +9,7 @@ import {
 } from '@swr/abis';
 
 export interface QuoteOptions {
-  network: 'local' | 'testnet' | 'mainnet';
+  env: 'local' | 'testnet' | 'mainnet';
   type: 'wallet' | 'transaction' | 'contract';
 }
 
@@ -17,7 +17,7 @@ export async function quote(options: QuoteOptions): Promise<void> {
   const spinner = ora();
 
   try {
-    const config = getConfig(options.network);
+    const config = getConfig(options.env);
 
     // Create a read-only client (no private key needed)
     const publicClient = createPublicClient({
@@ -33,7 +33,7 @@ export async function quote(options: QuoteOptions): Promise<void> {
     switch (options.type) {
       case 'wallet':
         if (config.contracts.stolenWalletRegistry === zeroAddress) {
-          throw new Error('Wallet registry not configured for this network');
+          throw new Error('Wallet registry not configured for this environment');
         }
         // Use operator batch quote for CLI (operators use batch registration)
         fee = await publicClient.readContract({
@@ -46,7 +46,7 @@ export async function quote(options: QuoteOptions): Promise<void> {
 
       case 'transaction':
         if (config.contracts.stolenTransactionRegistry === zeroAddress) {
-          throw new Error('Transaction registry not configured for this network');
+          throw new Error('Transaction registry not configured for this environment');
         }
         // quoteRegistration takes reporter param (unused on hub, for interface compatibility)
         fee = await publicClient.readContract({
@@ -60,7 +60,7 @@ export async function quote(options: QuoteOptions): Promise<void> {
 
       case 'contract':
         if (config.contracts.fraudulentContractRegistry === zeroAddress) {
-          throw new Error('Contract registry not configured for this network');
+          throw new Error('Contract registry not configured for this environment');
         }
         fee = await publicClient.readContract({
           address: config.contracts.fraudulentContractRegistry,
@@ -77,7 +77,7 @@ export async function quote(options: QuoteOptions): Promise<void> {
     spinner.succeed('Fee retrieved');
 
     console.log(`\n${chalk.bold(registryName)}`);
-    console.log(`  Network: ${chalk.cyan(options.network)}`);
+    console.log(`  Environment: ${chalk.cyan(options.env)}`);
     console.log(`  Fee: ${chalk.yellow(formatEther(fee))} ETH`);
     console.log(`  Fee (wei): ${fee.toString()}`);
   } catch (error) {

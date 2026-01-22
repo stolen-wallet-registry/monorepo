@@ -1,4 +1,11 @@
-import { formatEther, zeroAddress } from 'viem';
+import {
+  formatEther,
+  zeroAddress,
+  encodeFunctionData,
+  createPublicClient,
+  http,
+  type Hex,
+} from 'viem';
 import chalk from 'chalk';
 import ora from 'ora';
 import { buildWalletMerkleTree, serializeTree } from '../lib/merkle.js';
@@ -12,11 +19,23 @@ import { join } from 'path';
 
 export interface SubmitWalletsOptions {
   file: string;
-  network: 'local' | 'testnet' | 'mainnet';
-  privateKey: string;
+  env: 'local' | 'testnet' | 'mainnet';
+  privateKey?: string;
   chainId?: number;
   outputDir?: string;
   dryRun?: boolean;
+  buildOnly?: boolean;
+}
+
+/** Transaction data for multisig import (Safe, Zodiac, etc.) */
+export interface MultisigTransaction {
+  to: string;
+  value: string;
+  data: Hex;
+  operation: 0; // Call (not DelegateCall)
+  description: string;
+  merkleRoot: Hex;
+  entryCount: number;
 }
 
 export async function submitWallets(options: SubmitWalletsOptions): Promise<void> {
@@ -24,10 +43,10 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
 
   try {
     // 1. Load configuration
-    const config = getConfig(options.network);
+    const config = getConfig(options.env);
 
     if (config.contracts.stolenWalletRegistry === zeroAddress) {
-      throw new Error(`Contract addresses not configured for network: ${options.network}`);
+      throw new Error(`Contract addresses not configured for environment: ${options.env}`);
     }
 
     // 2. Parse input file
@@ -41,13 +60,11 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
     const { root, tree } = buildWalletMerkleTree(entries);
     spinner.succeed(`Merkle root: ${chalk.cyan(root)}`);
 
-    // 4. Setup client
-    const { publicClient, walletClient, account } = createClients(
-      config,
-      options.privateKey as `0x${string}`
-    );
-
-    console.log(chalk.gray(`Operator address: ${account}`));
+    // 4. Create public client for fee quote (no private key needed)
+    const publicClient = createPublicClient({
+      chain: config.chain,
+      transport: http(config.rpcUrl),
+    });
 
     // 5. Quote fee for operator batch registration
     spinner.start('Fetching fee quote...');
@@ -63,6 +80,52 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
     const walletAddresses = entries.map((e) => e.address);
     const chainIds = entries.map((e) => e.chainId);
 
+    // 7. Encode calldata
+    const calldata = encodeFunctionData({
+      abi: StolenWalletRegistryABI,
+      functionName: 'registerBatchAsOperator',
+      args: [root, reportedChainId, walletAddresses, chainIds],
+    });
+
+    // Handle --build-only mode (for multisig/DAO workflows)
+    if (options.buildOnly) {
+      const txData: MultisigTransaction = {
+        to: config.contracts.stolenWalletRegistry,
+        value: fee.toString(),
+        data: calldata,
+        operation: 0,
+        description: `Register ${entries.length} stolen wallets (Merkle root: ${root.slice(0, 10)}...)`,
+        merkleRoot: root,
+        entryCount: entries.length,
+      };
+
+      // Save merkle tree alongside transaction data
+      if (options.outputDir) {
+        const outputDir = options.outputDir;
+        await mkdir(outputDir, { recursive: true });
+
+        const timestamp = Date.now();
+        const txFile = join(outputDir, `tx-wallets-${timestamp}.json`);
+        const treeFile = join(outputDir, `tree-wallets-${timestamp}.json`);
+
+        await writeFile(txFile, JSON.stringify(txData, null, 2));
+        await writeFile(treeFile, serializeTree(tree));
+
+        console.log(chalk.green('\n✓ Transaction data built for multisig'));
+        console.log(`  Transaction file: ${chalk.cyan(txFile)}`);
+        console.log(`  Merkle tree file: ${chalk.cyan(treeFile)}`);
+      } else {
+        // Output to stdout if no output dir specified
+        console.log(chalk.green('\n✓ Transaction data for multisig:'));
+        console.log(JSON.stringify(txData, null, 2));
+      }
+
+      console.log(chalk.gray('\nImport the transaction JSON into your multisig UI (Safe, etc.)'));
+      console.log(chalk.gray('Keep the Merkle tree file for future verification.'));
+      return;
+    }
+
+    // Handle --dry-run mode
     if (options.dryRun) {
       console.log(chalk.yellow('\n--- DRY RUN ---'));
       console.log('Would submit:');
@@ -73,7 +136,18 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
       return;
     }
 
-    // 7. Submit transaction
+    // 8. For direct submission, private key is required
+    if (!options.privateKey) {
+      throw new Error(
+        'Private key required for direct submission. Use --build-only for multisig workflows.'
+      );
+    }
+
+    const { walletClient, account } = createClients(config, options.privateKey as `0x${string}`);
+
+    console.log(chalk.gray(`Operator address: ${account}`));
+
+    // 9. Submit transaction
     spinner.start('Submitting batch...');
     const hash = await walletClient.writeContract({
       chain: config.chain,
@@ -86,7 +160,7 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
     });
     spinner.succeed(`Transaction submitted: ${chalk.green(hash)}`);
 
-    // 8. Wait for confirmation
+    // 10. Wait for confirmation
     spinner.start('Waiting for confirmation...');
     const receipt = await publicClient.waitForTransactionReceipt({
       hash,
@@ -94,7 +168,7 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
     });
     spinner.succeed(`Confirmed in block ${receipt.blockNumber}`);
 
-    // 9. Save tree for verification
+    // 11. Save tree for verification
     if (options.outputDir) {
       const outputDir = options.outputDir;
       await mkdir(outputDir, { recursive: true });
@@ -104,7 +178,7 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
       console.log(chalk.gray(`Tree saved to: ${treeFile}`));
     }
 
-    // 10. Summary
+    // 12. Summary
     console.log(chalk.green('\n✓ Batch registered successfully!'));
     console.log(`  Transaction: ${hash}`);
     console.log(`  Block: ${receipt.blockNumber}`);

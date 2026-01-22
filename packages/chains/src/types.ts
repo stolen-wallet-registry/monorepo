@@ -97,6 +97,8 @@ export interface BridgesConfig {
 /** Hub chain contract addresses */
 export interface HubContracts {
   stolenWalletRegistry: Address;
+  stolenTransactionRegistry: Address;
+  fraudulentContractRegistry: Address;
   feeManager: Address;
   registryHub: Address;
   crossChainInbox?: Address;

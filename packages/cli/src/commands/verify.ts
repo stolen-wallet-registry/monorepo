@@ -7,7 +7,7 @@ import { FraudulentContractRegistryABI, StolenWalletRegistryABI } from '@swr/abi
 
 export interface VerifyOptions {
   address: string;
-  network: 'local' | 'testnet' | 'mainnet';
+  env: 'local' | 'testnet' | 'mainnet';
   chainId: number;
   type: 'wallet' | 'contract';
 }
@@ -21,7 +21,11 @@ export async function verify(options: VerifyOptions): Promise<void> {
       throw new Error(`Invalid address: ${options.address}`);
     }
 
-    const config = getConfig(options.network);
+    const config = getConfig(options.env);
+
+    // Note: options.chainId is the chain where the wallet/contract resides (e.g., Ethereum mainnet = 1).
+    // config.chain is the hub chain where the registry is deployed (e.g., Base).
+    // These are intentionally different - we query the hub registry to verify entries from any chain.
     const chainIdBytes = chainIdToBytes32(BigInt(options.chainId));
 
     // Create a read-only client (no private key needed)
@@ -39,7 +43,7 @@ export async function verify(options: VerifyOptions): Promise<void> {
     switch (options.type) {
       case 'wallet': {
         if (config.contracts.stolenWalletRegistry === zeroAddress) {
-          throw new Error('Wallet registry not configured for this network');
+          throw new Error('Wallet registry not configured for this environment');
         }
 
         // Check if wallet is registered via individual registration
@@ -83,7 +87,7 @@ export async function verify(options: VerifyOptions): Promise<void> {
 
       case 'contract': {
         if (config.contracts.fraudulentContractRegistry === zeroAddress) {
-          throw new Error('Contract registry not configured for this network');
+          throw new Error('Contract registry not configured for this environment');
         }
 
         entryHash = await publicClient.readContract({

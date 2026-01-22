@@ -1,11 +1,11 @@
 import type { Address, Hex } from 'viem';
 
-export type Network = 'local' | 'testnet' | 'mainnet';
+export type Environment = 'local' | 'testnet' | 'mainnet';
 export type RegistryType = 'wallet' | 'transaction' | 'contract';
 
 export interface BaseSubmitOptions {
   file: string;
-  network: Network;
+  env: Environment;
   privateKey: string;
   chainId?: number;
   outputDir?: string;

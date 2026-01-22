@@ -56,11 +56,6 @@ interface IFraudulentContractRegistry {
     /// @param reinstatedBy Address that performed the reinstatement
     event EntryReinstated(bytes32 indexed entryHash, address indexed reinstatedBy);
 
-    /// @notice Emitted when operator registry address is updated
-    /// @param oldRegistry Previous operator registry address
-    /// @param newRegistry New operator registry address
-    event OperatorRegistrySet(address indexed oldRegistry, address indexed newRegistry);
-
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
