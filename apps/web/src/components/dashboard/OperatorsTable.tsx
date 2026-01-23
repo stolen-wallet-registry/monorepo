@@ -418,9 +418,14 @@ function AddOperatorForm({
     if (canContract) capabilities |= CAPABILITIES.CONTRACT;
 
     if (isEOA) {
-      await onExecute(address as Address, capabilities, name.trim());
-      setAddress('');
-      setName('');
+      try {
+        await onExecute(address as Address, capabilities, name.trim());
+        // Only clear inputs on success
+        setAddress('');
+        setName('');
+      } catch {
+        // Error already handled by onExecute, preserve inputs for retry
+      }
     } else {
       const calldata = encodeFunctionData({
         abi: operatorRegistryAbi,
@@ -649,6 +654,8 @@ export function OperatorsTable({
         toast.error('Failed to approve operator', {
           description: error instanceof Error ? error.message : 'Transaction failed',
         });
+        // Re-throw so caller knows the operation failed (preserves form inputs)
+        throw error;
       } finally {
         setIsApprovePending(false);
         setIsApproveConfirming(false);

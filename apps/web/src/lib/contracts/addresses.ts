@@ -170,13 +170,28 @@ export function getSupportSoulboundAddress(chainId: number): Address {
  * Falls back to CONTRACT_ADDRESSES if not found in @swr/chains.
  */
 export function getOperatorRegistryAddress(chainId: number): Address {
+  const logContext = 'getOperatorRegistryAddress';
+
   // Try @swr/chains first (single source of truth)
   try {
     const network = getNetwork(chainId);
     if (network?.role === 'hub') {
       const hubNetwork = network as HubNetworkConfig;
-      if (hubNetwork.hubContracts?.operatorRegistry) {
-        return hubNetwork.hubContracts.operatorRegistry as Address;
+      const operatorRegistryAddr = hubNetwork.hubContracts?.operatorRegistry;
+      if (operatorRegistryAddr) {
+        // Validate the address from @swr/chains
+        if (!isAddress(operatorRegistryAddr) || operatorRegistryAddr === zeroAddress) {
+          logger.contract.error(
+            `${logContext}: Invalid operatorRegistry address from @swr/chains`,
+            {
+              chainId,
+              value: operatorRegistryAddr,
+            }
+          );
+          // Fall through to CONTRACT_ADDRESSES
+        } else {
+          return operatorRegistryAddr as Address;
+        }
       }
     }
   } catch {

@@ -135,7 +135,12 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     reporter: storedSignature?.reporter,
     deadline: storedSignature?.deadline,
     signature: parsedSigForEstimate,
-    enabled: !!storedSignature && !!merkleRoot && !!reportedChainIdHash && !!txHashesForContract,
+    enabled:
+      !!storedSignature &&
+      !!merkleRoot &&
+      !!reportedChainIdHash &&
+      !!txHashesForContract &&
+      !!chainIdsForContract,
   });
 
   // Map hook state to TransactionStatus

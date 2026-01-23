@@ -11,7 +11,7 @@
  * @see https://github.com/ChainAgnostic/CAIPs/blob/main/CAIPs/caip-10.md
  */
 
-import { keccak256, encodePacked, type Hex } from 'viem';
+import { keccak256, encodePacked, encodeAbiParameters, concat, type Hex } from 'viem';
 import { toCAIP2, getChainName, getCAIP2ChainName } from '@swr/chains';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -40,19 +40,28 @@ export function chainIdToCAIP2(chainId: number): Hex {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Merkle Tree Leaf Utilities
+// Merkle Tree Leaf Utilities (OpenZeppelin StandardMerkleTree Compatible)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * Compute a Merkle tree leaf for a transaction.
- * Matches on-chain format: keccak256(abi.encodePacked(txHash, chainId))
+ * Uses OpenZeppelin StandardMerkleTree format matching MerkleRootComputation.sol:
+ *   leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(txHash, chainId))))
+ *
+ * The 0x00 prefix prevents second-preimage attacks by distinguishing leaves
+ * from internal nodes.
  *
  * @param txHash - Transaction hash
  * @param chainId - CAIP-2 chain identifier as bytes32
- * @returns Merkle leaf hash
+ * @returns Merkle leaf hash (OZ standard format)
  */
 export function computeTransactionLeaf(txHash: Hex, chainId: Hex): Hex {
-  return keccak256(encodePacked(['bytes32', 'bytes32'], [txHash, chainId]));
+  // 1. Inner hash: keccak256(abi.encode(txHash, chainId))
+  const innerHash = keccak256(
+    encodeAbiParameters([{ type: 'bytes32' }, { type: 'bytes32' }], [txHash, chainId])
+  );
+  // 2. Outer hash with 0x00 prefix
+  return keccak256(concat(['0x00', innerHash]));
 }
 
 /**

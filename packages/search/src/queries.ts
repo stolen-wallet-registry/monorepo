@@ -224,6 +224,7 @@ export const RECENT_CONTRACTS_QUERY = gql`
 
 /**
  * Query recent transaction batch registrations.
+ * Note: Use RECENT_TRANSACTION_ENTRIES_QUERY for individual transactions.
  */
 export const RECENT_TRANSACTIONS_QUERY = gql`
   query RecentTransactions($limit: Int!, $offset: Int) {
@@ -244,6 +245,31 @@ export const RECENT_TRANSACTIONS_QUERY = gql`
         verifyingOperator
         registeredAt
         transactionHash
+      }
+    }
+  }
+`;
+
+/**
+ * Query recent individual transaction entries (from transactionInBatch).
+ * Use this for dashboard views that need to show individual stolen transactions.
+ */
+export const RECENT_TRANSACTION_ENTRIES_QUERY = gql`
+  query RecentTransactionEntries($limit: Int!, $offset: Int) {
+    transactionInBatchs(
+      orderBy: "reportedAt"
+      orderDirection: "desc"
+      limit: $limit
+      offset: $offset
+    ) {
+      items {
+        id
+        txHash
+        caip2ChainId
+        numericChainId
+        batchId
+        reporter
+        reportedAt
       }
     }
   }
@@ -422,6 +448,20 @@ export interface RawRecentTransactionsResponse {
       verifyingOperator?: string;
       registeredAt: string;
       transactionHash: string;
+    }>;
+  };
+}
+
+export interface RawRecentTransactionEntriesResponse {
+  transactionInBatchs: {
+    items: Array<{
+      id: string;
+      txHash: string;
+      caip2ChainId: string;
+      numericChainId?: number;
+      batchId: string;
+      reporter: string;
+      reportedAt: string;
     }>;
   };
 }

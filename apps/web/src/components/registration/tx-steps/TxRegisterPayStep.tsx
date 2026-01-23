@@ -161,6 +161,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       !!merkleRoot &&
       !!reportedChainIdHash &&
       !!txHashesForContract &&
+      !!chainIdsForContract &&
       feeWei !== undefined,
   });
 

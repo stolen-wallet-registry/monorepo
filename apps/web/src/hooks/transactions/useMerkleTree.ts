@@ -1,15 +1,15 @@
 /**
  * Hook to build and manage Merkle trees for transaction batches.
  *
- * Uses a custom implementation that matches the contract's leaf format:
- * leaf = keccak256(abi.encodePacked(txHash, chainId))
+ * Uses OpenZeppelin StandardMerkleTree format to match the contract:
+ * leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(txHash, chainId))))
  *
- * Note: We don't use OpenZeppelin's StandardMerkleTree because it uses
- * double-hashing for security, which doesn't match our contract.
+ * The 0x00 prefix prevents second-preimage attacks by distinguishing leaves
+ * from internal nodes. This matches MerkleRootComputation.sol exactly.
  */
 
 import { useMemo } from 'react';
-import { keccak256, encodePacked } from 'viem';
+import { keccak256, encodeAbiParameters, concat, encodePacked } from 'viem';
 import type { Hash } from '@/lib/types/ethereum';
 import { chainIdToCAIP2 } from '@/lib/caip';
 import { logger } from '@/lib/logger';
@@ -36,10 +36,17 @@ export interface MerkleTreeData {
 
 /**
  * Compute a single leaf for the Merkle tree.
- * Matches contract: keccak256(abi.encodePacked(txHash, chainId))
+ * Matches contract's MerkleRootComputation.hashLeaf(bytes32, bytes32):
+ * leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(txHash, chainId))))
  */
 function computeLeaf(txHash: Hash, caip2ChainId: Hash): Hash {
-  return keccak256(encodePacked(['bytes32', 'bytes32'], [txHash, caip2ChainId]));
+  // OpenZeppelin StandardMerkleTree format:
+  // 1. Inner hash: keccak256(abi.encode(txHash, chainId))
+  const innerHash = keccak256(
+    encodeAbiParameters([{ type: 'bytes32' }, { type: 'bytes32' }], [txHash, caip2ChainId])
+  );
+  // 2. Outer hash with 0x00 prefix (prevents second-preimage attacks)
+  return keccak256(concat(['0x00', innerHash]));
 }
 
 /**

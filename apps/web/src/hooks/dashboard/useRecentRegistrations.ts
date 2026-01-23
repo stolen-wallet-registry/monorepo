@@ -9,10 +9,10 @@ import { request } from 'graphql-request';
 import {
   RECENT_WALLETS_QUERY,
   RECENT_CONTRACTS_QUERY,
-  RECENT_TRANSACTIONS_QUERY,
+  RECENT_TRANSACTION_ENTRIES_QUERY,
   type RawRecentWalletsResponse,
   type RawRecentContractsResponse,
-  type RawRecentTransactionsResponse,
+  type RawRecentTransactionEntriesResponse,
 } from '@swr/search';
 import { logger } from '@/lib/logger';
 import type { Address, Hash } from '@/lib/types/ethereum';
@@ -109,10 +109,14 @@ export function useRecentRegistrations(
             })
           : null,
         fetchTransactions
-          ? request<RawRecentTransactionsResponse>(INDEXER_URL, RECENT_TRANSACTIONS_QUERY, {
-              limit,
-              offset: 0,
-            })
+          ? request<RawRecentTransactionEntriesResponse>(
+              INDEXER_URL,
+              RECENT_TRANSACTION_ENTRIES_QUERY,
+              {
+                limit,
+                offset: 0,
+              }
+            )
           : null,
       ]);
 
@@ -159,27 +163,26 @@ export function useRecentRegistrations(
         }
       }
 
-      // Process transactions
+      // Process transactions (individual entries, not batches)
       if (transactionsRes) {
-        for (const raw of transactionsRes.transactionBatchs.items) {
-          let txChainId = raw.reportedChainCAIP2;
+        for (const raw of transactionsRes.transactionInBatchs.items) {
+          let txChainId = raw.caip2ChainId;
           if (!txChainId) {
             logger.contract.debug('Fallback to eip155:1 for transaction', {
               id: raw.id,
-              merkleRoot: raw.merkleRoot,
+              txHash: raw.txHash,
             });
             txChainId = 'eip155:1';
           }
           entries.push({
             id: raw.id,
             type: 'transaction',
-            identifier: raw.merkleRoot,
+            identifier: raw.txHash,
             chainId: txChainId,
-            operator: raw.verifyingOperator as Address | undefined,
             reporter: raw.reporter as Address,
-            isSponsored: raw.isSponsored,
-            registeredAt: BigInt(raw.registeredAt),
-            transactionHash: raw.transactionHash as Hash,
+            isSponsored: false, // Individual tx entries don't track sponsorship
+            registeredAt: BigInt(raw.reportedAt),
+            batchId: raw.batchId,
           });
         }
       }
@@ -198,7 +201,7 @@ export function useRecentRegistrations(
         total: limited.length,
         wallets: walletsRes?.stolenWallets.items.length ?? 0,
         contracts: contractsRes?.fraudulentContracts.items.length ?? 0,
-        transactions: transactionsRes?.transactionBatchs.items.length ?? 0,
+        transactions: transactionsRes?.transactionInBatchs.items.length ?? 0,
       });
 
       return limited;

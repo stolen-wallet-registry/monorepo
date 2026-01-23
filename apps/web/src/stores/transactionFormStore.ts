@@ -135,7 +135,10 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
             if (!state.selectedTxHashes.includes(hash)) {
               logger.store.debug('Transaction hash added', { hash });
               state.selectedTxHashes.push(hash);
+              // Clear derived merkle data - needs recomputation
               state.merkleRoot = null;
+              state.sortedTxHashes = [];
+              state.sortedChainIds = [];
             }
           }),
 

@@ -96,6 +96,7 @@ export {
   RECENT_WALLETS_QUERY,
   RECENT_CONTRACTS_QUERY,
   RECENT_TRANSACTIONS_QUERY,
+  RECENT_TRANSACTION_ENTRIES_QUERY,
   // Response types
   type RawOperatorsListResponse,
   // Dashboard response types
@@ -103,4 +104,5 @@ export {
   type RawRecentWalletsResponse,
   type RawRecentContractsResponse,
   type RawRecentTransactionsResponse,
+  type RawRecentTransactionEntriesResponse,
 } from './queries';
