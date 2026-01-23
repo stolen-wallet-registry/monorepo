@@ -221,16 +221,38 @@ export function useTxContractDeadlines(
   // Map contract result to TxDeadlineData
   // getDeadlines returns: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
   // Note: Contract returns uint32 (mapped to number by viem), convert to bigint for interface
-  const data: TxDeadlineData | undefined = contractData
-    ? {
+  let data: TxDeadlineData | undefined;
+
+  if (contractData) {
+    // Validate tuple shape before BigInt conversions to avoid runtime exceptions
+    if (
+      !Array.isArray(contractData) ||
+      contractData.length < 6 ||
+      contractData[0] === undefined ||
+      contractData[1] === undefined ||
+      contractData[2] === undefined ||
+      contractData[3] === undefined ||
+      contractData[4] === undefined ||
+      contractData[5] === undefined
+    ) {
+      logger.contract.error('useTxContractDeadlines: Invalid contractData shape', {
+        isArray: Array.isArray(contractData),
+        length: Array.isArray(contractData) ? contractData.length : 'N/A',
+        contractData,
+        reporter,
+        chainId,
+      });
+    } else {
+      data = {
         currentBlock: BigInt(contractData[0]),
         expiry: BigInt(contractData[1]),
         start: BigInt(contractData[2]),
         graceStartsAt: BigInt(contractData[3]),
         timeLeft: BigInt(contractData[4]),
-        isExpired: contractData[5],
-      }
-    : undefined;
+        isExpired: Boolean(contractData[5]),
+      };
+    }
+  }
 
   return {
     data,

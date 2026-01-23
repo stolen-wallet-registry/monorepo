@@ -32,8 +32,8 @@ const REGISTRIES = [
     id: 'contract',
     title: 'Fraudulent Contracts',
     description:
-      'Catalog malicious smart contract addresses. Operator-approved submissions for known scam patterns.',
-    status: 'coming-soon' as const,
+      'Operator-only registry for cataloging malicious smart contracts. Approved operators can batch-submit scam contracts via the Dashboard. Search indexed data or view operator submissions.',
+    status: 'operator-only' as const,
     icon: <Code2 className="size-6" />,
     path: null,
   },

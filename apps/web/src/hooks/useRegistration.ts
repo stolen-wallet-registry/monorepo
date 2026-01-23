@@ -89,6 +89,14 @@ export function useRegistration(): UseRegistrationResult {
     // Use metadata for correct function name based on chain type
     const functionName = functions.register;
 
+    if (!functionName) {
+      logger.contract.error('useRegistration: Missing register function in metadata', {
+        chainId,
+        registryType,
+      });
+      throw new Error('Registration function not configured for this registry type');
+    }
+
     logger.registration.info('Submitting registration transaction', {
       chainId,
       registryType,
@@ -101,11 +109,12 @@ export function useRegistration(): UseRegistrationResult {
     });
 
     try {
-      // Cast functionName since wagmi expects specific literal type from ABI
+      // Cast functionName to union of valid register functions for hub/spoke contracts
+      // Hub uses 'register', Spoke uses 'registerLocal'
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi,
-        functionName: functionName as 'register',
+        functionName: functionName as 'register' | 'registerLocal',
         args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
         value: feeWei ?? 0n,
       });

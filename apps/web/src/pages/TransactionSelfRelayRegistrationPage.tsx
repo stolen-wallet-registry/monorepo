@@ -108,7 +108,7 @@ export function TransactionSelfRelayRegistrationPage() {
     setSelectedTxHashes,
     setSelectedTxDetails,
     setReportedChainId,
-    setMerkleRoot,
+    setMerkleTreeData,
   } = useTransactionSelection();
   const resetForm = useTransactionFormStore((s) => s.reset);
   const setReporter = useTransactionFormStore((s) => s.setReporter);
@@ -160,11 +160,11 @@ export function TransactionSelfRelayRegistrationPage() {
   // Update form state when merkle tree changes
   useEffect(() => {
     if (merkleTree) {
-      setMerkleRoot(merkleTree.root);
+      setMerkleTreeData(merkleTree.root, merkleTree.txHashes, merkleTree.chainIds);
     } else {
-      setMerkleRoot(null);
+      setMerkleTreeData(null, [], []);
     }
-  }, [merkleTree, setMerkleRoot]);
+  }, [merkleTree, setMerkleTreeData]);
 
   // Set reported chain ID when chain changes
   useEffect(() => {
@@ -172,9 +172,9 @@ export function TransactionSelfRelayRegistrationPage() {
       setReportedChainId(chainId);
       setSelectedTxHashes([]);
       setSelectedTxDetails([]);
-      setMerkleRoot(null);
+      setMerkleTreeData(null, [], []);
     }
-  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setMerkleRoot]);
+  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setMerkleTreeData]);
 
   // Set reporter address when on select-transactions step
   // IMPORTANT: Only clear selection when on the initial step, not during wallet switches for payment
@@ -185,9 +185,9 @@ export function TransactionSelfRelayRegistrationPage() {
       setReporter(address);
       setSelectedTxHashes([]);
       setSelectedTxDetails([]);
-      setMerkleRoot(null);
+      setMerkleTreeData(null, [], []);
     }
-  }, [address, step, setReporter, setSelectedTxHashes, setSelectedTxDetails, setMerkleRoot]);
+  }, [address, step, setReporter, setSelectedTxHashes, setSelectedTxDetails, setMerkleTreeData]);
 
   // Redirect if not connected
   useEffect(() => {

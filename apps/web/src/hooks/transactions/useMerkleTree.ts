@@ -132,14 +132,28 @@ export function buildMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData
     // Convert chain IDs to CAIP-2 hashes
     const caip2ChainIds = transactions.map((tx) => chainIdToCAIP2(tx.chainId));
 
-    // Compute leaves
-    const leaves = transactions.map((tx, i) => computeLeaf(tx.txHash, caip2ChainIds[i]));
+    // Compute leaves with their indices to track original positions
+    const leavesWithIndices = transactions.map((tx, i) => ({
+      leaf: computeLeaf(tx.txHash, caip2ChainIds[i]),
+      originalIndex: i,
+    }));
 
-    // Sort leaves to match on-chain ordering
-    const sortedLeaves = [...leaves].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    // Sort leaves to match on-chain ordering, keeping track of original indices
+    const sortedLeavesWithIndices = [...leavesWithIndices].sort((a, b) =>
+      a.leaf < b.leaf ? -1 : a.leaf > b.leaf ? 1 : 0
+    );
+
+    const sortedLeaves = sortedLeavesWithIndices.map((item) => item.leaf);
 
     // Build tree
     const { root, getProof } = buildTree(sortedLeaves);
+
+    // Return txHashes and chainIds in the SAME order as sorted leaves
+    // This ensures the contract receives hashes in the correct order to reconstruct the same root
+    const sortedTxHashes = sortedLeavesWithIndices.map(
+      (item) => transactions[item.originalIndex].txHash
+    );
+    const sortedChainIds = sortedLeavesWithIndices.map((item) => caip2ChainIds[item.originalIndex]);
 
     logger.store.debug('Merkle tree built', {
       root,
@@ -149,8 +163,8 @@ export function buildMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData
     return {
       root,
       count: transactions.length,
-      txHashes: transactions.map((tx) => tx.txHash),
-      chainIds: caip2ChainIds,
+      txHashes: sortedTxHashes,
+      chainIds: sortedChainIds,
       getProof,
       getProofByTx: (txHash: Hash, chainId: number) => {
         const caip2 = chainIdToCAIP2(chainId);

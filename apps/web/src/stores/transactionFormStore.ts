@@ -38,6 +38,10 @@ export interface TransactionFormState {
   reportedChainId: number | null;
   /** Computed Merkle root (transient - not persisted) */
   merkleRoot: Hash | null;
+  /** Sorted transaction hashes from merkle tree (transient - for contract calls) */
+  sortedTxHashes: Hash[];
+  /** Sorted CAIP-2 chain IDs from merkle tree (transient - for contract calls) */
+  sortedChainIds: Hash[];
 }
 
 export interface TransactionFormActions {
@@ -51,6 +55,8 @@ export interface TransactionFormActions {
   removeTxHash: (hash: Hash) => void;
   setReportedChainId: (chainId: number) => void;
   setMerkleRoot: (root: Hash | null) => void;
+  /** Set merkle tree data including sorted hashes for contract calls */
+  setMerkleTreeData: (root: Hash | null, sortedTxHashes: Hash[], sortedChainIds: Hash[]) => void;
   reset: () => void;
 }
 
@@ -61,6 +67,8 @@ const initialState: TransactionFormState = {
   selectedTxDetails: [],
   reportedChainId: null,
   merkleRoot: null,
+  sortedTxHashes: [],
+  sortedChainIds: [],
 };
 
 export const useTransactionFormStore = create<TransactionFormState & TransactionFormActions>()(
@@ -87,8 +95,10 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
             const unique = Array.from(new Set(hashes));
             logger.store.debug('Transaction form hashes updated', { count: unique.length });
             state.selectedTxHashes = unique;
-            // Clear merkle root when hashes change - it needs to be recomputed
+            // Clear merkle data when hashes change - it needs to be recomputed
             state.merkleRoot = null;
+            state.sortedTxHashes = [];
+            state.sortedChainIds = [];
             // Note: details not updated here - use setSelectedTransactions for full update
           }),
 
@@ -116,6 +126,8 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
             state.selectedTxHashes = hashes;
             state.selectedTxDetails = details;
             state.merkleRoot = null;
+            state.sortedTxHashes = [];
+            state.sortedChainIds = [];
           }),
 
         addTxHash: (hash) =>
@@ -136,6 +148,8 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
               // Also remove from details
               state.selectedTxDetails = state.selectedTxDetails.filter((d) => d.hash !== hash);
               state.merkleRoot = null;
+              state.sortedTxHashes = [];
+              state.sortedChainIds = [];
             }
           }),
 
@@ -143,14 +157,33 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
           set((state) => {
             logger.store.debug('Transaction form chain ID updated', { chainId });
             state.reportedChainId = chainId;
-            // Clear merkle root when chain changes - it needs to be recomputed
+            // Clear merkle data when chain changes - it needs to be recomputed
             state.merkleRoot = null;
+            state.sortedTxHashes = [];
+            state.sortedChainIds = [];
           }),
 
         setMerkleRoot: (root) =>
           set((state) => {
             logger.store.debug('Transaction form merkle root updated', { root });
             state.merkleRoot = root;
+            // Clear sorted data when root is cleared
+            if (!root) {
+              state.sortedTxHashes = [];
+              state.sortedChainIds = [];
+            }
+          }),
+
+        setMerkleTreeData: (root, sortedTxHashes, sortedChainIds) =>
+          set((state) => {
+            logger.store.debug('Transaction form merkle tree data updated', {
+              root,
+              sortedTxHashesCount: sortedTxHashes.length,
+              sortedChainIdsCount: sortedChainIds.length,
+            });
+            state.merkleRoot = root;
+            state.sortedTxHashes = sortedTxHashes;
+            state.sortedChainIds = sortedChainIds;
           }),
 
         reset: () => {
@@ -236,6 +269,8 @@ export const useTransactionSelection = () =>
       selectedTxDetails: s.selectedTxDetails,
       reportedChainId: s.reportedChainId,
       merkleRoot: s.merkleRoot,
+      sortedTxHashes: s.sortedTxHashes,
+      sortedChainIds: s.sortedChainIds,
       setSelectedTxHashes: s.setSelectedTxHashes,
       setSelectedTxDetails: s.setSelectedTxDetails,
       setSelectedTransactions: s.setSelectedTransactions,
@@ -243,6 +278,7 @@ export const useTransactionSelection = () =>
       removeTxHash: s.removeTxHash,
       setReportedChainId: s.setReportedChainId,
       setMerkleRoot: s.setMerkleRoot,
+      setMerkleTreeData: s.setMerkleTreeData,
     }))
   );
 

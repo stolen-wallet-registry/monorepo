@@ -102,7 +102,7 @@ export function TransactionStandardRegistrationPage() {
     setSelectedTxHashes,
     setSelectedTxDetails,
     setReportedChainId,
-    setMerkleRoot,
+    setMerkleTreeData,
   } = useTransactionSelection();
   // Use stable selectors for form actions to avoid unnecessary re-renders
   const resetForm = useTransactionFormStore((s) => s.reset);
@@ -148,11 +148,11 @@ export function TransactionStandardRegistrationPage() {
   // Update form state when merkle tree changes (clear when selections cleared)
   useEffect(() => {
     if (merkleTree) {
-      setMerkleRoot(merkleTree.root);
+      setMerkleTreeData(merkleTree.root, merkleTree.txHashes, merkleTree.chainIds);
     } else {
-      setMerkleRoot(null);
+      setMerkleTreeData(null, [], []);
     }
-  }, [merkleTree, setMerkleRoot]);
+  }, [merkleTree, setMerkleTreeData]);
 
   // Set reported chain ID when chain changes
   useEffect(() => {
@@ -160,9 +160,9 @@ export function TransactionStandardRegistrationPage() {
       setReportedChainId(chainId);
       setSelectedTxHashes([]);
       setSelectedTxDetails([]);
-      setMerkleRoot(null);
+      setMerkleTreeData(null, [], []);
     }
-  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setMerkleRoot]);
+  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setMerkleTreeData]);
 
   // Set reporter address when connected
   useEffect(() => {
@@ -171,7 +171,7 @@ export function TransactionStandardRegistrationPage() {
       setForwarder(address); // Standard registration: same address pays
       setSelectedTxHashes([]);
       setSelectedTxDetails([]);
-      setMerkleRoot(null);
+      setMerkleTreeData(null, [], []);
     }
   }, [
     address,
@@ -179,7 +179,7 @@ export function TransactionStandardRegistrationPage() {
     setForwarder,
     setSelectedTxHashes,
     setSelectedTxDetails,
-    setMerkleRoot,
+    setMerkleTreeData,
   ]);
 
   // Redirect if not connected

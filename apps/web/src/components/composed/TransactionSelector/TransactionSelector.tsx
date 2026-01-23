@@ -262,7 +262,9 @@ export function TransactionSelector({
           <div>
             <CardTitle>Select Fraudulent Transactions</CardTitle>
             <CardDescription>
-              Choose the transactions you want to report as fraudulent.
+              Select transactions you were tricked into signing (phishing, address poisoning, etc.).
+              You still control your wallet—these are specific fraudulent transactions, not a
+              compromised wallet.
               {chainId && ` (${getChainName(chainId)})`}
             </CardDescription>
           </div>

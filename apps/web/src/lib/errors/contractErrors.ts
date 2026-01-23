@@ -25,8 +25,11 @@ export interface ContractErrorInfo {
  * Map of error selectors (4-byte hex) to user-friendly error info.
  *
  * Selectors computed via: `cast sig 'ErrorName()'`
+ * Keys are normalized to lowercase at load time to ensure case-insensitive lookups work.
  */
-export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = errorData;
+export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = Object.fromEntries(
+  Object.entries(errorData).map(([selector, info]) => [selector.toLowerCase(), info])
+);
 
 /**
  * Decode a contract custom error from an error message containing a hex selector.

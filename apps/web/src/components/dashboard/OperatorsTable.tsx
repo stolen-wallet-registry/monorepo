@@ -5,7 +5,7 @@
  * When canManage is true, shows add/edit/delete functionality for DAO owners.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -122,12 +122,26 @@ interface TransactionDialogProps {
 
 function TransactionDialog({ transaction, chainId, onClose }: TransactionDialogProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount to prevent state update on unmounted component
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleCopy = async (field: string, value: string) => {
     try {
       await navigator.clipboard.writeText(value);
       setCopiedField(field);
-      setTimeout(() => setCopiedField(null), 2000);
+      // Clear any existing timeout before setting a new one
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => setCopiedField(null), 2000);
     } catch {
       // Silently fail
     }
@@ -726,10 +740,20 @@ export function OperatorsTable({
           });
           await publicClient.waitForTransactionReceipt({ hash });
 
-          // Optimistic update: remove operator from cache immediately
+          // Optimistic update: handle revoked operators based on showRevoked setting
           queryClient.setQueryData<OperatorInfo[]>(
             ['dashboard', 'operators', { approvedOnly: !showRevoked }],
-            (old) => old?.filter((op) => op.address !== operator.address)
+            (old) => {
+              if (!old) return old;
+              if (showRevoked) {
+                // When showing revoked operators, mark as revoked instead of removing
+                return old.map((op) =>
+                  op.address === operator.address ? { ...op, approved: false } : op
+                );
+              }
+              // When showing only approved operators, remove the revoked one
+              return old.filter((op) => op.address !== operator.address);
+            }
           );
 
           toast.success('Operator revoked', {

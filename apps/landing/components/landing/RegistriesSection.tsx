@@ -18,14 +18,14 @@ const REGISTRIES = [
     title: 'Stolen Transactions',
     description:
       'Anyone can report specific fraudulent transactions like phishing attacks, address poisoning, or unauthorized transfers. Operators can batch-submit.',
-    status: 'coming-soon' as const,
+    status: 'active' as const,
     icon: <FileText className="size-6" />,
   },
   {
     title: 'Fraudulent Contracts',
     description:
-      'Operator-only submissions for malicious smart contracts. Users can flag suspicious contracts, but only approved operators can formalize registry entries.',
-    status: 'coming-soon' as const,
+      'Operator-only registry for cataloging malicious smart contracts. Approved operators can batch-submit known scam patterns via the Dashboard. Data is searchable by anyone.',
+    status: 'operator-only' as const,
     icon: <Code2 className="size-6" />,
   },
 ];

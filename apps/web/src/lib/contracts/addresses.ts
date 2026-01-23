@@ -1,5 +1,6 @@
-import { zeroAddress } from 'viem';
+import { zeroAddress, isAddress } from 'viem';
 import type { Address } from '@/lib/types/ethereum';
+import { logger } from '@/lib/logger';
 import {
   anvilHub,
   baseSepolia,
@@ -86,10 +87,26 @@ export type ContractName = keyof typeof CONTRACT_ADDRESSES;
 
 // Get contract address for a chain, with env override support
 export function getContractAddress(contract: ContractName, chainId: number): Address {
+  const logContext = 'getContractAddress';
+
   // Check for env override first (registry only for backward compat)
   if (contract === 'stolenWalletRegistry') {
-    if (chainId === anvilHub.chainId && import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST) {
-      return import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST as Address;
+    const envOverride = import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST;
+    if (chainId === anvilHub.chainId && envOverride) {
+      if (!isAddress(envOverride)) {
+        logger.contract.error(
+          `${logContext}: Invalid address format in VITE_CONTRACT_ADDRESS_LOCALHOST`,
+          {
+            contract,
+            chainId,
+            envValue: envOverride,
+          }
+        );
+        throw new Error(
+          `Invalid address format in VITE_CONTRACT_ADDRESS_LOCALHOST: ${envOverride}`
+        );
+      }
+      return envOverride as Address;
     }
   }
 
@@ -97,6 +114,15 @@ export function getContractAddress(contract: ContractName, chainId: number): Add
   const envKey = `VITE_${contract.toUpperCase()}_ADDRESS_${chainId}`;
   const envValue = (import.meta.env as Record<string, string | undefined>)[envKey];
   if (envValue) {
+    if (!isAddress(envValue)) {
+      logger.contract.error(`${logContext}: Invalid address format in env override`, {
+        contract,
+        chainId,
+        envKey,
+        envValue,
+      });
+      throw new Error(`Invalid address format in ${envKey}: ${envValue}`);
+    }
     return envValue as Address;
   }
 
