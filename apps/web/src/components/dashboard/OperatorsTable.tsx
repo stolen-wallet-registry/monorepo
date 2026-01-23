@@ -66,11 +66,11 @@ import type { Address, Hex } from '@/lib/types/ethereum';
 const PERMISSIONS_TOOLTIP =
   'Permissions grant operators access to submit batch registrations to specific registries (Wallet, Transaction, or Contract).';
 
-/** Capability bitmask values matching the contract */
+/** Capability bitmask values matching the contract - use imported constants to prevent drift */
 const CAPABILITIES = {
-  WALLET: 0x01,
-  TX: 0x02,
-  CONTRACT: 0x04,
+  WALLET: CAPABILITY_WALLET,
+  TX: CAPABILITY_TX,
+  CONTRACT: CAPABILITY_CONTRACT,
 } as const;
 
 interface TransactionData {
@@ -833,12 +833,10 @@ export function OperatorsTable({
                 </TableHeader>
                 <TableBody>
                   {operators.map((operator) => {
-                    const approvedDate = new Date(Number(operator.approvedAt) * 12 * 1000);
-                    const dateString = approvedDate.toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    });
+                    // approvedAt is a block number, not a timestamp.
+                    // TODO: Add approvedTimestamp to indexer schema (store event.block.timestamp)
+                    // and use that for accurate date display. For now, show block number.
+                    const approvedBlockNumber = Number(operator.approvedAt);
                     const isActionInProgress = actionInProgress === operator.address;
 
                     return (
@@ -864,7 +862,18 @@ export function OperatorsTable({
                           <CapabilitiesBadge operator={operator} />
                         </TableCell>
                         <TableCell>
-                          <span className="text-sm text-muted-foreground">{dateString}</span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-sm text-muted-foreground cursor-help">
+                                Block #{approvedBlockNumber.toLocaleString()}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">
+                                Approved at block {approvedBlockNumber.toLocaleString()}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
                         </TableCell>
                         {canManage && (
                           <TableCell className="text-right">

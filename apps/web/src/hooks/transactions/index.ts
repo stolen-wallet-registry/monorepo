@@ -42,20 +42,23 @@ export {
   type UseSignTxEIP712Result,
 } from './useSignTxEIP712';
 
-export { useTxContractNonce, type UseTxContractNonceResult } from './useTxContractNonce';
+// Re-export from merged hook file
+export {
+  useTxContractNonce,
+  type UseContractNonceExtendedResult as UseTxContractNonceResult,
+} from '../useContractNonce';
 
+// Re-export from merged hook file
 export {
   useTxContractDeadlines,
   type TxDeadlineData,
   type UseTxContractDeadlinesResult,
-} from './useTxContractDeadlines';
+} from '../useContractDeadlines';
 
 export { useTxQuoteFee, type TxQuoteFeeData, type UseTxQuoteFeeResult } from './useTxQuoteFee';
 
-export {
-  useTxQuoteFeeBreakdown,
-  type UseTxQuoteFeeBreakdownResult,
-} from './useTxQuoteFeeBreakdown';
+// Re-export from merged hook file
+export { useTxQuoteFeeBreakdown, type UseTxQuoteFeeBreakdownResult } from '../useQuoteFeeBreakdown';
 
 export {
   useTxGasEstimate,

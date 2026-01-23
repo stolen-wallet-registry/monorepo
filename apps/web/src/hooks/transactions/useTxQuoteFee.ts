@@ -7,8 +7,8 @@
 
 import { useMemo } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
-import { stolenTransactionRegistryAbi, spokeTransactionRegistryAbi } from '@/lib/contracts/abis';
-import { getTransactionRegistryAddress, isSpokeChain } from '@/lib/contracts/addresses';
+import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
+import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
 import { formatEthConsistent } from '@/lib/utils';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { logger } from '@/lib/logger';
@@ -43,30 +43,19 @@ export interface UseTxQuoteFeeResult {
 export function useTxQuoteFee(reporterAddress: Address | null | undefined): UseTxQuoteFeeResult {
   const chainId = useChainId();
   const { data: ethPrice } = useEthPrice();
-  const isSpoke = isSpokeChain(chainId);
 
-  // Resolve contract address (spoke-aware)
-  let contractAddress: Address | undefined;
-  try {
-    contractAddress = getTransactionRegistryAddress(chainId);
-    logger.contract.debug('useTxQuoteFee: Registry address resolved', {
-      chainId,
-      contractAddress,
-      isSpoke,
-    });
-  } catch (error) {
-    contractAddress = undefined;
-    logger.contract.warn('useTxQuoteFee: Failed to resolve registry address', {
-      chainId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  // Resolve contract address with built-in error handling and logging
+  const { address: contractAddress, role: registryType } = resolveRegistryContract(
+    chainId,
+    'transaction',
+    'useTxQuoteFee'
+  );
+
+  // Get the correct ABI for hub/spoke
+  const { abi } = getRegistryMetadata('transaction', registryType);
 
   // Convert null to undefined for wagmi compatibility
   const normalizedAddress = reporterAddress ?? undefined;
-
-  // Select correct ABI based on chain type
-  const abi = isSpoke ? spokeTransactionRegistryAbi : stolenTransactionRegistryAbi;
 
   const {
     data: rawFee,

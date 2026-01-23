@@ -4,14 +4,23 @@
  * The nonce is used for replay protection in EIP-712 signatures.
  * Each signature must use the current nonce, which increments after each successful use.
  *
- * Chain-aware: Works with both StolenWalletRegistry (hub) and SpokeRegistry (spoke).
+ * Chain-aware: Works with both hub and spoke chains.
+ * Supports both wallet and transaction registries via variant parameter.
  */
 
+import { useEffect, useCallback } from 'react';
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
-import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
-import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
+import { resolveRegistryContract, type RegistryVariant } from '@/lib/contracts/resolveContract';
+import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
 import type { Address } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
+
+/** Result of refetch operation with status information */
+export interface RefetchResult<T> {
+  status: 'success' | 'error';
+  data: T | undefined;
+  error: Error | null;
+}
 
 export interface UseContractNonceResult {
   nonce: bigint | undefined;
@@ -21,56 +30,149 @@ export interface UseContractNonceResult {
   refetch: UseReadContractReturnType['refetch'];
 }
 
+/** Extended result for transaction registry with typed refetch */
+export interface UseContractNonceExtendedResult {
+  nonce: bigint | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  /** Refetch the nonce from the contract with typed result */
+  refetch: () => Promise<RefetchResult<bigint>>;
+}
+
 /**
- * Reads the current nonce for an owner address from the contract.
+ * Reads the current nonce for an address from the contract.
  *
  * @param ownerAddress - The address to get the nonce for
- * @returns The current nonce value
+ * @param variant - Registry variant: 'wallet' (default) or 'transaction'
+ * @returns The current nonce value and loading/error states
  */
-export function useContractNonce(ownerAddress: Address | undefined): UseContractNonceResult {
+export function useContractNonce(
+  ownerAddress: Address | undefined,
+  variant: RegistryVariant = 'wallet'
+): UseContractNonceResult {
   const chainId = useChainId();
 
-  let contractAddress: Address | undefined;
-  let registryType: 'hub' | 'spoke' = 'hub';
-  try {
-    contractAddress = getRegistryAddress(chainId);
-    registryType = getRegistryType(chainId);
-    logger.contract.debug('Registry address resolved for nonce', {
-      chainId,
-      contractAddress,
-      registryType,
-      ownerAddress,
-    });
-  } catch (error) {
-    contractAddress = undefined;
-    logger.contract.error('Failed to resolve registry address for nonce', {
-      chainId,
-      ownerAddress,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  // Resolve contract address with built-in error handling and logging
+  const { address: contractAddress, role: registryType } = resolveRegistryContract(
+    chainId,
+    variant,
+    'useContractNonce'
+  );
 
-  // Both contracts have identical nonces() function
-  const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
+  // Get the correct ABI for hub/spoke
+  const { abi } = getRegistryMetadata(variant, registryType);
+
+  // Transaction registry needs faster polling for merkle batch workflows
+  const refetchInterval = variant === 'transaction' ? 5_000 : undefined;
+  const staleTime = variant === 'transaction' ? undefined : 30_000;
 
   const result = useReadContract({
     address: contractAddress,
     abi,
-    chainId, // Explicit chain ID ensures RPC call targets correct chain
+    chainId,
     functionName: 'nonces',
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
       enabled: !!ownerAddress && !!contractAddress,
-      // Nonce doesn't change frequently, longer stale time is fine
-      staleTime: 30_000, // 30 seconds
+      staleTime,
+      refetchInterval,
     },
   });
 
+  // Log nonce changes for debugging (transaction registry only)
+  useEffect(() => {
+    if (variant === 'transaction' && result.data !== undefined) {
+      logger.contract.debug('Registry nonce read', {
+        variant,
+        address: ownerAddress,
+        nonce: (result.data as bigint).toString(),
+      });
+    }
+  }, [variant, result.data, ownerAddress]);
+
   return {
-    nonce: result.data,
+    nonce: result.data as bigint | undefined,
     isLoading: result.isLoading,
     isError: result.isError,
     error: result.error,
     refetch: result.refetch,
+  };
+}
+
+/**
+ * Hook for transaction registry nonce with typed refetch result.
+ * This is a convenience wrapper for transaction-specific usage.
+ *
+ * @param address - The address to get the nonce for (the reporter)
+ * @returns The nonce and loading/error states with typed refetch
+ */
+export function useTxContractNonce(address: Address | undefined): UseContractNonceExtendedResult {
+  const chainId = useChainId();
+
+  // Resolve contract address with built-in error handling and logging
+  const { address: contractAddress, role: registryType } = resolveRegistryContract(
+    chainId,
+    'transaction',
+    'useTxContractNonce'
+  );
+
+  // Get the correct ABI for hub/spoke
+  const { abi } = getRegistryMetadata('transaction', registryType);
+
+  const enabled = !!address && !!contractAddress;
+
+  const {
+    data: nonce,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useReadContract({
+    address: contractAddress,
+    abi,
+    functionName: 'nonces',
+    args: address ? [address] : undefined,
+    chainId,
+    query: {
+      enabled,
+      refetchInterval: 5_000, // Auto-refetch every 5 seconds
+    },
+  });
+
+  // Log nonce changes in useEffect to avoid logging on every render
+  useEffect(() => {
+    if (nonce !== undefined) {
+      logger.contract.debug('Transaction registry nonce read', {
+        address,
+        nonce: (nonce as bigint).toString(),
+      });
+    }
+  }, [nonce, address]);
+
+  // Type-safe wrapper for refetch that returns a properly typed result
+  const wrappedRefetch = useCallback(async (): Promise<RefetchResult<bigint>> => {
+    try {
+      const result = await refetch();
+      return {
+        status: result.status === 'success' ? 'success' : 'error',
+        data: result.data as bigint | undefined,
+        error: result.error as Error | null,
+      };
+    } catch (err) {
+      return {
+        status: 'error',
+        data: undefined,
+        error: err instanceof Error ? err : new Error(String(err)),
+      };
+    }
+  }, [refetch]);
+
+  return {
+    nonce: nonce as bigint | undefined,
+    isLoading,
+    isError,
+    error: error as Error | null,
+    refetch: wrappedRefetch,
   };
 }

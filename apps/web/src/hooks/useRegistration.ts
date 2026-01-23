@@ -8,8 +8,8 @@
  */
 
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
-import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
-import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
+import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
+import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
 import type { ParsedSignature } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -50,23 +50,15 @@ export interface UseRegistrationResult {
 export function useRegistration(): UseRegistrationResult {
   const chainId = useChainId();
 
-  let contractAddress: Address | undefined;
-  let registryType: 'hub' | 'spoke' = 'hub';
-  try {
-    contractAddress = getRegistryAddress(chainId);
-    registryType = getRegistryType(chainId);
-    logger.contract.debug('useRegistration: Registry address resolved', {
-      chainId,
-      contractAddress,
-      registryType,
-    });
-  } catch (error) {
-    contractAddress = undefined;
-    logger.contract.error('useRegistration: Failed to resolve registry address', {
-      chainId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  // Resolve contract address with built-in error handling and logging
+  const { address: contractAddress, role: registryType } = resolveRegistryContract(
+    chainId,
+    'wallet',
+    'useRegistration'
+  );
+
+  // Get the correct ABI and function names for hub/spoke
+  const { abi, functions } = getRegistryMetadata('wallet', registryType);
 
   const {
     writeContractAsync,
@@ -94,9 +86,8 @@ export function useRegistration(): UseRegistrationResult {
 
     const { deadline, nonce, registeree, signature, feeWei } = params;
 
-    // Select correct ABI and function name based on chain type
-    const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
-    const functionName = registryType === 'spoke' ? 'registerLocal' : 'register';
+    // Use metadata for correct function name based on chain type
+    const functionName = functions.register;
 
     logger.registration.info('Submitting registration transaction', {
       chainId,
@@ -110,10 +101,11 @@ export function useRegistration(): UseRegistrationResult {
     });
 
     try {
+      // Cast functionName since wagmi expects specific literal type from ABI
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi,
-        functionName,
+        functionName: functionName as 'register',
         args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
         value: feeWei ?? 0n,
       });

@@ -8,8 +8,8 @@
 
 import { useReadContract, useChainId } from 'wagmi';
 import { formatEther } from 'viem';
-import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
-import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
+import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
+import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
 import type { Address } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
@@ -34,27 +34,15 @@ export function useQuoteRegistration(
 ): UseQuoteRegistrationResult {
   const chainId = useChainId();
 
-  let contractAddress: Address | undefined;
-  let registryType: 'hub' | 'spoke' = 'hub';
-  try {
-    contractAddress = getRegistryAddress(chainId);
-    registryType = getRegistryType(chainId);
-    logger.contract.debug('useQuoteRegistration: Registry address resolved', {
-      chainId,
-      contractAddress,
-      registryType,
-      ownerAddress,
-    });
-  } catch (error) {
-    contractAddress = undefined;
-    logger.contract.error('useQuoteRegistration: Failed to resolve registry address', {
-      chainId,
-      ownerAddress,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  // Resolve contract address with built-in error handling and logging
+  const { address: contractAddress, role: registryType } = resolveRegistryContract(
+    chainId,
+    'wallet',
+    'useQuoteRegistration'
+  );
 
-  const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
+  // Get the correct ABI for hub/spoke
+  const { abi } = getRegistryMetadata('wallet', registryType);
 
   // Convert null to undefined for wagmi compatibility
   const normalizedAddress = ownerAddress ?? undefined;

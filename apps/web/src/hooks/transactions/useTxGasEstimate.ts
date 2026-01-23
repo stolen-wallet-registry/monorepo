@@ -12,8 +12,8 @@
 import { useMemo } from 'react';
 import { useEstimateGas, useGasPrice, useChainId } from 'wagmi';
 import { formatGwei, encodeFunctionData } from 'viem';
-import { stolenTransactionRegistryAbi, spokeTransactionRegistryAbi } from '@/lib/contracts/abis';
-import { getTransactionRegistryAddress, isSpokeChain } from '@/lib/contracts/addresses';
+import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
+import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { logger } from '@/lib/logger';
 import { formatCentsToUsd, formatEthConsistent } from '@/lib/utils';
@@ -101,19 +101,16 @@ export function useTxGasEstimate({
 }: UseTxGasEstimateParams): UseTxGasEstimateResult {
   const chainId = useChainId();
   const ethPrice = useEthPrice();
-  const isSpoke = isSpokeChain(chainId);
 
-  // Select correct ABI based on chain type
-  const abi = isSpoke ? spokeTransactionRegistryAbi : stolenTransactionRegistryAbi;
+  // Resolve contract address with built-in error handling and logging
+  const { address: contractAddress, role: registryType } = resolveRegistryContract(
+    chainId,
+    'transaction',
+    'useTxGasEstimate'
+  );
 
-  // Get contract address (spoke-aware)
-  const contractAddress = useMemo(() => {
-    try {
-      return getTransactionRegistryAddress(chainId);
-    } catch {
-      return undefined;
-    }
-  }, [chainId]);
+  // Get the correct ABI for hub/spoke
+  const { abi } = getRegistryMetadata('transaction', registryType);
 
   // Check if we have all required params
   const hasAllParams =

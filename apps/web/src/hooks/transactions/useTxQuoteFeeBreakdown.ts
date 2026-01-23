@@ -8,8 +8,8 @@
 
 import { useMemo } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
-import { stolenTransactionRegistryAbi, spokeTransactionRegistryAbi } from '@/lib/contracts/abis';
-import { getTransactionRegistryAddress, isSpokeChain } from '@/lib/contracts/addresses';
+import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
+import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
 import { formatFeeLineItem } from '@/lib/utils';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import type { Address } from '@/lib/types/ethereum';
@@ -41,29 +41,23 @@ export function useTxQuoteFeeBreakdown(
 ): UseTxQuoteFeeBreakdownResult {
   const chainId = useChainId();
   const { data: ethPrice } = useEthPrice();
-  const isSpoke = isSpokeChain(chainId);
 
-  // Resolve contract address
-  let contractAddress: Address | undefined;
-  try {
-    contractAddress = getTransactionRegistryAddress(chainId);
-    logger.contract.debug('useTxQuoteFeeBreakdown: Registry resolved', {
-      chainId,
-      contractAddress,
-      isSpoke,
-    });
-  } catch (error) {
-    contractAddress = undefined;
-    logger.contract.error('useTxQuoteFeeBreakdown: Failed to resolve registry', {
-      chainId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  // Resolve contract address with built-in error handling and logging
+  const { address: contractAddress, role: registryType } = resolveRegistryContract(
+    chainId,
+    'transaction',
+    'useTxQuoteFeeBreakdown'
+  );
+  const isSpoke = registryType === 'spoke';
+
+  // Get the correct ABIs for hub/spoke (need both for conditional queries)
+  const hubMetadata = getRegistryMetadata('transaction', 'hub');
+  const spokeMetadata = getRegistryMetadata('transaction', 'spoke');
 
   // On spoke: call quoteFeeBreakdown(transactionCount)
   const spokeResult = useReadContract({
     address: contractAddress,
-    abi: spokeTransactionRegistryAbi,
+    abi: spokeMetadata.abi,
     chainId,
     functionName: 'quoteFeeBreakdown',
     args: [transactionCount],
@@ -77,7 +71,7 @@ export function useTxQuoteFeeBreakdown(
   // On hub: call quoteRegistration(reporter)
   const hubResult = useReadContract({
     address: contractAddress,
-    abi: stolenTransactionRegistryAbi,
+    abi: hubMetadata.abi,
     chainId,
     functionName: 'quoteRegistration',
     args: reporter ? [reporter] : undefined,

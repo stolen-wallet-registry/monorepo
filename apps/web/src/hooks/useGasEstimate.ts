@@ -10,8 +10,8 @@
 
 import { useEstimateGas, useGasPrice, useChainId } from 'wagmi';
 import { formatEther, formatGwei, encodeFunctionData } from 'viem';
-import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
-import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
+import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
+import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
 import { useEthPrice } from './useEthPrice';
 import { logger } from '@/lib/logger';
 import { formatCentsToUsd, formatEthConsistent } from '@/lib/utils';
@@ -92,44 +92,25 @@ export function useGasEstimate({
   const chainId = useChainId();
   const ethPrice = useEthPrice();
 
-  // Determine registry type and get correct address/ABI
-  // Both calls must succeed or we reset to defaults to avoid mismatch
-  let contractAddress: Address | undefined;
-  let registryType: 'hub' | 'spoke' = 'hub';
-  try {
-    const resolvedAddress = getRegistryAddress(chainId);
-    const resolvedType = getRegistryType(chainId);
-    // Only assign after both succeed
-    contractAddress = resolvedAddress;
-    registryType = resolvedType;
-  } catch (error) {
-    contractAddress = undefined;
-    registryType = 'hub';
-    logger.contract.debug('Failed to resolve registry address', {
-      chainId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  // Resolve contract address with built-in error handling and logging
+  const { address: contractAddress, role: registryType } = resolveRegistryContract(
+    chainId,
+    'wallet',
+    'useGasEstimate'
+  );
 
-  const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
+  // Get the correct ABI and function names for hub/spoke
+  const { abi, functions } = getRegistryMetadata('wallet', registryType);
 
-  // Map step to correct function name based on chain type
-  // Hub: acknowledge / register
-  // Spoke: acknowledgeLocal / registerLocal
-  const functionName =
-    registryType === 'spoke'
-      ? step === 'acknowledgement'
-        ? 'acknowledgeLocal'
-        : 'registerLocal'
-      : step === 'acknowledgement'
-        ? 'acknowledge'
-        : 'register';
+  // Map step to correct function name using metadata
+  const functionName = step === 'acknowledgement' ? functions.acknowledge : functions.register;
 
   // Build call data for gas estimation
+  // Cast functionName since viem expects specific literal type from ABI
   const callData = args
     ? encodeFunctionData({
         abi,
-        functionName,
+        functionName: functionName as 'acknowledge' | 'register',
         args,
       })
     : undefined;

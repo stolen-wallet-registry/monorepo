@@ -8,8 +8,8 @@
  */
 
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
-import { stolenWalletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
-import { getRegistryAddress, getRegistryType } from '@/lib/contracts/addresses';
+import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
+import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
 import type { SignatureStep } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -40,28 +40,15 @@ export function useGenerateHashStruct(
 ): UseGenerateHashStructResult {
   const chainId = useChainId();
 
-  let contractAddress: Address | undefined;
-  let registryType: 'hub' | 'spoke' = 'hub';
-  try {
-    contractAddress = getRegistryAddress(chainId);
-    registryType = getRegistryType(chainId);
-    logger.contract.debug('Registry address resolved for hash struct', {
-      chainId,
-      contractAddress,
-      registryType,
-      step,
-    });
-  } catch (error) {
-    contractAddress = undefined;
-    logger.contract.error('Failed to resolve registry address for hash struct', {
-      chainId,
-      step,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  // Resolve contract address with built-in error handling and logging
+  const { address: contractAddress, role: registryType } = resolveRegistryContract(
+    chainId,
+    'wallet',
+    'useGenerateHashStruct'
+  );
 
-  // Both contracts have identical generateHashStruct() function after normalization
-  const abi = registryType === 'spoke' ? spokeRegistryAbi : stolenWalletRegistryAbi;
+  // Get the correct ABI for hub/spoke
+  const { abi } = getRegistryMetadata('wallet', registryType);
 
   const result = useReadContract({
     address: contractAddress,
