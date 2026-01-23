@@ -95,6 +95,11 @@ export function useRecentRegistrations(
       const fetchTransactions = type === 'all' || type === 'transaction';
 
       // Parallel fetch
+      // Note: When type='all', each source fetches `limit` items independently,
+      // resulting in up to 3 × limit total entries before the final sort and
+      // truncation at line ~205. This ensures we capture the most recent items
+      // across all types. If bandwidth becomes a concern for large limits,
+      // consider reducing per-type fetches (e.g., Math.ceil(limit * 1.5)).
       const [walletsRes, contractsRes, transactionsRes] = await Promise.all([
         fetchWallets
           ? request<RawRecentWalletsResponse>(INDEXER_URL, RECENT_WALLETS_QUERY, {
@@ -189,6 +194,7 @@ export function useRecentRegistrations(
             reporter: raw.reporter as Address,
             isSponsored: false, // Individual tx entries don't track sponsorship
             registeredAt: BigInt(raw.reportedAt),
+            transactionHash: raw.txHash as Hash,
             batchId: raw.batchId,
           });
         }

@@ -1,7 +1,8 @@
 {
-  "name": "@swr/chains",
+  "name": "@swr/caip",
   "version": "0.0.1",
   "private": true,
+  "description": "CAIP-2 and CAIP-10 utilities for multi-chain address handling",
   "type": "module",
   "exports": {
     ".": {
@@ -17,11 +18,10 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@swr/caip": "workspace:*"
   },
   "peerDependencies": {
     "viem": "^2.0.0"
@@ -32,6 +32,7 @@
     "tsup": "^8.5.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
-    "viem": "^2.41.2"
+    "viem": "^2.41.2",
+    "vitest": "^4.0.15"
   }
 }

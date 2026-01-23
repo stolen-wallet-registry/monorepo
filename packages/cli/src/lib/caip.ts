@@ -1,54 +1,29 @@
 /**
  * CAIP utilities for the CLI.
  *
- * Uses @swr/chains for CAIP-2 parsing and chain names.
- * Provides contract-specific bytes32 conversions.
+ * All functions re-exported from @swr/chains for consistency.
+ * This ensures CLI produces bytes32 values that match Solidity CAIP2.fromEIP155():
+ *   bytes32 chainId = keccak256(bytes("eip155:8453"))
  */
 
-import { type Hex, pad, toHex } from 'viem';
-import { toCAIP2, caip2ToNumericChainId, getCAIP2ChainName } from '@swr/chains';
+// Re-export all CAIP utilities from @swr/chains
+export {
+  // bytes32 conversions (matches Solidity CAIP2.fromEIP155)
+  chainIdToBytes32,
+  caip2ToBytes32,
+  bytes32ToCAIP2,
+  // String conversions
+  toCAIP2,
+  caip2ToNumericChainId,
+  getCAIP2ChainName,
+  computeCAIP2Hash,
+  // CAIP-10 functions
+  parseCAIP10,
+  toCAIP10,
+} from '@swr/chains';
 
-// Re-export from @swr/chains for convenience
-export { toCAIP2, caip2ToNumericChainId, getCAIP2ChainName };
-
-// ═══════════════════════════════════════════════════════════════════════════
-// BYTES32 CONVERSIONS (Contract-specific)
-// ═══════════════════════════════════════════════════════════════════════════
-
-// Note: Our contracts store chainIds as padded bytes32 values (not CAIP-2 hashes).
-// Example: chainId 8453 → bytes32(uint256(8453)) → 0x0000...2105
-
-/**
- * Convert numeric chain ID to bytes32 for contract calls.
- * This matches how Solidity stores chain IDs: bytes32(uint256(chainId))
- */
-export function chainIdToBytes32(chainId: bigint | number): Hex {
-  return pad(toHex(BigInt(chainId)), { size: 32 });
-}
-
-/**
- * Parse CAIP-2 string to bytes32 for contract calls.
- * @example "eip155:8453" → 0x0000...2105 (8453 padded to bytes32)
- */
-export function caip2ToBytes32(caip2: string): Hex {
-  const chainId = caip2ToNumericChainId(caip2);
-  if (chainId === null) {
-    throw new Error(`Unsupported or invalid CAIP-2 format: ${caip2}`);
-  }
-  return chainIdToBytes32(chainId);
-}
-
-/**
- * Convert bytes32 back to CAIP-2 string.
- * @throws If chainId exceeds Number.MAX_SAFE_INTEGER
- */
-export function bytes32ToCaip2(bytes32: Hex): string {
-  const chainId = BigInt(bytes32);
-  if (chainId > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error(`Chain ID ${chainId} exceeds safe integer range`);
-  }
-  return toCAIP2(Number(chainId));
-}
+// Re-export chain name utility with local alias for backward compat
+import { getCAIP2ChainName, toCAIP2 } from '@swr/chains';
 
 /**
  * Get display name for a chain from its numeric ID.
@@ -63,7 +38,7 @@ export function getChainName(chainId: bigint | number): string {
   return getCAIP2ChainName(caip2);
 }
 
-// Common chain IDs (re-exported for backwards compatibility)
+// Common chain IDs (for backwards compatibility)
 export const CHAIN_IDS = {
   ETHEREUM: 1n,
   OPTIMISM: 10n,

@@ -1,17 +1,18 @@
 /**
  * Hook to build and manage Merkle trees for transaction batches.
  *
- * Uses OpenZeppelin StandardMerkleTree format to match the contract:
- * leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(txHash, chainId))))
- *
- * The 0x00 prefix prevents second-preimage attacks by distinguishing leaves
- * from internal nodes. This matches MerkleRootComputation.sol exactly.
+ * Uses @swr/merkle which wraps OpenZeppelin StandardMerkleTree for
+ * consistent behavior with contracts and CLI.
  */
 
 import { useMemo } from 'react';
-import { keccak256, encodeAbiParameters, concat, encodePacked } from 'viem';
 import type { Hash } from '@/lib/types/ethereum';
-import { chainIdToCAIP2 } from '@/lib/caip';
+import { chainIdToBytes32 } from '@swr/caip';
+import {
+  buildTransactionMerkleTree,
+  getTransactionProof,
+  type TransactionEntry,
+} from '@swr/merkle';
 import { logger } from '@/lib/logger';
 
 export interface TransactionLeaf {
@@ -24,104 +25,14 @@ export interface MerkleTreeData {
   root: Hash;
   /** Number of transactions in the tree */
   count: number;
-  /** The transaction hashes (for contract call) */
+  /** The transaction hashes (for contract call) - in sorted leaf order */
   txHashes: Hash[];
-  /** The CAIP-2 chain IDs as bytes32 (for contract call) */
+  /** The CAIP-2 chain IDs as bytes32 (for contract call) - in sorted leaf order */
   chainIds: Hash[];
   /** Get proof for a specific transaction by index */
   getProof: (index: number) => Hash[];
   /** Get proof for a specific transaction by hash and chain */
   getProofByTx: (txHash: Hash, chainId: number) => Hash[];
-}
-
-/**
- * Compute a single leaf for the Merkle tree.
- * Matches contract's MerkleRootComputation.hashLeaf(bytes32, bytes32):
- * leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(txHash, chainId))))
- */
-function computeLeaf(txHash: Hash, caip2ChainId: Hash): Hash {
-  // OpenZeppelin StandardMerkleTree format:
-  // 1. Inner hash: keccak256(abi.encode(txHash, chainId))
-  const innerHash = keccak256(
-    encodeAbiParameters([{ type: 'bytes32' }, { type: 'bytes32' }], [txHash, caip2ChainId])
-  );
-  // 2. Outer hash with 0x00 prefix (prevents second-preimage attacks)
-  return keccak256(concat(['0x00', innerHash]));
-}
-
-/**
- * Hash two nodes together for the Merkle tree.
- * Sorts nodes to ensure consistent ordering (like OpenZeppelin).
- */
-function hashPair(a: Hash, b: Hash): Hash {
-  // Sort to ensure consistent ordering regardless of input order
-  const [left, right] = a < b ? [a, b] : [b, a];
-  return keccak256(encodePacked(['bytes32', 'bytes32'], [left, right]));
-}
-
-/**
- * Build a Merkle tree from leaves and return root + proof generation function.
- */
-function buildTree(leaves: Hash[]): { root: Hash; getProof: (index: number) => Hash[] } {
-  if (leaves.length === 0) {
-    throw new Error('Cannot build tree with no leaves');
-  }
-
-  if (leaves.length === 1) {
-    return {
-      root: leaves[0],
-      getProof: () => [],
-    };
-  }
-
-  // Build tree bottom-up, storing all levels
-  const levels: Hash[][] = [leaves];
-  let currentLevel = leaves;
-
-  while (currentLevel.length > 1) {
-    const nextLevel: Hash[] = [];
-
-    for (let i = 0; i < currentLevel.length; i += 2) {
-      if (i + 1 < currentLevel.length) {
-        nextLevel.push(hashPair(currentLevel[i], currentLevel[i + 1]));
-      } else {
-        // Odd number of nodes: promote the last one
-        nextLevel.push(currentLevel[i]);
-      }
-    }
-
-    levels.push(nextLevel);
-    currentLevel = nextLevel;
-  }
-
-  const root = currentLevel[0];
-
-  // Function to generate proof for a leaf at given index
-  const getProof = (index: number): Hash[] => {
-    if (index < 0 || index >= leaves.length) {
-      return [];
-    }
-
-    const proof: Hash[] = [];
-    let idx = index;
-
-    for (let level = 0; level < levels.length - 1; level++) {
-      const levelNodes = levels[level];
-      const isLeft = idx % 2 === 0;
-      const siblingIdx = isLeft ? idx + 1 : idx - 1;
-
-      if (siblingIdx < levelNodes.length) {
-        proof.push(levelNodes[siblingIdx]);
-      }
-
-      // Move to parent index
-      idx = Math.floor(idx / 2);
-    }
-
-    return proof;
-  };
-
-  return { root, getProof };
 }
 
 /**
@@ -136,52 +47,60 @@ export function buildMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData
   }
 
   try {
-    // Convert chain IDs to CAIP-2 hashes
-    const caip2ChainIds = transactions.map((tx) => chainIdToCAIP2(tx.chainId));
-
-    // Compute leaves with their indices to track original positions
-    const leavesWithIndices = transactions.map((tx, i) => ({
-      leaf: computeLeaf(tx.txHash, caip2ChainIds[i]),
-      originalIndex: i,
+    // Convert to @swr/merkle format (chain ID as bytes32)
+    const entries: TransactionEntry[] = transactions.map((tx) => ({
+      txHash: tx.txHash,
+      chainId: chainIdToBytes32(tx.chainId),
     }));
 
-    // Sort leaves to match on-chain ordering, keeping track of original indices
-    const sortedLeavesWithIndices = [...leavesWithIndices].sort((a, b) =>
-      a.leaf < b.leaf ? -1 : a.leaf > b.leaf ? 1 : 0
-    );
+    // Build tree using @swr/merkle (uses OZ StandardMerkleTree)
+    const { root, tree, leafCount } = buildTransactionMerkleTree(entries);
 
-    const sortedLeaves = sortedLeavesWithIndices.map((item) => item.leaf);
+    // Get the sorted order from the tree for contract calls
+    // OZ StandardMerkleTree sorts leaves internally
+    const sortedEntries: TransactionEntry[] = [];
+    for (const [, value] of tree.entries()) {
+      sortedEntries.push({
+        txHash: value[0] as Hash,
+        chainId: value[1] as Hash,
+      });
+    }
 
-    // Build tree
-    const { root, getProof } = buildTree(sortedLeaves);
-
-    // Return txHashes and chainIds in the SAME order as sorted leaves
-    // This ensures the contract receives hashes in the correct order to reconstruct the same root
-    const sortedTxHashes = sortedLeavesWithIndices.map(
-      (item) => transactions[item.originalIndex].txHash
-    );
-    const sortedChainIds = sortedLeavesWithIndices.map((item) => caip2ChainIds[item.originalIndex]);
+    const sortedTxHashes = sortedEntries.map((e) => e.txHash);
+    const sortedChainIds = sortedEntries.map((e) => e.chainId);
 
     logger.store.debug('Merkle tree built', {
       root,
-      count: transactions.length,
+      count: leafCount,
     });
 
     return {
       root,
-      count: transactions.length,
+      count: leafCount,
       txHashes: sortedTxHashes,
       chainIds: sortedChainIds,
-      getProof,
-      getProofByTx: (txHash: Hash, chainId: number) => {
-        const caip2 = chainIdToCAIP2(chainId);
-        const targetLeaf = computeLeaf(txHash, caip2);
-        const index = sortedLeaves.findIndex((leaf) => leaf === targetLeaf);
-        if (index === -1) {
+      getProof: (index: number): Hash[] => {
+        if (index < 0 || index >= sortedEntries.length) {
+          return [];
+        }
+        try {
+          return getTransactionProof(
+            tree,
+            sortedEntries[index].txHash,
+            sortedEntries[index].chainId
+          );
+        } catch {
+          return [];
+        }
+      },
+      getProofByTx: (txHash: Hash, chainId: number): Hash[] => {
+        const chainIdBytes32 = chainIdToBytes32(chainId);
+        try {
+          return getTransactionProof(tree, txHash, chainIdBytes32);
+        } catch {
           logger.store.warn('Transaction not found in tree', { txHash, chainId });
           return [];
         }
-        return getProof(index);
       },
     };
   } catch (error) {

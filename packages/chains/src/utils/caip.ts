@@ -1,18 +1,50 @@
 /**
  * CAIP-2 and CAIP-10 utilities for multi-chain address handling.
  *
+ * This file re-exports pure CAIP functions from @swr/caip and adds
+ * chain-specific lookup tables built from network configurations.
+ *
  * CAIP-2: Chain identifiers (e.g., "eip155:8453" for Base)
  * CAIP-10: Account identifiers (e.g., "eip155:8453:0x123...abc")
  *
  * On-chain, chain IDs are stored as keccak256 hashes of CAIP-2 strings
- * for gas efficiency. This lookup table resolves hashes to readable strings.
+ * for gas efficiency. The lookup table resolves hashes to readable strings.
  */
 
-import { keccak256, encodePacked } from 'viem';
+import type { Hex } from 'viem';
 import { anvilHub, anvilSpoke, base, baseSepolia, optimism, optimismSepolia } from '../networks';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CAIP-2 LOOKUP TABLE
+// RE-EXPORTS FROM @swr/caip (pure functions)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  // Types
+  type CAIP2,
+  type CAIP10,
+  type ChainNamespace,
+  type ParsedCAIP2,
+  type ParsedCAIP10,
+  // CAIP-2 functions
+  toCAIP2,
+  parseCAIP2,
+  isValidCAIP2,
+  caip2ToNumericChainId,
+  // CAIP-10 functions
+  toCAIP10,
+  toCAIP10FromCAIP2,
+  parseCAIP10,
+  isValidCAIP10,
+  extractAddressFromCAIP10,
+  extractCAIP2FromCAIP10,
+  // bytes32 conversions
+  computeCAIP2Hash,
+  chainIdToBytes32,
+  caip2ToBytes32,
+} from '@swr/caip';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CAIP-2 LOOKUP TABLE (chain-specific, built from network configs)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -99,7 +131,7 @@ export const CAIP2_CHAIN_NAMES: Record<string, string> = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CAIP-2 FUNCTIONS
+// LOOKUP FUNCTIONS (chain-specific)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -109,26 +141,6 @@ export const CAIP2_CHAIN_NAMES: Record<string, string> = {
  */
 export function resolveChainIdHash(chainIdHash: string): string | null {
   return CAIP2_LOOKUP[chainIdHash.toLowerCase()] ?? null;
-}
-
-/**
- * Get numeric chain ID from CAIP-2 string (EVM only).
- * @param caip2 - CAIP-2 string (e.g., "eip155:8453")
- * @returns Numeric chain ID or null for non-EVM chains
- */
-export function caip2ToNumericChainId(caip2: string): number | null {
-  if (!caip2.startsWith('eip155:')) return null;
-  const chainId = parseInt(caip2.split(':')[1], 10);
-  return isNaN(chainId) ? null : chainId;
-}
-
-/**
- * Build CAIP-2 string from numeric chain ID.
- * @param chainId - Numeric chain ID
- * @returns CAIP-2 string (e.g., "eip155:8453")
- */
-export function toCAIP2(chainId: number): string {
-  return `eip155:${chainId}`;
 }
 
 /**
@@ -150,72 +162,18 @@ export function getCAIP2ChainName(caip2: string): string {
 }
 
 /**
- * Compute CAIP-2 hash for a given chain (utility for adding new chains).
- * @param caip2 - CAIP-2 string (e.g., "eip155:8453")
- * @returns bytes32 hash
+ * Resolve bytes32 hash back to CAIP-2 string.
+ * Uses the pre-computed CAIP2_LOOKUP table for reverse resolution.
+ *
+ * @param hash - bytes32 CAIP-2 hash
+ * @returns CAIP-2 string or null if unknown hash
+ *
+ * @example
+ * ```ts
+ * bytes32ToCAIP2('0x43b48883ef7be0f98fe7f98fafb2187e42caab4063697b32816f95e09d69b3ec')
+ * // => 'eip155:8453'
+ * ```
  */
-export function computeCAIP2Hash(caip2: string): string {
-  return keccak256(encodePacked(['string'], [caip2]));
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// CAIP-10 FUNCTIONS
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Build CAIP-10 address from wallet address and numeric chain ID.
- * @param address - Wallet address (will be lowercased)
- * @param chainId - Numeric chain ID
- * @returns CAIP-10 string (e.g., "eip155:8453:0x123...abc")
- */
-export function toCAIP10(address: string, chainId: number): string {
-  return `eip155:${chainId}:${address.toLowerCase()}`;
-}
-
-/**
- * Build CAIP-10 address from wallet address and CAIP-2 chain string.
- * @param address - Wallet address (will be lowercased)
- * @param caip2 - CAIP-2 chain string
- * @returns CAIP-10 string
- */
-export function toCAIP10FromCAIP2(address: string, caip2: string): string {
-  return `${caip2}:${address.toLowerCase()}`;
-}
-
-/**
- * Parse a CAIP-10 string into its components.
- * @param caip10 - CAIP-10 string (e.g., "eip155:8453:0x123...abc")
- * @returns Parsed components or null if invalid
- */
-export function parseCAIP10(
-  caip10: string
-): { namespace: string; chainId: string; address: string } | null {
-  const parts = caip10.split(':');
-  if (parts.length !== 3) return null;
-  return {
-    namespace: parts[0],
-    chainId: parts[1],
-    address: parts[2],
-  };
-}
-
-/**
- * Extract the wallet address from a CAIP-10 string.
- * @param caip10 - CAIP-10 string
- * @returns Wallet address or null if invalid
- */
-export function extractAddressFromCAIP10(caip10: string): string | null {
-  const parsed = parseCAIP10(caip10);
-  return parsed?.address ?? null;
-}
-
-/**
- * Extract the CAIP-2 chain identifier from a CAIP-10 string.
- * @param caip10 - CAIP-10 string
- * @returns CAIP-2 string or null if invalid
- */
-export function extractCAIP2FromCAIP10(caip10: string): string | null {
-  const parsed = parseCAIP10(caip10);
-  if (!parsed) return null;
-  return `${parsed.namespace}:${parsed.chainId}`;
+export function bytes32ToCAIP2(hash: Hex): string | null {
+  return CAIP2_LOOKUP[hash.toLowerCase()] ?? null;
 }

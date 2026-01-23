@@ -16,9 +16,9 @@
     "swr": "node dist/index.js"
   },
   "dependencies": {
-    "@openzeppelin/merkle-tree": "^1.0.8",
     "@swr/abis": "workspace:*",
     "@swr/chains": "workspace:*",
+    "@swr/merkle": "workspace:*",
     "commander": "^12.1.0",
     "viem": "^2.41.2",
     "dotenv": "^16.4.5",

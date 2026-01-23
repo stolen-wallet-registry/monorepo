@@ -7,24 +7,57 @@
  * On-chain, we store CAIP-2 identifiers as bytes32 hashes:
  *   bytes32 chainId = keccak256(bytes("eip155:8453"))
  *
+ * All functions are re-exported from @swr/chains to ensure
+ * consistency with CLI and match Solidity CAIP2.fromEIP155().
+ *
  * @see https://github.com/ChainAgnostic/CAIPs/blob/main/CAIPs/caip-2.md
  * @see https://github.com/ChainAgnostic/CAIPs/blob/main/CAIPs/caip-10.md
  */
 
-import { keccak256, encodePacked, encodeAbiParameters, concat, type Hex } from 'viem';
-import { toCAIP2, getChainName, getCAIP2ChainName } from '@swr/chains';
+// Re-export everything from @swr/chains for convenience
+export {
+  // Types
+  type CAIP2,
+  type CAIP10,
+  type ChainNamespace,
+  type ParsedCAIP2,
+  type ParsedCAIP10,
+  // CAIP-2 functions
+  toCAIP2,
+  parseCAIP2,
+  isValidCAIP2,
+  caip2ToNumericChainId,
+  // CAIP-10 functions
+  toCAIP10,
+  toCAIP10FromCAIP2,
+  parseCAIP10,
+  isValidCAIP10,
+  extractAddressFromCAIP10,
+  extractCAIP2FromCAIP10,
+  // bytes32 conversions
+  computeCAIP2Hash,
+  chainIdToBytes32,
+  caip2ToBytes32,
+  bytes32ToCAIP2,
+  // Chain name utilities
+  getChainName,
+  getCAIP2ChainName,
+  // Lookup tables
+  CAIP2_LOOKUP,
+  CAIP2_CHAIN_NAMES,
+} from '@swr/chains';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CAIP-2: Chain Identifiers
-// ═══════════════════════════════════════════════════════════════════════════
+import type { Hex } from 'viem';
+import { chainIdToBytes32 } from '@swr/chains';
 
 /**
  * Convert an EIP-155 chain ID number to a CAIP-2 string.
  * @param chainId - EIP-155 chain ID (e.g., 8453 for Base)
  * @returns CAIP-2 string (e.g., "eip155:8453")
+ * @deprecated Use toCAIP2 from @swr/chains instead
  */
 export function chainIdToCAIP2String(chainId: number): string {
-  return toCAIP2(chainId);
+  return `eip155:${chainId}`;
 }
 
 /**
@@ -35,50 +68,5 @@ export function chainIdToCAIP2String(chainId: number): string {
  * @returns CAIP-2 identifier as bytes32 hash
  */
 export function chainIdToCAIP2(chainId: number): Hex {
-  const caip2String = toCAIP2(chainId);
-  return keccak256(encodePacked(['string'], [caip2String]));
+  return chainIdToBytes32(chainId);
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Merkle Tree Leaf Utilities (OpenZeppelin StandardMerkleTree Compatible)
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Compute a Merkle tree leaf for a transaction.
- * Uses OpenZeppelin StandardMerkleTree format matching MerkleRootComputation.sol:
- *   leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(txHash, chainId))))
- *
- * The 0x00 prefix prevents second-preimage attacks by distinguishing leaves
- * from internal nodes.
- *
- * @param txHash - Transaction hash
- * @param chainId - CAIP-2 chain identifier as bytes32
- * @returns Merkle leaf hash (OZ standard format)
- */
-export function computeTransactionLeaf(txHash: Hex, chainId: Hex): Hex {
-  // 1. Inner hash: keccak256(abi.encode(txHash, chainId))
-  const innerHash = keccak256(
-    encodeAbiParameters([{ type: 'bytes32' }, { type: 'bytes32' }], [txHash, chainId])
-  );
-  // 2. Outer hash with 0x00 prefix
-  return keccak256(concat(['0x00', innerHash]));
-}
-
-/**
- * Compute a Merkle tree leaf from transaction hash and numeric chain ID.
- * Convenience function that converts chain ID to CAIP-2 bytes32 first.
- *
- * @param txHash - Transaction hash
- * @param chainId - EIP-155 chain ID number
- * @returns Merkle leaf hash
- */
-export function computeTransactionLeafFromChainId(txHash: Hex, chainId: number): Hex {
-  const caip2Hash = chainIdToCAIP2(chainId);
-  return computeTransactionLeaf(txHash, caip2Hash);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Chain Name Utilities
-// ═══════════════════════════════════════════════════════════════════════════
-
-export { getChainName, getCAIP2ChainName };

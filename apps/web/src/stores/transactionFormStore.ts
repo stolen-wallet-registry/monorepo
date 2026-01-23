@@ -166,15 +166,18 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
             state.sortedChainIds = [];
           }),
 
+        /**
+         * @deprecated Prefer setMerkleTreeData() which sets root and sorted arrays together.
+         * This setter always clears sortedTxHashes/sortedChainIds to prevent stale data.
+         */
         setMerkleRoot: (root) =>
           set((state) => {
             logger.store.debug('Transaction form merkle root updated', { root });
             state.merkleRoot = root;
-            // Clear sorted data when root is cleared
-            if (!root) {
-              state.sortedTxHashes = [];
-              state.sortedChainIds = [];
-            }
+            // Always clear sorted data - callers should use setMerkleTreeData to set
+            // root along with sorted arrays to ensure consistency
+            state.sortedTxHashes = [];
+            state.sortedChainIds = [];
           }),
 
         setMerkleTreeData: (root, sortedTxHashes, sortedChainIds) =>

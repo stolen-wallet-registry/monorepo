@@ -296,18 +296,21 @@ importers:
       '@multiformats/multiaddr-matcher':
         specifier: ^2.0.0
         version: 2.0.2
-      '@openzeppelin/merkle-tree':
-        specifier: ^1.0.8
-        version: 1.0.8
       '@rainbow-me/rainbowkit':
         specifier: ^2.2.10
         version: 2.2.10(@tanstack/react-query@5.90.12(react@19.2.1))(@types/react@19.2.7)(react-dom@19.2.1(react@19.2.1))(react@19.2.1)(typescript@5.9.3)(viem@2.41.2(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.13))(wagmi@2.19.5(@tanstack/query-core@5.90.12)(@tanstack/react-query@5.90.12(react@19.2.1))(@types/react@19.2.7)(bufferutil@4.0.9)(fastestsmallesttextencoderdecoder@1.0.22)(immer@11.0.1)(react-native@0.83.0(@babel/core@7.28.5)(@types/react@19.2.7)(bufferutil@4.0.9)(react@19.2.1)(utf-8-validate@5.0.10))(react@19.2.1)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.41.2(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.13))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@4.1.13))
       '@swr/abis':
         specifier: workspace:*
         version: link:../../packages/abis
+      '@swr/caip':
+        specifier: workspace:*
+        version: link:../../packages/caip
       '@swr/chains':
         specifier: workspace:*
         version: link:../../packages/chains
+      '@swr/merkle':
+        specifier: workspace:*
+        version: link:../../packages/merkle
       '@swr/search':
         specifier: workspace:*
         version: link:../../packages/search
@@ -474,7 +477,35 @@ importers:
 
   packages/abis: {}
 
+  packages/caip:
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.39.1
+        version: 9.39.1
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1(jiti@2.6.1)
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.46.4
+        version: 8.49.0(eslint@9.39.1(jiti@2.6.1))(typescript@5.9.3)
+      viem:
+        specifier: ^2.41.2
+        version: 2.41.2(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.13)
+      vitest:
+        specifier: ^4.0.15
+        version: 4.0.15(@opentelemetry/api@1.9.0)(@types/node@24.10.2)(@vitest/browser-playwright@4.0.15)(jiti@2.6.1)(jsdom@27.3.0(bufferutil@4.0.9)(postcss@8.5.6)(utf-8-validate@5.0.10))(lightningcss@1.30.2)(terser@5.44.1)(yaml@2.8.2)
+
   packages/chains:
+    dependencies:
+      '@swr/caip':
+        specifier: workspace:*
+        version: link:../caip
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.1
@@ -497,15 +528,15 @@ importers:
 
   packages/cli:
     dependencies:
-      '@openzeppelin/merkle-tree':
-        specifier: ^1.0.8
-        version: 1.0.8
       '@swr/abis':
         specifier: workspace:*
         version: link:../abis
       '@swr/chains':
         specifier: workspace:*
         version: link:../chains
+      '@swr/merkle':
+        specifier: workspace:*
+        version: link:../merkle
       chalk:
         specifier: ^5.3.0
         version: 5.6.2
@@ -552,6 +583,37 @@ importers:
       solhint:
         specifier: ^6.0.3
         version: 6.0.3(typescript@5.9.3)
+
+  packages/merkle:
+    dependencies:
+      '@openzeppelin/merkle-tree':
+        specifier: ^1.0.8
+        version: 1.0.8
+      '@swr/caip':
+        specifier: workspace:*
+        version: link:../caip
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.39.1
+        version: 9.39.1
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1(jiti@2.6.1)
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.46.4
+        version: 8.49.0(eslint@9.39.1(jiti@2.6.1))(typescript@5.9.3)
+      viem:
+        specifier: ^2.41.2
+        version: 2.41.2(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.13)
+      vitest:
+        specifier: ^4.0.15
+        version: 4.0.15(@opentelemetry/api@1.9.0)(@types/node@24.10.2)(@vitest/browser-playwright@4.0.15)(jiti@2.6.1)(jsdom@27.3.0(bufferutil@4.0.9)(postcss@8.5.6)(utf-8-validate@5.0.10))(lightningcss@1.30.2)(terser@5.44.1)(yaml@2.8.2)
 
   packages/search:
     dependencies:
