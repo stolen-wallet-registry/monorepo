@@ -44,10 +44,19 @@ import {
   Copy,
   Check,
   ExternalLink,
+  AlertTriangle,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import { useChainId, useWriteContract, usePublicClient } from 'wagmi';
 import { encodeFunctionData, isAddress } from 'viem';
-import { useOperators, type OperatorInfo } from '@/hooks/dashboard';
+import {
+  useOperators,
+  type OperatorInfo,
+  CAPABILITY_WALLET,
+  CAPABILITY_TX,
+  CAPABILITY_CONTRACT,
+} from '@/hooks/dashboard';
 import { useWalletType } from '@/hooks/useWalletType';
 import { operatorRegistryAbi } from '@/lib/contracts/abis';
 import { getOperatorRegistryAddress } from '@/lib/contracts/addresses';
@@ -207,6 +216,60 @@ function TransactionDialog({ transaction, chainId, onClose }: TransactionDialogP
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// DELETE CONFIRMATION DIALOG
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface DeleteConfirmDialogProps {
+  operator: OperatorInfo;
+  onConfirm: () => void;
+  onCancel: () => void;
+  isPending: boolean;
+}
+
+function DeleteConfirmDialog({
+  operator,
+  onConfirm,
+  onCancel,
+  isPending,
+}: DeleteConfirmDialogProps) {
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5 text-destructive" />
+          Remove Operator
+        </DialogTitle>
+        <DialogDescription>
+          Are you sure you want to revoke operator access for{' '}
+          <span className="font-semibold">{operator.identifier}</span>?
+        </DialogDescription>
+      </DialogHeader>
+      <div className="py-4">
+        <p className="text-sm text-muted-foreground">
+          This will submit a transaction to remove the operator from the registry. They will no
+          longer be able to submit batch registrations.
+        </p>
+      </div>
+      <div className="flex gap-2 justify-end">
+        <Button variant="outline" onClick={onCancel} disabled={isPending}>
+          Cancel
+        </Button>
+        <Button variant="destructive" onClick={onConfirm} disabled={isPending}>
+          {isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            'Submit Revoke Tx'
+          )}
+        </Button>
+      </div>
+    </DialogContent>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // EDIT CAPABILITIES DIALOG
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -288,10 +351,10 @@ function EditCapabilitiesDialog({
           {isPending ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
+              Submitting...
             </>
           ) : (
-            'Save Changes'
+            'Submit Update Tx'
           )}
         </Button>
       </div>
@@ -469,9 +532,11 @@ function AddOperatorForm({
           )}
         </div>
 
-        <Button onClick={handleAction} disabled={!isValid || isBusy} className="w-full sm:w-auto">
-          {getButtonContent()}
-        </Button>
+        <div className="flex justify-end">
+          <Button onClick={handleAction} disabled={!isValid || isBusy} className="w-full sm:w-auto">
+            {getButtonContent()}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -499,6 +564,7 @@ export function OperatorsTable({
   canManage = false,
 }: OperatorsTableProps) {
   const chainId = useChainId();
+  const queryClient = useQueryClient();
   const { operators, isLoading, isError, refetch } = useOperators({
     approvedOnly: !showRevoked,
   });
@@ -517,13 +583,14 @@ export function OperatorsTable({
   // State for dialogs
   const [transaction, setTransaction] = useState<TransactionData | null>(null);
   const [editingOperator, setEditingOperator] = useState<OperatorInfo | null>(null);
+  const [deletingOperator, setDeletingOperator] = useState<OperatorInfo | null>(null);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
   // Transaction states
   const [isApprovePending, setIsApprovePending] = useState(false);
   const [isApproveConfirming, setIsApproveConfirming] = useState(false);
 
-  // EOA: Execute approve operator
+  // EOA: Execute approve operator with optimistic update
   const handleExecuteApprove = useCallback(
     async (operatorAddress: Address, capabilities: number, name: string) => {
       if (!contractAddress || !publicClient) return;
@@ -539,17 +606,44 @@ export function OperatorsTable({
 
         setIsApprovePending(false);
         setIsApproveConfirming(true);
-        await publicClient.waitForTransactionReceipt({ hash });
-        refetch();
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+        // Optimistic update: add new operator to cache immediately
+        const newOperator: OperatorInfo = {
+          address: operatorAddress,
+          identifier: name,
+          capabilities,
+          approved: true,
+          canSubmitWallet: (capabilities & CAPABILITY_WALLET) !== 0,
+          canSubmitTransaction: (capabilities & CAPABILITY_TX) !== 0,
+          canSubmitContract: (capabilities & CAPABILITY_CONTRACT) !== 0,
+          approvedAt: BigInt(receipt.blockNumber),
+        };
+
+        queryClient.setQueryData<OperatorInfo[]>(
+          ['dashboard', 'operators', { approvedOnly: !showRevoked }],
+          (old) => (old ? [...old, newOperator] : [newOperator])
+        );
+
+        toast.success('Operator approved', {
+          description: `${name} has been added as an operator.`,
+        });
+
+        // Background refetch to sync with indexer (may take a moment)
+        setTimeout(() => refetch(), 2000);
+      } catch (error) {
+        toast.error('Failed to approve operator', {
+          description: error instanceof Error ? error.message : 'Transaction failed',
+        });
       } finally {
         setIsApprovePending(false);
         setIsApproveConfirming(false);
       }
     },
-    [contractAddress, publicClient, writeContractAsync, refetch]
+    [contractAddress, publicClient, writeContractAsync, queryClient, showRevoked, refetch]
   );
 
-  // Handle edit capabilities
+  // Handle edit capabilities with optimistic update
   const handleEditCapabilities = useCallback(
     async (operator: OperatorInfo, capabilities: number) => {
       if (!contractAddress || !publicClient) return;
@@ -564,8 +658,35 @@ export function OperatorsTable({
             args: [operator.address as Address, capabilities],
           });
           await publicClient.waitForTransactionReceipt({ hash });
-          refetch();
+
+          // Optimistic update: update operator in cache immediately
+          queryClient.setQueryData<OperatorInfo[]>(
+            ['dashboard', 'operators', { approvedOnly: !showRevoked }],
+            (old) =>
+              old?.map((op) =>
+                op.address === operator.address
+                  ? {
+                      ...op,
+                      capabilities,
+                      canSubmitWallet: (capabilities & CAPABILITY_WALLET) !== 0,
+                      canSubmitTransaction: (capabilities & CAPABILITY_TX) !== 0,
+                      canSubmitContract: (capabilities & CAPABILITY_CONTRACT) !== 0,
+                    }
+                  : op
+              )
+          );
+
+          toast.success('Permissions updated', {
+            description: `${operator.identifier}'s capabilities have been updated.`,
+          });
           setEditingOperator(null);
+
+          // Background refetch to sync with indexer
+          setTimeout(() => refetch(), 2000);
+        } catch (error) {
+          toast.error('Failed to update permissions', {
+            description: error instanceof Error ? error.message : 'Transaction failed',
+          });
         } finally {
           setActionInProgress(null);
         }
@@ -586,11 +707,11 @@ export function OperatorsTable({
         setEditingOperator(null);
       }
     },
-    [contractAddress, publicClient, isEOA, writeContractAsync, refetch]
+    [contractAddress, publicClient, isEOA, writeContractAsync, queryClient, showRevoked, refetch]
   );
 
-  // Handle revoke operator
-  const handleRevoke = useCallback(
+  // Handle revoke operator (called from confirmation dialog) with optimistic update
+  const handleConfirmRevoke = useCallback(
     async (operator: OperatorInfo) => {
       if (!contractAddress || !publicClient) return;
 
@@ -604,7 +725,24 @@ export function OperatorsTable({
             args: [operator.address as Address],
           });
           await publicClient.waitForTransactionReceipt({ hash });
-          refetch();
+
+          // Optimistic update: remove operator from cache immediately
+          queryClient.setQueryData<OperatorInfo[]>(
+            ['dashboard', 'operators', { approvedOnly: !showRevoked }],
+            (old) => old?.filter((op) => op.address !== operator.address)
+          );
+
+          toast.success('Operator revoked', {
+            description: `${operator.identifier} has been removed as an operator.`,
+          });
+          setDeletingOperator(null);
+
+          // Background refetch to sync with indexer
+          setTimeout(() => refetch(), 2000);
+        } catch (error) {
+          toast.error('Failed to revoke operator', {
+            description: error instanceof Error ? error.message : 'Transaction failed',
+          });
         } finally {
           setActionInProgress(null);
         }
@@ -622,9 +760,10 @@ export function OperatorsTable({
           operation: 'revoke',
           summary: `Revoke operator "${operator.identifier}" (${operator.address.slice(0, 6)}...${operator.address.slice(-4)})`,
         });
+        setDeletingOperator(null);
       }
     },
-    [contractAddress, publicClient, isEOA, writeContractAsync, refetch]
+    [contractAddress, publicClient, isEOA, writeContractAsync, queryClient, showRevoked, refetch]
   );
 
   if (isError) {
@@ -745,7 +884,7 @@ export function OperatorsTable({
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleRevoke(operator)}
+                                onClick={() => setDeletingOperator(operator)}
                                 disabled={isActionInProgress}
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />
@@ -781,6 +920,18 @@ export function OperatorsTable({
             operator={editingOperator}
             onSave={(caps) => handleEditCapabilities(editingOperator, caps)}
             onClose={() => setEditingOperator(null)}
+            isPending={!!actionInProgress}
+          />
+        )}
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deletingOperator} onOpenChange={() => setDeletingOperator(null)}>
+        {deletingOperator && (
+          <DeleteConfirmDialog
+            operator={deletingOperator}
+            onConfirm={() => handleConfirmRevoke(deletingOperator)}
+            onCancel={() => setDeletingOperator(null)}
             isPending={!!actionInProgress}
           />
         )}

@@ -216,7 +216,7 @@ export function RecentRegistrationsTable({ className }: RecentRegistrationsTable
     return map;
   }, [operators]);
 
-  // Client-side pagination with clamped page (no useEffect needed)
+  // Client-side pagination with clamped page
   const totalPages = Math.max(1, Math.ceil(registrations.length / pageSize));
   const clampedPage = Math.min(page, totalPages - 1);
   const startIndex = clampedPage * pageSize;
@@ -297,7 +297,7 @@ export function RecentRegistrationsTable({ className }: RecentRegistrationsTable
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    onClick={() => setPage(clampedPage - 1)}
                     disabled={clampedPage === 0}
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -308,7 +308,7 @@ export function RecentRegistrationsTable({ className }: RecentRegistrationsTable
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    onClick={() => setPage(clampedPage + 1)}
                     disabled={clampedPage >= totalPages - 1}
                   >
                     <ChevronRight className="h-4 w-4" />

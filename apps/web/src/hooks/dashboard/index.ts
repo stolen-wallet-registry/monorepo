@@ -18,7 +18,14 @@ export {
   type RegistryStats,
   type UseRegistryStatsResult,
 } from './useRegistryStats';
-export { useOperators, type OperatorInfo, type UseOperatorsResult } from './useOperators';
+export {
+  useOperators,
+  type OperatorInfo,
+  type UseOperatorsResult,
+  CAPABILITY_WALLET,
+  CAPABILITY_TX,
+  CAPABILITY_CONTRACT,
+} from './useOperators';
 export {
   useRecentRegistrations,
   type RegistrationEntry,

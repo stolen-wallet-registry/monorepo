@@ -7,6 +7,7 @@
  * - DAO: + Manage operators (integrated into Operators tab)
  */
 
+import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger, Badge } from '@swr/ui';
 import { ListOrdered, Users, Upload } from 'lucide-react';
 import {
@@ -38,10 +39,14 @@ function RoleBadge({ role, isLoading }: RoleBadgeProps) {
 
 export function DashboardPage() {
   const { role, isLoading, isDAO } = useUserRole();
+  const [activeTab, setActiveTab] = useState('registrations');
 
   // Compute tab visibility based on role
   // Default to showing only public tabs while loading to prevent layout shift
   const showSubmitTab = !isLoading && (role === 'operator' || role === 'dao');
+
+  // Auto-reset to registrations if current tab becomes unavailable (e.g., wallet disconnect)
+  const effectiveTab = activeTab === 'submit' && !showSubmitTab ? 'registrations' : activeTab;
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-8">
@@ -62,7 +67,7 @@ export function DashboardPage() {
       <DashboardStatsCards />
 
       {/* Tabs - aligned right */}
-      <Tabs defaultValue="registrations" className="space-y-4">
+      <Tabs value={effectiveTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex justify-end">
           <TabsList>
             <TabsTrigger value="registrations" className="gap-2">
