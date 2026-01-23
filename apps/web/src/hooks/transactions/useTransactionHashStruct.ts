@@ -8,8 +8,8 @@
  */
 
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
-import { stolenTransactionRegistryAbi, spokeTransactionRegistryAbi } from '@/lib/contracts/abis';
-import { getTransactionRegistryAddress, isSpokeChain } from '@/lib/contracts/addresses';
+import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
+import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
 import { TX_SIGNATURE_STEP, type TxSignatureStep } from '@/lib/signatures/transactions';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -45,29 +45,16 @@ export function useTransactionHashStruct(
   step: TxSignatureStep
 ): UseTxHashStructResult {
   const chainId = useChainId();
-  const isSpoke = isSpokeChain(chainId);
 
-  let contractAddress: Address | undefined;
-  try {
-    contractAddress = getTransactionRegistryAddress(chainId);
-    logger.contract.debug('Transaction registry address resolved for hash struct', {
-      chainId,
-      contractAddress,
-      step,
-      isSpoke,
-    });
-  } catch (error) {
-    contractAddress = undefined;
-    logger.contract.error('Failed to resolve transaction registry address for hash struct', {
-      chainId,
-      step,
-      isSpoke,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  // Resolve contract address with built-in error handling and logging
+  const { address: contractAddress, role: registryType } = resolveRegistryContract(
+    chainId,
+    'transaction',
+    'useTransactionHashStruct'
+  );
 
-  // Use the correct ABI for hub vs spoke
-  const abi = isSpoke ? spokeTransactionRegistryAbi : stolenTransactionRegistryAbi;
+  // Get the correct ABI for hub/spoke
+  const { abi } = getRegistryMetadata('transaction', registryType);
 
   const enabled =
     !!merkleRoot &&

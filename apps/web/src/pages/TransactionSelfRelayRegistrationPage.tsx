@@ -41,7 +41,7 @@ import {
   TxSuccessStep,
 } from '@/components/registration/tx-steps';
 import { useUserTransactions, useMerkleTree, type TransactionLeaf } from '@/hooks/transactions';
-import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
+import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import {
@@ -108,7 +108,7 @@ export function TransactionSelfRelayRegistrationPage() {
     setSelectedTxHashes,
     setSelectedTxDetails,
     setReportedChainId,
-    setMerkleRoot,
+    setMerkleTreeData,
   } = useTransactionSelection();
   const resetForm = useTransactionFormStore((s) => s.reset);
   const setReporter = useTransactionFormStore((s) => s.setReporter);
@@ -160,11 +160,11 @@ export function TransactionSelfRelayRegistrationPage() {
   // Update form state when merkle tree changes
   useEffect(() => {
     if (merkleTree) {
-      setMerkleRoot(merkleTree.root);
+      setMerkleTreeData(merkleTree.root, merkleTree.txHashes, merkleTree.chainIds);
     } else {
-      setMerkleRoot(null);
+      setMerkleTreeData(null, [], []);
     }
-  }, [merkleTree, setMerkleRoot]);
+  }, [merkleTree, setMerkleTreeData]);
 
   // Set reported chain ID when chain changes
   useEffect(() => {
@@ -172,9 +172,9 @@ export function TransactionSelfRelayRegistrationPage() {
       setReportedChainId(chainId);
       setSelectedTxHashes([]);
       setSelectedTxDetails([]);
-      setMerkleRoot(null);
+      setMerkleTreeData(null, [], []);
     }
-  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setMerkleRoot]);
+  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setMerkleTreeData]);
 
   // Set reporter address when on select-transactions step
   // IMPORTANT: Only clear selection when on the initial step, not during wallet switches for payment
@@ -185,9 +185,9 @@ export function TransactionSelfRelayRegistrationPage() {
       setReporter(address);
       setSelectedTxHashes([]);
       setSelectedTxDetails([]);
-      setMerkleRoot(null);
+      setMerkleTreeData(null, [], []);
     }
-  }, [address, step, setReporter, setSelectedTxHashes, setSelectedTxDetails, setMerkleRoot]);
+  }, [address, step, setReporter, setSelectedTxHashes, setSelectedTxDetails, setMerkleTreeData]);
 
   // Redirect if not connected
   useEffect(() => {
@@ -393,20 +393,18 @@ export function TransactionSelfRelayRegistrationPage() {
                         <span className="font-mono font-medium">
                           {getChainName(chainId)}{' '}
                           <span className="text-muted-foreground text-xs">
-                            ({chainIdToCAIP2String(chainId)})
+                            ({toCAIP2(chainId)})
                           </span>
                         </span>
                       </div>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <code className="font-mono text-xs text-muted-foreground break-all cursor-default ml-0">
-                            {chainIdToCAIP2(chainId)}
+                            {chainIdToBytes32(chainId)}
                           </code>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-md">
-                          <p className="text-xs">
-                            keccak256 hash of "{chainIdToCAIP2String(chainId)}"
-                          </p>
+                          <p className="text-xs">keccak256 hash of "{toCAIP2(chainId)}"</p>
                         </TooltipContent>
                       </Tooltip>
                     </div>

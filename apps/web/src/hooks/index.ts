@@ -74,6 +74,8 @@ export {
 // Utility hooks
 export { useCopyToClipboard, type UseCopyToClipboardResult } from './useCopyToClipboard';
 
+export { useWalletType, type WalletType, type UseWalletTypeResult } from './useWalletType';
+
 // Registry status hook
 export {
   useRegistryStatus,
@@ -132,3 +134,30 @@ export {
   type TransactionSearchData,
   type TransactionChainReport,
 } from './indexer';
+
+// Dashboard hooks
+export {
+  // Role hooks
+  useIsOperator,
+  useIsDAO,
+  useUserRole,
+  type UserRole,
+  type UseIsOperatorOptions,
+  type UseIsOperatorResult,
+  type UseIsDAOOptions,
+  type UseIsDAOResult,
+  type UseUserRoleOptions,
+  type UseUserRoleResult,
+  // Data hooks
+  useRegistryStats,
+  useOperators,
+  useRecentRegistrations,
+  type RegistryStats,
+  type UseRegistryStatsResult,
+  type OperatorInfo,
+  type UseOperatorsResult,
+  type RegistrationEntry,
+  type RegistrationType,
+  type UseRecentRegistrationsOptions,
+  type UseRecentRegistrationsResult,
+} from './dashboard';

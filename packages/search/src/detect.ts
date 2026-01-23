@@ -2,6 +2,7 @@
  * Input type detection for registry search.
  */
 
+import { parseCAIP10 as parseCAIP10Base } from '@swr/chains';
 import type { SearchType } from './types';
 
 /**
@@ -86,24 +87,28 @@ export function isCAIP10(value: string): boolean {
  * Parse a CAIP-10 identifier into its components.
  * Preserves original address casing (important for checksum addresses).
  *
- * @returns Object with namespace, chainId, address, or null if invalid
+ * Returns numeric chainId (unlike @swr/chains which returns string chainId)
+ * for convenience in search operations that need numeric chain IDs.
+ *
+ * Input is trimmed for convenience. Chain ID must be a positive decimal integer.
+ *
+ * @returns Object with namespace, chainId (number), address, or null if invalid
  */
 export function parseCAIP10(
   value: string
 ): { namespace: string; chainId: number; address: string } | null {
-  const parts = value.split(':');
-  if (parts.length !== 3) return null;
+  const parsed = parseCAIP10Base(value.trim());
+  if (!parsed) return null;
 
-  const [namespace, chainIdStr, address] = parts;
-  const namespaceLower = namespace.toLowerCase();
+  // Ensure chainId is a valid decimal integer (no hex, no leading zeros except "0")
+  if (!/^\d+$/.test(parsed.chainId)) return null;
 
-  if (namespaceLower !== 'eip155') return null;
-  if (!/^\d+$/.test(chainIdStr)) return null;
-  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return null;
+  const numericChainId = parseInt(parsed.chainId, 10);
+  if (isNaN(numericChainId) || numericChainId < 0) return null;
 
   return {
-    namespace: namespaceLower,
-    chainId: parseInt(chainIdStr, 10),
-    address,
+    namespace: parsed.namespace,
+    chainId: numericChainId,
+    address: parsed.address,
   };
 }

@@ -28,7 +28,7 @@ import type { TransactionCost } from '@/hooks/useTransactionCost';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { getTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
 import { parseSignature } from '@/lib/signatures';
-import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
+import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
@@ -47,8 +47,14 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   const { address } = useAccount();
   const chainId = useChainId();
   const { registrationType, setAcknowledgementHash } = useTransactionRegistrationStore();
-  const { selectedTxHashes, selectedTxDetails, reportedChainId, merkleRoot } =
-    useTransactionSelection();
+  const {
+    selectedTxHashes,
+    selectedTxDetails,
+    reportedChainId,
+    merkleRoot,
+    sortedTxHashes,
+    sortedChainIds,
+  } = useTransactionSelection();
 
   const isSelfRelay = registrationType === 'selfRelay';
 
@@ -100,13 +106,24 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     address && expectedWallet && areAddressesEqual(address, expectedWallet)
   );
 
-  // Convert reported chain ID to CAIP-2 format
-  const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : undefined;
+  // Convert reported chain ID to CAIP-2 format - cache both for display and contract use
+  // Guard against invalid chain IDs (must be positive safe integer)
+  const reportedChainIdCaip2 =
+    reportedChainId != null && Number.isSafeInteger(reportedChainId) && reportedChainId > 0
+      ? toCAIP2(reportedChainId)
+      : undefined;
+  const reportedChainIdHash =
+    reportedChainId != null && Number.isSafeInteger(reportedChainId) && reportedChainId > 0
+      ? chainIdToBytes32(reportedChainId)
+      : undefined;
 
-  // Build chain IDs array for gas estimation
-  const chainIdsArray = reportedChainIdHash
-    ? selectedTxHashes.map(() => reportedChainIdHash)
-    : undefined;
+  // Use sorted hashes and chain IDs from merkle tree for contract calls
+  // These must match the order used to compute the merkle root
+  // Guard against undefined during store hydration
+  const txHashesForContract =
+    sortedTxHashes && sortedTxHashes.length > 0 ? sortedTxHashes : undefined;
+  const chainIdsForContract =
+    sortedChainIds && sortedChainIds.length > 0 ? sortedChainIds : undefined;
 
   // Parse signature for gas estimation
   const parsedSigForEstimate = storedSignature
@@ -124,12 +141,17 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     merkleRoot: merkleRoot ?? undefined,
     reportedChainId: reportedChainIdHash,
     transactionCount: selectedTxHashes.length,
-    transactionHashes: selectedTxHashes.length > 0 ? selectedTxHashes : undefined,
-    chainIds: chainIdsArray,
+    transactionHashes: txHashesForContract,
+    chainIds: chainIdsForContract,
     reporter: storedSignature?.reporter,
     deadline: storedSignature?.deadline,
     signature: parsedSigForEstimate,
-    enabled: !!storedSignature && !!merkleRoot && !!reportedChainIdHash,
+    enabled:
+      !!storedSignature &&
+      !!merkleRoot &&
+      !!reportedChainIdHash &&
+      !!txHashesForContract &&
+      !!chainIdsForContract,
   });
 
   // Map hook state to TransactionStatus
@@ -216,8 +238,15 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     try {
       const parsedSig = parseSignature(storedSignature.signature);
 
-      // Build chain IDs array (all same chain for now)
-      const chainIds = selectedTxHashes.map(() => reportedChainIdHash);
+      // Validate sorted data is available
+      if (!txHashesForContract || !chainIdsForContract) {
+        logger.contract.error('Missing sorted transaction data for acknowledgement', {
+          hasSortedTxHashes: !!txHashesForContract,
+          hasSortedChainIds: !!chainIdsForContract,
+        });
+        setLocalError('Transaction data not ready. Please go back and try again.');
+        return;
+      }
 
       logger.contract.info('Submitting transaction batch acknowledge to contract', {
         merkleRoot,
@@ -231,8 +260,8 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         merkleRoot,
         reportedChainId: reportedChainIdHash,
         transactionCount: selectedTxHashes.length,
-        transactionHashes: selectedTxHashes,
-        chainIds,
+        transactionHashes: txHashesForContract,
+        chainIds: chainIdsForContract,
         reporter: storedSignature.reporter,
         deadline: storedSignature.deadline,
         signature: parsedSig,
@@ -262,6 +291,8 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     merkleRoot,
     reportedChainIdHash,
     selectedTxHashes,
+    txHashesForContract,
+    chainIdsForContract,
     address,
     chainId,
     submitAcknowledgement,
@@ -386,24 +417,18 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
                 </span>
                 <span className="font-mono font-medium">
                   {getChainName(reportedChainId)}{' '}
-                  <span className="text-muted-foreground text-xs">
-                    ({chainIdToCAIP2String(reportedChainId)})
-                  </span>
+                  <span className="text-muted-foreground text-xs">({reportedChainIdCaip2})</span>
                 </span>
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <code className="font-mono text-xs text-muted-foreground break-all cursor-default">
-                    {chainIdToCAIP2(reportedChainId)}
+                    {reportedChainIdHash}
                   </code>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-md">
-                  <p className="text-xs">
-                    keccak256 hash of "{chainIdToCAIP2String(reportedChainId)}"
-                  </p>
-                  <p className="text-xs font-mono break-all mt-1">
-                    {chainIdToCAIP2(reportedChainId)}
-                  </p>
+                  <p className="text-xs">keccak256 hash of "{reportedChainIdCaip2}"</p>
+                  <p className="text-xs font-mono break-all mt-1">{reportedChainIdHash}</p>
                 </TooltipContent>
               </Tooltip>
             </div>

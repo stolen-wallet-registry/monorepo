@@ -7,7 +7,7 @@
  * - Registration signatures (Phase 2)
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import { useSignTypedData, useAccount, useChainId } from 'wagmi';
 import {
   buildTxAcknowledgementTypedData,
@@ -15,7 +15,7 @@ import {
   type TxAcknowledgementMessage,
   type TxRegistrationMessage,
 } from '@/lib/signatures/transactions';
-import { getTransactionRegistryAddress, isSpokeChain } from '@/lib/contracts/addresses';
+import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
@@ -53,28 +53,15 @@ export interface UseSignTxEIP712Result {
 export function useSignTxEIP712(): UseSignTxEIP712Result {
   const { address } = useAccount();
   const chainId = useChainId();
-  const isSpoke = isSpokeChain(chainId);
 
   const { signTypedDataAsync, isPending, isError, error, reset } = useSignTypedData();
 
-  const contractAddress = useMemo(() => {
-    try {
-      const address = getTransactionRegistryAddress(chainId);
-      logger.signature.debug('useSignTxEIP712: Transaction registry address resolved', {
-        chainId,
-        contractAddress: address,
-        isSpoke,
-      });
-      return address;
-    } catch (err) {
-      logger.signature.error('useSignTxEIP712: Failed to resolve transaction registry address', {
-        chainId,
-        isSpoke,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return undefined;
-    }
-  }, [chainId, isSpoke]);
+  // Resolve contract address with built-in error handling and logging
+  const { address: contractAddress } = resolveRegistryContract(
+    chainId,
+    'transaction',
+    'useSignTxEIP712'
+  );
 
   /**
    * Validates that wallet is connected and contract is configured.

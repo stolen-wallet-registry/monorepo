@@ -36,7 +36,7 @@ import {
   TxSuccessStep,
 } from '@/components/registration/tx-steps';
 import { useUserTransactions, useMerkleTree, type TransactionLeaf } from '@/hooks/transactions';
-import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
+import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import {
@@ -102,7 +102,7 @@ export function TransactionStandardRegistrationPage() {
     setSelectedTxHashes,
     setSelectedTxDetails,
     setReportedChainId,
-    setMerkleRoot,
+    setMerkleTreeData,
   } = useTransactionSelection();
   // Use stable selectors for form actions to avoid unnecessary re-renders
   const resetForm = useTransactionFormStore((s) => s.reset);
@@ -148,11 +148,11 @@ export function TransactionStandardRegistrationPage() {
   // Update form state when merkle tree changes (clear when selections cleared)
   useEffect(() => {
     if (merkleTree) {
-      setMerkleRoot(merkleTree.root);
+      setMerkleTreeData(merkleTree.root, merkleTree.txHashes, merkleTree.chainIds);
     } else {
-      setMerkleRoot(null);
+      setMerkleTreeData(null, [], []);
     }
-  }, [merkleTree, setMerkleRoot]);
+  }, [merkleTree, setMerkleTreeData]);
 
   // Set reported chain ID when chain changes
   useEffect(() => {
@@ -160,9 +160,9 @@ export function TransactionStandardRegistrationPage() {
       setReportedChainId(chainId);
       setSelectedTxHashes([]);
       setSelectedTxDetails([]);
-      setMerkleRoot(null);
+      setMerkleTreeData(null, [], []);
     }
-  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setMerkleRoot]);
+  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setMerkleTreeData]);
 
   // Set reporter address when connected
   useEffect(() => {
@@ -171,7 +171,7 @@ export function TransactionStandardRegistrationPage() {
       setForwarder(address); // Standard registration: same address pays
       setSelectedTxHashes([]);
       setSelectedTxDetails([]);
-      setMerkleRoot(null);
+      setMerkleTreeData(null, [], []);
     }
   }, [
     address,
@@ -179,7 +179,7 @@ export function TransactionStandardRegistrationPage() {
     setForwarder,
     setSelectedTxHashes,
     setSelectedTxDetails,
-    setMerkleRoot,
+    setMerkleTreeData,
   ]);
 
   // Redirect if not connected
@@ -321,22 +321,20 @@ export function TransactionStandardRegistrationPage() {
                         <span className="font-mono font-medium">
                           {getChainName(chainId)}{' '}
                           <span className="text-muted-foreground text-xs">
-                            ({chainIdToCAIP2String(chainId)})
+                            ({toCAIP2(chainId)})
                           </span>
                         </span>
                       </div>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <code className="font-mono text-xs text-muted-foreground break-all cursor-default ml-0">
-                            {chainIdToCAIP2(chainId)}
+                            {chainIdToBytes32(chainId)}
                           </code>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-md">
-                          <p className="text-xs">
-                            keccak256 hash of "{chainIdToCAIP2String(chainId)}"
-                          </p>
+                          <p className="text-xs">keccak256 hash of "{toCAIP2(chainId)}"</p>
                           <p className="text-xs font-mono break-all mt-1">
-                            {chainIdToCAIP2(chainId)}
+                            {chainIdToBytes32(chainId)}
                           </p>
                         </TooltipContent>
                       </Tooltip>

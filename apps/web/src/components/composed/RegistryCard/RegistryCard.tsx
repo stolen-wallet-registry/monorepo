@@ -14,13 +14,25 @@ export interface RegistryCardProps {
   /** Registry description */
   description: string;
   /** Status - active registries are clickable */
-  status: 'active' | 'coming-soon';
+  status: 'active' | 'coming-soon' | 'operator-only';
   /** Icon to display */
   icon: React.ReactNode;
   /** Click handler for active registries */
   onClick?: () => void;
   /** Additional class names */
   className?: string;
+}
+
+function getStatusBadge(status: RegistryCardProps['status']) {
+  switch (status) {
+    case 'active':
+      return { label: 'Active', variant: 'default' as const };
+    case 'operator-only':
+      return { label: 'Operators Only', variant: 'outline' as const };
+    case 'coming-soon':
+    default:
+      return { label: 'Coming Soon', variant: 'secondary' as const };
+  }
 }
 
 export function RegistryCard({
@@ -31,15 +43,17 @@ export function RegistryCard({
   onClick,
   className,
 }: RegistryCardProps) {
-  const isActive = status === 'active';
+  const isClickable = status === 'active';
+  const isHighlighted = status === 'active' || status === 'operator-only';
+  const badge = getStatusBadge(status);
 
   return (
     <Card
-      role={isActive ? 'button' : undefined}
-      tabIndex={isActive ? 0 : undefined}
-      onClick={isActive ? onClick : undefined}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onClick={isClickable ? onClick : undefined}
       onKeyDown={
-        isActive
+        isClickable
           ? (e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
@@ -50,9 +64,11 @@ export function RegistryCard({
       }
       className={cn(
         'relative overflow-hidden transition-all duration-300',
-        isActive
+        isClickable
           ? 'cursor-pointer border-primary/20 bg-gradient-to-br from-primary/5 to-transparent hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-          : 'border-border/50 opacity-75',
+          : status === 'operator-only'
+            ? 'border-border/70 bg-gradient-to-br from-muted/30 to-transparent'
+            : 'border-border/50 opacity-75',
         className
       )}
     >
@@ -61,13 +77,13 @@ export function RegistryCard({
           <div
             className={cn(
               'flex size-12 items-center justify-center rounded-lg',
-              isActive ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+              isHighlighted ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
             )}
           >
             {icon}
           </div>
-          <Badge variant={isActive ? 'default' : 'secondary'} className="text-xs">
-            {isActive ? 'Active' : 'Coming Soon'}
+          <Badge variant={badge.variant} className="text-xs">
+            {badge.label}
           </Badge>
         </div>
         <CardTitle className="text-lg">{title}</CardTitle>

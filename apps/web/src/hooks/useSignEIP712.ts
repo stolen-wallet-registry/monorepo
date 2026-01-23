@@ -13,7 +13,7 @@ import {
   type AcknowledgementMessage,
   type RegistrationMessage,
 } from '@/lib/signatures';
-import { getRegistryAddress } from '@/lib/contracts/addresses';
+import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import type { Address, Hex } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
@@ -57,20 +57,8 @@ export function useSignEIP712(): UseSignEIP712Result {
 
   const { signTypedDataAsync, isPending, isError, error, reset } = useSignTypedData();
 
-  let contractAddress: Address | undefined;
-  try {
-    contractAddress = getRegistryAddress(chainId);
-    logger.signature.debug('useSignEIP712: Registry address resolved', {
-      chainId,
-      contractAddress,
-    });
-  } catch (error) {
-    contractAddress = undefined;
-    logger.signature.error('useSignEIP712: Failed to resolve registry address', {
-      chainId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  // Resolve contract address with built-in error handling and logging
+  const { address: contractAddress } = resolveRegistryContract(chainId, 'wallet', 'useSignEIP712');
 
   /**
    * Validates that wallet is connected and contract is configured.

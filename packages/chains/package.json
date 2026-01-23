@@ -20,6 +20,9 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@swr/caip": "workspace:*"
+  },
   "peerDependencies": {
     "viem": "^2.0.0"
   },

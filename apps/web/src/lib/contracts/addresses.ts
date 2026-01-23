@@ -1,6 +1,13 @@
-import { zeroAddress } from 'viem';
+import { zeroAddress, isAddress } from 'viem';
 import type { Address } from '@/lib/types/ethereum';
-import { anvilHub, baseSepolia, isSpokeChain } from '@swr/chains';
+import { logger } from '@/lib/logger';
+import {
+  anvilHub,
+  baseSepolia,
+  isSpokeChain,
+  getNetwork,
+  type HubNetworkConfig,
+} from '@swr/chains';
 import { getSpokeAddress } from './crosschain-addresses';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -80,10 +87,26 @@ export type ContractName = keyof typeof CONTRACT_ADDRESSES;
 
 // Get contract address for a chain, with env override support
 export function getContractAddress(contract: ContractName, chainId: number): Address {
+  const logContext = 'getContractAddress';
+
   // Check for env override first (registry only for backward compat)
   if (contract === 'stolenWalletRegistry') {
-    if (chainId === anvilHub.chainId && import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST) {
-      return import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST as Address;
+    const envOverride = import.meta.env.VITE_CONTRACT_ADDRESS_LOCALHOST;
+    if (chainId === anvilHub.chainId && envOverride) {
+      if (!isAddress(envOverride)) {
+        logger.contract.error(
+          `${logContext}: Invalid address format in VITE_CONTRACT_ADDRESS_LOCALHOST`,
+          {
+            contract,
+            chainId,
+            envValue: envOverride,
+          }
+        );
+        throw new Error(
+          `Invalid address format in VITE_CONTRACT_ADDRESS_LOCALHOST: ${envOverride}`
+        );
+      }
+      return envOverride as Address;
     }
   }
 
@@ -91,6 +114,15 @@ export function getContractAddress(contract: ContractName, chainId: number): Add
   const envKey = `VITE_${contract.toUpperCase()}_ADDRESS_${chainId}`;
   const envValue = (import.meta.env as Record<string, string | undefined>)[envKey];
   if (envValue) {
+    if (!isAddress(envValue)) {
+      logger.contract.error(`${logContext}: Invalid address format in env override`, {
+        contract,
+        chainId,
+        envKey,
+        envValue,
+      });
+      throw new Error(`Invalid address format in ${envKey}: ${envValue}`);
+    }
     return envValue as Address;
   }
 
@@ -133,7 +165,40 @@ export function getSupportSoulboundAddress(chainId: number): Address {
   return getContractAddress('supportSoulbound', chainId);
 }
 
+/**
+ * Get OperatorRegistry address from @swr/chains (single source of truth).
+ * Falls back to CONTRACT_ADDRESSES if not found in @swr/chains.
+ */
 export function getOperatorRegistryAddress(chainId: number): Address {
+  const logContext = 'getOperatorRegistryAddress';
+
+  // Try @swr/chains first (single source of truth)
+  try {
+    const network = getNetwork(chainId);
+    if (network?.role === 'hub') {
+      const hubNetwork = network as HubNetworkConfig;
+      const operatorRegistryAddr = hubNetwork.hubContracts?.operatorRegistry;
+      if (operatorRegistryAddr) {
+        // Validate the address from @swr/chains
+        if (!isAddress(operatorRegistryAddr) || operatorRegistryAddr === zeroAddress) {
+          logger.contract.error(
+            `${logContext}: Invalid operatorRegistry address from @swr/chains`,
+            {
+              chainId,
+              value: operatorRegistryAddr,
+            }
+          );
+          // Fall through to CONTRACT_ADDRESSES
+        } else {
+          return operatorRegistryAddr as Address;
+        }
+      }
+    }
+  } catch {
+    // Network not found in @swr/chains, fall through to CONTRACT_ADDRESSES
+  }
+
+  // Fallback to hardcoded addresses for backward compatibility
   return getContractAddress('operatorRegistry', chainId);
 }
 

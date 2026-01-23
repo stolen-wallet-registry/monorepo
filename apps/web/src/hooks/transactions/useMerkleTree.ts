@@ -1,17 +1,18 @@
 /**
  * Hook to build and manage Merkle trees for transaction batches.
  *
- * Uses a custom implementation that matches the contract's leaf format:
- * leaf = keccak256(abi.encodePacked(txHash, chainId))
- *
- * Note: We don't use OpenZeppelin's StandardMerkleTree because it uses
- * double-hashing for security, which doesn't match our contract.
+ * Uses @swr/merkle which wraps OpenZeppelin StandardMerkleTree for
+ * consistent behavior with contracts and CLI.
  */
 
 import { useMemo } from 'react';
-import { keccak256, encodePacked } from 'viem';
 import type { Hash } from '@/lib/types/ethereum';
-import { chainIdToCAIP2 } from '@/lib/caip';
+import { chainIdToBytes32 } from '@swr/caip';
+import {
+  buildTransactionMerkleTree,
+  getTransactionProof,
+  type TransactionEntry,
+} from '@swr/merkle';
 import { logger } from '@/lib/logger';
 
 export interface TransactionLeaf {
@@ -24,97 +25,14 @@ export interface MerkleTreeData {
   root: Hash;
   /** Number of transactions in the tree */
   count: number;
-  /** The transaction hashes (for contract call) */
+  /** The transaction hashes (for contract call) - in sorted leaf order */
   txHashes: Hash[];
-  /** The CAIP-2 chain IDs as bytes32 (for contract call) */
+  /** The CAIP-2 chain IDs as bytes32 (for contract call) - in sorted leaf order */
   chainIds: Hash[];
-  /** Get proof for a specific transaction by index */
+  /** Get proof for a specific transaction by index (sorted leaf order) */
   getProof: (index: number) => Hash[];
   /** Get proof for a specific transaction by hash and chain */
   getProofByTx: (txHash: Hash, chainId: number) => Hash[];
-}
-
-/**
- * Compute a single leaf for the Merkle tree.
- * Matches contract: keccak256(abi.encodePacked(txHash, chainId))
- */
-function computeLeaf(txHash: Hash, caip2ChainId: Hash): Hash {
-  return keccak256(encodePacked(['bytes32', 'bytes32'], [txHash, caip2ChainId]));
-}
-
-/**
- * Hash two nodes together for the Merkle tree.
- * Sorts nodes to ensure consistent ordering (like OpenZeppelin).
- */
-function hashPair(a: Hash, b: Hash): Hash {
-  // Sort to ensure consistent ordering regardless of input order
-  const [left, right] = a < b ? [a, b] : [b, a];
-  return keccak256(encodePacked(['bytes32', 'bytes32'], [left, right]));
-}
-
-/**
- * Build a Merkle tree from leaves and return root + proof generation function.
- */
-function buildTree(leaves: Hash[]): { root: Hash; getProof: (index: number) => Hash[] } {
-  if (leaves.length === 0) {
-    throw new Error('Cannot build tree with no leaves');
-  }
-
-  if (leaves.length === 1) {
-    return {
-      root: leaves[0],
-      getProof: () => [],
-    };
-  }
-
-  // Build tree bottom-up, storing all levels
-  const levels: Hash[][] = [leaves];
-  let currentLevel = leaves;
-
-  while (currentLevel.length > 1) {
-    const nextLevel: Hash[] = [];
-
-    for (let i = 0; i < currentLevel.length; i += 2) {
-      if (i + 1 < currentLevel.length) {
-        nextLevel.push(hashPair(currentLevel[i], currentLevel[i + 1]));
-      } else {
-        // Odd number of nodes: promote the last one
-        nextLevel.push(currentLevel[i]);
-      }
-    }
-
-    levels.push(nextLevel);
-    currentLevel = nextLevel;
-  }
-
-  const root = currentLevel[0];
-
-  // Function to generate proof for a leaf at given index
-  const getProof = (index: number): Hash[] => {
-    if (index < 0 || index >= leaves.length) {
-      return [];
-    }
-
-    const proof: Hash[] = [];
-    let idx = index;
-
-    for (let level = 0; level < levels.length - 1; level++) {
-      const levelNodes = levels[level];
-      const isLeft = idx % 2 === 0;
-      const siblingIdx = isLeft ? idx + 1 : idx - 1;
-
-      if (siblingIdx < levelNodes.length) {
-        proof.push(levelNodes[siblingIdx]);
-      }
-
-      // Move to parent index
-      idx = Math.floor(idx / 2);
-    }
-
-    return proof;
-  };
-
-  return { root, getProof };
 }
 
 /**
@@ -123,44 +41,66 @@ function buildTree(leaves: Hash[]): { root: Hash; getProof: (index: number) => H
  * @param transactions - Array of transactions with hash and chain ID
  * @returns Merkle tree data or null if empty
  */
-export function buildMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData | null {
+function buildMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData | null {
   if (transactions.length === 0) {
     return null;
   }
 
   try {
-    // Convert chain IDs to CAIP-2 hashes
-    const caip2ChainIds = transactions.map((tx) => chainIdToCAIP2(tx.chainId));
+    // Convert to @swr/merkle format (chain ID as bytes32)
+    const entries: TransactionEntry[] = transactions.map((tx) => ({
+      txHash: tx.txHash,
+      chainId: chainIdToBytes32(tx.chainId),
+    }));
 
-    // Compute leaves
-    const leaves = transactions.map((tx, i) => computeLeaf(tx.txHash, caip2ChainIds[i]));
+    // Build tree using @swr/merkle (uses OZ StandardMerkleTree)
+    const { root, tree, leafCount } = buildTransactionMerkleTree(entries);
 
-    // Sort leaves to match on-chain ordering
-    const sortedLeaves = [...leaves].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    // Get the sorted order from the tree for contract calls
+    // OZ StandardMerkleTree sorts leaves internally
+    const sortedEntries: TransactionEntry[] = [];
+    for (const [, value] of tree.entries()) {
+      sortedEntries.push({
+        txHash: value[0] as Hash,
+        chainId: value[1] as Hash,
+      });
+    }
 
-    // Build tree
-    const { root, getProof } = buildTree(sortedLeaves);
+    const sortedTxHashes = sortedEntries.map((e) => e.txHash);
+    const sortedChainIds = sortedEntries.map((e) => e.chainId);
 
     logger.store.debug('Merkle tree built', {
       root,
-      count: transactions.length,
+      count: leafCount,
     });
 
     return {
       root,
-      count: transactions.length,
-      txHashes: transactions.map((tx) => tx.txHash),
-      chainIds: caip2ChainIds,
-      getProof,
-      getProofByTx: (txHash: Hash, chainId: number) => {
-        const caip2 = chainIdToCAIP2(chainId);
-        const targetLeaf = computeLeaf(txHash, caip2);
-        const index = sortedLeaves.findIndex((leaf) => leaf === targetLeaf);
-        if (index === -1) {
+      count: leafCount,
+      txHashes: sortedTxHashes,
+      chainIds: sortedChainIds,
+      getProof: (index: number): Hash[] => {
+        if (index < 0 || index >= sortedEntries.length) {
+          return [];
+        }
+        try {
+          return getTransactionProof(
+            tree,
+            sortedEntries[index].txHash,
+            sortedEntries[index].chainId
+          );
+        } catch {
+          return [];
+        }
+      },
+      getProofByTx: (txHash: Hash, chainId: number): Hash[] => {
+        try {
+          const chainIdBytes32 = chainIdToBytes32(chainId);
+          return getTransactionProof(tree, txHash, chainIdBytes32);
+        } catch {
           logger.store.warn('Transaction not found in tree', { txHash, chainId });
           return [];
         }
-        return getProof(index);
       },
     };
   } catch (error) {
@@ -184,25 +124,4 @@ export function useMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData |
   }, [transactions]);
 
   return tree;
-}
-
-/**
- * Hook to get a proof for a specific transaction.
- *
- * @param tree - The Merkle tree data
- * @param txHash - Transaction hash to prove
- * @param chainId - Chain ID where transaction occurred
- * @returns Merkle proof as array of bytes32
- */
-export function useMerkleProof(
-  tree: MerkleTreeData | null,
-  txHash: Hash | undefined,
-  chainId: number | undefined
-): Hash[] {
-  return useMemo(() => {
-    if (!tree || !txHash || chainId === undefined) {
-      return [];
-    }
-    return tree.getProofByTx(txHash, chainId);
-  }, [tree, txHash, chainId]);
 }

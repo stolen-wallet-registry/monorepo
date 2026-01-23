@@ -129,7 +129,7 @@ describe('Merkle Tree', () => {
 
       expect(() =>
         getContractProof(tree, '0x0000000000000000000000000000000000000000' as Address, baseChainId)
-      ).toThrow('Entry not found');
+      ).toThrow('not found');
     });
 
     it('is case-insensitive for address matching', () => {

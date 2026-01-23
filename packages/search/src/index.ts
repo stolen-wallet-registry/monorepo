@@ -91,4 +91,18 @@ export {
   INVALIDATIONS_BATCH_QUERY,
   OPERATOR_QUERY,
   OPERATORS_LIST_QUERY,
+  // Dashboard queries
+  REGISTRY_STATS_QUERY,
+  RECENT_WALLETS_QUERY,
+  RECENT_CONTRACTS_QUERY,
+  RECENT_TRANSACTIONS_QUERY,
+  RECENT_TRANSACTION_ENTRIES_QUERY,
+  // Response types
+  type RawOperatorsListResponse,
+  // Dashboard response types
+  type RawRegistryStatsResponse,
+  type RawRecentWalletsResponse,
+  type RawRecentContractsResponse,
+  type RawRecentTransactionsResponse,
+  type RawRecentTransactionEntriesResponse,
 } from './queries';

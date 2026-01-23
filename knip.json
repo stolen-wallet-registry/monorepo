@@ -2,8 +2,23 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "workspaces": {
     "apps/web": {
-      "entry": ["src/main.tsx"],
+      "entry": ["src/main.tsx", "src/test/test-utils.tsx"],
       "project": ["src/**/*.{ts,tsx}"]
+    },
+    "apps/landing": {
+      "entry": ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
+      "project": ["**/*.{ts,tsx}"]
+    },
+    "apps/indexer": {
+      "entry": ["src/index.ts", "src/api/index.ts", "ponder.config.ts", "ponder.schema.ts"],
+      "project": ["src/**/*.ts", "*.ts"]
+    },
+    "apps/docs": {
+      "entry": ["vocs.config.ts", "docs/**/*.mdx", "sidebar.ts"],
+      "project": ["**/*.{ts,tsx}"]
+    },
+    "packages/contracts": {
+      "ignore": ["**/*"]
     },
     "packages/*": {
       "entry": ["src/index.ts"],
@@ -16,6 +31,7 @@
     "**/*.d.ts",
     "apps/web/src/**/index.{ts,tsx}"
   ],
-  "ignoreDependencies": ["tailwindcss"],
-  "ignoreBinaries": ["anvil", "eslint"]
+  "ignoreDependencies": ["alchemy-sdk", "@hyperlane-xyz/utils"],
+  "ignoreBinaries": ["anvil", "eslint", "forge", "psql", "sleep", "hyperlane", "python3"],
+  "ignoreExportsUsedInFile": true
 }

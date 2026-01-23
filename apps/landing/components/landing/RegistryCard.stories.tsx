@@ -41,11 +41,12 @@ export const ComingSoon: Story = {
   },
 };
 
-export const FraudulentContracts: Story = {
+export const OperatorOnly: Story = {
   args: {
     title: 'Fraudulent Contracts',
-    description: 'Catalog malicious smart contract addresses. Operator-approved submissions.',
-    status: 'coming-soon',
+    description:
+      'Operator-only registry for cataloging malicious smart contracts. Approved operators can batch-submit via Dashboard.',
+    status: 'operator-only',
     icon: <Code2 className="size-6" />,
   },
 };

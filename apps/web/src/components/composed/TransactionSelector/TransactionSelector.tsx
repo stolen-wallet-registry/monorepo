@@ -23,7 +23,7 @@ import { AlertTriangle, ChevronDown, Loader2, RefreshCw } from 'lucide-react';
 import type { UserTransaction } from '@/hooks/transactions/useUserTransactions';
 import type { Hash } from '@/lib/types/ethereum';
 import { formatEther } from 'viem';
-import { getChainName } from '@/lib/caip';
+import { getChainName } from '@swr/chains';
 
 /**
  * Format a transaction hash for display (truncated).
@@ -262,7 +262,9 @@ export function TransactionSelector({
           <div>
             <CardTitle>Select Fraudulent Transactions</CardTitle>
             <CardDescription>
-              Choose the transactions you want to report as fraudulent.
+              Select transactions you were tricked into signing (phishing, address poisoning, etc.).
+              You still control your wallet—these are specific fraudulent transactions, not a
+              compromised wallet.
               {chainId && ` (${getChainName(chainId)})`}
             </CardDescription>
           </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, FileStack, Code2, Users, ShieldCheck, Clock } from 'lucide-react';
+import { Building2, FileStack, Code2, Users, ShieldCheck, CheckCircle2 } from 'lucide-react';
 
 import {
   Card,
@@ -54,9 +54,9 @@ export function OperatorsSection() {
       <div className="mx-auto max-w-6xl">
         {/* Section heading */}
         <div className="mb-12 text-center md:mb-16">
-          <Badge variant="secondary" className="mb-4">
-            <Clock className="mr-1 size-3" />
-            Coming Soon
+          <Badge variant="default" className="mb-4">
+            <CheckCircle2 className="mr-1 size-3" />
+            Live
           </Badge>
           <TextAnimate
             as="h2"
@@ -129,13 +129,12 @@ export function OperatorsSection() {
             ))}
           </div>
 
-          <div className="mt-6 rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
+          <div className="mt-6 rounded-lg border border-primary/30 bg-primary/5 p-4 text-center">
             <p className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">
-                Operator onboarding launching Q2 2025.
-              </span>
+              <span className="font-medium text-foreground">The Operator Program is now live.</span>
               <br />
-              Interested in becoming an operator? Join the discussion in our governance forum.
+              Approved operators can access the Dashboard to submit fraud data and view indexed
+              registrations. Contact the DAO to apply.
             </p>
           </div>
         </div>
