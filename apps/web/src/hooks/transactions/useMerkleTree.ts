@@ -29,7 +29,7 @@ export interface MerkleTreeData {
   txHashes: Hash[];
   /** The CAIP-2 chain IDs as bytes32 (for contract call) - in sorted leaf order */
   chainIds: Hash[];
-  /** Get proof for a specific transaction by index */
+  /** Get proof for a specific transaction by index (sorted leaf order) */
   getProof: (index: number) => Hash[];
   /** Get proof for a specific transaction by hash and chain */
   getProofByTx: (txHash: Hash, chainId: number) => Hash[];
@@ -94,8 +94,8 @@ function buildMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData | null
         }
       },
       getProofByTx: (txHash: Hash, chainId: number): Hash[] => {
-        const chainIdBytes32 = chainIdToBytes32(chainId);
         try {
+          const chainIdBytes32 = chainIdToBytes32(chainId);
           return getTransactionProof(tree, txHash, chainIdBytes32);
         } catch {
           logger.store.warn('Transaction not found in tree', { txHash, chainId });

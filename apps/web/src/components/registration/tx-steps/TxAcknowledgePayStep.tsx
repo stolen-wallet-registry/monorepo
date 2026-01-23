@@ -107,13 +107,23 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   );
 
   // Convert reported chain ID to CAIP-2 format - cache both for display and contract use
-  const reportedChainIdCaip2 = reportedChainId ? toCAIP2(reportedChainId) : undefined;
-  const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
+  // Guard against invalid chain IDs (must be positive safe integer)
+  const reportedChainIdCaip2 =
+    reportedChainId != null && Number.isSafeInteger(reportedChainId) && reportedChainId > 0
+      ? toCAIP2(reportedChainId)
+      : undefined;
+  const reportedChainIdHash =
+    reportedChainId != null && Number.isSafeInteger(reportedChainId) && reportedChainId > 0
+      ? chainIdToBytes32(reportedChainId)
+      : undefined;
 
   // Use sorted hashes and chain IDs from merkle tree for contract calls
   // These must match the order used to compute the merkle root
-  const txHashesForContract = sortedTxHashes.length > 0 ? sortedTxHashes : undefined;
-  const chainIdsForContract = sortedChainIds.length > 0 ? sortedChainIds : undefined;
+  // Guard against undefined during store hydration
+  const txHashesForContract =
+    sortedTxHashes && sortedTxHashes.length > 0 ? sortedTxHashes : undefined;
+  const chainIdsForContract =
+    sortedChainIds && sortedChainIds.length > 0 ? sortedChainIds : undefined;
 
   // Parse signature for gas estimation
   const parsedSigForEstimate = storedSignature

@@ -14,7 +14,7 @@
       "project": ["src/**/*.ts", "*.ts"]
     },
     "apps/docs": {
-      "entry": ["vocs.config.ts", "**/*.{ts,tsx,mdx}"],
+      "entry": ["vocs.config.ts", "docs/**/*.mdx", "sidebar.ts"],
       "project": ["**/*.{ts,tsx}"]
     },
     "packages/contracts": {

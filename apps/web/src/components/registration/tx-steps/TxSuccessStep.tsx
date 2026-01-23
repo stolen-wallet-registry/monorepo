@@ -53,8 +53,15 @@ export function TxSuccessStep() {
   const { selectedTxHashes, selectedTxDetails, merkleRoot, reportedChainId } =
     useTransactionSelection();
   const formStore = useTransactionFormStore();
-  const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : null;
-  const reportedChainIdString = reportedChainId ? toCAIP2(reportedChainId) : null;
+  // Guard against invalid chain IDs (must be positive safe integer)
+  const reportedChainIdHash =
+    reportedChainId != null && Number.isSafeInteger(reportedChainId) && reportedChainId > 0
+      ? chainIdToBytes32(reportedChainId)
+      : null;
+  const reportedChainIdString =
+    reportedChainId != null && Number.isSafeInteger(reportedChainId) && reportedChainId > 0
+      ? toCAIP2(reportedChainId)
+      : null;
 
   // Determine if this was a cross-chain registration
   const isCrossChain = registrationChainId ? isSpokeChain(registrationChainId) : false;
