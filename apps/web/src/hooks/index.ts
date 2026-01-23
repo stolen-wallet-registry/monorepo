@@ -74,6 +74,8 @@ export {
 // Utility hooks
 export { useCopyToClipboard, type UseCopyToClipboardResult } from './useCopyToClipboard';
 
+export { useWalletType, type WalletType, type UseWalletTypeResult } from './useWalletType';
+
 // Registry status hook
 export {
   useRegistryStatus,

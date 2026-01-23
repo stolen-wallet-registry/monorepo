@@ -40,8 +40,10 @@ export interface RegistrationEntry {
   isSponsored: boolean;
   /** Registration timestamp (Unix seconds) */
   registeredAt: bigint;
-  /** Transaction hash */
-  transactionHash: Hash;
+  /** Transaction hash (not available for contract entries) */
+  transactionHash?: Hash;
+  /** Batch ID reference (for contract entries) */
+  batchId?: string;
 }
 
 export interface UseRecentRegistrationsOptions {
@@ -146,7 +148,8 @@ export function useRecentRegistrations(
             operator: raw.operator as Address,
             isSponsored: false, // Operator submissions are never "sponsored"
             registeredAt: BigInt(raw.reportedAt),
-            transactionHash: raw.batchId as Hash, // Use batchId as reference
+            // Note: batchId is not a tx hash; contracts don't have individual tx hashes
+            batchId: raw.batchId,
           });
         }
       }

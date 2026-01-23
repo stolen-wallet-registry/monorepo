@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 
 interface StatCardProps {
   title: string;
-  value: number | string;
+  value: number;
   icon: React.ReactNode;
   description?: string;
   isLoading?: boolean;

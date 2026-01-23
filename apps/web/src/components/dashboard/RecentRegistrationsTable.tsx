@@ -25,8 +25,19 @@ import {
   Badge,
   Button,
   ExplorerLink,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  // Chain icons
+  NetworkEthereum,
+  NetworkBase,
+  NetworkOptimism,
+  NetworkArbitrumOne,
+  NetworkPolygon,
+  getExplorerAddressUrl,
+  getExplorerTxUrl,
 } from '@swr/ui';
-import { Wallet, Code, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Wallet, Code, FileText, ChevronLeft, ChevronRight, Globe } from 'lucide-react';
 import { formatRelativeTime, truncateHash } from '@swr/search';
 import {
   useRecentRegistrations,
@@ -44,6 +55,41 @@ const TYPE_CONFIG: Record<RegistrationType, { label: string; icon: typeof Wallet
     transaction: { label: 'Transaction', icon: FileText, color: 'bg-green-500/10 text-green-500' },
   };
 
+/**
+ * Chain configuration for display with icons.
+ * Maps chainId to display name and icon component.
+ */
+const CHAIN_CONFIG: Record<
+  number,
+  { name: string; shortName: string; Icon: React.ComponentType<{ className?: string }> }
+> = {
+  1: { name: 'Ethereum', shortName: 'ETH', Icon: NetworkEthereum },
+  8453: { name: 'Base', shortName: 'Base', Icon: NetworkBase },
+  10: { name: 'Optimism', shortName: 'OP', Icon: NetworkOptimism },
+  42161: { name: 'Arbitrum', shortName: 'ARB', Icon: NetworkArbitrumOne },
+  137: { name: 'Polygon', shortName: 'POLY', Icon: NetworkPolygon },
+  31337: { name: 'Local', shortName: 'Local', Icon: Globe },
+  84532: { name: 'Base Sepolia', shortName: 'Base Sep', Icon: NetworkBase },
+};
+
+/**
+ * Get chain info from CAIP-2 components.
+ */
+function getChainInfo(
+  namespace: string,
+  reference: string
+): { chainId: number | null; name: string; Icon: React.ComponentType<{ className?: string }> } {
+  if (namespace === 'eip155') {
+    const chainId = parseInt(reference, 10);
+    const config = CHAIN_CONFIG[chainId];
+    if (config) {
+      return { chainId, name: config.shortName, Icon: config.Icon };
+    }
+    return { chainId, name: `Chain ${chainId}`, Icon: Globe };
+  }
+  return { chainId: null, name: `${namespace}:${reference}`, Icon: Globe };
+}
+
 interface RegistrationRowProps {
   entry: RegistrationEntry;
   operatorNames: Map<string, string>;
@@ -51,7 +97,7 @@ interface RegistrationRowProps {
 
 function RegistrationRow({ entry, operatorNames }: RegistrationRowProps) {
   const config = TYPE_CONFIG[entry.type];
-  const Icon = config.icon;
+  const TypeIcon = config.icon;
 
   // Get operator name or "Individual"
   const operatorKey = (entry.operator ?? entry.reporter)?.toLowerCase();
@@ -59,16 +105,27 @@ function RegistrationRow({ entry, operatorNames }: RegistrationRowProps) {
     ? (operatorNames.get(operatorKey) ?? truncateHash(operatorKey, 6, 4))
     : 'Individual';
 
-  // Parse chain name from CAIP-2
+  // Parse chain info from CAIP-2
   const chainParts = entry.chainId.split(':');
-  const chainName = getChainDisplayName(chainParts[0], chainParts[1]);
+  const { chainId, name: chainName, Icon: ChainIcon } = getChainInfo(chainParts[0], chainParts[1]);
+
+  // Resolve explorer URLs (returns null for unsupported chains)
+  const identifierHref =
+    chainId && entry.type === 'transaction'
+      ? getExplorerTxUrl(chainId, entry.identifier)
+      : chainId
+        ? getExplorerAddressUrl(chainId, entry.identifier)
+        : null;
+
+  const txHref =
+    chainId && entry.transactionHash ? getExplorerTxUrl(chainId, entry.transactionHash) : null;
 
   return (
     <TableRow>
       <TableCell>
         <div className="flex items-center gap-2">
           <div className={cn('p-1 rounded', config.color)}>
-            <Icon className="h-3 w-3" />
+            <TypeIcon className="h-3 w-3" />
           </div>
           <span className="text-xs text-muted-foreground">{config.label}</span>
         </div>
@@ -77,6 +134,7 @@ function RegistrationRow({ entry, operatorNames }: RegistrationRowProps) {
         <ExplorerLink
           value={entry.identifier as Address}
           type={entry.type === 'transaction' ? 'transaction' : 'address'}
+          href={identifierHref}
           showDisabledIcon={false}
         />
       </TableCell>
@@ -84,9 +142,20 @@ function RegistrationRow({ entry, operatorNames }: RegistrationRowProps) {
         <span className="text-sm">{submitterLabel}</span>
       </TableCell>
       <TableCell>
-        <Badge variant="outline" className="text-xs">
-          {chainName}
-        </Badge>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className="text-xs inline-flex items-center gap-1">
+              <ChainIcon className="h-3 w-3" />
+              {chainName}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="text-xs">
+              {CHAIN_CONFIG[chainId ?? 0]?.name ?? chainName}
+              {chainId ? ` (Chain ID: ${chainId})` : ''}
+            </p>
+          </TooltipContent>
+        </Tooltip>
       </TableCell>
       <TableCell>
         <span className="text-sm text-muted-foreground">
@@ -94,30 +163,19 @@ function RegistrationRow({ entry, operatorNames }: RegistrationRowProps) {
         </span>
       </TableCell>
       <TableCell>
-        <ExplorerLink value={entry.transactionHash} type="transaction" showDisabledIcon={false} />
+        {entry.transactionHash ? (
+          <ExplorerLink
+            value={entry.transactionHash}
+            type="transaction"
+            href={txHref}
+            showDisabledIcon={false}
+          />
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
       </TableCell>
     </TableRow>
   );
-}
-
-/**
- * Get human-readable chain name from CAIP-2 components.
- */
-function getChainDisplayName(namespace: string, reference: string): string {
-  if (namespace === 'eip155') {
-    const chainId = parseInt(reference, 10);
-    const chainNames: Record<number, string> = {
-      1: 'Ethereum',
-      8453: 'Base',
-      10: 'Optimism',
-      42161: 'Arbitrum',
-      137: 'Polygon',
-      31337: 'Local',
-      84532: 'Base Sepolia',
-    };
-    return chainNames[chainId] ?? `Chain ${chainId}`;
-  }
-  return `${namespace}:${reference}`;
 }
 
 export interface RecentRegistrationsTableProps {

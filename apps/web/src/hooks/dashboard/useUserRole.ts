@@ -28,7 +28,7 @@ export interface UseUserRoleResult {
   /** Error state */
   isError: boolean;
   /** Refetch both checks */
-  refetch: () => void;
+  refetch: () => Promise<void>;
 }
 
 /**
@@ -70,9 +70,8 @@ export function useUserRole(options: UseUserRoleOptions = {}): UseUserRoleResult
     role = 'operator';
   }
 
-  const refetch = () => {
-    refetchDAO();
-    refetchOperator();
+  const refetch = async () => {
+    await Promise.all([refetchDAO(), refetchOperator()]);
   };
 
   return {

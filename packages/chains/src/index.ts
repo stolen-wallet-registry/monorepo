@@ -67,7 +67,16 @@ export type {
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Individual network exports
-export { anvilHub, anvilSpoke, base, baseSepolia, optimism, optimismSepolia } from './networks';
+export {
+  anvilHub,
+  anvilSpoke,
+  arbitrum,
+  base,
+  baseSepolia,
+  ethereum,
+  optimism,
+  optimismSepolia,
+} from './networks';
 
 // Network lookup and utilities
 export {

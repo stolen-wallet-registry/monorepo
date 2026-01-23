@@ -18,32 +18,40 @@ import {
   Skeleton,
   Badge,
   ExplorerLink,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
 } from '@swr/ui';
+import { HelpCircle } from 'lucide-react';
 import { useOperators, type OperatorInfo } from '@/hooks/dashboard';
 import type { Address } from '@/lib/types/ethereum';
+
+/** Permission description for header tooltip */
+const PERMISSIONS_TOOLTIP =
+  'Permissions grant operators access to submit batch registrations to specific registries (Wallet, Transaction, or Contract).';
 
 interface CapabilitiesBadgeProps {
   operator: OperatorInfo;
 }
 
 /**
- * Displays capability badges for an operator.
+ * Displays capability badges for an operator with color coding.
  */
 function CapabilitiesBadge({ operator }: CapabilitiesBadgeProps) {
   return (
     <div className="flex flex-wrap gap-1">
       {operator.canSubmitWallet && (
-        <Badge variant="secondary" className="text-xs">
+        <Badge className="text-xs bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30">
           WALLET
         </Badge>
       )}
       {operator.canSubmitTransaction && (
-        <Badge variant="secondary" className="text-xs">
+        <Badge className="text-xs bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30">
           TX
         </Badge>
       )}
       {operator.canSubmitContract && (
-        <Badge variant="secondary" className="text-xs">
+        <Badge className="text-xs bg-purple-500/20 text-purple-400 border-purple-500/30 hover:bg-purple-500/30">
           CONTRACT
         </Badge>
       )}
@@ -57,8 +65,9 @@ interface OperatorRowProps {
 
 function OperatorRow({ operator }: OperatorRowProps) {
   // Convert block number to approximate date
-  // Assuming ~12 second blocks on Ethereum
-  const approvedDate = new Date(Number(operator.approvedAt) * 1000);
+  // Block number × ~12 seconds per block = approximate epoch milliseconds
+  // Note: This is approximate since block times vary
+  const approvedDate = new Date(Number(operator.approvedAt) * 12 * 1000);
   const dateString = approvedDate.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -142,7 +151,19 @@ export function OperatorsTable({ className, showRevoked = false }: OperatorsTabl
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Address</TableHead>
-                  <TableHead>Permissions</TableHead>
+                  <TableHead>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center gap-1 cursor-help">
+                          Permissions
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[300px]">
+                        <p className="text-xs whitespace-pre-line">{PERMISSIONS_TOOLTIP}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TableHead>
                   <TableHead>Approved</TableHead>
                 </TableRow>
               </TableHeader>

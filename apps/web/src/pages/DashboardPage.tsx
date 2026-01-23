@@ -35,10 +35,12 @@ function RoleBadge() {
 }
 
 export function DashboardPage() {
-  const { role } = useUserRole();
+  const { role, isLoading } = useUserRole();
 
-  const showOperatorTab = role === 'operator' || role === 'dao';
-  const showDAOTab = role === 'dao';
+  // Compute tab visibility based on role
+  // Default to showing only public tabs while loading to prevent layout shift
+  const showOperatorTab = !isLoading && (role === 'operator' || role === 'dao');
+  const showDAOTab = !isLoading && role === 'dao';
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-8">
@@ -60,26 +62,32 @@ export function DashboardPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="registrations" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="registrations" className="gap-2">
-            <ListOrdered className="h-4 w-4" />
-            <span className="hidden sm:inline">Recent</span>
-          </TabsTrigger>
-          <TabsTrigger value="operators" className="gap-2">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Operators</span>
-          </TabsTrigger>
-          {showOperatorTab && (
-            <TabsTrigger value="submit" className="gap-2">
-              <Upload className="h-4 w-4" />
-              <span className="hidden sm:inline">Submit</span>
+        <TabsList className="justify-between w-full">
+          <div className="flex">
+            <TabsTrigger value="registrations" className="gap-2">
+              <ListOrdered className="h-4 w-4" />
+              <span className="hidden sm:inline">Recent</span>
             </TabsTrigger>
-          )}
-          {showDAOTab && (
-            <TabsTrigger value="manage" className="gap-2">
-              <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline">Manage</span>
+            <TabsTrigger value="operators" className="gap-2">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Operators</span>
             </TabsTrigger>
+          </div>
+          {(showOperatorTab || showDAOTab) && (
+            <div className="flex">
+              {showOperatorTab && (
+                <TabsTrigger value="submit" className="gap-2">
+                  <Upload className="h-4 w-4" />
+                  <span className="hidden sm:inline">DAO Submit</span>
+                </TabsTrigger>
+              )}
+              {showDAOTab && (
+                <TabsTrigger value="manage" className="gap-2">
+                  <Settings className="h-4 w-4" />
+                  <span className="hidden sm:inline">Manage Operators</span>
+                </TabsTrigger>
+              )}
+            </div>
           )}
         </TabsList>
 

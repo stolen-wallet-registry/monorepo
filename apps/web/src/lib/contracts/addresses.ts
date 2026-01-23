@@ -1,6 +1,12 @@
 import { zeroAddress } from 'viem';
 import type { Address } from '@/lib/types/ethereum';
-import { anvilHub, baseSepolia, isSpokeChain } from '@swr/chains';
+import {
+  anvilHub,
+  baseSepolia,
+  isSpokeChain,
+  getNetwork,
+  type HubNetworkConfig,
+} from '@swr/chains';
 import { getSpokeAddress } from './crosschain-addresses';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -133,7 +139,25 @@ export function getSupportSoulboundAddress(chainId: number): Address {
   return getContractAddress('supportSoulbound', chainId);
 }
 
+/**
+ * Get OperatorRegistry address from @swr/chains (single source of truth).
+ * Falls back to CONTRACT_ADDRESSES if not found in @swr/chains.
+ */
 export function getOperatorRegistryAddress(chainId: number): Address {
+  // Try @swr/chains first (single source of truth)
+  try {
+    const network = getNetwork(chainId);
+    if (network?.role === 'hub') {
+      const hubNetwork = network as HubNetworkConfig;
+      if (hubNetwork.hubContracts?.operatorRegistry) {
+        return hubNetwork.hubContracts.operatorRegistry as Address;
+      }
+    }
+  } catch {
+    // Network not found in @swr/chains, fall through to CONTRACT_ADDRESSES
+  }
+
+  // Fallback to hardcoded addresses for backward compatibility
   return getContractAddress('operatorRegistry', chainId);
 }
 
