@@ -52,7 +52,7 @@ describe('getWalletProof', () => {
     const entries = [{ address: TEST_ADDRESS_1, chainId }];
     const { tree } = buildWalletMerkleTree(entries);
 
-    expect(() => getWalletProof(tree, TEST_ADDRESS_2, chainId)).toThrow('Entry not found');
+    expect(() => getWalletProof(tree, TEST_ADDRESS_2, chainId)).toThrow('not found');
   });
 
   it('throws for wrong chain ID', () => {
@@ -61,7 +61,7 @@ describe('getWalletProof', () => {
     const entries = [{ address: TEST_ADDRESS_1, chainId }];
     const { tree } = buildWalletMerkleTree(entries);
 
-    expect(() => getWalletProof(tree, TEST_ADDRESS_1, wrongChainId)).toThrow('Entry not found');
+    expect(() => getWalletProof(tree, TEST_ADDRESS_1, wrongChainId)).toThrow('not found');
   });
 });
 
@@ -96,6 +96,15 @@ describe('getTransactionProof', () => {
     const entries = [{ txHash: TEST_TX_HASH_1, chainId }];
     const { tree } = buildTransactionMerkleTree(entries);
 
-    expect(() => getTransactionProof(tree, TEST_TX_HASH_2, chainId)).toThrow('Entry not found');
+    expect(() => getTransactionProof(tree, TEST_TX_HASH_2, chainId)).toThrow('not found');
+  });
+
+  it('throws for wrong chain ID', () => {
+    const chainId = chainIdToBytes32(8453);
+    const wrongChainId = chainIdToBytes32(1);
+    const entries = [{ txHash: TEST_TX_HASH_1, chainId }];
+    const { tree } = buildTransactionMerkleTree(entries);
+
+    expect(() => getTransactionProof(tree, TEST_TX_HASH_1, wrongChainId)).toThrow('not found');
   });
 });

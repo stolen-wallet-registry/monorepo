@@ -240,7 +240,9 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
               ? state.selectedTxDetails
               : initialState.selectedTxDetails,
             reportedChainId: state.reportedChainId ?? initialState.reportedChainId,
-            merkleRoot: null, // Never restore - always recompute
+            // Transient fields (merkleRoot, sortedTxHashes, sortedChainIds) are not persisted.
+            // They initialize from initialState during hydration and are recomputed on use.
+            merkleRoot: null,
           };
         },
       }

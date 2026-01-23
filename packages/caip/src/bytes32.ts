@@ -44,7 +44,11 @@ export function computeCAIP2Hash(caip2: string): Hex {
  * ```
  */
 export function chainIdToBytes32(chainId: number | bigint): Hex {
-  return computeCAIP2Hash(toCAIP2(Number(chainId)));
+  const numericChainId = Number(chainId);
+  if (!Number.isSafeInteger(numericChainId) || numericChainId < 0) {
+    throw new Error(`Chain ID ${chainId} is invalid or exceeds safe integer range`);
+  }
+  return computeCAIP2Hash(toCAIP2(numericChainId));
 }
 
 /**
@@ -61,9 +65,11 @@ export function chainIdToBytes32(chainId: number | bigint): Hex {
  * ```
  */
 export function caip2ToBytes32(caip2: string): Hex {
+  // Validate it's a valid EVM CAIP-2 before hashing
   const chainId = caip2ToNumericChainId(caip2);
   if (chainId === null) {
     throw new Error(`Unsupported or invalid CAIP-2 format: ${caip2}`);
   }
-  return chainIdToBytes32(chainId);
+  // Hash the validated string directly (equivalent to toCAIP2(chainId))
+  return computeCAIP2Hash(caip2);
 }

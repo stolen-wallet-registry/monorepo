@@ -2,14 +2,39 @@
  * Merkle leaf computation utilities.
  *
  * Uses OpenZeppelin StandardMerkleTree leaf format to match contracts:
- * leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(value1, value2))))
+ *   leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(value1, value2))))
  *
- * The 0x00 prefix prevents second-preimage attacks by distinguishing
- * leaves from internal nodes.
+ * ## Why the 0x00 prefix?
+ *
+ * The 0x00 prefix is OpenZeppelin's defense against second-preimage attacks.
+ * In a Merkle tree, internal nodes are computed as:
+ *   node = keccak256(leftChild || rightChild)
+ *
+ * Without domain separation, an attacker could craft leaf data that equals
+ * a valid internal node hash, potentially forging proofs. By prepending 0x00
+ * to leaves (and implicitly using no prefix for internal nodes), leaves and
+ * internal nodes are cryptographically distinguishable.
+ *
+ * This is standard in OpenZeppelin's MerkleProof library and StandardMerkleTree.
+ * Our Solidity contracts use the same format, ensuring off-chain computed
+ * leaves match on-chain verification.
+ *
+ * @see https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/cryptography/MerkleProof.sol
  */
 
 import { keccak256, encodeAbiParameters, concat, type Hex, type Address } from 'viem';
 import { chainIdToBytes32 } from '@swr/caip';
+
+/**
+ * Internal helper for address-based leaf computation.
+ * Used by both wallet and contract registries which share the same format.
+ */
+function computeAddressLeaf(address: Address, chainId: Hex): Hex {
+  const innerHash = keccak256(
+    encodeAbiParameters([{ type: 'address' }, { type: 'bytes32' }], [address, chainId])
+  );
+  return keccak256(concat(['0x00', innerHash]));
+}
 
 /**
  * Compute a Merkle tree leaf for a wallet entry.
@@ -20,10 +45,7 @@ import { chainIdToBytes32 } from '@swr/caip';
  * @returns Merkle leaf hash (OZ standard format)
  */
 export function computeWalletLeaf(address: Address, chainId: Hex): Hex {
-  const innerHash = keccak256(
-    encodeAbiParameters([{ type: 'address' }, { type: 'bytes32' }], [address, chainId])
-  );
-  return keccak256(concat(['0x00', innerHash]));
+  return computeAddressLeaf(address, chainId);
 }
 
 /**
@@ -74,10 +96,7 @@ export function computeTransactionLeafFromChainId(txHash: Hex, chainId: number):
  * @returns Merkle leaf hash (OZ standard format)
  */
 export function computeContractLeaf(address: Address, chainId: Hex): Hex {
-  const innerHash = keccak256(
-    encodeAbiParameters([{ type: 'address' }, { type: 'bytes32' }], [address, chainId])
-  );
-  return keccak256(concat(['0x00', innerHash]));
+  return computeAddressLeaf(address, chainId);
 }
 
 /**

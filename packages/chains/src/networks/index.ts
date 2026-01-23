@@ -19,6 +19,28 @@ import { optimismSepolia } from './optimism-sepolia';
 export { anvilHub, anvilSpoke, arbitrum, base, baseSepolia, ethereum, optimism, optimismSepolia };
 
 /**
+ * Common chain IDs as bigints for contract interactions.
+ *
+ * @example
+ * ```ts
+ * import { CHAIN_IDS } from '@swr/chains';
+ * if (chainId === CHAIN_IDS.BASE) { ... }
+ * ```
+ */
+export const CHAIN_IDS = {
+  ETHEREUM: BigInt(ethereum.chainId),
+  OPTIMISM: BigInt(optimism.chainId),
+  BASE: BigInt(base.chainId),
+  ARBITRUM: BigInt(arbitrum.chainId),
+  // Testnets
+  BASE_SEPOLIA: BigInt(baseSepolia.chainId),
+  OPTIMISM_SEPOLIA: BigInt(optimismSepolia.chainId),
+  // Local development
+  ANVIL_HUB: BigInt(anvilHub.chainId),
+  ANVIL_SPOKE: BigInt(anvilSpoke.chainId),
+} as const;
+
+/**
  * Deep freeze an object and all nested objects.
  */
 function deepFreeze<T extends object>(obj: T): T {

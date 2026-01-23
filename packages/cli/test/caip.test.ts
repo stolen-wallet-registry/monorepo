@@ -90,6 +90,12 @@ describe('CAIP Helpers', () => {
       const restored = bytes32ToCAIP2(bytes32);
       expect(restored).toBe(original);
     });
+
+    it('handles mixed-case hash input', () => {
+      const mixedCaseHash = '0x43B48883EF7BE0F98FE7F98FAFB2187E42CAAB4063697B32816F95E09D69B3EC';
+      const result = bytes32ToCAIP2(mixedCaseHash);
+      expect(result).toBe('eip155:8453');
+    });
   });
 
   describe('getChainName', () => {
@@ -99,9 +105,9 @@ describe('CAIP Helpers', () => {
       expect(getChainName(10n)).toBe('Optimism');
     });
 
-    it('returns CAIP-2 string for unknown chains', () => {
-      // @swr/chains returns the CAIP-2 string itself if no human name is found
-      expect(getChainName(99999n)).toBe('eip155:99999');
+    it('returns fallback for unknown chains', () => {
+      // @swr/chains returns "Chain {id}" for unknown chains
+      expect(getChainName(99999n)).toBe('Chain 99999');
     });
   });
 
@@ -110,7 +116,7 @@ describe('CAIP Helpers', () => {
       expect(CHAIN_IDS.ETHEREUM).toBe(1n);
       expect(CHAIN_IDS.BASE).toBe(8453n);
       expect(CHAIN_IDS.OPTIMISM).toBe(10n);
-      expect(CHAIN_IDS.ANVIL).toBe(31337n);
+      expect(CHAIN_IDS.ANVIL_HUB).toBe(31337n);
     });
   });
 });

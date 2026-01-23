@@ -28,7 +28,7 @@ import type { TransactionCost } from '@/hooks/useTransactionCost';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { getTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
 import { parseSignature } from '@/lib/signatures';
-import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
+import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
@@ -107,7 +107,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   );
 
   // Convert reported chain ID to CAIP-2 format
-  const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : undefined;
+  const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
 
   // Use sorted hashes and chain IDs from merkle tree for contract calls
   // These must match the order used to compute the merkle root
@@ -407,22 +407,20 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
                 <span className="font-mono font-medium">
                   {getChainName(reportedChainId)}{' '}
                   <span className="text-muted-foreground text-xs">
-                    ({chainIdToCAIP2String(reportedChainId)})
+                    ({toCAIP2(reportedChainId)})
                   </span>
                 </span>
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <code className="font-mono text-xs text-muted-foreground break-all cursor-default">
-                    {chainIdToCAIP2(reportedChainId)}
+                    {chainIdToBytes32(reportedChainId)}
                   </code>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-md">
-                  <p className="text-xs">
-                    keccak256 hash of "{chainIdToCAIP2String(reportedChainId)}"
-                  </p>
+                  <p className="text-xs">keccak256 hash of "{toCAIP2(reportedChainId)}"</p>
                   <p className="text-xs font-mono break-all mt-1">
-                    {chainIdToCAIP2(reportedChainId)}
+                    {chainIdToBytes32(reportedChainId)}
                   </p>
                 </TooltipContent>
               </Tooltip>

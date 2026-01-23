@@ -19,7 +19,7 @@ import {
   useTxContractNonce,
 } from '@/hooks/transactions';
 import { storeTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
-import { chainIdToCAIP2, chainIdToCAIP2String, getChainName } from '@/lib/caip';
+import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
@@ -66,7 +66,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   }, []);
 
   // Convert reported chain ID to CAIP-2 format
-  const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : undefined;
+  const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
 
   // Contract hooks
   const { nonce, isLoading: nonceLoading, isError: nonceError } = useTxContractNonce(address);
@@ -304,22 +304,20 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
                 <span className="font-mono font-medium">
                   {getChainName(reportedChainId)}{' '}
                   <span className="text-muted-foreground text-xs">
-                    ({chainIdToCAIP2String(reportedChainId)})
+                    ({toCAIP2(reportedChainId)})
                   </span>
                 </span>
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <code className="font-mono text-xs text-muted-foreground break-all cursor-default">
-                    {chainIdToCAIP2(reportedChainId)}
+                    {chainIdToBytes32(reportedChainId)}
                   </code>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-md">
-                  <p className="text-xs">
-                    keccak256 hash of "{chainIdToCAIP2String(reportedChainId)}"
-                  </p>
+                  <p className="text-xs">keccak256 hash of "{toCAIP2(reportedChainId)}"</p>
                   <p className="text-xs font-mono break-all mt-1">
-                    {chainIdToCAIP2(reportedChainId)}
+                    {chainIdToBytes32(reportedChainId)}
                   </p>
                 </TooltipContent>
               </Tooltip>

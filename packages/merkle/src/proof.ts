@@ -6,6 +6,27 @@ import type { StandardMerkleTree } from '@openzeppelin/merkle-tree';
 import type { Hex, Address } from 'viem';
 
 /**
+ * Internal helper to find proof by value in tree.
+ * Normalizes inputs to lowercase for case-insensitive matching.
+ */
+function findProof(
+  tree: StandardMerkleTree<[string, string]>,
+  value: string,
+  chainId: Hex,
+  entryType: string
+): Hex[] {
+  const normalizedValue = value.toLowerCase();
+  const normalizedChainId = chainId.toLowerCase();
+
+  for (const [i, v] of tree.entries()) {
+    if (v[0].toLowerCase() === normalizedValue && v[1].toLowerCase() === normalizedChainId) {
+      return tree.getProof(i) as Hex[];
+    }
+  }
+  throw new Error(`${entryType} not found: ${value} on chain ${chainId}`);
+}
+
+/**
  * Get Merkle proof for a wallet entry.
  *
  * @param tree - The StandardMerkleTree instance
@@ -25,15 +46,7 @@ export function getWalletProof(
   address: Address,
   chainId: Hex
 ): Hex[] {
-  const normalizedAddress = address.toLowerCase();
-  const normalizedChainId = chainId.toLowerCase();
-
-  for (const [i, v] of tree.entries()) {
-    if (v[0].toLowerCase() === normalizedAddress && v[1].toLowerCase() === normalizedChainId) {
-      return tree.getProof(i) as Hex[];
-    }
-  }
-  throw new Error(`Entry not found: ${address} on chain ${chainId}`);
+  return findProof(tree, address, chainId, 'Wallet');
 }
 
 /**
@@ -56,15 +69,7 @@ export function getTransactionProof(
   txHash: Hex,
   chainId: Hex
 ): Hex[] {
-  const normalizedTxHash = txHash.toLowerCase();
-  const normalizedChainId = chainId.toLowerCase();
-
-  for (const [i, v] of tree.entries()) {
-    if (v[0].toLowerCase() === normalizedTxHash && v[1].toLowerCase() === normalizedChainId) {
-      return tree.getProof(i) as Hex[];
-    }
-  }
-  throw new Error(`Entry not found: ${txHash} on chain ${chainId}`);
+  return findProof(tree, txHash, chainId, 'Transaction');
 }
 
 /**
@@ -87,13 +92,5 @@ export function getContractProof(
   address: Address,
   chainId: Hex
 ): Hex[] {
-  const normalizedAddress = address.toLowerCase();
-  const normalizedChainId = chainId.toLowerCase();
-
-  for (const [i, v] of tree.entries()) {
-    if (v[0].toLowerCase() === normalizedAddress && v[1].toLowerCase() === normalizedChainId) {
-      return tree.getProof(i) as Hex[];
-    }
-  }
-  throw new Error(`Entry not found: ${address} on chain ${chainId}`);
+  return findProof(tree, address, chainId, 'Contract');
 }

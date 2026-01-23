@@ -175,5 +175,5 @@ export function getCAIP2ChainName(caip2: string): string {
  * ```
  */
 export function bytes32ToCAIP2(hash: Hex): string | null {
-  return CAIP2_LOOKUP[hash.toLowerCase()] ?? null;
+  return resolveChainIdHash(hash);
 }

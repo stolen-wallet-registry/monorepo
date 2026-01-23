@@ -32,7 +32,7 @@ import {
   getBridgeMessageUrl,
 } from '@/lib/explorer';
 import { isSpokeChain, getHubChainId } from '@/lib/chains/config';
-import { chainIdToCAIP2, chainIdToCAIP2String } from '@/lib/caip';
+import { chainIdToBytes32, toCAIP2 } from '@swr/chains';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { CheckCircle2, Home, RefreshCw, Heart, ArrowRight } from 'lucide-react';
@@ -53,8 +53,8 @@ export function TxSuccessStep() {
   const { selectedTxHashes, selectedTxDetails, merkleRoot, reportedChainId } =
     useTransactionSelection();
   const formStore = useTransactionFormStore();
-  const reportedChainIdHash = reportedChainId ? chainIdToCAIP2(reportedChainId) : null;
-  const reportedChainIdString = reportedChainId ? chainIdToCAIP2String(reportedChainId) : null;
+  const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : null;
+  const reportedChainIdString = reportedChainId ? toCAIP2(reportedChainId) : null;
 
   // Determine if this was a cross-chain registration
   const isCrossChain = registrationChainId ? isSpokeChain(registrationChainId) : false;

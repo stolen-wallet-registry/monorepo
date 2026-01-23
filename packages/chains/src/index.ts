@@ -76,6 +76,7 @@ export {
   ethereum,
   optimism,
   optimismSepolia,
+  CHAIN_IDS,
 } from './networks';
 
 // Network lookup and utilities

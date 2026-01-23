@@ -90,16 +90,21 @@ export function isCAIP10(value: string): boolean {
  * Returns numeric chainId (unlike @swr/chains which returns string chainId)
  * for convenience in search operations that need numeric chain IDs.
  *
+ * Input is trimmed for convenience. Chain ID must be a positive decimal integer.
+ *
  * @returns Object with namespace, chainId (number), address, or null if invalid
  */
 export function parseCAIP10(
   value: string
 ): { namespace: string; chainId: number; address: string } | null {
-  const parsed = parseCAIP10Base(value);
+  const parsed = parseCAIP10Base(value.trim());
   if (!parsed) return null;
 
+  // Ensure chainId is a valid decimal integer (no hex, no leading zeros except "0")
+  if (!/^\d+$/.test(parsed.chainId)) return null;
+
   const numericChainId = parseInt(parsed.chainId, 10);
-  if (isNaN(numericChainId)) return null;
+  if (isNaN(numericChainId) || numericChainId < 0) return null;
 
   return {
     namespace: parsed.namespace,

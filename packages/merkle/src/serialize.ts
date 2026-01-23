@@ -39,5 +39,17 @@ export function serializeTree(tree: StandardMerkleTree<[string, string]>): strin
  * ```
  */
 export function deserializeTree(json: string): StandardMerkleTree<[string, string]> {
-  return StandardMerkleTree.load(JSON.parse(json));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch (e) {
+    throw new Error(`Invalid JSON in serialized tree: ${(e as Error).message}`);
+  }
+  try {
+    // StandardMerkleTree.load accepts the output of tree.dump()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return StandardMerkleTree.load(parsed as any);
+  } catch (e) {
+    throw new Error(`Invalid tree format: ${(e as Error).message}`);
+  }
 }

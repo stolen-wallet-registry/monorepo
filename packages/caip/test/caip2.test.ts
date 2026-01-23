@@ -12,6 +12,12 @@ describe('toCAIP2', () => {
     expect(toCAIP2(42161)).toBe('eip155:42161');
     expect(toCAIP2(11155111)).toBe('eip155:11155111');
   });
+
+  it('throws for invalid chain IDs', () => {
+    expect(() => toCAIP2(-1)).toThrow('Invalid chain ID');
+    expect(() => toCAIP2(3.14)).toThrow('Invalid chain ID');
+    expect(() => toCAIP2(NaN)).toThrow('Invalid chain ID');
+  });
 });
 
 describe('parseCAIP2', () => {
@@ -42,6 +48,15 @@ describe('parseCAIP2', () => {
     expect(parseCAIP2('invalid')).toBeNull();
     expect(parseCAIP2('eip155')).toBeNull();
     expect(parseCAIP2('eip155:1:extra')).toBeNull();
+  });
+
+  it('returns null for invalid namespace/chainId per CAIP-2 spec', () => {
+    // Namespace must be 3-8 chars, lowercase alphanumeric with hyphens
+    expect(parseCAIP2('ab:1')).toBeNull(); // namespace too short
+    expect(parseCAIP2('abcdefghi:1')).toBeNull(); // namespace too long
+    expect(parseCAIP2('EIP155:1')).toBeNull(); // uppercase not allowed
+    expect(parseCAIP2(':123')).toBeNull(); // empty namespace
+    expect(parseCAIP2('a:xyz')).toBeNull(); // namespace too short
   });
 });
 

@@ -32,21 +32,26 @@ export function toCAIP10(address: string, chainId: number): CAIP10 {
 /**
  * Build CAIP-10 address from wallet address and CAIP-2 chain string.
  *
- * @param address - Wallet address (will be lowercased)
+ * For EVM chains (eip155), addresses are lowercased for consistency.
+ * For non-EVM chains, addresses are preserved as-is since they may be case-sensitive.
+ *
+ * @param address - Wallet address
  * @param caip2 - CAIP-2 chain string
  * @returns CAIP-10 string
  *
  * @example
  * ```ts
- * toCAIP10FromCAIP2("0x123...abc", "eip155:8453")
- * // => "eip155:8453:0x123...abc"
+ * toCAIP10FromCAIP2("0x742d35Cc6634C0532925a3b844Bc454e83c4b3a1", "eip155:8453")
+ * // => "eip155:8453:0x742d35cc6634c0532925a3b844bc454e83c4b3a1"
  *
- * toCAIP10FromCAIP2("abc123...", "solana:mainnet")
- * // => "solana:mainnet:abc123..."
+ * toCAIP10FromCAIP2("FN1AbC123xYz...", "solana:mainnet")
+ * // => "solana:mainnet:FN1AbC123xYz..." (case preserved)
  * ```
  */
 export function toCAIP10FromCAIP2(address: string, caip2: CAIP2): CAIP10 {
-  return `${caip2}:${address.toLowerCase()}`;
+  // Only lowercase EVM addresses; non-EVM chains may have case-sensitive addresses
+  const normalizedAddress = caip2.startsWith('eip155:') ? address.toLowerCase() : address;
+  return `${caip2}:${normalizedAddress}`;
 }
 
 /**
@@ -67,6 +72,8 @@ export function toCAIP10FromCAIP2(address: string, caip2: CAIP2): CAIP10 {
 export function parseCAIP10(caip10: string): ParsedCAIP10 | null {
   const parts = caip10.split(':');
   if (parts.length !== 3) return null;
+  // Reject empty parts (e.g., ":::" would produce empty strings)
+  if (!parts[0] || !parts[1] || !parts[2]) return null;
   return {
     namespace: parts[0],
     chainId: parts[1],

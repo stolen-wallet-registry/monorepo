@@ -38,9 +38,15 @@ describe('chainIdToBytes32', () => {
     );
   });
 
-  it('produces consistent results', () => {
-    expect(chainIdToBytes32(8453)).toBe(chainIdToBytes32(8453));
+  it('produces consistent results for number and bigint', () => {
     expect(chainIdToBytes32(8453)).toBe(chainIdToBytes32(BigInt(8453)));
+  });
+
+  it('throws for invalid chain IDs', () => {
+    expect(() => chainIdToBytes32(-1)).toThrow('invalid or exceeds safe integer range');
+    expect(() => chainIdToBytes32(BigInt(Number.MAX_SAFE_INTEGER) + 1n)).toThrow(
+      'invalid or exceeds safe integer range'
+    );
   });
 });
 

@@ -93,7 +93,39 @@ describe('buildContractMerkleTree', () => {
     expect(result.leafCount).toBe(1);
   });
 
+  it('builds tree from multiple entries', () => {
+    const entries = [
+      { address: TEST_ADDRESS_1, chainId: chainIdToBytes32(8453) },
+      { address: TEST_ADDRESS_2, chainId: chainIdToBytes32(1) },
+    ];
+    const result = buildContractMerkleTree(entries);
+
+    expect(result.root).toMatch(/^0x[a-f0-9]{64}$/);
+    expect(result.leafCount).toBe(2);
+  });
+
+  it('produces deterministic root for same entries', () => {
+    const entries = [
+      { address: TEST_ADDRESS_1, chainId: chainIdToBytes32(8453) },
+      { address: TEST_ADDRESS_2, chainId: chainIdToBytes32(1) },
+    ];
+    const result1 = buildContractMerkleTree(entries);
+    const result2 = buildContractMerkleTree(entries);
+
+    expect(result1.root).toBe(result2.root);
+  });
+
   it('throws for empty entries', () => {
     expect(() => buildContractMerkleTree([])).toThrow('Cannot build tree with zero entries');
+  });
+
+  it('produces different roots for different entries', () => {
+    const entries1 = [{ address: TEST_ADDRESS_1, chainId: chainIdToBytes32(8453) }];
+    const entries2 = [{ address: TEST_ADDRESS_2, chainId: chainIdToBytes32(8453) }];
+
+    const result1 = buildContractMerkleTree(entries1);
+    const result2 = buildContractMerkleTree(entries2);
+
+    expect(result1.root).not.toBe(result2.root);
   });
 });

@@ -19,6 +19,7 @@ import type { CAIP2, ParsedCAIP2 } from './types';
  *
  * @param chainId - Numeric chain ID (e.g., 8453 for Base)
  * @returns CAIP-2 string (e.g., "eip155:8453")
+ * @throws If chainId is not a non-negative integer
  *
  * @example
  * ```ts
@@ -28,8 +29,18 @@ import type { CAIP2, ParsedCAIP2 } from './types';
  * ```
  */
 export function toCAIP2(chainId: number): CAIP2 {
+  if (!Number.isInteger(chainId) || chainId < 0) {
+    throw new Error(`Invalid chain ID: ${chainId}`);
+  }
   return `eip155:${chainId}`;
 }
+
+/**
+ * CAIP-2 format regex per specification:
+ * - Namespace: [-a-z0-9]{3,8}
+ * - ChainId: [-_a-zA-Z0-9]{1,32}
+ */
+const CAIP2_REGEX = /^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$/;
 
 /**
  * Parse a CAIP-2 string into its components.
@@ -50,8 +61,8 @@ export function toCAIP2(chainId: number): CAIP2 {
  * ```
  */
 export function parseCAIP2(caip2: string): ParsedCAIP2 | null {
+  if (!CAIP2_REGEX.test(caip2)) return null;
   const parts = caip2.split(':');
-  if (parts.length !== 2) return null;
   return {
     namespace: parts[0],
     chainId: parts[1],

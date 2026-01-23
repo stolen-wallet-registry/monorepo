@@ -23,7 +23,7 @@ import { AlertTriangle, ChevronDown, Loader2, RefreshCw } from 'lucide-react';
 import type { UserTransaction } from '@/hooks/transactions/useUserTransactions';
 import type { Hash } from '@/lib/types/ethereum';
 import { formatEther } from 'viem';
-import { getChainName } from '@/lib/caip';
+import { getChainName } from '@swr/chains';
 
 /**
  * Format a transaction hash for display (truncated).

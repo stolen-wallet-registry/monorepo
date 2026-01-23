@@ -49,12 +49,17 @@ export function getExplorerName(chainId: number): string {
 /**
  * Get the chain display name.
  *
- * @param chainId - The chain ID
+ * @param chainId - The chain ID (accepts bigint for contract compatibility)
  * @returns The chain name or 'Chain {id}' as default
+ * @throws If chainId bigint exceeds Number.MAX_SAFE_INTEGER
  */
-export function getChainName(chainId: number): string {
-  const network = getNetworkOrUndefined(chainId);
-  return network?.displayName ?? `Chain ${chainId}`;
+export function getChainName(chainId: number | bigint): string {
+  const numericId = typeof chainId === 'bigint' ? Number(chainId) : chainId;
+  if (typeof chainId === 'bigint' && chainId > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error(`Chain ID ${chainId} exceeds safe integer range`);
+  }
+  const network = getNetworkOrUndefined(numericId);
+  return network?.displayName ?? `Chain ${numericId}`;
 }
 
 /**
