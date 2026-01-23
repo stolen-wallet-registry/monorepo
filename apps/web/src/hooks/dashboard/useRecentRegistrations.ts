@@ -24,11 +24,11 @@ export type RegistrationType = 'wallet' | 'contract' | 'transaction';
 
 /** Unified registration entry */
 export interface RegistrationEntry {
-  /** Unique ID (address or batchId) */
+  /** Unique ID from the indexer record (composite key or address) */
   id: string;
   /** Registration type */
   type: RegistrationType;
-  /** Address (for wallet/contract) or batch ID (for transaction) */
+  /** Display identifier: wallet address, contract address, or transaction hash */
   identifier: string;
   /** CAIP-2 chain ID (e.g., "eip155:8453") */
   chainId: string;
@@ -123,20 +123,27 @@ export function useRecentRegistrations(
       // Process wallets
       if (walletsRes) {
         for (const raw of walletsRes.stolenWallets.items) {
-          // Extract chain ID from CAIP-10 (format: eip155:chainId:address)
+          // Extract chain ID and address from CAIP-10 (format: eip155:chainId:address)
           const caip10Parts = raw.caip10.split(':');
           let chainId: string;
-          if (caip10Parts.length >= 2) {
+          let walletAddress: string;
+
+          if (caip10Parts.length >= 3) {
             chainId = `${caip10Parts[0]}:${caip10Parts[1]}`;
+            walletAddress = caip10Parts[2];
+          } else if (caip10Parts.length >= 2) {
+            chainId = `${caip10Parts[0]}:${caip10Parts[1]}`;
+            walletAddress = raw.id; // Fallback to raw.id if address part missing
           } else {
             logger.contract.debug('Fallback to eip155:1 for wallet', { caip10: raw.caip10 });
             chainId = 'eip155:1';
+            walletAddress = raw.id;
           }
 
           entries.push({
             id: raw.id,
             type: 'wallet',
-            identifier: raw.id,
+            identifier: walletAddress,
             chainId,
             operator: raw.operator as Address | undefined,
             isSponsored: raw.isSponsored,

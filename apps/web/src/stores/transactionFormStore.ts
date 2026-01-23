@@ -185,8 +185,9 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
               sortedChainIdsCount: sortedChainIds.length,
             });
             state.merkleRoot = root;
-            state.sortedTxHashes = sortedTxHashes;
-            state.sortedChainIds = sortedChainIds;
+            // Defensive copy to avoid external mutation of stored arrays
+            state.sortedTxHashes = [...sortedTxHashes];
+            state.sortedChainIds = [...sortedChainIds];
           }),
 
         reset: () => {
