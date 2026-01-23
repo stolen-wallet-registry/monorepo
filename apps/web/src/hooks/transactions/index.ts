@@ -1,12 +1,6 @@
 // Transaction hooks barrel export
 
-export {
-  useMerkleTree,
-  useMerkleProof,
-  buildMerkleTree,
-  type TransactionLeaf,
-  type MerkleTreeData,
-} from './useMerkleTree';
+export { useMerkleTree, type TransactionLeaf, type MerkleTreeData } from './useMerkleTree';
 
 export {
   useTransactionAcknowledgement,
@@ -30,7 +24,6 @@ export {
 
 export {
   useUserTransactions,
-  isSuspiciousTransaction,
   type UserTransaction,
   type UseUserTransactionsResult,
 } from './useUserTransactions';

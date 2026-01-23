@@ -36,7 +36,6 @@ export {
   AddressSearchResult,
   type AddressSearchResultProps,
 } from './RegistrySearch';
-export { OperatorBadge, type OperatorBadgeProps } from './OperatorBadge';
 export { ConnectedWalletStatus, type ConnectedWalletStatusProps } from './ConnectedWalletStatus';
 export { ChainIndicator, type ChainIndicatorProps } from './ChainIndicator';
 export { ChainIcon, type ChainIconProps, type ChainIconSize } from './ChainIcon';

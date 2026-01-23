@@ -41,7 +41,7 @@ export interface MerkleTreeData {
  * @param transactions - Array of transactions with hash and chain ID
  * @returns Merkle tree data or null if empty
  */
-export function buildMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData | null {
+function buildMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData | null {
   if (transactions.length === 0) {
     return null;
   }
@@ -124,25 +124,4 @@ export function useMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData |
   }, [transactions]);
 
   return tree;
-}
-
-/**
- * Hook to get a proof for a specific transaction.
- *
- * @param tree - The Merkle tree data
- * @param txHash - Transaction hash to prove
- * @param chainId - Chain ID where transaction occurred
- * @returns Merkle proof as array of bytes32
- */
-export function useMerkleProof(
-  tree: MerkleTreeData | null,
-  txHash: Hash | undefined,
-  chainId: number | undefined
-): Hash[] {
-  return useMemo(() => {
-    if (!tree || !txHash || chainId === undefined) {
-      return [];
-    }
-    return tree.getProofByTx(txHash, chainId);
-  }, [tree, txHash, chainId]);
 }

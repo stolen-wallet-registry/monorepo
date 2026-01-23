@@ -54,10 +54,11 @@ export function getExplorerName(chainId: number): string {
  * @throws If chainId bigint exceeds Number.MAX_SAFE_INTEGER
  */
 export function getChainName(chainId: number | bigint): string {
-  const numericId = typeof chainId === 'bigint' ? Number(chainId) : chainId;
+  // Check bigint precision BEFORE converting to avoid loss
   if (typeof chainId === 'bigint' && chainId > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error(`Chain ID ${chainId} exceeds safe integer range`);
   }
+  const numericId = typeof chainId === 'bigint' ? Number(chainId) : chainId;
   const network = getNetworkOrUndefined(numericId);
   return network?.displayName ?? `Chain ${numericId}`;
 }

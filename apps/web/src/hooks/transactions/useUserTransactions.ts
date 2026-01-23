@@ -285,17 +285,3 @@ export function useUserTransactions(
     lowestBlockScanned,
   };
 }
-
-/**
- * Check if a transaction is likely fraudulent based on simple heuristics.
- * This is a placeholder - real fraud detection would be much more sophisticated.
- */
-export function isSuspiciousTransaction(tx: UserTransaction): boolean {
-  // Example heuristics (not real fraud detection):
-  // - Large value transfers
-  // - Transfers to new/unknown addresses
-  // - Contract interactions with high gas
-
-  const ONE_ETH = 1000000000000000000n;
-  return tx.value > ONE_ETH * 10n; // Transfers over 10 ETH flagged as "suspicious"
-}

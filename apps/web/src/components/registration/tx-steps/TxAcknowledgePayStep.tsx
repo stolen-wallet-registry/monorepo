@@ -106,7 +106,8 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     address && expectedWallet && areAddressesEqual(address, expectedWallet)
   );
 
-  // Convert reported chain ID to CAIP-2 format
+  // Convert reported chain ID to CAIP-2 format - cache both for display and contract use
+  const reportedChainIdCaip2 = reportedChainId ? toCAIP2(reportedChainId) : undefined;
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
 
   // Use sorted hashes and chain IDs from merkle tree for contract calls
@@ -406,22 +407,18 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
                 </span>
                 <span className="font-mono font-medium">
                   {getChainName(reportedChainId)}{' '}
-                  <span className="text-muted-foreground text-xs">
-                    ({toCAIP2(reportedChainId)})
-                  </span>
+                  <span className="text-muted-foreground text-xs">({reportedChainIdCaip2})</span>
                 </span>
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <code className="font-mono text-xs text-muted-foreground break-all cursor-default">
-                    {chainIdToBytes32(reportedChainId)}
+                    {reportedChainIdHash}
                   </code>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-md">
-                  <p className="text-xs">keccak256 hash of "{toCAIP2(reportedChainId)}"</p>
-                  <p className="text-xs font-mono break-all mt-1">
-                    {chainIdToBytes32(reportedChainId)}
-                  </p>
+                  <p className="text-xs">keccak256 hash of "{reportedChainIdCaip2}"</p>
+                  <p className="text-xs font-mono break-all mt-1">{reportedChainIdHash}</p>
                 </TooltipContent>
               </Tooltip>
             </div>
