@@ -4,7 +4,7 @@
  * Displays a paginated table of recent registrations across all registry types.
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -74,20 +74,25 @@ const CHAIN_CONFIG: Record<
 
 /**
  * Get chain info from CAIP-2 components.
+ * Validates reference to avoid NaN chainIds.
  */
 function getChainInfo(
   namespace: string,
   reference: string
 ): { chainId: number | null; name: string; Icon: React.ComponentType<{ className?: string }> } {
-  if (namespace === 'eip155') {
+  if (namespace === 'eip155' && reference && /^\d+$/.test(reference)) {
     const chainId = parseInt(reference, 10);
-    const config = CHAIN_CONFIG[chainId];
-    if (config) {
-      return { chainId, name: config.shortName, Icon: config.Icon };
+    if (Number.isFinite(chainId)) {
+      const config = CHAIN_CONFIG[chainId];
+      if (config) {
+        return { chainId, name: config.shortName, Icon: config.Icon };
+      }
+      return { chainId, name: `Chain ${chainId}`, Icon: Globe };
     }
-    return { chainId, name: `Chain ${chainId}`, Icon: Globe };
   }
-  return { chainId: null, name: `${namespace}:${reference}`, Icon: Globe };
+  // Fallback for invalid or non-EVM chains
+  const displayName = reference ? `${namespace}:${reference}` : namespace;
+  return { chainId: null, name: displayName, Icon: Globe };
 }
 
 interface RegistrationRowProps {
@@ -202,17 +207,21 @@ export function RecentRegistrationsTable({ className }: RecentRegistrationsTable
 
   const { operators } = useOperators();
 
-  // Build operator name lookup
-  const operatorNames = new Map<string, string>();
-  for (const op of operators) {
-    operatorNames.set(op.address.toLowerCase(), op.identifier);
-  }
+  // Memoize operator name lookup to avoid rebuilding every render
+  const operatorNames = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const op of operators) {
+      map.set(op.address.toLowerCase(), op.identifier);
+    }
+    return map;
+  }, [operators]);
 
-  // Client-side pagination
-  const startIndex = page * pageSize;
+  // Client-side pagination with clamped page (no useEffect needed)
+  const totalPages = Math.max(1, Math.ceil(registrations.length / pageSize));
+  const clampedPage = Math.min(page, totalPages - 1);
+  const startIndex = clampedPage * pageSize;
   const endIndex = startIndex + pageSize;
   const paginatedRegistrations = registrations.slice(startIndex, endIndex);
-  const totalPages = Math.ceil(registrations.length / pageSize);
 
   if (isError) {
     return (
@@ -289,18 +298,18 @@ export function RecentRegistrationsTable({ className }: RecentRegistrationsTable
                     variant="outline"
                     size="sm"
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    disabled={page === 0}
+                    disabled={clampedPage === 0}
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
                   <span className="text-sm">
-                    Page {page + 1} of {totalPages}
+                    Page {clampedPage + 1} of {totalPages}
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                    disabled={page >= totalPages - 1}
+                    disabled={clampedPage >= totalPages - 1}
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>

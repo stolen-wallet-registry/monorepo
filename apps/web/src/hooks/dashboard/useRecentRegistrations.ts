@@ -121,8 +121,13 @@ export function useRecentRegistrations(
         for (const raw of walletsRes.stolenWallets.items) {
           // Extract chain ID from CAIP-10 (format: eip155:chainId:address)
           const caip10Parts = raw.caip10.split(':');
-          const chainId =
-            caip10Parts.length >= 2 ? `${caip10Parts[0]}:${caip10Parts[1]}` : 'eip155:1';
+          let chainId: string;
+          if (caip10Parts.length >= 2) {
+            chainId = `${caip10Parts[0]}:${caip10Parts[1]}`;
+          } else {
+            logger.contract.debug('Fallback to eip155:1 for wallet', { caip10: raw.caip10 });
+            chainId = 'eip155:1';
+          }
 
           entries.push({
             id: raw.id,
@@ -157,11 +162,19 @@ export function useRecentRegistrations(
       // Process transactions
       if (transactionsRes) {
         for (const raw of transactionsRes.transactionBatchs.items) {
+          let txChainId = raw.reportedChainCAIP2;
+          if (!txChainId) {
+            logger.contract.debug('Fallback to eip155:1 for transaction', {
+              id: raw.id,
+              merkleRoot: raw.merkleRoot,
+            });
+            txChainId = 'eip155:1';
+          }
           entries.push({
             id: raw.id,
             type: 'transaction',
             identifier: raw.merkleRoot,
-            chainId: raw.reportedChainCAIP2 ?? 'eip155:1',
+            chainId: txChainId,
             operator: raw.verifyingOperator as Address | undefined,
             reporter: raw.reporter as Address,
             isSponsored: raw.isSponsored,
