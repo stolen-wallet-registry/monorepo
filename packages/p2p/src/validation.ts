@@ -70,8 +70,19 @@ export function isWithinSizeLimit(data: string): boolean {
 /**
  * Extract peer ID from a multiaddr string.
  * Returns the peer ID portion after /p2p/ or null if not found.
+ *
+ * Handles both standard and circuit relay multiaddrs:
+ * - `/ip4/127.0.0.1/tcp/4001/p2p/QmPeerId` → `QmPeerId`
+ * - `/dns4/relay.com/p2p/QmRelay/p2p-circuit/p2p/QmTarget` → `QmTarget` (target)
+ * - `/dns4/relay.com/p2p/QmRelay/p2p-circuit` → `QmRelay` (relay server)
  */
 export function extractPeerIdFromMultiaddr(multiaddr: string): string | null {
-  const match = multiaddr.match(/\/p2p\/([^/]+)$/);
-  return match ? match[1] : null;
+  // Try final /p2p/ segment first (for circuit relay target peer IDs)
+  const finalMatch = multiaddr.match(/\/p2p\/([^/]+)$/);
+  if (finalMatch) {
+    return finalMatch[1];
+  }
+  // Fall back to first /p2p/ segment (for relay addresses ending in /p2p-circuit)
+  const firstMatch = multiaddr.match(/\/p2p\/([^/]+)/);
+  return firstMatch ? firstMatch[1] : null;
 }

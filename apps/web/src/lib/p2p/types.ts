@@ -34,7 +34,11 @@ export {
 } from '@swr/p2p';
 
 import { logger } from '@/lib/logger';
-import { getRelayServers as baseGetRelayServers, type RelayConfig } from '@swr/p2p';
+import {
+  getRelayServers as baseGetRelayServers,
+  extractPeerIdFromMultiaddr,
+  type RelayConfig,
+} from '@swr/p2p';
 
 /**
  * Get relay servers for current Vite environment.
@@ -72,9 +76,9 @@ export function getRelayPeerIds(): Set<string> {
   }
 
   for (const server of servers) {
-    const match = server.multiaddr.match(/\/p2p\/([^/]+)$/);
-    if (match) {
-      peerIds.add(match[1]);
+    const peerId = extractPeerIdFromMultiaddr(server.multiaddr);
+    if (peerId) {
+      peerIds.add(peerId);
     }
   }
 

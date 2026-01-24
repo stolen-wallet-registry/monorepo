@@ -12,12 +12,12 @@ describe('getRelayServers', () => {
     expect(result[0].multiaddr).toBe('/custom/p2p/QmCustom');
   });
 
-  it('throws in production mode with no servers configured', () => {
-    // Only run if production is empty (current state)
-    if (RELAY_SERVERS.production.length === 0) {
+  it.runIf(RELAY_SERVERS.production.length === 0)(
+    'throws in production mode with no servers configured',
+    () => {
       expect(() => getRelayServers({ mode: 'production' })).toThrow(RelayConfigurationError);
     }
-  });
+  );
 
   it('falls back to development for unknown modes', () => {
     const result = getRelayServers({ mode: 'staging' });
@@ -34,10 +34,11 @@ describe('getRelayPeerIds', () => {
     expect(peerIds.has('QmTestPeer')).toBe(true);
   });
 
-  it('returns empty set for unconfigured production', () => {
-    if (RELAY_SERVERS.production.length === 0) {
+  it.runIf(RELAY_SERVERS.production.length === 0)(
+    'returns empty set for unconfigured production',
+    () => {
       const peerIds = getRelayPeerIds({ mode: 'production' });
       expect(peerIds.size).toBe(0);
     }
-  });
+  );
 });

@@ -55,4 +55,22 @@ describe('sanitizeErrorMessage', () => {
     sanitizeErrorMessage(new Error('test'), logError);
     expect(logError).toHaveBeenCalled();
   });
+
+  it('handles non-Error objects', () => {
+    expect(sanitizeErrorMessage({ message: 'some error' })).toBeDefined();
+    expect(sanitizeErrorMessage('plain string error')).toBeDefined();
+  });
+
+  it('handles errors with Raw Call Arguments section', () => {
+    const result = sanitizeErrorMessage(new Error('Error occurred Raw Call Arguments: 0x1234...'));
+    expect(result).not.toContain('Raw Call Arguments');
+  });
+
+  it('handles multiple error patterns in one message', () => {
+    const result = sanitizeErrorMessage(
+      new Error('custom error 0xec5c97a6 Version: viem@2.41.2 Details: something')
+    );
+    expect(result).toContain('registration window has expired');
+    expect(result).not.toContain('Version:');
+  });
 });

@@ -17,6 +17,22 @@ describe('safeJsonParse', () => {
     expect(result.safe).toBe('value');
   });
 
+  it('strips constructor key from parsed JSON', () => {
+    const malicious = '{"constructor":{"prototype":{"bad":true}},"safe":"value"}';
+    const result = safeJsonParse(malicious) as Record<string, unknown>;
+
+    expect(Object.prototype.hasOwnProperty.call(result, 'constructor')).toBe(false);
+    expect(result.safe).toBe('value');
+  });
+
+  it('strips prototype key from parsed JSON', () => {
+    const malicious = '{"prototype":{"bad":true},"safe":"value"}';
+    const result = safeJsonParse(malicious) as Record<string, unknown>;
+
+    expect(Object.prototype.hasOwnProperty.call(result, 'prototype')).toBe(false);
+    expect(result.safe).toBe('value');
+  });
+
   it('strips dangerous keys in nested objects', () => {
     const malicious = '{"outer":{"__proto__":{"bad":true},"good":"value"}}';
     const result = safeJsonParse(malicious) as { outer: Record<string, unknown> };
@@ -75,6 +91,11 @@ describe('extractPeerIdFromMultiaddr', () => {
   it('extracts final peer ID from circuit relay multiaddr', () => {
     const circuitRelay = '/dns4/relay.example.com/tcp/443/wss/p2p/QmRelay/p2p-circuit/p2p/QmTarget';
     expect(extractPeerIdFromMultiaddr(circuitRelay)).toBe('QmTarget');
+  });
+
+  it('extracts relay peer ID when multiaddr ends with /p2p-circuit', () => {
+    const relayServer = '/dns4/relay.example.com/tcp/443/wss/p2p/QmRelayId/p2p-circuit';
+    expect(extractPeerIdFromMultiaddr(relayServer)).toBe('QmRelayId');
   });
 
   it('returns null when no /p2p/ component', () => {

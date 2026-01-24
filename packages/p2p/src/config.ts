@@ -6,6 +6,7 @@
  */
 
 import { RelayConfigurationError, type RelayConfig } from './types';
+import { extractPeerIdFromMultiaddr } from './validation';
 
 /**
  * Default relay servers by environment.
@@ -58,7 +59,7 @@ export function getRelayServers(config: EnvironmentConfig): RelayConfig[] {
 
   // Check for environment variable override
   if (relayMultiaddr) {
-    return [{ multiaddr: relayMultiaddr, isDev: false }];
+    return [{ multiaddr: relayMultiaddr, isDev: mode !== 'production' }];
   }
 
   const servers = RELAY_SERVERS[mode];
@@ -95,9 +96,9 @@ export function getRelayPeerIds(config: EnvironmentConfig): Set<string> {
   }
 
   for (const server of servers) {
-    const match = server.multiaddr.match(/\/p2p\/([^/]+)$/);
-    if (match) {
-      peerIds.add(match[1]);
+    const peerId = extractPeerIdFromMultiaddr(server.multiaddr);
+    if (peerId) {
+      peerIds.add(peerId);
     }
   }
 

@@ -119,3 +119,25 @@ export const TX_SIGNATURE_STEP = {
 } as const;
 
 export type TxSignatureStep = (typeof TX_SIGNATURE_STEP)[keyof typeof TX_SIGNATURE_STEP];
+
+/**
+ * Type hashes from StolenTransactionRegistry contract.
+ *
+ * These are computed as keccak256 of the EIP-712 type string:
+ *
+ * TX_ACKNOWLEDGEMENT:
+ *   keccak256("TransactionBatchAcknowledgement(bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)")
+ *   = 0x0e5a9f919067d8f2bf4f63b5e1f43c211aabb11f4b82976a08fac620fa9cc311
+ *
+ * TX_REGISTRATION:
+ *   keccak256("TransactionBatchRegistration(bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)")
+ *   = 0x110a739971586041131256f403895289d746f40d94eff277b03a902201817b73
+ *
+ * To verify: cast keccak "TransactionBatchAcknowledgement(bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
+ */
+export const TX_TYPE_HASHES = {
+  /** keccak256("TransactionBatchAcknowledgement(bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)") */
+  TX_ACKNOWLEDGEMENT: '0x0e5a9f919067d8f2bf4f63b5e1f43c211aabb11f4b82976a08fac620fa9cc311',
+  /** keccak256("TransactionBatchRegistration(bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)") */
+  TX_REGISTRATION: '0x110a739971586041131256f403895289d746f40d94eff277b03a902201817b73',
+} as const;

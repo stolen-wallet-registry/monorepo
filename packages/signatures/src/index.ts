@@ -53,6 +53,7 @@ export {
   SIGNATURE_STEP,
   TX_EIP712_TYPES,
   TX_SIGNATURE_STEP,
+  TX_TYPE_HASHES,
   type AcknowledgementMessage,
   type RegistrationMessage,
   type SignatureStep,

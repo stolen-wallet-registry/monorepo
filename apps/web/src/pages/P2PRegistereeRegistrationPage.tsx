@@ -183,7 +183,12 @@ export function P2PRegistereeRegistrationPage() {
                 case PROTOCOLS.ACK_PAY:
                   // Acknowledgement tx hash received - use relayer's chainId if provided
                   // Use chainIdRef.current to avoid stale closure when network changes
-                  if (data.hash) {
+                  // Validate hash format: 0x + 64 hex chars = 66 total (32 bytes)
+                  if (
+                    data.hash &&
+                    typeof data.hash === 'string' &&
+                    /^0x[0-9a-fA-F]{64}$/.test(data.hash)
+                  ) {
                     setAcknowledgementHash(data.hash as Hash, data.txChainId ?? chainIdRef.current);
                   }
                   goToNextStepRef.current();
@@ -199,11 +204,21 @@ export function P2PRegistereeRegistrationPage() {
                   // Registration tx hash (and optional bridge message ID) received
                   // Use relayer's chainId if provided for correct explorer links
                   // Use chainIdRef.current to avoid stale closure when network changes
-                  if (data.hash) {
+                  // Validate hash format: 0x + 64 hex chars = 66 total (32 bytes)
+                  if (
+                    data.hash &&
+                    typeof data.hash === 'string' &&
+                    /^0x[0-9a-fA-F]{64}$/.test(data.hash)
+                  ) {
                     setRegistrationHash(data.hash as Hash, data.txChainId ?? chainIdRef.current);
                   }
                   // Store bridge message ID if provided (for cross-chain explorer links)
-                  if (data.messageId) {
+                  // Also validate message ID format
+                  if (
+                    data.messageId &&
+                    typeof data.messageId === 'string' &&
+                    /^0x[0-9a-fA-F]{64}$/.test(data.messageId)
+                  ) {
                     setBridgeMessageId(data.messageId as Hash);
                     logger.p2p.info('Received bridge message ID from relayer', {
                       messageId: data.messageId,

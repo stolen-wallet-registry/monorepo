@@ -26,6 +26,10 @@ describe('isWithinRegistrationWindow', () => {
     expect(isWithinRegistrationWindow(100n, 200n, 100n)).toBe(true);
   });
 
+  it('returns true within window', () => {
+    expect(isWithinRegistrationWindow(100n, 200n, 150n)).toBe(true);
+  });
+
   it('returns false at window end (exclusive)', () => {
     expect(isWithinRegistrationWindow(100n, 200n, 200n)).toBe(false);
   });
@@ -51,5 +55,14 @@ describe('isValidSignatureFormat', () => {
   it('rejects invalid hex characters', () => {
     const invalidHex = validSig.replace('a', 'g');
     expect(isValidSignatureFormat(invalidHex)).toBe(false);
+  });
+
+  it('rejects signature without 0x prefix', () => {
+    expect(isValidSignatureFormat(validSig.slice(2))).toBe(false);
+  });
+
+  it('rejects empty and undefined input', () => {
+    expect(isValidSignatureFormat('')).toBe(false);
+    expect(isValidSignatureFormat(undefined)).toBe(false);
   });
 });

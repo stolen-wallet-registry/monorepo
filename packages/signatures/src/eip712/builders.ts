@@ -80,11 +80,7 @@ export function buildTxAcknowledgementTypedData(
     domain: getTxEIP712Domain(chainId, contractAddress),
     types: TX_EIP712_TYPES,
     primaryType: 'TransactionBatchAcknowledgement' as const,
-    message: {
-      ...message,
-      // Ensure transactionCount is a number for EIP-712 encoding
-      transactionCount: message.transactionCount,
-    },
+    message,
   };
 }
 

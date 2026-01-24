@@ -31,4 +31,9 @@ describe('formatEthConsistent', () => {
     expect(() => formatEthConsistent(1n, -1)).toThrow(RangeError);
     expect(() => formatEthConsistent(1n, 2.5)).toThrow(RangeError);
   });
+
+  it('returns whole number only when decimals is 0', () => {
+    expect(formatEthConsistent(1500000000000000000n, 0)).toBe('1');
+    expect(formatEthConsistent(2999999999999999999n, 0)).toBe('2');
+  });
 });

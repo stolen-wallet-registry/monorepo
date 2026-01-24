@@ -8,7 +8,7 @@ import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import type { SignatureStatus } from '@/components/composed/SignatureCard';
 
-// Re-export utils wrapper that includes logging
+// Re-export error utilities for unified API surface
 export { sanitizeErrorMessage } from '@/lib/utils';
 export * from './contractErrors';
 
