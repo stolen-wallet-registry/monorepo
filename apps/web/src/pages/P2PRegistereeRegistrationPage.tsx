@@ -40,7 +40,7 @@ import { useP2PKeepAlive } from '@/hooks/useP2PKeepAlive';
 import { useP2PConnectionHealth } from '@/hooks/useP2PConnectionHealth';
 import { setup, PROTOCOLS, readStreamData, type ProtocolHandler } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
-import type { Hash } from '@/lib/types/ethereum';
+import { isHash } from '@/lib/types/ethereum';
 
 /**
  * Step descriptions for P2P registeree flow.
@@ -183,15 +183,16 @@ export function P2PRegistereeRegistrationPage() {
                 case PROTOCOLS.ACK_PAY:
                   // Acknowledgement tx hash received - use relayer's chainId if provided
                   // Use chainIdRef.current to avoid stale closure when network changes
-                  // Validate hash format: 0x + 64 hex chars = 66 total (32 bytes)
-                  if (
-                    data.hash &&
-                    typeof data.hash === 'string' &&
-                    /^0x[0-9a-fA-F]{64}$/.test(data.hash)
-                  ) {
-                    setAcknowledgementHash(data.hash as Hash, data.txChainId ?? chainIdRef.current);
+                  // Only advance step when hash validation succeeds
+                  if (typeof data.hash === 'string' && isHash(data.hash)) {
+                    setAcknowledgementHash(data.hash, data.txChainId ?? chainIdRef.current);
+                    goToNextStepRef.current();
+                  } else {
+                    logger.p2p.warn('ACK_PAY received with invalid or missing hash', {
+                      hash: data.hash,
+                    });
+                    setProtocolError('Received invalid acknowledgement hash from relayer');
                   }
-                  goToNextStepRef.current();
                   break;
 
                 case PROTOCOLS.REG_REC:
@@ -203,28 +204,23 @@ export function P2PRegistereeRegistrationPage() {
                 case PROTOCOLS.REG_PAY:
                   // Registration tx hash (and optional bridge message ID) received
                   // Use relayer's chainId if provided for correct explorer links
-                  // Use chainIdRef.current to avoid stale closure when network changes
-                  // Validate hash format: 0x + 64 hex chars = 66 total (32 bytes)
-                  if (
-                    data.hash &&
-                    typeof data.hash === 'string' &&
-                    /^0x[0-9a-fA-F]{64}$/.test(data.hash)
-                  ) {
-                    setRegistrationHash(data.hash as Hash, data.txChainId ?? chainIdRef.current);
-                  }
-                  // Store bridge message ID if provided (for cross-chain explorer links)
-                  // Also validate message ID format
-                  if (
-                    data.messageId &&
-                    typeof data.messageId === 'string' &&
-                    /^0x[0-9a-fA-F]{64}$/.test(data.messageId)
-                  ) {
-                    setBridgeMessageId(data.messageId as Hash);
-                    logger.p2p.info('Received bridge message ID from relayer', {
-                      messageId: data.messageId,
+                  // Only advance step when hash validation succeeds
+                  if (typeof data.hash === 'string' && isHash(data.hash)) {
+                    setRegistrationHash(data.hash, data.txChainId ?? chainIdRef.current);
+                    // Store bridge message ID if provided (for cross-chain explorer links)
+                    if (typeof data.messageId === 'string' && isHash(data.messageId)) {
+                      setBridgeMessageId(data.messageId);
+                      logger.p2p.info('Received bridge message ID from relayer', {
+                        messageId: data.messageId,
+                      });
+                    }
+                    goToNextStepRef.current();
+                  } else {
+                    logger.p2p.warn('REG_PAY received with invalid or missing hash', {
+                      hash: data.hash,
                     });
+                    setProtocolError('Received invalid registration hash from relayer');
                   }
-                  goToNextStepRef.current();
                   break;
               }
             } catch (err) {

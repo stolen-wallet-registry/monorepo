@@ -320,14 +320,22 @@ contract SpokeTransactionRegistryTest is Test {
     }
 
     // Acknowledgement should reject invalid signatures.
+    // Uses correct struct format with statement hash to ensure we're testing ONLY wrong signer.
     function test_Acknowledge_InvalidSigner_Reverts() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(reporter);
 
-        // Sign with wrong key
+        // Sign with wrong key but correct struct format
         bytes32 structHash = keccak256(
             abi.encode(
-                ACK_TYPEHASH, merkleRoot, reportedChainId, uint32(transactionHashes.length), forwarder, nonce, deadline
+                ACK_TYPEHASH,
+                keccak256(bytes(ACK_STATEMENT)),
+                merkleRoot,
+                reportedChainId,
+                uint32(transactionHashes.length),
+                forwarder,
+                nonce,
+                deadline
             )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(address(registry)), structHash));
@@ -366,6 +374,7 @@ contract SpokeTransactionRegistryTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Registration should fail if hub is not configured.
+    // Uses correct struct format with statement hash for consistency.
     function test_Register_HubNotConfigured_Reverts() public {
         SpokeTransactionRegistry noHub = new SpokeTransactionRegistry(
             owner, address(adapter), address(feeManager), HUB_DOMAIN, bytes32(0), GRACE_BLOCKS, DEADLINE_BLOCKS
@@ -374,9 +383,12 @@ contract SpokeTransactionRegistryTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = noHub.nonces(reporter);
 
-        // Sign for noHub registry
-        bytes32 structHash =
-            keccak256(abi.encode(REG_TYPEHASH, merkleRoot, reportedChainId, forwarder, nonce, deadline));
+        // Sign for noHub registry with correct struct format
+        bytes32 structHash = keccak256(
+            abi.encode(
+                REG_TYPEHASH, keccak256(bytes(REG_STATEMENT)), merkleRoot, reportedChainId, forwarder, nonce, deadline
+            )
+        );
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",

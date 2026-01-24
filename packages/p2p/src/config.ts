@@ -99,6 +99,9 @@ export function getRelayPeerIds(config: EnvironmentConfig): Set<string> {
     const peerId = extractPeerIdFromMultiaddr(server.multiaddr);
     if (peerId) {
       peerIds.add(peerId);
+    } else if (config.mode !== 'production') {
+      // Debug warning for misconfigured multiaddr in development
+      console.warn(`Could not extract peer ID from multiaddr: ${server.multiaddr}`);
     }
   }
 

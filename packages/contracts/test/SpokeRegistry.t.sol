@@ -183,10 +183,12 @@ contract SpokeRegistryTest is Test {
     }
 
     // Acknowledgement should reject signatures not from the owner.
+    // Uses correct struct format with statement hash to ensure we're testing ONLY wrong signer.
     function test_Acknowledge_InvalidSigner_Reverts() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(victim);
-        bytes32 structHash = keccak256(abi.encode(ACK_TYPEHASH, victim, forwarder, nonce, deadline));
+        bytes32 structHash =
+            keccak256(abi.encode(ACK_TYPEHASH, keccak256(bytes(ACK_STATEMENT)), victim, forwarder, nonce, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(address(registry)), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xB0B, digest);
 

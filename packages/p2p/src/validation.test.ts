@@ -64,6 +64,12 @@ describe('validateStreamData', () => {
   it('returns null for invalid ethereum address', () => {
     expect(validateStreamData({ form: { registeree: 'not-an-address' } })).toBeNull();
   });
+
+  it('parses valid form data with ethereum address', () => {
+    const validForm = { form: { registeree: '0x1234567890123456789012345678901234567890' } };
+    const result = validateStreamData(validForm);
+    expect(result).toEqual(validForm);
+  });
 });
 
 describe('isWithinSizeLimit', () => {

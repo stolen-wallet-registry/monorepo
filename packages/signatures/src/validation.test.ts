@@ -33,6 +33,10 @@ describe('isWithinRegistrationWindow', () => {
   it('returns false at window end (exclusive)', () => {
     expect(isWithinRegistrationWindow(100n, 200n, 200n)).toBe(false);
   });
+
+  it('returns false after window closes', () => {
+    expect(isWithinRegistrationWindow(100n, 200n, 250n)).toBe(false);
+  });
 });
 
 describe('isValidSignatureFormat', () => {
