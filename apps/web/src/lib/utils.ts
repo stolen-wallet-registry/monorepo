@@ -1,79 +1,12 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { BaseError, formatEther } from 'viem';
+import { sanitizeErrorMessage as baseSanitizeErrorMessage } from '@swr/errors';
 
-import { decodeContractError } from './errors/contractErrors';
-import type { FeeLineItem } from './types/fees';
+// Re-export formatting utilities from shared package
+export { formatCentsToUsd, formatEthConsistent, formatFeeLineItem } from '@swr/formatting';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
-}
-
-/**
- * Format cents to USD string (e.g., 500 → "$5.00")
- */
-export function formatCentsToUsd(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(cents / 100);
-}
-
-/**
- * Format wei to ETH string with consistent decimal places.
- *
- * Always shows exactly `decimals` places for proper alignment in fee displays.
- *
- * @param wei - Amount in wei (bigint)
- * @param decimals - Number of decimal places to show (default: 8, must be non-negative integer)
- * @returns Formatted ETH string (e.g., "0.00142857")
- * @throws RangeError if decimals is negative or not an integer
- */
-export function formatEthConsistent(wei: bigint, decimals: number = 8): string {
-  // Validate decimals parameter
-  if (typeof decimals !== 'number' || !Number.isInteger(decimals) || decimals < 0) {
-    throw new RangeError(`decimals must be a non-negative integer, got: ${decimals}`);
-  }
-
-  const ethStr = formatEther(wei);
-  const [whole, decimal = ''] = ethStr.split('.');
-
-  if (decimals === 0) {
-    return whole;
-  }
-
-  // Always pad/truncate to exact decimal places for alignment
-  const paddedDecimal = decimal.padEnd(decimals, '0').slice(0, decimals);
-
-  return `${whole}.${paddedDecimal}`;
-}
-
-/**
- * Format a fee amount into a FeeLineItem with wei, eth, and usd.
- *
- * Consolidates the fee formatting logic used across useQuoteFeeBreakdown
- * and useTxQuoteFeeBreakdown hooks.
- *
- * @param wei - Amount in wei (bigint)
- * @param ethPriceUsd - Current ETH price in USD (undefined if not available)
- * @returns FeeLineItem with wei, eth string, and usd string
- */
-export function formatFeeLineItem(wei: bigint, ethPriceUsd: number | undefined): FeeLineItem {
-  const eth = formatEthConsistent(wei);
-  const ethAsNumber = Number(eth);
-
-  let usd: string;
-  if (ethPriceUsd && ethPriceUsd > 0) {
-    const usdValue = ethAsNumber * ethPriceUsd;
-    usd = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(usdValue);
-  } else {
-    usd = '—';
-  }
-
-  return { wei, eth, usd };
 }
 
 /**
@@ -84,68 +17,11 @@ export function formatFeeLineItem(wei: bigint, ethPriceUsd: number | undefined):
  */
 export function sanitizeErrorMessage(error: unknown): string {
   // Log full error in development for debugging
-  if (import.meta.env.DEV) {
-    console.error('[Error Details]', error);
-  }
+  const logError = import.meta.env.DEV
+    ? (err: unknown) => console.error('[Error Details]', err)
+    : undefined;
 
-  // Check for known viem error types
-  if (error instanceof BaseError) {
-    switch (error.name) {
-      case 'UserRejectedRequestError':
-        return 'Transaction was cancelled. Please try again when ready.';
-      case 'InsufficientFundsError':
-        return 'Insufficient funds to complete this transaction.';
-      case 'NonceTooLowError':
-        return 'Transaction conflict detected. Please refresh and try again.';
-      case 'HttpRequestError':
-      case 'TimeoutError':
-        return 'Network error. Please check your connection and try again.';
-    }
-  }
-
-  // Fallback to message-based detection
-  const message = error instanceof Error ? error.message : String(error);
-
-  // Try to decode contract custom errors (e.g., "custom error 0xec5c97a6")
-  const decodedError = decodeContractError(message);
-  if (decodedError) {
-    return decodedError;
-  }
-
-  if (message.includes('User rejected') || message.includes('user rejected')) {
-    return 'Transaction was cancelled. Please try again when ready.';
-  }
-
-  if (message.includes('insufficient funds')) {
-    return 'Insufficient funds to complete this transaction.';
-  }
-
-  if (message.includes('nonce too low')) {
-    return 'Transaction conflict detected. Please refresh and try again.';
-  }
-
-  if (message.includes('network') || message.includes('Network')) {
-    return 'Network error. Please check your connection and try again.';
-  }
-
-  // Strip version info (e.g., "Version: viem@2.41.2")
-  let sanitized = message.replace(/\s*Version:\s*\S+/gi, '');
-
-  // Strip "Details: " prefix if the details just repeat the message
-  sanitized = sanitized.replace(/\s*Details:\s*[^.]+\./gi, '');
-
-  // Strip "Raw Call Arguments:" section (contains long hex data that breaks UI)
-  sanitized = sanitized.replace(/\s*Raw Call Arguments:[\s\S]*$/i, '');
-
-  // Clean up any double spaces or trailing punctuation issues
-  sanitized = sanitized.replace(/\s+/g, ' ').trim();
-
-  // If we stripped everything meaningful or got useless output like [object Object], provide a generic message
-  if (!sanitized || sanitized.length < 10 || /^\[object .+\]$/.test(sanitized)) {
-    return 'An unexpected error occurred. Please try again.';
-  }
-
-  return sanitized;
+  return baseSanitizeErrorMessage(error, logError);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

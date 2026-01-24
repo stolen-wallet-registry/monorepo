@@ -1,8 +1,9 @@
 // Transaction batch signature storage utilities
 // Stores EIP-712 signatures in sessionStorage (clears on tab close for security)
+// NOTE: This file stays in web app (browser-specific, uses sessionStorage)
 
 import { isHex, isAddress } from 'viem';
-import { TX_SIGNATURE_STEP, type TxSignatureStep } from './eip712';
+import { TX_SIGNATURE_STEP, type TxSignatureStep } from '@swr/signatures';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 /** Signature session TTL in milliseconds (30 minutes) */

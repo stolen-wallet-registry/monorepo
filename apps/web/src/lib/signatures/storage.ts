@@ -1,8 +1,9 @@
 // Signature storage utilities
 // Stores EIP-712 signatures in sessionStorage (clears on tab close for security)
+// NOTE: This file stays in web app (browser-specific, uses sessionStorage)
 
 import { isHex, isAddress } from 'viem';
-import { SIGNATURE_STEP, type SignatureStep } from './eip712';
+import { SIGNATURE_STEP, type SignatureStep } from '@swr/signatures';
 import type { Address, Hex } from '@/lib/types/ethereum';
 
 /** Signature session TTL in milliseconds (30 minutes) */

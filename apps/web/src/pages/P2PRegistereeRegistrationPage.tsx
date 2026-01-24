@@ -40,6 +40,7 @@ import { useP2PKeepAlive } from '@/hooks/useP2PKeepAlive';
 import { useP2PConnectionHealth } from '@/hooks/useP2PConnectionHealth';
 import { setup, PROTOCOLS, readStreamData, type ProtocolHandler } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
+import type { Hash } from '@/lib/types/ethereum';
 
 /**
  * Step descriptions for P2P registeree flow.
@@ -183,7 +184,7 @@ export function P2PRegistereeRegistrationPage() {
                   // Acknowledgement tx hash received - use relayer's chainId if provided
                   // Use chainIdRef.current to avoid stale closure when network changes
                   if (data.hash) {
-                    setAcknowledgementHash(data.hash, data.txChainId ?? chainIdRef.current);
+                    setAcknowledgementHash(data.hash as Hash, data.txChainId ?? chainIdRef.current);
                   }
                   goToNextStepRef.current();
                   break;
@@ -199,11 +200,11 @@ export function P2PRegistereeRegistrationPage() {
                   // Use relayer's chainId if provided for correct explorer links
                   // Use chainIdRef.current to avoid stale closure when network changes
                   if (data.hash) {
-                    setRegistrationHash(data.hash, data.txChainId ?? chainIdRef.current);
+                    setRegistrationHash(data.hash as Hash, data.txChainId ?? chainIdRef.current);
                   }
                   // Store bridge message ID if provided (for cross-chain explorer links)
                   if (data.messageId) {
-                    setBridgeMessageId(data.messageId);
+                    setBridgeMessageId(data.messageId as Hash);
                     logger.p2p.info('Received bridge message ID from relayer', {
                       messageId: data.messageId,
                     });
