@@ -5,6 +5,7 @@
  * Web app uses this via getRelayServers(), relay server uses for self-identification.
  */
 
+import type { Environment } from '@swr/chains';
 import { RelayConfigurationError, type RelayConfig } from './types';
 import { extractPeerIdFromMultiaddr } from './validation';
 
@@ -14,7 +15,7 @@ import { extractPeerIdFromMultiaddr } from './validation';
  * IMPORTANT: Production relay servers MUST be configured before deployment.
  * The system will fail fast if production mode has no relay servers configured.
  */
-export const RELAY_SERVERS: Record<string, RelayConfig[]> = {
+export const RELAY_SERVERS: Record<Environment, RelayConfig[]> = {
   development: [
     {
       // Ed25519 peer ID format (12D3KooW... prefix) - libp2p 3.x standard
@@ -29,6 +30,11 @@ export const RELAY_SERVERS: Record<string, RelayConfig[]> = {
       isDev: true,
     },
   ],
+  staging: [
+    // TODO: Add staging relay server for testnet deployment
+    // Configure via environment variable VITE_RELAY_MULTIADDR or add here:
+    // { multiaddr: '/ip4/xxx.xxx.xxx.xxx/tcp/12312/ws/p2p/${PEER_ID}' },
+  ],
   production: [
     // TODO: Add production relay server before deployment
     // Configure via environment variable VITE_RELAY_MULTIADDR or add here:
@@ -41,8 +47,8 @@ export const RELAY_SERVERS: Record<string, RelayConfig[]> = {
  * Can be overridden for server-side usage.
  */
 export interface EnvironmentConfig {
-  /** Current environment mode (development, production, test) */
-  mode: string;
+  /** Current environment mode */
+  mode: Environment;
   /** Optional multiaddr override from environment variable */
   relayMultiaddr?: string;
 }

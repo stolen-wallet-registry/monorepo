@@ -83,3 +83,6 @@ export {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export { RELAY_SERVERS, getRelayServers, getRelayPeerIds, type EnvironmentConfig } from './config';
+
+// Re-export Environment type for consumers
+export type { Environment } from '@swr/chains';

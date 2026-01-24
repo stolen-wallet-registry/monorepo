@@ -24,6 +24,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@swr/chains": "workspace:*",
     "zod": "^4.1.13"
   },
   "devDependencies": {

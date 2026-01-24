@@ -665,6 +665,9 @@ importers:
 
   packages/p2p:
     dependencies:
+      '@swr/chains':
+        specifier: workspace:*
+        version: link:../chains
       zod:
         specifier: ^4.1.13
         version: 4.1.13

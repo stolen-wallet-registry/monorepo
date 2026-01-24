@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test } from "forge-std/Test.sol";
+import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
 import { SpokeRegistry } from "../src/spoke/SpokeRegistry.sol";
 import { ISpokeRegistry } from "../src/interfaces/ISpokeRegistry.sol";
 import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
@@ -11,7 +11,7 @@ import { MockMailbox } from "./mocks/MockMailbox.sol";
 import { MockInterchainGasPaymaster } from "./mocks/MockInterchainGasPaymaster.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 
-contract SpokeRegistryTest is Test {
+contract SpokeRegistryTest is EIP712TestHelper {
     SpokeRegistry registry;
     HyperlaneAdapter adapter;
     MockMailbox mailbox;
@@ -30,19 +30,10 @@ contract SpokeRegistryTest is Test {
     uint256 internal constant GRACE_BLOCKS = 10;
     uint256 internal constant DEADLINE_BLOCKS = 50;
 
-    bytes32 private constant ACK_TYPEHASH = keccak256(
-        "AcknowledgementOfRegistry(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)"
-    );
-    bytes32 private constant REG_TYPEHASH =
-        keccak256("Registration(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)");
-    bytes32 private constant TYPE_HASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-
-    // Statement constants (must match contract)
-    string private constant ACK_STATEMENT =
-        "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry.";
-    string private constant REG_STATEMENT =
-        "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry. This action is irreversible.";
+    // Type hashes and statements inherited from EIP712TestHelper:
+    // - WALLET_ACK_TYPEHASH, WALLET_REG_TYPEHASH (type hashes)
+    // - WALLET_ACK_STATEMENT, WALLET_REG_STATEMENT (statements)
+    // - EIP712_TYPE_HASH, DOMAIN_VERSION (domain helpers)
 
     function setUp() public {
         vm.chainId(SPOKE_CHAIN_ID);
@@ -75,7 +66,13 @@ contract SpokeRegistryTest is Test {
 
     function _domainSeparator(address verifyingContract) internal view returns (bytes32) {
         return keccak256(
-            abi.encode(TYPE_HASH, keccak256("StolenWalletRegistry"), keccak256("4"), block.chainid, verifyingContract)
+            abi.encode(
+                EIP712_TYPE_HASH,
+                keccak256("StolenWalletRegistry"),
+                keccak256(bytes(DOMAIN_VERSION)),
+                block.chainid,
+                verifyingContract
+            )
         );
     }
 
@@ -87,9 +84,15 @@ contract SpokeRegistryTest is Test {
         uint256 deadline,
         address targetRegistry
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        // Determine which statement to use based on type hash
-        bytes32 statementHash =
-            typeHash == ACK_TYPEHASH ? keccak256(bytes(ACK_STATEMENT)) : keccak256(bytes(REG_STATEMENT));
+        // Explicitly check typeHash and fail fast on unknown values
+        bytes32 statementHash;
+        if (typeHash == WALLET_ACK_TYPEHASH) {
+            statementHash = keccak256(bytes(WALLET_ACK_STATEMENT));
+        } else if (typeHash == WALLET_REG_TYPEHASH) {
+            statementHash = keccak256(bytes(WALLET_REG_STATEMENT));
+        } else {
+            revert("SpokeRegistryTest: unknown typeHash");
+        }
         bytes32 structHash = keccak256(abi.encode(typeHash, statementHash, ownerAddr, forwarderAddr, nonce, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(targetRegistry), structHash));
         (v, r, s) = vm.sign(victimPk, digest);
@@ -107,7 +110,7 @@ contract SpokeRegistryTest is Test {
     function _acknowledge(address forwarderAddr) internal {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(victim);
-        (uint8 v, bytes32 r, bytes32 s) = _sign(ACK_TYPEHASH, victim, forwarderAddr, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = _sign(WALLET_ACK_TYPEHASH, victim, forwarderAddr, nonce, deadline);
 
         vm.prank(forwarderAddr);
         registry.acknowledgeLocal(deadline, nonce, victim, v, r, s);
@@ -164,7 +167,7 @@ contract SpokeRegistryTest is Test {
     function test_Acknowledge_InvalidOwner_Reverts() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(address(0));
-        (uint8 v, bytes32 r, bytes32 s) = _sign(ACK_TYPEHASH, address(0), forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = _sign(WALLET_ACK_TYPEHASH, address(0), forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidOwner.selector);
@@ -175,7 +178,7 @@ contract SpokeRegistryTest is Test {
     function test_Acknowledge_InvalidNonce_Reverts() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = 999;
-        (uint8 v, bytes32 r, bytes32 s) = _sign(ACK_TYPEHASH, victim, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = _sign(WALLET_ACK_TYPEHASH, victim, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidNonce.selector);
@@ -187,8 +190,9 @@ contract SpokeRegistryTest is Test {
     function test_Acknowledge_InvalidSigner_Reverts() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(victim);
-        bytes32 structHash =
-            keccak256(abi.encode(ACK_TYPEHASH, keccak256(bytes(ACK_STATEMENT)), victim, forwarder, nonce, deadline));
+        bytes32 structHash = keccak256(
+            abi.encode(WALLET_ACK_TYPEHASH, keccak256(bytes(WALLET_ACK_STATEMENT)), victim, forwarder, nonce, deadline)
+        );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(address(registry)), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xB0B, digest);
 
@@ -201,7 +205,7 @@ contract SpokeRegistryTest is Test {
     function test_Acknowledge_SignatureExpired_Reverts() public {
         uint256 deadline = block.timestamp - 1;
         uint256 nonce = registry.nonces(victim);
-        (uint8 v, bytes32 r, bytes32 s) = _sign(ACK_TYPEHASH, victim, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = _sign(WALLET_ACK_TYPEHASH, victim, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__SignatureExpired.selector);
@@ -218,7 +222,7 @@ contract SpokeRegistryTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = noHub.nonces(victim);
         // Use parameterized _sign to target the noHub registry instance
-        (uint8 v, bytes32 r, bytes32 s) = _sign(REG_TYPEHASH, victim, forwarder, nonce, deadline, address(noHub));
+        (uint8 v, bytes32 r, bytes32 s) = _sign(WALLET_REG_TYPEHASH, victim, forwarder, nonce, deadline, address(noHub));
 
         vm.prank(forwarder);
         vm.expectRevert(SpokeRegistry.SpokeRegistry__HubNotConfigured.selector);
@@ -233,7 +237,7 @@ contract SpokeRegistryTest is Test {
         address wrongForwarder = makeAddr("wrongForwarder");
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(victim);
-        (uint8 v, bytes32 r, bytes32 s) = _sign(REG_TYPEHASH, victim, wrongForwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = _sign(WALLET_REG_TYPEHASH, victim, wrongForwarder, nonce, deadline);
 
         vm.prank(wrongForwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidForwarder.selector);
@@ -246,7 +250,7 @@ contract SpokeRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(victim);
-        (uint8 v, bytes32 r, bytes32 s) = _sign(REG_TYPEHASH, victim, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = _sign(WALLET_REG_TYPEHASH, victim, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__GracePeriodNotStarted.selector);
@@ -263,7 +267,7 @@ contract SpokeRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(victim);
-        (uint8 v, bytes32 r, bytes32 s) = _sign(REG_TYPEHASH, victim, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = _sign(WALLET_REG_TYPEHASH, victim, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__ForwarderExpired.selector);
@@ -278,7 +282,7 @@ contract SpokeRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(victim);
-        (uint8 v, bytes32 r, bytes32 s) = _sign(REG_TYPEHASH, victim, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = _sign(WALLET_REG_TYPEHASH, victim, forwarder, nonce, deadline);
 
         uint256 fee = registry.quoteRegistration(victim);
         assertGt(fee, 0);
@@ -332,7 +336,9 @@ contract SpokeRegistryTest is Test {
         uint256 nonce = registry.nonces(victim);
         // Include statement hash per EIP-712
         bytes32 structHash = keccak256(
-            abi.encode(ACK_TYPEHASH, keccak256(bytes(ACK_STATEMENT)), victim, refundForwarder, nonce, deadline)
+            abi.encode(
+                WALLET_ACK_TYPEHASH, keccak256(bytes(WALLET_ACK_STATEMENT)), victim, refundForwarder, nonce, deadline
+            )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(address(registry)), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(victimPk, digest);
@@ -344,7 +350,9 @@ contract SpokeRegistryTest is Test {
         nonce = registry.nonces(victim);
         deadline = block.timestamp + 1 hours;
         structHash = keccak256(
-            abi.encode(REG_TYPEHASH, keccak256(bytes(REG_STATEMENT)), victim, refundForwarder, nonce, deadline)
+            abi.encode(
+                WALLET_REG_TYPEHASH, keccak256(bytes(WALLET_REG_STATEMENT)), victim, refundForwarder, nonce, deadline
+            )
         );
         digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(address(registry)), structHash));
         (v, r, s) = vm.sign(victimPk, digest);

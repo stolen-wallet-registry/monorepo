@@ -38,6 +38,7 @@ import {
   getRelayServers as baseGetRelayServers,
   extractPeerIdFromMultiaddr,
   type RelayConfig,
+  type Environment,
 } from '@swr/p2p';
 
 /**
@@ -48,8 +49,10 @@ import {
  * @throws {RelayConfigurationError} If production mode has no relay servers configured
  */
 export function getRelayServers(): RelayConfig[] {
+  // Cast Vite mode to Environment type (falls back to 'development' for unknown modes)
+  const mode = (import.meta.env.MODE || 'development') as Environment;
   return baseGetRelayServers({
-    mode: import.meta.env.MODE || 'development',
+    mode,
     relayMultiaddr: import.meta.env.VITE_RELAY_MULTIADDR,
   });
 }
