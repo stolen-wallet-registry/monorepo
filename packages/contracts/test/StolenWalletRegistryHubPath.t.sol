@@ -1,21 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test } from "forge-std/Test.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 import { IStolenWalletRegistry } from "../src/interfaces/IStolenWalletRegistry.sol";
+import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
 
-contract StolenWalletRegistryHubPathTest is Test {
+contract StolenWalletRegistryHubPathTest is EIP712TestHelper {
     uint256 internal constant GRACE_BLOCKS = 10;
     uint256 internal constant DEADLINE_BLOCKS = 50;
-    bytes32 private constant TYPE_HASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-    bytes32 private constant ACK_TYPEHASH =
-        keccak256("AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-    bytes32 private constant REG_TYPEHASH =
-        keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
 
     // Constructor should reject feeManager set without a registry hub.
     function test_Constructor_InvalidFeeConfig_Reverts() public {
@@ -161,7 +155,7 @@ contract StolenWalletRegistryHubPathTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
-        (uint8 v, bytes32 r, bytes32 s) = _signAck(ownerPk, owner, forwarder, nonce, deadline, registry);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletAck(ownerPk, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         registry.acknowledge(deadline, nonce, owner, v, r, s);
@@ -170,7 +164,7 @@ contract StolenWalletRegistryHubPathTest is Test {
         vm.roll(startBlock + 1);
 
         nonce = registry.nonces(owner);
-        (v, r, s) = _signReg(ownerPk, owner, forwarder, nonce, deadline, registry);
+        (v, r, s) = _signWalletReg(ownerPk, address(registry), owner, forwarder, nonce, deadline);
 
         uint256 fee = feeManager.currentFeeWei();
         assertGt(fee, 0);
@@ -178,38 +172,6 @@ contract StolenWalletRegistryHubPathTest is Test {
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.FeeForwardFailed.selector);
         registry.register{ value: fee }(deadline, nonce, owner, v, r, s);
-    }
-
-    function _domainSeparator(StolenWalletRegistry registry) internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(TYPE_HASH, keccak256("StolenWalletRegistry"), keccak256("4"), block.chainid, address(registry))
-        );
-    }
-
-    function _signAck(
-        uint256 ownerPk,
-        address owner,
-        address forwarder,
-        uint256 nonce,
-        uint256 deadline,
-        StolenWalletRegistry registry
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(abi.encode(ACK_TYPEHASH, owner, forwarder, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(registry), structHash));
-        (v, r, s) = vm.sign(ownerPk, digest);
-    }
-
-    function _signReg(
-        uint256 ownerPk,
-        address owner,
-        address forwarder,
-        uint256 nonce,
-        uint256 deadline,
-        StolenWalletRegistry registry
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(abi.encode(REG_TYPEHASH, owner, forwarder, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(registry), structHash));
-        (v, r, s) = vm.sign(ownerPk, digest);
     }
 }
 

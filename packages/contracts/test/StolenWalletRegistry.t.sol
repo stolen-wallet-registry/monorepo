@@ -1,33 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test } from "forge-std/Test.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
 import { IStolenWalletRegistry } from "../src/interfaces/IStolenWalletRegistry.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
+import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
 
 /// @title StolenWalletRegistryTest
 /// @notice Comprehensive unit and fuzz tests for StolenWalletRegistry
-contract StolenWalletRegistryTest is Test {
+contract StolenWalletRegistryTest is EIP712TestHelper {
     StolenWalletRegistry public registry;
 
     // Test accounts
     uint256 internal ownerPrivateKey;
     address internal owner;
     address internal forwarder;
-
-    // EIP-712 constants (must match contract)
-    bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH =
-        keccak256("AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-
-    bytes32 private constant REGISTRATION_TYPEHASH =
-        keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-
-    // Domain separator components
-    bytes32 private constant TYPE_HASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
     // Timing configuration (matching local Anvil - 13s blocks)
     uint256 internal constant GRACE_BLOCKS = 10;
@@ -51,39 +40,12 @@ contract StolenWalletRegistryTest is Test {
     // HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _getDomainSeparator() internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(TYPE_HASH, keccak256("StolenWalletRegistry"), keccak256("4"), block.chainid, address(registry))
-        );
-    }
-
-    function _signAcknowledgement(
-        uint256 privateKey,
-        address _owner,
-        address _forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(abi.encode(ACKNOWLEDGEMENT_TYPEHASH, _owner, _forwarder, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
-    function _signRegistration(uint256 privateKey, address _owner, address _forwarder, uint256 nonce, uint256 deadline)
-        internal
-        view
-        returns (uint8 v, bytes32 r, bytes32 s)
-    {
-        bytes32 structHash = keccak256(abi.encode(REGISTRATION_TYPEHASH, _owner, _forwarder, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
     function _doAcknowledgement(address _forwarder) internal {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
 
-        (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(ownerPrivateKey, owner, _forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(ownerPrivateKey, address(registry), owner, _forwarder, nonce, deadline);
 
         vm.prank(_forwarder);
         registry.acknowledge(deadline, nonce, owner, v, r, s);
@@ -104,7 +66,8 @@ contract StolenWalletRegistryTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
 
-        (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.expectEmit(true, true, true, true);
         emit IStolenWalletRegistry.WalletAcknowledged(owner, forwarder, true);
@@ -130,7 +93,8 @@ contract StolenWalletRegistryTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
 
-        (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(ownerPrivateKey, owner, owner, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(ownerPrivateKey, address(registry), owner, owner, nonce, deadline);
 
         vm.expectEmit(true, true, true, true);
         emit IStolenWalletRegistry.WalletAcknowledged(owner, owner, false); // isSponsored = false
@@ -146,7 +110,8 @@ contract StolenWalletRegistryTest is Test {
         uint256 deadline = block.timestamp - 1; // Already expired
         uint256 nonce = registry.nonces(owner);
 
-        (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.Acknowledgement__Expired.selector);
@@ -158,7 +123,8 @@ contract StolenWalletRegistryTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 wrongNonce = 999;
 
-        (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(ownerPrivateKey, owner, forwarder, wrongNonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(ownerPrivateKey, address(registry), owner, forwarder, wrongNonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.InvalidNonce.selector);
@@ -172,7 +138,7 @@ contract StolenWalletRegistryTest is Test {
 
         // Sign with wrong private key
         uint256 wrongKey = 0xBAD;
-        (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(wrongKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletAck(wrongKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.Acknowledgement__InvalidSigner.selector);
@@ -187,7 +153,8 @@ contract StolenWalletRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         registry.register(deadline, nonce, owner, v, r, s);
@@ -196,7 +163,7 @@ contract StolenWalletRegistryTest is Test {
 
         // Try to acknowledge again
         nonce = registry.nonces(owner);
-        (v, r, s) = _signAcknowledgement(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (v, r, s) = _signWalletAck(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.AlreadyRegistered.selector);
@@ -209,7 +176,8 @@ contract StolenWalletRegistryTest is Test {
         uint256 nonce = 0;
 
         // Sign for zero address (will fail validation anyway, but test the explicit check)
-        (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(ownerPrivateKey, address(0), forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(ownerPrivateKey, address(registry), address(0), forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.InvalidOwner.selector);
@@ -231,7 +199,8 @@ contract StolenWalletRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.expectEmit(true, true, true, true);
         emit IStolenWalletRegistry.WalletRegistered(owner, true);
@@ -261,7 +230,8 @@ contract StolenWalletRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, owner, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, owner, nonce, deadline);
 
         vm.expectEmit(true, true, true, true);
         emit IStolenWalletRegistry.WalletRegistered(owner, false); // Not sponsored
@@ -280,7 +250,8 @@ contract StolenWalletRegistryTest is Test {
         // Try to register immediately (before grace period)
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.Registration__GracePeriodNotStarted.selector);
@@ -297,7 +268,8 @@ contract StolenWalletRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.Registration__ForwarderExpired.selector);
@@ -319,7 +291,8 @@ contract StolenWalletRegistryTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
         // Sign with correct owner but for wrong forwarder
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, wrongForwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, wrongForwarder, nonce, deadline);
 
         vm.prank(wrongForwarder);
         vm.expectRevert(IStolenWalletRegistry.Registration__InvalidForwarder.selector);
@@ -333,7 +306,8 @@ contract StolenWalletRegistryTest is Test {
 
         uint256 deadline = block.timestamp - 1; // Expired
         uint256 nonce = registry.nonces(owner);
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.Registration__SignatureExpired.selector);
@@ -347,7 +321,8 @@ contract StolenWalletRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 wrongNonce = 999;
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, wrongNonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, wrongNonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.InvalidNonce.selector);
@@ -362,7 +337,7 @@ contract StolenWalletRegistryTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
         uint256 wrongKey = 0xBAD;
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(wrongKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(wrongKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.Registration__InvalidSigner.selector);
@@ -375,7 +350,8 @@ contract StolenWalletRegistryTest is Test {
         uint256 nonce = 0;
 
         // Sign for zero address (will fail validation anyway, but test the explicit check)
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, address(0), forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), address(0), forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.InvalidOwner.selector);
@@ -393,7 +369,8 @@ contract StolenWalletRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         registry.register(deadline, nonce, owner, v, r, s);
@@ -443,7 +420,8 @@ contract StolenWalletRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         registry.register(deadline, nonce, owner, v, r, s);
@@ -462,9 +440,11 @@ contract StolenWalletRegistryTest is Test {
 
         assertGt(deadline, block.timestamp, "Deadline should be in future");
 
-        // Verify hash struct is correctly computed
+        // Verify hash struct is correctly computed (statement is hashed per EIP-712)
         uint256 nonce = registry.nonces(owner);
-        bytes32 expectedHash = keccak256(abi.encode(ACKNOWLEDGEMENT_TYPEHASH, owner, forwarder, nonce, deadline));
+        bytes32 expectedHash = keccak256(
+            abi.encode(WALLET_ACK_TYPEHASH, keccak256(bytes(WALLET_ACK_STATEMENT)), owner, forwarder, nonce, deadline)
+        );
         assertEq(hashStruct, expectedHash, "Hash struct should match");
     }
 
@@ -475,9 +455,11 @@ contract StolenWalletRegistryTest is Test {
 
         assertGt(deadline, block.timestamp, "Deadline should be in future");
 
-        // Verify hash struct is correctly computed
+        // Verify hash struct is correctly computed (statement is hashed per EIP-712)
         uint256 nonce = registry.nonces(owner);
-        bytes32 expectedHash = keccak256(abi.encode(REGISTRATION_TYPEHASH, owner, forwarder, nonce, deadline));
+        bytes32 expectedHash = keccak256(
+            abi.encode(WALLET_REG_TYPEHASH, keccak256(bytes(WALLET_REG_STATEMENT)), owner, forwarder, nonce, deadline)
+        );
         assertEq(hashStruct, expectedHash, "Hash struct should match");
     }
 
@@ -564,7 +546,8 @@ contract StolenWalletRegistryTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(fuzzOwner);
 
-        (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(privateKey, fuzzOwner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(privateKey, address(registry), fuzzOwner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         registry.acknowledge(deadline, nonce, fuzzOwner, v, r, s);
@@ -587,7 +570,8 @@ contract StolenWalletRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         registry.register(deadline, nonce, owner, v, r, s);
@@ -607,7 +591,8 @@ contract StolenWalletRegistryTest is Test {
             // Do acknowledgement
             uint256 deadline = block.timestamp + 1 hours;
             uint256 nonce = registry.nonces(owner);
-            (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(ownerPrivateKey, owner, forwarder, nonce, deadline);
+            (uint8 v, bytes32 r, bytes32 s) =
+                _signWalletAck(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
             vm.prank(forwarder);
             registry.acknowledge(deadline, nonce, owner, v, r, s);
@@ -626,7 +611,7 @@ contract StolenWalletRegistryTest is Test {
 
 /// @title StolenWalletRegistryFeeTest
 /// @notice Tests for fee validation in StolenWalletRegistry
-contract StolenWalletRegistryFeeTest is Test {
+contract StolenWalletRegistryFeeTest is EIP712TestHelper {
     StolenWalletRegistry public registry;
     FeeManager public feeManager;
     RegistryHub public hub;
@@ -637,14 +622,6 @@ contract StolenWalletRegistryFeeTest is Test {
     address internal owner;
     address internal forwarder;
     address internal deployer;
-
-    // EIP-712 constants
-    bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH =
-        keccak256("AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-    bytes32 private constant REGISTRATION_TYPEHASH =
-        keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-    bytes32 private constant TYPE_HASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
     // Timing configuration (matching local Anvil - 13s blocks)
     uint256 internal constant GRACE_BLOCKS = 10;
@@ -670,38 +647,11 @@ contract StolenWalletRegistryFeeTest is Test {
         vm.stopPrank();
     }
 
-    function _getDomainSeparator() internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(TYPE_HASH, keccak256("StolenWalletRegistry"), keccak256("4"), block.chainid, address(registry))
-        );
-    }
-
-    function _signAcknowledgement(
-        uint256 privateKey,
-        address _owner,
-        address _forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(abi.encode(ACKNOWLEDGEMENT_TYPEHASH, _owner, _forwarder, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
-    function _signRegistration(uint256 privateKey, address _owner, address _forwarder, uint256 nonce, uint256 deadline)
-        internal
-        view
-        returns (uint8 v, bytes32 r, bytes32 s)
-    {
-        bytes32 structHash = keccak256(abi.encode(REGISTRATION_TYPEHASH, _owner, _forwarder, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
     function _doAcknowledgement() internal {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(owner);
-        (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         registry.acknowledge(deadline, nonce, owner, v, r, s);
@@ -725,7 +675,8 @@ contract StolenWalletRegistryFeeTest is Test {
         uint256 nonce = registry.nonces(owner);
         uint256 fee = feeManager.currentFeeWei();
 
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         registry.register{ value: fee }(deadline, nonce, owner, v, r, s);
@@ -743,7 +694,8 @@ contract StolenWalletRegistryFeeTest is Test {
         uint256 fee = feeManager.currentFeeWei();
         uint256 insufficientFee = fee - 1;
 
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IStolenWalletRegistry.StolenWalletRegistry__InsufficientFee.selector);
@@ -760,7 +712,8 @@ contract StolenWalletRegistryFeeTest is Test {
         uint256 fee = feeManager.currentFeeWei();
         uint256 excessFee = fee * 2; // Double the required fee
 
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         registry.register{ value: excessFee }(deadline, nonce, owner, v, r, s);
@@ -778,15 +731,9 @@ contract StolenWalletRegistryFeeTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = freeRegistry.nonces(owner);
 
-        // Sign for the free registry
-        bytes32 domainSep = keccak256(
-            abi.encode(
-                TYPE_HASH, keccak256("StolenWalletRegistry"), keccak256("4"), block.chainid, address(freeRegistry)
-            )
-        );
-        bytes32 structHash = keccak256(abi.encode(ACKNOWLEDGEMENT_TYPEHASH, owner, forwarder, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSep, structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
+        // Sign for the free registry using helper
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(ownerPrivateKey, address(freeRegistry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         freeRegistry.acknowledge(deadline, nonce, owner, v, r, s);
@@ -798,9 +745,7 @@ contract StolenWalletRegistryFeeTest is Test {
         // Register without fee
         deadline = block.timestamp + 1 hours;
         nonce = freeRegistry.nonces(owner);
-        structHash = keccak256(abi.encode(REGISTRATION_TYPEHASH, owner, forwarder, nonce, deadline));
-        digest = keccak256(abi.encodePacked("\x19\x01", domainSep, structHash));
-        (v, r, s) = vm.sign(ownerPrivateKey, digest);
+        (v, r, s) = _signWalletReg(ownerPrivateKey, address(freeRegistry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         freeRegistry.register(deadline, nonce, owner, v, r, s); // No value sent
@@ -820,7 +765,8 @@ contract StolenWalletRegistryFeeTest is Test {
 
         uint256 hubBalanceBefore = address(hub).balance;
 
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         registry.register{ value: fee }(deadline, nonce, owner, v, r, s);
@@ -839,7 +785,8 @@ contract StolenWalletRegistryFeeTest is Test {
         uint256 nonce = registry.nonces(owner);
         uint256 fee = feeManager.currentFeeWei();
 
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(ownerPrivateKey, owner, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(ownerPrivateKey, address(registry), owner, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         registry.register{ value: fee }(deadline, nonce, owner, v, r, s);

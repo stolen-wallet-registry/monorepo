@@ -25,16 +25,29 @@ import { RegistryCapabilities } from "../libraries/RegistryCapabilities.sol";
 ///      Operators (DAO-approved) can bypass two-phase via single-phase batch registration.
 contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
+    // STATEMENT CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev Human-readable statement for acknowledgement (displayed in MetaMask)
+    string private constant ACK_STATEMENT =
+        "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry.";
+
+    /// @dev Human-readable statement for registration (displayed in MetaMask)
+    string private constant REG_STATEMENT =
+        "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry. This action is irreversible.";
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // TYPE HASHES
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev EIP-712 type hash for acknowledgement phase
-    bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH =
-        keccak256("AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)");
+    /// @dev EIP-712 type hash for acknowledgement phase (statement field first for visibility)
+    bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH = keccak256(
+        "AcknowledgementOfRegistry(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)"
+    );
 
-    /// @dev EIP-712 type hash for registration phase
+    /// @dev EIP-712 type hash for registration phase (statement field first for visibility)
     bytes32 private constant REGISTRATION_TYPEHASH =
-        keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
+        keccak256("Registration(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)");
 
     // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLE STATE
@@ -150,9 +163,14 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
         // Prevent re-registration of already registered wallets
         if (registeredWallets[owner].registeredAt != 0) revert AlreadyRegistered();
 
-        // Verify EIP-712 signature
-        bytes32 digest =
-            _hashTypedDataV4(keccak256(abi.encode(ACKNOWLEDGEMENT_TYPEHASH, owner, msg.sender, nonce, deadline)));
+        // Verify EIP-712 signature (statement is hashed per EIP-712 for string types)
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    ACKNOWLEDGEMENT_TYPEHASH, keccak256(bytes(ACK_STATEMENT)), owner, msg.sender, nonce, deadline
+                )
+            )
+        );
         address signer = ECDSA.recover(digest, v, r, s);
         if (signer == address(0) || signer != owner) revert Acknowledgement__InvalidSigner();
 
@@ -180,9 +198,12 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
         // Validate nonce matches expected value
         if (nonce != nonces[owner]) revert InvalidNonce();
 
-        // Verify EIP-712 signature
-        bytes32 digest =
-            _hashTypedDataV4(keccak256(abi.encode(REGISTRATION_TYPEHASH, owner, msg.sender, nonce, deadline)));
+        // Verify EIP-712 signature (statement is hashed per EIP-712 for string types)
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(
+                abi.encode(REGISTRATION_TYPEHASH, keccak256(bytes(REG_STATEMENT)), owner, msg.sender, nonce, deadline)
+            )
+        );
         address signer = ECDSA.recover(digest, v, r, s);
         if (signer == address(0) || signer != owner) revert Registration__InvalidSigner();
 
@@ -404,8 +425,29 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
         returns (uint256 deadline, bytes32 hashStruct)
     {
         deadline = TimingConfig.getSignatureDeadline();
-        bytes32 typehash = step == 1 ? ACKNOWLEDGEMENT_TYPEHASH : REGISTRATION_TYPEHASH;
-        hashStruct = keccak256(abi.encode(typehash, msg.sender, forwarder, nonces[msg.sender], deadline));
+        if (step == 1) {
+            hashStruct = keccak256(
+                abi.encode(
+                    ACKNOWLEDGEMENT_TYPEHASH,
+                    keccak256(bytes(ACK_STATEMENT)),
+                    msg.sender,
+                    forwarder,
+                    nonces[msg.sender],
+                    deadline
+                )
+            );
+        } else {
+            hashStruct = keccak256(
+                abi.encode(
+                    REGISTRATION_TYPEHASH,
+                    keccak256(bytes(REG_STATEMENT)),
+                    msg.sender,
+                    forwarder,
+                    nonces[msg.sender],
+                    deadline
+                )
+            );
+        }
     }
 
     /// @inheritdoc IStolenWalletRegistry

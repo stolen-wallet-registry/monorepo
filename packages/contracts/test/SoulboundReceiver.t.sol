@@ -27,12 +27,19 @@ contract SoulboundReceiverTest is Test {
     uint32 constant SPOKE_DOMAIN = 11_155_420; // Optimism Sepolia
     uint256 constant MIN_WEI = 0.01 ether;
 
-    bytes32 private constant ACK_TYPEHASH =
-        keccak256("AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)");
+    bytes32 private constant ACK_TYPEHASH = keccak256(
+        "AcknowledgementOfRegistry(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)"
+    );
     bytes32 private constant REG_TYPEHASH =
-        keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
+        keccak256("Registration(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)");
     bytes32 private constant TYPE_HASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+
+    // Statement constants (must match contract)
+    string private constant ACK_STATEMENT =
+        "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry.";
+    string private constant REG_STATEMENT =
+        "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry. This action is irreversible.";
 
     function setUp() public {
         vm.chainId(HUB_CHAIN_ID);
@@ -91,7 +98,9 @@ contract SoulboundReceiverTest is Test {
     function _doAcknowledge(address wallet, address forwarder, uint256 pk) internal {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(wallet);
-        bytes32 structHash = keccak256(abi.encode(ACK_TYPEHASH, wallet, forwarder, nonce, deadline));
+        // Statement is hashed per EIP-712 for string types
+        bytes32 structHash =
+            keccak256(abi.encode(ACK_TYPEHASH, keccak256(bytes(ACK_STATEMENT)), wallet, forwarder, nonce, deadline));
         bytes32 domainSep = keccak256(
             abi.encode(
                 TYPE_HASH, keccak256("StolenWalletRegistry"), keccak256("4"), block.chainid, address(walletRegistry)
@@ -107,7 +116,9 @@ contract SoulboundReceiverTest is Test {
     function _doRegister(address wallet, address forwarder, uint256 pk) internal {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(wallet);
-        bytes32 structHash = keccak256(abi.encode(REG_TYPEHASH, wallet, forwarder, nonce, deadline));
+        // Statement is hashed per EIP-712 for string types
+        bytes32 structHash =
+            keccak256(abi.encode(REG_TYPEHASH, keccak256(bytes(REG_STATEMENT)), wallet, forwarder, nonce, deadline));
         bytes32 domainSep = keccak256(
             abi.encode(
                 TYPE_HASH, keccak256("StolenWalletRegistry"), keccak256("4"), block.chainid, address(walletRegistry)

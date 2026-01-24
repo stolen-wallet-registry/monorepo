@@ -565,6 +565,12 @@ contract CrossChainAdvancedTest is Test {
         hubMailbox.simulateReceive(address(inbox), spokeDomain, sender, messageBody);
     }
 
+    // Statement constants (must match contract)
+    string private constant ACK_STATEMENT =
+        "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry.";
+    string private constant REG_STATEMENT =
+        "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry. This action is irreversible.";
+
     function _signAcknowledgement(
         SpokeRegistry spokeRegistry,
         uint32 chainId,
@@ -574,9 +580,11 @@ contract CrossChainAdvancedTest is Test {
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
         bytes32 typeHash = keccak256(
-            "AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)"
+            "AcknowledgementOfRegistry(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)"
         );
-        bytes32 structHash = keccak256(abi.encode(typeHash, victim, victim, nonce, deadline));
+        // Statement is hashed per EIP-712 for string types
+        bytes32 structHash =
+            keccak256(abi.encode(typeHash, keccak256(bytes(ACK_STATEMENT)), victim, victim, nonce, deadline));
 
         bytes32 domainSeparator = keccak256(
             abi.encode(
@@ -600,8 +608,12 @@ contract CrossChainAdvancedTest is Test {
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 typeHash = keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-        bytes32 structHash = keccak256(abi.encode(typeHash, victim, victim, nonce, deadline));
+        bytes32 typeHash = keccak256(
+            "Registration(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)"
+        );
+        // Statement is hashed per EIP-712 for string types
+        bytes32 structHash =
+            keccak256(abi.encode(typeHash, keccak256(bytes(REG_STATEMENT)), victim, victim, nonce, deadline));
 
         bytes32 domainSeparator = keccak256(
             abi.encode(

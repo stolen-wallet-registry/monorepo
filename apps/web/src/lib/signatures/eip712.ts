@@ -10,6 +10,8 @@ export {
   TYPE_HASHES,
   EIP712_TYPES,
   SIGNATURE_STEP,
+  // Statement constants
+  STATEMENTS,
   // Types
   type AcknowledgementMessage,
   type RegistrationMessage,

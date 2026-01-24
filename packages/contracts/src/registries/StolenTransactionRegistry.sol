@@ -29,19 +29,31 @@ import { RegistryCapabilities } from "../libraries/RegistryCapabilities.sol";
 /// - Verification requires both txHash AND chainId
 contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
+    // STATEMENT CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev Human-readable statement for acknowledgement (displayed in MetaMask)
+    string private constant ACK_STATEMENT =
+        "This signature acknowledges that the specified transactions are being reported as fraudulent to the Stolen Transaction Registry.";
+
+    /// @dev Human-readable statement for registration (displayed in MetaMask)
+    string private constant REG_STATEMENT =
+        "This signature confirms permanent registration of the specified transactions as fraudulent. This action is irreversible.";
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // TYPE HASHES
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev EIP-712 type hash for acknowledgement phase
+    /// @dev EIP-712 type hash for acknowledgement phase (statement field first for visibility)
     // solhint-disable-next-line max-line-length
     bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
+        "TransactionBatchAcknowledgement(string statement,bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
     );
 
-    /// @dev EIP-712 type hash for registration phase
+    /// @dev EIP-712 type hash for registration phase (statement field first for visibility)
     // solhint-disable-next-line max-line-length
     bytes32 private constant REGISTRATION_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)"
+        "TransactionBatchRegistration(string statement,bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)"
     );
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -416,10 +428,11 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
         deadline = TimingConfig.getSignatureDeadline();
 
         if (step == 1) {
-            // Acknowledgement
+            // Acknowledgement (statement is hashed per EIP-712 for string types)
             hashStruct = keccak256(
                 abi.encode(
                     ACKNOWLEDGEMENT_TYPEHASH,
+                    keccak256(bytes(ACK_STATEMENT)),
                     merkleRoot,
                     reportedChainId,
                     transactionCount,
@@ -429,9 +442,17 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
                 )
             );
         } else {
-            // Registration
+            // Registration (statement is hashed per EIP-712 for string types)
             hashStruct = keccak256(
-                abi.encode(REGISTRATION_TYPEHASH, merkleRoot, reportedChainId, forwarder, nonces[msg.sender], deadline)
+                abi.encode(
+                    REGISTRATION_TYPEHASH,
+                    keccak256(bytes(REG_STATEMENT)),
+                    merkleRoot,
+                    reportedChainId,
+                    forwarder,
+                    nonces[msg.sender],
+                    deadline
+                )
             );
         }
     }
@@ -625,10 +646,12 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
         bytes32 s
     ) internal view {
         uint256 expectedNonce = nonces[reporter];
+        // Statement is hashed per EIP-712 for string types
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
                     ACKNOWLEDGEMENT_TYPEHASH,
+                    keccak256(bytes(ACK_STATEMENT)),
                     merkleRoot,
                     reportedChainId,
                     transactionCount,
@@ -660,10 +683,12 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
         bytes32 s
     ) internal view {
         uint256 expectedNonce = nonces[reporter];
+        // Statement is hashed per EIP-712 for string types
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
                     REGISTRATION_TYPEHASH,
+                    keccak256(bytes(REG_STATEMENT)),
                     merkleRoot,
                     reportedChainId,
                     msg.sender, // forwarder

@@ -48,6 +48,7 @@ export {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export {
+  STATEMENTS,
   TYPE_HASHES,
   EIP712_TYPES,
   SIGNATURE_STEP,

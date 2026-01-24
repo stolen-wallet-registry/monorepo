@@ -30,12 +30,19 @@ contract SpokeRegistryTest is Test {
     uint256 internal constant GRACE_BLOCKS = 10;
     uint256 internal constant DEADLINE_BLOCKS = 50;
 
-    bytes32 private constant ACK_TYPEHASH =
-        keccak256("AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)");
+    bytes32 private constant ACK_TYPEHASH = keccak256(
+        "AcknowledgementOfRegistry(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)"
+    );
     bytes32 private constant REG_TYPEHASH =
-        keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
+        keccak256("Registration(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)");
     bytes32 private constant TYPE_HASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+
+    // Statement constants (must match contract)
+    string private constant ACK_STATEMENT =
+        "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry.";
+    string private constant REG_STATEMENT =
+        "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry. This action is irreversible.";
 
     function setUp() public {
         vm.chainId(SPOKE_CHAIN_ID);
@@ -80,7 +87,10 @@ contract SpokeRegistryTest is Test {
         uint256 deadline,
         address targetRegistry
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(abi.encode(typeHash, ownerAddr, forwarderAddr, nonce, deadline));
+        // Determine which statement to use based on type hash
+        bytes32 statementHash =
+            typeHash == ACK_TYPEHASH ? keccak256(bytes(ACK_STATEMENT)) : keccak256(bytes(REG_STATEMENT));
+        bytes32 structHash = keccak256(abi.encode(typeHash, statementHash, ownerAddr, forwarderAddr, nonce, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(targetRegistry), structHash));
         (v, r, s) = vm.sign(victimPk, digest);
     }
@@ -318,7 +328,10 @@ contract SpokeRegistryTest is Test {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(victim);
-        bytes32 structHash = keccak256(abi.encode(ACK_TYPEHASH, victim, refundForwarder, nonce, deadline));
+        // Include statement hash per EIP-712
+        bytes32 structHash = keccak256(
+            abi.encode(ACK_TYPEHASH, keccak256(bytes(ACK_STATEMENT)), victim, refundForwarder, nonce, deadline)
+        );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(address(registry)), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(victimPk, digest);
 
@@ -328,7 +341,9 @@ contract SpokeRegistryTest is Test {
 
         nonce = registry.nonces(victim);
         deadline = block.timestamp + 1 hours;
-        structHash = keccak256(abi.encode(REG_TYPEHASH, victim, refundForwarder, nonce, deadline));
+        structHash = keccak256(
+            abi.encode(REG_TYPEHASH, keccak256(bytes(REG_STATEMENT)), victim, refundForwarder, nonce, deadline)
+        );
         digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(address(registry)), structHash));
         (v, r, s) = vm.sign(victimPk, digest);
 

@@ -7,6 +7,7 @@ import { getEIP712Domain, getTxEIP712Domain } from './domain';
 import {
   EIP712_TYPES,
   TX_EIP712_TYPES,
+  STATEMENTS,
   type AcknowledgementMessage,
   type RegistrationMessage,
   type TxAcknowledgementMessage,
@@ -19,43 +20,51 @@ import {
 
 /**
  * Build typed data for wallet acknowledgement signature.
+ * The statement is added internally to ensure consistency with the contract.
  *
  * @param chainId - The chain ID
  * @param contractAddress - The StolenWalletRegistry contract address
- * @param message - The acknowledgement message to sign
+ * @param message - The acknowledgement message to sign (without statement)
  * @returns Typed data object for signing
  */
 export function buildAcknowledgementTypedData(
   chainId: number,
   contractAddress: Address,
-  message: AcknowledgementMessage
+  message: Omit<AcknowledgementMessage, 'statement'>
 ) {
   return {
     domain: getEIP712Domain(chainId, contractAddress),
     types: EIP712_TYPES,
     primaryType: 'AcknowledgementOfRegistry' as const,
-    message,
+    message: {
+      statement: STATEMENTS.WALLET_ACK,
+      ...message,
+    },
   };
 }
 
 /**
  * Build typed data for wallet registration signature.
+ * The statement is added internally to ensure consistency with the contract.
  *
  * @param chainId - The chain ID
  * @param contractAddress - The StolenWalletRegistry contract address
- * @param message - The registration message to sign
+ * @param message - The registration message to sign (without statement)
  * @returns Typed data object for signing
  */
 export function buildRegistrationTypedData(
   chainId: number,
   contractAddress: Address,
-  message: RegistrationMessage
+  message: Omit<RegistrationMessage, 'statement'>
 ) {
   return {
     domain: getEIP712Domain(chainId, contractAddress),
     types: EIP712_TYPES,
     primaryType: 'Registration' as const,
-    message,
+    message: {
+      statement: STATEMENTS.WALLET_REG,
+      ...message,
+    },
   };
 }
 
@@ -65,42 +74,50 @@ export function buildRegistrationTypedData(
 
 /**
  * Build typed data for transaction batch acknowledgement signature.
+ * The statement is added internally to ensure consistency with the contract.
  *
  * @param chainId - The chain ID
  * @param contractAddress - The StolenTransactionRegistry contract address
- * @param message - The acknowledgement message to sign
+ * @param message - The acknowledgement message to sign (without statement)
  * @returns Typed data object for signing
  */
 export function buildTxAcknowledgementTypedData(
   chainId: number,
   contractAddress: Address,
-  message: TxAcknowledgementMessage
+  message: Omit<TxAcknowledgementMessage, 'statement'>
 ) {
   return {
     domain: getTxEIP712Domain(chainId, contractAddress),
     types: TX_EIP712_TYPES,
     primaryType: 'TransactionBatchAcknowledgement' as const,
-    message,
+    message: {
+      statement: STATEMENTS.TX_ACK,
+      ...message,
+    },
   };
 }
 
 /**
  * Build typed data for transaction batch registration signature.
+ * The statement is added internally to ensure consistency with the contract.
  *
  * @param chainId - The chain ID
  * @param contractAddress - The StolenTransactionRegistry contract address
- * @param message - The registration message to sign
+ * @param message - The registration message to sign (without statement)
  * @returns Typed data object for signing
  */
 export function buildTxRegistrationTypedData(
   chainId: number,
   contractAddress: Address,
-  message: TxRegistrationMessage
+  message: Omit<TxRegistrationMessage, 'statement'>
 ) {
   return {
     domain: getTxEIP712Domain(chainId, contractAddress),
     types: TX_EIP712_TYPES,
     primaryType: 'TransactionBatchRegistration' as const,
-    message,
+    message: {
+      statement: STATEMENTS.TX_REG,
+      ...message,
+    },
   };
 }
