@@ -8,6 +8,7 @@ import { OperatorRegistry } from "../../src/OperatorRegistry.sol";
 import { RegistryHub } from "../../src/RegistryHub.sol";
 import { FeeManager } from "../../src/FeeManager.sol";
 import { MerkleRootComputation } from "../../src/libraries/MerkleRootComputation.sol";
+import { MerkleTestHelper } from "../helpers/MerkleTestHelper.sol";
 
 /// @notice Full workflow test for FraudulentContractRegistry
 contract FraudulentContractWorkflowTest is Test {
@@ -164,44 +165,12 @@ contract FraudulentContractWorkflowTest is Test {
         assertTrue(batchId1 != batchId2);
     }
 
-    /// @notice Compute merkle root using shared MerkleRootComputation library
-    /// @dev Sorts contracts/chainIds in-place by leaf hash (ascending order).
-    ///      This ensures the input arrays are sorted when passed to the contract,
-    ///      which now requires pre-sorted leaves for gas efficiency.
+    /// @notice Compute merkle root and sort arrays in-place for contract submission
     function _computeRoot(address[] memory contracts, bytes32[] memory contractChainIds)
         internal
         pure
         returns (bytes32)
     {
-        uint256 length = contracts.length;
-        if (length == 0) return bytes32(0);
-        if (length == 1) {
-            return MerkleRootComputation.hashLeaf(contracts[0], contractChainIds[0]);
-        }
-
-        // Build leaves in OZ StandardMerkleTree format
-        bytes32[] memory leaves = new bytes32[](length);
-        for (uint256 i = 0; i < length; i++) {
-            leaves[i] = MerkleRootComputation.hashLeaf(contracts[i], contractChainIds[i]);
-        }
-
-        // Sort leaves AND contracts/chainIds together (insertion sort)
-        for (uint256 i = 1; i < length; i++) {
-            bytes32 keyLeaf = leaves[i];
-            address keyContract = contracts[i];
-            bytes32 keyChainId = contractChainIds[i];
-            uint256 j = i;
-            while (j > 0 && leaves[j - 1] > keyLeaf) {
-                leaves[j] = leaves[j - 1];
-                contracts[j] = contracts[j - 1];
-                contractChainIds[j] = contractChainIds[j - 1];
-                j--;
-            }
-            leaves[j] = keyLeaf;
-            contracts[j] = keyContract;
-            contractChainIds[j] = keyChainId;
-        }
-
-        return MerkleRootComputation.computeRootFromSorted(leaves);
+        return MerkleTestHelper.computeAddressRoot(contracts, contractChainIds);
     }
 }

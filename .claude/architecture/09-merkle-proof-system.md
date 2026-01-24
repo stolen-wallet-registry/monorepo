@@ -35,7 +35,7 @@ library MerkleRootComputation {
 
 **Leaf Format (OpenZeppelin Standard):**
 
-```
+```text
 leaf = keccak256(0x00 || keccak256(abi.encode(value1, value2)))
 ```
 
@@ -343,16 +343,23 @@ client.watchContractEvent({
   address: WALLET_REGISTRY_ADDRESS,
   abi: walletRegistryAbi,
   eventName: 'WalletRegistered',
-  onLogs: (logs) => {
-    for (const log of logs) {
-      // Index this wallet as stolen
-      await db.wallets.insert({
+  onLogs: async (logs) => {
+    // Process logs with proper error handling
+    const insertPromises = logs.map((log) =>
+      db.wallets.insert({
         address: log.args.wallet,
         chainId: log.args.chainId,
         registrant: log.args.registrant,
         timestamp: log.args.timestamp,
         txHash: log.transactionHash,
-      });
+      })
+    );
+
+    try {
+      await Promise.all(insertPromises);
+    } catch (error) {
+      console.error('Failed to index wallet registrations:', error);
+      // Queue for retry or send to dead letter queue
     }
   },
 });

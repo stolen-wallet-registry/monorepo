@@ -48,8 +48,8 @@ export function buildWalletMerkleTree(entries: WalletEntry[]): MerkleTreeResult<
   // Build values array: [address, chainId]
   const values = sortedEntries.map((e) => [e.address, e.chainId] as [string, string]);
 
-  // Create tree with OpenZeppelin's standard (sorted leaves)
-  const tree = StandardMerkleTree.of(values, ['address', 'bytes32']);
+  // Create tree - entries already sorted, disable internal sort to avoid double-sorting
+  const tree = StandardMerkleTree.of(values, ['address', 'bytes32'], { sortLeaves: false });
 
   return {
     root: tree.root as Hex,
@@ -94,7 +94,8 @@ export function buildTransactionMerkleTree(
   const sortedEntries = sortTransactionEntries(entries);
 
   const values = sortedEntries.map((e) => [e.txHash, e.chainId] as [string, string]);
-  const tree = StandardMerkleTree.of(values, ['bytes32', 'bytes32']);
+  // Entries already sorted, disable internal sort to avoid double-sorting
+  const tree = StandardMerkleTree.of(values, ['bytes32', 'bytes32'], { sortLeaves: false });
 
   return {
     root: tree.root as Hex,
@@ -137,7 +138,8 @@ export function buildContractMerkleTree(entries: ContractEntry[]): MerkleTreeRes
   const sortedEntries = sortContractEntries(entries);
 
   const values = sortedEntries.map((e) => [e.address, e.chainId] as [string, string]);
-  const tree = StandardMerkleTree.of(values, ['address', 'bytes32']);
+  // Entries already sorted, disable internal sort to avoid double-sorting
+  const tree = StandardMerkleTree.of(values, ['address', 'bytes32'], { sortLeaves: false });
 
   return {
     root: tree.root as Hex,

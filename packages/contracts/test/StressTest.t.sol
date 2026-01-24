@@ -7,6 +7,7 @@ import { StolenTransactionRegistry } from "../src/registries/StolenTransactionRe
 import { FraudulentContractRegistry } from "../src/registries/FraudulentContractRegistry.sol";
 import { OperatorRegistry } from "../src/OperatorRegistry.sol";
 import { MerkleRootComputation } from "../src/libraries/MerkleRootComputation.sol";
+import { MerkleTestHelper } from "./helpers/MerkleTestHelper.sol";
 import { CAIP2 } from "../src/libraries/CAIP2.sol";
 
 /// @title BatchSubmissionStressTest
@@ -54,7 +55,7 @@ contract BatchSubmissionStressTest is Test {
     function testWalletBatch1500() public {
         vm.pauseGasMetering();
         (address[] memory wallets, bytes32[] memory walletChainIds) = _generateWallets(1500);
-        bytes32 merkleRoot = _computeWalletRoot(wallets, walletChainIds);
+        bytes32 merkleRoot = MerkleTestHelper.computeAddressRoot(wallets, walletChainIds);
         vm.resumeGasMetering();
 
         uint256 gasBefore = gasleft();
@@ -69,7 +70,7 @@ contract BatchSubmissionStressTest is Test {
     function testTxBatch1500() public {
         vm.pauseGasMetering();
         (bytes32[] memory txHashes, bytes32[] memory txChainIds) = _generateTxHashes(1500);
-        bytes32 merkleRoot = _computeTxRoot(txHashes, txChainIds);
+        bytes32 merkleRoot = MerkleTestHelper.computeBytes32Root(txHashes, txChainIds);
         vm.resumeGasMetering();
 
         uint256 gasBefore = gasleft();
@@ -84,7 +85,7 @@ contract BatchSubmissionStressTest is Test {
     function testContractBatch1500() public {
         vm.pauseGasMetering();
         (address[] memory contracts, bytes32[] memory contractChainIds) = _generateContracts(1500);
-        bytes32 merkleRoot = _computeContractRoot(contracts, contractChainIds);
+        bytes32 merkleRoot = MerkleTestHelper.computeAddressRoot(contracts, contractChainIds);
         vm.resumeGasMetering();
 
         uint256 gasBefore = gasleft();
@@ -99,33 +100,33 @@ contract BatchSubmissionStressTest is Test {
     // VALIDATION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Unsorted input must revert
+    /// @notice Unsorted input must revert - uses deterministic unsorted order
     function testUnsortedInputReverts() public {
+        // Generate wallets and sort them to know the correct order
         address[] memory wallets = new address[](3);
         bytes32[] memory walletChainIds = new bytes32[](3);
 
-        wallets[0] = makeAddr("z");
-        wallets[1] = makeAddr("m");
-        wallets[2] = makeAddr("a");
+        wallets[0] = makeAddr("a");
+        wallets[1] = makeAddr("b");
+        wallets[2] = makeAddr("c");
         walletChainIds[0] = chainId;
         walletChainIds[1] = chainId;
         walletChainIds[2] = chainId;
 
-        // Ensure unsorted by leaf hash
-        bytes32 leaf0 = MerkleRootComputation.hashLeaf(wallets[0], walletChainIds[0]);
-        bytes32 leaf1 = MerkleRootComputation.hashLeaf(wallets[1], walletChainIds[1]);
-        bytes32 leaf2 = MerkleRootComputation.hashLeaf(wallets[2], walletChainIds[2]);
-        if ((leaf0 < leaf1) && (leaf1 < leaf2)) {
-            (wallets[0], wallets[2]) = (wallets[2], wallets[0]);
+        // Make copies for sorting to get valid root
+        address[] memory sortedWallets = new address[](3);
+        bytes32[] memory sortedChainIds = new bytes32[](3);
+        for (uint256 i = 0; i < 3; i++) {
+            sortedWallets[i] = wallets[i];
+            sortedChainIds[i] = walletChainIds[i];
         }
 
-        // Compute valid root from sorted leaves
-        bytes32[] memory leaves = new bytes32[](3);
-        leaves[0] = MerkleRootComputation.hashLeaf(wallets[0], walletChainIds[0]);
-        leaves[1] = MerkleRootComputation.hashLeaf(wallets[1], walletChainIds[1]);
-        leaves[2] = MerkleRootComputation.hashLeaf(wallets[2], walletChainIds[2]);
-        bytes32[] memory sorted = _sortLeaves(leaves);
-        bytes32 merkleRoot = MerkleRootComputation.computeRootFromSorted(sorted);
+        // Get valid root from sorted data
+        bytes32 merkleRoot = MerkleTestHelper.computeAddressRoot(sortedWallets, sortedChainIds);
+
+        // Reverse the sorted order to guarantee unsorted submission
+        (wallets[0], wallets[2]) = (sortedWallets[2], sortedWallets[0]);
+        (walletChainIds[0], walletChainIds[2]) = (sortedChainIds[2], sortedChainIds[0]);
 
         vm.prank(operator);
         vm.expectRevert(MerkleRootComputation.LeavesNotSorted.selector);
@@ -136,7 +137,7 @@ contract BatchSubmissionStressTest is Test {
     function testContractRegistryNoLimit() public {
         vm.pauseGasMetering();
         (address[] memory contracts, bytes32[] memory contractChainIds) = _generateContracts(1500);
-        bytes32 merkleRoot = _computeContractRoot(contracts, contractChainIds);
+        bytes32 merkleRoot = MerkleTestHelper.computeAddressRoot(contracts, contractChainIds);
         vm.resumeGasMetering();
 
         vm.prank(operator);
@@ -147,7 +148,7 @@ contract BatchSubmissionStressTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // HELPERS
+    // HELPERS - Data Generation Only
     // ═══════════════════════════════════════════════════════════════════════════
 
     function _generateWallets(uint256 count) internal pure returns (address[] memory, bytes32[] memory) {
@@ -181,107 +182,5 @@ contract BatchSubmissionStressTest is Test {
             ids[i] = cid;
         }
         return (contracts, ids);
-    }
-
-    function _computeWalletRoot(address[] memory wallets, bytes32[] memory chainIds) internal pure returns (bytes32) {
-        uint256 len = wallets.length;
-        if (len == 0) return bytes32(0);
-        if (len == 1) return MerkleRootComputation.hashLeaf(wallets[0], chainIds[0]);
-
-        bytes32[] memory leaves = new bytes32[](len);
-        for (uint256 i = 0; i < len; i++) {
-            leaves[i] = MerkleRootComputation.hashLeaf(wallets[i], chainIds[i]);
-        }
-        _sortWithData(leaves, wallets, chainIds);
-        return MerkleRootComputation.computeRootFromSorted(leaves);
-    }
-
-    function _computeTxRoot(bytes32[] memory hashes, bytes32[] memory chainIds) internal pure returns (bytes32) {
-        uint256 len = hashes.length;
-        if (len == 0) return bytes32(0);
-        if (len == 1) return MerkleRootComputation.hashLeaf(hashes[0], chainIds[0]);
-
-        bytes32[] memory leaves = new bytes32[](len);
-        for (uint256 i = 0; i < len; i++) {
-            leaves[i] = MerkleRootComputation.hashLeaf(hashes[i], chainIds[i]);
-        }
-        _sortBytes32WithData(leaves, hashes, chainIds);
-        return MerkleRootComputation.computeRootFromSorted(leaves);
-    }
-
-    function _computeContractRoot(address[] memory contracts, bytes32[] memory chainIds)
-        internal
-        pure
-        returns (bytes32)
-    {
-        uint256 len = contracts.length;
-        if (len == 0) return bytes32(0);
-        if (len == 1) return MerkleRootComputation.hashLeaf(contracts[0], chainIds[0]);
-
-        bytes32[] memory leaves = new bytes32[](len);
-        for (uint256 i = 0; i < len; i++) {
-            leaves[i] = MerkleRootComputation.hashLeaf(contracts[i], chainIds[i]);
-        }
-        _sortWithData(leaves, contracts, chainIds);
-        return MerkleRootComputation.computeRootFromSorted(leaves);
-    }
-
-    function _sortWithData(bytes32[] memory leaves, address[] memory addrs, bytes32[] memory chainIds) internal pure {
-        uint256 len = leaves.length;
-        for (uint256 i = 1; i < len; i++) {
-            bytes32 kL = leaves[i];
-            address kA = addrs[i];
-            bytes32 kC = chainIds[i];
-            uint256 j = i;
-            while (j > 0 && leaves[j - 1] > kL) {
-                leaves[j] = leaves[j - 1];
-                addrs[j] = addrs[j - 1];
-                chainIds[j] = chainIds[j - 1];
-                j--;
-            }
-            leaves[j] = kL;
-            addrs[j] = kA;
-            chainIds[j] = kC;
-        }
-    }
-
-    function _sortBytes32WithData(bytes32[] memory leaves, bytes32[] memory vals, bytes32[] memory chainIds)
-        internal
-        pure
-    {
-        uint256 len = leaves.length;
-        for (uint256 i = 1; i < len; i++) {
-            bytes32 kL = leaves[i];
-            bytes32 kV = vals[i];
-            bytes32 kC = chainIds[i];
-            uint256 j = i;
-            while (j > 0 && leaves[j - 1] > kL) {
-                leaves[j] = leaves[j - 1];
-                vals[j] = vals[j - 1];
-                chainIds[j] = chainIds[j - 1];
-                j--;
-            }
-            leaves[j] = kL;
-            vals[j] = kV;
-            chainIds[j] = kC;
-        }
-    }
-
-    function _sortLeaves(bytes32[] memory leaves) internal pure returns (bytes32[] memory) {
-        uint256 len = leaves.length;
-        bytes32[] memory sorted = new bytes32[](len);
-        for (uint256 i = 0; i < len; i++) {
-            sorted[i] = leaves[i];
-        }
-        for (uint256 i = 1; i < len; i++) {
-            bytes32 k = sorted[i];
-            uint256 j = i;
-            while (j > 0 && sorted[j - 1] > k) {
-                sorted[j] = sorted[j - 1];
-                j--;
-            }
-            sorted[j] = k;
-        }
-        return sorted;
     }
 }
