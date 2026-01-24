@@ -52,14 +52,29 @@ TypeScript library for off-chain merkle tree operations.
 ```typescript
 // packages/merkle/src/tree.ts
 import { StandardMerkleTree } from '@openzeppelin/merkle-tree';
+import type { Hex } from 'viem';
+import { sortWalletEntries } from './sort';
 
-export function buildWalletMerkleTree(entries: WalletEntry[]): MerkleTreeResult {
-  const sorted = sortEntriesByLeafHash(entries);
-  const tree = StandardMerkleTree.of(
-    sorted.map((e) => [e.address, e.chainId]),
-    ['address', 'bytes32']
-  );
-  return { root: tree.root, tree, leafCount: entries.length };
+export function buildWalletMerkleTree(entries: WalletEntry[]): MerkleTreeResult<WalletEntry> {
+  if (entries.length === 0) {
+    throw new Error('Cannot build tree with zero entries');
+  }
+
+  // Sort entries by leaf hash (required for on-chain verification)
+  const sortedEntries = sortWalletEntries(entries);
+
+  // Build values array: [address, chainId]
+  const values = sortedEntries.map((e) => [e.address, e.chainId] as [string, string]);
+
+  // Create tree - entries already sorted, disable internal sort to avoid double-sorting
+  const tree = StandardMerkleTree.of(values, ['address', 'bytes32'], { sortLeaves: false });
+
+  return {
+    root: tree.root as Hex,
+    tree,
+    entries: sortedEntries,
+    leafCount: sortedEntries.length,
+  };
 }
 
 export function getWalletProof(tree: StandardMerkleTree, address: Address, chainId: Hex): Hex[] {
@@ -74,13 +89,14 @@ export function getWalletProof(tree: StandardMerkleTree, address: Address, chain
 ```
 
 **Key Functions:**
-| Function | Purpose |
-|----------|---------|
-| `buildWalletMerkleTree()` | Build tree for wallet entries |
-| `buildTransactionMerkleTree()` | Build tree for tx hash entries |
-| `buildContractMerkleTree()` | Build tree for contract entries |
-| `getWalletProof()` | Get inclusion proof for wallet |
-| `serializeTree()` / `deserializeTree()` | Persist tree to JSON |
+
+| Function                                | Purpose                         |
+| --------------------------------------- | ------------------------------- |
+| `buildWalletMerkleTree()`               | Build tree for wallet entries   |
+| `buildTransactionMerkleTree()`          | Build tree for tx hash entries  |
+| `buildContractMerkleTree()`             | Build tree for contract entries |
+| `getWalletProof()`                      | Get inclusion proof for wallet  |
+| `serializeTree()` / `deserializeTree()` | Persist tree to JSON            |
 
 ---
 
@@ -126,7 +142,7 @@ library CAIP2 {
 
 ### Tree Structure
 
-```
+```text
                     ┌─────────┐
                     │  ROOT   │
                     └────┬────┘
@@ -151,7 +167,7 @@ library CAIP2 {
 
 To prove `leaf_2` is in the tree:
 
-```
+```text
 proof = [leaf_3, H(0,1)]
 ```
 
@@ -219,7 +235,7 @@ function registerBatchAsOperator(
 
 ### High-Level Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           DATA FLOW OVERVIEW                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -400,7 +416,7 @@ const result = await indexer.query({
 
 After batch registration, users/services can verify inclusion:
 
-```
+```text
 1. Query indexer: "Is wallet X in the registry?"
 2. Indexer returns: { registered: true, batchRoot: 0xabc, proof: [...] }
 3. Optionally verify on-chain:
@@ -463,7 +479,9 @@ From stress tests:
 | Contract    | ~3,670    | ~6,800                |
 | Transaction | ~3,160    | ~7,900                |
 
-**Conservative production limit: 5,000 entries per batch**
+### Conservative Production Limit
+
+5,000 entries per batch is recommended for production deployments.
 
 ### Cost Structure
 

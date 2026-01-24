@@ -102,35 +102,34 @@ contract BatchSubmissionStressTest is Test {
 
     /// @notice Unsorted input must revert - uses deterministic unsorted order
     function testUnsortedInputReverts() public {
-        // Generate wallets and sort them to know the correct order
-        address[] memory wallets = new address[](3);
-        bytes32[] memory walletChainIds = new bytes32[](3);
-
-        wallets[0] = makeAddr("a");
-        wallets[1] = makeAddr("b");
-        wallets[2] = makeAddr("c");
-        walletChainIds[0] = chainId;
-        walletChainIds[1] = chainId;
-        walletChainIds[2] = chainId;
-
-        // Make copies for sorting to get valid root
+        // Create sorted arrays for computing valid merkle root
         address[] memory sortedWallets = new address[](3);
         bytes32[] memory sortedChainIds = new bytes32[](3);
-        for (uint256 i = 0; i < 3; i++) {
-            sortedWallets[i] = wallets[i];
-            sortedChainIds[i] = walletChainIds[i];
-        }
 
-        // Get valid root from sorted data
+        sortedWallets[0] = makeAddr("a");
+        sortedWallets[1] = makeAddr("b");
+        sortedWallets[2] = makeAddr("c");
+        sortedChainIds[0] = chainId;
+        sortedChainIds[1] = chainId;
+        sortedChainIds[2] = chainId;
+
+        // Sort in-place and compute root
         bytes32 merkleRoot = MerkleTestHelper.computeAddressRoot(sortedWallets, sortedChainIds);
+        // sortedWallets/sortedChainIds are now in correct sorted order
 
-        // Reverse the sorted order to guarantee unsorted submission
-        (wallets[0], wallets[2]) = (sortedWallets[2], sortedWallets[0]);
-        (walletChainIds[0], walletChainIds[2]) = (sortedChainIds[2], sortedChainIds[0]);
+        // Create unsorted submission by reversing the sorted order
+        address[] memory unsortedWallets = new address[](3);
+        bytes32[] memory unsortedChainIds = new bytes32[](3);
+        unsortedWallets[0] = sortedWallets[2]; // Last -> First
+        unsortedWallets[1] = sortedWallets[1]; // Middle stays
+        unsortedWallets[2] = sortedWallets[0]; // First -> Last
+        unsortedChainIds[0] = sortedChainIds[2];
+        unsortedChainIds[1] = sortedChainIds[1];
+        unsortedChainIds[2] = sortedChainIds[0];
 
         vm.prank(operator);
         vm.expectRevert(MerkleRootComputation.LeavesNotSorted.selector);
-        walletRegistry.registerBatchAsOperator(merkleRoot, chainId, wallets, walletChainIds);
+        walletRegistry.registerBatchAsOperator(merkleRoot, chainId, unsortedWallets, unsortedChainIds);
     }
 
     /// @notice Old 1000 limit removed from contract registry
