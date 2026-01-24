@@ -579,7 +579,7 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
             leaves[i] = MerkleRootComputation.hashLeaf(txHashes[i], chainIds[i]);
         }
 
-        return MerkleRootComputation.computeRoot(leaves);
+        return MerkleRootComputation.computeRootFromSorted(leaves);
     }
 
     /// @notice Validate acknowledgement inputs (helper to reduce stack depth)

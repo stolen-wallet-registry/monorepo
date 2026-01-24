@@ -165,17 +165,43 @@ contract FraudulentContractWorkflowTest is Test {
     }
 
     /// @notice Compute merkle root using shared MerkleRootComputation library
-    /// @dev Ensures test/prod parity - leaf construction is registry-specific (contract + chainId)
-    function _computeRoot(address[] memory contracts, bytes32[] memory chainIds) internal pure returns (bytes32) {
+    /// @dev Sorts contracts/chainIds in-place by leaf hash (ascending order).
+    ///      This ensures the input arrays are sorted when passed to the contract,
+    ///      which now requires pre-sorted leaves for gas efficiency.
+    function _computeRoot(address[] memory contracts, bytes32[] memory contractChainIds)
+        internal
+        pure
+        returns (bytes32)
+    {
         uint256 length = contracts.length;
         if (length == 0) return bytes32(0);
+        if (length == 1) {
+            return MerkleRootComputation.hashLeaf(contracts[0], contractChainIds[0]);
+        }
 
         // Build leaves in OZ StandardMerkleTree format
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
-            leaves[i] = MerkleRootComputation.hashLeaf(contracts[i], chainIds[i]);
+            leaves[i] = MerkleRootComputation.hashLeaf(contracts[i], contractChainIds[i]);
         }
 
-        return MerkleRootComputation.computeRoot(leaves);
+        // Sort leaves AND contracts/chainIds together (insertion sort)
+        for (uint256 i = 1; i < length; i++) {
+            bytes32 keyLeaf = leaves[i];
+            address keyContract = contracts[i];
+            bytes32 keyChainId = contractChainIds[i];
+            uint256 j = i;
+            while (j > 0 && leaves[j - 1] > keyLeaf) {
+                leaves[j] = leaves[j - 1];
+                contracts[j] = contracts[j - 1];
+                contractChainIds[j] = contractChainIds[j - 1];
+                j--;
+            }
+            leaves[j] = keyLeaf;
+            contracts[j] = keyContract;
+            contractChainIds[j] = keyChainId;
+        }
+
+        return MerkleRootComputation.computeRootFromSorted(leaves);
     }
 }

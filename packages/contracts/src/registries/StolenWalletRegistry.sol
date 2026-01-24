@@ -566,6 +566,6 @@ contract StolenWalletRegistry is IStolenWalletRegistry, EIP712, Ownable2Step {
             leaves[i] = MerkleRootComputation.hashLeaf(wallets[i], walletChainIds[i]);
         }
 
-        return MerkleRootComputation.computeRoot(leaves);
+        return MerkleRootComputation.computeRootFromSorted(leaves);
     }
 }

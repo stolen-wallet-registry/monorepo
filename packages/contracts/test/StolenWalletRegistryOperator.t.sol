@@ -537,10 +537,15 @@ contract StolenWalletRegistryOperatorTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Compute merkle root using shared MerkleRootComputation library
-    /// @dev Ensures test/prod parity - uses OZ StandardMerkleTree leaf format
+    /// @dev Sorts wallets/chainIds in-place by leaf hash (ascending order).
+    ///      This ensures the input arrays are sorted when passed to the contract,
+    ///      which now requires pre-sorted leaves for gas efficiency.
     function _computeRoot(address[] memory wallets, bytes32[] memory walletChainIds) internal pure returns (bytes32) {
         uint256 length = wallets.length;
         if (length == 0) return bytes32(0);
+        if (length == 1) {
+            return MerkleRootComputation.hashLeaf(wallets[0], walletChainIds[0]);
+        }
 
         // Build leaves in OZ StandardMerkleTree format
         bytes32[] memory leaves = new bytes32[](length);
@@ -548,6 +553,24 @@ contract StolenWalletRegistryOperatorTest is Test {
             leaves[i] = MerkleRootComputation.hashLeaf(wallets[i], walletChainIds[i]);
         }
 
-        return MerkleRootComputation.computeRoot(leaves);
+        // Sort leaves AND wallets/chainIds together (insertion sort)
+        // This modifies the input arrays in-place so they're sorted for contract calls
+        for (uint256 i = 1; i < length; i++) {
+            bytes32 keyLeaf = leaves[i];
+            address keyWallet = wallets[i];
+            bytes32 keyChainId = walletChainIds[i];
+            uint256 j = i;
+            while (j > 0 && leaves[j - 1] > keyLeaf) {
+                leaves[j] = leaves[j - 1];
+                wallets[j] = wallets[j - 1];
+                walletChainIds[j] = walletChainIds[j - 1];
+                j--;
+            }
+            leaves[j] = keyLeaf;
+            wallets[j] = keyWallet;
+            walletChainIds[j] = keyChainId;
+        }
+
+        return MerkleRootComputation.computeRootFromSorted(leaves);
     }
 }

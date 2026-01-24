@@ -64,14 +64,15 @@ contract StolenTransactionRegistryOperatorTest is Test {
     // HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Compute merkle root from test transactions (sorted by leaf hash)
+    /// @dev Sorts leaves before computing to match contract's computeRootFromSorted
     function _computeTestMerkleRoot() internal view returns (bytes32) {
-        bytes32[] memory leaves = new bytes32[](3);
-        leaves[0] = MerkleRootComputation.hashLeaf(txHash1, chainId);
-        leaves[1] = MerkleRootComputation.hashLeaf(txHash2, chainId);
-        leaves[2] = MerkleRootComputation.hashLeaf(txHash3, chainId);
-        return MerkleRootComputation.computeRoot(leaves);
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _getTestTransactions();
+        return _computeRoot(txHashes, chainIds);
     }
 
+    /// @notice Get test transactions sorted by their leaf hash
+    /// @dev Returns transactions in the same order as merkle root computation expects
     function _getTestTransactions() internal view returns (bytes32[] memory txHashes, bytes32[] memory chainIds) {
         txHashes = new bytes32[](3);
         chainIds = new bytes32[](3);
@@ -81,6 +82,72 @@ contract StolenTransactionRegistryOperatorTest is Test {
         chainIds[0] = chainId;
         chainIds[1] = chainId;
         chainIds[2] = chainId;
+
+        // Sort by leaf hash (contract requires pre-sorted leaves)
+        _sortByLeafHash(txHashes, chainIds);
+    }
+
+    /// @notice Compute merkle root and sort arrays in place
+    function _computeRoot(bytes32[] memory txHashes, bytes32[] memory chainIds) internal pure returns (bytes32) {
+        uint256 length = txHashes.length;
+        if (length == 0) return bytes32(0);
+        if (length == 1) {
+            return MerkleRootComputation.hashLeaf(txHashes[0], chainIds[0]);
+        }
+
+        // Build leaves
+        bytes32[] memory leaves = new bytes32[](length);
+        for (uint256 i = 0; i < length; i++) {
+            leaves[i] = MerkleRootComputation.hashLeaf(txHashes[i], chainIds[i]);
+        }
+
+        // Sort leaves AND txHashes/chainIds together
+        for (uint256 i = 1; i < length; i++) {
+            bytes32 keyLeaf = leaves[i];
+            bytes32 keyTxHash = txHashes[i];
+            bytes32 keyChainId = chainIds[i];
+            uint256 j = i;
+            while (j > 0 && leaves[j - 1] > keyLeaf) {
+                leaves[j] = leaves[j - 1];
+                txHashes[j] = txHashes[j - 1];
+                chainIds[j] = chainIds[j - 1];
+                j--;
+            }
+            leaves[j] = keyLeaf;
+            txHashes[j] = keyTxHash;
+            chainIds[j] = keyChainId;
+        }
+
+        return MerkleRootComputation.computeRootFromSorted(leaves);
+    }
+
+    /// @notice Sort txHashes and chainIds by their leaf hash
+    function _sortByLeafHash(bytes32[] memory txHashes, bytes32[] memory chainIds) internal pure {
+        uint256 length = txHashes.length;
+        if (length <= 1) return;
+
+        // Build leaves
+        bytes32[] memory leaves = new bytes32[](length);
+        for (uint256 i = 0; i < length; i++) {
+            leaves[i] = MerkleRootComputation.hashLeaf(txHashes[i], chainIds[i]);
+        }
+
+        // Sort leaves AND txHashes/chainIds together
+        for (uint256 i = 1; i < length; i++) {
+            bytes32 keyLeaf = leaves[i];
+            bytes32 keyTxHash = txHashes[i];
+            bytes32 keyChainId = chainIds[i];
+            uint256 j = i;
+            while (j > 0 && leaves[j - 1] > keyLeaf) {
+                leaves[j] = leaves[j - 1];
+                txHashes[j] = txHashes[j - 1];
+                chainIds[j] = chainIds[j - 1];
+                j--;
+            }
+            leaves[j] = keyLeaf;
+            txHashes[j] = keyTxHash;
+            chainIds[j] = keyChainId;
+        }
     }
 
     function _computeBatchId(bytes32 root, address op, bytes32 reportedChainId) internal pure returns (bytes32) {

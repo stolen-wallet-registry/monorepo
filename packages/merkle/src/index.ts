@@ -72,3 +72,16 @@ export {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export { serializeTree, deserializeTree } from './serialize';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SORTING (for pre-sorted batch submission)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  sortWalletEntries,
+  sortTransactionEntries,
+  sortContractEntries,
+  getSortedWalletArrays,
+  getSortedTransactionArrays,
+  getSortedContractArrays,
+} from './sort';

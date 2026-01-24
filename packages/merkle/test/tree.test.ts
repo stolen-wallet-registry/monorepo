@@ -7,7 +7,8 @@ import {
 } from '../src/tree';
 import { chainIdToBytes32 } from '@swr/caip';
 
-const TEST_ADDRESS_1 = '0x742d35Cc6634C0532925a3b844Bc454e83c4b3a1' as Address;
+// Use lowercase to avoid checksum validation errors in viem
+const TEST_ADDRESS_1 = '0x742d35cc6634c0532925a3b844bc454e83c4b3a1' as Address;
 const TEST_ADDRESS_2 = '0x1234567890123456789012345678901234567890' as Address;
 const TEST_TX_HASH_1 = '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890' as Hex;
 const TEST_TX_HASH_2 = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' as Hex;

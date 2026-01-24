@@ -94,7 +94,6 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
         if (merkleRoot == bytes32(0)) revert FraudulentContractRegistry__InvalidMerkleRoot();
         if (reportedChainId == bytes32(0)) revert FraudulentContractRegistry__InvalidChainId();
         if (contractAddresses.length == 0) revert FraudulentContractRegistry__InvalidContractCount();
-        if (contractAddresses.length > 1000) revert FraudulentContractRegistry__BatchSizeExceedsLimit();
         if (contractAddresses.length != chainIds.length) revert FraudulentContractRegistry__ArrayLengthMismatch();
 
         // Validate each entry - reject zero addresses and zero chainIds
@@ -297,6 +296,6 @@ contract FraudulentContractRegistry is IFraudulentContractRegistry, Ownable2Step
             leaves[i] = MerkleRootComputation.hashLeaf(contractAddresses[i], chainIds[i]);
         }
 
-        return MerkleRootComputation.computeRoot(leaves);
+        return MerkleRootComputation.computeRootFromSorted(leaves);
     }
 }
