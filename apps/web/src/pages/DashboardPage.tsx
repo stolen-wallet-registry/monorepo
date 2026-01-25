@@ -7,6 +7,7 @@
  * - DAO: + Manage operators (integrated into Operators tab)
  */
 
+import { useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Tabs, TabsContent, TabsList, TabsTrigger, Badge } from '@swr/ui';
 import { ListOrdered, Users, Upload } from 'lucide-react';
@@ -57,8 +58,20 @@ export function DashboardPage() {
   // Auto-reset to registrations if current tab becomes unavailable (e.g., wallet disconnect)
   const effectiveTab = activeTab === 'submit' && !showSubmitTab ? 'registrations' : activeTab;
 
+  const basePath = location.split('?')[0] || '/dashboard';
+
+  // Keep URL in sync if role-gated tab is not available
+  useEffect(() => {
+    if (effectiveTab !== activeTab) {
+      const nextLocation =
+        effectiveTab === 'registrations' ? basePath : `${basePath}?tab=${effectiveTab}`;
+      if (nextLocation !== location) {
+        setLocation(nextLocation);
+      }
+    }
+  }, [effectiveTab, activeTab, basePath, location, setLocation]);
+
   const handleTabChange = (value: string) => {
-    const basePath = location.split('?')[0] ?? '/dashboard';
     const nextLocation = value === 'registrations' ? basePath : `${basePath}?tab=${value}`;
     if (nextLocation !== location) {
       setLocation(nextLocation);

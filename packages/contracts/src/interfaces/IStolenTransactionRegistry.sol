@@ -231,7 +231,7 @@ interface IStolenTransactionRegistry {
         bool isSponsored
     );
 
-    /// @notice Emitted when a transaction batch registration is finalized
+    /// @notice Emitted when a transaction batch registration is finalized (reporter flow)
     /// @dev Transaction hashes emitted here for data availability (not stored on-chain)
     /// @param batchId Unique identifier for this batch
     /// @param merkleRoot The Merkle root of the registered batch
@@ -241,7 +241,7 @@ interface IStolenTransactionRegistry {
     /// @param isSponsored True if registration was submitted by a third party
     /// @param transactionHashes Raw tx hashes (parallel with chainIds)
     /// @param chainIds CAIP-2 chainId for each txHash (parallel with transactionHashes)
-    event TransactionBatchRegistered(
+    event TransactionBatchRegisteredByReporter(
         bytes32 indexed batchId,
         bytes32 indexed merkleRoot,
         address indexed reporter,
@@ -269,7 +269,7 @@ interface IStolenTransactionRegistry {
     /// @param transactionCount Number of transactions in the batch
     /// @param transactionHashes Array of transaction hashes in the batch
     /// @param chainIds Array of chain IDs for each transaction
-    event TransactionBatchRegisteredByOperator(
+    event TransactionBatchRegistered(
         bytes32 indexed batchId,
         bytes32 indexed merkleRoot,
         address indexed operator,

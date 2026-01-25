@@ -8,7 +8,7 @@ import { ArrowLeft, Database, Search, ShieldCheck, Terminal } from 'lucide-react
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
 import { OperatorSubmitGuide } from '@/components/dashboard';
 
-const SWR_CLI_URL = 'https://github.com/stolen-wallet-registry/monorepo/tree/main/packages/cli';
+const SWR_CLI_URL = 'https://github.com/stolen-wallet-registry/cli';
 
 const HIGHLIGHTS = [
   {

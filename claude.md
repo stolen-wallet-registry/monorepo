@@ -133,6 +133,8 @@ All registries are active and publicly searchable; submission rules differ by re
    - **Who can submit:** Approved operators only
    - Single-phase batch registration for malicious contract addresses
    - Publicly searchable and visible in the dashboard
+   - **Security rationale:** Operator submissions are restricted to DAO-approved entities (trusted security partners with bulk fraud intel). That approval process is the risk control that substitutes for the two-phase EIP-712 flow required for individual submissions.
+   - **Security review:** Add link to the approval of this exception (e.g., audit note / ticket / meeting doc).
 
 ### Three Registration Methods
 
@@ -237,6 +239,7 @@ logger.ui.info('Component mounted', { name });
 
 ```typescript
 // In registration hook
+logger.acknowledgement.info('Starting phase', { registeree, relayer });
 logger.registration.info('Starting acknowledgement', { registeree, relayer });
 logger.signature.debug('Generating typed data', { domain, message });
 logger.contract.info('Submitting acknowledgement tx');
@@ -269,7 +272,9 @@ ThemeProvider must wrap Web3Provider so RainbowKit can access theme context at r
 | `useFormStore`                    | Wallet form values (registeree, relayer, flags) | Yes         |
 | `useTransactionRegistrationStore` | Transaction flow state                          | Yes         |
 | `useTransactionFormStore`         | Transaction selection + merkle data             | Yes         |
-| `useP2PStore`                     | Peer IDs, connection status                     | Partial     |
+| `useP2PStore`                     | Peer IDs, connection status                     | Partial\*   |
+
+\*Partial persistence: peerId and partnerPeerId persist; active connection state (connectedToPeer, connectionStatus, isInitialized, errorMessage) resets on reload.
 
 ### Component Organization
 

@@ -271,7 +271,7 @@ function registerBatchAsOperator(
 │                                    ▼                                         │
 │  INDEXER (Off-chain) ─────────────────────────────────────────────────────  │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │ 13. Listen for WalletBatchRegistered / TransactionBatchRegisteredByOperator │    │
+│  │ 13. Listen for WalletBatchRegistered / TransactionBatchRegistered │    │
 │  │ 14. Listen for ContractBatchRegistered                              │    │
 │  │ 15. Build searchable database of all entries                        │    │
 │  │ 16. Serve queries: "is wallet X registered?"                        │    │
@@ -305,7 +305,7 @@ event WalletBatchRegistered(
 );
 
 // Transaction batch (operator)
-event TransactionBatchRegisteredByOperator(
+event TransactionBatchRegistered(
     bytes32 indexed batchId,
     bytes32 indexed merkleRoot,
     address indexed operator,
@@ -372,10 +372,9 @@ client.watchContractEvent({
     // Process logs with proper error handling
     const insertPromises = logs.map((log) =>
       db.wallets.insert({
-        address: log.args.wallet,
-        chainId: log.args.chainId,
-        registrant: log.args.registrant,
-        timestamp: log.args.timestamp,
+        address: log.args.owner,
+        isSponsored: log.args.isSponsored,
+        timestamp: log.block?.timestamp,
         txHash: log.transactionHash,
       })
     );

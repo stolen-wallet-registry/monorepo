@@ -46,9 +46,9 @@ try {
 
 - Thrown when relay servers are not configured for production
 
-**Stream data validation errors** (`@swr/p2p`)
+**StreamDataValidationError** (`apps/web/src/lib/p2p/libp2p.ts`)
 
-- Raised when stream data exceeds size limits or fails schema validation
+- Thrown when P2P stream data exceeds size limits or fails schema validation
 
 ---
 

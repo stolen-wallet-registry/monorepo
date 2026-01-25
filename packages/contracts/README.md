@@ -107,6 +107,7 @@ script/
 ├── DeployCrossChain.s.sol    # Hub + spoke deploy
 ├── DeployTestnet.s.sol       # Testnet deploy
 ├── DeploySoulbound.s.sol     # Soulbound contracts
+├── SeedLanguages.s.sol       # Seed language metadata
 ├── SeedOperatorData.s.sol    # Seed operators for local/test
 ├── SeedTransactions.s.sol    # Seed sample txs for local/test
 ```

@@ -104,6 +104,8 @@ Operator B (CONTRACT): 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
 
 ### Anvil Test Accounts
 
+> ⚠️ These keys are public dev defaults. Never use or fund them on public testnets or mainnet.
+
 | Account | Address                                      | Capabilities                 | Private Key                                                          |
 | ------- | -------------------------------------------- | ---------------------------- | -------------------------------------------------------------------- |
 | 3       | `0x90F79bf6EB2c4f870365E785982E1f101E93b906` | ALL (wallet + tx + contract) | `0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6` |

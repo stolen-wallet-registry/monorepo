@@ -240,7 +240,7 @@ contract StolenTransactionRegistryTest is StolenTransactionRegistryTestBase {
         bytes32 expectedBatchId = registry.computeBatchId(testMerkleRoot, reporter, testChainId);
 
         vm.expectEmit(true, true, true, false); // Don't check non-indexed params (arrays)
-        emit IStolenTransactionRegistry.TransactionBatchRegistered(
+        emit IStolenTransactionRegistry.TransactionBatchRegisteredByReporter(
             expectedBatchId, testMerkleRoot, reporter, testChainId, uint32(txHashes.length), true, txHashes, chainIds
         );
 
