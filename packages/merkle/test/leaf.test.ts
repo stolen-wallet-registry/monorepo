@@ -121,10 +121,10 @@ describe('computeLeaf (generic)', () => {
 });
 
 describe('OZ StandardMerkleTree format', () => {
-  // These tests verify our leaf computation matches OpenZeppelin's format:
-  // leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(values))))
+  // These tests verify our leaf computation matches OpenZeppelin v1.0.8+ format:
+  // leaf = keccak256(keccak256(abi.encode(values)))
 
-  it('includes 0x00 prefix to prevent second-preimage attacks', () => {
+  it('uses double-keccak256 to prevent second-preimage attacks', () => {
     const chainId = chainIdToBytes32(8453);
     const leaf = computeTransactionLeaf(TEST_TX_HASH, chainId);
 

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test } from "forge-std/Test.sol";
-
 // Hub contracts
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
@@ -22,9 +20,12 @@ import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
 import { MockInterchainGasPaymaster } from "./mocks/MockInterchainGasPaymaster.sol";
 
+// Test helpers
+import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
+
 /// @title CrossChainIntegrationTest
 /// @notice Full cross-chain flow tests from spoke registration to hub storage
-contract CrossChainIntegrationTest is Test {
+contract CrossChainIntegrationTest is EIP712TestHelper {
     using CrossChainMessage for CrossChainMessage.RegistrationPayload;
     // Hub contracts (Base Sepolia)
     RegistryHub hub;
@@ -141,24 +142,9 @@ contract CrossChainIntegrationTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = spokeRegistry.nonces(victim);
 
-        // Generate signature
-        bytes32 ackTypeHash =
-            keccak256("AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-        bytes32 structHash = keccak256(abi.encode(ackTypeHash, victim, victim, nonce, deadline));
-
-        // Get domain separator (EIP-712)
-        bytes32 domainSeparator = keccak256(
-            abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256("StolenWalletRegistry"),
-                keccak256("4"),
-                SPOKE_CHAIN_ID,
-                address(spokeRegistry)
-            )
-        );
-
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VICTIM_PRIVATE_KEY, digest);
+        // Use helper to sign acknowledgement with statement
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(VICTIM_PRIVATE_KEY, address(spokeRegistry), victim, victim, nonce, deadline);
 
         // Submit acknowledgement
         vm.prank(victim);
@@ -180,10 +166,8 @@ contract CrossChainIntegrationTest is Test {
         nonce = spokeRegistry.nonces(victim);
         deadline = block.timestamp + 1 hours;
 
-        bytes32 regTypeHash = keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-        structHash = keccak256(abi.encode(regTypeHash, victim, victim, nonce, deadline));
-        digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        (v, r, s) = vm.sign(VICTIM_PRIVATE_KEY, digest);
+        // Use helper to sign registration with statement
+        (v, r, s) = _signWalletReg(VICTIM_PRIVATE_KEY, address(spokeRegistry), victim, victim, nonce, deadline);
 
         // Get quote for registration
         uint256 fee = spokeRegistry.quoteRegistration(victim);
@@ -234,22 +218,9 @@ contract CrossChainIntegrationTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = spokeRegistry.nonces(victim);
 
-        bytes32 ackTypeHash =
-            keccak256("AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-        bytes32 structHash = keccak256(abi.encode(ackTypeHash, victim, relayer, nonce, deadline));
-
-        bytes32 domainSeparator = keccak256(
-            abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256("StolenWalletRegistry"),
-                keccak256("4"),
-                SPOKE_CHAIN_ID,
-                address(spokeRegistry)
-            )
-        );
-
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(VICTIM_PRIVATE_KEY, digest);
+        // Use helper to sign acknowledgement with statement
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(VICTIM_PRIVATE_KEY, address(spokeRegistry), victim, relayer, nonce, deadline);
 
         // Relayer submits acknowledgement
         vm.prank(relayer);
@@ -269,10 +240,8 @@ contract CrossChainIntegrationTest is Test {
         nonce = spokeRegistry.nonces(victim);
         deadline = block.timestamp + 1 hours;
 
-        bytes32 regTypeHash = keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-        structHash = keccak256(abi.encode(regTypeHash, victim, relayer, nonce, deadline));
-        digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        (v, r, s) = vm.sign(VICTIM_PRIVATE_KEY, digest);
+        // Use helper to sign registration with statement
+        (v, r, s) = _signWalletReg(VICTIM_PRIVATE_KEY, address(spokeRegistry), victim, relayer, nonce, deadline);
 
         uint256 fee = spokeRegistry.quoteRegistration(victim);
         vm.deal(relayer, fee);

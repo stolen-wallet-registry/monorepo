@@ -83,10 +83,7 @@ contract OperatorRegistryWorkflowTest is Test {
         walletChainIds[0] = chainId;
         walletChainIds[1] = chainId;
 
-        bytes32[] memory leaves = new bytes32[](2);
-        leaves[0] = MerkleRootComputation.hashLeaf(wallets[0], walletChainIds[0]);
-        leaves[1] = MerkleRootComputation.hashLeaf(wallets[1], walletChainIds[1]);
-        bytes32 walletMerkleRoot = MerkleRootComputation.computeRoot(leaves);
+        bytes32 walletMerkleRoot = _computeWalletRoot(wallets, walletChainIds);
 
         // Wallet operator CAN register wallet batches
         vm.prank(walletOperator);
@@ -103,10 +100,7 @@ contract OperatorRegistryWorkflowTest is Test {
         txChainIds[0] = chainId;
         txChainIds[1] = chainId;
 
-        bytes32[] memory txLeaves = new bytes32[](2);
-        txLeaves[0] = MerkleRootComputation.hashLeaf(txHashes[0], txChainIds[0]);
-        txLeaves[1] = MerkleRootComputation.hashLeaf(txHashes[1], txChainIds[1]);
-        bytes32 txMerkleRoot = MerkleRootComputation.computeRoot(txLeaves);
+        bytes32 txMerkleRoot = _computeTxRoot(txHashes, txChainIds);
 
         vm.prank(walletOperator);
         vm.expectRevert(IStolenTransactionRegistry.StolenTransactionRegistry__NotApprovedOperator.selector);
@@ -120,10 +114,7 @@ contract OperatorRegistryWorkflowTest is Test {
         contractChainIds[0] = chainId;
         contractChainIds[1] = chainId;
 
-        bytes32[] memory contractLeaves = new bytes32[](2);
-        contractLeaves[0] = MerkleRootComputation.hashLeaf(contracts[0], contractChainIds[0]);
-        contractLeaves[1] = MerkleRootComputation.hashLeaf(contracts[1], contractChainIds[1]);
-        bytes32 contractMerkleRoot = MerkleRootComputation.computeRoot(contractLeaves);
+        bytes32 contractMerkleRoot = _computeContractRoot(contracts, contractChainIds);
 
         vm.prank(walletOperator);
         vm.expectRevert(IFraudulentContractRegistry.FraudulentContractRegistry__NotApprovedOperator.selector);
@@ -138,9 +129,7 @@ contract OperatorRegistryWorkflowTest is Test {
         wallets[0] = makeAddr("stolenWallet");
         walletChainIds[0] = chainId;
 
-        bytes32[] memory walletLeaves = new bytes32[](1);
-        walletLeaves[0] = MerkleRootComputation.hashLeaf(wallets[0], walletChainIds[0]);
-        bytes32 walletMerkleRoot = MerkleRootComputation.computeRoot(walletLeaves);
+        bytes32 walletMerkleRoot = _computeWalletRoot(wallets, walletChainIds);
 
         vm.prank(fullOperator);
         walletRegistry.registerBatchAsOperator(walletMerkleRoot, chainId, wallets, walletChainIds);
@@ -154,9 +143,7 @@ contract OperatorRegistryWorkflowTest is Test {
         txHashes[0] = keccak256("tx1");
         txChainIds[0] = chainId;
 
-        bytes32[] memory txLeaves = new bytes32[](1);
-        txLeaves[0] = MerkleRootComputation.hashLeaf(txHashes[0], txChainIds[0]);
-        bytes32 txMerkleRoot = MerkleRootComputation.computeRoot(txLeaves);
+        bytes32 txMerkleRoot = _computeTxRoot(txHashes, txChainIds);
 
         vm.prank(fullOperator);
         txRegistry.registerBatchAsOperator(txMerkleRoot, chainId, txHashes, txChainIds);
@@ -168,9 +155,7 @@ contract OperatorRegistryWorkflowTest is Test {
         contracts[0] = makeAddr("scamContract");
         contractChainIds[0] = chainId;
 
-        bytes32[] memory contractLeaves = new bytes32[](1);
-        contractLeaves[0] = MerkleRootComputation.hashLeaf(contracts[0], contractChainIds[0]);
-        bytes32 contractMerkleRoot = MerkleRootComputation.computeRoot(contractLeaves);
+        bytes32 contractMerkleRoot = _computeContractRoot(contracts, contractChainIds);
 
         vm.prank(fullOperator);
         contractRegistry.registerBatch(contractMerkleRoot, chainId, contracts, contractChainIds);
@@ -189,9 +174,7 @@ contract OperatorRegistryWorkflowTest is Test {
         wallets[0] = makeAddr("stolenWallet");
         walletChainIds[0] = chainId;
 
-        bytes32[] memory leaves = new bytes32[](1);
-        leaves[0] = MerkleRootComputation.hashLeaf(wallets[0], walletChainIds[0]);
-        bytes32 merkleRoot = MerkleRootComputation.computeRoot(leaves);
+        bytes32 merkleRoot = _computeWalletRoot(wallets, walletChainIds);
 
         // Operator can register before revocation
         vm.prank(walletOperator);
@@ -203,8 +186,7 @@ contract OperatorRegistryWorkflowTest is Test {
 
         // Create new batch data
         wallets[0] = makeAddr("stolenWallet2");
-        leaves[0] = MerkleRootComputation.hashLeaf(wallets[0], walletChainIds[0]);
-        bytes32 newMerkleRoot = MerkleRootComputation.computeRoot(leaves);
+        bytes32 newMerkleRoot = _computeWalletRoot(wallets, walletChainIds);
 
         // Operator CANNOT register after revocation
         vm.prank(walletOperator);
@@ -220,9 +202,7 @@ contract OperatorRegistryWorkflowTest is Test {
         wallets[0] = makeAddr("stolenWallet");
         walletChainIds[0] = chainId;
 
-        bytes32[] memory leaves = new bytes32[](1);
-        leaves[0] = MerkleRootComputation.hashLeaf(wallets[0], walletChainIds[0]);
-        bytes32 merkleRoot = MerkleRootComputation.computeRoot(leaves);
+        bytes32 merkleRoot = _computeWalletRoot(wallets, walletChainIds);
 
         vm.prank(txOperator);
         vm.expectRevert(IStolenWalletRegistry.StolenWalletRegistry__NotApprovedOperator.selector);
@@ -249,9 +229,7 @@ contract OperatorRegistryWorkflowTest is Test {
         bytes32[] memory walletChainIds = new bytes32[](1);
         wallets[0] = makeAddr("stolenWallet");
         walletChainIds[0] = chainId;
-        bytes32[] memory walletLeaves = new bytes32[](1);
-        walletLeaves[0] = MerkleRootComputation.hashLeaf(wallets[0], walletChainIds[0]);
-        bytes32 walletMerkleRoot = MerkleRootComputation.computeRoot(walletLeaves);
+        bytes32 walletMerkleRoot = _computeWalletRoot(wallets, walletChainIds);
 
         vm.prank(fullOperator);
         walletRegistry.registerBatchAsOperator(walletMerkleRoot, chainId, wallets, walletChainIds);
@@ -261,9 +239,7 @@ contract OperatorRegistryWorkflowTest is Test {
         bytes32[] memory txChainIds = new bytes32[](1);
         txHashes[0] = keccak256("tx1");
         txChainIds[0] = chainId;
-        bytes32[] memory txLeaves = new bytes32[](1);
-        txLeaves[0] = MerkleRootComputation.hashLeaf(txHashes[0], txChainIds[0]);
-        bytes32 txMerkleRoot = MerkleRootComputation.computeRoot(txLeaves);
+        bytes32 txMerkleRoot = _computeTxRoot(txHashes, txChainIds);
 
         vm.prank(fullOperator);
         txRegistry.registerBatchAsOperator(txMerkleRoot, chainId, txHashes, txChainIds);
@@ -273,9 +249,7 @@ contract OperatorRegistryWorkflowTest is Test {
         bytes32[] memory contractChainIds = new bytes32[](1);
         contracts[0] = makeAddr("scamContract");
         contractChainIds[0] = chainId;
-        bytes32[] memory contractLeaves = new bytes32[](1);
-        contractLeaves[0] = MerkleRootComputation.hashLeaf(contracts[0], contractChainIds[0]);
-        bytes32 contractMerkleRoot = MerkleRootComputation.computeRoot(contractLeaves);
+        bytes32 contractMerkleRoot = _computeContractRoot(contracts, contractChainIds);
 
         vm.prank(fullOperator);
         contractRegistry.registerBatch(contractMerkleRoot, chainId, contracts, contractChainIds);
@@ -310,9 +284,7 @@ contract OperatorRegistryWorkflowTest is Test {
         bytes32[] memory chainIds1 = new bytes32[](1);
         wallets1[0] = makeAddr("wallet1");
         chainIds1[0] = chainId;
-        bytes32[] memory leaves1 = new bytes32[](1);
-        leaves1[0] = MerkleRootComputation.hashLeaf(wallets1[0], chainIds1[0]);
-        bytes32 root1 = MerkleRootComputation.computeRoot(leaves1);
+        bytes32 root1 = _computeWalletRoot(wallets1, chainIds1);
 
         vm.prank(walletOperator);
         walletRegistry.registerBatchAsOperator(root1, chainId, wallets1, chainIds1);
@@ -322,9 +294,7 @@ contract OperatorRegistryWorkflowTest is Test {
         bytes32[] memory chainIds2 = new bytes32[](1);
         wallets2[0] = makeAddr("wallet2");
         chainIds2[0] = chainId;
-        bytes32[] memory leaves2 = new bytes32[](1);
-        leaves2[0] = MerkleRootComputation.hashLeaf(wallets2[0], chainIds2[0]);
-        bytes32 root2 = MerkleRootComputation.computeRoot(leaves2);
+        bytes32 root2 = _computeWalletRoot(wallets2, chainIds2);
 
         vm.prank(fullOperator);
         walletRegistry.registerBatchAsOperator(root2, chainId, wallets2, chainIds2);
@@ -339,5 +309,108 @@ contract OperatorRegistryWorkflowTest is Test {
         // Verify operator addresses are correctly stored
         assertEq(walletRegistry.getWalletBatch(batchId1).operator, walletOperator);
         assertEq(walletRegistry.getWalletBatch(batchId2).operator, fullOperator);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HELPERS - Sort and compute merkle roots
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Compute merkle root for wallet entries, sorting inputs in-place
+    function _computeWalletRoot(address[] memory wallets, bytes32[] memory walletChainIds)
+        internal
+        pure
+        returns (bytes32)
+    {
+        uint256 length = wallets.length;
+        if (length == 0) return bytes32(0);
+        if (length == 1) return MerkleRootComputation.hashLeaf(wallets[0], walletChainIds[0]);
+
+        bytes32[] memory leaves = new bytes32[](length);
+        for (uint256 i = 0; i < length; i++) {
+            leaves[i] = MerkleRootComputation.hashLeaf(wallets[i], walletChainIds[i]);
+        }
+
+        // Sort leaves AND wallets/chainIds together
+        for (uint256 i = 1; i < length; i++) {
+            bytes32 keyLeaf = leaves[i];
+            address keyWallet = wallets[i];
+            bytes32 keyChainId = walletChainIds[i];
+            uint256 j = i;
+            while (j > 0 && leaves[j - 1] > keyLeaf) {
+                leaves[j] = leaves[j - 1];
+                wallets[j] = wallets[j - 1];
+                walletChainIds[j] = walletChainIds[j - 1];
+                j--;
+            }
+            leaves[j] = keyLeaf;
+            wallets[j] = keyWallet;
+            walletChainIds[j] = keyChainId;
+        }
+
+        return MerkleRootComputation.computeRootFromSorted(leaves);
+    }
+
+    /// @notice Compute merkle root for transaction entries, sorting inputs in-place
+    function _computeTxRoot(bytes32[] memory txHashes, bytes32[] memory txChainIds) internal pure returns (bytes32) {
+        uint256 length = txHashes.length;
+        if (length == 0) return bytes32(0);
+        if (length == 1) return MerkleRootComputation.hashLeaf(txHashes[0], txChainIds[0]);
+
+        bytes32[] memory leaves = new bytes32[](length);
+        for (uint256 i = 0; i < length; i++) {
+            leaves[i] = MerkleRootComputation.hashLeaf(txHashes[i], txChainIds[i]);
+        }
+
+        for (uint256 i = 1; i < length; i++) {
+            bytes32 keyLeaf = leaves[i];
+            bytes32 keyTxHash = txHashes[i];
+            bytes32 keyChainId = txChainIds[i];
+            uint256 j = i;
+            while (j > 0 && leaves[j - 1] > keyLeaf) {
+                leaves[j] = leaves[j - 1];
+                txHashes[j] = txHashes[j - 1];
+                txChainIds[j] = txChainIds[j - 1];
+                j--;
+            }
+            leaves[j] = keyLeaf;
+            txHashes[j] = keyTxHash;
+            txChainIds[j] = keyChainId;
+        }
+
+        return MerkleRootComputation.computeRootFromSorted(leaves);
+    }
+
+    /// @notice Compute merkle root for contract entries, sorting inputs in-place
+    function _computeContractRoot(address[] memory contracts, bytes32[] memory contractChainIds)
+        internal
+        pure
+        returns (bytes32)
+    {
+        uint256 length = contracts.length;
+        if (length == 0) return bytes32(0);
+        if (length == 1) return MerkleRootComputation.hashLeaf(contracts[0], contractChainIds[0]);
+
+        bytes32[] memory leaves = new bytes32[](length);
+        for (uint256 i = 0; i < length; i++) {
+            leaves[i] = MerkleRootComputation.hashLeaf(contracts[i], contractChainIds[i]);
+        }
+
+        for (uint256 i = 1; i < length; i++) {
+            bytes32 keyLeaf = leaves[i];
+            address keyContract = contracts[i];
+            bytes32 keyChainId = contractChainIds[i];
+            uint256 j = i;
+            while (j > 0 && leaves[j - 1] > keyLeaf) {
+                leaves[j] = leaves[j - 1];
+                contracts[j] = contracts[j - 1];
+                contractChainIds[j] = contractChainIds[j - 1];
+                j--;
+            }
+            leaves[j] = keyLeaf;
+            contracts[j] = keyContract;
+            contractChainIds[j] = keyChainId;
+        }
+
+        return MerkleRootComputation.computeRootFromSorted(leaves);
     }
 }

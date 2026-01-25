@@ -6,6 +6,7 @@ import { StolenTransactionRegistry } from "../src/registries/StolenTransactionRe
 import { IStolenTransactionRegistry } from "../src/interfaces/IStolenTransactionRegistry.sol";
 import { OperatorRegistry } from "../src/OperatorRegistry.sol";
 import { MerkleRootComputation } from "../src/libraries/MerkleRootComputation.sol";
+import { MerkleTestHelper } from "./helpers/MerkleTestHelper.sol";
 import { CAIP2 } from "../src/libraries/CAIP2.sol";
 
 /// @title StolenTransactionRegistryOperatorTest
@@ -64,14 +65,13 @@ contract StolenTransactionRegistryOperatorTest is Test {
     // HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Compute merkle root from test transactions (sorted by leaf hash)
     function _computeTestMerkleRoot() internal view returns (bytes32) {
-        bytes32[] memory leaves = new bytes32[](3);
-        leaves[0] = MerkleRootComputation.hashLeaf(txHash1, chainId);
-        leaves[1] = MerkleRootComputation.hashLeaf(txHash2, chainId);
-        leaves[2] = MerkleRootComputation.hashLeaf(txHash3, chainId);
-        return MerkleRootComputation.computeRoot(leaves);
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _getTestTransactions();
+        return MerkleTestHelper.computeBytes32Root(txHashes, chainIds);
     }
 
+    /// @notice Get test transactions (sorted by leaf hash for contract submission)
     function _getTestTransactions() internal view returns (bytes32[] memory txHashes, bytes32[] memory chainIds) {
         txHashes = new bytes32[](3);
         chainIds = new bytes32[](3);
@@ -81,6 +81,7 @@ contract StolenTransactionRegistryOperatorTest is Test {
         chainIds[0] = chainId;
         chainIds[1] = chainId;
         chainIds[2] = chainId;
+        MerkleTestHelper.sortBytes32Values(txHashes, chainIds);
     }
 
     function _computeBatchId(bytes32 root, address op, bytes32 reportedChainId) internal pure returns (bytes32) {

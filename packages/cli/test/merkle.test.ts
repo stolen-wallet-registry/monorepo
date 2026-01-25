@@ -133,16 +133,17 @@ describe('Merkle Tree', () => {
     });
 
     it('is case-insensitive for address matching', () => {
+      // Use lowercase in entry (viem accepts lowercase)
       const entries = [
-        { address: '0xAbCdEfAbCdEfAbCdEfAbCdEfAbCdEfAbCdEfAbCd' as Address, chainId: baseChainId },
+        { address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd' as Address, chainId: baseChainId },
       ];
 
       const { tree } = buildContractMerkleTree(entries);
 
-      // Should find entry regardless of case
+      // Should find entry when looking up with uppercase
       const proof = getContractProof(
         tree,
-        '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd' as Address,
+        '0xABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD' as Address,
         baseChainId
       );
       // For a single-entry tree, proof may be empty but retrieval should succeed

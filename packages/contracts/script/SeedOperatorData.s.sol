@@ -386,6 +386,7 @@ contract SeedOperatorData is Script {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Compute merkle root for address-based entries (wallets, contracts)
+    /// @dev Sorts leaves in-place for computeRootFromSorted
     function _computeAddressMerkleRoot(address[] memory addresses, bytes32[] memory chainIds)
         internal
         pure
@@ -394,16 +395,35 @@ contract SeedOperatorData is Script {
         uint256 length = addresses.length;
         require(length == chainIds.length, "SeedOperatorData: addresses and chainIds length mismatch");
         if (length == 0) return bytes32(0);
+        if (length == 1) return MerkleRootComputation.hashLeaf(addresses[0], chainIds[0]);
 
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
             leaves[i] = MerkleRootComputation.hashLeaf(addresses[i], chainIds[i]);
         }
 
-        return MerkleRootComputation.computeRoot(leaves);
+        // Sort leaves AND addresses/chainIds together (insertion sort)
+        for (uint256 i = 1; i < length; i++) {
+            bytes32 keyLeaf = leaves[i];
+            address keyAddr = addresses[i];
+            bytes32 keyChainId = chainIds[i];
+            uint256 j = i;
+            while (j > 0 && leaves[j - 1] > keyLeaf) {
+                leaves[j] = leaves[j - 1];
+                addresses[j] = addresses[j - 1];
+                chainIds[j] = chainIds[j - 1];
+                j--;
+            }
+            leaves[j] = keyLeaf;
+            addresses[j] = keyAddr;
+            chainIds[j] = keyChainId;
+        }
+
+        return MerkleRootComputation.computeRootFromSorted(leaves);
     }
 
     /// @notice Compute merkle root for transaction hash entries
+    /// @dev Sorts leaves in-place for computeRootFromSorted
     function _computeTxMerkleRoot(bytes32[] memory txHashes, bytes32[] memory chainIds)
         internal
         pure
@@ -412,13 +432,31 @@ contract SeedOperatorData is Script {
         uint256 length = txHashes.length;
         require(length == chainIds.length, "SeedOperatorData: txHashes and chainIds length mismatch");
         if (length == 0) return bytes32(0);
+        if (length == 1) return MerkleRootComputation.hashLeaf(txHashes[0], chainIds[0]);
 
         bytes32[] memory leaves = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
             leaves[i] = MerkleRootComputation.hashLeaf(txHashes[i], chainIds[i]);
         }
 
-        return MerkleRootComputation.computeRoot(leaves);
+        // Sort leaves AND txHashes/chainIds together (insertion sort)
+        for (uint256 i = 1; i < length; i++) {
+            bytes32 keyLeaf = leaves[i];
+            bytes32 keyTxHash = txHashes[i];
+            bytes32 keyChainId = chainIds[i];
+            uint256 j = i;
+            while (j > 0 && leaves[j - 1] > keyLeaf) {
+                leaves[j] = leaves[j - 1];
+                txHashes[j] = txHashes[j - 1];
+                chainIds[j] = chainIds[j - 1];
+                j--;
+            }
+            leaves[j] = keyLeaf;
+            txHashes[j] = keyTxHash;
+            chainIds[j] = keyChainId;
+        }
+
+        return MerkleRootComputation.computeRootFromSorted(leaves);
     }
 
     /// @notice Compute batch ID for contract registry (for seeding check)

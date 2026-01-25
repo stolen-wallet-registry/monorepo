@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 import { Test } from "forge-std/Test.sol";
 import { BridgeRouter } from "../src/crosschain/BridgeRouter.sol";
 import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
-import { IBridgeAdapter } from "../src/interfaces/IBridgeAdapter.sol";
 import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
 import { MockInterchainGasPaymaster } from "./mocks/MockInterchainGasPaymaster.sol";

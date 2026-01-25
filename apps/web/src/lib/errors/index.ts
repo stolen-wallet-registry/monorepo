@@ -8,6 +8,10 @@ import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import type { SignatureStatus } from '@/components/composed/SignatureCard';
 
+// Re-export error utilities for unified API surface
+export { sanitizeErrorMessage } from '@/lib/utils';
+export * from './contractErrors';
+
 /**
  * Creates a standardized error handler for signature operations.
  *

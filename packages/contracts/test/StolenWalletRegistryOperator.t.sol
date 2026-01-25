@@ -5,11 +5,11 @@ import { Test } from "forge-std/Test.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
 import { IStolenWalletRegistry } from "../src/interfaces/IStolenWalletRegistry.sol";
 import { OperatorRegistry } from "../src/OperatorRegistry.sol";
-import { IOperatorRegistry } from "../src/interfaces/IOperatorRegistry.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 import { MerkleRootComputation } from "../src/libraries/MerkleRootComputation.sol";
+import { MerkleTestHelper } from "./helpers/MerkleTestHelper.sol";
 
 /// @title StolenWalletRegistryOperatorTest
 /// @notice Unit tests for operator batch registration in StolenWalletRegistry
@@ -536,18 +536,8 @@ contract StolenWalletRegistryOperatorTest is Test {
     // HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Compute merkle root using shared MerkleRootComputation library
-    /// @dev Ensures test/prod parity - uses OZ StandardMerkleTree leaf format
+    /// @notice Compute merkle root and sort arrays in-place for contract submission
     function _computeRoot(address[] memory wallets, bytes32[] memory walletChainIds) internal pure returns (bytes32) {
-        uint256 length = wallets.length;
-        if (length == 0) return bytes32(0);
-
-        // Build leaves in OZ StandardMerkleTree format
-        bytes32[] memory leaves = new bytes32[](length);
-        for (uint256 i = 0; i < length; i++) {
-            leaves[i] = MerkleRootComputation.hashLeaf(wallets[i], walletChainIds[i]);
-        }
-
-        return MerkleRootComputation.computeRoot(leaves);
+        return MerkleTestHelper.computeAddressRoot(wallets, walletChainIds);
     }
 }

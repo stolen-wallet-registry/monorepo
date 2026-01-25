@@ -31,13 +31,19 @@ contract SpokeTransactionRegistryTest is Test {
     uint256 internal constant DEADLINE_BLOCKS = 50;
 
     bytes32 private constant ACK_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
+        "TransactionBatchAcknowledgement(string statement,bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
     );
     bytes32 private constant REG_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)"
+        "TransactionBatchRegistration(string statement,bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)"
     );
     bytes32 private constant TYPE_HASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+
+    // Statement constants (must match contract)
+    string private constant ACK_STATEMENT =
+        "This signature acknowledges that the specified transactions are being reported as fraudulent to the Stolen Transaction Registry.";
+    string private constant REG_STATEMENT =
+        "This signature confirms permanent registration of the specified transactions as fraudulent. This action is irreversible.";
 
     // Test batch data
     bytes32 merkleRoot = keccak256("merkleRoot");
@@ -98,8 +104,18 @@ contract SpokeTransactionRegistryTest is Test {
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+        // Statement is hashed per EIP-712 for string types
         bytes32 structHash = keccak256(
-            abi.encode(ACK_TYPEHASH, _merkleRoot, _reportedChainId, _transactionCount, forwarderAddr, nonce, deadline)
+            abi.encode(
+                ACK_TYPEHASH,
+                keccak256(bytes(ACK_STATEMENT)),
+                _merkleRoot,
+                _reportedChainId,
+                _transactionCount,
+                forwarderAddr,
+                nonce,
+                deadline
+            )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(address(registry)), structHash));
         (v, r, s) = vm.sign(reporterPk, digest);
@@ -112,8 +128,17 @@ contract SpokeTransactionRegistryTest is Test {
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+        // Statement is hashed per EIP-712 for string types
         bytes32 structHash = keccak256(
-            abi.encode(REG_TYPEHASH, _merkleRoot, _reportedChainId, forwarderAddr, nonce, deadline)
+            abi.encode(
+                REG_TYPEHASH,
+                keccak256(bytes(REG_STATEMENT)),
+                _merkleRoot,
+                _reportedChainId,
+                forwarderAddr,
+                nonce,
+                deadline
+            )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(address(registry)), structHash));
         (v, r, s) = vm.sign(reporterPk, digest);
@@ -295,14 +320,22 @@ contract SpokeTransactionRegistryTest is Test {
     }
 
     // Acknowledgement should reject invalid signatures.
+    // Uses correct struct format with statement hash to ensure we're testing ONLY wrong signer.
     function test_Acknowledge_InvalidSigner_Reverts() public {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = registry.nonces(reporter);
 
-        // Sign with wrong key
+        // Sign with wrong key but correct struct format
         bytes32 structHash = keccak256(
             abi.encode(
-                ACK_TYPEHASH, merkleRoot, reportedChainId, uint32(transactionHashes.length), forwarder, nonce, deadline
+                ACK_TYPEHASH,
+                keccak256(bytes(ACK_STATEMENT)),
+                merkleRoot,
+                reportedChainId,
+                uint32(transactionHashes.length),
+                forwarder,
+                nonce,
+                deadline
             )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(address(registry)), structHash));
@@ -341,6 +374,7 @@ contract SpokeTransactionRegistryTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Registration should fail if hub is not configured.
+    // Uses correct struct format with statement hash for consistency.
     function test_Register_HubNotConfigured_Reverts() public {
         SpokeTransactionRegistry noHub = new SpokeTransactionRegistry(
             owner, address(adapter), address(feeManager), HUB_DOMAIN, bytes32(0), GRACE_BLOCKS, DEADLINE_BLOCKS
@@ -349,9 +383,12 @@ contract SpokeTransactionRegistryTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = noHub.nonces(reporter);
 
-        // Sign for noHub registry
-        bytes32 structHash =
-            keccak256(abi.encode(REG_TYPEHASH, merkleRoot, reportedChainId, forwarder, nonce, deadline));
+        // Sign for noHub registry with correct struct format
+        bytes32 structHash = keccak256(
+            abi.encode(
+                REG_TYPEHASH, keccak256(bytes(REG_STATEMENT)), merkleRoot, reportedChainId, forwarder, nonce, deadline
+            )
+        );
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",

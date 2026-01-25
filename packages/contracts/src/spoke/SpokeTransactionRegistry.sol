@@ -21,17 +21,29 @@ contract SpokeTransactionRegistry is ISpokeTransactionRegistry, EIP712, Ownable2
     using CrossChainMessage for CrossChainMessage.TransactionBatchPayload;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // STATEMENT CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev Human-readable statement for acknowledgement (displayed in MetaMask)
+    string private constant ACK_STATEMENT =
+        "This signature acknowledges that the specified transactions are being reported as fraudulent to the Stolen Transaction Registry.";
+
+    /// @dev Human-readable statement for registration (displayed in MetaMask)
+    string private constant REG_STATEMENT =
+        "This signature confirms permanent registration of the specified transactions as fraudulent. This action is irreversible.";
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // TYPE HASHES
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev EIP-712 type hash for acknowledgement phase
+    /// @dev EIP-712 type hash for acknowledgement phase (statement field first for visibility)
     bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
+        "TransactionBatchAcknowledgement(string statement,bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
     );
 
-    /// @dev EIP-712 type hash for registration phase
+    /// @dev EIP-712 type hash for registration phase (statement field first for visibility)
     bytes32 private constant REGISTRATION_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)"
+        "TransactionBatchRegistration(string statement,bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)"
     );
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -195,11 +207,12 @@ contract SpokeTransactionRegistry is ISpokeTransactionRegistry, EIP712, Ownable2
         _storeAcknowledgement(params);
     }
 
-    /// @dev Verify EIP-712 acknowledgement signature
+    /// @dev Verify EIP-712 acknowledgement signature (statement is hashed per EIP-712 for string types)
     function _verifyAcknowledgementSignature(AcknowledgeParams memory params, uint256 currentNonce) internal view {
         bytes32 structHash = keccak256(
             abi.encode(
                 ACKNOWLEDGEMENT_TYPEHASH,
+                keccak256(bytes(ACK_STATEMENT)),
                 params.merkleRoot,
                 params.reportedChainId,
                 params.transactionCount,
@@ -303,12 +316,14 @@ contract SpokeTransactionRegistry is ISpokeTransactionRegistry, EIP712, Ownable2
     }
 
     /// @dev Verify EIP-712 registration signature. Returns current nonce.
+    /// @dev Statement is hashed per EIP-712 for string types.
     function _verifyRegistrationSignature(RegisterParams memory params) internal view returns (uint256) {
         uint256 currentNonce = nonces[params.reporter];
 
         bytes32 structHash = keccak256(
             abi.encode(
                 REGISTRATION_TYPEHASH,
+                keccak256(bytes(REG_STATEMENT)),
                 params.merkleRoot,
                 params.reportedChainId,
                 msg.sender,
@@ -545,10 +560,11 @@ contract SpokeTransactionRegistry is ISpokeTransactionRegistry, EIP712, Ownable2
         deadline = TimingConfig.getSignatureDeadline();
 
         if (step == 1) {
-            // Acknowledgement
+            // Acknowledgement (statement is hashed per EIP-712 for string types)
             hashStruct = keccak256(
                 abi.encode(
                     ACKNOWLEDGEMENT_TYPEHASH,
+                    keccak256(bytes(ACK_STATEMENT)),
                     merkleRoot,
                     reportedChainId,
                     transactionCount,
@@ -558,9 +574,17 @@ contract SpokeTransactionRegistry is ISpokeTransactionRegistry, EIP712, Ownable2
                 )
             );
         } else {
-            // Registration
+            // Registration (statement is hashed per EIP-712 for string types)
             hashStruct = keccak256(
-                abi.encode(REGISTRATION_TYPEHASH, merkleRoot, reportedChainId, forwarder, nonces[msg.sender], deadline)
+                abi.encode(
+                    REGISTRATION_TYPEHASH,
+                    keccak256(bytes(REG_STATEMENT)),
+                    merkleRoot,
+                    reportedChainId,
+                    forwarder,
+                    nonces[msg.sender],
+                    deadline
+                )
             );
         }
     }

@@ -8,40 +8,23 @@ import { FeeManager } from "../src/FeeManager.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 import { CAIP2 } from "../src/libraries/CAIP2.sol";
-import { MerkleRootComputation } from "../src/libraries/MerkleRootComputation.sol";
+import { StolenTransactionRegistryTestBase } from "./helpers/StolenTransactionRegistryTestBase.sol";
 
 /// @title StolenTransactionRegistryTest
 /// @notice Comprehensive unit and fuzz tests for StolenTransactionRegistry
-contract StolenTransactionRegistryTest is Test {
-    StolenTransactionRegistry public registry;
-
+/// @dev Inherits StolenTransactionRegistryTestBase for shared helpers
+contract StolenTransactionRegistryTest is StolenTransactionRegistryTestBase {
     // Test accounts
     uint256 internal reporterPrivateKey;
     address internal reporter;
     address internal forwarder;
 
-    // EIP-712 constants (must match contract)
-    bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
-    );
-
-    bytes32 private constant REGISTRATION_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)"
-    );
-
-    // Domain separator components
-    bytes32 private constant TYPE_HASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-
     // Timing configuration (matching local Anvil - 13s blocks)
     uint256 internal constant GRACE_BLOCKS = 10;
     uint256 internal constant DEADLINE_BLOCKS = 50;
 
-    // Test data
+    // Test data (individual hashes for specific tests)
     bytes32 internal testTxHash1;
-    bytes32 internal testTxHash2;
-    bytes32 internal testTxHash3;
-    bytes32 internal testChainId;
     bytes32 internal testMerkleRoot;
 
     function setUp() public {
@@ -57,96 +40,19 @@ contract StolenTransactionRegistryTest is Test {
         vm.deal(reporter, 10 ether);
         vm.deal(forwarder, 10 ether);
 
-        // Set up test transaction data
+        // Set up test chain ID (Base mainnet) - used by base class helpers
+        testChainId = CAIP2.fromEIP155(8453);
+
+        // Keep testTxHash1 for tests that need individual hash reference
         testTxHash1 = keccak256("tx1");
-        testTxHash2 = keccak256("tx2");
-        testTxHash3 = keccak256("tx3");
-        testChainId = CAIP2.fromEIP155(8453); // Base mainnet
 
         // Pre-compute merkle root for standard test case (3 transactions)
         testMerkleRoot = _computeTestMerkleRoot();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // HELPERS
+    // TEST-SPECIFIC HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
-
-    function _getDomainSeparator() internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                TYPE_HASH, keccak256("StolenTransactionRegistry"), keccak256("4"), block.chainid, address(registry)
-            )
-        );
-    }
-
-    function _signAcknowledgement(
-        uint256 privateKey,
-        bytes32 merkleRoot,
-        bytes32 reportedChainId,
-        uint32 transactionCount,
-        address _forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(
-            abi.encode(
-                ACKNOWLEDGEMENT_TYPEHASH, merkleRoot, reportedChainId, transactionCount, _forwarder, nonce, deadline
-            )
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
-    function _signRegistration(
-        uint256 privateKey,
-        bytes32 merkleRoot,
-        bytes32 reportedChainId,
-        address _forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(
-            abi.encode(REGISTRATION_TYPEHASH, merkleRoot, reportedChainId, _forwarder, nonce, deadline)
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
-    function _getTestTxHashes() internal view returns (bytes32[] memory) {
-        bytes32[] memory txHashes = new bytes32[](3);
-        txHashes[0] = testTxHash1;
-        txHashes[1] = testTxHash2;
-        txHashes[2] = testTxHash3;
-        return txHashes;
-    }
-
-    function _getTestChainIds() internal view returns (bytes32[] memory) {
-        bytes32[] memory chainIds = new bytes32[](3);
-        chainIds[0] = testChainId;
-        chainIds[1] = testChainId;
-        chainIds[2] = testChainId;
-        return chainIds;
-    }
-
-    function _computeTestMerkleRoot() internal view returns (bytes32) {
-        bytes32[] memory txHashes = _getTestTxHashes();
-        bytes32[] memory chainIds = _getTestChainIds();
-        return _computeMerkleRoot(txHashes, chainIds);
-    }
-
-    /// @dev Uses shared MerkleRootComputation library to ensure test/prod parity
-    function _computeMerkleRoot(bytes32[] memory txHashes, bytes32[] memory chainIds) internal pure returns (bytes32) {
-        uint256 length = txHashes.length;
-        if (length == 0) return bytes32(0);
-
-        // Build leaves in OZ StandardMerkleTree format
-        bytes32[] memory leaves = new bytes32[](length);
-        for (uint256 i = 0; i < length; i++) {
-            leaves[i] = MerkleRootComputation.hashLeaf(txHashes[i], chainIds[i]);
-        }
-
-        return MerkleRootComputation.computeRoot(leaves);
-    }
 
     function _doAcknowledgement(address _forwarder) internal {
         uint256 deadline = block.timestamp + 1 hours;
@@ -543,8 +449,8 @@ contract StolenTransactionRegistryTest is Test {
 
 /// @title StolenTransactionRegistryFeeTest
 /// @notice Tests for StolenTransactionRegistry with fee collection enabled
-contract StolenTransactionRegistryFeeTest is Test {
-    StolenTransactionRegistry public registry;
+/// @dev Inherits StolenTransactionRegistryTestBase for shared helpers
+contract StolenTransactionRegistryFeeTest is StolenTransactionRegistryTestBase {
     RegistryHub public hub;
     FeeManager public feeManager;
     MockAggregator public priceFeed;
@@ -555,19 +461,6 @@ contract StolenTransactionRegistryFeeTest is Test {
     address internal hubOwner;
 
     bytes32 internal testMerkleRoot;
-    bytes32 internal testChainId;
-
-    // EIP-712 constants
-    bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
-    );
-
-    bytes32 private constant REGISTRATION_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)"
-    );
-
-    bytes32 private constant TYPE_HASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
     uint256 internal constant GRACE_BLOCKS = 10;
     uint256 internal constant DEADLINE_BLOCKS = 50;
@@ -603,92 +496,16 @@ contract StolenTransactionRegistryFeeTest is Test {
         vm.deal(reporter, 10 ether);
         vm.deal(forwarder, 10 ether);
 
-        // Set up test data
+        // Set up test chain ID (Base mainnet) - used by base class helpers
         testChainId = CAIP2.fromEIP155(8453);
-        bytes32 txHash1 = keccak256("tx1");
-        bytes32 txHash2 = keccak256("tx2");
-        bytes32 txHash3 = keccak256("tx3");
 
-        // Compute merkle root
-        bytes32[] memory txHashes = new bytes32[](3);
-        txHashes[0] = txHash1;
-        txHashes[1] = txHash2;
-        txHashes[2] = txHash3;
-
-        bytes32[] memory chainIds = new bytes32[](3);
-        chainIds[0] = testChainId;
-        chainIds[1] = testChainId;
-        chainIds[2] = testChainId;
-
-        testMerkleRoot = _computeMerkleRoot(txHashes, chainIds);
+        // Pre-compute merkle root using base class helper
+        testMerkleRoot = _computeTestMerkleRoot();
     }
 
-    function _getDomainSeparator() internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                TYPE_HASH, keccak256("StolenTransactionRegistry"), keccak256("4"), block.chainid, address(registry)
-            )
-        );
-    }
-
-    function _signAcknowledgement(
-        uint256 privateKey,
-        bytes32 merkleRoot,
-        bytes32 reportedChainId,
-        uint32 transactionCount,
-        address _forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(
-            abi.encode(
-                ACKNOWLEDGEMENT_TYPEHASH, merkleRoot, reportedChainId, transactionCount, _forwarder, nonce, deadline
-            )
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
-    function _signRegistration(
-        uint256 privateKey,
-        bytes32 merkleRoot,
-        bytes32 reportedChainId,
-        address _forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(
-            abi.encode(REGISTRATION_TYPEHASH, merkleRoot, reportedChainId, _forwarder, nonce, deadline)
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
-    function _getTestTxHashes() internal pure returns (bytes32[] memory) {
-        bytes32[] memory txHashes = new bytes32[](3);
-        txHashes[0] = keccak256("tx1");
-        txHashes[1] = keccak256("tx2");
-        txHashes[2] = keccak256("tx3");
-        return txHashes;
-    }
-
-    function _getTestChainIds() internal view returns (bytes32[] memory) {
-        bytes32[] memory chainIds = new bytes32[](3);
-        chainIds[0] = testChainId;
-        chainIds[1] = testChainId;
-        chainIds[2] = testChainId;
-        return chainIds;
-    }
-
-    /// @dev Uses shared MerkleRootComputation library to ensure test/prod parity
-    function _computeMerkleRoot(bytes32[] memory txHashes, bytes32[] memory chainIds) internal pure returns (bytes32) {
-        uint256 length = txHashes.length;
-        bytes32[] memory leaves = new bytes32[](length);
-        for (uint256 i = 0; i < length; i++) {
-            leaves[i] = MerkleRootComputation.hashLeaf(txHashes[i], chainIds[i]);
-        }
-        return MerkleRootComputation.computeRoot(leaves);
-    }
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FEE TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Registration should require fee payment
     function test_Register_RequiresFee() public {

@@ -12,8 +12,6 @@ import { useSignTypedData, useAccount, useChainId } from 'wagmi';
 import {
   buildTxAcknowledgementTypedData,
   buildTxRegistrationTypedData,
-  type TxAcknowledgementMessage,
-  type TxRegistrationMessage,
 } from '@/lib/signatures/transactions';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
@@ -84,7 +82,7 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
   const signTxAcknowledgement = useCallback(
     async (params: TxSignAckParams): Promise<Hex> => {
       const validatedAddress = validateSigningPreconditions();
-      const message: TxAcknowledgementMessage = {
+      const message = {
         merkleRoot: params.merkleRoot,
         reportedChainId: params.reportedChainId,
         transactionCount: params.transactionCount,
@@ -136,7 +134,7 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
   const signTxRegistration = useCallback(
     async (params: TxSignRegParams): Promise<Hex> => {
       const validatedAddress = validateSigningPreconditions();
-      const message: TxRegistrationMessage = {
+      const message = {
         merkleRoot: params.merkleRoot,
         reportedChainId: params.reportedChainId,
         forwarder: params.forwarder,

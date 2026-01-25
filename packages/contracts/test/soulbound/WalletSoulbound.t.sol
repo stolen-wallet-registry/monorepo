@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test, console2 } from "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { WalletSoulbound } from "../../src/soulbound/WalletSoulbound.sol";
 import { BaseSoulbound } from "../../src/soulbound/BaseSoulbound.sol";
 import { TranslationRegistry } from "../../src/soulbound/TranslationRegistry.sol";
-import { IStolenWalletRegistry } from "../../src/interfaces/IStolenWalletRegistry.sol";
 import { IERC5192 } from "../../src/soulbound/interfaces/IERC5192.sol";
 import { SVGRenderer } from "../../src/soulbound/libraries/SVGRenderer.sol";
 

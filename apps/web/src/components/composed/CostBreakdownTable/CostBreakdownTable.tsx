@@ -121,7 +121,11 @@ export function CostBreakdownTable({
           />
         </span>
         <div className="text-right">
-          {costEstimate.gasCost.wei > 0n ? (
+          {isLoading ? (
+            <span className="text-muted-foreground">Estimating...</span>
+          ) : isError ? (
+            <span className="text-destructive text-xs">Estimation failed</span>
+          ) : costEstimate.gasCost.wei !== undefined ? (
             <>
               <span className="font-medium">{costEstimate.gasCost.usd}</span>
               <span className="text-xs text-muted-foreground ml-2">
@@ -129,7 +133,7 @@ export function CostBreakdownTable({
               </span>
             </>
           ) : (
-            <span className="text-muted-foreground">Estimating...</span>
+            <span className="text-muted-foreground">—</span>
           )}
         </div>
       </div>

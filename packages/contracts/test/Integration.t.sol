@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test, console2 } from "forge-std/Test.sol";
+import { console2 } from "forge-std/Test.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
 import { IStolenWalletRegistry } from "../src/interfaces/IStolenWalletRegistry.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
+import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
 
 /// @title IntegrationTest
 /// @notice End-to-end tests for the full registry system
-contract IntegrationTest is Test {
+contract IntegrationTest is EIP712TestHelper {
     RegistryHub public hub;
     FeeManager public feeManager;
     StolenWalletRegistry public walletRegistry;
@@ -20,15 +21,6 @@ contract IntegrationTest is Test {
     address public victim;
     address public forwarder;
     uint256 internal victimPrivateKey;
-
-    // EIP-712 constants - version must match StolenWalletRegistry
-    string private constant DOMAIN_VERSION = "4";
-    bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH =
-        keccak256("AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-    bytes32 private constant REGISTRATION_TYPEHASH =
-        keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-    bytes32 private constant TYPE_HASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
     // Timing configuration (matching local Anvil - 13s blocks)
     uint256 internal constant GRACE_BLOCKS = 10;
@@ -72,45 +64,12 @@ contract IntegrationTest is Test {
     // HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _getDomainSeparator() internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                TYPE_HASH,
-                keccak256("StolenWalletRegistry"),
-                keccak256(bytes(DOMAIN_VERSION)),
-                block.chainid,
-                address(walletRegistry)
-            )
-        );
-    }
-
-    function _signAcknowledgement(
-        uint256 privateKey,
-        address _owner,
-        address _forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(abi.encode(ACKNOWLEDGEMENT_TYPEHASH, _owner, _forwarder, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
-    function _signRegistration(uint256 privateKey, address _owner, address _forwarder, uint256 nonce, uint256 deadline)
-        internal
-        view
-        returns (uint8 v, bytes32 r, bytes32 s)
-    {
-        bytes32 structHash = keccak256(abi.encode(REGISTRATION_TYPEHASH, _owner, _forwarder, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
     function _doAcknowledgement() internal {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(victim);
 
-        (uint8 v, bytes32 r, bytes32 s) = _signAcknowledgement(victimPrivateKey, victim, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(victimPrivateKey, address(walletRegistry), victim, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         walletRegistry.acknowledge(deadline, nonce, victim, v, r, s);
@@ -126,7 +85,8 @@ contract IntegrationTest is Test {
         uint256 nonce = walletRegistry.nonces(victim);
         uint256 fee = feeManager.currentFeeWei();
 
-        (uint8 v, bytes32 r, bytes32 s) = _signRegistration(victimPrivateKey, victim, forwarder, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletReg(victimPrivateKey, address(walletRegistry), victim, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         walletRegistry.register{ value: fee }(deadline, nonce, victim, v, r, s);
@@ -311,9 +271,9 @@ contract IntegrationTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(victim2);
 
-        bytes32 structHash = keccak256(abi.encode(ACKNOWLEDGEMENT_TYPEHASH, victim2, forwarder, nonce, deadline));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(victim2PrivateKey, digest);
+        // Use helper for signing
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signWalletAck(victim2PrivateKey, address(walletRegistry), victim2, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         walletRegistry.acknowledge(deadline, nonce, victim2, v, r, s);
@@ -331,9 +291,7 @@ contract IntegrationTest is Test {
         nonce = walletRegistry.nonces(victim2);
         uint256 fee = feeManager.currentFeeWei();
 
-        structHash = keccak256(abi.encode(REGISTRATION_TYPEHASH, victim2, forwarder, nonce, deadline));
-        digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(victim2PrivateKey, digest);
+        (v, r, s) = _signWalletReg(victim2PrivateKey, address(walletRegistry), victim2, forwarder, nonce, deadline);
 
         vm.prank(forwarder);
         walletRegistry.register{ value: fee }(deadline, nonce, victim2, v, r, s);

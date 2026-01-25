@@ -7,12 +7,7 @@
  */
 
 import { useSignTypedData, useAccount, useChainId } from 'wagmi';
-import {
-  buildAcknowledgementTypedData,
-  buildRegistrationTypedData,
-  type AcknowledgementMessage,
-  type RegistrationMessage,
-} from '@/lib/signatures';
+import { buildAcknowledgementTypedData, buildRegistrationTypedData } from '@/lib/signatures';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import type { Address, Hex } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -77,10 +72,11 @@ export function useSignEIP712(): UseSignEIP712Result {
 
   /**
    * Sign an acknowledgement message (Phase 1).
+   * Note: The builder adds the statement field internally.
    */
   const signAcknowledgement = async (params: SignParams): Promise<Hex> => {
     const validatedAddress = validateSigningPreconditions();
-    const message: AcknowledgementMessage = toBaseMessage(params);
+    const message = toBaseMessage(params);
     const typedData = buildAcknowledgementTypedData(chainId, validatedAddress, message);
 
     logger.signature.info('Requesting acknowledgement signature', {
@@ -121,7 +117,7 @@ export function useSignEIP712(): UseSignEIP712Result {
    */
   const signRegistration = async (params: SignParams): Promise<Hex> => {
     const validatedAddress = validateSigningPreconditions();
-    const message: RegistrationMessage = toBaseMessage(params);
+    const message = toBaseMessage(params);
     const typedData = buildRegistrationTypedData(chainId, validatedAddress, message);
 
     logger.signature.info('Requesting registration signature', {

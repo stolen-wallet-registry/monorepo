@@ -76,7 +76,6 @@ interface IFraudulentContractRegistry {
     error FraudulentContractRegistry__NotInvalidated();
     error FraudulentContractRegistry__InvalidContractAddress();
     error FraudulentContractRegistry__InvalidChainIdEntry();
-    error FraudulentContractRegistry__BatchSizeExceedsLimit();
     error FraudulentContractRegistry__UnexpectedEthWithFeesDisabled();
 
     // ═══════════════════════════════════════════════════════════════════════════

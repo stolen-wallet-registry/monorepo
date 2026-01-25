@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test } from "forge-std/Test.sol";
+import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
 
 // Hub contracts
 import { RegistryHub } from "../src/RegistryHub.sol";
@@ -25,7 +25,7 @@ import { MockInterchainGasPaymaster } from "./mocks/MockInterchainGasPaymaster.s
 
 /// @title CrossChainAdvancedTest
 /// @notice Advanced cross-chain tests: multi-spoke, security, edge cases, fuzz
-contract CrossChainAdvancedTest is Test {
+contract CrossChainAdvancedTest is EIP712TestHelper {
     using CrossChainMessage for CrossChainMessage.RegistrationPayload;
 
     // Hub contracts
@@ -536,9 +536,9 @@ contract CrossChainAdvancedTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = spokeRegistry.nonces(victim);
 
-        // Acknowledgement
+        // Acknowledgement - use shared helper
         (uint8 v, bytes32 r, bytes32 s) =
-            _signAcknowledgement(spokeRegistry, spokeDomain, victim, victimPk, nonce, deadline);
+            _signWalletAck(victimPk, address(spokeRegistry), victim, victim, nonce, deadline);
         vm.prank(victim);
         spokeRegistry.acknowledgeLocal(deadline, nonce, victim, v, r, s);
 
@@ -546,10 +546,10 @@ contract CrossChainAdvancedTest is Test {
         ISpokeRegistry.AcknowledgementData memory ack = spokeRegistry.getAcknowledgement(victim);
         vm.roll(ack.startBlock + 1);
 
-        // Registration
+        // Registration - use shared helper
         nonce = spokeRegistry.nonces(victim);
         deadline = block.timestamp + 1 hours;
-        (v, r, s) = _signRegistration(spokeRegistry, spokeDomain, victim, victimPk, nonce, deadline);
+        (v, r, s) = _signWalletReg(victimPk, address(spokeRegistry), victim, victim, nonce, deadline);
 
         uint256 fee = spokeRegistry.quoteRegistration(victim);
         vm.deal(victim, fee);
@@ -565,6 +565,10 @@ contract CrossChainAdvancedTest is Test {
         hubMailbox.simulateReceive(address(inbox), spokeDomain, sender, messageBody);
     }
 
+    // Note: Statement constants and signing helpers inherited from EIP712TestHelper.
+    // Uses WALLET_ACK_STATEMENT, WALLET_REG_STATEMENT, _signWalletAck(), _signWalletReg()
+
+    /// @dev Wrapper for cross-chain tests that need chainId override
     function _signAcknowledgement(
         SpokeRegistry spokeRegistry,
         uint32 chainId,
@@ -573,25 +577,18 @@ contract CrossChainAdvancedTest is Test {
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 typeHash = keccak256(
-            "AcknowledgementOfRegistry(address owner,address forwarder,uint256 nonce,uint256 deadline)"
+        // Use shared EIP712TestHelper constants
+        bytes32 structHash = keccak256(
+            abi.encode(WALLET_ACK_TYPEHASH, keccak256(bytes(WALLET_ACK_STATEMENT)), victim, victim, nonce, deadline)
         );
-        bytes32 structHash = keccak256(abi.encode(typeHash, victim, victim, nonce, deadline));
 
-        bytes32 domainSeparator = keccak256(
-            abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256("StolenWalletRegistry"),
-                keccak256("4"),
-                chainId,
-                address(spokeRegistry)
-            )
-        );
+        bytes32 domainSeparator = _walletDomainSeparatorWithChainId(address(spokeRegistry), chainId);
 
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (v, r, s) = vm.sign(victimPk, digest);
     }
 
+    /// @dev Wrapper for cross-chain tests that need chainId override
     function _signRegistration(
         SpokeRegistry spokeRegistry,
         uint32 chainId,
@@ -600,18 +597,12 @@ contract CrossChainAdvancedTest is Test {
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 typeHash = keccak256("Registration(address owner,address forwarder,uint256 nonce,uint256 deadline)");
-        bytes32 structHash = keccak256(abi.encode(typeHash, victim, victim, nonce, deadline));
-
-        bytes32 domainSeparator = keccak256(
-            abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256("StolenWalletRegistry"),
-                keccak256("4"),
-                chainId,
-                address(spokeRegistry)
-            )
+        // Use shared EIP712TestHelper constants
+        bytes32 structHash = keccak256(
+            abi.encode(WALLET_REG_TYPEHASH, keccak256(bytes(WALLET_REG_STATEMENT)), victim, victim, nonce, deadline)
         );
+
+        bytes32 domainSeparator = _walletDomainSeparatorWithChainId(address(spokeRegistry), chainId);
 
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (v, r, s) = vm.sign(victimPk, digest);

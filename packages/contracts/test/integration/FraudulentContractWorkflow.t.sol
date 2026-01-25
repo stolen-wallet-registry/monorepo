@@ -3,11 +3,10 @@ pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
 import { FraudulentContractRegistry } from "../../src/registries/FraudulentContractRegistry.sol";
-import { IFraudulentContractRegistry } from "../../src/interfaces/IFraudulentContractRegistry.sol";
 import { OperatorRegistry } from "../../src/OperatorRegistry.sol";
 import { RegistryHub } from "../../src/RegistryHub.sol";
 import { FeeManager } from "../../src/FeeManager.sol";
-import { MerkleRootComputation } from "../../src/libraries/MerkleRootComputation.sol";
+import { MerkleTestHelper } from "../helpers/MerkleTestHelper.sol";
 
 /// @notice Full workflow test for FraudulentContractRegistry
 contract FraudulentContractWorkflowTest is Test {
@@ -164,18 +163,12 @@ contract FraudulentContractWorkflowTest is Test {
         assertTrue(batchId1 != batchId2);
     }
 
-    /// @notice Compute merkle root using shared MerkleRootComputation library
-    /// @dev Ensures test/prod parity - leaf construction is registry-specific (contract + chainId)
-    function _computeRoot(address[] memory contracts, bytes32[] memory chainIds) internal pure returns (bytes32) {
-        uint256 length = contracts.length;
-        if (length == 0) return bytes32(0);
-
-        // Build leaves in OZ StandardMerkleTree format
-        bytes32[] memory leaves = new bytes32[](length);
-        for (uint256 i = 0; i < length; i++) {
-            leaves[i] = MerkleRootComputation.hashLeaf(contracts[i], chainIds[i]);
-        }
-
-        return MerkleRootComputation.computeRoot(leaves);
+    /// @notice Compute merkle root and sort arrays in-place for contract submission
+    function _computeRoot(address[] memory contracts, bytes32[] memory contractChainIds)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return MerkleTestHelper.computeAddressRoot(contracts, contractChainIds);
     }
 }

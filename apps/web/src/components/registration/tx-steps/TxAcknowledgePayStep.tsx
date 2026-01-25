@@ -254,6 +254,11 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         transactionCount: selectedTxHashes.length,
         deadline: storedSignature.deadline.toString(),
         chainId,
+        // Log sorted hashes for debugging merkle root mismatch
+        sortedTxHashesCount: txHashesForContract?.length,
+        firstSortedTxHash: txHashesForContract?.[0],
+        lastSortedTxHash: txHashesForContract?.[txHashesForContract?.length - 1],
+        firstSortedChainId: chainIdsForContract?.[0],
       });
 
       const params: TxAcknowledgementParams = {
@@ -266,6 +271,16 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         deadline: storedSignature.deadline,
         signature: parsedSig,
       };
+
+      // Debug log to trace merkle root mismatch issues
+      logger.contract.debug('Transaction acknowledgement params', {
+        merkleRoot,
+        reportedChainId: reportedChainIdHash,
+        transactionCount: params.transactionCount,
+        // Log capped sample to keep logs manageable in stress tests
+        transactionHashesSample: txHashesForContract?.slice(0, 10),
+        chainIds: chainIdsForContract?.slice(0, 2), // Just first 2 to keep log readable
+      });
 
       await submitAcknowledgement(params);
 

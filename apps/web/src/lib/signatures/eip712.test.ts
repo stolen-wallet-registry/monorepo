@@ -7,6 +7,7 @@ import {
   EIP712_DOMAIN_VERSION,
   EIP712_TYPES,
   SIGNATURE_STEP,
+  STATEMENTS,
   type AcknowledgementMessage,
   type RegistrationMessage,
 } from './eip712';
@@ -33,7 +34,9 @@ describe('EIP-712 typed data', () => {
     });
 
     it('has correct EIP712 type definitions', () => {
+      // Statement is FIRST field for visibility in wallet UI (MetaMask)
       expect(EIP712_TYPES.AcknowledgementOfRegistry).toEqual([
+        { name: 'statement', type: 'string' },
         { name: 'owner', type: 'address' },
         { name: 'forwarder', type: 'address' },
         { name: 'nonce', type: 'uint256' },
@@ -41,11 +44,21 @@ describe('EIP-712 typed data', () => {
       ]);
 
       expect(EIP712_TYPES.Registration).toEqual([
+        { name: 'statement', type: 'string' },
         { name: 'owner', type: 'address' },
         { name: 'forwarder', type: 'address' },
         { name: 'nonce', type: 'uint256' },
         { name: 'deadline', type: 'uint256' },
       ]);
+    });
+
+    it('has correct statement constants', () => {
+      expect(STATEMENTS.WALLET_ACK).toBe(
+        'This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry.'
+      );
+      expect(STATEMENTS.WALLET_REG).toBe(
+        'This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry. This action is irreversible.'
+      );
     });
   });
 
@@ -80,7 +93,8 @@ describe('EIP-712 typed data', () => {
   });
 
   describe('buildAcknowledgementTypedData', () => {
-    const message: AcknowledgementMessage = {
+    // Builder accepts message without statement (adds it internally)
+    const message: Omit<AcknowledgementMessage, 'statement'> = {
       owner: testOwner,
       forwarder: testForwarder,
       nonce: 0n,
@@ -109,9 +123,11 @@ describe('EIP-712 typed data', () => {
       expect(typedData.types.Registration).toBeDefined();
     });
 
-    it('includes message with all fields', () => {
+    it('includes message with all fields including statement', () => {
       const typedData = buildAcknowledgementTypedData(testChainId, testContract, message);
 
+      // Statement is added by the builder
+      expect(typedData.message.statement).toBe(STATEMENTS.WALLET_ACK);
       expect(typedData.message.owner).toBe(testOwner);
       expect(typedData.message.forwarder).toBe(testForwarder);
       expect(typedData.message.nonce).toBe(0n);
@@ -119,7 +135,7 @@ describe('EIP-712 typed data', () => {
     });
 
     it('preserves BigInt message values', () => {
-      const largeMessage: AcknowledgementMessage = {
+      const largeMessage: Omit<AcknowledgementMessage, 'statement'> = {
         owner: testOwner,
         forwarder: testForwarder,
         nonce: 999999999999n,
@@ -134,7 +150,8 @@ describe('EIP-712 typed data', () => {
   });
 
   describe('buildRegistrationTypedData', () => {
-    const message: RegistrationMessage = {
+    // Builder accepts message without statement (adds it internally)
+    const message: Omit<RegistrationMessage, 'statement'> = {
       owner: testOwner,
       forwarder: testForwarder,
       nonce: 1n,
@@ -161,9 +178,11 @@ describe('EIP-712 typed data', () => {
       expect(typedData.types).toBe(EIP712_TYPES);
     });
 
-    it('includes message with all fields', () => {
+    it('includes message with all fields including statement', () => {
       const typedData = buildRegistrationTypedData(testChainId, testContract, message);
 
+      // Statement is added by the builder
+      expect(typedData.message.statement).toBe(STATEMENTS.WALLET_REG);
       expect(typedData.message.owner).toBe(testOwner);
       expect(typedData.message.forwarder).toBe(testForwarder);
       expect(typedData.message.nonce).toBe(1n);
@@ -172,15 +191,15 @@ describe('EIP-712 typed data', () => {
   });
 
   describe('acknowledgement vs registration typed data', () => {
-    it('differ only in primaryType', () => {
-      const ackMessage: AcknowledgementMessage = {
+    it('differ in primaryType and statement', () => {
+      const ackMessage: Omit<AcknowledgementMessage, 'statement'> = {
         owner: testOwner,
         forwarder: testForwarder,
         nonce: 0n,
         deadline: 100n,
       };
 
-      const regMessage: RegistrationMessage = {
+      const regMessage: Omit<RegistrationMessage, 'statement'> = {
         owner: testOwner,
         forwarder: testForwarder,
         nonce: 0n,
@@ -196,8 +215,15 @@ describe('EIP-712 typed data', () => {
       // Same types reference
       expect(ackData.types).toBe(regData.types);
 
-      // Same message content
-      expect(ackData.message).toEqual(regData.message);
+      // Different statements (human-readable intent)
+      expect(ackData.message.statement).toBe(STATEMENTS.WALLET_ACK);
+      expect(regData.message.statement).toBe(STATEMENTS.WALLET_REG);
+
+      // Same other message fields
+      expect(ackData.message.owner).toBe(regData.message.owner);
+      expect(ackData.message.forwarder).toBe(regData.message.forwarder);
+      expect(ackData.message.nonce).toBe(regData.message.nonce);
+      expect(ackData.message.deadline).toBe(regData.message.deadline);
 
       // Different primaryType
       expect(ackData.primaryType).toBe('AcknowledgementOfRegistry');
