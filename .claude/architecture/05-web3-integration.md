@@ -22,19 +22,28 @@ AppProviders
 ```typescript
 // apps/web/src/lib/wagmi.ts
 
-export const localhost: Chain = {
-  id: 31337,
-  name: 'Localhost',
-  rpcUrls: { default: { http: ['http://127.0.0.1:8545'] } },
-};
+import {
+  anvilHub,
+  anvilSpoke,
+  baseSepolia,
+  optimismSepolia,
+  toWagmiChain,
+  getRpcUrl,
+} from '@swr/chains';
+
+export const isCrossChainMode = import.meta.env.VITE_CROSSCHAIN === 'true';
+export const isTestnetMode = import.meta.env.VITE_TESTNET === 'true';
+
+const chains = isTestnetMode
+  ? [toWagmiChain(baseSepolia), toWagmiChain(optimismSepolia)]
+  : isCrossChainMode
+    ? [toWagmiChain(anvilHub), toWagmiChain(anvilSpoke)]
+    : [toWagmiChain(anvilHub)];
 
 export const config = createConfig({
-  chains: [localhost, sepolia],
+  chains,
   connectors: [injected(), walletConnect({ projectId })],
-  transports: {
-    [localhost.id]: http('http://127.0.0.1:8545'),
-    [sepolia.id]: http(getSepoliaRpcUrl()),
-  },
+  transports: Object.fromEntries(chains.map((c) => [c.id, http(getRpcUrl(c.id))])),
 });
 ```
 
@@ -45,13 +54,10 @@ export const config = createConfig({
 ```typescript
 // apps/web/src/lib/contracts/addresses.ts
 
-export const CONTRACT_ADDRESSES: Record<number, `0x${string}`> = {
-  [localhost.id]: '0x5fbdb2315678afecb367f032d93f642f64180aa3',
-  [sepolia.id]: '0x0000000000000000000000000000000000000000', // TODO
-};
-
-export function getContractAddress(chainId: number): `0x${string}` {
-  // Supports VITE_CONTRACT_ADDRESS_* env overrides
+export function getContractAddress(contract: ContractName, chainId: number): Address {
+  // 1) contract-specific env override (VITE_<CONTRACT>_ADDRESS_<CHAINID>)
+  // 2) @swr/chains (hub contracts when available)
+  // 3) local deterministic defaults
 }
 ```
 
@@ -158,93 +164,27 @@ export function createRainbowKitTheme(colorScheme, variant): Theme {
 
 ## Environment Variables
 
-| Variable                        | Purpose                           |
-| ------------------------------- | --------------------------------- |
-| `VITE_ALCHEMY_API_KEY`          | Alchemy API for tx fetching       |
-| `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect                     |
-| `VITE_CONTRACT_ADDRESS_*`       | Address overrides                 |
-| `VITE_TESTNET`                  | Use testnets instead of localhost |
-| `VITE_CROSSCHAIN`               | Enable cross-chain mode           |
+| Variable                        | Purpose                                   |
+| ------------------------------- | ----------------------------------------- |
+| `VITE_ALCHEMY_API_KEY`          | Transaction history on non-local networks |
+| `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect                             |
+| `VITE_RELAY_MULTIADDR`          | P2P relay override                        |
+| `VITE_TESTNET`                  | Use testnets instead of localhost         |
+| `VITE_CROSSCHAIN`               | Enable cross-chain mode                   |
+| `VITE_APP_ENV`                  | Logging environment (staging/production)  |
+| `VITE_*_ADDRESS_<CHAINID>`      | Contract address overrides                |
 
 ---
 
-## Alchemy SDK Integration
+## Transaction History (Alchemy TODO)
 
-Used for fetching user transaction history in the Stolen Transaction Registry.
+`useUserTransactions` currently scans local Anvil blocks via viem. For non-local networks, it logs a warning and returns an error because Alchemy is not implemented yet.
 
-**Setup:**
+Planned implementation (when added):
 
-1. Create account at [Alchemy Dashboard](https://dashboard.alchemy.com)
-2. Create an app
-3. Enable networks: Base, Optimism, Arbitrum, Polygon (and testnets)
-4. Copy API key to `VITE_ALCHEMY_API_KEY`
-
-**SDK handles network routing automatically:**
-
-```typescript
-import { Alchemy, Network } from 'alchemy-sdk';
-
-// Single API key works for all networks
-const alchemy = new Alchemy({
-  apiKey: import.meta.env.VITE_ALCHEMY_API_KEY,
-  network: Network.BASE_MAINNET, // SDK builds correct URL
-});
-
-// Internally constructs: https://base-mainnet.g.alchemy.com/v2/{key}
-```
-
-**Supported Networks:**
-
-| Network          | SDK Enum                | Endpoint                                         |
-| ---------------- | ----------------------- | ------------------------------------------------ |
-| Ethereum         | `Network.ETH_MAINNET`   | `https://eth-mainnet.g.alchemy.com/v2/{key}`     |
-| Base             | `Network.BASE_MAINNET`  | `https://base-mainnet.g.alchemy.com/v2/{key}`    |
-| Optimism         | `Network.OPT_MAINNET`   | `https://opt-mainnet.g.alchemy.com/v2/{key}`     |
-| Arbitrum         | `Network.ARB_MAINNET`   | `https://arb-mainnet.g.alchemy.com/v2/{key}`     |
-| Polygon          | `Network.MATIC_MAINNET` | `https://polygon-mainnet.g.alchemy.com/v2/{key}` |
-| Sepolia          | `Network.ETH_SEPOLIA`   | `https://eth-sepolia.g.alchemy.com/v2/{key}`     |
-| Base Sepolia     | `Network.BASE_SEPOLIA`  | `https://base-sepolia.g.alchemy.com/v2/{key}`    |
-| Optimism Sepolia | `Network.OPT_SEPOLIA`   | `https://opt-sepolia.g.alchemy.com/v2/{key}`     |
-
-**Chain ID to Network mapping:**
-
-```typescript
-// apps/web/src/lib/alchemy.ts
-
-import { Network } from 'alchemy-sdk';
-
-export const chainIdToAlchemyNetwork: Record<number, Network> = {
-  // Mainnets
-  1: Network.ETH_MAINNET,
-  8453: Network.BASE_MAINNET,
-  10: Network.OPT_MAINNET,
-  42161: Network.ARB_MAINNET,
-  137: Network.MATIC_MAINNET,
-  // Testnets
-  11155111: Network.ETH_SEPOLIA,
-  84532: Network.BASE_SEPOLIA,
-  11155420: Network.OPT_SEPOLIA,
-};
-```
-
-**Fetching transactions:**
-
-```typescript
-const transfers = await alchemy.core.getAssetTransfers({
-  fromAddress: userAddress,
-  category: [
-    AssetTransfersCategory.EXTERNAL, // ETH transfers
-    AssetTransfersCategory.ERC20, // Token transfers
-    AssetTransfersCategory.ERC721, // NFT transfers
-    AssetTransfersCategory.ERC1155, // Multi-token transfers
-  ],
-  maxCount: 100,
-  order: 'desc',
-  withMetadata: true,
-});
-```
-
-**Free tier limits:** 300M compute units/month (sufficient for development and moderate production use).
+- Use `VITE_ALCHEMY_API_KEY`
+- Fetch transaction history via Alchemy enhanced APIs
+- Map chain IDs to Alchemy networks
 
 ---
 
@@ -255,7 +195,6 @@ apps/web/src/
 ├── lib/
 │   ├── wagmi.ts                 # Chain config
 │   ├── rainbowkit-theme.ts      # Theme integration
-│   ├── alchemy.ts               # Alchemy SDK config & network mapping
 │   └── contracts/
 │       ├── abis.ts
 │       ├── addresses.ts
@@ -267,5 +206,5 @@ apps/web/src/
     ├── useRegistration.ts
     ├── useContractNonce.ts
     ├── useContractDeadlines.ts
-    └── useUserTransactions.ts   # Transaction registry - fetches via Alchemy
+    └── useUserTransactions.ts   # Local scan; non-local returns TODO error
 ```

@@ -4,13 +4,15 @@ Zustand stores with immer, persist, and devtools middleware.
 
 ---
 
-## Three Stores
+## Stores
 
-| Store                  | Purpose                     | Persisted |
-| ---------------------- | --------------------------- | --------- |
-| `useRegistrationStore` | Flow state, step, tx hashes | Yes       |
-| `useFormStore`         | Addresses, NFT flags        | Yes       |
-| `useP2PStore`          | Connection state            | Partial   |
+| Store                             | Purpose                             | Persisted |
+| --------------------------------- | ----------------------------------- | --------- |
+| `useRegistrationStore`            | Wallet flow state, tx hashes        | Yes       |
+| `useFormStore`                    | Wallet form values                  | Yes       |
+| `useTransactionRegistrationStore` | Transaction flow state              | Yes       |
+| `useTransactionFormStore`         | Transaction selection + merkle data | Yes       |
+| `useP2PStore`                     | Connection state                    | Partial   |
 
 ---
 
@@ -43,7 +45,10 @@ interface RegistrationState {
   registrationType: 'standard' | 'selfRelay' | 'p2pRelay';
   step: RegistrationStep | null;
   acknowledgementHash: `0x${string}` | null;
+  acknowledgementChainId: number | null;
   registrationHash: `0x${string}` | null;
+  registrationChainId: number | null;
+  bridgeMessageId: `0x${string}` | null;
 }
 
 // Step sequences
@@ -71,6 +76,31 @@ interface FormState {
 
 ---
 
+## Transaction Stores
+
+```typescript
+// apps/web/src/stores/transactionRegistrationStore.ts
+
+interface TransactionRegistrationState {
+  registrationType: 'standard' | 'selfRelay' | 'p2pRelay';
+  step: TransactionRegistrationStep | null;
+  acknowledgementHash: `0x${string}` | null;
+  registrationHash: `0x${string}` | null;
+}
+
+// apps/web/src/stores/transactionFormStore.ts
+
+interface TransactionFormState {
+  reporter: `0x${string}` | null;
+  forwarder: `0x${string}` | null;
+  selectedTxHashes: `0x${string}`[];
+  reportedChainId: number | null;
+  merkleRoot: `0x${string}` | null;
+}
+```
+
+---
+
 ## P2P Store
 
 ```typescript
@@ -79,7 +109,7 @@ interface FormState {
 interface P2PState {
   peerId: string | null; // Persists
   partnerPeerId: string | null; // Persists
-  connectedToPeer: boolean; // Persists
+  connectedToPeer: boolean; // Resets on reload
   connectionStatus: P2PConnectionStatus; // Resets on reload
   isInitialized: boolean; // Resets on reload
 }
@@ -119,8 +149,10 @@ const resetFlow = () => {
 
 ## Storage Keys
 
-| Store        | Key                      | Version |
-| ------------ | ------------------------ | ------- |
-| Registration | `swr-registration-state` | 1       |
-| Form         | `swr-form-state`         | 1       |
-| P2P          | `swr-p2p-state`          | 1       |
+| Store           | Key                                  | Version |
+| --------------- | ------------------------------------ | ------- |
+| Registration    | `swr-registration-state`             | 1       |
+| Form            | `swr-form-state`                     | 1       |
+| Tx Registration | `swr-transaction-registration-state` | 1       |
+| Tx Form         | `swr-transaction-form-state`         | 1       |
+| P2P             | `swr-p2p-state`                      | 1       |

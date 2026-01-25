@@ -12,6 +12,7 @@ import { logger } from '@/lib/logger';
 logger.wallet.info('Connected', { address, chainId });
 logger.contract.debug('Reading deadlines', { registeree });
 logger.signature.warn('Signature expired', { deadline });
+logger.acknowledgement.info('ACK hash received', { hash });
 logger.registration.error('Failed', { step }, error);
 logger.p2p.info('Peer connected', { peerId });
 logger.store.debug('State updated', { action });
@@ -22,15 +23,16 @@ logger.ui.info('Component mounted', { name });
 
 ## Categories
 
-| Category       | Purpose                            |
-| -------------- | ---------------------------------- |
-| `wallet`       | Wallet connection, chain switching |
-| `contract`     | Contract reads/writes, tx receipts |
-| `signature`    | EIP-712 signing, storage           |
-| `registration` | Flow step transitions              |
-| `p2p`          | libp2p node, peer connections      |
-| `store`        | Zustand state changes (noisy)      |
-| `ui`           | Component lifecycle (noisy)        |
+| Category          | Purpose                            |
+| ----------------- | ---------------------------------- |
+| `wallet`          | Wallet connection, chain switching |
+| `contract`        | Contract reads/writes, tx receipts |
+| `signature`       | EIP-712 signing, storage           |
+| `acknowledgement` | ACK flow events                    |
+| `registration`    | Flow step transitions              |
+| `p2p`             | libp2p node, peer connections      |
+| `store`           | Zustand state changes (noisy)      |
+| `ui`              | Component lifecycle (noisy)        |
 
 ---
 

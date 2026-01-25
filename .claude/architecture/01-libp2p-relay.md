@@ -188,7 +188,7 @@ How long a reservation remains valid without activity.
 ## Custom Protocols
 
 ```typescript
-// apps/web/src/lib/p2p/protocols.ts
+// packages/p2p/src/protocols.ts
 
 export const PROTOCOLS = {
   CONNECT: '/swr/connected/1.0.0',

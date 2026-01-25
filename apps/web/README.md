@@ -1,73 +1,51 @@
-# React + TypeScript + Vite
+# SWR Web App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The registry web app for registering stolen wallets and fraudulent transactions, searching indexed data, and viewing the public dashboard.
 
-Currently, two official plugins are available:
+## Run Locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+From the repo root:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
+```bash
+pnpm dev:web
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+App runs at `http://localhost:5173`.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x';
-import reactDom from 'eslint-plugin-react-dom';
+## Local Contracts (Recommended)
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
+```bash
+pnpm anvil
+pnpm deploy:dev
 ```
+
+## Cross-Chain Mode
+
+```bash
+pnpm anvil:crosschain
+pnpm deploy:crosschain
+pnpm dev:crosschain
+```
+
+## Common Scripts
+
+```bash
+pnpm --filter web lint
+pnpm --filter web test
+pnpm --filter web storybook
+```
+
+## Environment Variables
+
+Copy `apps/web/.env.example` to `apps/web/.env`.
+
+| Variable                        | Purpose                                   |
+| ------------------------------- | ----------------------------------------- |
+| `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect integration (optional)      |
+| `VITE_ALCHEMY_API_KEY`          | Transaction history on non-local networks |
+| `VITE_CROSSCHAIN`               | Enable cross-chain UI (`true`)            |
+| `VITE_TESTNET`                  | Use testnet chains (`true`)               |
+| `VITE_RELAY_MULTIADDR`          | Override P2P relay multiaddr              |
+| `VITE_APP_ENV`                  | Logging mode: `staging` or `production`   |
+| `VITE_HOMEPAGE_URL`             | Link to landing page                      |
+| `VITE_DOCS_URL`                 | Link to docs site                         |

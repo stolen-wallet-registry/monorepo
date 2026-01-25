@@ -157,7 +157,7 @@ it('calls onSelect when clicking', async () => {
 
 ## Custom Icons (web3icons-compatible)
 
-Custom icons not in `@web3icons/react` live in `apps/landing/.../shared/icons.tsx`.
+Custom icons not in `@web3icons/react` live in `apps/landing/components/landing/CrossChainVisualization/shared/icons.tsx`.
 
 **Reference:** `ChainalysisLogo`, `SealTeamLogo`, `HyperlaneLogo`
 

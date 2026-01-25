@@ -117,23 +117,22 @@ find_tasks(filter_by="project", filter_value="proj-123")
 
 ### Three Subregistries (Submission Rules)
 
-1. **Stolen Wallet Subregistry** (Launching First)
-   - **Who can submit:** Anyone (individual users) + Operators can batch-submit
-   - User self-attestation with wallet signature provides high trust signal
-   - EIP-712 two-phase registration prevents phishing
-   - Once registered, wallet marked permanently compromised
+All registries are active and publicly searchable; submission rules differ by registry.
 
-2. **Stolen Transaction Subregistry** (Phase 8 - Deferred)
-   - **Who can submit:** Anyone (individual users) + Operators can batch-submit
-   - Mark specific fraudulent transactions (phishing, address poisoning, unauthorized transfers)
-   - Higher gaming risk - needs dispute mechanism
-   - Deferred until wallet registry proves PMF
+1. **Stolen Wallet Registry**
+   - **Who can submit:** Individuals (self-attestation) + approved operators (batch)
+   - Two-phase EIP-712 registration prevents phishing
+   - Once registered, wallets are permanently marked as compromised
 
-3. **Fraudulent Contract Subregistry** (Phase 3)
+2. **Stolen Transaction Registry**
+   - **Who can submit:** Individuals (batch of tx hashes) + approved operators (batch)
+   - Two-phase EIP-712 registration with merkle roots
+   - Used to report fraudulent transactions across chains
+
+3. **Fraudulent Contract Registry**
    - **Who can submit:** Approved operators only
-   - Users can flag suspicious contracts, but only operators can formalize registry entries
-   - Catalogs malicious smart contract addresses (scams, honeypots, exploits)
-   - Batch submission support for known scam patterns
+   - Single-phase batch registration for malicious contract addresses
+   - Publicly searchable and visible in the dashboard
 
 ### Three Registration Methods
 
@@ -189,7 +188,7 @@ This project uses a category-based logger designed for LLM-assisted debugging. U
 ```typescript
 import { logger } from '@/lib/logger';
 
-// Categories: wallet, contract, signature, registration, p2p, store, ui
+// Categories: wallet, contract, signature, acknowledgement, registration, p2p, store, ui
 logger.wallet.info('Connected', { address, chainId });
 logger.contract.debug('Reading deadlines', { registeree });
 logger.signature.warn('Signature expired', { deadline });
@@ -229,7 +228,7 @@ logger.ui.info('Component mounted', { name });
 
 | Environment | Enabled | Level | Categories                 |
 | ----------- | ------- | ----- | -------------------------- |
-| development | true    | debug | all on (store/ui off)      |
+| development | true    | debug | all on (store/ui on)       |
 | staging     | true    | info  | all on (store/ui off)      |
 | production  | false   | warn  | all off (enable as needed) |
 | test        | false   | error | all off                    |
@@ -264,11 +263,13 @@ ThemeProvider must wrap Web3Provider so RainbowKit can access theme context at r
 
 ### Zustand Stores
 
-| Store                  | Purpose                                  | Persistence |
-| ---------------------- | ---------------------------------------- | ----------- |
-| `useRegistrationStore` | Flow state, current step, tx hashes      | Yes         |
-| `useFormStore`         | Form values (registeree, relayer, flags) | Yes         |
-| `useP2PStore`          | Peer IDs, connection status              | Yes         |
+| Store                             | Purpose                                         | Persistence |
+| --------------------------------- | ----------------------------------------------- | ----------- |
+| `useRegistrationStore`            | Wallet flow state, current step, tx hashes      | Yes         |
+| `useFormStore`                    | Wallet form values (registeree, relayer, flags) | Yes         |
+| `useTransactionRegistrationStore` | Transaction flow state                          | Yes         |
+| `useTransactionFormStore`         | Transaction selection + merkle data             | Yes         |
+| `useP2PStore`                     | Peer IDs, connection status                     | Partial     |
 
 ### Component Organization
 
@@ -276,6 +277,10 @@ ThemeProvider must wrap Web3Provider so RainbowKit can access theme context at r
 src/components/
 ├── ui/           # shadcn primitives (no custom stories needed)
 ├── composed/     # Business components (WITH stories)
+├── registration/ # Registration flow steps (wallet + transaction)
+├── p2p/          # P2P flow helpers
+├── dashboard/    # Dashboard-specific components
+├── icons/        # Local icon assets
 ├── layout/       # Header, Layout shells
 └── dev/          # DevTools, debugging utilities
 ```
@@ -422,10 +427,15 @@ apps/web/
 │   ├── components/
 │   │   ├── ui/           # shadcn primitives
 │   │   ├── composed/     # Business components
+│   │   ├── registration/ # Flow steps (wallet + transaction)
+│   │   ├── p2p/          # P2P UI helpers
+│   │   ├── dashboard/    # Dashboard components
 │   │   ├── layout/       # Layout shells
 │   │   └── dev/          # Dev utilities
 │   ├── lib/
 │   │   ├── contracts/    # ABIs, addresses, types
+│   │   ├── p2p/          # Client libp2p helpers
+│   │   ├── chains/       # Chain helpers (wrapping @swr/chains)
 │   │   ├── logger/       # Logging system
 │   │   ├── signatures/   # EIP-712 helpers
 │   │   ├── wagmi.ts      # Web3 configuration
@@ -465,14 +475,4 @@ These documents are optimized for LLM context with:
 
 ---
 
-## Development Phases (Roadmap Summary)
-
-| Phase | Focus                       | Status      |
-| ----- | --------------------------- | ----------- |
-| 1     | Frontend rebuild (Vite)     | In Progress |
-| 2     | Monorepo consolidation      | Pending     |
-| 3     | Contract expansion          | Pending     |
-| 4     | P2P relay elimination       | Pending     |
-| 5+    | Cross-chain, DAO governance | Future      |
-
-See `/PRPs/` directory for detailed phase documentation.
+See `/PRPs/` for planning docs if needed.
