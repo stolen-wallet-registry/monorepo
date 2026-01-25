@@ -7,17 +7,25 @@
  * - DAO: + Manage operators (integrated into Operators tab)
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { Tabs, TabsContent, TabsList, TabsTrigger, Badge } from '@swr/ui';
-import { ListOrdered, Users, Upload } from 'lucide-react';
+import { ListOrdered, Users, Upload, Layers } from 'lucide-react';
 import {
   DashboardStatsCards,
   RecentRegistrationsTable,
+  BatchesTable,
   OperatorsTable,
   OperatorSubmitGuide,
 } from '@/components/dashboard';
 import { useUserRole, type UserRole } from '@/hooks/dashboard';
+
+const VALID_TABS = new Set(['operators', 'submit', 'registrations', 'batches']);
+
+const getTabFromSearch = (search: string) => {
+  const tab = new URLSearchParams(search).get('tab');
+  return tab && VALID_TABS.has(tab) ? tab : null;
+};
 
 interface RoleBadgeProps {
   role: UserRole;
@@ -41,15 +49,8 @@ function RoleBadge({ role, isLoading }: RoleBadgeProps) {
 export function DashboardPage() {
   const [location, setLocation] = useLocation();
   const { role, isLoading, isDAO } = useUserRole();
-  const getTabFromLocation = (loc: string) => {
-    const search = loc.split('?')[1] ?? '';
-    const tab = new URLSearchParams(search).get('tab');
-    if (tab === 'operators' || tab === 'submit' || tab === 'registrations') {
-      return tab;
-    }
-    return null;
-  };
-  const activeTab = getTabFromLocation(location) ?? 'registrations';
+  const initialSearch = typeof window !== 'undefined' ? window.location.search : '';
+  const [activeTab, setActiveTab] = useState(getTabFromSearch(initialSearch) ?? 'registrations');
 
   // Compute tab visibility based on role
   // Default to showing only public tabs while loading to prevent layout shift
@@ -58,20 +59,37 @@ export function DashboardPage() {
   // Auto-reset to registrations if current tab becomes unavailable (e.g., wallet disconnect)
   const effectiveTab = activeTab === 'submit' && !showSubmitTab ? 'registrations' : activeTab;
 
-  const basePath = location.split('?')[0] || '/dashboard';
+  const basePath =
+    typeof window !== 'undefined'
+      ? window.location.pathname
+      : location.split('?')[0] || '/dashboard';
 
-  // Keep URL in sync if role-gated tab is not available
+  // Sync local tab state with back/forward navigation
   useEffect(() => {
-    if (effectiveTab !== activeTab) {
+    if (typeof window === 'undefined') return;
+    const handlePopState = () => {
+      const nextTab = getTabFromSearch(window.location.search) ?? 'registrations';
+      setActiveTab(nextTab);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Keep URL in sync with the effective tab (visible tab)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlTab = getTabFromSearch(window.location.search) ?? 'registrations';
+    if (urlTab !== effectiveTab) {
       const nextLocation =
         effectiveTab === 'registrations' ? basePath : `${basePath}?tab=${effectiveTab}`;
       if (nextLocation !== location) {
         setLocation(nextLocation);
       }
     }
-  }, [effectiveTab, activeTab, basePath, location, setLocation]);
+  }, [effectiveTab, basePath, location, setLocation]);
 
   const handleTabChange = (value: string) => {
+    setActiveTab(value);
     const nextLocation = value === 'registrations' ? basePath : `${basePath}?tab=${value}`;
     if (nextLocation !== location) {
       setLocation(nextLocation);
@@ -108,6 +126,10 @@ export function DashboardPage() {
               <Users className="h-4 w-4" />
               <span className="hidden sm:inline">Operators</span>
             </TabsTrigger>
+            <TabsTrigger value="batches" className="gap-2">
+              <Layers className="h-4 w-4" />
+              <span className="hidden sm:inline">Batches</span>
+            </TabsTrigger>
             {showSubmitTab && (
               <TabsTrigger value="submit" className="gap-2">
                 <Upload className="h-4 w-4" />
@@ -123,6 +145,10 @@ export function DashboardPage() {
 
         <TabsContent value="operators">
           <OperatorsTable canManage={isDAO} />
+        </TabsContent>
+
+        <TabsContent value="batches">
+          <BatchesTable />
         </TabsContent>
 
         {showSubmitTab && (

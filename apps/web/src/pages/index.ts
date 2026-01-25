@@ -16,4 +16,5 @@ export { TransactionSelfRelayRegistrationPage } from './TransactionSelfRelayRegi
 export { FraudulentContractRegistryPage } from './FraudulentContractRegistryPage';
 export { SoulboundPage } from './SoulboundPage';
 export { DashboardPage } from './DashboardPage';
+export { DashboardBatchDetailPage } from './DashboardBatchDetailPage';
 export { NotFoundPage } from './NotFoundPage';

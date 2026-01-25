@@ -97,6 +97,11 @@ export {
   RECENT_CONTRACTS_QUERY,
   RECENT_TRANSACTIONS_QUERY,
   RECENT_TRANSACTION_ENTRIES_QUERY,
+  RECENT_WALLET_BATCHES_QUERY,
+  RECENT_CONTRACT_BATCHES_QUERY,
+  WALLET_BATCH_DETAIL_QUERY,
+  TRANSACTION_BATCH_DETAIL_QUERY,
+  CONTRACT_BATCH_DETAIL_QUERY,
   // Response types
   type RawOperatorsListResponse,
   // Dashboard response types
@@ -105,4 +110,10 @@ export {
   type RawRecentContractsResponse,
   type RawRecentTransactionsResponse,
   type RawRecentTransactionEntriesResponse,
+  type RawInvalidationsBatchResponse,
+  type RawRecentWalletBatchesResponse,
+  type RawRecentContractBatchesResponse,
+  type RawWalletBatchDetailResponse,
+  type RawTransactionBatchDetailResponse,
+  type RawContractBatchDetailResponse,
 } from './queries';
