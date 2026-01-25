@@ -582,15 +582,7 @@ contract CrossChainAdvancedTest is EIP712TestHelper {
             abi.encode(WALLET_ACK_TYPEHASH, keccak256(bytes(WALLET_ACK_STATEMENT)), victim, victim, nonce, deadline)
         );
 
-        bytes32 domainSeparator = keccak256(
-            abi.encode(
-                EIP712_TYPE_HASH,
-                keccak256("StolenWalletRegistry"),
-                keccak256(bytes(DOMAIN_VERSION)),
-                chainId,
-                address(spokeRegistry)
-            )
-        );
+        bytes32 domainSeparator = _walletDomainSeparatorWithChainId(address(spokeRegistry), chainId);
 
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (v, r, s) = vm.sign(victimPk, digest);
@@ -610,15 +602,7 @@ contract CrossChainAdvancedTest is EIP712TestHelper {
             abi.encode(WALLET_REG_TYPEHASH, keccak256(bytes(WALLET_REG_STATEMENT)), victim, victim, nonce, deadline)
         );
 
-        bytes32 domainSeparator = keccak256(
-            abi.encode(
-                EIP712_TYPE_HASH,
-                keccak256("StolenWalletRegistry"),
-                keccak256(bytes(DOMAIN_VERSION)),
-                chainId,
-                address(spokeRegistry)
-            )
-        );
+        bytes32 domainSeparator = _walletDomainSeparatorWithChainId(address(spokeRegistry), chainId);
 
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (v, r, s) = vm.sign(victimPk, digest);

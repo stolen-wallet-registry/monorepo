@@ -9,7 +9,7 @@
  * Supports both hub (StolenTransactionRegistry) and spoke (SpokeTransactionRegistry) chains.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { useEstimateGas, useGasPrice, useChainId } from 'wagmi';
 import { formatGwei, encodeFunctionData } from 'viem';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
@@ -200,14 +200,16 @@ export function useTxGasEstimate({
 
   const estimateEnabled = enabled && !!contractAddress && !!callData;
 
-  // Log when estimation is disabled for debugging
-  if (enabled && !estimateEnabled) {
-    logger.contract.debug('Gas estimation disabled - missing requirements', {
-      hasContractAddress: !!contractAddress,
-      hasCallData: !!callData,
-      hasAllParams,
-    });
-  }
+  // Log when estimation is disabled for debugging (in useEffect to avoid double-invocation in Strict Mode)
+  useEffect(() => {
+    if (enabled && !estimateEnabled) {
+      logger.contract.debug('Gas estimation disabled - missing requirements', {
+        hasContractAddress: !!contractAddress,
+        hasCallData: !!callData,
+        hasAllParams,
+      });
+    }
+  }, [enabled, estimateEnabled, contractAddress, callData, hasAllParams]);
 
   // Estimate gas units
   const {
@@ -226,15 +228,17 @@ export function useTxGasEstimate({
     },
   });
 
-  // Log gas estimation errors (e.g., contract reverts)
-  if (isEstimateError && estimateError) {
-    logger.contract.warn('Gas estimation failed - likely contract revert', {
-      step,
-      error: estimateError.message,
-      merkleRoot,
-      transactionCount: transactionHashes?.length,
-    });
-  }
+  // Log gas estimation errors (in useEffect to avoid double-invocation in Strict Mode)
+  useEffect(() => {
+    if (isEstimateError && estimateError) {
+      logger.contract.warn('Gas estimation failed - likely contract revert', {
+        step,
+        error: estimateError.message,
+        merkleRoot,
+        transactionCount: transactionHashes?.length,
+      });
+    }
+  }, [isEstimateError, estimateError, step, merkleRoot, transactionHashes]);
 
   // Get current gas price
   const {

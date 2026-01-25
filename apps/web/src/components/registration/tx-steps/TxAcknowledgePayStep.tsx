@@ -277,8 +277,8 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         merkleRoot,
         reportedChainId: reportedChainIdHash,
         transactionCount: params.transactionCount,
-        // Log all transaction hashes for debugging
-        transactionHashes: txHashesForContract,
+        // Log capped sample to keep logs manageable in stress tests
+        transactionHashesSample: txHashesForContract?.slice(0, 10),
         chainIds: chainIdsForContract?.slice(0, 2), // Just first 2 to keep log readable
       });
 

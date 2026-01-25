@@ -34,12 +34,21 @@ export {
 } from '@swr/p2p';
 
 import { logger } from '@/lib/logger';
+import { environmentChainIds } from '@swr/chains';
 import {
   getRelayServers as baseGetRelayServers,
   extractPeerIdFromMultiaddr,
   type RelayConfig,
   type Environment,
 } from '@swr/p2p';
+
+/**
+ * Type guard to check if a string is a valid Environment.
+ * Uses environmentChainIds keys as the source of truth.
+ */
+function isValidEnvironment(value: string): value is Environment {
+  return value in environmentChainIds;
+}
 
 /**
  * Get relay servers for current Vite environment.
@@ -49,8 +58,8 @@ import {
  * @throws {RelayConfigurationError} If production mode has no relay servers configured
  */
 export function getRelayServers(): RelayConfig[] {
-  // Cast Vite mode to Environment type (falls back to 'development' for unknown modes)
-  const mode = (import.meta.env.MODE || 'development') as Environment;
+  const modeStr = import.meta.env.MODE;
+  const mode: Environment = isValidEnvironment(modeStr) ? modeStr : 'development';
   return baseGetRelayServers({
     mode,
     relayMultiaddr: import.meta.env.VITE_RELAY_MULTIADDR,

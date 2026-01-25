@@ -17,6 +17,10 @@ abstract contract EIP712TestHelper is Test {
 
     string internal constant DOMAIN_VERSION = "4";
 
+    // Domain names must match the production contracts
+    string internal constant WALLET_DOMAIN_NAME = "StolenWalletRegistry";
+    string internal constant TX_DOMAIN_NAME = "StolenTransactionRegistry";
+
     // ═══════════════════════════════════════════════════════════════════════════
     // WALLET REGISTRY STATEMENTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -69,7 +73,7 @@ abstract contract EIP712TestHelper is Test {
         return keccak256(
             abi.encode(
                 EIP712_TYPE_HASH,
-                keccak256("StolenWalletRegistry"),
+                keccak256(bytes(WALLET_DOMAIN_NAME)),
                 keccak256(bytes(DOMAIN_VERSION)),
                 block.chainid,
                 registry
@@ -82,9 +86,23 @@ abstract contract EIP712TestHelper is Test {
         return keccak256(
             abi.encode(
                 EIP712_TYPE_HASH,
-                keccak256("StolenTransactionRegistry"),
+                keccak256(bytes(TX_DOMAIN_NAME)),
                 keccak256(bytes(DOMAIN_VERSION)),
                 block.chainid,
+                registry
+            )
+        );
+    }
+
+    /// @notice Compute domain separator for StolenWalletRegistry with custom chainId
+    /// @dev Used for cross-chain signature tests where chainId differs from block.chainid
+    function _walletDomainSeparatorWithChainId(address registry, uint256 chainId) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                EIP712_TYPE_HASH,
+                keccak256(bytes(WALLET_DOMAIN_NAME)),
+                keccak256(bytes(DOMAIN_VERSION)),
+                chainId,
                 registry
             )
         );

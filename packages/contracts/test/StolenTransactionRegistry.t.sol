@@ -9,35 +9,18 @@ import { RegistryHub } from "../src/RegistryHub.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 import { CAIP2 } from "../src/libraries/CAIP2.sol";
 import { MerkleTestHelper } from "./helpers/MerkleTestHelper.sol";
+import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
 
 /// @title StolenTransactionRegistryTest
 /// @notice Comprehensive unit and fuzz tests for StolenTransactionRegistry
-contract StolenTransactionRegistryTest is Test {
+/// @dev Inherits EIP712TestHelper for shared constants and signing utilities
+contract StolenTransactionRegistryTest is EIP712TestHelper {
     StolenTransactionRegistry public registry;
 
     // Test accounts
     uint256 internal reporterPrivateKey;
     address internal reporter;
     address internal forwarder;
-
-    // EIP-712 constants (must match contract)
-    bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(string statement,bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
-    );
-
-    bytes32 private constant REGISTRATION_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(string statement,bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)"
-    );
-
-    // Statement constants (must match contract)
-    string private constant ACK_STATEMENT =
-        "This signature acknowledges that the specified transactions are being reported as fraudulent to the Stolen Transaction Registry.";
-    string private constant REG_STATEMENT =
-        "This signature confirms permanent registration of the specified transactions as fraudulent. This action is irreversible.";
-
-    // Domain separator components
-    bytes32 private constant TYPE_HASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
     // Timing configuration (matching local Anvil - 13s blocks)
     uint256 internal constant GRACE_BLOCKS = 10;
@@ -78,11 +61,7 @@ contract StolenTransactionRegistryTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function _getDomainSeparator() internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                TYPE_HASH, keccak256("StolenTransactionRegistry"), keccak256("4"), block.chainid, address(registry)
-            )
-        );
+        return _txDomainSeparator(address(registry));
     }
 
     function _signAcknowledgement(
@@ -94,21 +73,10 @@ contract StolenTransactionRegistryTest is Test {
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        // Statement is hashed per EIP-712 for string types
-        bytes32 structHash = keccak256(
-            abi.encode(
-                ACKNOWLEDGEMENT_TYPEHASH,
-                keccak256(bytes(ACK_STATEMENT)),
-                merkleRoot,
-                reportedChainId,
-                transactionCount,
-                _forwarder,
-                nonce,
-                deadline
-            )
+        // Use shared EIP712TestHelper signing utility
+        return _signTxAck(
+            privateKey, address(registry), merkleRoot, reportedChainId, transactionCount, _forwarder, nonce, deadline
         );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
     }
 
     function _signRegistration(
@@ -119,20 +87,8 @@ contract StolenTransactionRegistryTest is Test {
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        // Statement is hashed per EIP-712 for string types
-        bytes32 structHash = keccak256(
-            abi.encode(
-                REGISTRATION_TYPEHASH,
-                keccak256(bytes(REG_STATEMENT)),
-                merkleRoot,
-                reportedChainId,
-                _forwarder,
-                nonce,
-                deadline
-            )
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
+        // Use shared EIP712TestHelper signing utility
+        return _signTxReg(privateKey, address(registry), merkleRoot, reportedChainId, _forwarder, nonce, deadline);
     }
 
     function _getTestTxHashes() internal view returns (bytes32[] memory txHashes) {
@@ -562,7 +518,8 @@ contract StolenTransactionRegistryTest is Test {
 
 /// @title StolenTransactionRegistryFeeTest
 /// @notice Tests for StolenTransactionRegistry with fee collection enabled
-contract StolenTransactionRegistryFeeTest is Test {
+/// @dev Inherits EIP712TestHelper for shared constants and signing utilities
+contract StolenTransactionRegistryFeeTest is EIP712TestHelper {
     StolenTransactionRegistry public registry;
     RegistryHub public hub;
     FeeManager public feeManager;
@@ -575,24 +532,6 @@ contract StolenTransactionRegistryFeeTest is Test {
 
     bytes32 internal testMerkleRoot;
     bytes32 internal testChainId;
-
-    // EIP-712 constants
-    bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(string statement,bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
-    );
-
-    bytes32 private constant REGISTRATION_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(string statement,bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)"
-    );
-
-    bytes32 private constant TYPE_HASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-
-    // Statement constants (must match contract)
-    string private constant ACK_STATEMENT =
-        "This signature acknowledges that the specified transactions are being reported as fraudulent to the Stolen Transaction Registry.";
-    string private constant REG_STATEMENT =
-        "This signature confirms permanent registration of the specified transactions as fraudulent. This action is irreversible.";
 
     uint256 internal constant GRACE_BLOCKS = 10;
     uint256 internal constant DEADLINE_BLOCKS = 50;
@@ -648,12 +587,12 @@ contract StolenTransactionRegistryFeeTest is Test {
         testMerkleRoot = _computeMerkleRoot(txHashes, chainIds);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HELPERS (using shared EIP712TestHelper utilities)
+    // ═══════════════════════════════════════════════════════════════════════════
+
     function _getDomainSeparator() internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                TYPE_HASH, keccak256("StolenTransactionRegistry"), keccak256("4"), block.chainid, address(registry)
-            )
-        );
+        return _txDomainSeparator(address(registry));
     }
 
     function _signAcknowledgement(
@@ -665,21 +604,10 @@ contract StolenTransactionRegistryFeeTest is Test {
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        // Statement is hashed per EIP-712 for string types
-        bytes32 structHash = keccak256(
-            abi.encode(
-                ACKNOWLEDGEMENT_TYPEHASH,
-                keccak256(bytes(ACK_STATEMENT)),
-                merkleRoot,
-                reportedChainId,
-                transactionCount,
-                _forwarder,
-                nonce,
-                deadline
-            )
+        // Use shared EIP712TestHelper signing utility
+        return _signTxAck(
+            privateKey, address(registry), merkleRoot, reportedChainId, transactionCount, _forwarder, nonce, deadline
         );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
     }
 
     function _signRegistration(
@@ -690,20 +618,8 @@ contract StolenTransactionRegistryFeeTest is Test {
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        // Statement is hashed per EIP-712 for string types
-        bytes32 structHash = keccak256(
-            abi.encode(
-                REGISTRATION_TYPEHASH,
-                keccak256(bytes(REG_STATEMENT)),
-                merkleRoot,
-                reportedChainId,
-                _forwarder,
-                nonce,
-                deadline
-            )
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
+        // Use shared EIP712TestHelper signing utility
+        return _signTxReg(privateKey, address(registry), merkleRoot, reportedChainId, _forwarder, nonce, deadline);
     }
 
     function _getTestTxHashes() internal view returns (bytes32[] memory txHashes) {
@@ -732,6 +648,10 @@ contract StolenTransactionRegistryFeeTest is Test {
     function _computeMerkleRoot(bytes32[] memory txHashes, bytes32[] memory chainIds) internal pure returns (bytes32) {
         return MerkleTestHelper.computeBytes32Root(txHashes, chainIds);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FEE TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Registration should require fee payment
     function test_Register_RequiresFee() public {
