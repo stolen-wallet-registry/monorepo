@@ -19,6 +19,7 @@ import {
   TransactionHomePage,
   TransactionStandardRegistrationPage,
   TransactionSelfRelayRegistrationPage,
+  FraudulentContractRegistryPage,
   NotFoundPage,
 } from '@/pages';
 
@@ -53,6 +54,7 @@ function App() {
               component={TransactionSelfRelayRegistrationPage}
             />
             {/* Other routes */}
+            <Route path="/registry/contracts" component={FraudulentContractRegistryPage} />
             <Route path="/search" component={SearchPage} />
             <Route path="/soulbound" component={SoulboundPage} />
             <Route path="/dashboard" component={DashboardPage} />

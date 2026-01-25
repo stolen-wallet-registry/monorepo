@@ -73,7 +73,11 @@ export function HomePage() {
             </p>
           </div>
 
-          <RegistrationMethodSelector onSelect={handleMethodSelect} p2pAvailable={p2pAvailable} />
+          <RegistrationMethodSelector
+            onSelect={handleMethodSelect}
+            p2pAvailable={p2pAvailable}
+            registryType="wallet"
+          />
         </div>
       )}
     </div>

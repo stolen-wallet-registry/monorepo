@@ -56,6 +56,18 @@ const TYPE_LABELS = {
   registration: 'Registration',
 } as const;
 
+function getSignatureSummary(type: SignatureCardProps['type'], registryType: RegistryType) {
+  if (type === 'acknowledgement') {
+    return registryType === 'transaction'
+      ? 'Signing this message acknowledges your intent to register these transactions as fraudulent and starts the grace period.'
+      : 'Signing this message acknowledges your intent to register this wallet as stolen and starts the grace period.';
+  }
+
+  return registryType === 'transaction'
+    ? 'Signing this message authorizes the on-chain registration that marks these transactions as fraudulent in the registry.'
+    : 'Signing this message authorizes the on-chain registration that marks this wallet as stolen in the registry.';
+}
+
 /**
  * Displays EIP-712 signing UI with data preview and status.
  * This is content-only - no Card wrapper. Parent provides the container.
@@ -78,6 +90,7 @@ export function SignatureCard({
   const isSuccess = status === 'success';
   const isSigning = status === 'signing';
   const isError = status === 'error';
+  const signatureSummary = getSignatureSummary(type, registryType);
 
   const handleCopySignature = () => {
     if (signature) {
@@ -87,6 +100,7 @@ export function SignatureCard({
 
   return (
     <div className={cn('space-y-4', className)}>
+      <p className="text-sm text-muted-foreground">{signatureSummary}</p>
       {/* Data being signed */}
       <SignatureDetails data={data} registryType={registryType} />
 

@@ -2,50 +2,39 @@
  * Registry type card component.
  *
  * Displays a registry type (wallet, transaction, contract) with status badge.
- * Active registries are clickable, coming-soon registries are disabled.
+ * Cards are clickable when an onClick handler is provided.
  */
 
+import type { ComponentProps } from 'react';
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
 import { cn } from '@/lib/utils';
+
+type BadgeVariant = ComponentProps<typeof Badge>['variant'];
 
 export interface RegistryCardProps {
   /** Registry title */
   title: string;
   /** Registry description */
-  description: string;
-  /** Status - active registries are clickable */
-  status: 'active' | 'coming-soon' | 'operator-only';
+  description: React.ReactNode;
   /** Icon to display */
   icon: React.ReactNode;
-  /** Click handler for active registries */
+  /** Click handler for navigation */
   onClick?: () => void;
+  /** Optional badge (e.g., Operators Only) */
+  badge?: { label: string; variant?: BadgeVariant };
   /** Additional class names */
   className?: string;
-}
-
-function getStatusBadge(status: RegistryCardProps['status']) {
-  switch (status) {
-    case 'active':
-      return { label: 'Active', variant: 'default' as const };
-    case 'operator-only':
-      return { label: 'Operators Only', variant: 'outline' as const };
-    case 'coming-soon':
-    default:
-      return { label: 'Coming Soon', variant: 'secondary' as const };
-  }
 }
 
 export function RegistryCard({
   title,
   description,
-  status,
   icon,
   onClick,
+  badge,
   className,
 }: RegistryCardProps) {
-  const isClickable = status === 'active';
-  const isHighlighted = status === 'active' || status === 'operator-only';
-  const badge = getStatusBadge(status);
+  const isClickable = Boolean(onClick);
 
   return (
     <Card
@@ -64,27 +53,22 @@ export function RegistryCard({
       }
       className={cn(
         'relative overflow-hidden transition-all duration-300',
-        isClickable
-          ? 'cursor-pointer border-primary/20 bg-gradient-to-br from-primary/5 to-transparent hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-          : status === 'operator-only'
-            ? 'border-border/70 bg-gradient-to-br from-muted/30 to-transparent'
-            : 'border-border/50 opacity-75',
+        'border-primary/20 bg-gradient-to-br from-primary/5 to-transparent',
+        isClickable &&
+          'cursor-pointer hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         className
       )}
     >
       <CardHeader className="pb-2">
         <div className="mb-3 flex items-center justify-between">
-          <div
-            className={cn(
-              'flex size-12 items-center justify-center rounded-lg',
-              isHighlighted ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
-            )}
-          >
+          <div className="flex size-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
             {icon}
           </div>
-          <Badge variant={badge.variant} className="text-xs">
-            {badge.label}
-          </Badge>
+          {badge && (
+            <Badge variant={badge.variant ?? 'secondary'} className="text-xs">
+              {badge.label}
+            </Badge>
+          )}
         </div>
         <CardTitle className="text-lg">{title}</CardTitle>
       </CardHeader>

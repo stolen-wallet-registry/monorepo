@@ -13,6 +13,7 @@ export { TransactionHomePage } from './TransactionHomePage';
 export { TransactionStandardRegistrationPage } from './TransactionStandardRegistrationPage';
 export { TransactionSelfRelayRegistrationPage } from './TransactionSelfRelayRegistrationPage';
 // Other pages
+export { FraudulentContractRegistryPage } from './FraudulentContractRegistryPage';
 export { SoulboundPage } from './SoulboundPage';
 export { DashboardPage } from './DashboardPage';
 export { NotFoundPage } from './NotFoundPage';

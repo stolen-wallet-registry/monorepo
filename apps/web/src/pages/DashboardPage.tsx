@@ -7,7 +7,7 @@
  * - DAO: + Manage operators (integrated into Operators tab)
  */
 
-import { useState } from 'react';
+import { useLocation } from 'wouter';
 import { Tabs, TabsContent, TabsList, TabsTrigger, Badge } from '@swr/ui';
 import { ListOrdered, Users, Upload } from 'lucide-react';
 import {
@@ -38,8 +38,17 @@ function RoleBadge({ role, isLoading }: RoleBadgeProps) {
 }
 
 export function DashboardPage() {
+  const [location, setLocation] = useLocation();
   const { role, isLoading, isDAO } = useUserRole();
-  const [activeTab, setActiveTab] = useState('registrations');
+  const getTabFromLocation = (loc: string) => {
+    const search = loc.split('?')[1] ?? '';
+    const tab = new URLSearchParams(search).get('tab');
+    if (tab === 'operators' || tab === 'submit' || tab === 'registrations') {
+      return tab;
+    }
+    return null;
+  };
+  const activeTab = getTabFromLocation(location) ?? 'registrations';
 
   // Compute tab visibility based on role
   // Default to showing only public tabs while loading to prevent layout shift
@@ -47,6 +56,14 @@ export function DashboardPage() {
 
   // Auto-reset to registrations if current tab becomes unavailable (e.g., wallet disconnect)
   const effectiveTab = activeTab === 'submit' && !showSubmitTab ? 'registrations' : activeTab;
+
+  const handleTabChange = (value: string) => {
+    const basePath = location.split('?')[0] ?? '/dashboard';
+    const nextLocation = value === 'registrations' ? basePath : `${basePath}?tab=${value}`;
+    if (nextLocation !== location) {
+      setLocation(nextLocation);
+    }
+  };
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-8">
@@ -67,7 +84,7 @@ export function DashboardPage() {
       <DashboardStatsCards />
 
       {/* Tabs - aligned right */}
-      <Tabs value={effectiveTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs value={effectiveTab} onValueChange={handleTabChange} className="space-y-4">
         <div className="flex justify-end">
           <TabsList>
             <TabsTrigger value="registrations" className="gap-2">

@@ -19,6 +19,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Wallet, RefreshCw, Users } from 'lucide-react';
 import type { RegistrationType } from '@/stores/registrationStore';
+import type { RegistryType } from '@/lib/types';
 
 export interface MethodConfig {
   type: RegistrationType;
@@ -35,6 +36,8 @@ export interface RegistrationMethodSelectorProps {
   onSelect: (type: RegistrationType) => void;
   /** Whether P2P relay is available (has connected peer) */
   p2pAvailable?: boolean;
+  /** Registry context to adjust copy */
+  registryType?: RegistryType;
   /** Additional class names */
   className?: string;
 }
@@ -42,7 +45,7 @@ export interface RegistrationMethodSelectorProps {
 /**
  * Default method configurations.
  */
-const DEFAULT_METHODS: MethodConfig[] = [
+const WALLET_METHODS: MethodConfig[] = [
   {
     type: 'standard',
     title: 'Standard Registration',
@@ -54,14 +57,49 @@ const DEFAULT_METHODS: MethodConfig[] = [
     type: 'selfRelay',
     title: 'Self-Relay Registration',
     description: 'Sign with the stolen wallet, then switch to a different wallet to pay gas fees.',
-    requirements: ['Stolen wallet for signing', 'Second wallet for gas'],
+    requirements: ['Stolen wallet for signing', 'Second wallet to pay for gas'],
     icon: <RefreshCw className="h-6 w-6" />,
   },
   {
     type: 'p2pRelay',
     title: 'P2P Relay Registration',
     description: 'Sign with your stolen wallet and have a trusted helper pay the gas fees for you.',
-    requirements: ['Stolen wallet for signing', 'Connected helper peer'],
+    requirements: ['Stolen wallet for signing', 'Friend or trusted party who can pay for gas'],
+    icon: <Users className="h-6 w-6" />,
+  },
+];
+
+const TRANSACTION_METHODS: MethodConfig[] = [
+  {
+    type: 'standard',
+    title: 'Standard Registration',
+    description: 'Sign and pay from the wallet where the fraudulent transactions occurred.',
+    requirements: [
+      'Wallet where the fraudulent transactions occurred',
+      'Gas fees from same wallet',
+    ],
+    icon: <Wallet className="h-6 w-6" />,
+  },
+  {
+    type: 'selfRelay',
+    title: 'Self-Relay Registration',
+    description:
+      'Sign with the wallet where the fraudulent transactions occurred, then switch to a different wallet to pay gas fees.',
+    requirements: [
+      'Wallet where the fraudulent transactions occurred',
+      'Second wallet to pay for gas',
+    ],
+    icon: <RefreshCw className="h-6 w-6" />,
+  },
+  {
+    type: 'p2pRelay',
+    title: 'P2P Relay Registration',
+    description:
+      'Sign with the wallet where the fraudulent transactions occurred and have a trusted helper pay the gas fees for you.',
+    requirements: [
+      'Wallet where the fraudulent transactions occurred',
+      'Friend or trusted party who can pay for gas',
+    ],
     icon: <Users className="h-6 w-6" />,
   },
 ];
@@ -72,11 +110,13 @@ const DEFAULT_METHODS: MethodConfig[] = [
 export function RegistrationMethodSelector({
   onSelect,
   p2pAvailable = true,
+  registryType = 'wallet',
   className,
 }: RegistrationMethodSelectorProps) {
   const p2pUnavailableMessage =
     'Relay node not deployed yet. P2P relay is disabled in this deployment.';
-  const methods = DEFAULT_METHODS.map((method) => ({
+  const baseMethods = registryType === 'transaction' ? TRANSACTION_METHODS : WALLET_METHODS;
+  const methods = baseMethods.map((method) => ({
     ...method,
     disabled: method.type === 'p2pRelay' && !p2pAvailable,
     disabledReason:
