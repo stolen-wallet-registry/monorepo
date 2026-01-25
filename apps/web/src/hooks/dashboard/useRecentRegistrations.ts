@@ -15,9 +15,8 @@ import {
   type RawRecentTransactionEntriesResponse,
 } from '@swr/search';
 import { logger } from '@/lib/logger';
+import { INDEXER_URL } from '@/lib/indexer';
 import type { Address, Hash } from '@/lib/types/ethereum';
-
-const INDEXER_URL = import.meta.env.VITE_INDEXER_URL ?? 'http://localhost:42069';
 
 /** Registration entry type */
 export type RegistrationType = 'wallet' | 'contract' | 'transaction';

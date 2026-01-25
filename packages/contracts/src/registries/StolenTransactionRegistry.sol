@@ -266,7 +266,7 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
             crossChainMessageId: crossChainMessageId
         });
 
-        emit TransactionBatchRegisteredByReporter(
+        emit TransactionBatchRegistered(
             batchId, merkleRoot, reporter, reportedChainId, transactionCount, isSponsored, transactionHashes, chainIds
         );
     }
@@ -328,7 +328,7 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
             invalidated: false
         });
 
-        emit TransactionBatchRegistered(
+        emit TransactionBatchRegisteredByOperator(
             batchId, merkleRoot, msg.sender, reportedChainId, uint32(length), transactionHashes, chainIds
         );
 
@@ -804,7 +804,7 @@ contract StolenTransactionRegistry is IStolenTransactionRegistry, EIP712, Ownabl
             crossChainMessageId: bytes32(0)
         });
 
-        emit TransactionBatchRegisteredByReporter(
+        emit TransactionBatchRegistered(
             batchId, merkleRoot, reporter, reportedChainId, txCount, isSponsored, transactionHashes, chainIds
         );
 

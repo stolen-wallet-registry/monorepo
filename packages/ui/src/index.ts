@@ -140,3 +140,4 @@ export {
   // Token icons
   TokenLINK,
 } from '@web3icons/react';
+export { NetworkIcon } from '@web3icons/react/dynamic';

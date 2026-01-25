@@ -6,8 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { request } from 'graphql-request';
 import { REGISTRY_STATS_QUERY, type RawRegistryStatsResponse } from '@swr/search';
 import { logger } from '@/lib/logger';
-
-const INDEXER_URL = import.meta.env.VITE_INDEXER_URL ?? 'http://localhost:42069';
+import { INDEXER_URL } from '@/lib/indexer';
 
 export interface RegistryStats {
   /** Total stolen wallets registered */

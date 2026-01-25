@@ -110,13 +110,13 @@ contract StolenTransactionRegistryOperatorTest is Test {
         assertFalse(batch.invalidated);
     }
 
-    // Registration should emit TransactionBatchRegistered event.
+    // Registration should emit TransactionBatchRegisteredByOperator event.
     function test_RegisterBatchAsOperator_EmitsEvent() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _getTestTransactions();
         bytes32 batchId = _computeBatchId(merkleRoot, operator, chainId);
 
         vm.expectEmit(true, true, true, true);
-        emit IStolenTransactionRegistry.TransactionBatchRegistered(
+        emit IStolenTransactionRegistry.TransactionBatchRegisteredByOperator(
             batchId, merkleRoot, operator, chainId, 3, txHashes, chainIds
         );
 

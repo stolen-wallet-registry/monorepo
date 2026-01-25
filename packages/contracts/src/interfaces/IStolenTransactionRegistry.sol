@@ -241,7 +241,7 @@ interface IStolenTransactionRegistry {
     /// @param isSponsored True if registration was submitted by a third party
     /// @param transactionHashes Raw tx hashes (parallel with chainIds)
     /// @param chainIds CAIP-2 chainId for each txHash (parallel with transactionHashes)
-    event TransactionBatchRegisteredByReporter(
+    event TransactionBatchRegistered(
         bytes32 indexed batchId,
         bytes32 indexed merkleRoot,
         address indexed reporter,
@@ -269,7 +269,7 @@ interface IStolenTransactionRegistry {
     /// @param transactionCount Number of transactions in the batch
     /// @param transactionHashes Array of transaction hashes in the batch
     /// @param chainIds Array of chain IDs for each transaction
-    event TransactionBatchRegistered(
+    event TransactionBatchRegisteredByOperator(
         bytes32 indexed batchId,
         bytes32 indexed merkleRoot,
         address indexed operator,

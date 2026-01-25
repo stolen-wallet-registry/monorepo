@@ -4,7 +4,8 @@
  * Displays a paginated table of recent registrations across all registry types.
  */
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useLocation, useSearch } from 'wouter';
 import {
   Card,
   CardContent,
@@ -54,6 +55,13 @@ const TYPE_CONFIG: Record<RegistrationType, { label: string; icon: typeof Wallet
     contract: { label: 'Contract', icon: Code, color: 'bg-purple-500/10 text-purple-500' },
     transaction: { label: 'Transaction', icon: FileText, color: 'bg-green-500/10 text-green-500' },
   };
+
+function getValidTypeFilter(value: string | null): RegistrationType | 'all' {
+  if (value === 'wallet' || value === 'contract' || value === 'transaction' || value === 'all') {
+    return value;
+  }
+  return 'all';
+}
 
 /**
  * Chain configuration for display with icons.
@@ -196,7 +204,11 @@ export interface RecentRegistrationsTableProps {
  * ```
  */
 export function RecentRegistrationsTable({ className }: RecentRegistrationsTableProps) {
-  const [typeFilter, setTypeFilter] = useState<RegistrationType | 'all'>('all');
+  const [location, setLocation] = useLocation();
+  const search = useSearch();
+  const basePath = location.split('?')[0] || '/dashboard';
+  const searchParams = useMemo(() => new URLSearchParams(search), [search]);
+  const typeFilter = getValidTypeFilter(searchParams.get('type'));
   const [page, setPage] = useState(0);
   const pageSize = 10;
 
@@ -240,7 +252,18 @@ export function RecentRegistrationsTable({ className }: RecentRegistrationsTable
         <Select
           value={typeFilter}
           onValueChange={(value) => {
-            setTypeFilter(value as RegistrationType | 'all');
+            const nextParams = new URLSearchParams(search);
+            nextParams.set('tab', 'registrations');
+            if (value === 'all') {
+              nextParams.delete('type');
+            } else {
+              nextParams.set('type', value);
+            }
+            const query = nextParams.toString();
+            const nextLocation = query ? `${basePath}?${query}` : basePath;
+            if (nextLocation !== location) {
+              setLocation(nextLocation);
+            }
             setPage(0);
           }}
         >

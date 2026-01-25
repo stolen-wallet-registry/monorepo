@@ -3,7 +3,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Link, useLocation } from 'wouter';
+import { Link, useSearch } from 'wouter';
 import {
   Badge,
   Button,
@@ -24,17 +24,15 @@ import {
   ExplorerLink,
   getExplorerAddressUrl,
   getExplorerTxUrl,
-  NetworkEthereum,
-  NetworkBase,
-  NetworkOptimism,
-  NetworkArbitrumOne,
-  NetworkPolygon,
+  NetworkIcon,
 } from '@swr/ui';
 import { ArrowLeft, Copy, Check, Globe, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatRelativeTime, formatTimestamp, truncateHash } from '@swr/search';
 import { useBatchDetail, useOperators } from '@/hooks/dashboard';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
+import { getChainDisplayFromCaip2 } from '@/lib/chains';
+import { extractAddressFromCAIP10, extractCAIP2FromCAIP10 } from '@swr/chains';
 import type { BatchType } from '@/hooks/dashboard';
 
 interface DashboardBatchDetailPageProps {
@@ -48,42 +46,6 @@ function getValidBatchType(value: string | null): BatchType | null {
     return value;
   }
   return null;
-}
-
-const CHAIN_CONFIG: Record<
-  number,
-  { name: string; shortName: string; Icon: React.ComponentType<{ className?: string }> }
-> = {
-  1: { name: 'Ethereum', shortName: 'ETH', Icon: NetworkEthereum },
-  8453: { name: 'Base', shortName: 'Base', Icon: NetworkBase },
-  10: { name: 'Optimism', shortName: 'OP', Icon: NetworkOptimism },
-  42161: { name: 'Arbitrum', shortName: 'ARB', Icon: NetworkArbitrumOne },
-  137: { name: 'Polygon', shortName: 'POLY', Icon: NetworkPolygon },
-  31337: { name: 'Local', shortName: 'Local', Icon: Globe },
-  84532: { name: 'Base Sepolia', shortName: 'Base Sep', Icon: NetworkBase },
-};
-
-function getChainInfoFromCaip2(caip2?: string): {
-  chainId: number | null;
-  name: string;
-  label: string;
-  Icon: React.ComponentType<{ className?: string }>;
-} {
-  if (!caip2) {
-    return { chainId: null, name: 'Unknown', label: 'Unknown', Icon: Globe };
-  }
-  const [namespace, reference] = caip2.split(':');
-  if (namespace === 'eip155' && reference && /^\d+$/.test(reference)) {
-    const chainId = parseInt(reference, 10);
-    if (Number.isFinite(chainId)) {
-      const config = CHAIN_CONFIG[chainId];
-      if (config) {
-        return { chainId, name: config.name, label: config.shortName, Icon: config.Icon };
-      }
-      return { chainId, name: `Chain ${chainId}`, label: `Chain ${chainId}`, Icon: Globe };
-    }
-  }
-  return { chainId: null, name: caip2, label: caip2, Icon: Globe };
 }
 
 function SummaryItem({ label, value }: { label: string; value: React.ReactNode }) {
@@ -141,7 +103,7 @@ function BatchDetailContent({
 }) {
   const [entryPage, setEntryPage] = useState(1);
   const pageSize = 25;
-  const { data, isLoading, isError } = useBatchDetail({
+  const { data, isLoading, isError, refetch } = useBatchDetail({
     batchId,
     type: batchType,
     limit: pageSize,
@@ -175,10 +137,33 @@ function BatchDetailContent({
     const address = 'operator' in data.batch ? data.batch.operator : data.batch.reporter;
     const name = operatorNames.get(address.toLowerCase());
     if (data.type === 'transaction' && !name) {
-      return 'Individual';
+      return data.batch.isOperatorVerified ? 'Operator' : 'Individual';
     }
     return name ?? truncateHash(address, 6, 4);
   }, [data, operatorNames]);
+
+  const renderChainBadge = (caip2?: string) => {
+    const chain = getChainDisplayFromCaip2(caip2);
+    const showNetworkIcon = chain.isKnown && !chain.isLocal;
+    const icon = showNetworkIcon ? (
+      chain.chainId ? (
+        <NetworkIcon chainId={chain.chainId} className="h-3 w-3" />
+      ) : chain.caip2 ? (
+        <NetworkIcon caip2id={chain.caip2} className="h-3 w-3" />
+      ) : (
+        <Globe className="h-3 w-3" />
+      )
+    ) : (
+      <Globe className="h-3 w-3" />
+    );
+
+    return (
+      <Badge variant="outline" className="text-xs inline-flex items-center gap-1">
+        {icon}
+        {chain.shortName}
+      </Badge>
+    );
+  };
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-6">
@@ -197,7 +182,14 @@ function BatchDetailContent({
       {isError && (
         <Card>
           <CardContent className="pt-6">
-            <p className="text-sm text-destructive">Failed to load batch details.</p>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-destructive">Failed to load batch details.</p>
+              <div>
+                <Button variant="outline" size="sm" onClick={() => refetch()}>
+                  Retry
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -213,7 +205,14 @@ function BatchDetailContent({
               <Skeleton className="h-8 w-full" />
             </div>
           ) : !data ? (
-            <p className="text-sm text-muted-foreground">Batch not found.</p>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">Batch not found.</p>
+              <div>
+                <Button variant="outline" size="sm" onClick={() => refetch()}>
+                  Retry
+                </Button>
+              </div>
+            </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               <SummaryItem label="Batch ID" value={<CopyableHash value={data.batch.id} />} />
@@ -239,16 +238,7 @@ function BatchDetailContent({
               />
               <SummaryItem
                 label="Reported Chain"
-                value={(() => {
-                  const chain = getChainInfoFromCaip2(data.batch.reportedChainId);
-                  const ChainIcon = chain.Icon;
-                  return (
-                    <span className="inline-flex items-center gap-2">
-                      <ChainIcon className="h-3 w-3" />
-                      {chain.label}
-                    </span>
-                  );
-                })()}
+                value={renderChainBadge(data.batch.reportedChainId)}
               />
               <SummaryItem label="Registered" value={formatTimestamp(data.batch.registeredAt)} />
               <SummaryItem
@@ -341,12 +331,9 @@ function BatchDetailContent({
                     </TableRow>
                   ) : data.type === 'wallet' ? (
                     data.entries.map((entry) => {
-                      const parts = entry.caip10.split(':');
-                      const address = parts[2] ?? entry.id;
-                      const caip2 =
-                        parts.length >= 2 ? `${parts[0]}:${parts[1]}` : entry.sourceChainCAIP2;
-                      const chainInfo = getChainInfoFromCaip2(caip2);
-                      const ChainIcon = chainInfo.Icon;
+                      const address = extractAddressFromCAIP10(entry.caip10) ?? entry.id;
+                      const caip2 = extractCAIP2FromCAIP10(entry.caip10) ?? entry.sourceChainCAIP2;
+                      const chainInfo = getChainDisplayFromCaip2(caip2);
                       return (
                         <TableRow key={entry.id}>
                           <TableCell>
@@ -361,15 +348,7 @@ function BatchDetailContent({
                               showDisabledIcon={false}
                             />
                           </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className="text-xs inline-flex items-center gap-1"
-                            >
-                              <ChainIcon className="h-3 w-3" />
-                              {chainInfo.label}
-                            </Badge>
-                          </TableCell>
+                          <TableCell>{renderChainBadge(caip2)}</TableCell>
                           <TableCell>
                             <span className="text-sm text-muted-foreground">
                               {formatRelativeTime(entry.registeredAt)}
@@ -388,10 +367,10 @@ function BatchDetailContent({
                     })
                   ) : data.type === 'transaction' ? (
                     data.entries.map((entry) => {
-                      const chainInfo = getChainInfoFromCaip2(entry.caip2ChainId);
-                      const ChainIcon = chainInfo.Icon;
-                      const txHref = entry.numericChainId
-                        ? getExplorerTxUrl(entry.numericChainId, entry.txHash)
+                      const chainInfo = getChainDisplayFromCaip2(entry.caip2ChainId);
+                      const chainIdForExplorer = entry.numericChainId ?? chainInfo.chainId;
+                      const txHref = chainIdForExplorer
+                        ? getExplorerTxUrl(chainIdForExplorer, entry.txHash)
                         : null;
                       return (
                         <TableRow key={entry.id}>
@@ -403,15 +382,7 @@ function BatchDetailContent({
                               showDisabledIcon={false}
                             />
                           </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className="text-xs inline-flex items-center gap-1"
-                            >
-                              <ChainIcon className="h-3 w-3" />
-                              {chainInfo.label}
-                            </Badge>
-                          </TableCell>
+                          <TableCell>{renderChainBadge(entry.caip2ChainId)}</TableCell>
                           <TableCell>
                             <ExplorerLink
                               value={entry.reporter}
@@ -429,10 +400,10 @@ function BatchDetailContent({
                     })
                   ) : (
                     data.entries.map((entry) => {
-                      const chainInfo = getChainInfoFromCaip2(entry.caip2ChainId);
-                      const ChainIcon = chainInfo.Icon;
-                      const contractHref = entry.numericChainId
-                        ? getExplorerAddressUrl(entry.numericChainId, entry.contractAddress)
+                      const chainInfo = getChainDisplayFromCaip2(entry.caip2ChainId);
+                      const chainIdForExplorer = entry.numericChainId ?? chainInfo.chainId;
+                      const contractHref = chainIdForExplorer
+                        ? getExplorerAddressUrl(chainIdForExplorer, entry.contractAddress)
                         : null;
                       const statusLabel = data.batch.invalidated
                         ? 'Batch invalidated'
@@ -451,15 +422,7 @@ function BatchDetailContent({
                               showDisabledIcon={false}
                             />
                           </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className="text-xs inline-flex items-center gap-1"
-                            >
-                              <ChainIcon className="h-3 w-3" />
-                              {chainInfo.label}
-                            </Badge>
-                          </TableCell>
+                          <TableCell>{renderChainBadge(entry.caip2ChainId)}</TableCell>
                           <TableCell>
                             <span className="text-sm text-muted-foreground">
                               {formatRelativeTime(entry.reportedAt)}
@@ -512,10 +475,8 @@ function BatchDetailContent({
 
 export function DashboardBatchDetailPage({ params }: DashboardBatchDetailPageProps) {
   const { batchId } = params;
-  const [location] = useLocation();
-  const searchParams = new URLSearchParams(
-    typeof window !== 'undefined' ? window.location.search : (location.split('?')[1] ?? '')
-  );
+  const search = useSearch();
+  const searchParams = new URLSearchParams(search);
 
   const batchType =
     getValidBatchType(searchParams.get('batchType')) ??
@@ -524,7 +485,8 @@ export function DashboardBatchDetailPage({ params }: DashboardBatchDetailPagePro
   const backParams = new URLSearchParams(searchParams);
   backParams.set('tab', 'batches');
   backParams.delete('batchType');
-  const backHref = `/dashboard?${backParams.toString()}`;
+  const backQuery = backParams.toString();
+  const backHref = backQuery ? `/dashboard?${backQuery}` : '/dashboard';
 
   if (!batchType) {
     return (

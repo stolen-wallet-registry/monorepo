@@ -7,8 +7,8 @@
  * - DAO: + Manage operators (integrated into Operators tab)
  */
 
-import { useEffect, useState } from 'react';
-import { useLocation } from 'wouter';
+import { useEffect } from 'react';
+import { useLocation, useSearch } from 'wouter';
 import { Tabs, TabsContent, TabsList, TabsTrigger, Badge } from '@swr/ui';
 import { ListOrdered, Users, Upload, Layers } from 'lucide-react';
 import {
@@ -19,6 +19,7 @@ import {
   OperatorSubmitGuide,
 } from '@/components/dashboard';
 import { useUserRole, type UserRole } from '@/hooks/dashboard';
+import { logger } from '@/lib/logger';
 
 const VALID_TABS = new Set(['operators', 'submit', 'registrations', 'batches']);
 
@@ -48,9 +49,9 @@ function RoleBadge({ role, isLoading }: RoleBadgeProps) {
 
 export function DashboardPage() {
   const [location, setLocation] = useLocation();
+  const search = useSearch();
   const { role, isLoading, isDAO } = useUserRole();
-  const initialSearch = typeof window !== 'undefined' ? window.location.search : '';
-  const [activeTab, setActiveTab] = useState(getTabFromSearch(initialSearch) ?? 'registrations');
+  const activeTab = getTabFromSearch(search) ?? 'registrations';
 
   // Compute tab visibility based on role
   // Default to showing only public tabs while loading to prevent layout shift
@@ -59,39 +60,23 @@ export function DashboardPage() {
   // Auto-reset to registrations if current tab becomes unavailable (e.g., wallet disconnect)
   const effectiveTab = activeTab === 'submit' && !showSubmitTab ? 'registrations' : activeTab;
 
-  const basePath =
-    typeof window !== 'undefined'
-      ? window.location.pathname
-      : location.split('?')[0] || '/dashboard';
-
-  // Sync local tab state with back/forward navigation
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handlePopState = () => {
-      const nextTab = getTabFromSearch(window.location.search) ?? 'registrations';
-      setActiveTab(nextTab);
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  const basePath = location.split('?')[0] || '/dashboard';
+  const currentLocation = search ? `${basePath}${search}` : basePath;
 
   // Keep URL in sync with the effective tab (visible tab)
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const urlTab = getTabFromSearch(window.location.search) ?? 'registrations';
-    if (urlTab !== effectiveTab) {
-      const nextLocation =
-        effectiveTab === 'registrations' ? basePath : `${basePath}?tab=${effectiveTab}`;
-      if (nextLocation !== location) {
-        setLocation(nextLocation);
-      }
+    const nextLocation =
+      effectiveTab === 'registrations' ? basePath : `${basePath}?tab=${effectiveTab}`;
+    if (nextLocation !== currentLocation) {
+      setLocation(nextLocation);
     }
-  }, [effectiveTab, basePath, location, setLocation]);
+  }, [effectiveTab, basePath, currentLocation, setLocation]);
 
   const handleTabChange = (value: string) => {
-    setActiveTab(value);
     const nextLocation = value === 'registrations' ? basePath : `${basePath}?tab=${value}`;
-    if (nextLocation !== location) {
+    logger.ui.debug('Dashboard tab change', { value, nextLocation, currentLocation });
+    if (nextLocation !== currentLocation) {
       setLocation(nextLocation);
     }
   };

@@ -1052,7 +1052,7 @@ export const StolenTransactionRegistryABI = [
   },
   {
     type: 'event',
-    name: 'TransactionBatchRegisteredByReporter',
+    name: 'TransactionBatchRegistered',
     inputs: [
       {
         name: 'batchId',
@@ -1107,7 +1107,7 @@ export const StolenTransactionRegistryABI = [
   },
   {
     type: 'event',
-    name: 'TransactionBatchRegistered',
+    name: 'TransactionBatchRegisteredByOperator',
     inputs: [
       {
         name: 'batchId',

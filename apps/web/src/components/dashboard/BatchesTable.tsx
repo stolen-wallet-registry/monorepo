@@ -4,8 +4,8 @@
  * Displays recent batch registrations across all registry types.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'wouter';
+import { useMemo } from 'react';
+import { Link, useLocation, useSearch } from 'wouter';
 import {
   Badge,
   Button,
@@ -30,11 +30,7 @@ import {
   TooltipTrigger,
   ExplorerLink,
   getExplorerTxUrl,
-  NetworkEthereum,
-  NetworkBase,
-  NetworkOptimism,
-  NetworkArbitrumOne,
-  NetworkPolygon,
+  NetworkIcon,
 } from '@swr/ui';
 import {
   Wallet,
@@ -49,6 +45,7 @@ import {
 import { formatRelativeTime, truncateHash } from '@swr/search';
 import { useBatches, useOperators, type BatchSummary, type BatchType } from '@/hooks/dashboard';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
+import { getChainDisplayFromCaip2 } from '@/lib/chains';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { cn } from '@/lib/utils';
 
@@ -57,41 +54,6 @@ const TYPE_CONFIG: Record<BatchType, { label: string; icon: typeof Wallet; color
   transaction: { label: 'Transaction', icon: FileText, color: 'bg-green-500/10 text-green-500' },
   contract: { label: 'Contract', icon: Code, color: 'bg-purple-500/10 text-purple-500' },
 };
-
-const CHAIN_CONFIG: Record<
-  number,
-  { name: string; shortName: string; Icon: React.ComponentType<{ className?: string }> }
-> = {
-  1: { name: 'Ethereum', shortName: 'ETH', Icon: NetworkEthereum },
-  8453: { name: 'Base', shortName: 'Base', Icon: NetworkBase },
-  10: { name: 'Optimism', shortName: 'OP', Icon: NetworkOptimism },
-  42161: { name: 'Arbitrum', shortName: 'ARB', Icon: NetworkArbitrumOne },
-  137: { name: 'Polygon', shortName: 'POLY', Icon: NetworkPolygon },
-  31337: { name: 'Local', shortName: 'Local', Icon: Globe },
-  84532: { name: 'Base Sepolia', shortName: 'Base Sep', Icon: NetworkBase },
-};
-
-function getChainInfo(caip2?: string): {
-  chainId: number | null;
-  name: string;
-  Icon: React.ComponentType<{ className?: string }>;
-} {
-  if (!caip2) {
-    return { chainId: null, name: 'Unknown', Icon: Globe };
-  }
-  const [namespace, reference] = caip2.split(':');
-  if (namespace === 'eip155' && reference && /^\d+$/.test(reference)) {
-    const chainId = parseInt(reference, 10);
-    if (Number.isFinite(chainId)) {
-      const config = CHAIN_CONFIG[chainId];
-      if (config) {
-        return { chainId, name: config.shortName, Icon: config.Icon };
-      }
-      return { chainId, name: `Chain ${chainId}`, Icon: Globe };
-    }
-  }
-  return { chainId: null, name: caip2, Icon: Globe };
-}
 
 function getValidTypeFilter(value: string | null): BatchType | 'all' {
   if (value === 'wallet' || value === 'transaction' || value === 'contract' || value === 'all') {
@@ -120,12 +82,25 @@ function BatchRow({ batch, operatorNames, detailHref }: BatchRowProps) {
 
   const submitterKey = batch.submitter.toLowerCase();
   const operatorLabel = operatorNames.get(submitterKey);
-  const isOperator = batch.type !== 'transaction' || operatorLabel !== undefined;
+  const isOperator =
+    batch.type !== 'transaction' || (batch.type === 'transaction' && batch.isOperatorVerified);
   const submitterLabel = isOperator
     ? (operatorLabel ?? truncateHash(submitterKey, 6, 4))
     : 'Individual';
 
-  const { name: chainName, Icon: ChainIcon } = getChainInfo(batch.reportedChainId);
+  const chainDisplay = getChainDisplayFromCaip2(batch.reportedChainId);
+  const showNetworkIcon = chainDisplay.isKnown && !chainDisplay.isLocal;
+  const chainIcon = showNetworkIcon ? (
+    chainDisplay.chainId ? (
+      <NetworkIcon chainId={chainDisplay.chainId} className="h-3 w-3" />
+    ) : chainDisplay.caip2 ? (
+      <NetworkIcon caip2id={chainDisplay.caip2} className="h-3 w-3" />
+    ) : (
+      <Globe className="h-3 w-3" />
+    )
+  ) : (
+    <Globe className="h-3 w-3" />
+  );
   const hubChainId = getHubChainIdForEnvironment();
   const txHref = getExplorerTxUrl(hubChainId, batch.transactionHash);
 
@@ -182,8 +157,8 @@ function BatchRow({ batch, operatorNames, detailHref }: BatchRowProps) {
       </TableCell>
       <TableCell>
         <Badge variant="outline" className="text-xs inline-flex items-center gap-1">
-          <ChainIcon className="h-3 w-3" />
-          {chainName}
+          {chainIcon}
+          {chainDisplay.shortName}
         </Badge>
       </TableCell>
       <TableCell>
@@ -212,26 +187,19 @@ export interface BatchesTableProps {
 
 export function BatchesTable({ className }: BatchesTableProps) {
   const [location, setLocation] = useLocation();
-  const basePath =
-    typeof window !== 'undefined'
-      ? window.location.pathname
-      : location.split('?')[0] || '/dashboard';
-  const initialSearch =
-    typeof window !== 'undefined' ? window.location.search : (location.split('?')[1] ?? '');
-  const initialParams = new URLSearchParams(initialSearch);
-  const [typeFilter, setTypeFilter] = useState(getValidTypeFilter(initialParams.get('type')));
-  const [submitterFilter, setSubmitterFilter] = useState(
-    getValidSubmitterFilter(initialParams.get('submitter'))
-  );
-  const initialPageParam = parseInt(initialParams.get('page') ?? '1', 10);
-  const [page, setPage] = useState(
-    Number.isFinite(initialPageParam) && initialPageParam > 0 ? initialPageParam : 1
-  );
+  const search = useSearch();
+  const basePath = location.split('?')[0] || '/dashboard';
+  const searchParams = useMemo(() => new URLSearchParams(search), [search]);
+  const typeFilter = getValidTypeFilter(searchParams.get('type'));
+  const submitterFilter = getValidSubmitterFilter(searchParams.get('submitter'));
+  const pageParam = parseInt(searchParams.get('page') ?? '1', 10);
+  const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
   const pageSize = 10;
+  const batchFetchLimit = 100;
 
   const { batches, isLoading, isError } = useBatches({
     type: typeFilter,
-    limit: 100,
+    limit: batchFetchLimit,
   });
   const { operators } = useOperators({ approvedOnly: false });
 
@@ -249,46 +217,31 @@ export function BatchesTable({ className }: BatchesTableProps) {
       if (batch.type !== 'transaction') {
         return submitterFilter === 'operator';
       }
-      const operatorLabel = operatorNames.get(batch.submitter.toLowerCase());
-      const isOperator = operatorLabel !== undefined;
+      const isOperator = batch.isOperatorVerified === true;
       return submitterFilter === 'operator' ? isOperator : !isOperator;
     });
-  }, [batches, operatorNames, submitterFilter]);
+  }, [batches, submitterFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
   const startIndex = (clampedPage - 1) * pageSize;
   const paginated = filtered.slice(startIndex, startIndex + pageSize);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handlePopState = () => {
-      const params = new URLSearchParams(window.location.search);
-      setTypeFilter(getValidTypeFilter(params.get('type')));
-      setSubmitterFilter(getValidSubmitterFilter(params.get('submitter')));
-      const nextPageParam = parseInt(params.get('page') ?? '1', 10);
-      setPage(Number.isFinite(nextPageParam) && nextPageParam > 0 ? nextPageParam : 1);
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
   const updateParams = (updates: Record<string, string>) => {
-    const nextParams = new URLSearchParams(
-      typeof window !== 'undefined' ? window.location.search : (location.split('?')[1] ?? '')
-    );
+    const nextParams = new URLSearchParams(search);
     nextParams.set('tab', 'batches');
     Object.entries(updates).forEach(([key, value]) => {
-      nextParams.set(key, value);
+      if (value === 'all' || value === '1') {
+        nextParams.delete(key);
+      } else {
+        nextParams.set(key, value);
+      }
     });
-    const nextLocation = `${basePath}?${nextParams.toString()}`;
+    const query = nextParams.toString();
+    const nextLocation = query ? `${basePath}?${query}` : basePath;
     if (nextLocation !== location) {
       setLocation(nextLocation);
     }
-    setTypeFilter(getValidTypeFilter(nextParams.get('type')));
-    setSubmitterFilter(getValidSubmitterFilter(nextParams.get('submitter')));
-    const nextPageParam = parseInt(nextParams.get('page') ?? '1', 10);
-    setPage(Number.isFinite(nextPageParam) && nextPageParam > 0 ? nextPageParam : 1);
   };
 
   if (isError) {
@@ -304,7 +257,12 @@ export function BatchesTable({ className }: BatchesTableProps) {
   return (
     <Card className={className}>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Batch Registrations</CardTitle>
+        <div className="space-y-1">
+          <CardTitle>Batch Registrations</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Showing the latest {batchFetchLimit} batches per type. Refine filters to narrow results.
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <Select
             value={typeFilter}
@@ -365,11 +323,7 @@ export function BatchesTable({ className }: BatchesTableProps) {
                   </TableRow>
                 ) : (
                   paginated.map((batch) => {
-                    const detailParams = new URLSearchParams(
-                      typeof window !== 'undefined'
-                        ? window.location.search
-                        : (location.split('?')[1] ?? '')
-                    );
+                    const detailParams = new URLSearchParams(search);
                     detailParams.set('tab', 'batches');
                     detailParams.set('batchType', batch.type);
                     const detailHref = `/dashboard/batches/${batch.id}?${detailParams.toString()}`;

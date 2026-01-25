@@ -15,10 +15,28 @@ import {
   type RawInvalidationsBatchResponse,
 } from '@swr/search';
 import { logger } from '@/lib/logger';
+import { INDEXER_URL } from '@/lib/indexer';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import type { BatchType } from './useBatches';
+import { isAddress } from 'viem';
 
-const INDEXER_URL = import.meta.env.VITE_INDEXER_URL ?? 'http://localhost:42069';
+function safeBigInt(value: string | number | bigint | null | undefined): bigint {
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return BigInt(value);
+  if (typeof value === 'string') {
+    try {
+      return BigInt(value);
+    } catch {
+      return 0n;
+    }
+  }
+  return 0n;
+}
+
+function asOptionalAddress(value?: string | null): Address | undefined {
+  if (!value) return undefined;
+  return isAddress(value) ? (value as Address) : undefined;
+}
 
 export interface WalletBatchDetail {
   id: string;
@@ -118,6 +136,7 @@ export interface UseBatchDetailResult {
 
 export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailResult {
   const { batchId, type, limit = 25, offset = 0 } = options;
+  const staleTime = type === 'contract' ? 30_000 : 120_000;
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['dashboard', 'batch-detail', { batchId, type, limit, offset }],
@@ -140,16 +159,16 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
           operator: response.walletBatch.operator as Address,
           reportedChainId: response.walletBatch.reportedChainCAIP2,
           walletCount: response.walletBatch.walletCount,
-          registeredAt: BigInt(response.walletBatch.registeredAt),
+          registeredAt: safeBigInt(response.walletBatch.registeredAt),
           transactionHash: response.walletBatch.transactionHash as Hash,
         };
 
         const entries = response.stolenWallets.items.map<WalletBatchEntry>((raw) => ({
           id: raw.id,
           caip10: raw.caip10,
-          registeredAt: BigInt(raw.registeredAt),
+          registeredAt: safeBigInt(raw.registeredAt),
           transactionHash: raw.transactionHash as Hash,
-          operator: raw.operator as Address | undefined,
+          operator: asOptionalAddress(raw.operator),
           sourceChainCAIP2: raw.sourceChainCAIP2,
         }));
 
@@ -173,8 +192,8 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
           transactionCount: response.transactionBatch.transactionCount,
           isSponsored: response.transactionBatch.isSponsored,
           isOperatorVerified: response.transactionBatch.isOperatorVerified,
-          verifyingOperator: response.transactionBatch.verifyingOperator as Address | undefined,
-          registeredAt: BigInt(response.transactionBatch.registeredAt),
+          verifyingOperator: asOptionalAddress(response.transactionBatch.verifyingOperator),
+          registeredAt: safeBigInt(response.transactionBatch.registeredAt),
           transactionHash: response.transactionBatch.transactionHash as Hash,
         };
 
@@ -184,7 +203,7 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
           caip2ChainId: raw.caip2ChainId,
           numericChainId: raw.numericChainId,
           reporter: raw.reporter as Address,
-          reportedAt: BigInt(raw.reportedAt),
+          reportedAt: safeBigInt(raw.reportedAt),
         }));
 
         return { type: 'transaction', batch, entries };
@@ -204,11 +223,11 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
         operator: response.fraudulentContractBatch.operator as Address,
         reportedChainId: response.fraudulentContractBatch.reportedChainCAIP2,
         contractCount: response.fraudulentContractBatch.contractCount,
-        registeredAt: BigInt(response.fraudulentContractBatch.registeredAt),
+        registeredAt: safeBigInt(response.fraudulentContractBatch.registeredAt),
         transactionHash: response.fraudulentContractBatch.transactionHash as Hash,
         invalidated: response.fraudulentContractBatch.invalidated,
         invalidatedAt: response.fraudulentContractBatch.invalidatedAt
-          ? BigInt(response.fraudulentContractBatch.invalidatedAt)
+          ? safeBigInt(response.fraudulentContractBatch.invalidatedAt)
           : null,
       };
 
@@ -224,7 +243,7 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
 
         for (const item of invalidations.invalidatedEntrys.items) {
           invalidationMap.set(item.id, {
-            invalidatedAt: BigInt(item.invalidatedAt),
+            invalidatedAt: safeBigInt(item.invalidatedAt),
             reinstated: item.reinstated,
           });
         }
@@ -238,7 +257,7 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
           caip2ChainId: raw.caip2ChainId,
           numericChainId: raw.numericChainId,
           operator: raw.operator as Address,
-          reportedAt: BigInt(raw.reportedAt),
+          reportedAt: safeBigInt(raw.reportedAt),
           entryHash: raw.entryHash,
           invalidated,
           invalidatedAt: invalidation ? invalidation.invalidatedAt : null,
@@ -247,7 +266,7 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
 
       return { type: 'contract', batch, entries };
     },
-    staleTime: 30_000,
+    staleTime,
     retry: 2,
   });
 
