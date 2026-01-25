@@ -54,24 +54,22 @@ function buildMerkleTree(transactions: TransactionLeaf[]): MerkleTreeData | null
     }));
 
     // Build tree using @swr/merkle (uses OZ StandardMerkleTree)
-    const { root, tree, leafCount } = buildTransactionMerkleTree(entries);
+    // IMPORTANT: Use the `entries` property from the result which is already sorted by leaf hash.
+    // This guarantees the sorted order matches what was used to compute the merkle root.
+    const { root, tree, entries: sortedEntries, leafCount } = buildTransactionMerkleTree(entries);
 
-    // Get the sorted order from the tree for contract calls
-    // OZ StandardMerkleTree sorts leaves internally
-    const sortedEntries: TransactionEntry[] = [];
-    for (const [, value] of tree.entries()) {
-      sortedEntries.push({
-        txHash: value[0] as Hash,
-        chainId: value[1] as Hash,
-      });
-    }
-
+    // Extract sorted arrays for contract calls
+    // These MUST be in the same order used to compute the merkle root
     const sortedTxHashes = sortedEntries.map((e) => e.txHash);
     const sortedChainIds = sortedEntries.map((e) => e.chainId);
 
     logger.store.debug('Merkle tree built', {
       root,
       count: leafCount,
+      // Log first/last hash for debugging sorted order
+      firstTxHash: sortedTxHashes[0],
+      lastTxHash: sortedTxHashes[sortedTxHashes.length - 1],
+      firstChainId: sortedChainIds[0],
     });
 
     return {

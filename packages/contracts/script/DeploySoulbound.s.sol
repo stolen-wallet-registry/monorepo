@@ -3,9 +3,6 @@ pragma solidity ^0.8.24;
 
 import { console2 } from "forge-std/Script.sol";
 import { DeployBase } from "./DeployBase.s.sol";
-import { TranslationRegistry } from "../src/soulbound/TranslationRegistry.sol";
-import { WalletSoulbound } from "../src/soulbound/WalletSoulbound.sol";
-import { SupportSoulbound } from "../src/soulbound/SupportSoulbound.sol";
 
 /// @title DeploySoulbound
 /// @notice Standalone deployment script for soulbound token contracts

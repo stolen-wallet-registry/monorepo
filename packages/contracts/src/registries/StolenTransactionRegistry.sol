@@ -22,8 +22,8 @@ import { RegistryCapabilities } from "../libraries/RegistryCapabilities.sol";
 ///      2. Grace period: Randomized delay (1-4 minutes)
 ///      3. Registration: Reporter signs again, batch marked as stolen permanently
 ///
-/// MERKLE TREE DESIGN (OpenZeppelin StandardMerkleTree Compatible):
-/// - Leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(txHash, chainId))))
+/// MERKLE TREE DESIGN (OpenZeppelin StandardMerkleTree v1.0.8+ Compatible):
+/// - Leaf = keccak256(keccak256(abi.encode(txHash, chainId)))
 /// - Only merkleRoot stored on-chain (gas efficient)
 /// - Full txHashes and chainIds emitted in events for data availability
 /// - Verification requires both txHash AND chainId

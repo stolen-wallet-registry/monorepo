@@ -128,8 +128,12 @@ export function CostBreakdownTable({
                 ({costEstimate.gasCost.eth} ETH)
               </span>
             </>
-          ) : (
+          ) : isError ? (
+            <span className="text-destructive text-xs">Estimation failed</span>
+          ) : isLoading ? (
             <span className="text-muted-foreground">Estimating...</span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
           )}
         </div>
       </div>

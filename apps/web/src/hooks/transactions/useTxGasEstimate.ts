@@ -200,6 +200,15 @@ export function useTxGasEstimate({
 
   const estimateEnabled = enabled && !!contractAddress && !!callData;
 
+  // Log when estimation is disabled for debugging
+  if (enabled && !estimateEnabled) {
+    logger.contract.debug('Gas estimation disabled - missing requirements', {
+      hasContractAddress: !!contractAddress,
+      hasCallData: !!callData,
+      hasAllParams,
+    });
+  }
+
   // Estimate gas units
   const {
     data: gasEstimate,
@@ -216,6 +225,16 @@ export function useTxGasEstimate({
       staleTime: GAS_POLL_INTERVAL / 2,
     },
   });
+
+  // Log gas estimation errors (e.g., contract reverts)
+  if (isEstimateError && estimateError) {
+    logger.contract.warn('Gas estimation failed - likely contract revert', {
+      step,
+      error: estimateError.message,
+      merkleRoot,
+      transactionCount: transactionHashes?.length,
+    });
+  }
 
   // Get current gas price
   const {

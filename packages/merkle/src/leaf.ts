@@ -1,39 +1,35 @@
 /**
  * Merkle leaf computation utilities.
  *
- * Uses OpenZeppelin StandardMerkleTree leaf format to match contracts:
- *   leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(value1, value2))))
+ * Uses OpenZeppelin StandardMerkleTree v1.0.8+ leaf format to match contracts:
+ *   leaf = keccak256(keccak256(abi.encode(value1, value2)))
  *
- * ## Why the 0x00 prefix?
+ * ## Why double keccak256?
  *
- * The 0x00 prefix is OpenZeppelin's defense against second-preimage attacks.
- * In a Merkle tree, internal nodes are computed as:
+ * The double-keccak256 provides domain separation for second-preimage attack defense.
+ * Leaves use double hash while internal nodes use single hash:
+ *   leaf = keccak256(keccak256(abi.encode(value)))
  *   node = keccak256(leftChild || rightChild)
  *
- * Without domain separation, an attacker could craft leaf data that equals
- * a valid internal node hash, potentially forging proofs. By prepending 0x00
- * to leaves (and implicitly using no prefix for internal nodes), leaves and
- * internal nodes are cryptographically distinguishable.
+ * This ensures leaves and internal nodes are cryptographically distinguishable.
+ * Note: OZ v1.0.8+ removed the 0x00 prefix in favor of double-hashing.
  *
- * This is standard in OpenZeppelin's MerkleProof library and StandardMerkleTree.
- * Our Solidity contracts use the same format, ensuring off-chain computed
- * leaves match on-chain verification.
- *
- * @see https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/cryptography/MerkleProof.sol
+ * @see https://github.com/OpenZeppelin/merkle-tree
  */
 
-import { keccak256, encodeAbiParameters, concat, type Hex, type Address } from 'viem';
+import { keccak256, encodeAbiParameters, type Hex, type Address } from 'viem';
 import { chainIdToBytes32 } from '@swr/caip';
 
 /**
  * Internal helper for address-based leaf computation.
  * Used by both wallet and contract registries which share the same format.
+ * Matches OZ StandardMerkleTree v1.0.8+ format: keccak256(keccak256(abi.encode(value)))
  */
 function computeAddressLeaf(address: Address, chainId: Hex): Hex {
   const innerHash = keccak256(
     encodeAbiParameters([{ type: 'address' }, { type: 'bytes32' }], [address, chainId])
   );
-  return keccak256(concat(['0x00', innerHash]));
+  return keccak256(innerHash);
 }
 
 /**
@@ -50,8 +46,8 @@ export function computeWalletLeaf(address: Address, chainId: Hex): Hex {
 
 /**
  * Compute a Merkle tree leaf for a transaction entry.
- * Uses OpenZeppelin StandardMerkleTree format matching MerkleRootComputation.sol:
- *   leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(txHash, chainId))))
+ * Uses OpenZeppelin StandardMerkleTree v1.0.8+ format matching MerkleRootComputation.sol:
+ *   leaf = keccak256(keccak256(abi.encode(txHash, chainId)))
  *
  * @param txHash - Transaction hash
  * @param chainId - CAIP-2 chain identifier as bytes32
@@ -66,7 +62,7 @@ export function computeTransactionLeaf(txHash: Hex, chainId: Hex): Hex {
   const innerHash = keccak256(
     encodeAbiParameters([{ type: 'bytes32' }, { type: 'bytes32' }], [txHash, chainId])
   );
-  return keccak256(concat(['0x00', innerHash]));
+  return keccak256(innerHash);
 }
 
 /**
@@ -101,7 +97,7 @@ export function computeContractLeaf(address: Address, chainId: Hex): Hex {
 
 /**
  * Generic leaf computation for any (bytes32, bytes32) tuple.
- * Used internally by tree building functions.
+ * Uses OZ StandardMerkleTree v1.0.8+ format: keccak256(keccak256(abi.encode(value)))
  *
  * @param value1 - First value (txHash or address as bytes32)
  * @param value2 - Second value (chainId as bytes32)
@@ -111,5 +107,5 @@ export function computeLeaf(value1: Hex, value2: Hex): Hex {
   const innerHash = keccak256(
     encodeAbiParameters([{ type: 'bytes32' }, { type: 'bytes32' }], [value1, value2])
   );
-  return keccak256(concat(['0x00', innerHash]));
+  return keccak256(innerHash);
 }

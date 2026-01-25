@@ -357,11 +357,11 @@ The CLI uses `@swr/chains` for network configuration. Contract addresses are def
 This CLI uses OpenZeppelin's `StandardMerkleTree` which is fully compatible with the on-chain registry contracts:
 
 ```typescript
-// CLI (using @openzeppelin/merkle-tree)
+// CLI (using @openzeppelin/merkle-tree v1.0.8+)
 const tree = StandardMerkleTree.of(values, ['address', 'bytes32']);
 
-// Solidity (MerkleRootComputation.sol)
-// keccak256(bytes.concat(bytes1(0x00), keccak256(abi.encode(addr, chainId))))
+// Solidity (MerkleRootComputation.sol) - matches OZ v1.0.8+ format
+// keccak256(abi.encodePacked(keccak256(abi.encode(addr, chainId))))
 ```
 
 The Merkle tree files saved to `--output-dir` can be used for:

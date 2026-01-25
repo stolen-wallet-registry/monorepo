@@ -5,7 +5,6 @@ import { Test } from "forge-std/Test.sol";
 import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
 import { IStolenWalletRegistry } from "../src/interfaces/IStolenWalletRegistry.sol";
 import { OperatorRegistry } from "../src/OperatorRegistry.sol";
-import { IOperatorRegistry } from "../src/interfaces/IOperatorRegistry.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";

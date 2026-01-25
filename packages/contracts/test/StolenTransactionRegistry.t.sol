@@ -8,7 +8,6 @@ import { FeeManager } from "../src/FeeManager.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 import { CAIP2 } from "../src/libraries/CAIP2.sol";
-import { MerkleRootComputation } from "../src/libraries/MerkleRootComputation.sol";
 import { MerkleTestHelper } from "./helpers/MerkleTestHelper.sol";
 
 /// @title StolenTransactionRegistryTest

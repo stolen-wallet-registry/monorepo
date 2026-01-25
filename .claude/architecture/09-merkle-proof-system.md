@@ -17,14 +17,14 @@ library MerkleRootComputation {
     error LeavesNotSorted();
 
     /// @notice Compute leaf hash for (address, bytes32) pair
-    /// @dev Matches OZ StandardMerkleTree.of(values, ['address', 'bytes32'])
+    /// @dev Matches OZ StandardMerkleTree.of(values, ['address', 'bytes32']) v1.0.8+
     function hashLeaf(address addr, bytes32 value) internal pure returns (bytes32) {
-        return keccak256(bytes.concat(bytes1(0x00), keccak256(abi.encode(addr, value))));
+        return keccak256(abi.encodePacked(keccak256(abi.encode(addr, value))));
     }
 
     /// @notice Compute leaf hash for (bytes32, bytes32) pair
     function hashLeaf(bytes32 value1, bytes32 value2) internal pure returns (bytes32) {
-        return keccak256(bytes.concat(bytes1(0x00), keccak256(abi.encode(value1, value2))));
+        return keccak256(abi.encodePacked(keccak256(abi.encode(value1, value2))));
     }
 
     /// @notice Compute root from PRE-SORTED leaves (O(n) verification)
@@ -33,13 +33,20 @@ library MerkleRootComputation {
 }
 ```
 
-**Leaf Format (OpenZeppelin Standard):**
+**Leaf Format (OpenZeppelin StandardMerkleTree v1.0.8+):**
 
 ```text
-leaf = keccak256(0x00 || keccak256(abi.encode(value1, value2)))
+leaf = keccak256(keccak256(abi.encode(value1, value2)))
 ```
 
-The `0x00` prefix distinguishes leaves from internal nodes, preventing second-preimage attacks.
+The double-keccak256 provides domain separation between leaves and internal nodes:
+
+- Leaves use double hash: `keccak256(keccak256(...))`
+- Internal nodes use single hash: `keccak256(left || right)`
+
+This prevents second-preimage attacks without requiring a prefix byte.
+
+> **Note**: OZ v1.0.8+ removed the `0x00` prefix used in earlier versions. The double-keccak256 approach provides equivalent security with simpler implementation.
 
 ---
 

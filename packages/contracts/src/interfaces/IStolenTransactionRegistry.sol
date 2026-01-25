@@ -8,8 +8,8 @@ pragma solidity ^0.8.24;
 ///      Uses Merkle trees for efficient batch storage - only the root is stored on-chain,
 ///      while individual transaction hashes are emitted in events for indexer reconstruction.
 ///
-/// KEY DESIGN (OpenZeppelin StandardMerkleTree Compatible):
-/// - Merkle leaf = keccak256(bytes.concat(0x00, keccak256(abi.encode(txHash, chainId))))
+/// KEY DESIGN (OpenZeppelin StandardMerkleTree v1.0.8+ Compatible):
+/// - Merkle leaf = keccak256(keccak256(abi.encode(txHash, chainId)))
 /// - Single batch can contain transactions from multiple chains
 /// - Events emit parallel arrays: txHashes[] + chainIds[] for data availability
 /// - CAIP-2 chain identifiers (bytes32) support EVM and non-EVM blockchains

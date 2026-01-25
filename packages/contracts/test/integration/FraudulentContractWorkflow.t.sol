@@ -3,11 +3,9 @@ pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
 import { FraudulentContractRegistry } from "../../src/registries/FraudulentContractRegistry.sol";
-import { IFraudulentContractRegistry } from "../../src/interfaces/IFraudulentContractRegistry.sol";
 import { OperatorRegistry } from "../../src/OperatorRegistry.sol";
 import { RegistryHub } from "../../src/RegistryHub.sol";
 import { FeeManager } from "../../src/FeeManager.sol";
-import { MerkleRootComputation } from "../../src/libraries/MerkleRootComputation.sol";
 import { MerkleTestHelper } from "../helpers/MerkleTestHelper.sol";
 
 /// @notice Full workflow test for FraudulentContractRegistry

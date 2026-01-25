@@ -887,12 +887,12 @@ ponder.on('FraudulentContractRegistry:ContractBatchRegistered', async ({ event, 
     const compositeId = `${contractAddr.toLowerCase()}-${chainIdHash}`;
 
     // Compute entryHash for linking with invalidation events
-    // Matches contract's MerkleRootComputation.hashLeaf (OpenZeppelin standard):
-    // keccak256(bytes.concat(bytes1(0x00), keccak256(abi.encode(address, bytes32))))
+    // Matches contract's MerkleRootComputation.hashLeaf (OpenZeppelin v1.0.8+ standard):
+    // keccak256(abi.encodePacked(keccak256(abi.encode(address, bytes32))))
     const innerHash = keccak256(
       encodeAbiParameters([{ type: 'address' }, { type: 'bytes32' }], [contractAddr, chainIdHash])
     );
-    const entryHash = keccak256(concat(['0x00', innerHash]));
+    const entryHash = keccak256(innerHash);
 
     await db
       .insert(fraudulentContract)
