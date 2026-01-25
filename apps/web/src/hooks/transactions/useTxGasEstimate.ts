@@ -9,7 +9,7 @@
  * Supports both hub (StolenTransactionRegistry) and spoke (SpokeTransactionRegistry) chains.
  */
 
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { useEstimateGas, useGasPrice, useChainId } from 'wagmi';
 import { formatGwei, encodeFunctionData } from 'viem';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
@@ -200,14 +200,22 @@ export function useTxGasEstimate({
 
   const estimateEnabled = enabled && !!contractAddress && !!callData;
 
-  // Log when estimation is disabled for debugging (in useEffect to avoid double-invocation in Strict Mode)
+  // Track logged states to prevent duplicate logs in Strict Mode
+  const lastLoggedDisabledState = useRef<boolean | null>(null);
+  const lastLoggedError = useRef<string | null>(null);
+
+  // Log when estimation is disabled for debugging (dedupe to avoid Strict Mode noise)
   useEffect(() => {
-    if (enabled && !estimateEnabled) {
+    const shouldLog = enabled && !estimateEnabled;
+    if (shouldLog && lastLoggedDisabledState.current !== estimateEnabled) {
+      lastLoggedDisabledState.current = estimateEnabled;
       logger.contract.debug('Gas estimation disabled - missing requirements', {
         hasContractAddress: !!contractAddress,
         hasCallData: !!callData,
         hasAllParams,
       });
+    } else if (!shouldLog) {
+      lastLoggedDisabledState.current = null;
     }
   }, [enabled, estimateEnabled, contractAddress, callData, hasAllParams]);
 
@@ -228,17 +236,23 @@ export function useTxGasEstimate({
     },
   });
 
-  // Log gas estimation errors (in useEffect to avoid double-invocation in Strict Mode)
+  // Log gas estimation errors (dedupe to avoid Strict Mode noise)
   useEffect(() => {
     if (isEstimateError && estimateError) {
-      logger.contract.warn('Gas estimation failed - likely contract revert', {
-        step,
-        error: estimateError.message,
-        merkleRoot,
-        transactionCount: transactionHashes?.length,
-      });
+      const errorKey = `${step}:${merkleRoot}:${estimateError.message}`;
+      if (lastLoggedError.current !== errorKey) {
+        lastLoggedError.current = errorKey;
+        logger.contract.warn('Gas estimation failed - likely contract revert', {
+          step,
+          error: estimateError.message,
+          merkleRoot,
+          transactionCount,
+        });
+      }
+    } else {
+      lastLoggedError.current = null;
     }
-  }, [isEstimateError, estimateError, step, merkleRoot, transactionHashes]);
+  }, [isEstimateError, estimateError, step, merkleRoot, transactionCount]);
 
   // Get current gas price
   const {

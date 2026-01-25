@@ -8,15 +8,12 @@ import { FeeManager } from "../src/FeeManager.sol";
 import { RegistryHub } from "../src/RegistryHub.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 import { CAIP2 } from "../src/libraries/CAIP2.sol";
-import { MerkleTestHelper } from "./helpers/MerkleTestHelper.sol";
-import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
+import { StolenTransactionRegistryTestBase } from "./helpers/StolenTransactionRegistryTestBase.sol";
 
 /// @title StolenTransactionRegistryTest
 /// @notice Comprehensive unit and fuzz tests for StolenTransactionRegistry
-/// @dev Inherits EIP712TestHelper for shared constants and signing utilities
-contract StolenTransactionRegistryTest is EIP712TestHelper {
-    StolenTransactionRegistry public registry;
-
+/// @dev Inherits StolenTransactionRegistryTestBase for shared helpers
+contract StolenTransactionRegistryTest is StolenTransactionRegistryTestBase {
     // Test accounts
     uint256 internal reporterPrivateKey;
     address internal reporter;
@@ -26,11 +23,8 @@ contract StolenTransactionRegistryTest is EIP712TestHelper {
     uint256 internal constant GRACE_BLOCKS = 10;
     uint256 internal constant DEADLINE_BLOCKS = 50;
 
-    // Test data
+    // Test data (individual hashes for specific tests)
     bytes32 internal testTxHash1;
-    bytes32 internal testTxHash2;
-    bytes32 internal testTxHash3;
-    bytes32 internal testChainId;
     bytes32 internal testMerkleRoot;
 
     function setUp() public {
@@ -46,82 +40,19 @@ contract StolenTransactionRegistryTest is EIP712TestHelper {
         vm.deal(reporter, 10 ether);
         vm.deal(forwarder, 10 ether);
 
-        // Set up test transaction data
+        // Set up test chain ID (Base mainnet) - used by base class helpers
+        testChainId = CAIP2.fromEIP155(8453);
+
+        // Keep testTxHash1 for tests that need individual hash reference
         testTxHash1 = keccak256("tx1");
-        testTxHash2 = keccak256("tx2");
-        testTxHash3 = keccak256("tx3");
-        testChainId = CAIP2.fromEIP155(8453); // Base mainnet
 
         // Pre-compute merkle root for standard test case (3 transactions)
         testMerkleRoot = _computeTestMerkleRoot();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // HELPERS
+    // TEST-SPECIFIC HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
-
-    function _getDomainSeparator() internal view returns (bytes32) {
-        return _txDomainSeparator(address(registry));
-    }
-
-    function _signAcknowledgement(
-        uint256 privateKey,
-        bytes32 merkleRoot,
-        bytes32 reportedChainId,
-        uint32 transactionCount,
-        address _forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        // Use shared EIP712TestHelper signing utility
-        return _signTxAck(
-            privateKey, address(registry), merkleRoot, reportedChainId, transactionCount, _forwarder, nonce, deadline
-        );
-    }
-
-    function _signRegistration(
-        uint256 privateKey,
-        bytes32 merkleRoot,
-        bytes32 reportedChainId,
-        address _forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        // Use shared EIP712TestHelper signing utility
-        return _signTxReg(privateKey, address(registry), merkleRoot, reportedChainId, _forwarder, nonce, deadline);
-    }
-
-    function _getTestTxHashes() internal view returns (bytes32[] memory txHashes) {
-        bytes32[] memory chainIds;
-        (txHashes, chainIds) = _getTestData();
-    }
-
-    function _getTestChainIds() internal view returns (bytes32[] memory chainIds) {
-        bytes32[] memory txHashes;
-        (txHashes, chainIds) = _getTestData();
-    }
-
-    function _getTestData() internal view returns (bytes32[] memory txHashes, bytes32[] memory chainIds) {
-        txHashes = new bytes32[](3);
-        chainIds = new bytes32[](3);
-        txHashes[0] = testTxHash1;
-        txHashes[1] = testTxHash2;
-        txHashes[2] = testTxHash3;
-        chainIds[0] = testChainId;
-        chainIds[1] = testChainId;
-        chainIds[2] = testChainId;
-        MerkleTestHelper.sortBytes32Values(txHashes, chainIds);
-    }
-
-    function _computeTestMerkleRoot() internal view returns (bytes32) {
-        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _getTestData();
-        return MerkleTestHelper.computeBytes32Root(txHashes, chainIds);
-    }
-
-    /// @dev Compute merkle root and sort arrays in-place for contract submission
-    function _computeMerkleRoot(bytes32[] memory txHashes, bytes32[] memory chainIds) internal pure returns (bytes32) {
-        return MerkleTestHelper.computeBytes32Root(txHashes, chainIds);
-    }
 
     function _doAcknowledgement(address _forwarder) internal {
         uint256 deadline = block.timestamp + 1 hours;
@@ -518,9 +449,8 @@ contract StolenTransactionRegistryTest is EIP712TestHelper {
 
 /// @title StolenTransactionRegistryFeeTest
 /// @notice Tests for StolenTransactionRegistry with fee collection enabled
-/// @dev Inherits EIP712TestHelper for shared constants and signing utilities
-contract StolenTransactionRegistryFeeTest is EIP712TestHelper {
-    StolenTransactionRegistry public registry;
+/// @dev Inherits StolenTransactionRegistryTestBase for shared helpers
+contract StolenTransactionRegistryFeeTest is StolenTransactionRegistryTestBase {
     RegistryHub public hub;
     FeeManager public feeManager;
     MockAggregator public priceFeed;
@@ -531,7 +461,6 @@ contract StolenTransactionRegistryFeeTest is EIP712TestHelper {
     address internal hubOwner;
 
     bytes32 internal testMerkleRoot;
-    bytes32 internal testChainId;
 
     uint256 internal constant GRACE_BLOCKS = 10;
     uint256 internal constant DEADLINE_BLOCKS = 50;
@@ -567,86 +496,11 @@ contract StolenTransactionRegistryFeeTest is EIP712TestHelper {
         vm.deal(reporter, 10 ether);
         vm.deal(forwarder, 10 ether);
 
-        // Set up test data
+        // Set up test chain ID (Base mainnet) - used by base class helpers
         testChainId = CAIP2.fromEIP155(8453);
-        bytes32 txHash1 = keccak256("tx1");
-        bytes32 txHash2 = keccak256("tx2");
-        bytes32 txHash3 = keccak256("tx3");
 
-        // Compute merkle root
-        bytes32[] memory txHashes = new bytes32[](3);
-        txHashes[0] = txHash1;
-        txHashes[1] = txHash2;
-        txHashes[2] = txHash3;
-
-        bytes32[] memory chainIds = new bytes32[](3);
-        chainIds[0] = testChainId;
-        chainIds[1] = testChainId;
-        chainIds[2] = testChainId;
-
-        testMerkleRoot = _computeMerkleRoot(txHashes, chainIds);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // HELPERS (using shared EIP712TestHelper utilities)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    function _getDomainSeparator() internal view returns (bytes32) {
-        return _txDomainSeparator(address(registry));
-    }
-
-    function _signAcknowledgement(
-        uint256 privateKey,
-        bytes32 merkleRoot,
-        bytes32 reportedChainId,
-        uint32 transactionCount,
-        address _forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        // Use shared EIP712TestHelper signing utility
-        return _signTxAck(
-            privateKey, address(registry), merkleRoot, reportedChainId, transactionCount, _forwarder, nonce, deadline
-        );
-    }
-
-    function _signRegistration(
-        uint256 privateKey,
-        bytes32 merkleRoot,
-        bytes32 reportedChainId,
-        address _forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        // Use shared EIP712TestHelper signing utility
-        return _signTxReg(privateKey, address(registry), merkleRoot, reportedChainId, _forwarder, nonce, deadline);
-    }
-
-    function _getTestTxHashes() internal view returns (bytes32[] memory txHashes) {
-        bytes32[] memory chainIds;
-        (txHashes, chainIds) = _getTestData();
-    }
-
-    function _getTestChainIds() internal view returns (bytes32[] memory chainIds) {
-        bytes32[] memory txHashes;
-        (txHashes, chainIds) = _getTestData();
-    }
-
-    function _getTestData() internal view returns (bytes32[] memory txHashes, bytes32[] memory chainIds) {
-        txHashes = new bytes32[](3);
-        chainIds = new bytes32[](3);
-        txHashes[0] = keccak256("tx1");
-        txHashes[1] = keccak256("tx2");
-        txHashes[2] = keccak256("tx3");
-        chainIds[0] = testChainId;
-        chainIds[1] = testChainId;
-        chainIds[2] = testChainId;
-        MerkleTestHelper.sortBytes32Values(txHashes, chainIds);
-    }
-
-    /// @dev Compute merkle root and sort arrays in-place for contract submission
-    function _computeMerkleRoot(bytes32[] memory txHashes, bytes32[] memory chainIds) internal pure returns (bytes32) {
-        return MerkleTestHelper.computeBytes32Root(txHashes, chainIds);
+        // Pre-compute merkle root using base class helper
+        testMerkleRoot = _computeTestMerkleRoot();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

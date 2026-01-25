@@ -80,7 +80,13 @@ export function getRelayServers(config: EnvironmentConfig): RelayConfig[] {
   }
 
   // For non-production, fall back to development servers
-  return servers && servers.length > 0 ? servers : RELAY_SERVERS.development;
+  if (!servers || servers.length === 0) {
+    if (mode !== 'development') {
+      console.warn(`No relay servers configured for ${mode}; falling back to development relays.`);
+    }
+    return RELAY_SERVERS.development;
+  }
+  return servers;
 }
 
 /**
