@@ -30,22 +30,11 @@ import {
   TooltipTrigger,
   ExplorerLink,
   getExplorerTxUrl,
-  NetworkIcon,
 } from '@swr/ui';
-import {
-  Wallet,
-  FileText,
-  Code,
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  Check,
-  Globe,
-} from 'lucide-react';
+import { Wallet, FileText, Code, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
 import { formatRelativeTime, truncateHash } from '@swr/search';
 import { useBatches, useOperators, type BatchSummary, type BatchType } from '@/hooks/dashboard';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
-import { getChainDisplayFromCaip2 } from '@/lib/chains';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { cn } from '@/lib/utils';
 
@@ -88,19 +77,6 @@ function BatchRow({ batch, operatorNames, detailHref }: BatchRowProps) {
     ? (operatorLabel ?? truncateHash(submitterKey, 6, 4))
     : 'Individual';
 
-  const chainDisplay = getChainDisplayFromCaip2(batch.reportedChainId);
-  const showNetworkIcon = chainDisplay.isKnown && !chainDisplay.isLocal;
-  const chainIcon = showNetworkIcon ? (
-    chainDisplay.chainId ? (
-      <NetworkIcon chainId={chainDisplay.chainId} className="h-3 w-3" />
-    ) : chainDisplay.caip2 ? (
-      <NetworkIcon caip2id={chainDisplay.caip2} className="h-3 w-3" />
-    ) : (
-      <Globe className="h-3 w-3" />
-    )
-  ) : (
-    <Globe className="h-3 w-3" />
-  );
   const hubChainId = getHubChainIdForEnvironment();
   const txHref = getExplorerTxUrl(hubChainId, batch.transactionHash);
 
@@ -154,12 +130,6 @@ function BatchRow({ batch, operatorNames, detailHref }: BatchRowProps) {
       </TableCell>
       <TableCell>
         <span className="text-sm">{submitterLabel}</span>
-      </TableCell>
-      <TableCell>
-        <Badge variant="outline" className="text-xs inline-flex items-center gap-1">
-          {chainIcon}
-          {chainDisplay.shortName}
-        </Badge>
       </TableCell>
       <TableCell>
         <span className="text-sm">{batch.count.toLocaleString()}</span>
@@ -308,7 +278,6 @@ export function BatchesTable({ className }: BatchesTableProps) {
                   <TableHead>Type</TableHead>
                   <TableHead>Batch ID</TableHead>
                   <TableHead>Submitter</TableHead>
-                  <TableHead>Chain</TableHead>
                   <TableHead>Count</TableHead>
                   <TableHead>Registered</TableHead>
                   <TableHead>Tx</TableHead>
@@ -317,7 +286,7 @@ export function BatchesTable({ className }: BatchesTableProps) {
               <TableBody>
                 {paginated.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                       No batches found for this filter.
                     </TableCell>
                   </TableRow>

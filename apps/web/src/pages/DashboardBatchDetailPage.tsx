@@ -147,9 +147,9 @@ function BatchDetailContent({
     const showNetworkIcon = chain.isKnown && !chain.isLocal;
     const icon = showNetworkIcon ? (
       chain.chainId ? (
-        <NetworkIcon chainId={chain.chainId} className="h-3 w-3" />
+        <NetworkIcon chainId={chain.chainId} variant="branded" size={12} />
       ) : chain.caip2 ? (
-        <NetworkIcon caip2id={chain.caip2} className="h-3 w-3" />
+        <NetworkIcon caip2id={chain.caip2} variant="branded" size={12} />
       ) : (
         <Globe className="h-3 w-3" />
       )
