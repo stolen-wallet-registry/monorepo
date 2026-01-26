@@ -16,6 +16,7 @@ import { ErrorBoundary, StepErrorFallback } from '@/components/composed/ErrorBou
 import { StepRenderer } from '@/components/registration';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { useRegistrySearch } from '@/hooks/indexer';
 
 /**
  * Step descriptions for standard flow.
@@ -60,9 +61,17 @@ const STEP_TOOLTIPS: Partial<Record<RegistrationStep, string>> = {
 
 export function StandardRegistrationPage() {
   const [, setLocation] = useLocation();
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const { registrationType, step, setRegistrationType } = useRegistrationStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
+
+  // Check if the connected wallet is already registered via indexer
+  // This catches both individual and batch registrations
+  const { data: searchResult, isLoading: isCheckingRegistration } = useRegistrySearch(
+    address ?? ''
+  );
+  const connectedWalletRegistered =
+    searchResult?.type === 'address' && searchResult.foundInWalletRegistry;
 
   // Initialize registration type
   useEffect(() => {
@@ -78,7 +87,24 @@ export function StandardRegistrationPage() {
     }
   }, [isConnected, setLocation]);
 
+  // Redirect if connected wallet is already registered (can't register same wallet twice)
+  useEffect(() => {
+    if (!isCheckingRegistration && connectedWalletRegistered) {
+      setLocation('/register/wallets');
+    }
+  }, [isCheckingRegistration, connectedWalletRegistered, setLocation]);
+
   if (!isConnected) {
+    return null;
+  }
+
+  // Show nothing while checking registration status
+  if (isCheckingRegistration) {
+    return null;
+  }
+
+  // Block if wallet is already registered
+  if (connectedWalletRegistered) {
     return null;
   }
 

@@ -207,7 +207,12 @@ export function TxSuccessStep() {
 
         {/* Selected Transactions Table */}
         {selectedTxDetails.length > 0 && (
-          <SelectedTransactionsTable transactions={selectedTxDetails} showValue showBlock />
+          <SelectedTransactionsTable
+            transactions={selectedTxDetails}
+            showValue
+            showBlock
+            reportedChainId={reportedChainId}
+          />
         )}
 
         {/* Transaction links */}

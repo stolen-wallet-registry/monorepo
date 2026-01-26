@@ -92,23 +92,33 @@ export function ConnectedWalletStatus({
   }, [address, alwaysShow, sessionDismissed]);
 
   // Query registry status for connected wallet (always query hub for unified registry)
+  const hubChainId = getHubChainIdForEnvironment();
   const { isRegistered, isPending, isLoading, isError, error } = useRegistryStatus({
     address: isConnected ? address : undefined,
     refetchInterval: 60_000, // Check every minute
-    chainId: getHubChainIdForEnvironment(),
+    chainId: hubChainId,
   });
 
-  // Debug logging for troubleshooting
-  logger.wallet.debug('ConnectedWalletStatus state', {
+  // Debug logging for troubleshooting (use info level for visibility during debugging)
+  // This helps diagnose why the alert may not be triggering
+  logger.wallet.info('[ConnectedWalletStatus] Registry status check', {
     address,
     isConnected,
+    hubChainId,
+    queryEnabled: isConnected && !!address,
     isRegistered,
     isPending,
     isLoading,
     isError,
     error: error?.message,
     isDismissed,
-    hubChainId: getHubChainIdForEnvironment(),
+    shouldShowAlert:
+      isConnected &&
+      !!address &&
+      !isLoading &&
+      !isError &&
+      (isRegistered || isPending) &&
+      (!isDismissed || alwaysShow),
   });
 
   const handleDismiss = useCallback(() => {

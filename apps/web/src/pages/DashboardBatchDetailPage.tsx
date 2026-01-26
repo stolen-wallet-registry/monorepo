@@ -26,7 +26,16 @@ import {
   getExplorerTxUrl,
   NetworkIcon,
 } from '@swr/ui';
-import { ArrowLeft, Copy, Check, Globe, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  ArrowLeft,
+  Copy,
+  Check,
+  Globe,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Info,
+} from 'lucide-react';
 import { formatRelativeTime, formatTimestamp, truncateHash } from '@swr/search';
 import { useBatchDetail, useOperators } from '@/hooks/dashboard';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
@@ -92,6 +101,101 @@ function CopyableHash({ value }: { value: string }) {
   );
 }
 
+/**
+ * Format a CAIP-10 identifier for display (truncated).
+ * Format: eip155:{chainId}:{truncatedIdentifier}
+ */
+function formatCaip10Display(identifier: string, caip2: string | undefined): string {
+  const truncated = `${identifier.slice(0, 10)}...${identifier.slice(-6)}`;
+  if (caip2) {
+    return `${caip2}:${truncated}`;
+  }
+  return truncated;
+}
+
+/**
+ * Build full CAIP-10 identifier.
+ */
+function buildCaip10(identifier: string, caip2: string | undefined): string {
+  if (caip2) {
+    return `${caip2}:${identifier}`;
+  }
+  return identifier;
+}
+
+/**
+ * CAIP-10 formatted entry with copy and explorer buttons.
+ * Displays: namespace:chainId:truncatedIdentifier
+ * Copy button copies just the raw identifier (hash/address).
+ */
+function Caip10Entry({
+  identifier,
+  caip2,
+  explorerUrl,
+  type,
+}: {
+  identifier: string;
+  caip2: string | undefined;
+  explorerUrl: string | null;
+  type: 'address' | 'transaction' | 'contract';
+}) {
+  const { copy, copied } = useCopyToClipboard({ resetMs: 2000 });
+  const displayValue = formatCaip10Display(identifier, caip2);
+  const fullCaip10 = buildCaip10(identifier, caip2);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <code className="font-mono text-xs cursor-default">{displayValue}</code>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-md">
+          <p className="text-xs font-mono break-all">{fullCaip10}</p>
+        </TooltipContent>
+      </Tooltip>
+      {/* Copy button - copies just the identifier (address/hash) */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={() => copy(identifier)}
+            className="p-0.5 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-foreground"
+            aria-label={
+              copied ? 'Copied!' : `Copy ${type === 'transaction' ? 'tx hash' : 'address'}`
+            }
+          >
+            {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <p className="text-xs">
+            {copied ? 'Copied!' : `Copy ${type === 'transaction' ? 'tx hash' : 'address'}`}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+      {/* Explorer link */}
+      {explorerUrl && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <a
+              href={explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-0.5 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-foreground"
+              aria-label="View on explorer"
+            >
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <p className="text-xs">View on explorer</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
 function BatchDetailContent({
   batchId,
   batchType,
@@ -144,7 +248,7 @@ function BatchDetailContent({
     return name ?? truncateHash(address, 6, 4);
   }, [data, operatorNames]);
 
-  const renderChainBadge = (caip2?: string) => {
+  const renderChainBadge = (caip2?: string, showCaip2Detail = false, chainIdHash?: string) => {
     const chain = getChainDisplayFromCaip2(caip2);
     const showNetworkIcon = chain.isKnown && !chain.isLocal;
     const icon = showNetworkIcon ? (
@@ -158,6 +262,30 @@ function BatchDetailContent({
     ) : (
       <Globe className="h-3 w-3" />
     );
+
+    if (showCaip2Detail && caip2) {
+      return (
+        <div className="flex flex-col gap-0.5">
+          <Badge variant="outline" className="text-xs inline-flex items-center gap-1 w-fit">
+            {icon}
+            {chain.shortName}
+          </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-xs text-muted-foreground">
+                {caip2}
+                {chainIdHash && ` (${truncateHash(chainIdHash, 4, 4)})`}
+              </span>
+            </TooltipTrigger>
+            {chainIdHash && (
+              <TooltipContent side="bottom">
+                <p className="text-xs font-mono break-all">{chainIdHash}</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </div>
+      );
+    }
 
     return (
       <Badge variant="outline" className="text-xs inline-flex items-center gap-1">
@@ -225,8 +353,8 @@ function BatchDetailContent({
               <SummaryItem
                 label={data.type === 'transaction' ? 'Reporter' : 'Operator'}
                 value={
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">{submitterLabel}</span>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-medium">{submitterLabel}</span>
                     <ExplorerLink
                       value={'operator' in data.batch ? data.batch.operator : data.batch.reporter}
                       type="address"
@@ -240,7 +368,14 @@ function BatchDetailContent({
               />
               <SummaryItem
                 label="Reported Chain"
-                value={renderChainBadge(data.batch.reportedChainId)}
+                value={renderChainBadge(
+                  data.batch.reportedChainId,
+                  true,
+                  'reportedChainIdHash' in data.batch &&
+                    typeof data.batch.reportedChainIdHash === 'string'
+                    ? data.batch.reportedChainIdHash
+                    : undefined
+                )}
               />
               <SummaryItem label="Registered" value={formatTimestamp(data.batch.registeredAt)} />
               <SummaryItem
@@ -300,23 +435,69 @@ function BatchDetailContent({
                   <TableRow>
                     {data.type === 'wallet' && (
                       <>
-                        <TableHead>Wallet</TableHead>
+                        <TableHead>
+                          <span className="inline-flex items-center gap-1">
+                            Wallet (CAIP-10)
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3 w-3 cursor-help text-muted-foreground" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs">
+                                <p className="text-xs">
+                                  <strong>CAIP-10</strong> is a standard for identifying blockchain
+                                  addresses across chains. Format:{' '}
+                                  <code>namespace:chainId:address</code>
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </span>
+                        </TableHead>
                         <TableHead>Chain</TableHead>
                         <TableHead>Registered</TableHead>
-                        <TableHead>Tx</TableHead>
                       </>
                     )}
                     {data.type === 'transaction' && (
                       <>
-                        <TableHead>Tx Hash</TableHead>
+                        <TableHead>
+                          <span className="inline-flex items-center gap-1">
+                            Transaction (CAIP-10)
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3 w-3 cursor-help text-muted-foreground" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs">
+                                <p className="text-xs">
+                                  <strong>CAIP-10</strong> is a standard for identifying blockchain
+                                  addresses across chains. Format:{' '}
+                                  <code>namespace:chainId:txHash</code>
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </span>
+                        </TableHead>
                         <TableHead>Chain</TableHead>
-                        <TableHead>Reporter</TableHead>
                         <TableHead>Reported</TableHead>
                       </>
                     )}
                     {data.type === 'contract' && (
                       <>
-                        <TableHead>Contract</TableHead>
+                        <TableHead>
+                          <span className="inline-flex items-center gap-1">
+                            Contract (CAIP-10)
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3 w-3 cursor-help text-muted-foreground" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs">
+                                <p className="text-xs">
+                                  <strong>CAIP-10</strong> is a standard for identifying blockchain
+                                  addresses across chains. Format:{' '}
+                                  <code>namespace:chainId:address</code>
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </span>
+                        </TableHead>
                         <TableHead>Chain</TableHead>
                         <TableHead>Reported</TableHead>
                         <TableHead>Status</TableHead>
@@ -327,7 +508,10 @@ function BatchDetailContent({
                 <TableBody>
                   {data.entries.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                      <TableCell
+                        colSpan={data.type === 'contract' ? 4 : 3}
+                        className="text-center text-sm text-muted-foreground"
+                      >
                         No entries found for this batch.
                       </TableCell>
                     </TableRow>
@@ -336,18 +520,17 @@ function BatchDetailContent({
                       const address = extractAddressFromCAIP10(entry.caip10) ?? entry.id;
                       const caip2 = extractCAIP2FromCAIP10(entry.caip10) ?? entry.sourceChainCAIP2;
                       const chainInfo = getChainDisplayFromCaip2(caip2);
+                      const explorerUrl = chainInfo.chainId
+                        ? getExplorerAddressUrl(chainInfo.chainId, address)
+                        : null;
                       return (
                         <TableRow key={entry.id}>
                           <TableCell>
-                            <ExplorerLink
-                              value={address}
+                            <Caip10Entry
+                              identifier={address}
+                              caip2={caip2}
+                              explorerUrl={explorerUrl}
                               type="address"
-                              href={
-                                chainInfo.chainId
-                                  ? getExplorerAddressUrl(chainInfo.chainId, address)
-                                  : null
-                              }
-                              showDisabledIcon={false}
                             />
                           </TableCell>
                           <TableCell>{renderChainBadge(caip2)}</TableCell>
@@ -355,14 +538,6 @@ function BatchDetailContent({
                             <span className="text-sm text-muted-foreground">
                               {formatRelativeTime(entry.registeredAt)}
                             </span>
-                          </TableCell>
-                          <TableCell>
-                            <ExplorerLink
-                              value={entry.transactionHash}
-                              type="transaction"
-                              href={getExplorerTxUrl(hubChainId, entry.transactionHash)}
-                              showDisabledIcon={false}
-                            />
                           </TableCell>
                         </TableRow>
                       );
@@ -377,21 +552,14 @@ function BatchDetailContent({
                       return (
                         <TableRow key={entry.id}>
                           <TableCell>
-                            <ExplorerLink
-                              value={entry.txHash}
+                            <Caip10Entry
+                              identifier={entry.txHash}
+                              caip2={entry.caip2ChainId}
+                              explorerUrl={txHref}
                               type="transaction"
-                              href={txHref}
-                              showDisabledIcon={false}
                             />
                           </TableCell>
                           <TableCell>{renderChainBadge(entry.caip2ChainId)}</TableCell>
-                          <TableCell>
-                            <ExplorerLink
-                              value={entry.reporter}
-                              type="address"
-                              href={getExplorerAddressUrl(hubChainId, entry.reporter)}
-                            />
-                          </TableCell>
                           <TableCell>
                             <span className="text-sm text-muted-foreground">
                               {formatRelativeTime(entry.reportedAt)}
@@ -417,11 +585,11 @@ function BatchDetailContent({
                       return (
                         <TableRow key={entry.entryHash}>
                           <TableCell>
-                            <ExplorerLink
-                              value={entry.contractAddress}
+                            <Caip10Entry
+                              identifier={entry.contractAddress}
+                              caip2={entry.caip2ChainId}
+                              explorerUrl={contractHref}
                               type="contract"
-                              href={contractHref}
-                              showDisabledIcon={false}
                             />
                           </TableCell>
                           <TableCell>{renderChainBadge(entry.caip2ChainId)}</TableCell>

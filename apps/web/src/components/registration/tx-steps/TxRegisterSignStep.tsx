@@ -379,7 +379,12 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
 
       {/* Selected Transactions Table */}
       {selectedTxDetails.length > 0 && (
-        <SelectedTransactionsTable transactions={selectedTxDetails} showValue showBlock />
+        <SelectedTransactionsTable
+          transactions={selectedTxDetails}
+          showValue
+          showBlock
+          reportedChainId={reportedChainId}
+        />
       )}
 
       {/* Loading state for contract data */}

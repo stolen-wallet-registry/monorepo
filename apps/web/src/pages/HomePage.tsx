@@ -12,12 +12,19 @@ import { ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } from '@swr/ui';
 import { RegistrationMethodSelector } from '@/components/composed/RegistrationMethodSelector';
 import { useRegistrationStore, type RegistrationType } from '@/stores/registrationStore';
+import { useRegistrySearch } from '@/hooks/indexer';
 
 export function HomePage() {
   const [, setLocation] = useLocation();
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const { setRegistrationType } = useRegistrationStore();
   const p2pAvailable = Boolean(import.meta.env.VITE_RELAY_MULTIADDR);
+
+  // Check if the connected wallet is already registered via indexer
+  // This catches both individual and batch registrations
+  const { data: searchResult } = useRegistrySearch(address ?? '');
+  const connectedWalletRegistered =
+    searchResult?.type === 'address' && searchResult.foundInWalletRegistry;
 
   const handleMethodSelect = (type: RegistrationType) => {
     setRegistrationType(type);
@@ -77,6 +84,7 @@ export function HomePage() {
             onSelect={handleMethodSelect}
             p2pAvailable={p2pAvailable}
             registryType="wallet"
+            connectedWalletRegistered={connectedWalletRegistered}
           />
         </div>
       )}

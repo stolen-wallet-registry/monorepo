@@ -49,7 +49,7 @@ export function SuccessStep() {
     bridgeMessageId,
     reset: resetRegistration,
   } = useRegistrationStore();
-  const { registeree, reset: resetForm } = useFormStore();
+  const { registeree, relayer, reset: resetForm } = useFormStore();
 
   // Determine if this was a cross-chain registration
   const isCrossChain = registrationChainId ? isSpokeChain(registrationChainId) : false;
@@ -203,6 +203,16 @@ export function SuccessStep() {
             <div className="flex items-center gap-2">
               <Award className="h-5 w-5 text-primary" />
               <p className="text-sm font-medium">Registry Proof Token</p>
+            </div>
+            {/* Clarify which wallet receives the token for self-relay/p2p flows */}
+            <div className="rounded-md bg-muted/50 border p-3 space-y-1">
+              <p className="text-xs text-muted-foreground">Token will be minted to:</p>
+              <p className="text-sm font-mono font-medium text-primary break-all">{registeree}</p>
+              {relayer && relayer.toLowerCase() !== registeree.toLowerCase() && (
+                <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                  Note: This is your registered (stolen) wallet, not your current connected wallet.
+                </p>
+              )}
             </div>
             <WalletSoulboundMintCard wallet={registeree} />
             <Button variant="link" size="sm" asChild className="w-full justify-center">

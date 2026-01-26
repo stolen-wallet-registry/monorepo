@@ -480,4 +480,21 @@ These documents are optimized for LLM context with:
 
 ---
 
-See `/PRPs/` for planning docs if needed.
+## Development Status
+
+| Phase | Focus                                  | Status      |
+| ----- | -------------------------------------- | ----------- |
+| 1     | Core registries (wallet, tx, contract) | ✅ Complete |
+| 2     | Operator CLI + batch submissions       | ✅ Complete |
+| 3     | Indexer, search, and dashboard         | ✅ Complete |
+| 4     | Cross-chain infrastructure (Hyperlane) | ✅ Complete |
+| 5     | Soulbound attestation tokens           | ✅ Complete |
+| 6     | Testnet deployment (Base/OP Sepolia)   | In Progress |
+| 7     | Transaction history API (Alchemy)      | In Progress |
+| 8     | Mainnet deployment                     | Planned     |
+| 9     | DAO governance + operator approval     | Future      |
+| 10    | Additional chain support               | Future      |
+
+**Current Focus:** Testnet deployment and transaction history API integration.
+
+See `/PRPs/` for detailed planning documents.

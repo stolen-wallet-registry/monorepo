@@ -64,7 +64,18 @@ async function indexTransactions(
   reporter: Address,
   reportedAt: bigint
 ) {
-  for (let i = 0; i < transactionHashes.length; i++) {
+  // Guard: Check array length mismatch
+  if (transactionHashes.length !== chainIds.length) {
+    console.error(
+      `[indexTransactions] Array length mismatch for batch ${batchId}: ` +
+        `transactionHashes=${transactionHashes.length}, chainIds=${chainIds.length}. ` +
+        `Processing only matching pairs.`
+    );
+  }
+
+  const len = Math.min(transactionHashes.length, chainIds.length);
+
+  for (let i = 0; i < len; i++) {
     const txHash = transactionHashes[i];
     const chainIdHash = chainIds[i];
 

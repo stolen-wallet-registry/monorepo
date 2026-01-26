@@ -2,6 +2,18 @@
 
 A decentralized fraud detection and transparency registry system for Web3. It lets individuals report stolen wallets and fraudulent transactions, and lets approved operators batch-submit malicious contracts, wallets, and transactions. All registries are active and publicly searchable.
 
+## Why This Matters
+
+Crypto fraud victims today have no standardized way to report compromised wallets. Fraud data is siloed across exchanges, scattered in Discord servers, or lost entirely. Meanwhile, attackers move stolen funds through off-ramps that have no way to know a wallet is compromised.
+
+The Stolen Wallet Registry changes this by creating a **public, on-chain source of truth** for fraud data:
+
+- **Victims get agency** — Even with a completely drained wallet, users can register it as stolen through relay mechanisms
+- **Exchanges get intelligence** — Off-ramps and wallets can query the registry before processing withdrawals
+- **The ecosystem gets transparency** — Fraud patterns become visible, enabling better prevention
+
+This is a public good. The goal is to make Web3 safer for everyone.
+
 ## Overview
 
 The Stolen Wallet Registry (SWR) gives crypto fraud victims a way to publicly mark wallets and transactions as compromised, even when access to funds is lost. The registry is on-chain for transparency, and indexed for fast search by off-ramps, wallets, and security teams.
@@ -259,6 +271,31 @@ The registration flow uses EIP-712 typed data signing with a two-phase commit sc
 1. **Acknowledgement** — User signs intent, starts grace period
 2. **Grace Period** — Randomized delay (prevents automated phishing)
 3. **Registration** — User signs final registration within time window
+
+---
+
+## Roadmap
+
+| Phase | Focus                                  | Status      |
+| ----- | -------------------------------------- | ----------- |
+| 1     | Core registries (wallet, tx, contract) | ✅ Complete |
+| 2     | Operator CLI + batch submissions       | ✅ Complete |
+| 3     | Indexer, search, and dashboard         | ✅ Complete |
+| 4     | Cross-chain infrastructure (Hyperlane) | ✅ Complete |
+| 5     | Soulbound attestation tokens           | ✅ Complete |
+| 6     | Testnet deployment (Base/OP Sepolia)   | In Progress |
+| 7     | Transaction history API (Alchemy)      | In Progress |
+| 8     | Mainnet deployment                     | Planned     |
+| 9     | DAO governance + operator approval     | Future      |
+| 10    | Additional chain support               | Future      |
+
+See `PRPs/` for detailed planning documents.
+
+---
+
+## License
+
+MIT
 
 ---
 

@@ -209,6 +209,65 @@ pnpm --filter @swr/cli swr submit-contracts \
 
 Use the generated JSON in Safe Transaction Builder.
 
+---
+
+## Input File Formats
+
+### JSON (Wallets/Contracts)
+
+```json
+[
+  { "address": "0x123...", "chainId": 8453 },
+  { "address": "0xabc...", "chainId": "eip155:1" },
+  { "address": "0xdef..." }
+]
+```
+
+### CSV (Wallets/Contracts)
+
+```csv
+address,chainId
+0x123...,8453
+0xabc...,eip155:1
+0xdef...
+```
+
+### JSON (Transactions)
+
+```json
+[
+  { "txHash": "0x123...64chars", "chainId": 8453 },
+  { "txHash": "0xabc...64chars", "chainId": 1 }
+]
+```
+
+**Chain ID formats:**
+
+- Numeric: `8453`, `1`
+- CAIP-2: `eip155:8453`, `eip155:1`
+- Omitted: defaults to Base (8453)
+
+---
+
+## Troubleshooting
+
+### "Contract addresses not configured for environment"
+
+The `@swr/chains` package doesn't have addresses for your environment. For local testing, ensure you've run `pnpm deploy:crosschain` and the addresses match `packages/chains/src/networks/anvil-hub.ts`.
+
+### "NotApprovedOperator" Error
+
+Your wallet is not an approved operator. For local testing:
+
+- Use Account 3 (all permissions) or Account 4 (contracts only)
+- Or add yourself via the OperatorRegistry contract
+
+### "Insufficient funds"
+
+Registration requires a fee. Check with `swr quote` and ensure your wallet has enough ETH.
+
+---
+
 ## Notes
 
 - `verify` supports `wallet` and `contract` registry types.
