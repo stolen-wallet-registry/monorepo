@@ -71,12 +71,13 @@ async function indexTransactions(
     // Skip if array values are missing
     if (!txHash || !chainIdHash) continue;
 
-    // Resolve chain ID hash to CAIP-2
-    const caip2ChainId = resolveChainIdHash(chainIdHash);
-    const numericChainId = caip2ChainId ? caip2ToNumericChainId(caip2ChainId) : null;
+    // Resolve chain ID hash to CAIP-2, normalize fallback for consistency
+    const resolved = resolveChainIdHash(chainIdHash);
+    const resolvedCaip2 = resolved ?? `unknown:${chainIdHash}`;
+    const numericChainId = resolved ? caip2ToNumericChainId(resolved) : null;
 
-    // Composite key: txHash + resolved CAIP-2
-    const compositeId = `${txHash}-${caip2ChainId ?? chainIdHash}`;
+    // Composite key: txHash + resolved CAIP-2 (must match caip2ChainId column)
+    const compositeId = `${txHash}-${resolvedCaip2}`;
 
     await db
       .insert(transactionInBatch)
@@ -84,7 +85,7 @@ async function indexTransactions(
         id: compositeId,
         txHash,
         chainIdHash,
-        caip2ChainId: caip2ChainId ?? `unknown:${chainIdHash}`,
+        caip2ChainId: resolvedCaip2,
         numericChainId,
         batchId,
         reporter,

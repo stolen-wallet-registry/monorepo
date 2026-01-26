@@ -121,6 +121,8 @@ function BatchDetailContent({
   }, [data]);
 
   const totalPages = Math.max(1, Math.ceil(totalEntries / pageSize));
+  // Clamp page at render time to handle data size changes without cascading renders.
+  // When totalEntries shrinks, clampedPage adjusts automatically; state syncs on next interaction.
   const clampedPage = Math.min(entryPage, totalPages);
 
   const batchLabel = data?.type ?? batchType;

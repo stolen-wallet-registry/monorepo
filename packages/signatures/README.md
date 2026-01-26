@@ -68,5 +68,6 @@ if (isValidSignatureFormat(signature)) {
 - Domains: `EIP712_DOMAIN_NAME`, `EIP712_DOMAIN_VERSION`, `getEIP712Domain`
 - Wallet types: `EIP712_TYPES`, `TYPE_HASHES`, `SIGNATURE_STEP`
 - Transaction types: `TX_EIP712_TYPES`, `TX_TYPE_HASHES`, `TX_SIGNATURE_STEP`
+- Statements: `STATEMENTS` (acknowledgement and registration statement text)
 - Builders: `buildAcknowledgementTypedData`, `buildRegistrationTypedData`, `buildTxAcknowledgementTypedData`, `buildTxRegistrationTypedData`
 - Validation: `parseSignature`, `isSignatureExpired`, `isWithinRegistrationWindow`, `isValidSignatureFormat`

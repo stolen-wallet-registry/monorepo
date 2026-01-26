@@ -156,21 +156,20 @@ export function RegistrationMethodSelector({
                 <div className="p-2 rounded-lg bg-muted group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                   {method.icon}
                 </div>
-                {isDisabled && method.disabledReason && method.type === 'p2pRelay' ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge variant="secondary">{method.disabledReason}</Badge>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-xs">
-                      {p2pUnavailableMessage}
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  isDisabled &&
-                  method.disabledReason && (
+                {isDisabled &&
+                  method.disabledReason &&
+                  (method.type === 'p2pRelay' ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="secondary">{method.disabledReason}</Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-xs">
+                        {p2pUnavailableMessage}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
                     <Badge variant="secondary">{method.disabledReason}</Badge>
-                  )
-                )}
+                  ))}
               </div>
               <CardTitle className="text-lg mt-2">{method.title}</CardTitle>
               <CardDescription className="min-h-[3rem]">{method.description}</CardDescription>

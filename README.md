@@ -82,19 +82,19 @@ Key env notes:
 
 For basic wallet registration flows on a single local chain.
 
-**Terminal 1: Start Anvil**
+#### Terminal 1: Start Anvil
 
 ```bash
 pnpm anvil
 ```
 
-**Terminal 2: Deploy Contracts**
+#### Terminal 2: Deploy Contracts
 
 ```bash
 pnpm deploy:dev
 ```
 
-**Terminal 3: Start Web App**
+#### Terminal 3: Start Web App
 
 ```bash
 pnpm dev
@@ -113,7 +113,7 @@ Open `http://localhost:5173` and connect MetaMask to `Localhost 8545`.
 
 Anvil Account 0 private key (10,000 ETH):
 
-```
+```text
 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ```
 
@@ -123,7 +123,7 @@ Anvil Account 0 private key (10,000 ETH):
 
 For testing the cross-chain flow where users register on a spoke chain and messages relay to the hub chain.
 
-**Terminal 1: Start Both Anvil Nodes + Hyperlane Relayer**
+#### Terminal 1: Start Both Anvil Nodes + Hyperlane Relayer
 
 ```bash
 pnpm anvil:crosschain
@@ -135,13 +135,13 @@ This starts:
 - **Spoke** (green): localhost:8546, chain ID 31338 — loads Hyperlane state
 - **Relayer** (yellow): Hyperlane message relayer between chains
 
-**Terminal 2: Deploy Cross-Chain Contracts**
+#### Terminal 2: Deploy Cross-Chain Contracts
 
 ```bash
 pnpm deploy:crosschain
 ```
 
-**Terminal 3: Start Web App (Cross-Chain Mode)**
+#### Terminal 3: Start Web App (Cross-Chain Mode)
 
 ```bash
 pnpm dev:crosschain

@@ -124,9 +124,9 @@ src/
 │   ├── StandardRegistrationPage.tsx
 │   ├── SelfRelayRegistrationPage.tsx
 │   ├── P2PRegistereeRegistrationPage.tsx
-│   └── P2PRelayerRegistrationPage.tsx
+│   ├── P2PRelayerRegistrationPage.tsx
 │   ├── TransactionStandardRegistrationPage.tsx
-│   ├── TransactionSelfRelayRegistrationPage.tsx
+│   └── TransactionSelfRelayRegistrationPage.tsx
 │
 ├── components/registration/
 │   ├── StepRenderer.tsx              # Step → component mapping
