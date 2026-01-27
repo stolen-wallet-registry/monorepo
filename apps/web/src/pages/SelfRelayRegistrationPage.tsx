@@ -9,12 +9,22 @@ import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Skeleton,
+} from '@swr/ui';
 import { StepIndicator } from '@/components/composed/StepIndicator';
 import { ErrorBoundary, StepErrorFallback } from '@/components/composed/ErrorBoundary';
 import { StepRenderer } from '@/components/registration';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
+import { useFormStore } from '@/stores/formStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { useRegistrySearch } from '@/hooks/indexer';
 
 /**
  * Step descriptions for self-relay flow.
@@ -42,9 +52,19 @@ const STEP_TITLES: Partial<Record<RegistrationStep, string>> = {
 
 export function SelfRelayRegistrationPage() {
   const [, setLocation] = useLocation();
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const { registrationType, step, setRegistrationType } = useRegistrationStore();
+  const registeree = useFormStore((s) => s.registeree);
   const { goToNextStep, resetFlow } = useStepNavigation();
+
+  // Check if the registeree (stored or connected wallet) is already registered via indexer
+  // In self-relay, the registeree is stored when user first signs
+  // This catches both individual and batch registrations
+  const registereeToCheck = registeree || address || '';
+  const { data: searchResult, isLoading: isCheckingRegistration } =
+    useRegistrySearch(registereeToCheck);
+  const registereeAlreadyRegistered =
+    searchResult?.type === 'address' && searchResult.foundInWalletRegistry;
 
   // Initialize registration type on mount
   useEffect(() => {
@@ -60,7 +80,32 @@ export function SelfRelayRegistrationPage() {
     }
   }, [isConnected, setLocation]);
 
+  // Redirect if registeree is already registered (can't register same wallet twice)
+  useEffect(() => {
+    if (!isCheckingRegistration && registereeAlreadyRegistered) {
+      setLocation('/register/wallets');
+    }
+  }, [isCheckingRegistration, registereeAlreadyRegistered, setLocation]);
+
   if (!isConnected) {
+    return null;
+  }
+
+  // Show loading skeleton while checking registration status
+  if (isCheckingRegistration) {
+    return (
+      <div className="w-full max-w-7xl mx-auto px-4 py-8">
+        <Skeleton className="h-10 w-48 mb-6" />
+        <div className="grid lg:grid-cols-[300px_1fr] gap-8">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-96 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  // Block if registeree is already registered (redirect will happen via useEffect)
+  if (registereeAlreadyRegistered) {
     return null;
   }
 

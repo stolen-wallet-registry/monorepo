@@ -1,23 +1,42 @@
 # Stolen Wallet Registry
 
-A decentralized fraud detection and transparency registry system for Web3. Enables victims of crypto fraud to register stolen wallets on-chain, providing exchanges, off-ramps, and other services access to verified fraud data.
+A decentralized fraud detection and transparency registry system for Web3. It lets individuals report stolen wallets and fraudulent transactions, and lets approved operators batch-submit malicious contracts, wallets, and transactions. All registries are active and publicly searchable.
+
+## Why This Matters
+
+Crypto fraud victims today have no standardized way to report compromised wallets. Fraud data is siloed across exchanges, scattered in Discord servers, or lost entirely. Meanwhile, attackers move stolen funds through off-ramps that have no way to know a wallet is compromised.
+
+The Stolen Wallet Registry changes this by creating a **public, on-chain source of truth** for fraud data:
+
+- **Victims get agency** — Even with a completely drained wallet, users can register it as stolen through relay mechanisms
+- **Exchanges get intelligence** — Off-ramps and wallets can query the registry before processing withdrawals
+- **The ecosystem gets transparency** — Fraud patterns become visible, enabling better prevention
+
+This is a public good. The goal is to make Web3 safer for everyone.
 
 ## Overview
 
-The Stolen Wallet Registry (SWR) gives crypto fraud victims a way to publicly mark their wallets as compromised—even when they've lost access to funds. By creating a transparent, on-chain registry, we enable the broader ecosystem to detect and prevent fraud.
+The Stolen Wallet Registry (SWR) gives crypto fraud victims a way to publicly mark wallets and transactions as compromised, even when access to funds is lost. The registry is on-chain for transparency, and indexed for fast search by off-ramps, wallets, and security teams.
 
-### Key Features
+## Key Features
 
-- **Self-attestation with proof of ownership** — Users sign with their wallet to prove they own it before registering it as stolen
-- **Anti-phishing protection** — Two-phase EIP-712 signing with randomized grace period prevents single-transaction attacks
-- **No funds required** — Relay mechanisms allow registration even with completely drained wallets
-- **Cross-chain vision** — CAIP-10 compliant design for multi-chain support (Ethereum L2s, Solana, Bitcoin)
+- **Self-attestation with proof of ownership**: Users sign with their wallet to prove control before registering it as stolen.
+- **Anti-phishing protection**: Two-phase EIP-712 signing with a randomized grace period prevents single-transaction attacks.
+- **Operator batch submissions**: Approved operators can submit large batches using Merkle roots.
+- **Public search and dashboard**: Indexed data is searchable and visible in a public dashboard.
+- **Cross-chain design**: CAIP-10 compatible registry entries support multi-chain reporting.
 
-### Registration Methods
+## Active Registries
 
-1. **Standard** — Sign and pay with the wallet being registered
-2. **Self-Relay** — Sign with compromised wallet, pay gas from a different wallet
-3. **P2P Relay** — Sign with compromised wallet, a trusted helper pays gas via libp2p relay
+- **Stolen Wallets**: Individuals can self-attest with wallet signatures; operators can batch-submit wallets.
+- **Stolen Transactions**: Individuals can report fraudulent transactions; operators can batch-submit transaction batches.
+- **Fraudulent Contracts**: Operator-only submissions for malicious contract addresses.
+
+## Registration Methods
+
+1. **Standard** — Sign and pay with the wallet being registered.
+2. **Self-Relay** — Sign with the compromised wallet, pay gas from a different wallet.
+3. **P2P Relay** — Sign with the compromised wallet, a trusted helper pays gas via libp2p relay.
 
 ## Tech Stack
 
@@ -27,60 +46,75 @@ UI:        React 19, Tailwind CSS 4.x, shadcn/ui, Radix UI
 Web3:      wagmi 2.x, viem 2.x, RainbowKit 2.x, TanStack Query 5.x
 State:     Zustand 5.x, React Hook Form 7.x, Zod 4.x
 Testing:   Vitest 4.x, Storybook 10.x, Testing Library
-Contracts: Foundry, Solidity 0.8.21, OpenZeppelin
+Contracts: Foundry, Solidity 0.8.24, OpenZeppelin
+Indexer:   Ponder + Postgres
 ```
 
 ## Development
 
-Full local development requires smart contracts (Anvil), the frontend, and optionally the relay server for P2P testing. There are two development modes:
-
-1. **Standard Development** — Single Anvil chain for basic registration testing
-2. **Cross-Chain Development** — Two Anvil chains (Hub + Spoke) for cross-chain flow testing
+Full local development typically includes contracts (Anvil), the web app, and optionally the relay server and indexer.
 
 ### Prerequisites
 
 - Node.js 22+
 - pnpm 9+
-- [Foundry](https://book.getfoundry.sh/getting-started/installation) (for smart contracts)
+- Foundry (for contracts)
+- Postgres (for indexer)
+
+Install dependencies from the repo root:
 
 ```bash
-# Install dependencies
 pnpm install
 ```
 
 ---
 
-### Standard Development (Single Chain)
+## Environment Setup
 
-For testing basic wallet registration flows on a single chain.
+Copy the example env files and fill in values as needed:
 
-**Terminal 1: Start Anvil**
+- Web app: `apps/web/.env.example` → `apps/web/.env`
+- Landing site: `apps/landing/.env.example` → `apps/landing/.env.local`
+- Indexer: `apps/indexer/.env.local.example` → `apps/indexer/.env.local`
+- Contracts: `packages/contracts/.env.example` → `packages/contracts/.env`
+- Testnet contracts: `packages/contracts/.env.testnet.example` → `packages/contracts/.env.testnet`
+
+Key env notes:
+
+- `apps/web/.env`:
+  - `VITE_WALLETCONNECT_PROJECT_ID` (optional)
+  - `VITE_ALCHEMY_API_KEY` (required for transaction history on non-local networks)
+  - `VITE_RELAY_MULTIADDR` (optional override for P2P relay)
+- `apps/indexer/.env.local`:
+  - `DATABASE_URL` and `PONDER_RPC_URL_*` are required for local or testnet indexing
+
+---
+
+## Standard Development (Single Chain)
+
+For basic wallet registration flows on a single local chain.
+
+#### Terminal 1: Start Anvil
 
 ```bash
 pnpm anvil
 ```
 
-This runs: `anvil --ipc /tmp/anvil.ipc --steps-tracing --block-time 13`
-
-**Terminal 2: Deploy Contracts**
+#### Terminal 2: Deploy Contracts
 
 ```bash
 pnpm deploy:dev
 ```
 
-Deploys RegistryHub and StolenWalletRegistry to localhost:8545 (chain ID 31337).
-
-**Terminal 3: Start Frontend**
+#### Terminal 3: Start Web App
 
 ```bash
 pnpm dev
 ```
 
-Open http://localhost:5173 and connect MetaMask to "Localhost 8545".
+Open `http://localhost:5173` and connect MetaMask to `Localhost 8545`.
 
-#### MetaMask Setup (Standard)
-
-MetaMask typically auto-detects localhost:8545, but if needed:
+### MetaMask Setup (Standard)
 
 | Field        | Value                 |
 | ------------ | --------------------- |
@@ -89,18 +123,19 @@ MetaMask typically auto-detects localhost:8545, but if needed:
 | Chain ID     | 31337                 |
 | Symbol       | ETH                   |
 
-Import the default Anvil account for testing:
+Anvil Account 0 private key (10,000 ETH):
 
-- Private Key: `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`
-- This gives you 10,000 ETH for testing
+```text
+0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+```
 
 ---
 
-### Cross-Chain Development (Hub + Spoke)
+## Cross-Chain Development (Hub + Spoke)
 
-For testing the full cross-chain registration flow where users register on a spoke chain and messages relay to the hub chain.
+For testing the cross-chain flow where users register on a spoke chain and messages relay to the hub chain.
 
-**Terminal 1: Start Both Anvil Nodes + Hyperlane Relayer**
+#### Terminal 1: Start Both Anvil Nodes + Hyperlane Relayer
 
 ```bash
 pnpm anvil:crosschain
@@ -112,54 +147,23 @@ This starts:
 - **Spoke** (green): localhost:8546, chain ID 31338 — loads Hyperlane state
 - **Relayer** (yellow): Hyperlane message relayer between chains
 
-The Hyperlane infrastructure is pre-loaded from `.anvil-state/` (see "Saving Dev State" section).
-
-**Terminal 2: Deploy Cross-Chain Contracts**
+#### Terminal 2: Deploy Cross-Chain Contracts
 
 ```bash
 pnpm deploy:crosschain
 ```
 
-Deploys to both chains:
-
-**Hyperlane Infrastructure (pre-loaded in state):**
-
-| Chain         | Contract | Address                                    |
-| ------------- | -------- | ------------------------------------------ |
-| Hub (31337)   | Mailbox  | 0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84 |
-| Spoke (31338) | Mailbox  | 0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84 |
-
-**Our Contracts (deployed fresh each time):**
-
-| Chain         | Contract             | Address                                    |
-| ------------- | -------------------- | ------------------------------------------ |
-| Hub (31337)   | MockAggregator       | 0x5FbDB2315678afecb367f032d93F642f64180aa3 |
-| Hub (31337)   | FeeManager           | 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 |
-| Hub (31337)   | RegistryHub          | 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 |
-| Hub (31337)   | StolenWalletRegistry | 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 |
-| Hub (31337)   | CrossChainInbox      | 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707 |
-| Spoke (31338) | MockGasPaymaster     | 0x5FbDB2315678afecb367f032d93F642f64180aa3 |
-| Spoke (31338) | HyperlaneAdapter     | 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 |
-| Spoke (31338) | MockAggregator       | 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 |
-| Spoke (31338) | FeeManager           | 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 |
-| Spoke (31338) | SpokeRegistry        | 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707 |
-
-**Terminal 3: Start Frontend (Cross-Chain Mode)**
+#### Terminal 3: Start Web App (Cross-Chain Mode)
 
 ```bash
 pnpm dev:crosschain
 ```
 
-This sets `VITE_CROSSCHAIN=true`, enabling the spoke chain in the wallet connection UI. A chain indicator badge appears showing whether you're on Hub or Spoke.
+This sets `VITE_CROSSCHAIN=true` for the web app.
 
-#### MetaMask Setup (Cross-Chain)
+### MetaMask Setup (Cross-Chain)
 
-You need both networks configured. The Hub chain is the same as standard development. Add the Spoke chain:
-
-**Add Spoke Network to MetaMask:**
-
-1. Open MetaMask → Networks → Add Network → Add a network manually
-2. Enter these values:
+Add the Spoke chain in MetaMask:
 
 | Field        | Value                 |
 | ------------ | --------------------- |
@@ -168,124 +172,126 @@ You need both networks configured. The Hub chain is the same as standard develop
 | Chain ID     | 31338                 |
 | Symbol       | ETH                   |
 
-3. Click Save
+The same Anvil private key works on both chains.
 
-The same Anvil private key works on both chains (both have 10,000 ETH):
-
-- Private Key: `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`
-
-#### Cross-Chain Testing Flow
+### Cross-Chain Testing Flow
 
 1. Connect wallet to **Spoke Chain** (31338)
 2. Register a stolen wallet via SpokeRegistry
-3. The Hyperlane relayer delivers the message to Hub
+3. Hyperlane relayer delivers the message to Hub
 4. Switch to **Hub Chain** (31337) to verify registration
 
 ---
 
-### Saving Dev State (One-Time Setup)
+## Indexer Development (Ponder)
 
-For external infrastructure like Hyperlane that doesn't change, you can save anvil state to avoid redeploying every time. This is useful when you want to iterate on your own contracts while keeping external dependencies stable.
-
-**How it works:**
-
-1. Start anvil with `--dump-state` flag (saves JSON state on exit)
-2. Deploy external contracts (e.g., Hyperlane)
-3. Ctrl+C to exit anvil (state saves automatically)
-4. Future runs use `--load-state` to restore
-
-**Example: Setting up Hyperlane state**
+The indexer powers search and dashboard data.
 
 ```bash
-# Terminal 1 - Hub (saves state on exit)
-mkdir -p .anvil-state
-anvil --port 8545 --chain-id 31337 --block-time 12 --dump-state .anvil-state/hub.json
-
-# Terminal 2 - Spoke (saves state on exit)
-anvil --port 8546 --chain-id 31338 --block-time 12 --dump-state .anvil-state/spoke.json
+pnpm indexer:codegen
+pnpm indexer
 ```
 
-Deploy your external contracts, then Ctrl+C both anvil processes. State files are saved to `.anvil-state/`.
-
-**Loading saved state:**
+Other helpers:
 
 ```bash
-anvil --port 8545 --chain-id 31337 --block-time 12 --load-state .anvil-state/hub.json
+pnpm indexer:wipe
+pnpm indexer:start
 ```
 
-The `--load-state` flag loads the saved state but does NOT save on exit, so your own contract deployments won't pollute the base state.
-
-**Important:** Do NOT use the `anvil_dumpState` RPC method—it produces hex-encoded gzip which is incompatible with `--load-state`. Always use the `--dump-state` CLI flag.
+The indexer requires Postgres (`apps/indexer/.env.local`).
 
 ---
 
-### Other Commands
+## Relay Server (P2P Registration)
+
+The relay enables the helper-assisted P2P registration flow.
 
 ```bash
-pnpm storybook    # Component development (port 6006)
-pnpm test         # Run tests
-pnpm test:watch   # Run tests in watch mode
-pnpm typecheck    # TypeScript check
-pnpm lint         # ESLint
-pnpm format       # Prettier
+pnpm relay:setup   # generate keys.json
+pnpm relay         # run relay
+pnpm relay:debug   # verbose logging
 ```
 
-### Relay Server (for P2P Registration)
+---
 
-The relay server enables P2P registration where a helper can pay gas on behalf of a user with a drained wallet. Only needed when testing P2P relay functionality.
-
-**Location:** `apps/relay/`
+## Landing + Docs
 
 ```bash
-pnpm relay              # Run relay server
-pnpm relay:debug        # Run with debug logging
+pnpm dev:landing
+pnpm dev:docs
 ```
+
+---
+
+## Other Commands
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm storybook
+```
+
+---
+
+## Saving Dev State (Hyperlane)
+
+For external infrastructure like Hyperlane that doesn't change, you can save Anvil state to avoid redeploying every time.
+
+```bash
+mkdir -p .anvil-state
+anvil --port 8545 --chain-id 31337 --block-time 12 --dump-state .anvil-state/hub.json
+anvil --port 8546 --chain-id 31338 --block-time 12 --dump-state .anvil-state/spoke.json
+```
+
+Deploy external contracts, then Ctrl+C both Anvil processes. Future runs can use `--load-state`.
+
+---
 
 ## Project Structure
 
 ```text
 stolen-wallet-registry-monorepo/
 ├── apps/
-│   ├── relay/                # libp2p circuit relay server
-│   └── web/                  # Vite frontend application
-│       ├── src/
-│       │   ├── components/   # UI and composed components
-│       │   ├── hooks/        # Custom React hooks
-│       │   ├── lib/          # Utilities, contracts, signatures
-│       │   ├── providers/    # React context providers
-│       │   └── stores/       # Zustand state stores
-│       └── .storybook/       # Storybook configuration
-└── packages/                 # Shared packages (future)
+│   ├── web/       # Registry app
+│   ├── landing/   # Marketing site
+│   ├── docs/      # Docs site
+│   ├── indexer/   # Indexer
+│   └── relay/     # libp2p relay server
+└── packages/      # Shared packages (contracts, cli, merkle, p2p, etc)
 ```
 
-## Roadmap
-
-The project follows a phased development approach:
-
-| Phase | Focus                                             | Status      |
-| ----- | ------------------------------------------------- | ----------- |
-| 1     | Frontend rebuild with Vite + modern stack         | In Progress |
-| 2     | Monorepo consolidation (merge contracts, relay)   | Planned     |
-| 3     | Contract architecture expansion (3 subregistries) | Planned     |
-| 4     | Cross-L2 EVM integration                          | Future      |
-| 5     | Cross-blockchain support (CAIP-10)                | Future      |
-| 6     | DAO governance & operator system                  | Future      |
-
-### Future Subregistries
-
-1. **Stolen Wallet Registry** — User self-attestation (current focus)
-2. **Fraudulent Contract Registry** — Operator-submitted malicious contracts
-3. **Stolen Transaction Registry** — Mark specific fraudulent transactions
+---
 
 ## Security
 
 The registration flow uses EIP-712 typed data signing with a two-phase commit scheme:
 
 1. **Acknowledgement** — User signs intent, starts grace period
-2. **Grace Period** — Randomized 1-4 minute delay (prevents automated phishing)
+2. **Grace Period** — Randomized delay (prevents automated phishing)
 3. **Registration** — User signs final registration within time window
 
-This design prevents attackers from tricking users into signing a single transaction that immediately registers their wallet.
+---
+
+## Roadmap
+
+| Phase | Focus                                  | Status      |
+| ----- | -------------------------------------- | ----------- |
+| 1     | Core registries (wallet, tx, contract) | ✅ Complete |
+| 2     | Operator CLI + batch submissions       | ✅ Complete |
+| 3     | Indexer, search, and dashboard         | ✅ Complete |
+| 4     | Cross-chain infrastructure (Hyperlane) | ✅ Complete |
+| 5     | Soulbound attestation tokens           | ✅ Complete |
+| 6     | Testnet deployment (Base/OP Sepolia)   | In Progress |
+| 7     | Transaction history API (Alchemy)      | In Progress |
+| 8     | Mainnet deployment                     | Planned     |
+| 9     | DAO governance + operator approval     | Future      |
+| 10    | Additional chain support               | Future      |
+
+See `PRPs/` for detailed planning documents.
+
+---
 
 ## License
 

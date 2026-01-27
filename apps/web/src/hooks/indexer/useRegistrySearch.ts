@@ -13,6 +13,7 @@ import {
   type SearchResult,
   type SearchType,
 } from '@swr/search';
+import { INDEXER_URL } from '@/lib/indexer';
 
 // Re-export types from @swr/search for convenience
 export type {
@@ -54,8 +55,6 @@ export {
 // ═══════════════════════════════════════════════════════════════════════════
 // CONFIGURATION
 // ═══════════════════════════════════════════════════════════════════════════
-
-const INDEXER_URL = import.meta.env.VITE_INDEXER_URL ?? 'http://localhost:42069';
 
 const searchConfig: SearchConfig = {
   indexerUrl: INDEXER_URL,

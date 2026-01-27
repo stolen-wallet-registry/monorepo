@@ -1,6 +1,11 @@
-# Stolen Wallet Registry - Smart Contracts
+# SWR Contracts
 
-Solidity smart contracts for the Stolen Wallet Registry, a cross-chain fraud detection and transparency system.
+Solidity contracts for the Stolen Wallet Registry ecosystem (wallets, transactions, and fraudulent contracts), plus cross-chain and operator infrastructure.
+
+## Requirements
+
+- Foundry
+- Solidity `0.8.24`
 
 ## Quick Start
 
@@ -14,7 +19,7 @@ forge build
 # Run tests
 forge test
 
-# Deploy locally
+# Local deploy (Anvil)
 anvil &
 forge script script/Deploy.s.sol --rpc-url localhost --broadcast
 ```
@@ -23,47 +28,53 @@ forge script script/Deploy.s.sol --rpc-url localhost --broadcast
 
 ```text
 src/
-├── RegistryHub.sol                 # Main entry point on hub chain
-├── FeeManager.sol                  # Dynamic USD-based fee calculation
+├── RegistryHub.sol                 # Fee routing + shared registry config
+├── FeeManager.sol                  # Fee quotes per registry
+├── OperatorRegistry.sol            # DAO-approved operators + capabilities
 ├── registries/
-│   └── StolenWalletRegistry.sol    # Hub chain wallet registration
-├── spoke/
-│   └── SpokeRegistry.sol           # Spoke chain registration
+│   ├── StolenWalletRegistry.sol      # Two-phase wallet registration
+│   ├── StolenTransactionRegistry.sol # Two-phase transaction batch registration
+│   └── FraudulentContractRegistry.sol# Operator-only contract batches
 ├── crosschain/
-│   ├── CrossChainInbox.sol         # Receives cross-chain messages on hub
-│   └── adapters/
-│       └── HyperlaneAdapter.sol    # Hyperlane bridge adapter
-├── interfaces/                     # Contract interfaces
+│   ├── BridgeRouter.sol            # Outbound message routing
+│   ├── CrossChainInbox.sol         # Inbound message handling
+│   └── adapters/HyperlaneAdapter.sol
+├── spoke/
+│   ├── SpokeRegistry.sol           # Wallet registration on spoke chains
+│   ├── SpokeTransactionRegistry.sol# Transaction registration on spoke chains
+│   └── SpokeSoulboundForwarder.sol # Spoke → hub forwarding for soulbound mints
+├── soulbound/
+│   ├── TranslationRegistry.sol     # Language metadata
+│   ├── WalletSoulbound.sol         # Wallet attestation NFT
+│   ├── SupportSoulbound.sol        # Supporter attestation NFT
+│   └── SoulboundReceiver.sol       # Safe minting receiver
+├── interfaces/
 └── libraries/
-    ├── TimingConfig.sol            # Block timing calculations
-    └── CrossChainMessage.sol       # Cross-chain message encoding
+    ├── TimingConfig.sol            # Grace period + deadline randomization
+    ├── MerkleRootComputation.sol   # OZ-compatible Merkle leaf hashing
+    ├── CAIP2.sol                   # CAIP-2 conversion helpers
+    ├── CrossChainMessage.sol       # Message encoding
+    └── RegistryCapabilities.sol    # Operator capability flags
 ```
+
+## Registry Behavior
+
+| Registry                     | Submission              | Flow                                  | Notes                                                |
+| ---------------------------- | ----------------------- | ------------------------------------- | ---------------------------------------------------- |
+| Stolen Wallet Registry       | Individuals + operators | Two-phase EIP-712 (ACK → grace → REG) | Individuals self-attest; operators can batch-submit. |
+| Stolen Transaction Registry  | Individuals + operators | Two-phase EIP-712 (ACK → grace → REG) | Registration is for batches of tx hashes.            |
+| Fraudulent Contract Registry | Operators only          | Single-phase                          | Batch submission via Merkle roots.                   |
 
 ## Block Timing Configuration
 
-### Why This Matters
-
-EVM chains have vastly different block times:
-
-- **Ethereum L1**: ~12 seconds per block
-- **Base/Optimism**: ~2 seconds per block
-- **Arbitrum**: ~0.25 seconds per block
-
-The registration flow uses block-based timing for:
-
-1. **Grace Period**: Time after acknowledgement before registration is allowed
-2. **Deadline Window**: Time within which registration must complete
-
-Without chain-specific configuration, a flow designed for Ethereum (12s blocks) would be unusable on Arbitrum (0.25s blocks) - a 50-block deadline would be ~12 seconds instead of ~10 minutes.
+The registration flow uses block-based timing to provide consistent UX across chains.
 
 ### Target User Experience
 
-All chains should provide consistent UX:
+- **Grace Period:** ~2 minutes (prevents single-transaction phishing)
+- **Deadline Window:** ~10 minutes (reasonable time to complete registration)
 
-- **Grace Period**: ~2 minutes (prevents single-transaction phishing)
-- **Deadline Window**: ~10 minutes (reasonable time to complete registration)
-
-### Per-Chain Block Values
+### Chain-Specific Block Values
 
 | Chain         | Block Time | Grace Blocks | Grace Time | Deadline Blocks | Deadline Time |
 | ------------- | ---------- | ------------ | ---------- | --------------- | ------------- |
@@ -76,74 +87,30 @@ All chains should provide consistent UX:
 
 _Note: Actual times include randomization via `block.prevrandao` adding 0 to `base_blocks` additional blocks._
 
-### Implementation
-
-Timing is configured at deployment via constructor parameters stored as immutables:
-
-```solidity
-// StolenWalletRegistry.sol
-uint256 public immutable graceBlocks;
-uint256 public immutable deadlineBlocks;
-
-constructor(
-    address _feeManager,
-    address _registryHub,
-    uint256 _graceBlocks,    // Chain-specific
-    uint256 _deadlineBlocks  // Chain-specific
-) { ... }
-```
-
-Deployment scripts auto-select appropriate values and **revert on unsupported chains**:
-
-```solidity
-// DeployBase.s.sol
-function getTimingConfig(uint256 chainId)
-    internal pure
-    returns (uint256 graceBlocks, uint256 deadlineBlocks)
-{
-    // Anvil/Local (13s blocks)
-    if (chainId == 31337 || chainId == 31338) return (10, 50);
-
-    // Base/Optimism (2s blocks)
-    if (chainId == 8453 || chainId == 84532 ||
-        chainId == 10 || chainId == 11155420) return (60, 300);
-
-    // Arbitrum (0.25s blocks)
-    if (chainId == 42161 || chainId == 421614) return (480, 2400);
-
-    // Polygon (2s blocks)
-    if (chainId == 137 || chainId == 80002) return (60, 300);
-
-    // Ethereum L1 (12s blocks)
-    if (chainId == 1) return (10, 50);
-
-    // Unknown chain - MUST add config before deploying
-    revert("DeployBase: unsupported chain ID - add timing config");
-}
-```
-
 ### Randomization
 
-The `TimingConfig` library adds randomization to prevent timing attacks:
+`TimingConfig.sol` adds randomization to prevent timing attacks:
 
 ```solidity
 function getGracePeriodEndBlock(uint256 graceBlocks) internal view returns (uint256) {
     return block.number + getRandomBlockOffset(graceBlocks) + graceBlocks;
 }
-
-function getRandomBlockOffset(uint256 maxOffset) internal view returns (uint256) {
-    return uint256(keccak256(abi.encode(block.prevrandao, msg.sender))) % maxOffset;
-}
 ```
 
-This means:
+This produces a grace period between `graceBlocks` and `2 * graceBlocks`.
 
-- **Grace period**: `graceBlocks` to `2 * graceBlocks` actual blocks
-- **Deadline**: `deadlineBlocks` to `2 * deadlineBlocks` actual blocks
+## Deployment Scripts
 
-The randomization makes it harder for attackers to predict exact timing windows.
-
-## Deployment
+```text
+script/
+├── Deploy.s.sol              # Local hub deploy
+├── DeployCrossChain.s.sol    # Hub + spoke deploy
+├── DeployTestnet.s.sol       # Testnet deploy
+├── DeploySoulbound.s.sol     # Soulbound contracts
+├── SeedLanguages.s.sol       # Seed language metadata
+├── SeedOperatorData.s.sol    # Seed operators for local/test
+├── SeedTransactions.s.sol    # Seed sample txs for local/test
+```
 
 ### Local (Anvil)
 
@@ -152,67 +119,36 @@ anvil &
 forge script script/Deploy.s.sol --rpc-url localhost --broadcast
 ```
 
-### Base Sepolia (Testnet)
+### Cross-Chain (Local)
 
 ```bash
-forge script script/DeployTestnet.s.sol --rpc-url base-sepolia --broadcast --verify
+forge script script/DeployCrossChain.s.sol --tc DeployCrossChain --broadcast
+forge script script/SeedLanguages.s.sol --rpc-url localhost --broadcast
+forge script script/SeedOperatorData.s.sol --rpc-url localhost --broadcast --slow
+forge script script/SeedTransactions.s.sol --multi --broadcast --slow
 ```
 
-### Cross-Chain Deployment
-
-For hub + spoke deployment across chains:
+### Testnet
 
 ```bash
-# Deploy hub on Base Sepolia
-forge script script/DeployCrossChain.s.sol:DeployHub --rpc-url base-sepolia --broadcast
+# Base Sepolia hub
+pnpm --filter @swr/contracts deploy:testnet:hub
 
-# Deploy spoke on Optimism Sepolia
-forge script script/DeployCrossChain.s.sol:DeploySpoke --rpc-url optimism-sepolia --broadcast
+# Optimism Sepolia spoke
+pnpm --filter @swr/contracts deploy:testnet:spoke
 ```
 
 ## Testing
 
 ```bash
-# Run all tests
 forge test
-
-# Run with verbosity
 forge test -vvv
-
-# Run specific test file
-forge test --match-path test/StolenWalletRegistry.t.sol
-
-# Run with gas report
-forge test --gas-report
-
-# Run coverage
 forge coverage
+forge test --gas-report
 ```
 
 ## Security Considerations
 
-### Two-Phase Registration
-
-The EIP-712 two-phase registration prevents phishing attacks:
-
-1. **Acknowledgement**: User signs intent, establishing a trusted forwarder
-2. **Grace Period**: Randomized delay (chain-configured)
-3. **Registration**: User signs registration within deadline window
-
-This ensures:
-
-- Attackers cannot complete registration in a single transaction
-- Users have time to recognize and cancel suspicious acknowledgements
-- Timing is unpredictable due to randomization
-
-### Nonce Protection
-
-All signatures include a nonce to prevent replay attacks. Nonces increment after each successful operation.
-
-### Deadline Validation
-
-Signatures include deadlines to prevent indefinite validity. Expired signatures are rejected.
-
-## License
-
-MIT
+- Two-phase EIP-712 registration prevents single-transaction phishing.
+- Nonces and deadlines prevent replay attacks.
+- Operator permissions enforced via `OperatorRegistry` and capability flags.

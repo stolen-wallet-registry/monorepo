@@ -33,3 +33,22 @@ export {
   type UseRecentRegistrationsOptions,
   type UseRecentRegistrationsResult,
 } from './useRecentRegistrations';
+export {
+  useBatches,
+  type BatchSummary,
+  type BatchType,
+  type UseBatchesOptions,
+  type UseBatchesResult,
+} from './useBatches';
+export {
+  useBatchDetail,
+  type BatchDetailResult,
+  type WalletBatchDetail,
+  type WalletBatchEntry,
+  type TransactionBatchDetail,
+  type TransactionBatchEntry,
+  type ContractBatchDetail,
+  type ContractBatchEntry,
+  type UseBatchDetailOptions,
+  type UseBatchDetailResult,
+} from './useBatchDetail';

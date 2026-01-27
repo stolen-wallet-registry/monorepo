@@ -188,7 +188,7 @@ How long a reservation remains valid without activity.
 ## Custom Protocols
 
 ```typescript
-// apps/web/src/lib/p2p/protocols.ts
+// packages/p2p/src/protocols.ts
 
 export const PROTOCOLS = {
   CONNECT: '/swr/connected/1.0.0',
@@ -290,11 +290,12 @@ REGISTEREE                              RELAYER
 apps/web/src/
 ├── lib/p2p/
 │   ├── libp2p.ts       # Node setup, connections, streams
-│   ├── protocols.ts    # Protocol constants
 │   └── types.ts        # Zod schemas, interfaces
 ├── hooks/
 │   ├── useP2PConnection.ts
 │   └── useP2PSignatureRelay.ts
 └── stores/
     └── p2pStore.ts     # Connection state
+packages/p2p/src/
+└── protocols.ts        # Protocol constants
 ```

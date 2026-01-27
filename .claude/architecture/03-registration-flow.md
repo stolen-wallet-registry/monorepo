@@ -16,7 +16,7 @@ All methods follow: **Acknowledgement → Grace Period → Registration**
 
 ---
 
-## Step Sequences
+## Step Sequences (Wallet)
 
 ```typescript
 // apps/web/src/stores/registrationStore.ts
@@ -54,6 +54,48 @@ export const STEP_SEQUENCES: Record<RegistrationType, RegistrationStep[]> = {
 
 ---
 
+## Transaction Registration Flow
+
+Transaction flows mirror wallet flows but add a **Select Transactions** step up front. The flow lives in `apps/web/src/pages/Transaction*RegistrationPage.tsx` and uses `tx-steps` components.
+
+```typescript
+// apps/web/src/stores/transactionRegistrationStore.ts
+
+export const TX_STEP_SEQUENCES: Record<TransactionRegistrationType, TransactionRegistrationStep[]> =
+  {
+    standard: [
+      'select-transactions',
+      'acknowledge-sign',
+      'acknowledge-pay',
+      'grace-period',
+      'register-sign',
+      'register-pay',
+      'success',
+    ],
+    selfRelay: [
+      'select-transactions',
+      'acknowledge-sign',
+      'switch-and-pay-ack',
+      'grace-period',
+      'register-sign',
+      'switch-and-pay-reg',
+      'success',
+    ],
+    p2pRelay: [
+      'wait-for-connection',
+      'select-transactions',
+      'acknowledge-sign',
+      'acknowledgement-payment',
+      'grace-period',
+      'register-sign',
+      'registration-payment',
+      'success',
+    ],
+  };
+```
+
+---
+
 ## Flow Diagram (Standard)
 
 ```
@@ -82,7 +124,9 @@ src/
 │   ├── StandardRegistrationPage.tsx
 │   ├── SelfRelayRegistrationPage.tsx
 │   ├── P2PRegistereeRegistrationPage.tsx
-│   └── P2PRelayerRegistrationPage.tsx
+│   ├── P2PRelayerRegistrationPage.tsx
+│   ├── TransactionStandardRegistrationPage.tsx
+│   └── TransactionSelfRelayRegistrationPage.tsx
 │
 ├── components/registration/
 │   ├── StepRenderer.tsx              # Step → component mapping
@@ -94,10 +138,13 @@ src/
 │       ├── RegistrationPayStep.tsx
 │       ├── SuccessStep.tsx
 │       └── P2P*.tsx                  # P2P-specific steps
+│   └── tx-steps/                      # Transaction flow steps
 │
 ├── stores/
 │   ├── registrationStore.ts          # Step state, tx hashes
 │   └── formStore.ts                  # Form values
+│   ├── transactionRegistrationStore.ts
+│   └── transactionFormStore.ts
 │
 └── hooks/
     └── useStepNavigation.ts          # goToNextStep, resetFlow
@@ -189,5 +236,7 @@ Both stores persist to localStorage:
 
 - `swr-registration-state` - Current step, tx hashes
 - `swr-form-state` - Form values
+- `swr-transaction-registration-state` - Transaction flow state
+- `swr-transaction-form-state` - Transaction selections + merkle data
 
 Users can resume interrupted registrations on page refresh.

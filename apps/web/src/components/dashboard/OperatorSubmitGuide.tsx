@@ -1,7 +1,7 @@
 /**
  * Operator Submit Guide
  *
- * CLI documentation and step-by-step guide for operators.
+ * cli documentation and step-by-step guide for operators.
  * Only visible to approved operators.
  */
 
@@ -93,12 +93,12 @@ export function OperatorSubmitGuide({ className }: OperatorSubmitGuideProps) {
           <Badge variant="secondary">Operators Only</Badge>
         </div>
         <CardDescription>
-          Follow these steps to submit batch registrations using the SWR CLI.
+          Follow these steps to submit batch registrations using the SWR cli.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
-        <Step number={1} title="Install the SWR CLI" icon={<Terminal className="h-4 w-4" />}>
-          <p>Install the CLI tool globally via npm:</p>
+        <Step number={1} title="Install the SWR cli" icon={<Terminal className="h-4 w-4" />}>
+          <p>Install the cli tool globally via npm:</p>
           <CodeBlock code="npm install -g @swr/cli" />
           <p>Or use npx to run without installing:</p>
           <CodeBlock code="npx @swr/cli --help" />
@@ -171,12 +171,12 @@ export function OperatorSubmitGuide({ className }: OperatorSubmitGuideProps) {
                 rel="noopener noreferrer"
               >
                 <ExternalLink className="h-4 w-4 mr-2" />
-                CLI Documentation
+                cli documentation
               </a>
             </Button>
             <Button variant="outline" size="sm" asChild>
               <a
-                href="https://help.safe.global/en/articles/4787412-transaction-builder"
+                href="https://help.safe.global/en/articles/234052-transaction-builder"
                 target="_blank"
                 rel="noopener noreferrer"
               >

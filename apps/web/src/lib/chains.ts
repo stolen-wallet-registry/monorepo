@@ -7,6 +7,14 @@
  */
 
 import { config } from './wagmi';
+import {
+  getCAIP2ChainName,
+  getChainName,
+  getChainShortName,
+  getNetworkOrUndefined,
+  isLocalChain,
+  parseCAIP2,
+} from '@swr/chains';
 
 /** Tailwind color classes for chain indicators */
 const CHAIN_COLORS: Record<number, string> = {
@@ -29,6 +37,15 @@ export interface ChainDisplayInfo {
   color: string;
 }
 
+export interface Caip2ChainDisplayInfo {
+  chainId: number | null;
+  shortName: string;
+  displayName: string;
+  caip2: string | null;
+  isKnown: boolean;
+  isLocal: boolean;
+}
+
 /**
  * Get chain display info by chain ID.
  * Names come from wagmi config, colors from local mapping.
@@ -39,5 +56,46 @@ export function getChainDisplayInfo(chainId: number): ChainDisplayInfo {
     id: chainId,
     name: chain?.name ?? `Chain ${chainId}`,
     color: CHAIN_COLORS[chainId] ?? DEFAULT_COLOR,
+  };
+}
+
+/**
+ * Get display info for CAIP-2 identifiers using @swr/chains as the source of truth.
+ */
+export function getChainDisplayFromCaip2(caip2?: string): Caip2ChainDisplayInfo {
+  if (!caip2) {
+    return {
+      chainId: null,
+      shortName: 'Unknown',
+      displayName: 'Unknown',
+      caip2: null,
+      isKnown: false,
+      isLocal: false,
+    };
+  }
+
+  const parsed = parseCAIP2(caip2);
+  if (parsed && parsed.namespace === 'eip155' && /^\d+$/.test(parsed.chainId)) {
+    const chainId = parseInt(parsed.chainId, 10);
+    if (Number.isFinite(chainId)) {
+      return {
+        chainId,
+        shortName: getChainShortName(chainId),
+        displayName: getChainName(chainId),
+        caip2,
+        isKnown: !!getNetworkOrUndefined(chainId),
+        isLocal: isLocalChain(chainId),
+      };
+    }
+  }
+
+  const name = getCAIP2ChainName(caip2);
+  return {
+    chainId: null,
+    shortName: name,
+    displayName: name,
+    caip2,
+    isKnown: false,
+    isLocal: false,
   };
 }

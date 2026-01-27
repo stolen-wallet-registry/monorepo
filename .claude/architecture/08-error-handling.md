@@ -42,13 +42,13 @@ try {
 
 ## Custom Error Classes
 
-**RelayConfigurationError** (`lib/p2p/types.ts`)
+**RelayConfigurationError** (`@swr/p2p`)
 
-- Thrown when relay servers not configured for production
+- Thrown when relay servers are not configured for production
 
-**StreamDataValidationError** (`lib/p2p/libp2p.ts`)
+**StreamDataValidationError** (`apps/web/src/lib/p2p/libp2p.ts`)
 
-- Thrown when P2P stream data fails size/JSON/schema validation
+- Thrown when P2P stream data exceeds size limits or fails schema validation
 
 ---
 
@@ -124,18 +124,6 @@ toast.error('Failed to copy');
 
 ---
 
-## Error Constants
+## Contract Error Decoding
 
-```typescript
-// lib/errors/index.ts
-export const SIGNATURE_ERRORS = {
-  MISSING_DATA: 'Missing required data for signing',
-  USER_REJECTED: 'Signature request was rejected',
-  EXPIRED: 'Signature has expired. Please sign again.',
-};
-
-export const CONTRACT_ERRORS = {
-  NOT_CONNECTED: 'Please connect your wallet to continue',
-  WRONG_NETWORK: 'Please switch to the correct network',
-};
-```
+Contract error decoding is provided by `@swr/errors` and re-exported in `apps/web/src/lib/errors/contractErrors.ts`.

@@ -24,7 +24,7 @@ const REGISTRIES = [
   {
     title: 'Fraudulent Contracts',
     description:
-      'Operator-only registry for cataloging malicious smart contracts. Approved operators can batch-submit known scam patterns via the Dashboard. Data is searchable by anyone.',
+      'Public registry for malicious smart contracts. Approved operators submit batches via the SWR cli. Data is searchable by anyone.',
     status: 'operator-only' as const,
     icon: <Code2 className="size-6" />,
   },

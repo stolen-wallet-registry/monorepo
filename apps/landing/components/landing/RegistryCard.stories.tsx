@@ -45,7 +45,7 @@ export const OperatorOnly: Story = {
   args: {
     title: 'Fraudulent Contracts',
     description:
-      'Operator-only registry for cataloging malicious smart contracts. Approved operators can batch-submit via Dashboard.',
+      'Public registry for malicious smart contracts. Approved operators submit batches via the SWR cli.',
     status: 'operator-only',
     icon: <Code2 className="size-6" />,
   },

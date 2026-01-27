@@ -162,7 +162,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       !!reportedChainIdHash &&
       !!txHashesForContract &&
       !!chainIdsForContract &&
-      feeWei !== undefined,
+      feeWei !== undefined &&
+      isCorrectWallet, // Only estimate gas when correct wallet is connected
   });
 
   // Cross-chain confirmation - polls hub chain after spoke tx confirms
@@ -568,7 +569,12 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
 
       {/* Selected Transactions Table */}
       {selectedTxDetails.length > 0 && (
-        <SelectedTransactionsTable transactions={selectedTxDetails} showValue showBlock />
+        <SelectedTransactionsTable
+          transactions={selectedTxDetails}
+          showValue
+          showBlock
+          reportedChainId={reportedChainId}
+        />
       )}
 
       {/* Transaction card with cost breakdown */}

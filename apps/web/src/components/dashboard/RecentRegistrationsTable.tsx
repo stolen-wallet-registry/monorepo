@@ -4,7 +4,8 @@
  * Displays a paginated table of recent registrations across all registry types.
  */
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useLocation, useSearch } from 'wouter';
 import {
   Card,
   CardContent,
@@ -55,6 +56,13 @@ const TYPE_CONFIG: Record<RegistrationType, { label: string; icon: typeof Wallet
     transaction: { label: 'Transaction', icon: FileText, color: 'bg-green-500/10 text-green-500' },
   };
 
+function getValidTypeFilter(value: string | null): RegistrationType | 'all' {
+  if (value === 'wallet' || value === 'contract' || value === 'transaction' || value === 'all') {
+    return value;
+  }
+  return 'all';
+}
+
 /**
  * Chain configuration for display with icons.
  * Maps chainId to display name and icon component.
@@ -104,11 +112,20 @@ function RegistrationRow({ entry, operatorNames }: RegistrationRowProps) {
   const config = TYPE_CONFIG[entry.type];
   const TypeIcon = config.icon;
 
-  // Get operator name or "Individual"
-  const operatorKey = (entry.operator ?? entry.reporter)?.toLowerCase();
-  const submitterLabel = operatorKey
-    ? (operatorNames.get(operatorKey) ?? truncateHash(operatorKey, 6, 4))
-    : 'Individual';
+  // Get submitter label:
+  // - Operators: show operator name or truncated address
+  // - Individuals: show "Sponsored" if sponsored, "Individual" otherwise
+  // PRIVACY: Never expose relayer/forwarder address for sponsored submissions
+  const getSubmitterLabel = (): string => {
+    // Operators always show their name
+    if (entry.operator) {
+      const name = operatorNames.get(entry.operator.toLowerCase());
+      return name ?? truncateHash(entry.operator, 6, 4);
+    }
+    // For individuals: "Sponsored" if sponsored, "Individual" otherwise
+    return entry.isSponsored ? 'Sponsored' : 'Individual';
+  };
+  const submitterLabel = getSubmitterLabel();
 
   // Parse chain info from CAIP-2
   const chainParts = entry.chainId.split(':');
@@ -196,7 +213,15 @@ export interface RecentRegistrationsTableProps {
  * ```
  */
 export function RecentRegistrationsTable({ className }: RecentRegistrationsTableProps) {
-  const [typeFilter, setTypeFilter] = useState<RegistrationType | 'all'>('all');
+  const [location, setLocation] = useLocation();
+  const search = useSearch();
+  const basePath = location.split('?')[0] || '/dashboard';
+  const searchParams = useMemo(() => new URLSearchParams(search), [search]);
+
+  // Use local state for the filter to avoid race conditions with URL updates
+  // Initialize from URL, then control locally
+  const initialFilter = getValidTypeFilter(searchParams.get('type'));
+  const [typeFilter, setTypeFilter] = useState<RegistrationType | 'all'>(initialFilter);
   const [page, setPage] = useState(0);
   const pageSize = 10;
 
@@ -240,8 +265,24 @@ export function RecentRegistrationsTable({ className }: RecentRegistrationsTable
         <Select
           value={typeFilter}
           onValueChange={(value) => {
-            setTypeFilter(value as RegistrationType | 'all');
+            // Update local state immediately (controls the query)
+            const newFilter = getValidTypeFilter(value);
+            setTypeFilter(newFilter);
             setPage(0);
+
+            // Sync to URL for bookmarking/sharing (doesn't affect query)
+            const nextParams = new URLSearchParams(search);
+            nextParams.set('tab', 'registrations');
+            if (value === 'all') {
+              nextParams.delete('type');
+            } else {
+              nextParams.set('type', value);
+            }
+            const query = nextParams.toString();
+            const nextLocation = query ? `${basePath}?${query}` : basePath;
+            if (nextLocation !== location) {
+              setLocation(nextLocation);
+            }
           }}
         >
           <SelectTrigger className="w-[140px]">

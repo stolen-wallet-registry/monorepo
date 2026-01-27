@@ -1,6 +1,6 @@
 # @swr/relay
 
-libp2p circuit relay server for P2P wallet registration in the Stolen Wallet Registry.
+libp2p circuit relay server for helper-assisted registration in the Stolen Wallet Registry.
 
 ## Purpose
 
@@ -16,41 +16,42 @@ From monorepo root:
 
 ```bash
 pnpm install
+pnpm relay:setup
 ```
+
+`pnpm relay:setup` generates `apps/relay/keys.json` with a persistent peer ID.
 
 ## Configuration
 
-The relay requires a `keys.json` file for persistent peer identity:
+### keys.json (local/dev)
 
 ```json
 {
-  "id": "...",
-  "privKey": "...",
-  "pubKey": "...",
-  "password": "your-keychain-password"
+  "id": "12D3KooW...",
+  "privKey": "<base64>"
 }
 ```
 
-**Note:** The `privKey`/`pubKey` fields are legacy - only `password` is used now for the keychain. The private key is stored in the LevelDB datastore.
+Do not commit `keys.json`.
+
+### RELAY_PRIVATE_KEY (prod)
+
+Set `RELAY_PRIVATE_KEY` to a base64-encoded Ed25519 private key to avoid local files.
 
 ## Running
-
-From monorepo root:
-
-```bash
-# Normal mode
-pnpm --filter @swr/relay dev
-
-# Debug mode (shows libp2p logs)
-pnpm --filter @swr/relay dev:debug
-```
-
-Or use the root-level scripts:
 
 ```bash
 pnpm relay
 pnpm relay:debug
 ```
+
+## Ports
+
+- **12312**: WebSocket relay
+
+## Data Storage
+
+- `.data/relay-datastore/`: LevelDB datastore for peer identity persistence
 
 ## Production Deployment
 
@@ -58,7 +59,7 @@ pnpm relay:debug
 
 1. Clone the monorepo
 2. Install dependencies: `pnpm install`
-3. Copy your `keys.json` to `apps/relay/`
+3. Configure `RELAY_PRIVATE_KEY` or copy `keys.json` to `apps/relay/`
 4. Run with PM2:
 
 ```bash
@@ -71,11 +72,3 @@ pm2 start "pnpm --filter @swr/relay start:debug" --name "relay"
 docker build -t swr-relay -f apps/relay/Dockerfile .
 docker run -p 12312:12312 swr-relay
 ```
-
-## Ports
-
-- **12312**: WebSocket relay (main port)
-
-## Data Storage
-
-- `.data/relay-datastore/`: LevelDB datastore for peer identity persistence

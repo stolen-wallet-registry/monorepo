@@ -56,6 +56,56 @@ function computeBatchAcknowledgementId(
   );
 }
 
+async function indexTransactions(
+  db: any,
+  transactionHashes: readonly Hex[],
+  chainIds: readonly Hex[],
+  batchId: Hex,
+  reporter: Address,
+  reportedAt: bigint
+) {
+  // Guard: Check array length mismatch
+  if (transactionHashes.length !== chainIds.length) {
+    console.error(
+      `[indexTransactions] Array length mismatch for batch ${batchId}: ` +
+        `transactionHashes=${transactionHashes.length}, chainIds=${chainIds.length}. ` +
+        `Processing only matching pairs.`
+    );
+  }
+
+  const len = Math.min(transactionHashes.length, chainIds.length);
+
+  for (let i = 0; i < len; i++) {
+    const txHash = transactionHashes[i];
+    const chainIdHash = chainIds[i];
+
+    // Skip if array values are missing
+    if (!txHash || !chainIdHash) continue;
+
+    // Resolve chain ID hash to CAIP-2, normalize fallback for consistency
+    const resolved = resolveChainIdHash(chainIdHash);
+    const resolvedCaip2 = resolved ?? `unknown:${chainIdHash}`;
+    const numericChainId = resolved ? caip2ToNumericChainId(resolved) : null;
+
+    // Composite key: txHash + resolved CAIP-2 (must match caip2ChainId column)
+    const compositeId = `${txHash}-${resolvedCaip2}`;
+
+    await db
+      .insert(transactionInBatch)
+      .values({
+        id: compositeId,
+        txHash,
+        chainIdHash,
+        caip2ChainId: resolvedCaip2,
+        numericChainId,
+        batchId,
+        reporter,
+        reportedAt,
+      })
+      .onConflictDoNothing();
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPER: Update global stats
 // ═══════════════════════════════════════════════════════════════════════════
@@ -373,35 +423,14 @@ ponder.on('StolenTransactionRegistry:TransactionBatchRegistered', async ({ event
     })
     .onConflictDoNothing();
 
-  // Index individual transactions from event data
-  for (let i = 0; i < transactionHashes.length; i++) {
-    const txHash = transactionHashes[i];
-    const chainIdHash = chainIds[i];
-
-    // Skip if array values are missing (shouldn't happen with valid events)
-    if (!txHash || !chainIdHash) continue;
-
-    // Resolve chain ID hash to CAIP-2
-    const caip2ChainId = resolveChainIdHash(chainIdHash);
-    const numericChainId = caip2ChainId ? caip2ToNumericChainId(caip2ChainId) : null;
-
-    // Composite key: txHash + resolved CAIP-2
-    const compositeId = `${txHash}-${caip2ChainId ?? chainIdHash}`;
-
-    await db
-      .insert(transactionInBatch)
-      .values({
-        id: compositeId,
-        txHash,
-        chainIdHash,
-        caip2ChainId: caip2ChainId ?? `unknown:${chainIdHash}`,
-        numericChainId,
-        batchId,
-        reporter: reporter.toLowerCase() as Address,
-        reportedAt: event.block.timestamp,
-      })
-      .onConflictDoNothing();
-  }
+  await indexTransactions(
+    db,
+    transactionHashes,
+    chainIds,
+    batchId,
+    reporter.toLowerCase() as Address,
+    event.block.timestamp
+  );
 
   // Update acknowledgement status - lookup by the deterministic batchId
   const pending = await db.find(transactionBatchAcknowledgement, {
@@ -426,6 +455,12 @@ ponder.on('StolenTransactionRegistry:TransactionBatchRegistered', async ({ event
 ponder.on('StolenTransactionRegistry:OperatorVerified', async ({ event, context }) => {
   const { batchId, operator } = event.args;
   const { db } = context;
+
+  const existing = await db.find(transactionBatch, { id: batchId });
+  if (!existing) {
+    console.warn(`[OperatorVerified] Missing transaction batch ${batchId}. Skipping update.`);
+    return;
+  }
 
   await db.update(transactionBatch, { id: batchId }).set({
     isOperatorVerified: true,
@@ -470,35 +505,14 @@ ponder.on(
       })
       .onConflictDoNothing();
 
-    // Index individual transactions from event data
-    for (let i = 0; i < transactionHashes.length; i++) {
-      const txHash = transactionHashes[i];
-      const chainIdHash = chainIds[i];
-
-      // Skip if array values are missing
-      if (!txHash || !chainIdHash) continue;
-
-      // Resolve chain ID hash to CAIP-2
-      const caip2ChainId = resolveChainIdHash(chainIdHash);
-      const numericChainId = caip2ChainId ? caip2ToNumericChainId(caip2ChainId) : null;
-
-      // Composite key: txHash + resolved CAIP-2
-      const compositeId = `${txHash}-${caip2ChainId ?? chainIdHash}`;
-
-      await db
-        .insert(transactionInBatch)
-        .values({
-          id: compositeId,
-          txHash,
-          chainIdHash,
-          caip2ChainId: caip2ChainId ?? `unknown:${chainIdHash}`,
-          numericChainId,
-          batchId,
-          reporter: operatorAddress.toLowerCase() as Address,
-          reportedAt: event.block.timestamp,
-        })
-        .onConflictDoNothing();
-    }
+    await indexTransactions(
+      db,
+      transactionHashes,
+      chainIds,
+      batchId,
+      operatorAddress.toLowerCase() as Address,
+      event.block.timestamp
+    );
 
     // Update stats - operator batches count toward both operator-specific AND global batch counts
     await updateGlobalStats(

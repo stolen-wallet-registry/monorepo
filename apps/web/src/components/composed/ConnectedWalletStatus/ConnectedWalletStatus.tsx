@@ -8,7 +8,8 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useAccount } from 'wagmi';
-import { Alert, AlertTitle, AlertDescription, Button, ExplorerLink } from '@swr/ui';
+import { Alert, AlertTitle, AlertDescription, Button } from '@swr/ui';
+import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 import { AlertTriangle, Clock, X } from 'lucide-react';
 import { useRegistryStatus } from '@/hooks';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
@@ -92,23 +93,35 @@ export function ConnectedWalletStatus({
   }, [address, alwaysShow, sessionDismissed]);
 
   // Query registry status for connected wallet (always query hub for unified registry)
+  const hubChainId = getHubChainIdForEnvironment();
   const { isRegistered, isPending, isLoading, isError, error } = useRegistryStatus({
     address: isConnected ? address : undefined,
     refetchInterval: 60_000, // Check every minute
-    chainId: getHubChainIdForEnvironment(),
+    chainId: hubChainId,
   });
 
   // Debug logging for troubleshooting
-  logger.wallet.debug('ConnectedWalletStatus state', {
-    address,
+  // Uses debug level and anonymizes address for privacy
+  const shouldShowAlert =
+    isConnected &&
+    !!address &&
+    !isLoading &&
+    !isError &&
+    (isRegistered || isPending) &&
+    (!isDismissed || alwaysShow);
+
+  logger.wallet.debug('[ConnectedWalletStatus] Registry status check', {
+    addressPrefix: address ? `${address.slice(0, 6)}...` : undefined,
     isConnected,
+    hubChainId,
+    queryEnabled: isConnected && !!address,
     isRegistered,
     isPending,
     isLoading,
     isError,
     error: error?.message,
     isDismissed,
-    hubChainId: getHubChainIdForEnvironment(),
+    shouldShowAlert,
   });
 
   const handleDismiss = useCallback(() => {
@@ -143,7 +156,7 @@ export function ConnectedWalletStatus({
         <AlertDescription className="space-y-2">
           <p>
             This wallet (
-            <ExplorerLink
+            <EnsExplorerLink
               value={address}
               type="address"
               truncate={false}
@@ -182,7 +195,7 @@ export function ConnectedWalletStatus({
         <AlertDescription className="text-yellow-800 dark:text-yellow-200">
           <p>
             This wallet (
-            <ExplorerLink
+            <EnsExplorerLink
               value={address}
               type="address"
               truncate={false}

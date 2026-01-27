@@ -151,7 +151,8 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
       !!merkleRoot &&
       !!reportedChainIdHash &&
       !!txHashesForContract &&
-      !!chainIdsForContract,
+      !!chainIdsForContract &&
+      isCorrectWallet, // Only estimate gas when correct wallet is connected
   });
 
   // Map hook state to TransactionStatus
@@ -467,7 +468,12 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
 
       {/* Selected Transactions Table */}
       {selectedTxDetails.length > 0 && (
-        <SelectedTransactionsTable transactions={selectedTxDetails} showValue showBlock />
+        <SelectedTransactionsTable
+          transactions={selectedTxDetails}
+          showValue
+          showBlock
+          reportedChainId={reportedChainId}
+        />
       )}
 
       {/* Transaction card with cost estimate */}

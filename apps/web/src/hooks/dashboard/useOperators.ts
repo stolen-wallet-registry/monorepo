@@ -6,9 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 import { request } from 'graphql-request';
 import { OPERATORS_LIST_QUERY, type RawOperatorsListResponse } from '@swr/search';
 import { logger } from '@/lib/logger';
+import { INDEXER_URL } from '@/lib/indexer';
 import type { Address } from '@/lib/types/ethereum';
-
-const INDEXER_URL = import.meta.env.VITE_INDEXER_URL ?? 'http://localhost:42069';
 
 /** Capability bitmask values */
 export const CAPABILITY_WALLET = 0x01;

@@ -19,6 +19,28 @@ import {
 import { cn } from '@/lib/utils';
 import { Wallet, RefreshCw, Users } from 'lucide-react';
 import type { RegistrationType } from '@/stores/registrationStore';
+import type { RegistryType } from '@/lib/types';
+
+/**
+ * Reason keys for disabled methods.
+ * Using keys instead of strings for i18n compatibility and type safety.
+ */
+type DisabledReasonKey = 'walletRegistered' | 'p2pUnavailable';
+
+/**
+ * Maps reason keys to user-facing labels and tooltip messages.
+ */
+const DISABLED_REASON_CONFIG: Record<DisabledReasonKey, { label: string; message: string }> = {
+  walletRegistered: {
+    label: 'Wallet Already Registered',
+    message:
+      'Your connected wallet is already registered. You can still help others by being a P2P relayer.',
+  },
+  p2pUnavailable: {
+    label: 'P2P Relay Unavailable',
+    message: 'Relay node not deployed yet. P2P relay is disabled in this deployment.',
+  },
+};
 
 export interface MethodConfig {
   type: RegistrationType;
@@ -27,7 +49,7 @@ export interface MethodConfig {
   requirements: string[];
   icon: React.ReactNode;
   disabled?: boolean;
-  disabledReason?: string;
+  disabledReasonKey?: DisabledReasonKey;
 }
 
 export interface RegistrationMethodSelectorProps {
@@ -35,6 +57,10 @@ export interface RegistrationMethodSelectorProps {
   onSelect: (type: RegistrationType) => void;
   /** Whether P2P relay is available (has connected peer) */
   p2pAvailable?: boolean;
+  /** Registry context to adjust copy */
+  registryType?: RegistryType;
+  /** Whether the connected wallet is already registered (blocks standard/selfRelay) */
+  connectedWalletRegistered?: boolean;
   /** Additional class names */
   className?: string;
 }
@@ -42,7 +68,7 @@ export interface RegistrationMethodSelectorProps {
 /**
  * Default method configurations.
  */
-const DEFAULT_METHODS: MethodConfig[] = [
+const WALLET_METHODS: MethodConfig[] = [
   {
     type: 'standard',
     title: 'Standard Registration',
@@ -54,14 +80,49 @@ const DEFAULT_METHODS: MethodConfig[] = [
     type: 'selfRelay',
     title: 'Self-Relay Registration',
     description: 'Sign with the stolen wallet, then switch to a different wallet to pay gas fees.',
-    requirements: ['Stolen wallet for signing', 'Second wallet for gas'],
+    requirements: ['Stolen wallet for signing', 'Second wallet to pay for gas'],
     icon: <RefreshCw className="h-6 w-6" />,
   },
   {
     type: 'p2pRelay',
     title: 'P2P Relay Registration',
     description: 'Sign with your stolen wallet and have a trusted helper pay the gas fees for you.',
-    requirements: ['Stolen wallet for signing', 'Connected helper peer'],
+    requirements: ['Stolen wallet for signing', 'Friend or trusted party who can pay for gas'],
+    icon: <Users className="h-6 w-6" />,
+  },
+];
+
+const TRANSACTION_METHODS: MethodConfig[] = [
+  {
+    type: 'standard',
+    title: 'Standard Registration',
+    description: 'Sign and pay from the wallet where the fraudulent transactions occurred.',
+    requirements: [
+      'Wallet where the fraudulent transactions occurred',
+      'Gas fees from same wallet',
+    ],
+    icon: <Wallet className="h-6 w-6" />,
+  },
+  {
+    type: 'selfRelay',
+    title: 'Self-Relay Registration',
+    description:
+      'Sign with the wallet where the fraudulent transactions occurred, then switch to a different wallet to pay gas fees.',
+    requirements: [
+      'Wallet where the fraudulent transactions occurred',
+      'Second wallet to pay for gas',
+    ],
+    icon: <RefreshCw className="h-6 w-6" />,
+  },
+  {
+    type: 'p2pRelay',
+    title: 'P2P Relay Registration',
+    description:
+      'Sign with the wallet where the fraudulent transactions occurred and have a trusted helper pay the gas fees for you.',
+    requirements: [
+      'Wallet where the fraudulent transactions occurred',
+      'Friend or trusted party who can pay for gas',
+    ],
     icon: <Users className="h-6 w-6" />,
   },
 ];
@@ -72,16 +133,34 @@ const DEFAULT_METHODS: MethodConfig[] = [
 export function RegistrationMethodSelector({
   onSelect,
   p2pAvailable = true,
+  registryType = 'wallet',
+  connectedWalletRegistered = false,
   className,
 }: RegistrationMethodSelectorProps) {
-  const p2pUnavailableMessage =
-    'Relay node not deployed yet. P2P relay is disabled in this deployment.';
-  const methods = DEFAULT_METHODS.map((method) => ({
-    ...method,
-    disabled: method.type === 'p2pRelay' && !p2pAvailable,
-    disabledReason:
-      method.type === 'p2pRelay' && !p2pAvailable ? 'P2P Relay Unavailable' : undefined,
-  }));
+  const baseMethods = registryType === 'transaction' ? TRANSACTION_METHODS : WALLET_METHODS;
+  const methods = baseMethods.map((method) => {
+    // For wallet registry: standard and selfRelay are blocked if wallet is already registered
+    const isBlockedByRegistration =
+      registryType === 'wallet' &&
+      connectedWalletRegistered &&
+      (method.type === 'standard' || method.type === 'selfRelay');
+
+    // P2P relay is blocked if not available
+    const isBlockedByP2pUnavailable = method.type === 'p2pRelay' && !p2pAvailable;
+
+    let disabledReasonKey: DisabledReasonKey | undefined;
+    if (isBlockedByRegistration) {
+      disabledReasonKey = 'walletRegistered';
+    } else if (isBlockedByP2pUnavailable) {
+      disabledReasonKey = 'p2pUnavailable';
+    }
+
+    return {
+      ...method,
+      disabled: isBlockedByRegistration || isBlockedByP2pUnavailable,
+      disabledReasonKey,
+    };
+  });
 
   return (
     <div
@@ -116,20 +195,17 @@ export function RegistrationMethodSelector({
                 <div className="p-2 rounded-lg bg-muted group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                   {method.icon}
                 </div>
-                {isDisabled && method.disabledReason && method.type === 'p2pRelay' ? (
+                {isDisabled && method.disabledReasonKey && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge variant="secondary">{method.disabledReason}</Badge>
+                      <Badge variant="secondary">
+                        {DISABLED_REASON_CONFIG[method.disabledReasonKey].label}
+                      </Badge>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="max-w-xs">
-                      {p2pUnavailableMessage}
+                      {DISABLED_REASON_CONFIG[method.disabledReasonKey].message}
                     </TooltipContent>
                   </Tooltip>
-                ) : (
-                  isDisabled &&
-                  method.disabledReason && (
-                    <Badge variant="secondary">{method.disabledReason}</Badge>
-                  )
                 )}
               </div>
               <CardTitle className="text-lg mt-2">{method.title}</CardTitle>

@@ -9,7 +9,7 @@ import { useAccount, useChainId } from 'wagmi';
 import type { Libp2p } from 'libp2p';
 
 import { SignatureCard, type SignatureStatus } from '@/components/composed/SignatureCard';
-import { ExplorerLink } from '@/components/composed/ExplorerLink';
+import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 import { Alert, AlertDescription } from '@swr/ui';
 import { useSignEIP712 } from '@/hooks/useSignEIP712';
 import { useGenerateHashStruct } from '@/hooks/useGenerateHashStruct';
@@ -174,7 +174,7 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
           securely to your relayer{' '}
           {relayer && (
             <>
-              (<ExplorerLink value={relayer} type="address" truncate showDisabledIcon={false} />)
+              (<EnsExplorerLink value={relayer} type="address" truncate showDisabledIcon={false} />)
             </>
           )}{' '}
           who will submit the transaction on your behalf.

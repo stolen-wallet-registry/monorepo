@@ -231,7 +231,7 @@ interface IStolenTransactionRegistry {
         bool isSponsored
     );
 
-    /// @notice Emitted when a transaction batch registration is finalized
+    /// @notice Emitted when a transaction batch registration is finalized (reporter flow)
     /// @dev Transaction hashes emitted here for data availability (not stored on-chain)
     /// @param batchId Unique identifier for this batch
     /// @param merkleRoot The Merkle root of the registered batch

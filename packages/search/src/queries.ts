@@ -275,6 +275,155 @@ export const RECENT_TRANSACTION_ENTRIES_QUERY = gql`
   }
 `;
 
+/**
+ * Query recent wallet batch registrations (operator submissions).
+ */
+export const RECENT_WALLET_BATCHES_QUERY = gql`
+  query RecentWalletBatches($limit: Int!, $offset: Int) {
+    walletBatchs(orderBy: "registeredAt", orderDirection: "desc", limit: $limit, offset: $offset) {
+      items {
+        id
+        merkleRoot
+        operator
+        reportedChainCAIP2
+        walletCount
+        registeredAt
+        transactionHash
+      }
+    }
+  }
+`;
+
+/**
+ * Query recent fraudulent contract batch registrations.
+ */
+export const RECENT_CONTRACT_BATCHES_QUERY = gql`
+  query RecentContractBatches($limit: Int!, $offset: Int) {
+    fraudulentContractBatchs(
+      orderBy: "registeredAt"
+      orderDirection: "desc"
+      limit: $limit
+      offset: $offset
+    ) {
+      items {
+        id
+        merkleRoot
+        operator
+        reportedChainCAIP2
+        contractCount
+        registeredAt
+        transactionHash
+        invalidated
+        invalidatedAt
+      }
+    }
+  }
+`;
+
+/**
+ * Query wallet batch detail + entries.
+ */
+export const WALLET_BATCH_DETAIL_QUERY = gql`
+  query WalletBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
+    walletBatch(id: $batchId) {
+      id
+      merkleRoot
+      operator
+      reportedChainCAIP2
+      walletCount
+      registeredAt
+      transactionHash
+    }
+    stolenWallets(
+      where: { batchId: $batchId }
+      orderBy: "registeredAt"
+      orderDirection: "desc"
+      limit: $limit
+      offset: $offset
+    ) {
+      items {
+        id
+        caip10
+        registeredAt
+        transactionHash
+        operator
+        sourceChainCAIP2
+      }
+    }
+  }
+`;
+
+/**
+ * Query transaction batch detail + entries.
+ */
+export const TRANSACTION_BATCH_DETAIL_QUERY = gql`
+  query TransactionBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
+    transactionBatch(id: $batchId) {
+      id
+      merkleRoot
+      reporter
+      reportedChainCAIP2
+      transactionCount
+      isSponsored
+      isOperatorVerified
+      verifyingOperator
+      registeredAt
+      transactionHash
+    }
+    transactionInBatchs(
+      where: { batchId: $batchId }
+      orderBy: "reportedAt"
+      orderDirection: "desc"
+      limit: $limit
+      offset: $offset
+    ) {
+      items {
+        id
+        txHash
+        caip2ChainId
+        numericChainId
+        reporter
+        reportedAt
+      }
+    }
+  }
+`;
+
+/**
+ * Query contract batch detail + entries.
+ */
+export const CONTRACT_BATCH_DETAIL_QUERY = gql`
+  query ContractBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
+    fraudulentContractBatch(id: $batchId) {
+      id
+      merkleRoot
+      operator
+      reportedChainCAIP2
+      contractCount
+      registeredAt
+      transactionHash
+      invalidated
+      invalidatedAt
+    }
+    fraudulentContracts(
+      where: { batchId: $batchId }
+      orderBy: "reportedAt"
+      orderDirection: "desc"
+      limit: $limit
+      offset: $offset
+    ) {
+      items {
+        contractAddress
+        caip2ChainId
+        numericChainId
+        operator
+        reportedAt
+        entryHash
+      }
+    }
+  }
+`;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // RAW RESPONSE TYPES (from Ponder indexer)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -462,6 +611,107 @@ export interface RawRecentTransactionEntriesResponse {
       batchId: string;
       reporter: string;
       reportedAt: string;
+    }>;
+  };
+}
+
+export interface RawRecentWalletBatchesResponse {
+  walletBatchs: {
+    items: Array<{
+      id: string;
+      merkleRoot: string;
+      operator: string;
+      reportedChainCAIP2?: string;
+      walletCount: number;
+      registeredAt: string;
+      transactionHash: string;
+    }>;
+  };
+}
+
+export interface RawRecentContractBatchesResponse {
+  fraudulentContractBatchs: {
+    items: Array<{
+      id: string;
+      merkleRoot: string;
+      operator: string;
+      reportedChainCAIP2?: string;
+      contractCount: number;
+      registeredAt: string;
+      transactionHash: string;
+      invalidated: boolean;
+      invalidatedAt?: string | null;
+    }>;
+  };
+}
+
+export interface RawWalletBatchDetailResponse {
+  walletBatch: {
+    id: string;
+    merkleRoot: string;
+    operator: string;
+    reportedChainCAIP2?: string;
+    walletCount: number;
+    registeredAt: string;
+    transactionHash: string;
+  } | null;
+  stolenWallets: {
+    items: Array<{
+      id: string;
+      caip10: string;
+      registeredAt: string;
+      transactionHash: string;
+      operator?: string;
+      sourceChainCAIP2?: string;
+    }>;
+  };
+}
+
+export interface RawTransactionBatchDetailResponse {
+  transactionBatch: {
+    id: string;
+    merkleRoot: string;
+    reporter: string;
+    reportedChainCAIP2?: string;
+    transactionCount: number;
+    isSponsored: boolean;
+    isOperatorVerified: boolean;
+    verifyingOperator?: string;
+    registeredAt: string;
+    transactionHash: string;
+  } | null;
+  transactionInBatchs: {
+    items: Array<{
+      id: string;
+      txHash: string;
+      caip2ChainId: string;
+      numericChainId?: number;
+      reporter: string;
+      reportedAt: string;
+    }>;
+  };
+}
+
+export interface RawContractBatchDetailResponse {
+  fraudulentContractBatch: {
+    id: string;
+    merkleRoot: string;
+    operator: string;
+    reportedChainCAIP2?: string;
+    contractCount: number;
+    registeredAt: string;
+    transactionHash: string;
+    invalidated: boolean;
+    invalidatedAt?: string | null;
+  } | null;
+  fraudulentContracts: {
+    items: Array<{
+      contractAddress: string;
+      caip2ChainId: string;
+      numericChainId?: number;
+      operator: string;
+      reportedAt: string;
+      entryHash: string;
     }>;
   };
 }

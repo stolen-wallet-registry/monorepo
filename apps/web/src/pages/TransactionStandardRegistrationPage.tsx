@@ -27,6 +27,7 @@ import {
 import { TransactionStepIndicator } from '@/components/composed/TransactionStepIndicator';
 import { TransactionSelector } from '@/components/composed/TransactionSelector';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
+import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
 import {
   TxAcknowledgeSignStep,
   TxAcknowledgePayStep,
@@ -361,35 +362,18 @@ export function TransactionStandardRegistrationPage() {
                 </div>
 
                 {/* Selected Transactions Table */}
-                <div className="rounded-lg border overflow-hidden">
-                  <div className="px-4 py-2 bg-muted/50 border-b">
-                    <p className="text-sm font-medium">Selected Transactions</p>
-                  </div>
-                  <div className="max-h-40 overflow-y-auto">
-                    <table className="w-full text-xs">
-                      <thead className="bg-background sticky top-0 z-10">
-                        <tr className="border-b bg-muted">
-                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">
-                            #
-                          </th>
-                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">
-                            Transaction Hash
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {selectedTxHashes.map((hash, index) => (
-                          <tr key={hash} className="hover:bg-muted/30">
-                            <td className="px-3 py-1.5 text-muted-foreground">{index + 1}</td>
-                            <td className="px-3 py-1.5">
-                              <code className="font-mono">{hash}</code>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <SelectedTransactionsTable
+                  transactions={transactions
+                    .filter((tx) => selectedTxHashes.includes(tx.hash))
+                    .map((tx) => ({
+                      hash: tx.hash,
+                      to: tx.to,
+                      value: tx.value.toString(),
+                      blockNumber: tx.blockNumber.toString(),
+                      timestamp: tx.timestamp,
+                    }))}
+                  reportedChainId={chainId}
+                />
 
                 {/* Continue Button */}
                 <div className="flex justify-end">

@@ -1,12 +1,12 @@
 /**
  * Registry search component.
  *
- * Allows users to search for wallet addresses or transaction hashes
+ * Allows users to search for wallet addresses, ENS names, or transaction hashes
  * and see their registry status using the Ponder indexer.
  * Uses InputGroup for a composable search input with loading states.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   InputGroup,
   InputGroupAddon,
@@ -15,13 +15,14 @@ import {
   Skeleton,
   Button,
 } from '@swr/ui';
-import { Search, X, Loader2, Wallet, FileText, AlertCircle } from 'lucide-react';
+import { Search, X, Loader2, Wallet, FileText, AlertCircle, AtSign } from 'lucide-react';
 import {
   useRegistrySearch as useIndexerSearch,
-  detectSearchType,
+  useEnsResolve,
   type SearchResult as IndexerSearchResult,
   type SearchType,
 } from '@/hooks';
+import { detectSearchTypeWithEns, type SearchTypeWithEns } from '@/lib/ens';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { AddressSearchResult } from './AddressSearchResult';
@@ -43,11 +44,13 @@ export interface RegistrySearchProps {
 /**
  * Get validation indicator based on search type
  */
-function getSearchTypeIndicator(type: SearchType) {
+function getSearchTypeIndicator(type: SearchTypeWithEns) {
   switch (type) {
     case 'address':
     case 'caip10':
       return { Icon: Wallet, label: 'Valid address', valid: true };
+    case 'ens':
+      return { Icon: AtSign, label: 'ENS name', valid: true };
     case 'transaction':
       return { Icon: FileText, label: 'Valid transaction hash', valid: true };
     case 'invalid':
@@ -58,7 +61,7 @@ function getSearchTypeIndicator(type: SearchType) {
 
 /**
  * Search component for querying the registry via Ponder indexer.
- * Supports wallet addresses, transaction hashes, and CAIP-10 identifiers.
+ * Supports wallet addresses, ENS names, transaction hashes, and CAIP-10 identifiers.
  *
  * @example
  * ```tsx
@@ -81,24 +84,44 @@ export function RegistrySearch({
   // Track which query we've notified for to prevent duplicate callbacks
   const lastNotifiedQueryRef = useRef<string | null>(null);
 
-  // Real-time input type detection
-  const inputType = detectSearchType(inputValue);
+  // Real-time input type detection (with ENS support)
+  const inputType = useMemo(() => detectSearchTypeWithEns(inputValue), [inputValue]);
 
-  // Query the indexer
-  const { data, isLoading, error } = useIndexerSearch(searchQuery);
+  // ENS resolution (only when input looks like ENS name)
+  const ensName = inputType === 'ens' ? inputValue.trim() : undefined;
+  const {
+    address: resolvedAddress,
+    isLoading: isEnsLoading,
+    isError: isEnsError,
+  } = useEnsResolve(ensName);
 
-  // Notify parent when result changes
-  useEffect(() => {
-    if (onResult && data && lastNotifiedQueryRef.current !== searchQuery) {
-      lastNotifiedQueryRef.current = searchQuery;
-      logger.ui.info('Search result ready', {
-        query: searchQuery,
-        type: data.type,
-        found: data.found,
-      });
-      onResult(data);
+  // Determine the effective search value (use resolved address for ENS)
+  // Only switch to resolved address AFTER user has initiated search (hasSearched = true)
+  const effectiveSearchQuery = useMemo(() => {
+    if (!hasSearched) return searchQuery;
+    if (inputType === 'ens' && resolvedAddress) {
+      return resolvedAddress;
     }
-  }, [onResult, searchQuery, data]);
+    return searchQuery;
+  }, [hasSearched, inputType, resolvedAddress, searchQuery]);
+
+  // Query the indexer with effective query (empty string when not searching - hook disables itself)
+  const indexerQuery = hasSearched ? effectiveSearchQuery : '';
+  const { data, isLoading, error } = useIndexerSearch(indexerQuery);
+
+  // Notify parent when result changes (only when user has initiated search)
+  useEffect(() => {
+    if (!hasSearched || !onResult || !data || !effectiveSearchQuery) return;
+    if (lastNotifiedQueryRef.current === effectiveSearchQuery) return;
+
+    lastNotifiedQueryRef.current = effectiveSearchQuery;
+    logger.ui.info('Search result ready', {
+      query: effectiveSearchQuery,
+      type: data.type,
+      found: data.found,
+    });
+    onResult(data);
+  }, [hasSearched, onResult, effectiveSearchQuery, data]);
 
   const handleSearch = useCallback(() => {
     const trimmed = inputValue.trim();
@@ -108,9 +131,30 @@ export function RegistrySearch({
       return;
     }
 
-    const type = detectSearchType(trimmed);
+    const type = detectSearchTypeWithEns(trimmed);
     if (type === 'invalid') {
       logger.ui.debug('Search validation failed: invalid input format', { input: trimmed });
+      return;
+    }
+
+    // For ENS names, we need to wait for resolution
+    if (type === 'ens') {
+      if (isEnsLoading) {
+        logger.ui.debug('ENS resolution in progress', { input: trimmed });
+        return;
+      }
+      if (!resolvedAddress) {
+        logger.ui.debug('ENS name could not be resolved', { input: trimmed });
+        return;
+      }
+      logger.ui.info('Search started with resolved ENS', {
+        ensName: trimmed,
+        address: resolvedAddress,
+      });
+      setSearchQuery(resolvedAddress);
+      setHasSearched(true);
+      lastNotifiedQueryRef.current = null;
+      onSearch?.(resolvedAddress, 'address');
       return;
     }
 
@@ -118,8 +162,10 @@ export function RegistrySearch({
     setSearchQuery(trimmed);
     setHasSearched(true);
     lastNotifiedQueryRef.current = null;
-    onSearch?.(trimmed, type);
-  }, [inputValue, onSearch]);
+    // Map SearchTypeWithEns to SearchType for callback
+    const callbackType: SearchType = type === 'caip10' ? 'caip10' : type;
+    onSearch?.(trimmed, callbackType);
+  }, [inputValue, onSearch, isEnsLoading, resolvedAddress]);
 
   const handleClear = useCallback(() => {
     logger.ui.debug('Search cleared');
@@ -138,20 +184,47 @@ export function RegistrySearch({
     [handleSearch]
   );
 
+  // Determine loading states
   const showLoading = hasSearched && isLoading;
+  const showEnsLoading = inputType === 'ens' && isEnsLoading;
   const showResult = hasSearched && data && !isLoading;
   const showError = error && !isLoading;
-  const canSearch = inputValue.trim().length >= 10 && inputType !== 'invalid';
+
+  // Can search if input is valid and not loading ENS
+  const canSearch = useMemo(() => {
+    if (inputValue.trim().length < 3) return false;
+    if (inputType === 'invalid') return false;
+    if (inputType === 'ens') {
+      // For ENS, need to have resolved address or be currently loading
+      return !isEnsLoading && !isEnsError && !!resolvedAddress;
+    }
+    return inputValue.trim().length >= 10;
+  }, [inputValue, inputType, isEnsLoading, isEnsError, resolvedAddress]);
 
   // Get indicator for current input
-  const indicator = inputValue.trim() ? getSearchTypeIndicator(inputType) : null;
+  const indicator = useMemo(() => {
+    if (!inputValue.trim()) return null;
+
+    // For ENS names, show loading or error states
+    if (inputType === 'ens') {
+      if (isEnsLoading) {
+        return { Icon: Loader2, label: 'Resolving ENS...', valid: true, loading: true };
+      }
+      if (isEnsError || !resolvedAddress) {
+        return { Icon: AlertCircle, label: 'ENS not found', valid: false };
+      }
+      return { Icon: AtSign, label: `Resolves to ${resolvedAddress.slice(0, 10)}...`, valid: true };
+    }
+
+    return getSearchTypeIndicator(inputType);
+  }, [inputValue, inputType, isEnsLoading, isEnsError, resolvedAddress]);
 
   return (
     <div className={cn('space-y-4', className)}>
       {/* Search Input */}
       <div className="space-y-2">
         <div className="flex gap-2">
-          <InputGroup data-disabled={showLoading} className="flex-1">
+          <InputGroup data-disabled={showLoading || showEnsLoading} className="flex-1">
             <InputGroupAddon>
               <Search className="h-4 w-4" />
             </InputGroupAddon>
@@ -161,7 +234,7 @@ export function RegistrySearch({
                 setInputValue(e.target.value);
               }}
               onKeyDown={handleKeyDown}
-              placeholder="Search wallet or transaction (0x...)"
+              placeholder="Search wallet, ENS name, or transaction (0x... or name.eth)"
               disabled={showLoading}
               aria-invalid={!!showError}
               aria-describedby={showError ? 'search-error' : undefined}
@@ -171,7 +244,13 @@ export function RegistrySearch({
             {indicator && !showLoading && (
               <InputGroupAddon align="inline-end">
                 <indicator.Icon
-                  className={cn('h-4 w-4', indicator.valid ? 'text-green-500' : 'text-destructive')}
+                  className={cn(
+                    'h-4 w-4',
+                    indicator.valid ? 'text-green-500' : 'text-destructive',
+                    'loading' in indicator && indicator.loading
+                      ? 'animate-spin text-muted-foreground'
+                      : ''
+                  )}
                   aria-label={indicator.label}
                 />
               </InputGroupAddon>
@@ -187,12 +266,24 @@ export function RegistrySearch({
           </InputGroup>
           <Button
             onClick={handleSearch}
-            disabled={showLoading || !canSearch}
+            disabled={showLoading || showEnsLoading || !canSearch}
             size={compact ? 'sm' : 'default'}
           >
-            {showLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>Search</span>}
+            {showLoading || showEnsLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <span>Search</span>
+            )}
           </Button>
         </div>
+
+        {/* ENS resolution hint */}
+        {inputType === 'ens' && resolvedAddress && !showLoading && (
+          <p className="text-xs text-muted-foreground">
+            {inputValue.trim()} resolves to {resolvedAddress.slice(0, 10)}...
+            {resolvedAddress.slice(-8)}
+          </p>
+        )}
 
         {/* Error */}
         {showError && (
@@ -204,6 +295,7 @@ export function RegistrySearch({
 
       {/* Screen reader announcements */}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {showEnsLoading && 'Resolving ENS name...'}
         {showLoading && 'Searching registry...'}
         {showResult &&
           data &&

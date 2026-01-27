@@ -37,8 +37,8 @@ describe('RegistrationMethodSelector', () => {
       render(<RegistrationMethodSelector {...defaultProps} />);
 
       expect(screen.getByText('Wallet access')).toBeInTheDocument();
-      expect(screen.getByText('Second wallet for gas')).toBeInTheDocument();
-      expect(screen.getByText('Connected helper peer')).toBeInTheDocument();
+      expect(screen.getByText('Second wallet to pay for gas')).toBeInTheDocument();
+      expect(screen.getByText('Friend or trusted party who can pay for gas')).toBeInTheDocument();
     });
   });
 

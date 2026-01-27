@@ -265,14 +265,14 @@ function registerBatchAsOperator(
 │  │ 9. Compute merkle root                                              │    │
 │  │ 10. Verify computed root == expected root                           │    │
 │  │ 11. STORE: merkle root + batch metadata (minimal)                   │    │
-│  │ 12. EMIT: Individual events per entry (for indexers)                │    │
+│  │ 12. EMIT: Batch event with full arrays (for indexers)               │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                    │                                         │
 │                                    ▼                                         │
 │  INDEXER (Off-chain) ─────────────────────────────────────────────────────  │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │ 13. Listen for BatchRegistered events                               │    │
-│  │ 14. Listen for individual WalletRegistered/TxRegistered events      │    │
+│  │ 13. Listen for WalletBatchRegistered / TransactionBatchRegisteredByOperator │
+│  │ 14. Listen for ContractBatchRegistered                              │    │
 │  │ 15. Build searchable database of all entries                        │    │
 │  │ 16. Serve queries: "is wallet X registered?"                        │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
@@ -293,35 +293,37 @@ mapping(address => mapping(bytes32 => bool)) public isRegistered; // wallet => c
 **Events (Rich - for indexers):**
 
 ```solidity
-// Batch-level event
-event BatchRegistered(
+// Wallet batch (operator)
+event WalletBatchRegistered(
+    bytes32 indexed batchId,
     bytes32 indexed merkleRoot,
     address indexed operator,
-    bytes32 indexed chainId,
-    uint256 count,
-    uint256 timestamp
+    bytes32 reportedChainId,
+    uint32 walletCount,
+    address[] walletAddresses,
+    bytes32[] chainIds
 );
 
-// Individual entry events (emitted for each item in batch)
-event WalletRegistered(
-    address indexed wallet,
-    bytes32 indexed chainId,
-    address indexed registrant,
-    uint256 timestamp
-);
-
-event TransactionRegistered(
-    bytes32 indexed txHash,
-    bytes32 indexed chainId,
-    address indexed registrant,
-    uint256 timestamp
-);
-
-event ContractFlagged(
-    address indexed contractAddress,
-    bytes32 indexed chainId,
+// Transaction batch (operator)
+event TransactionBatchRegisteredByOperator(
+    bytes32 indexed batchId,
+    bytes32 indexed merkleRoot,
     address indexed operator,
-    uint256 timestamp
+    bytes32 reportedChainId,
+    uint32 transactionCount,
+    bytes32[] txHashes,
+    bytes32[] chainIds
+);
+
+// Fraudulent contracts (operator)
+event ContractBatchRegistered(
+    bytes32 indexed batchId,
+    bytes32 indexed merkleRoot,
+    address indexed operator,
+    bytes32 reportedChainId,
+    uint32 contractCount,
+    address[] contractAddresses,
+    bytes32[] chainIds
 );
 ```
 
@@ -345,35 +347,35 @@ import { base } from 'viem/chains';
 
 const client = createPublicClient({ chain: base, transport: http() });
 
-// Watch for new batch registrations
+// Watch for new wallet batch registrations
 client.watchContractEvent({
   address: WALLET_REGISTRY_ADDRESS,
   abi: walletRegistryAbi,
-  eventName: 'BatchRegistered',
+  eventName: 'WalletBatchRegistered',
   onLogs: (logs) => {
     for (const log of logs) {
       console.log('New batch:', {
         root: log.args.merkleRoot,
         operator: log.args.operator,
-        count: log.args.count,
+        count: log.args.walletCount,
       });
     }
   },
 });
 
-// Watch for individual wallet registrations
+// Watch for individual wallet registrations (self-attested)
 client.watchContractEvent({
   address: WALLET_REGISTRY_ADDRESS,
   abi: walletRegistryAbi,
   eventName: 'WalletRegistered',
   onLogs: async (logs) => {
+    // WalletRegistered emits { owner, isSponsored }; derive timestamp from the block.
     // Process logs with proper error handling
     const insertPromises = logs.map((log) =>
       db.wallets.insert({
-        address: log.args.wallet,
-        chainId: log.args.chainId,
-        registrant: log.args.registrant,
-        timestamp: log.args.timestamp,
+        address: log.args.owner,
+        isSponsored: log.args.isSponsored,
+        timestamp: log.block?.timestamp,
         txHash: log.transactionHash,
       })
     );

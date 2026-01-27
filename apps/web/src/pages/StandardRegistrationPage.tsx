@@ -9,13 +9,22 @@ import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Skeleton,
+} from '@swr/ui';
 import { StepIndicator } from '@/components/composed/StepIndicator';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { ErrorBoundary, StepErrorFallback } from '@/components/composed/ErrorBoundary';
 import { StepRenderer } from '@/components/registration';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { useRegistrySearch } from '@/hooks/indexer';
 
 /**
  * Step descriptions for standard flow.
@@ -60,9 +69,17 @@ const STEP_TOOLTIPS: Partial<Record<RegistrationStep, string>> = {
 
 export function StandardRegistrationPage() {
   const [, setLocation] = useLocation();
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const { registrationType, step, setRegistrationType } = useRegistrationStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
+
+  // Check if the connected wallet is already registered via indexer
+  // This catches both individual and batch registrations
+  const { data: searchResult, isLoading: isCheckingRegistration } = useRegistrySearch(
+    address ?? ''
+  );
+  const connectedWalletRegistered =
+    searchResult?.type === 'address' && searchResult.foundInWalletRegistry;
 
   // Initialize registration type
   useEffect(() => {
@@ -78,7 +95,32 @@ export function StandardRegistrationPage() {
     }
   }, [isConnected, setLocation]);
 
+  // Redirect if connected wallet is already registered (can't register same wallet twice)
+  useEffect(() => {
+    if (!isCheckingRegistration && connectedWalletRegistered) {
+      setLocation('/register/wallets');
+    }
+  }, [isCheckingRegistration, connectedWalletRegistered, setLocation]);
+
   if (!isConnected) {
+    return null;
+  }
+
+  // Show loading skeleton while checking registration status
+  if (isCheckingRegistration) {
+    return (
+      <div className="w-full max-w-7xl mx-auto px-4 py-8">
+        <Skeleton className="h-10 w-48 mb-6" />
+        <div className="grid lg:grid-cols-[300px_1fr] gap-8">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-96 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  // Block if wallet is already registered (redirect will happen via useEffect)
+  if (connectedWalletRegistered) {
     return null;
   }
 

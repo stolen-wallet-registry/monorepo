@@ -22,19 +22,21 @@ With two phases:
 ## Type Definitions
 
 ```typescript
-// apps/web/src/lib/signatures/eip712.ts
+// packages/signatures/src/eip712/types.ts (re-exported in apps/web)
 
 export const EIP712_DOMAIN_NAME = 'StolenWalletRegistry';
 export const EIP712_DOMAIN_VERSION = '4';
 
 export const EIP712_TYPES = {
   AcknowledgementOfRegistry: [
+    { name: 'statement', type: 'string' },
     { name: 'owner', type: 'address' },
     { name: 'forwarder', type: 'address' },
     { name: 'nonce', type: 'uint256' },
     { name: 'deadline', type: 'uint256' },
   ],
   Registration: [
+    { name: 'statement', type: 'string' },
     { name: 'owner', type: 'address' },
     { name: 'forwarder', type: 'address' },
     { name: 'nonce', type: 'uint256' },
@@ -44,6 +46,8 @@ export const EIP712_TYPES = {
 ```
 
 **Critical:** ACK and REG have identical structure but different `primaryType`, generating distinct hashes.
+
+Transaction registries have their own domain and types (see `TX_EIP712_TYPES` in `@swr/signatures`).
 
 ---
 
@@ -71,6 +75,8 @@ const typedData = buildAcknowledgementTypedData(chainId, contractAddress, {
 const signature = await signTypedDataAsync(typedData);
 ```
 
+Builders inject the correct statement string to match contract constants.
+
 ---
 
 ## Signature Storage
@@ -89,6 +95,13 @@ export interface StoredSignature {
 }
 
 // Storage key: swr_sig_${address}_${chainId}_${step}
+```
+
+Transaction batch signatures use a separate storage file:
+
+```typescript
+// apps/web/src/lib/signatures/transactions/storage.ts
+// Storage key: swr_tx_sig_${merkleRoot}_${chainId}_${step}
 ```
 
 ---
@@ -148,10 +161,7 @@ REG tx: Contract verifies nonce=1 ✓, increments to 2
 
 ## Grace Period
 
-Contract uses `block.prevrandao` for randomization:
-
-- Start: ~1-2 minutes from ACK (4-8 blocks)
-- Window: ~4-13 minutes total (55-110 blocks)
+Contract uses `block.prevrandao` for randomization. Actual durations depend on chain-specific timing config (see `TimingConfig.sol`).
 
 ---
 

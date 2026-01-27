@@ -2,7 +2,6 @@
  * Registry selection page - Entry point for the app.
  *
  * Users choose which registry type they want to interact with.
- * Currently only Stolen Wallets is active, others are coming soon.
  */
 
 import { useLocation } from 'wouter';
@@ -15,7 +14,6 @@ const REGISTRIES = [
     title: 'Stolen Wallets',
     description:
       'Register wallets you no longer control. Self-attestation with wallet signature provides high trust signal for fraud prevention.',
-    status: 'active' as const,
     icon: <Wallet className="size-6" />,
     path: '/register/wallet',
   },
@@ -24,7 +22,6 @@ const REGISTRIES = [
     title: 'Stolen Transactions',
     description:
       'Report specific fraudulent transactions like phishing attacks, address poisoning, or unauthorized transfers.',
-    status: 'active' as const,
     icon: <FileText className="size-6" />,
     path: '/register/transactions',
   },
@@ -32,10 +29,10 @@ const REGISTRIES = [
     id: 'contract',
     title: 'Fraudulent Contracts',
     description:
-      'Operator-only registry for cataloging malicious smart contracts. Approved operators can batch-submit scam contracts via the Dashboard. Search indexed data or view operator submissions.',
-    status: 'operator-only' as const,
+      'Public registry for malicious smart contracts. Anyone can search indexed data and view submissions on the dashboard. Approved operators submit batches via the SWR cli.',
     icon: <Code2 className="size-6" />,
-    path: null,
+    badge: { label: 'Operators Only', variant: 'outline' as const },
+    path: '/registry/contracts',
   },
 ];
 
@@ -60,9 +57,9 @@ export function RegistrySelectionPage() {
             key={registry.id}
             title={registry.title}
             description={registry.description}
-            status={registry.status}
             icon={registry.icon}
-            onClick={registry.path ? () => setLocation(registry.path!) : undefined}
+            badge={registry.badge}
+            onClick={() => setLocation(registry.path)}
           />
         ))}
       </div>

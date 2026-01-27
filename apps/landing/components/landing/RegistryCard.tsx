@@ -25,6 +25,7 @@ function getStatusBadge(status: RegistryCardProps['status']) {
 export function RegistryCard({ title, description, status, icon, className }: RegistryCardProps) {
   const isHighlighted = status === 'active' || status === 'operator-only';
   const badge = getStatusBadge(status);
+  const showBadge = status !== 'active';
 
   return (
     <Card
@@ -48,9 +49,11 @@ export function RegistryCard({ title, description, status, icon, className }: Re
           >
             {icon}
           </div>
-          <Badge variant={badge.variant} className="text-xs">
-            {badge.label}
-          </Badge>
+          {showBadge && (
+            <Badge variant={badge.variant} className="text-xs">
+              {badge.label}
+            </Badge>
+          )}
         </div>
         <CardTitle className="text-lg">{title}</CardTitle>
       </CardHeader>
