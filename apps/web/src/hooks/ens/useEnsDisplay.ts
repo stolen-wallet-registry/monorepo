@@ -6,17 +6,7 @@ import { useEnsName, useEnsAvatar } from 'wagmi';
 import { mainnet } from 'wagmi/chains';
 import { normalize } from 'viem/ens';
 import type { Address } from '@/lib/types/ethereum';
-
-/**
- * Query options for ENS resolution.
- * Aggressive caching since ENS names rarely change.
- */
-const ENS_QUERY_OPTIONS = {
-  staleTime: 5 * 60 * 1000, // 5 minutes
-  gcTime: 30 * 60 * 1000, // 30 minutes
-  retry: 1, // Single retry on failure
-  retryDelay: 1000, // 1 second delay
-};
+import { ENS_QUERY_OPTIONS } from './constants';
 
 export interface EnsDisplayData {
   /** Resolved ENS name, or null if none */

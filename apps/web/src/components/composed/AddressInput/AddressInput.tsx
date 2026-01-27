@@ -20,6 +20,23 @@ import type { Address } from '@/lib/types/ethereum';
 
 export type AddressType = 'ethereum' | 'solana' | 'bitcoin' | 'auto';
 
+/**
+ * Props for AddressInput component.
+ *
+ * NOTE: This is a controlled component. You must provide both `value` and `onChange`
+ * for proper operation. Typical usage patterns:
+ *
+ * 1. With React state:
+ *    const [address, setAddress] = useState('');
+ *    <AddressInput value={address} onChange={(e) => setAddress(e.target.value)} />
+ *
+ * 2. With React Hook Form:
+ *    <Controller
+ *      name="address"
+ *      control={control}
+ *      render={({ field }) => <AddressInput {...field} />}
+ *    />
+ */
 export interface AddressInputProps extends Omit<
   React.ComponentProps<'input'>,
   'type' | 'onChange'
@@ -30,7 +47,10 @@ export interface AddressInputProps extends Omit<
   showValidation?: boolean;
   /** Custom validation function (overrides addressType validation). Return null for no validation state. */
   validate?: (value: string) => boolean | null;
-  /** Current value */
+  /**
+   * Current value (required for controlled usage).
+   * Must be provided along with onChange for the component to work correctly.
+   */
   value?: string;
   /** Called when value changes (raw input, may be ENS or address) */
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;

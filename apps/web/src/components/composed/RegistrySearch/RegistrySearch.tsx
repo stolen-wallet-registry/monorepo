@@ -96,28 +96,32 @@ export function RegistrySearch({
   } = useEnsResolve(ensName);
 
   // Determine the effective search value (use resolved address for ENS)
+  // Only switch to resolved address AFTER user has initiated search (hasSearched = true)
   const effectiveSearchQuery = useMemo(() => {
+    if (!hasSearched) return searchQuery;
     if (inputType === 'ens' && resolvedAddress) {
       return resolvedAddress;
     }
     return searchQuery;
-  }, [inputType, resolvedAddress, searchQuery]);
+  }, [hasSearched, inputType, resolvedAddress, searchQuery]);
 
-  // Query the indexer with effective query
-  const { data, isLoading, error } = useIndexerSearch(effectiveSearchQuery);
+  // Query the indexer with effective query (empty string when not searching - hook disables itself)
+  const indexerQuery = hasSearched ? effectiveSearchQuery : '';
+  const { data, isLoading, error } = useIndexerSearch(indexerQuery);
 
-  // Notify parent when result changes
+  // Notify parent when result changes (only when user has initiated search)
   useEffect(() => {
-    if (onResult && data && lastNotifiedQueryRef.current !== effectiveSearchQuery) {
-      lastNotifiedQueryRef.current = effectiveSearchQuery;
-      logger.ui.info('Search result ready', {
-        query: effectiveSearchQuery,
-        type: data.type,
-        found: data.found,
-      });
-      onResult(data);
-    }
-  }, [onResult, effectiveSearchQuery, data]);
+    if (!hasSearched || !onResult || !data || !effectiveSearchQuery) return;
+    if (lastNotifiedQueryRef.current === effectiveSearchQuery) return;
+
+    lastNotifiedQueryRef.current = effectiveSearchQuery;
+    logger.ui.info('Search result ready', {
+      query: effectiveSearchQuery,
+      type: data.type,
+      found: data.found,
+    });
+    onResult(data);
+  }, [hasSearched, onResult, effectiveSearchQuery, data]);
 
   const handleSearch = useCallback(() => {
     const trimmed = inputValue.trim();

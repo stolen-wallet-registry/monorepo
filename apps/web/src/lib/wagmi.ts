@@ -26,8 +26,8 @@ export const isTestnetMode = import.meta.env.VITE_TESTNET === 'true';
 // ENS CONFIGURATION
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Whether ENS resolution is enabled */
-export const isEnsEnabled = true;
+/** Whether ENS resolution is enabled (default: true, set VITE_ENS_ENABLED=false to disable) */
+export const isEnsEnabled = import.meta.env.VITE_ENS_ENABLED !== 'false';
 
 /**
  * Mainnet RPC URL for ENS resolution only.
@@ -129,6 +129,7 @@ const getTransports = () => {
   }
 
   // Add mainnet transport for ENS resolution
+  // Note: mainnet uses .id (wagmi/chains type), app chains use .chainId (@swr/chains type)
   if (isEnsEnabled) {
     return {
       ...appTransports,

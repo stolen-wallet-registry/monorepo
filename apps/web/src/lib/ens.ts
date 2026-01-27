@@ -25,8 +25,7 @@ export function isEnsName(value: string): boolean {
   const nameWithoutTld = normalized.slice(0, -4);
   if (nameWithoutTld.length < 3) return false;
 
-  // Basic structure validation (at least one alphanumeric char)
-  // Full validation happens during resolution via normalize()
+  // Basic length check only - full validation happens during resolution via normalize()
   return true;
 }
 
