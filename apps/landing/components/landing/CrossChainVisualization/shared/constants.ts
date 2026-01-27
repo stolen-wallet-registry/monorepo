@@ -122,8 +122,9 @@ export const CAIP10_ADDRESSES = [
   'cosmos:cosmoshub-4:cosmos1vk8e95f0f3z5yv0ew3w9q4z6d8y7x3p2s4m1n0', // Cosmos
 ];
 
-// CAIP-220 transaction identifiers (chain:txHash format)
-export const CAIP220_TRANSACTIONS = [
+// Chain-qualified transaction references (chain:txHash format)
+// Note: This uses CAIP-2 chain IDs + tx hash, NOT CAIP-10 (which is for accounts only)
+export const CHAIN_QUALIFIED_TRANSACTIONS = [
   'eip155:1:0xabc123def456789012345678901234567890abcdef1234567890abcdef123456',
   'eip155:8453:0x789xyz012345678901234567890123456789012345678901234567890abcdef',
 ];
@@ -131,7 +132,7 @@ export const CAIP220_TRANSACTIONS = [
 // Combined examples with type indicator
 export const CAIP_EXAMPLES = [
   ...CAIP10_ADDRESSES.map((addr) => ({ value: addr, type: 'address' as const })),
-  ...CAIP220_TRANSACTIONS.map((tx) => ({ value: tx, type: 'transaction' as const })),
+  ...CHAIN_QUALIFIED_TRANSACTIONS.map((tx) => ({ value: tx, type: 'transaction' as const })),
 ];
 
 // Truncate CAIP address to reasonable length (show namespace:chainId + truncated address)

@@ -460,16 +460,18 @@ function BatchDetailContent({
                       <>
                         <TableHead>
                           <span className="inline-flex items-center gap-1">
-                            Transaction (CAIP-10)
+                            Transaction
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-3 w-3 cursor-help text-muted-foreground" />
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-xs">
                                 <p className="text-xs">
-                                  <strong>CAIP-10</strong> is a standard for identifying blockchain
-                                  addresses across chains. Format:{' '}
-                                  <code>namespace:chainId:txHash</code>
+                                  Transactions are shown with their <strong>chain context</strong>{' '}
+                                  (CAIP-2 format) to uniquely identify them across blockchains.
+                                </p>
+                                <p className="text-xs mt-1 text-muted-foreground">
+                                  Format: eip155:{'{chainId}'}:{'{txHash}'}
                                 </p>
                               </TooltipContent>
                             </Tooltip>

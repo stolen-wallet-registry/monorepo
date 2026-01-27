@@ -139,7 +139,7 @@ export const RegistryHub = forwardRef<
         <div className="mb-3 flex items-center gap-1">
           <span className="text-sm font-bold text-foreground">Stolen Wallet Registry</span>
           <InfoTooltip
-            content="The consolidated registry on Base stores stolen wallet AND fraudulent transaction reports from all chains. CAIP-10/CAIP-220 compliant storage enables tracking wallet addresses and transactions from any blockchain (Ethereum, Solana, Bitcoin, etc.)."
+            content="The consolidated registry on Base stores stolen wallet AND fraudulent transaction reports from all chains. CAIP-10 compliant storage for wallet addresses, with chain-qualified transaction references for cross-chain tracking (Ethereum, Solana, Bitcoin, etc.)."
             ariaLabel="Info about Stolen Wallet Registry"
             iconSize="size-3.5"
           />
@@ -218,7 +218,7 @@ export function MobileRegistryHub({ showLabels = true }: { showLabels?: boolean 
         <div className="flex items-center gap-1">
           <span className="text-sm font-bold text-foreground">Stolen Wallet Registry</span>
           <InfoTooltip
-            content="The consolidated registry on Base stores stolen wallet AND fraudulent transaction reports from all chains. CAIP-10/CAIP-220 compliant storage enables tracking wallet addresses and transactions from any blockchain (Ethereum, Solana, Bitcoin, etc.)."
+            content="The consolidated registry on Base stores stolen wallet AND fraudulent transaction reports from all chains. CAIP-10 compliant storage for wallet addresses, with chain-qualified transaction references for cross-chain tracking (Ethereum, Solana, Bitcoin, etc.)."
             ariaLabel="Info about Stolen Wallet Registry"
             iconSize="size-3.5"
           />

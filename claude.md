@@ -394,6 +394,21 @@ src/test/test-utils.tsx → Custom render with providers
 
 ---
 
+## Identifier Terminology
+
+| Type        | Standard            | Format                      | Example                 |
+| ----------- | ------------------- | --------------------------- | ----------------------- |
+| Wallet      | CAIP-10             | `namespace:chainId:address` | `eip155:8453:0x742d...` |
+| Contract    | CAIP-10             | `namespace:chainId:address` | `eip155:8453:0x9fE4...` |
+| Transaction | Chain-Qualified Ref | `namespace:chainId:txHash`  | `eip155:8453:0xabc1...` |
+| Chain       | CAIP-2              | `namespace:chainId`         | `eip155:8453`           |
+
+**Note:** Transactions use the same format as CAIP-10 but are NOT CAIP-10 compliant.
+CAIP-10 is specifically for account identifiers (addresses), not transaction hashes.
+We call our transaction format "chain-qualified references" to avoid confusion.
+
+---
+
 ## Type Conventions
 
 ### Ethereum Types (IMPORTANT)
