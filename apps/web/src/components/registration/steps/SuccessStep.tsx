@@ -20,6 +20,7 @@ import {
   HyperlaneLogo,
 } from '@swr/ui';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
+import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 import { ChainIcon } from '@/components/composed/ChainIcon';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
@@ -120,7 +121,7 @@ export function SuccessStep() {
         {registeree && (
           <div className="rounded-lg bg-white dark:bg-gray-900 border p-4">
             <p className="text-sm font-medium text-muted-foreground mb-2">Registered Wallet</p>
-            <ExplorerLink
+            <EnsExplorerLink
               value={registeree}
               type="address"
               href={

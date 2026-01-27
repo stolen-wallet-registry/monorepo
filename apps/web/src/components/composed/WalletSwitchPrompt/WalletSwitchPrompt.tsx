@@ -5,7 +5,7 @@
  */
 
 import { Alert, AlertDescription, AlertTitle, Badge } from '@swr/ui';
-import { ExplorerLink } from '@/components/composed/ExplorerLink';
+import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 import { cn } from '@/lib/utils';
 import { areAddressesEqual } from '@/lib/address';
 import { Wallet, ArrowRight, Check, AlertTriangle } from 'lucide-react';
@@ -75,7 +75,7 @@ export function WalletSwitchPrompt({
         </AlertTitle>
         <AlertDescription className="text-green-600 dark:text-green-400">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <ExplorerLink
+            <EnsExplorerLink
               value={expectedAddress}
               type="address"
               href={null}
@@ -100,7 +100,7 @@ export function WalletSwitchPrompt({
           </p>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-xs uppercase tracking-wide opacity-70">Expected:</span>
-            <ExplorerLink
+            <EnsExplorerLink
               value={expectedAddress}
               type="address"
               href={null}
@@ -169,7 +169,7 @@ export function WalletSwitchPrompt({
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-xs uppercase tracking-wide opacity-70">Current:</span>
-            <ExplorerLink
+            <EnsExplorerLink
               value={currentAddress}
               type="address"
               href={null}
@@ -183,7 +183,7 @@ export function WalletSwitchPrompt({
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-xs uppercase tracking-wide opacity-70">Expected:</span>
-            <ExplorerLink
+            <EnsExplorerLink
               value={expectedAddress}
               type="address"
               href={null}

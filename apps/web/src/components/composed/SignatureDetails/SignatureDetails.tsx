@@ -7,7 +7,7 @@
 
 import { Badge } from '@swr/ui';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
-import { ExplorerLink } from '@/components/composed/ExplorerLink';
+import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 import { getChainShortName } from '@/lib/explorer';
 import { cn } from '@/lib/utils';
 import type { Address } from '@/lib/types/ethereum';
@@ -72,7 +72,7 @@ export function SignatureDetails({
           {registereeLabel}
           <InfoTooltip content={registereeTooltip} size="sm" />
         </span>
-        <ExplorerLink value={data.registeree} type="address" showDisabledIcon={false} />
+        <EnsExplorerLink value={data.registeree} type="address" showDisabledIcon={false} />
       </div>
       <div className="flex justify-between items-center">
         <span className="text-muted-foreground flex items-center gap-1">
@@ -82,7 +82,7 @@ export function SignatureDetails({
             size="sm"
           />
         </span>
-        <ExplorerLink value={data.forwarder} type="address" showDisabledIcon={false} />
+        <EnsExplorerLink value={data.forwarder} type="address" showDisabledIcon={false} />
       </div>
       <div className="flex justify-between items-center">
         <span className="text-muted-foreground flex items-center gap-1">

@@ -8,7 +8,8 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useAccount } from 'wagmi';
-import { Alert, AlertTitle, AlertDescription, Button, ExplorerLink } from '@swr/ui';
+import { Alert, AlertTitle, AlertDescription, Button } from '@swr/ui';
+import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 import { AlertTriangle, Clock, X } from 'lucide-react';
 import { useRegistryStatus } from '@/hooks';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
@@ -155,7 +156,7 @@ export function ConnectedWalletStatus({
         <AlertDescription className="space-y-2">
           <p>
             This wallet (
-            <ExplorerLink
+            <EnsExplorerLink
               value={address}
               type="address"
               truncate={false}
@@ -194,7 +195,7 @@ export function ConnectedWalletStatus({
         <AlertDescription className="text-yellow-800 dark:text-yellow-200">
           <p>
             This wallet (
-            <ExplorerLink
+            <EnsExplorerLink
               value={address}
               type="address"
               truncate={false}

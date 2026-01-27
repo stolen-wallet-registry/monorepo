@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, userEvent } from '@/test/test-utils';
 import { SignatureCard, type SignatureData } from './SignatureCard';
 import { SIGNATURE_TTL_MS } from '@/lib/signatures';
 import type { Hex } from '@/lib/types/ethereum';

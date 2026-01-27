@@ -2,10 +2,12 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { EnsExplorerLink } from '.';
 import { ExplorerLink } from '@swr/ui';
 import type { Address } from '@/lib/types/ethereum';
+import { withWeb3 } from '../../../../.storybook/Web3Decorator';
 
 const meta = {
   title: 'Composed/EnsExplorerLink',
   component: EnsExplorerLink,
+  decorators: [withWeb3],
   parameters: {
     layout: 'centered',
     docs: {
@@ -36,7 +38,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 // Well-known addresses with ENS names (these resolve on mainnet)
-const vitalikAddress = '0xd8dA6BF26963aF9D7dB9bBa65e6b7C0e0e7bF1dC' as Address;
+const vitalikAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
 // Random address unlikely to have ENS
 const randomAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as Address;
 
