@@ -8,7 +8,7 @@
  * Example: eip155:31337:0x0cc34fb53e564f75daead1d949bb58e9be8f8e3b50a08789ad5562f7e6ba11c2
  */
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
 import { Copy, Check, ExternalLink, Info } from 'lucide-react';
 import { formatEther } from 'viem';
@@ -31,6 +31,7 @@ export interface SelectedTransactionsTableProps {
 
 /**
  * Format a transaction hash for display (truncated).
+ * Uses longer suffix (8 chars) since there's no CAIP prefix.
  */
 function formatTxHash(hash: string): string {
   return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
@@ -39,6 +40,7 @@ function formatTxHash(hash: string): string {
 /**
  * Format a CAIP-10 transaction identifier for display (truncated).
  * Format: eip155:{chainId}:{truncatedHash}
+ * Uses shorter suffix (6 chars) to accommodate the CAIP-10 prefix length.
  */
 function formatCaip10TxDisplay(hash: string, chainId: number): string {
   const prefix = `eip155:${chainId}:`;
@@ -77,15 +79,23 @@ function formatValue(value: string): string {
 
 /**
  * Copy button with feedback.
+ * Clears timeout on unmount to prevent state updates on unmounted component.
  */
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      timeoutRef.current = setTimeout(() => setCopied(false), 1500);
     } catch {
       // Silently fail
     }

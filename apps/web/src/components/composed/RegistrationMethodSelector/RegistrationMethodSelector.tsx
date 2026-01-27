@@ -21,6 +21,27 @@ import { Wallet, RefreshCw, Users } from 'lucide-react';
 import type { RegistrationType } from '@/stores/registrationStore';
 import type { RegistryType } from '@/lib/types';
 
+/**
+ * Reason keys for disabled methods.
+ * Using keys instead of strings for i18n compatibility and type safety.
+ */
+type DisabledReasonKey = 'walletRegistered' | 'p2pUnavailable';
+
+/**
+ * Maps reason keys to user-facing labels and tooltip messages.
+ */
+const DISABLED_REASON_CONFIG: Record<DisabledReasonKey, { label: string; message: string }> = {
+  walletRegistered: {
+    label: 'Wallet Already Registered',
+    message:
+      'Your connected wallet is already registered. You can still help others by being a P2P relayer.',
+  },
+  p2pUnavailable: {
+    label: 'P2P Relay Unavailable',
+    message: 'Relay node not deployed yet. P2P relay is disabled in this deployment.',
+  },
+};
+
 export interface MethodConfig {
   type: RegistrationType;
   title: string;
@@ -28,7 +49,7 @@ export interface MethodConfig {
   requirements: string[];
   icon: React.ReactNode;
   disabled?: boolean;
-  disabledReason?: string;
+  disabledReasonKey?: DisabledReasonKey;
 }
 
 export interface RegistrationMethodSelectorProps {
@@ -116,10 +137,6 @@ export function RegistrationMethodSelector({
   connectedWalletRegistered = false,
   className,
 }: RegistrationMethodSelectorProps) {
-  const p2pUnavailableMessage =
-    'Relay node not deployed yet. P2P relay is disabled in this deployment.';
-  const walletRegisteredMessage =
-    'Your connected wallet is already registered. You can still help others by being a P2P relayer.';
   const baseMethods = registryType === 'transaction' ? TRANSACTION_METHODS : WALLET_METHODS;
   const methods = baseMethods.map((method) => {
     // For wallet registry: standard and selfRelay are blocked if wallet is already registered
@@ -131,17 +148,17 @@ export function RegistrationMethodSelector({
     // P2P relay is blocked if not available
     const isBlockedByP2pUnavailable = method.type === 'p2pRelay' && !p2pAvailable;
 
-    let disabledReason: string | undefined;
+    let disabledReasonKey: DisabledReasonKey | undefined;
     if (isBlockedByRegistration) {
-      disabledReason = 'Wallet Already Registered';
+      disabledReasonKey = 'walletRegistered';
     } else if (isBlockedByP2pUnavailable) {
-      disabledReason = 'P2P Relay Unavailable';
+      disabledReasonKey = 'p2pUnavailable';
     }
 
     return {
       ...method,
       disabled: isBlockedByRegistration || isBlockedByP2pUnavailable,
-      disabledReason,
+      disabledReasonKey,
     };
   });
 
@@ -178,15 +195,15 @@ export function RegistrationMethodSelector({
                 <div className="p-2 rounded-lg bg-muted group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                   {method.icon}
                 </div>
-                {isDisabled && method.disabledReason && (
+                {isDisabled && method.disabledReasonKey && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge variant="secondary">{method.disabledReason}</Badge>
+                      <Badge variant="secondary">
+                        {DISABLED_REASON_CONFIG[method.disabledReasonKey].label}
+                      </Badge>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="max-w-xs">
-                      {method.disabledReason === 'P2P Relay Unavailable'
-                        ? p2pUnavailableMessage
-                        : walletRegisteredMessage}
+                      {DISABLED_REASON_CONFIG[method.disabledReasonKey].message}
                     </TooltipContent>
                   </Tooltip>
                 )}

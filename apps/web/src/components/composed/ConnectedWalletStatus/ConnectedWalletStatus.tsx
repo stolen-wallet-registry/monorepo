@@ -99,10 +99,18 @@ export function ConnectedWalletStatus({
     chainId: hubChainId,
   });
 
-  // Debug logging for troubleshooting (use info level for visibility during debugging)
-  // This helps diagnose why the alert may not be triggering
-  logger.wallet.info('[ConnectedWalletStatus] Registry status check', {
-    address,
+  // Debug logging for troubleshooting
+  // Uses debug level and anonymizes address for privacy
+  const shouldShowAlert =
+    isConnected &&
+    !!address &&
+    !isLoading &&
+    !isError &&
+    (isRegistered || isPending) &&
+    (!isDismissed || alwaysShow);
+
+  logger.wallet.debug('[ConnectedWalletStatus] Registry status check', {
+    addressPrefix: address ? `${address.slice(0, 6)}...` : undefined,
     isConnected,
     hubChainId,
     queryEnabled: isConnected && !!address,
@@ -112,13 +120,7 @@ export function ConnectedWalletStatus({
     isError,
     error: error?.message,
     isDismissed,
-    shouldShowAlert:
-      isConnected &&
-      !!address &&
-      !isLoading &&
-      !isError &&
-      (isRegistered || isPending) &&
-      (!isDismissed || alwaysShow),
+    shouldShowAlert,
   });
 
   const handleDismiss = useCallback(() => {

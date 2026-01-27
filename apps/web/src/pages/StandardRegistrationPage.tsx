@@ -9,7 +9,15 @@ import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Skeleton,
+} from '@swr/ui';
 import { StepIndicator } from '@/components/composed/StepIndicator';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { ErrorBoundary, StepErrorFallback } from '@/components/composed/ErrorBoundary';
@@ -98,12 +106,20 @@ export function StandardRegistrationPage() {
     return null;
   }
 
-  // Show nothing while checking registration status
+  // Show loading skeleton while checking registration status
   if (isCheckingRegistration) {
-    return null;
+    return (
+      <div className="w-full max-w-7xl mx-auto px-4 py-8">
+        <Skeleton className="h-10 w-48 mb-6" />
+        <div className="grid lg:grid-cols-[300px_1fr] gap-8">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-96 w-full" />
+        </div>
+      </div>
+    );
   }
 
-  // Block if wallet is already registered
+  // Block if wallet is already registered (redirect will happen via useEffect)
   if (connectedWalletRegistered) {
     return null;
   }
