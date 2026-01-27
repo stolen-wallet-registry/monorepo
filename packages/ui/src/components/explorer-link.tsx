@@ -89,6 +89,10 @@ export interface ExplorerLinkProps {
   showCopyButton?: boolean;
   /** Additional class names */
   className?: string;
+  /** ENS name to display instead of address (optional, resolved externally) */
+  ensName?: string | null;
+  /** Whether ENS is loading */
+  ensLoading?: boolean;
 }
 
 /**
@@ -133,6 +137,8 @@ export function ExplorerLink({
   showDisabledIcon = true,
   showCopyButton = true,
   className,
+  ensName,
+  ensLoading,
 }: ExplorerLinkProps) {
   const [copied, setCopied] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -170,22 +176,45 @@ export function ExplorerLink({
     }
   }, [value]);
 
-  // Content display (truncated or full)
-  const displayContent = truncate ? <TruncatedAddress value={value} /> : value;
+  // Determine what to display
+  const displayContent = (() => {
+    // Show loading skeleton while ENS is resolving
+    if (ensLoading) {
+      return <span className="inline-block w-24 h-4 bg-muted animate-pulse rounded" />;
+    }
+
+    // Show ENS name if available (for address type only)
+    if (ensName && resolvedType === 'address') {
+      return <span className="font-medium">{ensName}</span>;
+    }
+
+    // Fall back to truncated address or full value
+    return truncate ? <TruncatedAddress value={value} /> : value;
+  })();
+
+  // Tooltip content: show both ENS and address when ENS is displayed
+  const tooltipContent = ensName ? (
+    <div className="space-y-1">
+      <p className="text-xs font-medium">{ensName}</p>
+      <p className="text-xs font-mono break-all text-muted-foreground">{value}</p>
+    </div>
+  ) : (
+    <p className="text-xs font-mono break-all">{value}</p>
+  );
 
   return (
     <span
       data-testid="explorer-link"
       className={cn('font-mono text-sm inline-flex items-center gap-1.5', className)}
     >
-      {/* Full value tooltip on hover for truncated display */}
-      {truncate ? (
+      {/* Full value tooltip on hover for truncated display or ENS name */}
+      {truncate || ensName ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="cursor-default">{displayContent}</span>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-md">
-            <p className="text-xs font-mono break-all">{value}</p>
+            {tooltipContent}
           </TooltipContent>
         </Tooltip>
       ) : (

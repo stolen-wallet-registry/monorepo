@@ -439,6 +439,73 @@ const searchAddress = useState<`0x${string}` | undefined>();
 
 ---
 
+## ENS Integration
+
+The app integrates with ENS (Ethereum Name Service) for human-readable address display. **We want ENS names shown wherever addresses appear.**
+
+### How It Works
+
+ENS resolution requires **mainnet** even when the app operates on testnets. The wagmi config includes mainnet transport specifically for ENS, while app transactions go to testnets.
+
+```typescript
+// Address → ENS name (reverse resolution)
+import { useEnsDisplay } from '@/hooks/ens';
+
+const { name, isLoading } = useEnsDisplay(address);
+// name: "vitalik.eth" or null
+
+// ENS name → address (forward resolution)
+import { useEnsResolve } from '@/hooks/ens';
+
+const { address, isLoading } = useEnsResolve('vitalik.eth');
+// address: "0xd8dA6BF269..." or null
+```
+
+### Address Display Components
+
+**For address display, prefer `EnsExplorerLink` over `ExplorerLink`:**
+
+```typescript
+// Shows "vitalik.eth" (with 0x... in tooltip) instead of truncated hex
+import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
+
+<EnsExplorerLink value={address} />
+```
+
+### ENS Utilities
+
+```typescript
+import { isEnsName, detectSearchTypeWithEns } from '@/lib/ens';
+
+isEnsName('vitalik.eth'); // true
+isEnsName('0x1234...'); // false
+
+detectSearchTypeWithEns('vitalik.eth'); // 'ens'
+detectSearchTypeWithEns('0x1234...'); // 'address'
+```
+
+### Environment Variables
+
+```bash
+# Either enables ENS resolution:
+VITE_MAINNET_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/key
+# OR
+VITE_ALCHEMY_API_KEY=key  # Auto-constructs mainnet URL
+```
+
+### Key Files
+
+| File                                                | Purpose                                        |
+| --------------------------------------------------- | ---------------------------------------------- |
+| `apps/web/src/hooks/ens/useEnsDisplay.ts`           | Address → name + avatar                        |
+| `apps/web/src/hooks/ens/useEnsResolve.ts`           | Name → address                                 |
+| `apps/web/src/lib/ens.ts`                           | Utilities (isEnsName, detectSearchTypeWithEns) |
+| `apps/web/src/components/composed/EnsExplorerLink/` | ENS-aware address display                      |
+
+See `PRPs/ens-integration.md` for full implementation details.
+
+---
+
 ## File Structure Reference
 
 ```text

@@ -76,6 +76,17 @@ export function ComponentName({ value, onChange, className }: ComponentNameProps
 - Status-driven rendering: `type Status = 'idle' | 'loading' | 'success' | 'error'`
 - ARIA roles for custom interactive elements
 
+**ENS-aware components:**
+
+For address display, prefer `EnsExplorerLink` over `ExplorerLink` to show human-readable ENS names:
+
+```typescript
+// Shows "vitalik.eth" instead of "0xd8dA..."
+import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
+
+<EnsExplorerLink value={address} />
+```
+
 ---
 
 ## Storybook

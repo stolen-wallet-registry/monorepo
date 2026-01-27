@@ -164,15 +164,84 @@ export function createRainbowKitTheme(colorScheme, variant): Theme {
 
 ## Environment Variables
 
-| Variable                        | Purpose                                   |
-| ------------------------------- | ----------------------------------------- |
-| `VITE_ALCHEMY_API_KEY`          | Transaction history on non-local networks |
-| `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect                             |
-| `VITE_RELAY_MULTIADDR`          | P2P relay override                        |
-| `VITE_TESTNET`                  | Use testnets instead of localhost         |
-| `VITE_CROSSCHAIN`               | Enable cross-chain mode                   |
-| `VITE_APP_ENV`                  | Logging environment (staging/production)  |
-| `VITE_*_ADDRESS_<CHAINID>`      | Contract address overrides                |
+| Variable                        | Purpose                                  |
+| ------------------------------- | ---------------------------------------- |
+| `VITE_ALCHEMY_API_KEY`          | Transaction history + ENS resolution     |
+| `VITE_MAINNET_RPC_URL`          | Explicit mainnet RPC for ENS resolution  |
+| `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect                            |
+| `VITE_RELAY_MULTIADDR`          | P2P relay override                       |
+| `VITE_TESTNET`                  | Use testnets instead of localhost        |
+| `VITE_CROSSCHAIN`               | Enable cross-chain mode                  |
+| `VITE_APP_ENV`                  | Logging environment (staging/production) |
+| `VITE_*_ADDRESS_<CHAINID>`      | Contract address overrides               |
+
+---
+
+## ENS Integration
+
+The app resolves ENS names for human-readable address display. ENS resolution requires **mainnet** even when the app operates on testnets.
+
+### Mainnet Transport
+
+```typescript
+// apps/web/src/lib/wagmi.ts
+
+// Mainnet is included in chains array ONLY for ENS resolution
+// App transactions still go to testnets (Base Sepolia, OP Sepolia)
+const chains = [...appChains, mainnet];
+
+const transports = {
+  ...appTransports,
+  [mainnet.id]: http(getMainnetRpcUrl()), // For ENS only
+};
+```
+
+### ENS Hooks
+
+```typescript
+// Address → ENS name
+import { useEnsDisplay } from '@/hooks/ens';
+
+const { name, avatar, isLoading } = useEnsDisplay(address);
+// name: "vitalik.eth" or null
+// avatar: URL or null (if includeAvatar: true)
+
+// ENS name → address
+import { useEnsResolve } from '@/hooks/ens';
+
+const { address, isLoading, isError } = useEnsResolve('vitalik.eth');
+// address: "0xd8dA6BF269..." or null
+```
+
+### ENS-Aware Components
+
+```typescript
+// Instead of ExplorerLink, use EnsExplorerLink for address display
+import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
+
+<EnsExplorerLink value={address} />
+// Displays: "vitalik.eth" (with 0x... in tooltip)
+// Falls back to truncated address if no ENS name
+```
+
+### Caching
+
+ENS queries use TanStack Query with aggressive caching:
+
+| Setting     | Value  | Rationale                     |
+| ----------- | ------ | ----------------------------- |
+| `staleTime` | 5 min  | ENS names rarely change       |
+| `gcTime`    | 30 min | Keep in cache for navigation  |
+| `retry`     | 1      | Single retry on network error |
+
+### Environment Variables
+
+```bash
+# Either of these enables ENS resolution:
+VITE_MAINNET_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/key
+# OR
+VITE_ALCHEMY_API_KEY=key  # Constructs mainnet URL automatically
+```
 
 ---
 
@@ -193,15 +262,21 @@ Planned implementation (when added):
 ```text
 apps/web/src/
 ├── lib/
-│   ├── wagmi.ts                 # Chain config
+│   ├── wagmi.ts                 # Chain config (includes mainnet for ENS)
+│   ├── ens.ts                   # ENS utilities (isEnsName, detectSearchTypeWithEns)
 │   ├── rainbowkit-theme.ts      # Theme integration
 │   └── contracts/
 │       ├── abis.ts
 │       ├── addresses.ts
 │       └── queryKeys.ts
+├── components/composed/
+│   └── EnsExplorerLink/         # ENS-aware address display
 ├── providers/
 │   └── Web3Provider.tsx
 └── hooks/
+    ├── ens/
+    │   ├── useEnsDisplay.ts     # Address → name + avatar
+    │   └── useEnsResolve.ts     # Name → address
     ├── useAcknowledgement.ts
     ├── useRegistration.ts
     ├── useContractNonce.ts

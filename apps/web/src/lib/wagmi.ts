@@ -1,5 +1,6 @@
 import { http, createConfig } from 'wagmi';
 import { injected, walletConnect } from 'wagmi/connectors';
+import { mainnet } from 'wagmi/chains';
 import {
   anvilHub,
   anvilSpoke,
@@ -20,6 +21,33 @@ export const isCrossChainMode = import.meta.env.VITE_CROSSCHAIN === 'true';
 
 /** Whether testnet mode is enabled (set via VITE_TESTNET=true) */
 export const isTestnetMode = import.meta.env.VITE_TESTNET === 'true';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ENS CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Whether ENS resolution is enabled */
+export const isEnsEnabled = true;
+
+/**
+ * Mainnet RPC URL for ENS resolution only.
+ * ENS requires mainnet even when app operates on testnets/local chains.
+ *
+ * Priority:
+ * 1. VITE_MAINNET_RPC_URL (explicit override)
+ * 2. VITE_ALCHEMY_API_KEY (construct Alchemy URL)
+ * 3. Public RPC fallback (rate-limited, for development only)
+ */
+function getMainnetRpcUrl(): string {
+  if (import.meta.env.VITE_MAINNET_RPC_URL) {
+    return import.meta.env.VITE_MAINNET_RPC_URL;
+  }
+  if (import.meta.env.VITE_ALCHEMY_API_KEY) {
+    return `https://eth-mainnet.g.alchemy.com/v2/${import.meta.env.VITE_ALCHEMY_API_KEY}`;
+  }
+  // Fallback: public RPC (rate-limited, not for production)
+  return 'https://eth.llamarpc.com';
+}
 
 // Log mode at startup for debugging chain configuration issues
 if (import.meta.env.DEV) {
@@ -45,19 +73,21 @@ export { anvilHubChain as anvilHub, anvilSpokeChain as anvilSpoke };
 export const localhost = anvilHubChain;
 
 // Build chains array based on mode
+// IMPORTANT: mainnet is included ONLY for ENS resolution, not for transactions
 const getChains = (): readonly [Chain, ...Chain[]] => {
-  // Testnet mode: Base Sepolia (hub) + Optimism Sepolia (spoke)
-  if (isTestnetMode) {
-    return [baseSepoliaChain, optimismSepoliaChain] as const;
+  // Determine app chains based on mode (always at least one chain)
+  const [firstChain, ...restChains]: [Chain, ...Chain[]] = isTestnetMode
+    ? [baseSepoliaChain, optimismSepoliaChain]
+    : isCrossChainMode
+      ? [anvilHubChain, anvilSpokeChain]
+      : [anvilHubChain];
+
+  // Add mainnet for ENS resolution (always needed for useEnsName, useEnsAddress, etc.)
+  if (isEnsEnabled) {
+    return [firstChain, ...restChains, mainnet] as const;
   }
 
-  // Local cross-chain mode: Anvil Hub + Anvil Spoke
-  if (isCrossChainMode) {
-    return [anvilHubChain, anvilSpokeChain] as const;
-  }
-
-  // Default local development: Anvil Hub only
-  return [anvilHubChain] as const;
+  return [firstChain, ...restChains] as const;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -71,35 +101,42 @@ const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
 // NOTE: Batching is disabled for local Anvil chains to avoid viem parsing issues
 const getTransports = () => {
   // Testnet mode: Base Sepolia + Optimism Sepolia (batching OK for real RPCs)
+  let appTransports: Record<number, ReturnType<typeof http>>;
+
   if (isTestnetMode) {
-    return {
+    appTransports = {
       [baseSepolia.chainId]: http(getRpcUrl(baseSepolia.chainId)),
       [optimismSepolia.chainId]: http(getRpcUrl(optimismSepolia.chainId)),
     };
+  } else {
+    const hubRpc = getRpcUrl(anvilHub.chainId);
+
+    appTransports = {
+      [anvilHub.chainId]: http(hubRpc),
+    };
+
+    if (isCrossChainMode) {
+      const spokeRpc = getRpcUrl(anvilSpoke.chainId);
+      // Log RPC URLs for debugging
+      if (import.meta.env.DEV) {
+        logger.wallet.debug('Transport RPCs configured', {
+          hub: { chainId: anvilHub.chainId, rpc: hubRpc },
+          spoke: { chainId: anvilSpoke.chainId, rpc: spokeRpc },
+        });
+      }
+      appTransports[anvilSpoke.chainId] = http(spokeRpc);
+    }
   }
 
-  const hubRpc = getRpcUrl(anvilHub.chainId);
-
-  const base = {
-    [anvilHub.chainId]: http(hubRpc),
-  };
-
-  if (isCrossChainMode) {
-    const spokeRpc = getRpcUrl(anvilSpoke.chainId);
-    // Log RPC URLs for debugging
-    if (import.meta.env.DEV) {
-      logger.wallet.debug('Transport RPCs configured', {
-        hub: { chainId: anvilHub.chainId, rpc: hubRpc },
-        spoke: { chainId: anvilSpoke.chainId, rpc: spokeRpc },
-      });
-    }
+  // Add mainnet transport for ENS resolution
+  if (isEnsEnabled) {
     return {
-      ...base,
-      [anvilSpoke.chainId]: http(spokeRpc),
+      ...appTransports,
+      [mainnet.id]: http(getMainnetRpcUrl()),
     };
   }
 
-  return base;
+  return appTransports;
 };
 
 // Supported chains (dynamic based on mode)

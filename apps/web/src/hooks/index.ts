@@ -135,6 +135,15 @@ export {
   type TransactionChainReport,
 } from './indexer';
 
+// ENS hooks
+export {
+  useEnsDisplay,
+  useEnsResolve,
+  type EnsDisplayData,
+  type UseEnsDisplayOptions,
+  type EnsResolveResult,
+} from './ens';
+
 // Dashboard hooks
 export {
   // Role hooks
