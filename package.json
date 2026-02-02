@@ -39,6 +39,8 @@
     "hyperlane:deploy": "dotenv -e packages/contracts/.env -- hyperlane core deploy --config .hyperlane/core-config.yaml",
     "hyperlane:init": "dotenv -e packages/contracts/.env -- hyperlane registry init",
     "deploy:dev": "pnpm --filter @swr/contracts deploy:local",
+    "deploy:v2": "pnpm --filter @swr/contracts deploy:v2:local",
+    "deploy:v2:testnet": "pnpm --filter @swr/contracts deploy:v2:testnet",
     "deploy:crosschain": "pnpm --filter @swr/contracts deploy:crosschain",
     "seed:transactions": "pnpm --filter @swr/contracts seed:transactions",
     "deploy:testnet:hub": "pnpm --filter @swr/contracts deploy:testnet:hub",
