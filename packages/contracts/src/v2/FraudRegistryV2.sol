@@ -5,13 +5,13 @@ import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
-import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 import { IFraudRegistryV2 } from "./interfaces/IFraudRegistryV2.sol";
 import { IOperatorRegistry } from "../interfaces/IOperatorRegistry.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
 import { TimingConfig } from "../libraries/TimingConfig.sol";
 import { RegistryCapabilities } from "../libraries/RegistryCapabilities.sol";
+import { CAIP10 } from "../libraries/CAIP10.sol";
 
 /// @title FraudRegistryV2
 /// @author Stolen Wallet Registry Team
@@ -27,9 +27,6 @@ import { RegistryCapabilities } from "../libraries/RegistryCapabilities.sol";
 ///      - FeeManager integration for USD-denominated fees
 ///      - Soulbound compatibility via isRegistered(address) overload
 contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
-    using Strings for uint256;
-    using Strings for address;
-
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -78,15 +75,15 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Wallet entries: wildcard key => WalletEntry
-    /// @dev Key = keccak256(abi.encodePacked("eip155:_:", wallet))
+    /// @dev Key = CAIP10.evmWalletKey(wallet) = keccak256(abi.encodePacked("eip155:_:", wallet))
     mapping(bytes32 => WalletEntry) private _wallets;
 
     /// @notice Transaction entries: key => TransactionEntry
-    /// @dev Key = keccak256(abi.encode(txHash, chainId))
+    /// @dev Key = CAIP10.txStorageKey(txHash, chainId) where chainId is CAIP-2 hash
     mapping(bytes32 => TransactionEntry) private _transactions;
 
     /// @notice Contract entries: key => ContractEntry
-    /// @dev Key = keccak256(abi.encode(contractAddr, chainId))
+    /// @dev Key = CAIP10.contractStorageKey(contractAddr, chainId) where chainId is CAIP-2 hash
     mapping(bytes32 => ContractEntry) private _contracts;
 
     /// @notice Batch metadata
@@ -144,27 +141,6 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // INTERNAL HELPERS - Storage Keys
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @dev Compute wildcard storage key for EVM EOA wallet
-    /// @param wallet The wallet address
-    /// @return key The storage key using CAIP-363-inspired wildcard
-    function _evmWalletKey(address wallet) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked("eip155:_:", wallet));
-    }
-
-    /// @dev Compute storage key for transaction
-    function _txKey(bytes32 txHash, bytes32 chainId) internal pure returns (bytes32) {
-        return keccak256(abi.encode(txHash, chainId));
-    }
-
-    /// @dev Compute storage key for contract
-    function _contractKey(address contractAddr, bytes32 chainId) internal pure returns (bytes32) {
-        return keccak256(abi.encode(contractAddr, chainId));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // INTERNAL HELPERS - Fee Handling
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -184,134 +160,31 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // INTERNAL HELPERS - CAIP-10 Parsing
+    // INTERNAL HELPERS - CAIP-10 Parsing (delegates to CAIP10 library)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @dev Parse CAIP-10 string and check if registered
-    /// @param caip10 CAIP-10 string (e.g., "eip155:8453:0x..." or "eip155:_:0x...")
+    /// @param caip10 CAIP-10 string (e.g., "eip155:8453:0x...", "solana:mainnet:...")
     /// @return registered True if registered and not invalidated
     function _parseAndCheckRegistered(string calldata caip10) internal view returns (bool registered) {
-        // Parse namespace (everything before first ':')
-        bytes memory caip10Bytes = bytes(caip10);
-        uint256 len = caip10Bytes.length;
-
-        // Find first colon (namespace separator)
-        uint256 firstColon = 0;
-        for (uint256 i = 0; i < len; i++) {
-            if (caip10Bytes[i] == ":") {
-                firstColon = i;
-                break;
-            }
-        }
-        if (firstColon == 0) revert FraudRegistryV2__InvalidCaip10Format();
-
-        // Extract namespace
-        bytes memory namespaceBytes = new bytes(firstColon);
-        for (uint256 i = 0; i < firstColon; i++) {
-            namespaceBytes[i] = caip10Bytes[i];
-        }
-
-        // Check namespace
-        if (keccak256(namespaceBytes) == keccak256("eip155")) {
-            // EVM namespace - find second colon (chainId separator)
-            uint256 secondColon = 0;
-            for (uint256 i = firstColon + 1; i < len; i++) {
-                if (caip10Bytes[i] == ":") {
-                    secondColon = i;
-                    break;
-                }
-            }
-            if (secondColon == 0) revert FraudRegistryV2__InvalidCaip10Format();
-
-            // Extract address (everything after second colon)
-            // Address should be 42 chars (0x + 40 hex)
-            uint256 addrLen = len - secondColon - 1;
-            if (addrLen != 42) revert FraudRegistryV2__InvalidCaip10Format();
-
-            // Parse hex address
-            address wallet = _parseHexAddress(caip10Bytes, secondColon + 1);
-
-            // For EVM, always use wildcard key (chainId in CAIP-10 is ignored for lookup)
-            // This is by design - EVM EOAs have the same address on all chains
-            bytes32 key = _evmWalletKey(wallet);
-            WalletEntry memory entry = _wallets[key];
-            return entry.registeredAtTimestamp > 0 && !entry.invalidated;
-        } else {
-            // Unsupported namespace
-            revert FraudRegistryV2__UnsupportedNamespace();
-        }
+        bytes32 key = CAIP10.toWalletStorageKey(caip10);
+        WalletEntry memory entry = _wallets[key];
+        return entry.registeredAtTimestamp > 0 && !entry.invalidated;
     }
 
-    /// @dev Parse hex address from bytes at given offset
-    function _parseHexAddress(bytes memory data, uint256 offset) internal pure returns (address) {
-        // Verify 0x prefix
-        if (data[offset] != "0" || (data[offset + 1] != "x" && data[offset + 1] != "X")) {
-            revert FraudRegistryV2__InvalidCaip10Format();
-        }
-
-        uint160 addr = 0;
-        for (uint256 i = 0; i < 40; i++) {
-            uint8 b = uint8(data[offset + 2 + i]);
-            uint8 val;
-            if (b >= 48 && b <= 57) {
-                val = b - 48; // 0-9
-            } else if (b >= 65 && b <= 70) {
-                val = b - 55; // A-F
-            } else if (b >= 97 && b <= 102) {
-                val = b - 87; // a-f
-            } else {
-                revert FraudRegistryV2__InvalidCaip10Format();
-            }
-            addr = addr * 16 + val;
-        }
-        return address(addr);
-    }
-
-    /// @dev Parse CAIP-10 string and check if pending
+    /// @dev Parse CAIP-10 string and check if pending (EVM only for now)
+    /// @param caip10 CAIP-10 string (e.g., "eip155:8453:0x..." or "eip155:_:0x...")
+    /// @return pending True if acknowledgement is pending and not expired
     function _parseAndCheckPending(string calldata caip10) internal view returns (bool pending) {
-        // Parse namespace (everything before first ':')
-        bytes memory caip10Bytes = bytes(caip10);
-        uint256 len = caip10Bytes.length;
+        (bytes32 namespaceHash,, uint256 addrStart,) = CAIP10.parse(caip10);
 
-        // Find first colon
-        uint256 firstColon = 0;
-        for (uint256 i = 0; i < len; i++) {
-            if (caip10Bytes[i] == ":") {
-                firstColon = i;
-                break;
-            }
-        }
-        if (firstColon == 0) revert FraudRegistryV2__InvalidCaip10Format();
-
-        // Extract namespace
-        bytes memory namespaceBytes = new bytes(firstColon);
-        for (uint256 i = 0; i < firstColon; i++) {
-            namespaceBytes[i] = caip10Bytes[i];
-        }
-
-        // Check namespace
-        if (keccak256(namespaceBytes) == keccak256("eip155")) {
-            // EVM namespace - find second colon
-            uint256 secondColon = 0;
-            for (uint256 i = firstColon + 1; i < len; i++) {
-                if (caip10Bytes[i] == ":") {
-                    secondColon = i;
-                    break;
-                }
-            }
-            if (secondColon == 0) revert FraudRegistryV2__InvalidCaip10Format();
-
-            // Parse address
-            uint256 addrLen = len - secondColon - 1;
-            if (addrLen != 42) revert FraudRegistryV2__InvalidCaip10Format();
-
-            address wallet = _parseHexAddress(caip10Bytes, secondColon + 1);
-
+        if (namespaceHash == CAIP10.NAMESPACE_EIP155) {
+            address wallet = CAIP10.parseEvmAddress(caip10, addrStart);
             AcknowledgementData memory ack = _pendingAcknowledgements[wallet];
             return ack.trustedForwarder != address(0) && block.number < ack.expiryBlock;
-        } else {
-            revert FraudRegistryV2__UnsupportedNamespace();
         }
+
+        revert FraudRegistryV2__UnsupportedNamespace();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -334,7 +207,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
 
     /// @inheritdoc IFraudRegistryV2
     function isRegistered(address wallet) external view returns (bool registered) {
-        bytes32 key = _evmWalletKey(wallet);
+        bytes32 key = CAIP10.evmWalletKey(wallet);
         WalletEntry memory entry = _wallets[key];
         return entry.registeredAtTimestamp > 0 && !entry.invalidated;
     }
@@ -351,14 +224,14 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
 
     /// @inheritdoc IFraudRegistryV2
     function isTransactionRegistered(bytes32 txHash, bytes32 chainId) external view returns (bool registered) {
-        bytes32 key = _txKey(txHash, chainId);
+        bytes32 key = CAIP10.txStorageKey(txHash, chainId);
         TransactionEntry memory entry = _transactions[key];
         return entry.registeredAtTimestamp > 0 && !entry.invalidated;
     }
 
     /// @inheritdoc IFraudRegistryV2
     function isContractRegistered(address contractAddr, bytes32 chainId) external view returns (bool registered) {
-        bytes32 key = _contractKey(contractAddr, chainId);
+        bytes32 key = CAIP10.contractStorageKey(contractAddr, chainId);
         ContractEntry memory entry = _contracts[key];
         return entry.registeredAtTimestamp > 0 && !entry.invalidated;
     }
@@ -380,7 +253,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
             uint32 batchId
         )
     {
-        bytes32 key = _evmWalletKey(wallet);
+        bytes32 key = CAIP10.evmWalletKey(wallet);
         WalletEntry memory entry = _wallets[key];
         registered = entry.registeredAtTimestamp > 0 && !entry.invalidated;
         return (
@@ -515,7 +388,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         uint256 nonce = nonces[wallet];
 
         // Check not already registered
-        bytes32 key = _evmWalletKey(wallet);
+        bytes32 key = CAIP10.evmWalletKey(wallet);
         if (_wallets[key].registeredAtTimestamp > 0) revert FraudRegistryV2__AlreadyRegistered();
 
         // Verify EIP-712 signature from WALLET (the wallet being registered signs)
@@ -608,7 +481,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         delete _pendingAcknowledgements[wallet];
 
         // Store with wildcard key
-        bytes32 key = _evmWalletKey(wallet);
+        bytes32 key = CAIP10.evmWalletKey(wallet);
 
         // Check if already registered (shouldn't happen, but be safe)
         if (_wallets[key].registeredAtTimestamp > 0) {
@@ -679,7 +552,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
             address wallet = walletAddresses[i];
             if (wallet == address(0)) continue; // Skip invalid
 
-            bytes32 key = _evmWalletKey(wallet);
+            bytes32 key = CAIP10.evmWalletKey(wallet);
 
             if (_wallets[key].registeredAtTimestamp > 0) {
                 // Already registered - emit source event (operators are public)
@@ -735,7 +608,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         emit BatchCreated(batchId, msg.sender, uint32(length), true);
 
         for (uint256 i = 0; i < length; i++) {
-            bytes32 key = _txKey(txHashes[i], chainIds[i]);
+            bytes32 key = CAIP10.txStorageKey(txHashes[i], chainIds[i]);
 
             if (_transactions[key].registeredAtTimestamp > 0) {
                 emit TransactionOperatorSourceAdded(txHashes[i], chainIds[i], msg.sender, batchId);
@@ -781,7 +654,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
             address contractAddr = contractAddresses[i];
             if (contractAddr == address(0)) continue;
 
-            bytes32 key = _contractKey(contractAddr, chainIds[i]);
+            bytes32 key = CAIP10.contractStorageKey(contractAddr, chainIds[i]);
 
             if (_contracts[key].registeredAtTimestamp > 0) {
                 emit ContractOperatorSourceAdded(contractAddr, chainIds[i], msg.sender, batchId);
@@ -808,7 +681,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
 
     /// @inheritdoc IFraudRegistryV2
     function invalidateEvmWallet(address wallet, string calldata reason) external onlyOwner {
-        bytes32 key = _evmWalletKey(wallet);
+        bytes32 key = CAIP10.evmWalletKey(wallet);
         WalletEntry storage entry = _wallets[key];
 
         if (entry.registeredAtTimestamp == 0) revert FraudRegistryV2__EntryNotFound();
@@ -820,7 +693,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
 
     /// @inheritdoc IFraudRegistryV2
     function reinstateEvmWallet(address wallet) external onlyOwner {
-        bytes32 key = _evmWalletKey(wallet);
+        bytes32 key = CAIP10.evmWalletKey(wallet);
         WalletEntry storage entry = _wallets[key];
 
         if (entry.registeredAtTimestamp == 0) revert FraudRegistryV2__EntryNotFound();
@@ -832,7 +705,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
 
     /// @inheritdoc IFraudRegistryV2
     function invalidateTransaction(bytes32 txHash, bytes32 chainId, string calldata reason) external onlyOwner {
-        bytes32 key = _txKey(txHash, chainId);
+        bytes32 key = CAIP10.txStorageKey(txHash, chainId);
         TransactionEntry storage entry = _transactions[key];
 
         if (entry.registeredAtTimestamp == 0) revert FraudRegistryV2__EntryNotFound();
@@ -844,7 +717,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
 
     /// @inheritdoc IFraudRegistryV2
     function reinstateTransaction(bytes32 txHash, bytes32 chainId) external onlyOwner {
-        bytes32 key = _txKey(txHash, chainId);
+        bytes32 key = CAIP10.txStorageKey(txHash, chainId);
         TransactionEntry storage entry = _transactions[key];
 
         if (entry.registeredAtTimestamp == 0) revert FraudRegistryV2__EntryNotFound();
@@ -856,7 +729,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
 
     /// @inheritdoc IFraudRegistryV2
     function invalidateContract(address contractAddr, bytes32 chainId, string calldata reason) external onlyOwner {
-        bytes32 key = _contractKey(contractAddr, chainId);
+        bytes32 key = CAIP10.contractStorageKey(contractAddr, chainId);
         ContractEntry storage entry = _contracts[key];
 
         if (entry.registeredAtTimestamp == 0) revert FraudRegistryV2__EntryNotFound();
@@ -868,7 +741,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
 
     /// @inheritdoc IFraudRegistryV2
     function reinstateContract(address contractAddr, bytes32 chainId) external onlyOwner {
-        bytes32 key = _contractKey(contractAddr, chainId);
+        bytes32 key = CAIP10.contractStorageKey(contractAddr, chainId);
         ContractEntry storage entry = _contracts[key];
 
         if (entry.registeredAtTimestamp == 0) revert FraudRegistryV2__EntryNotFound();
