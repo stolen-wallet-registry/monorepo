@@ -33,20 +33,29 @@ interface IFraudRegistryV2 {
     // STRUCTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Wallet entry for EOA wallets (not smart contract wallets)
-    /// @dev 1 + 8 + 8 + 8 + 4 + 1 = 30 bytes (fits in 1 slot!)
-    ///      Uses block.timestamp for cross-chain compatibility.
-    ///      Storage key uses WILDCARD for EVM EOAs (covers all EVM chains):
-    ///        key = keccak256(abi.encodePacked("eip155:_:", wallet))
-    /// @param namespace CAIP-2 namespace (EIP155 for EVM EOAs)
-    /// @param reportedChainId Chain ID where reported (e.g., 8453 for Base)
+    /// @notice Wallet entry for wallets across ALL blockchains
+    /// @dev Cross-blockchain compatible: works for EVM, Solana, Bitcoin, Cosmos, etc.
+    ///      Storage key computed via CAIP10.walletKey(namespaceHash, chainRef, identifier)
+    ///        - EVM (eip155): Uses WILDCARD key (same wallet on all EVM chains)
+    ///        - Other chains: Uses chain-specific key
+    ///
+    ///      Storage optimization: reportedChainIdHash is a TRUNCATED hash (top 64 bits of
+    ///      keccak256(caip2String)). With ~18 quintillion possible values and only thousands
+    ///      of chains, collision probability is effectively zero. Full chain info is emitted
+    ///      in events for indexers.
+    ///
+    ///      Total: 1 + 8 + 8 + 8 + 4 + 1 = 30 bytes (fits in 1 storage slot!)
+    ///
+    /// @param namespace CAIP-2 namespace enum (EIP155, SOLANA, etc.)
+    /// @param reportedChainIdHash Truncated CAIP-2 hash where incident reported
+    ///        (e.g., uint64(keccak256("eip155:8453") >> 192))
     /// @param incidentTimestamp When theft occurred (user-provided, Unix timestamp)
     /// @param registeredAtTimestamp block.timestamp when registered
     /// @param firstBatchId First batch that included this (0 if individual)
     /// @param invalidated DAO can invalidate
     struct WalletEntry {
         Namespace namespace; // 1 byte
-        uint64 reportedChainId; // 8 bytes
+        uint64 reportedChainIdHash; // 8 bytes - truncated CAIP-2 hash for cross-blockchain support
         uint64 incidentTimestamp; // 8 bytes
         uint64 registeredAtTimestamp; // 8 bytes
         uint32 firstBatchId; // 4 bytes
@@ -104,17 +113,18 @@ interface IFraudRegistryV2 {
 
     /// @notice Emitted for EACH wallet registration (individual or in batch)
     /// @dev PRIVACY: Never emit relayer address - only emit isSponsored bool.
-    ///      Storage key uses wildcard (eip155:_:wallet), event includes specific chain.
+    ///      Storage key uses wildcard (eip155:_:wallet), event includes chain hash.
+    ///      reportedChainIdHash is truncated CAIP-2 hash (top 64 bits of keccak256(caip2String))
     /// @param wallet The stolen wallet being registered
     /// @param namespace EIP155 (EVM EOAs only for now)
-    /// @param reportedChainId Specific chain where reported (e.g., 8453 for Base)
+    /// @param reportedChainIdHash Truncated CAIP-2 hash where reported
     /// @param incidentTimestamp When theft occurred (user-provided)
     /// @param isSponsored True if third party paid (hides relayer identity)
     /// @param batchId 0 if individual submission, >0 if part of batch
     event WalletRegistered(
         address indexed wallet,
         Namespace namespace,
-        uint64 reportedChainId,
+        uint64 reportedChainIdHash,
         uint64 incidentTimestamp,
         bool isSponsored,
         uint32 batchId
@@ -131,11 +141,15 @@ interface IFraudRegistryV2 {
     ///      Individual re-submissions silently succeed (privacy).
     /// @param wallet The wallet address
     /// @param namespace The namespace
-    /// @param reportedChainId The chain where reported
+    /// @param reportedChainIdHash Truncated CAIP-2 hash where reported
     /// @param operator Operator address (public entity)
     /// @param batchId The batch ID
     event WalletOperatorSourceAdded(
-        address indexed wallet, Namespace namespace, uint64 reportedChainId, address indexed operator, uint32 batchId
+        address indexed wallet,
+        Namespace namespace,
+        uint64 reportedChainIdHash,
+        address indexed operator,
+        uint32 batchId
     );
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -278,6 +292,36 @@ interface IFraudRegistryV2 {
     /// @notice Thrown when namespace in CAIP-10 is not supported
     error FraudRegistryV2__UnsupportedNamespace();
 
+    /// @notice Thrown when caller is not the authorized registry hub
+    error FraudRegistryV2__UnauthorizedInbox();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // EVENTS - Cross-Chain
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Emitted when a wallet is registered via cross-chain message from hub
+    /// @dev Uses bytes32 identifier for cross-BLOCKCHAIN compatibility (EVM, Solana, Bitcoin, etc.)
+    /// @param namespaceHash Hash of namespace (keccak256("eip155"), keccak256("solana"), etc.)
+    /// @param identifier Wallet identifier as bytes32 (address for EVM, pubkey for Solana)
+    /// @param sourceChainId CAIP-2 hash of chain where registration was submitted
+    /// @param reportedChainId CAIP-2 hash of chain where incident occurred
+    /// @param incidentTimestamp When theft occurred
+    /// @param bridgeId Bridge protocol used (1 = Hyperlane)
+    /// @param crossChainMessageId Unique message identifier from bridge
+    event CrossChainWalletRegistered(
+        bytes32 indexed namespaceHash,
+        bytes32 indexed identifier,
+        bytes32 sourceChainId,
+        bytes32 reportedChainId,
+        uint64 incidentTimestamp,
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    );
+
+    /// @notice Emitted when registry hub is updated
+    /// @param crossChainInbox The new registry hub address
+    event CrossChainInboxSet(address indexed crossChainInbox);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - Primary CAIP-10 Interface
     // ═══════════════════════════════════════════════════════════════════════════
@@ -337,11 +381,12 @@ interface IFraudRegistryV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Get EVM wallet registration details with chain info
-    /// @dev Returns raw values - format CAIP-10 strings off-chain to save gas
+    /// @dev Returns raw values - format CAIP-10 strings off-chain to save gas.
+    ///      reportedChainIdHash is truncated CAIP-2 hash (verify with CAIP10.truncatedEvmChainIdHash(chainId))
     /// @param wallet The wallet address
     /// @return registered Whether wallet is registered and not invalidated
     /// @return namespace The namespace (EIP155)
-    /// @return reportedChainId The chain where reported
+    /// @return reportedChainIdHash Truncated CAIP-2 hash where reported
     /// @return incidentTimestamp When theft occurred
     /// @return registeredAtTimestamp When registered
     /// @return batchId The batch ID (0 if individual)
@@ -351,7 +396,7 @@ interface IFraudRegistryV2 {
         returns (
             bool registered,
             Namespace namespace,
-            uint64 reportedChainId,
+            uint64 reportedChainIdHash,
             uint64 incidentTimestamp,
             uint64 registeredAtTimestamp,
             uint32 batchId
@@ -488,12 +533,50 @@ interface IFraudRegistryV2 {
         payable;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // WRITE FUNCTIONS - Cross-Chain Registration (Hub Only)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Register wallet from cross-chain message via CrossChainInbox
+    /// @dev Only callable by crossChainInbox. Bypasses two-phase since spoke validated.
+    ///      Uses bytes32 parameters for cross-BLOCKCHAIN compatibility (EVM, Solana, Bitcoin, etc.)
+    ///      The spoke has already validated signatures - hub just computes storage key and stores.
+    ///
+    ///      Storage key computation (via CAIP10 library):
+    ///        - EVM (eip155): Uses WILDCARD key, chainRef ignored
+    ///        - Other chains: Uses chain-specific key with chainRef
+    ///
+    /// @param namespaceHash Hash of namespace (CAIP10.NAMESPACE_EIP155, CAIP10.NAMESPACE_SOLANA, etc.)
+    /// @param chainRef Hash of chain reference (ignored for EVM, used for Solana/Bitcoin/etc.)
+    /// @param identifier Wallet identifier as bytes32 (address padded for EVM, pubkey for Solana)
+    /// @param reportedChainId CAIP-2 hash of chain where incident occurred
+    /// @param incidentTimestamp When theft occurred (Unix timestamp)
+    /// @param sourceChainId CAIP-2 hash of chain where registration was submitted
+    /// @param isSponsored True if third party paid gas on spoke
+    /// @param bridgeId Bridge protocol used (1 = Hyperlane)
+    /// @param crossChainMessageId Unique message identifier from bridge
+    function registerFromSpoke(
+        bytes32 namespaceHash,
+        bytes32 chainRef,
+        bytes32 identifier,
+        bytes32 reportedChainId,
+        uint64 incidentTimestamp,
+        bytes32 sourceChainId,
+        bool isSponsored,
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    ) external;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS - DAO Controls
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Set the operator registry address
     /// @param _operatorRegistry The operator registry address
     function setOperatorRegistry(address _operatorRegistry) external;
+
+    /// @notice Set the registry hub address for cross-chain registrations
+    /// @param _crossChainInbox The registry hub address (address(0) to disable)
+    function setCrossChainInbox(address _crossChainInbox) external;
 
     /// @notice Invalidate an EVM wallet entry
     /// @param wallet The wallet address
@@ -545,7 +628,7 @@ interface IFraudRegistryV2 {
     function feeManager() external view returns (address);
 
     /// @notice Get fee recipient address
-    /// @return Where fees are forwarded (RegistryHub or treasury)
+    /// @return Where fees are forwarded (CrossChainInbox or treasury)
     function feeRecipient() external view returns (address);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -555,6 +638,10 @@ interface IFraudRegistryV2 {
     /// @notice Get operator registry address
     /// @return The operator registry address
     function operatorRegistry() external view returns (address);
+
+    /// @notice Get registry hub address for cross-chain registrations
+    /// @return The registry hub address (address(0) = cross-chain disabled)
+    function crossChainInbox() external view returns (address);
 
     /// @notice Get grace period blocks
     /// @return The grace period in blocks

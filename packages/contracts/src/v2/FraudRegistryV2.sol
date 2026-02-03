@@ -67,7 +67,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     /// @notice Fee manager address (address(0) = free registrations)
     address public immutable feeManager;
 
-    /// @notice Where fees are forwarded (RegistryHub or treasury)
+    /// @notice Where fees are forwarded (CrossChainInbox or treasury)
     address public immutable feeRecipient;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -101,6 +101,9 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     /// @notice Operator registry address
     address public operatorRegistry;
 
+    /// @notice Registry hub address for cross-chain registrations (address(0) = disabled)
+    address public crossChainInbox;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
@@ -109,7 +112,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     /// @param _owner Initial owner (DAO multisig)
     /// @param _operatorRegistry Operator registry address
     /// @param _feeManager FeeManager contract address (address(0) for free registrations)
-    /// @param _feeRecipient Where fees go (RegistryHub or treasury)
+    /// @param _feeRecipient Where fees go (CrossChainInbox or treasury)
     /// @param _graceBlocks Base blocks for grace period
     /// @param _deadlineBlocks Base blocks for deadline window
     constructor(
@@ -247,7 +250,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         returns (
             bool registered,
             Namespace namespace,
-            uint64 reportedChainId,
+            uint64 reportedChainIdHash,
             uint64 incidentTimestamp,
             uint64 registeredAtTimestamp,
             uint32 batchId
@@ -259,7 +262,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         return (
             registered,
             entry.namespace,
-            entry.reportedChainId,
+            entry.reportedChainIdHash,
             entry.incidentTimestamp,
             entry.registeredAtTimestamp,
             entry.firstBatchId
@@ -489,9 +492,12 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
             return;
         }
 
+        // Compute truncated chain ID hash for storage efficiency
+        uint64 chainIdHash = CAIP10.truncatedEvmChainIdHash(reportedChainId);
+
         _wallets[key] = WalletEntry({
             namespace: Namespace.EIP155,
-            reportedChainId: reportedChainId,
+            reportedChainIdHash: chainIdHash,
             incidentTimestamp: incidentTimestamp,
             registeredAtTimestamp: uint64(block.timestamp),
             firstBatchId: 0, // Individual submission
@@ -500,7 +506,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
 
         // PRIVACY: Do NOT emit msg.sender - may be relayer
         bool isSponsored = wallet != msg.sender;
-        emit WalletRegistered(wallet, Namespace.EIP155, reportedChainId, incidentTimestamp, isSponsored, 0);
+        emit WalletRegistered(wallet, Namespace.EIP155, chainIdHash, incidentTimestamp, isSponsored, 0);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -554,15 +560,18 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
 
             bytes32 key = CAIP10.evmWalletKey(wallet);
 
+            // Compute truncated chain ID hash for storage efficiency
+            uint64 chainIdHash = CAIP10.truncatedEvmChainIdHash(reportedChainIds[i]);
+
             if (_wallets[key].registeredAtTimestamp > 0) {
                 // Already registered - emit source event (operators are public)
-                emit WalletOperatorSourceAdded(wallet, Namespace.EIP155, reportedChainIds[i], msg.sender, batchId);
+                emit WalletOperatorSourceAdded(wallet, Namespace.EIP155, chainIdHash, msg.sender, batchId);
                 continue;
             }
 
             _wallets[key] = WalletEntry({
                 namespace: Namespace.EIP155,
-                reportedChainId: reportedChainIds[i],
+                reportedChainIdHash: chainIdHash,
                 incidentTimestamp: incidentTimestamps[i],
                 registeredAtTimestamp: uint64(block.timestamp),
                 firstBatchId: batchId,
@@ -572,7 +581,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
             emit WalletRegistered(
                 wallet,
                 Namespace.EIP155,
-                reportedChainIds[i],
+                chainIdHash,
                 incidentTimestamps[i],
                 false, // Not sponsored (operator pays directly)
                 batchId
@@ -670,6 +679,74 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // WRITE FUNCTIONS - Cross-Chain Registration (Hub Only)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @inheritdoc IFraudRegistryV2
+    function registerFromSpoke(
+        bytes32 namespaceHash,
+        bytes32 chainRef,
+        bytes32 identifier,
+        bytes32 reportedChainId,
+        uint64 incidentTimestamp,
+        bytes32 sourceChainId,
+        bool, // isSponsored - kept for interface compatibility, not used in event
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    ) external whenNotPaused {
+        // Only registry hub can call this
+        if (msg.sender != crossChainInbox || crossChainInbox == address(0)) {
+            revert FraudRegistryV2__UnauthorizedInbox();
+        }
+
+        // Determine namespace enum and compute storage key
+        // EVM uses evmWalletKey (address-based wildcard key)
+        // Other namespaces use chain-specific key with bytes32 identifier
+        Namespace ns;
+        bytes32 key;
+
+        if (namespaceHash == CAIP10.NAMESPACE_EIP155) {
+            ns = Namespace.EIP155;
+            // Extract address from bytes32 identifier (stored in lower 160 bits)
+            address wallet = address(uint160(uint256(identifier)));
+            key = CAIP10.evmWalletKey(wallet);
+        } else if (namespaceHash == CAIP10.NAMESPACE_SOLANA) {
+            ns = Namespace.SOLANA;
+            key = CAIP10.walletKey(namespaceHash, chainRef, identifier);
+        } else if (namespaceHash == CAIP10.NAMESPACE_COSMOS) {
+            ns = Namespace.COSMOS;
+            key = CAIP10.walletKey(namespaceHash, chainRef, identifier);
+        } else if (namespaceHash == CAIP10.NAMESPACE_BIP122) {
+            ns = Namespace.BIP122;
+            key = CAIP10.walletKey(namespaceHash, chainRef, identifier);
+        } else {
+            revert FraudRegistryV2__UnsupportedNamespace();
+        }
+
+        // Check if already registered - silently succeed if so
+        if (_wallets[key].registeredAtTimestamp > 0) {
+            return;
+        }
+
+        // Truncate reportedChainId for storage efficiency (full hash emitted in event)
+        uint64 chainIdHash = CAIP10.truncatedChainIdHash(reportedChainId);
+
+        _wallets[key] = WalletEntry({
+            namespace: ns,
+            reportedChainIdHash: chainIdHash,
+            incidentTimestamp: incidentTimestamp,
+            registeredAtTimestamp: uint64(block.timestamp),
+            firstBatchId: 0, // Cross-chain individual submission
+            invalidated: false
+        });
+
+        // Emit cross-chain specific event for indexers (includes full bytes32 chain info)
+        emit CrossChainWalletRegistered(
+            namespaceHash, identifier, sourceChainId, reportedChainId, incidentTimestamp, bridgeId, crossChainMessageId
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS - DAO Controls
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -677,6 +754,12 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     function setOperatorRegistry(address _operatorRegistry) external onlyOwner {
         operatorRegistry = _operatorRegistry;
         emit OperatorRegistrySet(_operatorRegistry);
+    }
+
+    /// @inheritdoc IFraudRegistryV2
+    function setCrossChainInbox(address _crossChainInbox) external onlyOwner {
+        crossChainInbox = _crossChainInbox;
+        emit CrossChainInboxSet(_crossChainInbox);
     }
 
     /// @inheritdoc IFraudRegistryV2

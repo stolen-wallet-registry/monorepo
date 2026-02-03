@@ -6,6 +6,7 @@ import { FraudRegistryV2 } from "../../src/v2/FraudRegistryV2.sol";
 import { IFraudRegistryV2 } from "../../src/v2/interfaces/IFraudRegistryV2.sol";
 import { OperatorRegistry } from "../../src/OperatorRegistry.sol";
 import { IOperatorRegistry } from "../../src/interfaces/IOperatorRegistry.sol";
+import { CAIP10 } from "../../src/libraries/CAIP10.sol";
 
 /// @title FraudRegistryV2Test
 /// @notice Comprehensive tests for FraudRegistryV2
@@ -273,7 +274,7 @@ contract FraudRegistryV2Test is Test {
         (
             bool registered,
             IFraudRegistryV2.Namespace ns,
-            uint64 reportedChain,
+            uint64 reportedChainIdHash,
             uint64 incident,
             uint64 registeredAt,
             uint32 batchId
@@ -281,7 +282,8 @@ contract FraudRegistryV2Test is Test {
 
         assertTrue(registered);
         assertEq(uint8(ns), uint8(IFraudRegistryV2.Namespace.EIP155));
-        assertEq(reportedChain, chainId);
+        // Stored value is truncated CAIP-2 hash, not raw chain ID
+        assertEq(reportedChainIdHash, CAIP10.truncatedEvmChainIdHash(chainId));
         assertEq(incident, incidentTs);
         assertGt(registeredAt, 0);
         assertEq(batchId, 0); // Individual submission
@@ -421,9 +423,13 @@ contract FraudRegistryV2Test is Test {
         assertTrue(registry.isRegistered(victim));
 
         // Second registration by same operator
+        // Event emits truncated CAIP-2 hash, not raw chain ID
+        uint64 expectedChainIdHash = CAIP10.truncatedEvmChainIdHash(8453);
         vm.prank(operator);
         vm.expectEmit(true, true, true, true);
-        emit IFraudRegistryV2.WalletOperatorSourceAdded(victim, IFraudRegistryV2.Namespace.EIP155, 8453, operator, 2);
+        emit IFraudRegistryV2.WalletOperatorSourceAdded(
+            victim, IFraudRegistryV2.Namespace.EIP155, expectedChainIdHash, operator, 2
+        );
         registry.registerEvmWalletsAsOperator(wallets, chainIds, timestamps);
 
         // Still registered, batch ID unchanged
@@ -639,5 +645,180 @@ contract FraudRegistryV2Test is Test {
 
         // Should be reasonable per entry
         assertLt(gasPerEntry, 50_000, "Gas per entry should be under 50k");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CROSS-CHAIN REGISTRATION TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Cross-chain registration succeeds when called by authorized hub.
+    function test_RegisterFromSpoke_Success() public {
+        // Set up registry hub
+        address hub = makeAddr("crossChainInbox");
+        registry.setCrossChainInbox(hub);
+
+        address victim = makeAddr("crossChainVictim");
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        // Cross-chain parameters (bytes32 for cross-blockchain support)
+        bytes32 reportedChainIdFull = CAIP10.caip2Hash(uint64(1)); // Full CAIP-2 hash
+        bytes32 sourceChainIdFull = CAIP10.caip2Hash(uint64(10)); // Optimism
+
+        // Expect cross-chain event (uses full bytes32 for indexers)
+        vm.expectEmit(true, true, true, true);
+        emit IFraudRegistryV2.CrossChainWalletRegistered(
+            CAIP10.NAMESPACE_EIP155,
+            bytes32(uint256(uint160(victim))),
+            sourceChainIdFull,
+            reportedChainIdFull,
+            incidentTimestamp,
+            1, // bridgeId
+            keccak256("test_message")
+        );
+
+        vm.prank(hub);
+        registry.registerFromSpoke(
+            CAIP10.NAMESPACE_EIP155,
+            CAIP10.evmChainRefHash(1), // chainRef (ignored for EVM)
+            bytes32(uint256(uint160(victim))), // identifier
+            reportedChainIdFull,
+            incidentTimestamp,
+            sourceChainIdFull,
+            true, // isSponsored
+            1, // bridgeId
+            keccak256("test_message")
+        );
+
+        // Verify registration
+        assertTrue(registry.isRegistered(victim));
+
+        // Verify details - use separate scope to reduce stack
+        {
+            (
+                bool registered,
+                IFraudRegistryV2.Namespace namespace,
+                uint64 storedChainIdHash,
+                uint64 storedIncident,
+                uint64 registeredAt,
+                uint32 batchId
+            ) = registry.getEvmWalletDetails(victim);
+
+            assertTrue(registered);
+            assertEq(uint8(namespace), uint8(IFraudRegistryV2.Namespace.EIP155));
+            assertEq(storedChainIdHash, CAIP10.truncatedChainIdHash(reportedChainIdFull));
+            assertEq(storedIncident, incidentTimestamp);
+            assertGt(registeredAt, 0);
+            assertEq(batchId, 0); // Individual submission
+        }
+    }
+
+    /// Cross-chain registration fails when caller is not the hub.
+    function test_RegisterFromSpoke_FailsUnauthorized() public {
+        address hub = makeAddr("crossChainInbox");
+        registry.setCrossChainInbox(hub);
+
+        address victim = makeAddr("victim");
+        address notHub = makeAddr("notHub");
+
+        vm.prank(notHub);
+        vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__UnauthorizedInbox.selector);
+        registry.registerFromSpoke(
+            CAIP10.NAMESPACE_EIP155,
+            CAIP10.evmChainRefHash(1),
+            bytes32(uint256(uint160(victim))),
+            CAIP10.caip2Hash(uint64(1)),
+            uint64(block.timestamp),
+            CAIP10.caip2Hash(uint64(10)),
+            false,
+            1,
+            bytes32(0)
+        );
+    }
+
+    /// Cross-chain registration fails when hub is not configured.
+    function test_RegisterFromSpoke_FailsNoHubConfigured() public {
+        // Hub is address(0) by default
+        assertEq(registry.crossChainInbox(), address(0));
+
+        address victim = makeAddr("victim");
+
+        vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__UnauthorizedInbox.selector);
+        registry.registerFromSpoke(
+            CAIP10.NAMESPACE_EIP155,
+            CAIP10.evmChainRefHash(1),
+            bytes32(uint256(uint160(victim))),
+            CAIP10.caip2Hash(uint64(1)),
+            uint64(block.timestamp),
+            CAIP10.caip2Hash(uint64(10)),
+            false,
+            1,
+            bytes32(0)
+        );
+    }
+
+    /// Cross-chain registration silently succeeds for already registered wallet.
+    function test_RegisterFromSpoke_SkipsDuplicate() public {
+        address hub = makeAddr("crossChainInbox");
+        registry.setCrossChainInbox(hub);
+
+        address victim = makeAddr("duplicateVictim");
+        bytes32 identifier = bytes32(uint256(uint160(victim)));
+
+        // First registration
+        vm.prank(hub);
+        registry.registerFromSpoke(
+            CAIP10.NAMESPACE_EIP155,
+            CAIP10.evmChainRefHash(1),
+            identifier,
+            CAIP10.caip2Hash(uint64(1)),
+            uint64(block.timestamp),
+            CAIP10.caip2Hash(uint64(10)),
+            false,
+            1,
+            keccak256("message1")
+        );
+        assertTrue(registry.isRegistered(victim));
+
+        // Get initial registration timestamp
+        (,,,, uint64 firstRegisteredAt,) = registry.getEvmWalletDetails(victim);
+
+        // Second registration with different chain IDs should silently succeed (no revert)
+        vm.prank(hub);
+        registry.registerFromSpoke(
+            CAIP10.NAMESPACE_EIP155,
+            CAIP10.evmChainRefHash(1),
+            identifier,
+            CAIP10.caip2Hash(uint64(8453)),
+            uint64(block.timestamp - 1 hours),
+            CAIP10.caip2Hash(uint64(42_161)),
+            true,
+            1,
+            keccak256("message2")
+        );
+
+        // Timestamp should be unchanged (wasn't overwritten)
+        (,,,, uint64 secondRegisteredAt,) = registry.getEvmWalletDetails(victim);
+        assertEq(firstRegisteredAt, secondRegisteredAt);
+    }
+
+    /// Only owner can set registry hub.
+    function test_SetRegistryHub_OnlyOwner() public {
+        address hub = makeAddr("newHub");
+        address notOwner = makeAddr("notOwner");
+
+        vm.prank(notOwner);
+        vm.expectRevert();
+        registry.setCrossChainInbox(hub);
+    }
+
+    /// Owner can set registry hub to address(0) to disable cross-chain.
+    function test_SetRegistryHub_CanDisable() public {
+        address hub = makeAddr("hub");
+
+        registry.setCrossChainInbox(hub);
+        assertEq(registry.crossChainInbox(), hub);
+
+        registry.setCrossChainInbox(address(0));
+        assertEq(registry.crossChainInbox(), address(0));
     }
 }

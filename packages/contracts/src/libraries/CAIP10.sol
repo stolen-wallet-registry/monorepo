@@ -73,11 +73,7 @@ library CAIP10 {
     /// @param chainRef Hash of chain reference (ignored for EVM wallets)
     /// @param identifier The wallet identifier as bytes32
     /// @return key The storage key
-    function walletKey(bytes32 namespaceHash, bytes32 chainRef, bytes32 identifier)
-        internal
-        pure
-        returns (bytes32)
-    {
+    function walletKey(bytes32 namespaceHash, bytes32 chainRef, bytes32 identifier) internal pure returns (bytes32) {
         if (namespaceHash == NAMESPACE_EIP155) {
             // EVM: wildcard key (same wallet on all EVM chains)
             return keccak256(abi.encodePacked(NAMESPACE_EIP155, WILDCARD, identifier));
@@ -92,11 +88,7 @@ library CAIP10 {
     /// @param chainRef Hash of chain reference
     /// @param txHash The transaction hash/signature as bytes32
     /// @return key The storage key
-    function transactionKey(bytes32 namespaceHash, bytes32 chainRef, bytes32 txHash)
-        internal
-        pure
-        returns (bytes32)
-    {
+    function transactionKey(bytes32 namespaceHash, bytes32 chainRef, bytes32 txHash) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(namespaceHash, chainRef, txHash));
     }
 
@@ -106,11 +98,7 @@ library CAIP10 {
     /// @param chainRef Hash of chain reference
     /// @param contractId The contract identifier as bytes32
     /// @return key The storage key
-    function contractKey(bytes32 namespaceHash, bytes32 chainRef, bytes32 contractId)
-        internal
-        pure
-        returns (bytes32)
-    {
+    function contractKey(bytes32 namespaceHash, bytes32 chainRef, bytes32 contractId) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(namespaceHash, chainRef, contractId));
     }
 
@@ -210,6 +198,44 @@ library CAIP10 {
     /// @return hash The CAIP-2 chain identifier hash
     function caip2Hash(string memory namespace, string memory chainRef) internal pure returns (bytes32) {
         return keccak256(bytes(string(abi.encodePacked(namespace, ":", chainRef))));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TRUNCATED CHAIN ID HASH (storage-efficient cross-blockchain support)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // These functions produce uint64 truncated hashes for storage efficiency.
+    // A full CAIP-2 hash is 32 bytes, but for storage we only need 8 bytes.
+    // With 64 bits (~18 quintillion values) and only thousands of chains,
+    // collision probability is effectively zero.
+    //
+    // Use cases:
+    //   - WalletEntry.reportedChainIdHash (where incident was reported)
+    //   - Any storage field that needs cross-blockchain chain identification
+    //
+    // The full bytes32 hash should still be emitted in EVENTS for indexers.
+
+    /// @notice Compute truncated CAIP-2 hash for storage-efficient chain identification
+    /// @dev Takes top 64 bits of keccak256(caip2String)
+    /// @param caip2 CAIP-2 string (e.g., "eip155:8453", "solana:mainnet")
+    /// @return Truncated 64-bit hash suitable for uint64 storage
+    function truncatedChainIdHash(string memory caip2) internal pure returns (uint64) {
+        return uint64(uint256(keccak256(bytes(caip2))) >> 192);
+    }
+
+    /// @notice Compute truncated chain ID hash from full bytes32 hash
+    /// @dev Use when you already have the full CAIP-2 hash
+    /// @param fullHash The full keccak256 hash of CAIP-2 string
+    /// @return Truncated 64-bit hash
+    function truncatedChainIdHash(bytes32 fullHash) internal pure returns (uint64) {
+        return uint64(uint256(fullHash) >> 192);
+    }
+
+    /// @notice Compute truncated chain ID hash for EVM chain
+    /// @dev Convenience function: truncatedChainIdHash("eip155:{chainId}")
+    /// @param chainId The EIP-155 chain ID (e.g., 8453 for Base)
+    /// @return Truncated 64-bit hash
+    function truncatedEvmChainIdHash(uint64 chainId) internal pure returns (uint64) {
+        return truncatedChainIdHash(string(abi.encodePacked("eip155:", uint256(chainId).toString())));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
