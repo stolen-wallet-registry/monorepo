@@ -141,7 +141,7 @@ contract FraudRegistryV2Test is Test {
             _signAck(walletPrivateKey, wallet, _forwarder, chainId, incidentTs, nonce, deadline);
 
         vm.prank(_forwarder);
-        registry.acknowledgeEvmWallet(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.acknowledge(wallet, chainId, incidentTs, deadline, v, r, s);
     }
 
     function _skipToRegistrationWindow() internal {
@@ -195,7 +195,7 @@ contract FraudRegistryV2Test is Test {
             _signAck(walletPrivateKey, wallet, wallet, chainId, incidentTs, nonce, deadline);
 
         vm.prank(wallet);
-        registry.acknowledgeEvmWallet(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.acknowledge(wallet, chainId, incidentTs, deadline, v, r, s);
 
         assertTrue(registry.isPending(wallet));
     }
@@ -212,7 +212,7 @@ contract FraudRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__SignatureExpired.selector);
-        registry.acknowledgeEvmWallet(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.acknowledge(wallet, chainId, incidentTs, deadline, v, r, s);
     }
 
     /// Acknowledgement should reject invalid signature.
@@ -228,7 +228,7 @@ contract FraudRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__InvalidSignature.selector);
-        registry.acknowledgeEvmWallet(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.acknowledge(wallet, chainId, incidentTs, deadline, v, r, s);
     }
 
     /// Acknowledgement should reject zero wallet.
@@ -242,7 +242,7 @@ contract FraudRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__InvalidWallet.selector);
-        registry.acknowledgeEvmWallet(address(0), chainId, incidentTs, deadline, v, r, s);
+        registry.acknowledge(address(0), chainId, incidentTs, deadline, v, r, s);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -264,7 +264,7 @@ contract FraudRegistryV2Test is Test {
             _signReg(walletPrivateKey, wallet, forwarder, chainId, incidentTs, nonce, deadline);
 
         vm.prank(forwarder);
-        registry.registerEvmWallet(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.register(wallet, chainId, incidentTs, deadline, v, r, s);
 
         assertTrue(registry.isRegistered(wallet), "Should be registered");
         assertFalse(registry.isPending(wallet), "Should not be pending");
@@ -305,7 +305,7 @@ contract FraudRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__GracePeriodNotStarted.selector);
-        registry.registerEvmWallet(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.register(wallet, chainId, incidentTs, deadline, v, r, s);
     }
 
     /// Registration should fail after expiry.
@@ -327,7 +327,7 @@ contract FraudRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__RegistrationExpired.selector);
-        registry.registerEvmWallet(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.register(wallet, chainId, incidentTs, deadline, v, r, s);
     }
 
     /// Registration should fail with wrong forwarder.
@@ -347,7 +347,7 @@ contract FraudRegistryV2Test is Test {
 
         vm.prank(wrongForwarder);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__InvalidForwarder.selector);
-        registry.registerEvmWallet(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.register(wallet, chainId, incidentTs, deadline, v, r, s);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -593,106 +593,6 @@ contract FraudRegistryV2Test is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // INVALIDATION TESTS
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// Owner can invalidate wallet.
-    function test_InvalidateWallet_Success() public {
-        // Register wallet first
-        address[] memory wallets = new address[](1);
-        wallets[0] = makeAddr("victim");
-        uint64[] memory chainIds = new uint64[](1);
-        chainIds[0] = 8453;
-        uint64[] memory timestamps = new uint64[](1);
-        timestamps[0] = uint64(block.timestamp);
-
-        (
-            bytes32[] memory namespaceHashes,
-            bytes32[] memory chainRefs,
-            bytes32[] memory identifiers,
-            bytes32[] memory reportedChainIds,
-            uint64[] memory incidentTimestamps
-        ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
-
-        vm.prank(operator);
-        registry.registerWalletsAsOperator(
-            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
-        );
-
-        assertTrue(registry.isRegistered(wallets[0]));
-
-        // Invalidate
-        registry.invalidateEvmWallet(wallets[0], "False positive");
-
-        assertFalse(registry.isRegistered(wallets[0]));
-    }
-
-    /// Owner can reinstate invalidated wallet.
-    function test_ReinstateWallet_Success() public {
-        address victim = makeAddr("victim");
-
-        // Register
-        address[] memory wallets = new address[](1);
-        wallets[0] = victim;
-        uint64[] memory chainIds = new uint64[](1);
-        chainIds[0] = 8453;
-        uint64[] memory timestamps = new uint64[](1);
-        timestamps[0] = uint64(block.timestamp);
-
-        (
-            bytes32[] memory namespaceHashes,
-            bytes32[] memory chainRefs,
-            bytes32[] memory identifiers,
-            bytes32[] memory reportedChainIds,
-            uint64[] memory incidentTimestamps
-        ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
-
-        vm.prank(operator);
-        registry.registerWalletsAsOperator(
-            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
-        );
-
-        // Invalidate
-        registry.invalidateEvmWallet(victim, "Test");
-        assertFalse(registry.isRegistered(victim));
-
-        // Reinstate
-        registry.reinstateEvmWallet(victim);
-        assertTrue(registry.isRegistered(victim));
-    }
-
-    /// Non-owner cannot invalidate.
-    function test_InvalidateWallet_FailsForNonOwner() public {
-        address victim = makeAddr("victim");
-
-        // Register
-        address[] memory wallets = new address[](1);
-        wallets[0] = victim;
-        uint64[] memory chainIds = new uint64[](1);
-        chainIds[0] = 8453;
-        uint64[] memory timestamps = new uint64[](1);
-        timestamps[0] = uint64(block.timestamp);
-
-        (
-            bytes32[] memory namespaceHashes,
-            bytes32[] memory chainRefs,
-            bytes32[] memory identifiers,
-            bytes32[] memory reportedChainIds,
-            uint64[] memory incidentTimestamps
-        ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
-
-        vm.prank(operator);
-        registry.registerWalletsAsOperator(
-            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
-        );
-
-        // Try to invalidate as non-owner
-        vm.prank(makeAddr("attacker"));
-        vm.expectRevert();
-        registry.invalidateEvmWallet(victim, "Malicious");
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // PRIVACY TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -714,7 +614,7 @@ contract FraudRegistryV2Test is Test {
             _signReg(walletPrivateKey, wallet, forwarder, chainId, incidentTs, nonce, deadline);
 
         vm.prank(forwarder);
-        registry.registerEvmWallet(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.register(wallet, chainId, incidentTs, deadline, v, r, s);
 
         // Verify batchId is 0 (no batch created)
         (,,,,, uint32 batchId) = registry.getEvmWalletDetails(wallet);
@@ -767,7 +667,7 @@ contract FraudRegistryV2Test is Test {
 
         uint256 gasBefore = gasleft();
         vm.prank(forwarder);
-        registry.registerEvmWallet(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.register(wallet, chainId, incidentTs, deadline, v, r, s);
         uint256 gasUsed = gasBefore - gasleft();
 
         // Should be under 50k gas (PRP target)

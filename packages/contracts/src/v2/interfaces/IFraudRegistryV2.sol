@@ -207,23 +207,6 @@ interface IFraudRegistryV2 {
     /// @param isOperator Was this an operator submission
     event BatchCreated(uint32 indexed batchId, address indexed operator, uint32 entryCount, bool isOperator);
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // EVENTS - Invalidation
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @notice Emitted when DAO invalidates an entry
-    /// @param entryKey The storage key of the entry
-    /// @param registryType "wallet", "transaction", or "contract"
-    /// @param invalidatedBy Address that performed invalidation
-    /// @param reason Optional reason for audit trail
-    event EntryInvalidated(bytes32 indexed entryKey, string registryType, address indexed invalidatedBy, string reason);
-
-    /// @notice Emitted when DAO reinstates an entry
-    /// @param entryKey The storage key of the entry
-    /// @param registryType "wallet", "transaction", or "contract"
-    /// @param reinstatedBy Address that performed reinstatement
-    event EntryReinstated(bytes32 indexed entryKey, string registryType, address indexed reinstatedBy);
-
     /// @notice Emitted when operator registry is set
     /// @param operatorRegistry The new operator registry address
     event OperatorRegistrySet(address indexed operatorRegistry);
@@ -243,9 +226,6 @@ interface IFraudRegistryV2 {
     error FraudRegistryV2__NotApprovedOperator();
     error FraudRegistryV2__ArrayLengthMismatch();
     error FraudRegistryV2__EmptyBatch();
-    error FraudRegistryV2__EntryNotFound();
-    error FraudRegistryV2__AlreadyInvalidated();
-    error FraudRegistryV2__NotInvalidated();
     error FraudRegistryV2__InvalidTimingConfig();
     error FraudRegistryV2__InvalidFeeConfig();
     error FraudRegistryV2__InsufficientFee();
@@ -423,6 +403,7 @@ interface IFraudRegistryV2 {
     /// @dev Creates trusted forwarder relationship and starts grace period.
     ///      Signature must be from the wallet being registered.
     ///      Fee is collected during registration phase, not acknowledgement.
+    ///      Hub only supports EVM wallets for individual registration.
     /// @param wallet The wallet address being registered
     /// @param reportedChainId Chain ID where reporting (e.g., 8453 for Base)
     /// @param incidentTimestamp When theft occurred (Unix timestamp)
@@ -430,7 +411,7 @@ interface IFraudRegistryV2 {
     /// @param v ECDSA v
     /// @param r ECDSA r
     /// @param s ECDSA s
-    function acknowledgeEvmWallet(
+    function acknowledge(
         address wallet,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
@@ -444,6 +425,7 @@ interface IFraudRegistryV2 {
     /// @dev Must be called by the trusted forwarder from acknowledgement.
     ///      Must be after grace period but before expiry.
     ///      Fee is collected during this phase via msg.value.
+    ///      Hub only supports EVM wallets for individual registration.
     /// @param wallet The wallet address being registered
     /// @param reportedChainId Chain ID (must match acknowledgement)
     /// @param incidentTimestamp Incident timestamp (must match acknowledgement)
@@ -451,7 +433,7 @@ interface IFraudRegistryV2 {
     /// @param v ECDSA v
     /// @param r ECDSA r
     /// @param s ECDSA s
-    function registerEvmWallet(
+    function register(
         address wallet,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
@@ -557,37 +539,6 @@ interface IFraudRegistryV2 {
     /// @notice Set the registry hub address for cross-chain registrations
     /// @param _crossChainInbox The registry hub address (address(0) to disable)
     function setCrossChainInbox(address _crossChainInbox) external;
-
-    /// @notice Invalidate an EVM wallet entry
-    /// @param wallet The wallet address
-    /// @param reason Reason for invalidation
-    function invalidateEvmWallet(address wallet, string calldata reason) external;
-
-    /// @notice Reinstate a previously invalidated EVM wallet
-    /// @param wallet The wallet address
-    function reinstateEvmWallet(address wallet) external;
-
-    /// @notice Invalidate a transaction entry
-    /// @param txHash The transaction hash
-    /// @param chainId The chain ID
-    /// @param reason Reason for invalidation
-    function invalidateTransaction(bytes32 txHash, bytes32 chainId, string calldata reason) external;
-
-    /// @notice Reinstate a previously invalidated transaction
-    /// @param txHash The transaction hash
-    /// @param chainId The chain ID
-    function reinstateTransaction(bytes32 txHash, bytes32 chainId) external;
-
-    /// @notice Invalidate a contract entry
-    /// @param contractAddr The contract address
-    /// @param chainId The chain ID
-    /// @param reason Reason for invalidation
-    function invalidateContract(address contractAddr, bytes32 chainId, string calldata reason) external;
-
-    /// @notice Reinstate a previously invalidated contract
-    /// @param contractAddr The contract address
-    /// @param chainId The chain ID
-    function reinstateContract(address contractAddr, bytes32 chainId) external;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - Fee Configuration

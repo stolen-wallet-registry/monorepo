@@ -152,3 +152,11 @@ forge test --gas-report
 - Two-phase EIP-712 registration prevents single-transaction phishing.
 - Nonces and deadlines prevent replay attacks.
 - Operator permissions enforced via `OperatorRegistry` and capability flags.
+
+## Future Work
+
+Features not yet implemented but structurally supported:
+
+- **Entry Invalidation/Reinstatement** - DAO governance to invalidate false positives and reinstate wrongly invalidated entries. Storage structs include `invalidated` boolean field; functions removed until app integration.
+- **Operator Contract Separation** - Potential extraction of operator batch functions into separate contract sharing storage (Diamond pattern or inheritance).
+- **Event Optimization** - Consider emitting bytes32 storage keys in events and parsing CAIP-10 format off-chain to reduce conditional logic.

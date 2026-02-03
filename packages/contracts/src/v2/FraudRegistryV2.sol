@@ -74,8 +74,10 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     // STORAGE
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Wallet entries: wildcard key => WalletEntry
-    /// @dev Key = CAIP10.evmWalletKey(wallet) = keccak256(abi.encodePacked("eip155:_:", wallet))
+    /// @notice Wallet entries: storage key => WalletEntry
+    /// @dev Key computation depends on namespace:
+    ///      - EVM: CAIP10.evmWalletKey(wallet) = wildcard key (same wallet on all EVM chains)
+    ///      - Other: CAIP10.walletKey(namespaceHash, chainRef, identifier) = chain-specific key
     mapping(bytes32 => WalletEntry) private _wallets;
 
     /// @notice Transaction entries: key => TransactionEntry
@@ -374,7 +376,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IFraudRegistryV2
-    function acknowledgeEvmWallet(
+    function acknowledge(
         address wallet,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
@@ -429,7 +431,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     }
 
     /// @inheritdoc IFraudRegistryV2
-    function registerEvmWallet(
+    function register(
         address wallet,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
@@ -512,17 +514,22 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // WRITE FUNCTIONS - Operator Batch Registration
+    // MODIFIERS - Operator Access Control
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Check if caller is approved operator with given capability
-    function _requireApprovedOperator(uint8 capability) internal view {
+    /// @dev Require caller is approved operator with given capability
+    modifier onlyApprovedOperator(uint8 capability) {
         if (
             operatorRegistry == address(0) || !IOperatorRegistry(operatorRegistry).isApprovedFor(msg.sender, capability)
         ) {
             revert FraudRegistryV2__NotApprovedOperator();
         }
+        _;
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WRITE FUNCTIONS - Operator Batch Registration
+    // ═══════════════════════════════════════════════════════════════════════════
 
     /// @dev Internal helper to register a single wallet entry (reduces stack pressure)
     function _registerWalletEntry(
@@ -599,9 +606,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         bytes32[] calldata identifiers,
         bytes32[] calldata reportedChainIds,
         uint64[] calldata incidentTimestamps
-    ) external payable whenNotPaused {
-        _requireApprovedOperator(WALLET_CAPABILITY);
-
+    ) external payable whenNotPaused onlyApprovedOperator(WALLET_CAPABILITY) {
         // Validate arrays
         uint256 length = namespaceHashes.length;
         if (length == 0) revert FraudRegistryV2__EmptyBatch();
@@ -641,9 +646,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         bytes32[] calldata namespaceHashes,
         bytes32[] calldata chainRefs,
         bytes32[] calldata txHashes
-    ) external payable whenNotPaused {
-        _requireApprovedOperator(TX_CAPABILITY);
-
+    ) external payable whenNotPaused onlyApprovedOperator(TX_CAPABILITY) {
         uint256 length = txHashes.length;
         if (length == 0) revert FraudRegistryV2__EmptyBatch();
         if (length != namespaceHashes.length || length != chainRefs.length) {
@@ -693,9 +696,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         bytes32[] calldata namespaceHashes,
         bytes32[] calldata chainRefs,
         bytes32[] calldata contractIds
-    ) external payable whenNotPaused {
-        _requireApprovedOperator(CONTRACT_CAPABILITY);
-
+    ) external payable whenNotPaused onlyApprovedOperator(CONTRACT_CAPABILITY) {
         uint256 length = contractIds.length;
         if (length == 0) revert FraudRegistryV2__EmptyBatch();
         if (length != namespaceHashes.length || length != chainRefs.length) {
@@ -825,78 +826,6 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     function setCrossChainInbox(address _crossChainInbox) external onlyOwner {
         crossChainInbox = _crossChainInbox;
         emit CrossChainInboxSet(_crossChainInbox);
-    }
-
-    /// @inheritdoc IFraudRegistryV2
-    function invalidateEvmWallet(address wallet, string calldata reason) external onlyOwner {
-        bytes32 key = CAIP10.evmWalletKey(wallet);
-        WalletEntry storage entry = _wallets[key];
-
-        if (entry.registeredAtTimestamp == 0) revert FraudRegistryV2__EntryNotFound();
-        if (entry.invalidated) revert FraudRegistryV2__AlreadyInvalidated();
-
-        entry.invalidated = true;
-        emit EntryInvalidated(key, "wallet", msg.sender, reason);
-    }
-
-    /// @inheritdoc IFraudRegistryV2
-    function reinstateEvmWallet(address wallet) external onlyOwner {
-        bytes32 key = CAIP10.evmWalletKey(wallet);
-        WalletEntry storage entry = _wallets[key];
-
-        if (entry.registeredAtTimestamp == 0) revert FraudRegistryV2__EntryNotFound();
-        if (!entry.invalidated) revert FraudRegistryV2__NotInvalidated();
-
-        entry.invalidated = false;
-        emit EntryReinstated(key, "wallet", msg.sender);
-    }
-
-    /// @inheritdoc IFraudRegistryV2
-    function invalidateTransaction(bytes32 txHash, bytes32 chainId, string calldata reason) external onlyOwner {
-        bytes32 key = CAIP10.txStorageKey(txHash, chainId);
-        TransactionEntry storage entry = _transactions[key];
-
-        if (entry.registeredAtTimestamp == 0) revert FraudRegistryV2__EntryNotFound();
-        if (entry.invalidated) revert FraudRegistryV2__AlreadyInvalidated();
-
-        entry.invalidated = true;
-        emit EntryInvalidated(key, "transaction", msg.sender, reason);
-    }
-
-    /// @inheritdoc IFraudRegistryV2
-    function reinstateTransaction(bytes32 txHash, bytes32 chainId) external onlyOwner {
-        bytes32 key = CAIP10.txStorageKey(txHash, chainId);
-        TransactionEntry storage entry = _transactions[key];
-
-        if (entry.registeredAtTimestamp == 0) revert FraudRegistryV2__EntryNotFound();
-        if (!entry.invalidated) revert FraudRegistryV2__NotInvalidated();
-
-        entry.invalidated = false;
-        emit EntryReinstated(key, "transaction", msg.sender);
-    }
-
-    /// @inheritdoc IFraudRegistryV2
-    function invalidateContract(address contractAddr, bytes32 chainId, string calldata reason) external onlyOwner {
-        bytes32 key = CAIP10.contractStorageKey(contractAddr, chainId);
-        ContractEntry storage entry = _contracts[key];
-
-        if (entry.registeredAtTimestamp == 0) revert FraudRegistryV2__EntryNotFound();
-        if (entry.invalidated) revert FraudRegistryV2__AlreadyInvalidated();
-
-        entry.invalidated = true;
-        emit EntryInvalidated(key, "contract", msg.sender, reason);
-    }
-
-    /// @inheritdoc IFraudRegistryV2
-    function reinstateContract(address contractAddr, bytes32 chainId) external onlyOwner {
-        bytes32 key = CAIP10.contractStorageKey(contractAddr, chainId);
-        ContractEntry storage entry = _contracts[key];
-
-        if (entry.registeredAtTimestamp == 0) revert FraudRegistryV2__EntryNotFound();
-        if (!entry.invalidated) revert FraudRegistryV2__NotInvalidated();
-
-        entry.invalidated = false;
-        emit EntryReinstated(key, "contract", msg.sender);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
