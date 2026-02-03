@@ -5,7 +5,7 @@ import { Test } from "forge-std/Test.sol";
 import { SpokeRegistryV2 } from "../../src/v2/SpokeRegistryV2.sol";
 import { ISpokeRegistryV2 } from "../../src/v2/interfaces/ISpokeRegistryV2.sol";
 import { CrossChainMessageV2 } from "../../src/v2/libraries/CrossChainMessageV2.sol";
-import { CAIP10 } from "../../src/libraries/CAIP10.sol";
+import { CAIP10 } from "../../src/v2/libraries/CAIP10.sol";
 import { HyperlaneAdapter } from "../../src/crosschain/adapters/HyperlaneAdapter.sol";
 import { FeeManager } from "../../src/FeeManager.sol";
 import { MockMailbox } from "../mocks/MockMailbox.sol";

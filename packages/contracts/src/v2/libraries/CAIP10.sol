@@ -316,12 +316,16 @@ library CAIP10 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Check if CAIP-10 string uses wildcard chainId
+    /// @param caip10 The CAIP-10 string to check
+    /// @return True if the string uses wildcard ("_") as chainId
     function hasWildcard(string memory caip10) internal pure returns (bool) {
         (, bytes32 chainRef,,) = parse(caip10);
         return chainRef == WILDCARD;
     }
 
     /// @notice Validate CAIP-10 string format (basic structural check)
+    /// @param caip10 The CAIP-10 string to validate
+    /// @return True if the string has valid structure (namespace:chainRef:identifier)
     function validate(string memory caip10) internal pure returns (bool) {
         bytes memory data = bytes(caip10);
         uint256 len = data.length;
@@ -345,21 +349,31 @@ library CAIP10 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Format EVM address to CAIP-10 wildcard string (checksummed)
+    /// @param wallet The EVM wallet address
+    /// @return The CAIP-10 string in format "eip155:_:0xChecksum..."
     function formatEvmWildcard(address wallet) internal pure returns (string memory) {
         return string(abi.encodePacked("eip155:_:", wallet.toChecksumHexString()));
     }
 
     /// @notice Format EVM address to chain-specific CAIP-10 string (checksummed)
+    /// @param wallet The EVM wallet address
+    /// @param chainId The EIP-155 chain ID
+    /// @return The CAIP-10 string in format "eip155:{chainId}:0xChecksum..."
     function formatEvm(address wallet, uint64 chainId) internal pure returns (string memory) {
         return string(abi.encodePacked("eip155:", uint256(chainId).toString(), ":", wallet.toChecksumHexString()));
     }
 
     /// @notice Format EVM address to CAIP-10 wildcard string (lowercase)
+    /// @param wallet The EVM wallet address
+    /// @return The CAIP-10 string in format "eip155:_:0xlowercase..."
     function formatEvmWildcardLower(address wallet) internal pure returns (string memory) {
         return string(abi.encodePacked("eip155:_:", _addressToLowerHex(wallet)));
     }
 
     /// @notice Format EVM address to chain-specific CAIP-10 string (lowercase)
+    /// @param wallet The EVM wallet address
+    /// @param chainId The EIP-155 chain ID
+    /// @return The CAIP-10 string in format "eip155:{chainId}:0xlowercase..."
     function formatEvmLower(address wallet, uint64 chainId) internal pure returns (string memory) {
         return string(abi.encodePacked("eip155:", uint256(chainId).toString(), ":", _addressToLowerHex(wallet)));
     }

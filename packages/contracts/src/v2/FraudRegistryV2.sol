@@ -11,7 +11,7 @@ import { IOperatorRegistry } from "../interfaces/IOperatorRegistry.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
 import { TimingConfig } from "../libraries/TimingConfig.sol";
 import { RegistryCapabilities } from "../libraries/RegistryCapabilities.sol";
-import { CAIP10 } from "../libraries/CAIP10.sol";
+import { CAIP10 } from "./libraries/CAIP10.sol";
 
 /// @title FraudRegistryV2
 /// @author Stolen Wallet Registry Team
@@ -166,7 +166,8 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     // INTERNAL HELPERS - CAIP-10 Parsing (delegates to CAIP10 library)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Parse CAIP-10 string and check if registered
+    /// @notice Parse CAIP-10 string and check if registered
+    /// @dev Delegates to CAIP10 library for parsing
     /// @param caip10 CAIP-10 string (e.g., "eip155:8453:0x...", "solana:mainnet:...")
     /// @return registered True if registered and not invalidated
     function _parseAndCheckRegistered(string calldata caip10) internal view returns (bool registered) {
@@ -175,7 +176,8 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         return entry.registeredAtTimestamp > 0 && !entry.invalidated;
     }
 
-    /// @dev Parse CAIP-10 string and check if pending (EVM only for now)
+    /// @notice Parse CAIP-10 string and check if pending (EVM only for now)
+    /// @dev Delegates to CAIP10 library for parsing
     /// @param caip10 CAIP-10 string (e.g., "eip155:8453:0x..." or "eip155:_:0x...")
     /// @return pending True if acknowledgement is pending and not expired
     function _parseAndCheckPending(string calldata caip10) internal view returns (bool pending) {
@@ -522,18 +524,91 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         }
     }
 
+    /// @dev Internal helper to register a single wallet entry (reduces stack pressure)
+    function _registerWalletEntry(
+        bytes32 namespaceHash,
+        bytes32 chainRef,
+        bytes32 identifier,
+        bytes32 reportedChainId,
+        uint64 incidentTimestamp,
+        uint32 batchId
+    ) internal {
+        // Skip zero identifiers
+        if (identifier == bytes32(0)) return;
+
+        // Compute storage key and namespace enum
+        Namespace ns;
+        bytes32 key;
+
+        if (namespaceHash == CAIP10.NAMESPACE_EIP155) {
+            ns = Namespace.EIP155;
+            key = CAIP10.evmWalletKey(address(uint160(uint256(identifier))));
+        } else if (namespaceHash == CAIP10.NAMESPACE_SOLANA) {
+            ns = Namespace.SOLANA;
+            key = CAIP10.walletKey(namespaceHash, chainRef, identifier);
+        } else if (namespaceHash == CAIP10.NAMESPACE_COSMOS) {
+            ns = Namespace.COSMOS;
+            key = CAIP10.walletKey(namespaceHash, chainRef, identifier);
+        } else if (namespaceHash == CAIP10.NAMESPACE_BIP122) {
+            ns = Namespace.BIP122;
+            key = CAIP10.walletKey(namespaceHash, chainRef, identifier);
+        } else {
+            // Skip unsupported namespaces
+            return;
+        }
+
+        // Compute truncated chain ID hash for storage efficiency
+        uint64 chainIdHash = CAIP10.truncatedChainIdHash(reportedChainId);
+
+        if (_wallets[key].registeredAtTimestamp > 0) {
+            // Already registered - emit source event (operators are public)
+            if (ns == Namespace.EIP155) {
+                emit WalletOperatorSourceAdded(
+                    address(uint160(uint256(identifier))), ns, chainIdHash, msg.sender, batchId
+                );
+            }
+            return;
+        }
+
+        _wallets[key] = WalletEntry({
+            namespace: ns,
+            reportedChainIdHash: chainIdHash,
+            incidentTimestamp: incidentTimestamp,
+            registeredAtTimestamp: uint64(block.timestamp),
+            firstBatchId: batchId,
+            invalidated: false
+        });
+
+        // Emit appropriate event based on namespace
+        if (ns == Namespace.EIP155) {
+            emit WalletRegistered(
+                address(uint160(uint256(identifier))),
+                ns,
+                chainIdHash,
+                incidentTimestamp,
+                false, // Not sponsored (operator pays directly)
+                batchId
+            );
+        }
+    }
+
     /// @inheritdoc IFraudRegistryV2
-    function registerEvmWalletsAsOperator(
-        address[] calldata walletAddresses,
-        uint64[] calldata reportedChainIds,
+    function registerWalletsAsOperator(
+        bytes32[] calldata namespaceHashes,
+        bytes32[] calldata chainRefs,
+        bytes32[] calldata identifiers,
+        bytes32[] calldata reportedChainIds,
         uint64[] calldata incidentTimestamps
     ) external payable whenNotPaused {
         _requireApprovedOperator(WALLET_CAPABILITY);
 
         // Validate arrays
-        uint256 length = walletAddresses.length;
+        uint256 length = namespaceHashes.length;
         if (length == 0) revert FraudRegistryV2__EmptyBatch();
-        if (length != reportedChainIds.length || length != incidentTimestamps.length) {
+        if (
+            length != chainRefs.length || length != identifiers.length || length != reportedChainIds.length
+                || length != incidentTimestamps.length
+        ) {
             revert FraudRegistryV2__ArrayLengthMismatch();
         }
 
@@ -555,51 +630,25 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
 
         // Register each wallet
         for (uint256 i = 0; i < length; i++) {
-            address wallet = walletAddresses[i];
-            if (wallet == address(0)) continue; // Skip invalid
-
-            bytes32 key = CAIP10.evmWalletKey(wallet);
-
-            // Compute truncated chain ID hash for storage efficiency
-            uint64 chainIdHash = CAIP10.truncatedEvmChainIdHash(reportedChainIds[i]);
-
-            if (_wallets[key].registeredAtTimestamp > 0) {
-                // Already registered - emit source event (operators are public)
-                emit WalletOperatorSourceAdded(wallet, Namespace.EIP155, chainIdHash, msg.sender, batchId);
-                continue;
-            }
-
-            _wallets[key] = WalletEntry({
-                namespace: Namespace.EIP155,
-                reportedChainIdHash: chainIdHash,
-                incidentTimestamp: incidentTimestamps[i],
-                registeredAtTimestamp: uint64(block.timestamp),
-                firstBatchId: batchId,
-                invalidated: false
-            });
-
-            emit WalletRegistered(
-                wallet,
-                Namespace.EIP155,
-                chainIdHash,
-                incidentTimestamps[i],
-                false, // Not sponsored (operator pays directly)
-                batchId
+            _registerWalletEntry(
+                namespaceHashes[i], chainRefs[i], identifiers[i], reportedChainIds[i], incidentTimestamps[i], batchId
             );
         }
     }
 
     /// @inheritdoc IFraudRegistryV2
-    function registerTransactionsAsOperator(bytes32[] calldata txHashes, bytes32[] calldata chainIds)
-        external
-        payable
-        whenNotPaused
-    {
+    function registerTransactionsAsOperator(
+        bytes32[] calldata namespaceHashes,
+        bytes32[] calldata chainRefs,
+        bytes32[] calldata txHashes
+    ) external payable whenNotPaused {
         _requireApprovedOperator(TX_CAPABILITY);
 
         uint256 length = txHashes.length;
         if (length == 0) revert FraudRegistryV2__EmptyBatch();
-        if (length != chainIds.length) revert FraudRegistryV2__ArrayLengthMismatch();
+        if (length != namespaceHashes.length || length != chainRefs.length) {
+            revert FraudRegistryV2__ArrayLengthMismatch();
+        }
 
         // Collect fee (if configured)
         if (feeManager != address(0)) {
@@ -617,10 +666,17 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         emit BatchCreated(batchId, msg.sender, uint32(length), true);
 
         for (uint256 i = 0; i < length; i++) {
-            bytes32 key = CAIP10.txStorageKey(txHashes[i], chainIds[i]);
+            bytes32 txHash = txHashes[i];
+            if (txHash == bytes32(0)) continue;
+
+            // Compute CAIP-2 chain ID (namespace:chainRef combined) for storage and events
+            bytes32 chainId = keccak256(abi.encodePacked(namespaceHashes[i], chainRefs[i]));
+
+            // Use txStorageKey for consistency with isTransactionRegistered lookup
+            bytes32 key = CAIP10.txStorageKey(txHash, chainId);
 
             if (_transactions[key].registeredAtTimestamp > 0) {
-                emit TransactionOperatorSourceAdded(txHashes[i], chainIds[i], msg.sender, batchId);
+                emit TransactionOperatorSourceAdded(txHash, chainId, msg.sender, batchId);
                 continue;
             }
 
@@ -628,21 +684,23 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
                 registeredAtTimestamp: uint64(block.timestamp), firstBatchId: batchId, invalidated: false
             });
 
-            emit TransactionRegistered(txHashes[i], chainIds[i], false, batchId);
+            emit TransactionRegistered(txHash, chainId, false, batchId);
         }
     }
 
     /// @inheritdoc IFraudRegistryV2
-    function registerContractsAsOperator(address[] calldata contractAddresses, bytes32[] calldata chainIds)
-        external
-        payable
-        whenNotPaused
-    {
+    function registerContractsAsOperator(
+        bytes32[] calldata namespaceHashes,
+        bytes32[] calldata chainRefs,
+        bytes32[] calldata contractIds
+    ) external payable whenNotPaused {
         _requireApprovedOperator(CONTRACT_CAPABILITY);
 
-        uint256 length = contractAddresses.length;
+        uint256 length = contractIds.length;
         if (length == 0) revert FraudRegistryV2__EmptyBatch();
-        if (length != chainIds.length) revert FraudRegistryV2__ArrayLengthMismatch();
+        if (length != namespaceHashes.length || length != chainRefs.length) {
+            revert FraudRegistryV2__ArrayLengthMismatch();
+        }
 
         // Collect fee (if configured)
         if (feeManager != address(0)) {
@@ -660,13 +718,20 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         emit BatchCreated(batchId, msg.sender, uint32(length), true);
 
         for (uint256 i = 0; i < length; i++) {
-            address contractAddr = contractAddresses[i];
-            if (contractAddr == address(0)) continue;
+            bytes32 contractId = contractIds[i];
+            if (contractId == bytes32(0)) continue;
 
-            bytes32 key = CAIP10.contractStorageKey(contractAddr, chainIds[i]);
+            // Compute CAIP-2 chain ID (namespace:chainRef combined) for storage and events
+            bytes32 chainId = keccak256(abi.encodePacked(namespaceHashes[i], chainRefs[i]));
+
+            // For EVM contracts, extract address for indexed events and storage key
+            address contractAddr = address(uint160(uint256(contractId)));
+
+            // Use contractStorageKey for consistency with isContractRegistered lookup
+            bytes32 key = CAIP10.contractStorageKey(contractAddr, chainId);
 
             if (_contracts[key].registeredAtTimestamp > 0) {
-                emit ContractOperatorSourceAdded(contractAddr, chainIds[i], msg.sender, batchId);
+                emit ContractOperatorSourceAdded(contractAddr, chainId, msg.sender, batchId);
                 continue;
             }
 
@@ -674,7 +739,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
                 registeredAtTimestamp: uint64(block.timestamp), firstBatchId: batchId, invalidated: false
             });
 
-            emit ContractRegistered(contractAddr, chainIds[i], msg.sender, batchId);
+            emit ContractRegistered(contractAddr, chainId, msg.sender, batchId);
         }
     }
 

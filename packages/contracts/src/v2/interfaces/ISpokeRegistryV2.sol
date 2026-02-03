@@ -13,14 +13,15 @@ interface ISpokeRegistryV2 {
 
     /// @notice Acknowledgement data for pending registrations
     /// @param trustedForwarder Address authorized to complete registration
-    /// @param reportedChainId CAIP-2 hash of chain where incident occurred
     /// @param incidentTimestamp User-provided timestamp of when theft occurred
+    /// @param reportedChainId CAIP-2 hash of chain where incident occurred
     /// @param startBlock Block number when grace period ends
     /// @param expiryBlock Block number when registration window expires
+    /// @dev Struct packing: trustedForwarder (20) + incidentTimestamp (8) = 28 bytes in slot 1
     struct AcknowledgementData {
         address trustedForwarder;
-        bytes32 reportedChainId;
         uint64 incidentTimestamp;
+        bytes32 reportedChainId;
         uint256 startBlock;
         uint256 expiryBlock;
     }
@@ -58,6 +59,8 @@ interface ISpokeRegistryV2 {
     event RegistrationSentToHub(address indexed wallet, bytes32 indexed messageId, uint32 hubChainId);
 
     /// @notice Emitted when hub configuration is updated
+    /// @param hubChainId The hub chain domain ID
+    /// @param hubInbox The hub inbox address (as bytes32)
     event HubConfigUpdated(uint32 indexed hubChainId, bytes32 hubInbox);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -130,18 +133,28 @@ interface ISpokeRegistryV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Check if wallet has pending acknowledgement
+    /// @param wallet The wallet address to check
+    /// @return True if the wallet has a pending acknowledgement
     function isPending(address wallet) external view returns (bool);
 
     /// @notice Get acknowledgement data for wallet
+    /// @param wallet The wallet address
+    /// @return The acknowledgement data struct
     function getAcknowledgement(address wallet) external view returns (AcknowledgementData memory);
 
     /// @notice Get nonce for wallet
+    /// @param wallet The wallet address
+    /// @return The current nonce value
     function nonces(address wallet) external view returns (uint256);
 
     /// @notice Quote total registration fee
+    /// @param owner The wallet owner address
+    /// @return The total fee in wei
     function quoteRegistration(address owner) external view returns (uint256);
 
     /// @notice Get detailed fee breakdown
+    /// @param owner The wallet owner address
+    /// @return The fee breakdown struct
     function quoteFeeBreakdown(address owner) external view returns (FeeBreakdown memory);
 
     /// @notice Generate hash struct for signing (frontend helper)
@@ -157,6 +170,13 @@ interface ISpokeRegistryV2 {
         returns (uint256 deadline, bytes32 hashStruct);
 
     /// @notice Get deadline info for pending registration
+    /// @param session The wallet address (session)
+    /// @return currentBlock The current block number
+    /// @return expiryBlock The block when registration window closes
+    /// @return startBlock The block when grace period ends
+    /// @return graceStartsAt Blocks until grace period ends
+    /// @return timeLeft Blocks until expiry
+    /// @return isExpired Whether the registration window has closed
     function getDeadlines(address session)
         external
         view

@@ -212,11 +212,15 @@ library CrossChainMessageV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Convert an address to bytes32 (for cross-chain addressing)
+    /// @param addr The address to convert
+    /// @return The address as bytes32 (right-padded)
     function addressToBytes32(address addr) internal pure returns (bytes32) {
         return bytes32(uint256(uint160(addr)));
     }
 
     /// @notice Convert bytes32 to an address
+    /// @param b The bytes32 value to convert
+    /// @return The address extracted from the lower 160 bits
     function bytes32ToAddress(bytes32 b) internal pure returns (address) {
         return address(uint160(uint256(b)));
     }

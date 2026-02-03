@@ -232,67 +232,26 @@ interface IFraudRegistryV2 {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Thrown when wallet address is zero
     error FraudRegistryV2__InvalidWallet();
-
-    /// @notice Thrown when nonce doesn't match expected
     error FraudRegistryV2__InvalidNonce();
-
-    /// @notice Thrown when signature deadline has passed
     error FraudRegistryV2__SignatureExpired();
-
-    /// @notice Thrown when signature is invalid
     error FraudRegistryV2__InvalidSignature();
-
-    /// @notice Thrown when forwarder doesn't match acknowledgement
     error FraudRegistryV2__InvalidForwarder();
-
-    /// @notice Thrown when grace period hasn't started yet
     error FraudRegistryV2__GracePeriodNotStarted();
-
-    /// @notice Thrown when registration window has expired
     error FraudRegistryV2__RegistrationExpired();
-
-    /// @notice Thrown when wallet is already registered
     error FraudRegistryV2__AlreadyRegistered();
-
-    /// @notice Thrown when caller is not an approved operator
     error FraudRegistryV2__NotApprovedOperator();
-
-    /// @notice Thrown when array lengths don't match
     error FraudRegistryV2__ArrayLengthMismatch();
-
-    /// @notice Thrown when batch is empty
     error FraudRegistryV2__EmptyBatch();
-
-    /// @notice Thrown when entry is not found
     error FraudRegistryV2__EntryNotFound();
-
-    /// @notice Thrown when entry is already invalidated
     error FraudRegistryV2__AlreadyInvalidated();
-
-    /// @notice Thrown when entry is not invalidated (for reinstatement)
     error FraudRegistryV2__NotInvalidated();
-
-    /// @notice Thrown when timing config is invalid
     error FraudRegistryV2__InvalidTimingConfig();
-
-    /// @notice Thrown when fee config is invalid (feeManager set without feeRecipient)
     error FraudRegistryV2__InvalidFeeConfig();
-
-    /// @notice Thrown when insufficient fee is provided
     error FraudRegistryV2__InsufficientFee();
-
-    /// @notice Thrown when fee forwarding fails
     error FraudRegistryV2__FeeForwardFailed();
-
-    /// @notice Thrown when CAIP-10 string format is invalid
     error FraudRegistryV2__InvalidCaip10Format();
-
-    /// @notice Thrown when namespace in CAIP-10 is not supported
     error FraudRegistryV2__UnsupportedNamespace();
-
-    /// @notice Thrown when caller is not the authorized registry hub
     error FraudRegistryV2__UnauthorizedInbox();
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -503,34 +462,55 @@ interface IFraudRegistryV2 {
     ) external payable;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // WRITE FUNCTIONS - Operator Batch Registration
+    // WRITE FUNCTIONS - Operator Batch Registration (Chain-Agnostic)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Register batch of wallets as operator (single-phase, no two-phase)
+    /// @notice Register batch of wallets as operator (single-phase, chain-agnostic)
     /// @dev Operators bypass two-phase since they're DAO-vetted.
+    ///      Supports EVM, Solana, Bitcoin, Cosmos - any CAIP-10 namespace.
     ///      Fee is flat per batch, collected via msg.value.
-    /// @param walletAddresses Array of wallet addresses
-    /// @param reportedChainIds Array of chain IDs where each was reported
+    ///
+    ///      Parameter format matches registerFromSpoke for consistency:
+    ///        - EVM: namespaceHash=NAMESPACE_EIP155, chainRef ignored, identifier=address as bytes32
+    ///        - Solana: namespaceHash=NAMESPACE_SOLANA, chainRef=keccak256("mainnet"), identifier=pubkey
+    ///        - etc.
+    ///
+    /// @param namespaceHashes Array of namespace hashes (CAIP10.NAMESPACE_EIP155, etc.)
+    /// @param chainRefs Array of chain reference hashes (ignored for EVM wallets)
+    /// @param identifiers Array of wallet identifiers as bytes32
+    /// @param reportedChainIds Array of CAIP-2 hashes where each was reported
     /// @param incidentTimestamps Array of incident timestamps
-    function registerEvmWalletsAsOperator(
-        address[] calldata walletAddresses,
-        uint64[] calldata reportedChainIds,
+    function registerWalletsAsOperator(
+        bytes32[] calldata namespaceHashes,
+        bytes32[] calldata chainRefs,
+        bytes32[] calldata identifiers,
+        bytes32[] calldata reportedChainIds,
         uint64[] calldata incidentTimestamps
     ) external payable;
 
-    /// @notice Register batch of transactions as operator
+    /// @notice Register batch of transactions as operator (chain-agnostic)
     /// @dev Fee is flat per batch, collected via msg.value.
-    /// @param txHashes Array of transaction hashes
-    /// @param chainIds Array of chain IDs (bytes32 for CAIP-2)
-    function registerTransactionsAsOperator(bytes32[] calldata txHashes, bytes32[] calldata chainIds) external payable;
+    ///      Transactions are always chain-specific (no wildcard).
+    /// @param namespaceHashes Array of namespace hashes
+    /// @param chainRefs Array of chain reference hashes
+    /// @param txHashes Array of transaction hashes/signatures as bytes32
+    function registerTransactionsAsOperator(
+        bytes32[] calldata namespaceHashes,
+        bytes32[] calldata chainRefs,
+        bytes32[] calldata txHashes
+    ) external payable;
 
-    /// @notice Register batch of contracts as operator
+    /// @notice Register batch of contracts as operator (chain-agnostic)
     /// @dev Fee is flat per batch, collected via msg.value.
-    /// @param contractAddresses Array of contract addresses
-    /// @param chainIds Array of chain IDs (bytes32 for CAIP-2)
-    function registerContractsAsOperator(address[] calldata contractAddresses, bytes32[] calldata chainIds)
-        external
-        payable;
+    ///      Contracts are always chain-specific (no wildcard).
+    /// @param namespaceHashes Array of namespace hashes
+    /// @param chainRefs Array of chain reference hashes
+    /// @param contractIds Array of contract identifiers as bytes32
+    function registerContractsAsOperator(
+        bytes32[] calldata namespaceHashes,
+        bytes32[] calldata chainRefs,
+        bytes32[] calldata contractIds
+    ) external payable;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS - Cross-Chain Registration (Hub Only)

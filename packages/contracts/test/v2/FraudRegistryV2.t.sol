@@ -6,7 +6,7 @@ import { FraudRegistryV2 } from "../../src/v2/FraudRegistryV2.sol";
 import { IFraudRegistryV2 } from "../../src/v2/interfaces/IFraudRegistryV2.sol";
 import { OperatorRegistry } from "../../src/OperatorRegistry.sol";
 import { IOperatorRegistry } from "../../src/interfaces/IOperatorRegistry.sol";
-import { CAIP10 } from "../../src/libraries/CAIP10.sol";
+import { CAIP10 } from "../../src/v2/libraries/CAIP10.sol";
 
 /// @title FraudRegistryV2Test
 /// @notice Comprehensive tests for FraudRegistryV2
@@ -351,6 +351,72 @@ contract FraudRegistryV2Test is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // OPERATOR BATCH HELPERS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Helper to build unified operator wallet batch params from EVM addresses
+    function _buildEvmWalletBatchParams(address[] memory wallets, uint64[] memory chainIds, uint64[] memory timestamps)
+        internal
+        pure
+        returns (
+            bytes32[] memory namespaceHashes,
+            bytes32[] memory chainRefs,
+            bytes32[] memory identifiers,
+            bytes32[] memory reportedChainIds,
+            uint64[] memory incidentTimestamps
+        )
+    {
+        uint256 length = wallets.length;
+        namespaceHashes = new bytes32[](length);
+        chainRefs = new bytes32[](length);
+        identifiers = new bytes32[](length);
+        reportedChainIds = new bytes32[](length);
+        incidentTimestamps = timestamps;
+
+        for (uint256 i = 0; i < length; i++) {
+            namespaceHashes[i] = CAIP10.NAMESPACE_EIP155;
+            chainRefs[i] = bytes32(0); // Ignored for EVM
+            identifiers[i] = bytes32(uint256(uint160(wallets[i])));
+            reportedChainIds[i] = CAIP10.caip2Hash(chainIds[i]);
+        }
+    }
+
+    /// Helper to build unified operator tx batch params
+    function _buildEvmTxBatchParams(bytes32[] memory txHashes, uint64[] memory chainIds)
+        internal
+        pure
+        returns (bytes32[] memory namespaceHashes, bytes32[] memory chainRefs, bytes32[] memory hashes)
+    {
+        uint256 length = txHashes.length;
+        namespaceHashes = new bytes32[](length);
+        chainRefs = new bytes32[](length);
+        hashes = txHashes;
+
+        for (uint256 i = 0; i < length; i++) {
+            namespaceHashes[i] = CAIP10.NAMESPACE_EIP155;
+            chainRefs[i] = CAIP10.evmChainRefHash(chainIds[i]);
+        }
+    }
+
+    /// Helper to build unified operator contract batch params
+    function _buildEvmContractBatchParams(address[] memory contracts, uint64[] memory chainIds)
+        internal
+        pure
+        returns (bytes32[] memory namespaceHashes, bytes32[] memory chainRefs, bytes32[] memory contractIds)
+    {
+        uint256 length = contracts.length;
+        namespaceHashes = new bytes32[](length);
+        chainRefs = new bytes32[](length);
+        contractIds = new bytes32[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            namespaceHashes[i] = CAIP10.NAMESPACE_EIP155;
+            chainRefs[i] = CAIP10.evmChainRefHash(chainIds[i]);
+            contractIds[i] = bytes32(uint256(uint160(contracts[i])));
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // OPERATOR BATCH TESTS - WALLETS
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -371,8 +437,19 @@ contract FraudRegistryV2Test is Test {
         timestamps[1] = uint64(block.timestamp - 2 days);
         timestamps[2] = uint64(block.timestamp - 3 days);
 
+        // Convert to unified format
+        (
+            bytes32[] memory namespaceHashes,
+            bytes32[] memory chainRefs,
+            bytes32[] memory identifiers,
+            bytes32[] memory reportedChainIds,
+            uint64[] memory incidentTimestamps
+        ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
+
         vm.prank(operator);
-        registry.registerEvmWalletsAsOperator(wallets, chainIds, timestamps);
+        registry.registerWalletsAsOperator(
+            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
+        );
 
         // Verify all registered
         for (uint256 i = 0; i < wallets.length; i++) {
@@ -397,10 +474,20 @@ contract FraudRegistryV2Test is Test {
         uint64[] memory timestamps = new uint64[](1);
         timestamps[0] = uint64(block.timestamp);
 
+        (
+            bytes32[] memory namespaceHashes,
+            bytes32[] memory chainRefs,
+            bytes32[] memory identifiers,
+            bytes32[] memory reportedChainIds,
+            uint64[] memory incidentTimestamps
+        ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
+
         address notOperator = makeAddr("notOperator");
         vm.prank(notOperator);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__NotApprovedOperator.selector);
-        registry.registerEvmWalletsAsOperator(wallets, chainIds, timestamps);
+        registry.registerWalletsAsOperator(
+            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
+        );
     }
 
     /// Duplicate wallet should emit source added event, not store again.
@@ -416,9 +503,19 @@ contract FraudRegistryV2Test is Test {
         uint64[] memory timestamps = new uint64[](1);
         timestamps[0] = uint64(block.timestamp);
 
+        (
+            bytes32[] memory namespaceHashes,
+            bytes32[] memory chainRefs,
+            bytes32[] memory identifiers,
+            bytes32[] memory reportedChainIds,
+            uint64[] memory incidentTimestamps
+        ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
+
         // First registration
         vm.prank(operator);
-        registry.registerEvmWalletsAsOperator(wallets, chainIds, timestamps);
+        registry.registerWalletsAsOperator(
+            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
+        );
 
         assertTrue(registry.isRegistered(victim));
 
@@ -430,7 +527,9 @@ contract FraudRegistryV2Test is Test {
         emit IFraudRegistryV2.WalletOperatorSourceAdded(
             victim, IFraudRegistryV2.Namespace.EIP155, expectedChainIdHash, operator, 2
         );
-        registry.registerEvmWalletsAsOperator(wallets, chainIds, timestamps);
+        registry.registerWalletsAsOperator(
+            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
+        );
 
         // Still registered, batch ID unchanged
         (,,,,, uint32 batchId) = registry.getEvmWalletDetails(victim);
@@ -447,15 +546,22 @@ contract FraudRegistryV2Test is Test {
         txHashes[0] = keccak256("tx1");
         txHashes[1] = keccak256("tx2");
 
-        bytes32[] memory chainIds = new bytes32[](2);
-        chainIds[0] = bytes32(uint256(8453));
-        chainIds[1] = bytes32(uint256(10));
+        uint64[] memory chainIds = new uint64[](2);
+        chainIds[0] = 8453;
+        chainIds[1] = 10;
+
+        (bytes32[] memory namespaceHashes, bytes32[] memory chainRefs, bytes32[] memory hashes) =
+            _buildEvmTxBatchParams(txHashes, chainIds);
 
         vm.prank(operator);
-        registry.registerTransactionsAsOperator(txHashes, chainIds);
+        registry.registerTransactionsAsOperator(namespaceHashes, chainRefs, hashes);
 
-        assertTrue(registry.isTransactionRegistered(txHashes[0], chainIds[0]));
-        assertTrue(registry.isTransactionRegistered(txHashes[1], chainIds[1]));
+        // Compute expected chain IDs for lookup (namespace:chainRef combined)
+        bytes32 expectedChainId1 = keccak256(abi.encodePacked(CAIP10.NAMESPACE_EIP155, CAIP10.evmChainRefHash(8453)));
+        bytes32 expectedChainId2 = keccak256(abi.encodePacked(CAIP10.NAMESPACE_EIP155, CAIP10.evmChainRefHash(10)));
+
+        assertTrue(registry.isTransactionRegistered(txHashes[0], expectedChainId1));
+        assertTrue(registry.isTransactionRegistered(txHashes[1], expectedChainId2));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -468,15 +574,22 @@ contract FraudRegistryV2Test is Test {
         contracts[0] = makeAddr("scam1");
         contracts[1] = makeAddr("scam2");
 
-        bytes32[] memory chainIds = new bytes32[](2);
-        chainIds[0] = bytes32(uint256(8453));
-        chainIds[1] = bytes32(uint256(10));
+        uint64[] memory chainIds = new uint64[](2);
+        chainIds[0] = 8453;
+        chainIds[1] = 10;
+
+        (bytes32[] memory namespaceHashes, bytes32[] memory chainRefs, bytes32[] memory contractIds) =
+            _buildEvmContractBatchParams(contracts, chainIds);
 
         vm.prank(operator);
-        registry.registerContractsAsOperator(contracts, chainIds);
+        registry.registerContractsAsOperator(namespaceHashes, chainRefs, contractIds);
 
-        assertTrue(registry.isContractRegistered(contracts[0], chainIds[0]));
-        assertTrue(registry.isContractRegistered(contracts[1], chainIds[1]));
+        // Compute expected chain IDs for lookup (namespace:chainRef combined)
+        bytes32 expectedChainId1 = keccak256(abi.encodePacked(CAIP10.NAMESPACE_EIP155, CAIP10.evmChainRefHash(8453)));
+        bytes32 expectedChainId2 = keccak256(abi.encodePacked(CAIP10.NAMESPACE_EIP155, CAIP10.evmChainRefHash(10)));
+
+        assertTrue(registry.isContractRegistered(contracts[0], expectedChainId1));
+        assertTrue(registry.isContractRegistered(contracts[1], expectedChainId2));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -493,8 +606,18 @@ contract FraudRegistryV2Test is Test {
         uint64[] memory timestamps = new uint64[](1);
         timestamps[0] = uint64(block.timestamp);
 
+        (
+            bytes32[] memory namespaceHashes,
+            bytes32[] memory chainRefs,
+            bytes32[] memory identifiers,
+            bytes32[] memory reportedChainIds,
+            uint64[] memory incidentTimestamps
+        ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
+
         vm.prank(operator);
-        registry.registerEvmWalletsAsOperator(wallets, chainIds, timestamps);
+        registry.registerWalletsAsOperator(
+            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
+        );
 
         assertTrue(registry.isRegistered(wallets[0]));
 
@@ -516,8 +639,18 @@ contract FraudRegistryV2Test is Test {
         uint64[] memory timestamps = new uint64[](1);
         timestamps[0] = uint64(block.timestamp);
 
+        (
+            bytes32[] memory namespaceHashes,
+            bytes32[] memory chainRefs,
+            bytes32[] memory identifiers,
+            bytes32[] memory reportedChainIds,
+            uint64[] memory incidentTimestamps
+        ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
+
         vm.prank(operator);
-        registry.registerEvmWalletsAsOperator(wallets, chainIds, timestamps);
+        registry.registerWalletsAsOperator(
+            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
+        );
 
         // Invalidate
         registry.invalidateEvmWallet(victim, "Test");
@@ -540,8 +673,18 @@ contract FraudRegistryV2Test is Test {
         uint64[] memory timestamps = new uint64[](1);
         timestamps[0] = uint64(block.timestamp);
 
+        (
+            bytes32[] memory namespaceHashes,
+            bytes32[] memory chainRefs,
+            bytes32[] memory identifiers,
+            bytes32[] memory reportedChainIds,
+            uint64[] memory incidentTimestamps
+        ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
+
         vm.prank(operator);
-        registry.registerEvmWalletsAsOperator(wallets, chainIds, timestamps);
+        registry.registerWalletsAsOperator(
+            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
+        );
 
         // Try to invalidate as non-owner
         vm.prank(makeAddr("attacker"));
@@ -587,8 +730,18 @@ contract FraudRegistryV2Test is Test {
         uint64[] memory timestamps = new uint64[](1);
         timestamps[0] = uint64(block.timestamp);
 
+        (
+            bytes32[] memory namespaceHashes,
+            bytes32[] memory chainRefs,
+            bytes32[] memory identifiers,
+            bytes32[] memory reportedChainIds,
+            uint64[] memory incidentTimestamps
+        ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
+
         vm.prank(operator);
-        registry.registerEvmWalletsAsOperator(wallets, chainIds, timestamps);
+        registry.registerWalletsAsOperator(
+            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
+        );
 
         IFraudRegistryV2.Batch memory batch = registry.getBatch(1);
         assertEq(batch.submitter, operator, "Operator should be stored");
@@ -635,9 +788,19 @@ contract FraudRegistryV2Test is Test {
             timestamps[i] = uint64(block.timestamp);
         }
 
+        (
+            bytes32[] memory namespaceHashes,
+            bytes32[] memory chainRefs,
+            bytes32[] memory identifiers,
+            bytes32[] memory reportedChainIds,
+            uint64[] memory incidentTimestamps
+        ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
+
         uint256 gasBefore = gasleft();
         vm.prank(operator);
-        registry.registerEvmWalletsAsOperator(wallets, chainIds, timestamps);
+        registry.registerWalletsAsOperator(
+            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
+        );
         uint256 gasUsed = gasBefore - gasleft();
 
         // Gas per entry

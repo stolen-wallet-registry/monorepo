@@ -9,7 +9,7 @@ import { ISpokeRegistryV2 } from "./interfaces/ISpokeRegistryV2.sol";
 import { IBridgeAdapter } from "../interfaces/IBridgeAdapter.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
 import { TimingConfig } from "../libraries/TimingConfig.sol";
-import { CAIP10 } from "../libraries/CAIP10.sol";
+import { CAIP10 } from "./libraries/CAIP10.sol";
 import { CrossChainMessageV2 } from "./libraries/CrossChainMessageV2.sol";
 
 /// @title SpokeRegistryV2
@@ -174,10 +174,11 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
         nonces[owner]++;
 
         // Store acknowledgement with randomized grace period
+        // Struct packing: trustedForwarder (20) + incidentTimestamp (8) fit in slot 1
         pendingAcknowledgements[owner] = AcknowledgementData({
             trustedForwarder: msg.sender,
-            reportedChainId: reportedChainId,
             incidentTimestamp: incidentTimestamp,
+            reportedChainId: reportedChainId,
             startBlock: TimingConfig.getGracePeriodEndBlock(graceBlocks),
             expiryBlock: TimingConfig.getDeadlineBlock(deadlineBlocks)
         });
@@ -448,5 +449,6 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
     // RECEIVE ETH
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @notice Accept ETH for cross-chain fees and refunds
     receive() external payable { }
 }

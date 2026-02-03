@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import { IFraudRegistryV2 } from "./interfaces/IFraudRegistryV2.sol";
 import { IMessageRecipient } from "@hyperlane-xyz/core/contracts/interfaces/IMessageRecipient.sol";
 import { CrossChainMessageV2 } from "./libraries/CrossChainMessageV2.sol";
-import { CAIP10 } from "../libraries/CAIP10.sol";
+import { CAIP10 } from "./libraries/CAIP10.sol";
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 /// @title CrossChainInboxV2
@@ -42,14 +42,24 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when a wallet registration is received and processed
+    /// @param origin The origin chain domain ID
+    /// @param identifier The wallet identifier (bytes32)
+    /// @param messageId The cross-chain message ID
     event WalletRegistrationReceived(uint32 indexed origin, bytes32 indexed identifier, bytes32 messageId);
 
     /// @notice Emitted when a transaction batch is received and processed
+    /// @param origin The origin chain domain ID
+    /// @param reporter The address that submitted the batch
+    /// @param merkleRoot The merkle root of the transaction batch
+    /// @param messageId The cross-chain message ID
     event TransactionBatchReceived(
         uint32 indexed origin, address indexed reporter, bytes32 merkleRoot, bytes32 messageId
     );
 
     /// @notice Emitted when trusted source configuration changes
+    /// @param chainId The Hyperlane domain ID
+    /// @param spokeRegistry The spoke registry address (as bytes32)
+    /// @param trusted Whether the source is now trusted
     event TrustedSourceUpdated(uint32 indexed chainId, bytes32 indexed spokeRegistry, bool trusted);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -183,11 +193,15 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Check if a source is trusted
+    /// @param chainId The Hyperlane domain ID
+    /// @param sender The sender address (as bytes32)
+    /// @return True if the source is trusted
     function isTrustedSource(uint32 chainId, bytes32 sender) external view returns (bool) {
         return _trustedSources[chainId][sender];
     }
 
     /// @notice Get bridge ID
+    /// @return The bridge ID constant (1 for Hyperlane)
     function bridgeId() external pure returns (uint8) {
         return BRIDGE_ID;
     }
