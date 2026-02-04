@@ -231,6 +231,7 @@ interface IFraudRegistryV2 {
     error FraudRegistryV2__InvalidFeeConfig();
     error FraudRegistryV2__InsufficientFee();
     error FraudRegistryV2__FeeForwardFailed();
+    error FraudRegistryV2__ExcessRefundFailed();
     error FraudRegistryV2__InvalidCaip10Format();
     error FraudRegistryV2__UnsupportedNamespace();
     error FraudRegistryV2__UnauthorizedInbox();

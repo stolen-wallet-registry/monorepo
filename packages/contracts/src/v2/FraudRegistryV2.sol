@@ -146,7 +146,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     // INTERNAL HELPERS - Fee Handling
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Validate and forward registration fee
+    /// @dev Validate and forward registration fee, refunding any excess
     function _collectFee(uint256 requiredFee) internal {
         if (feeManager == address(0)) return; // Free registrations
 
@@ -154,10 +154,19 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
             revert FraudRegistryV2__InsufficientFee();
         }
 
-        // Forward fee to recipient
-        (bool success,) = feeRecipient.call{ value: msg.value }("");
+        // Forward only the required fee to recipient
+        (bool success,) = feeRecipient.call{ value: requiredFee }("");
         if (!success) {
             revert FraudRegistryV2__FeeForwardFailed();
+        }
+
+        // Refund excess to sender
+        uint256 excess = msg.value - requiredFee;
+        if (excess > 0) {
+            (bool refundSuccess,) = msg.sender.call{ value: excess }("");
+            if (!refundSuccess) {
+                revert FraudRegistryV2__ExcessRefundFailed();
+            }
         }
     }
 

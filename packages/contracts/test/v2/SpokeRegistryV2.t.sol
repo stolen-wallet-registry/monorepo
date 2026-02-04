@@ -140,7 +140,7 @@ contract SpokeRegistryV2Test is Test {
             abi.encode(
                 keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
                 keccak256("StolenWalletRegistry"),
-                keccak256("4"), // V2 uses version 5
+                keccak256("4"), // EIP-712 version 4
                 block.chainid,
                 address(spoke)
             )

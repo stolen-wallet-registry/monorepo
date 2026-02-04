@@ -68,6 +68,10 @@ contract OperatorSubmitter is IOperatorSubmitter, Ownable2Step, Pausable {
         address _feeManager,
         address _feeRecipient
     ) Ownable(_owner) {
+        // If feeManager is set, feeRecipient must also be set to avoid locked ETH
+        if (_feeManager != address(0) && _feeRecipient == address(0)) {
+            revert OperatorSubmitter__InvalidFeeConfig();
+        }
         fraudRegistry = _fraudRegistry;
         operatorRegistry = _operatorRegistry;
         feeManager = _feeManager;
@@ -423,6 +427,10 @@ contract OperatorSubmitter is IOperatorSubmitter, Ownable2Step, Pausable {
 
     /// @inheritdoc IOperatorSubmitter
     function setFeeManager(address _feeManager) external onlyOwner {
+        // If enabling fees, feeRecipient must be set
+        if (_feeManager != address(0) && feeRecipient == address(0)) {
+            revert OperatorSubmitter__InvalidFeeConfig();
+        }
         feeManager = _feeManager;
         emit FeeManagerSet(_feeManager);
     }
@@ -430,6 +438,10 @@ contract OperatorSubmitter is IOperatorSubmitter, Ownable2Step, Pausable {
     /// @notice Set fee recipient address
     /// @param _feeRecipient Where fees go
     function setFeeRecipient(address _feeRecipient) external onlyOwner {
+        // If feeManager is set, feeRecipient cannot be cleared
+        if (feeManager != address(0) && _feeRecipient == address(0)) {
+            revert OperatorSubmitter__InvalidFeeConfig();
+        }
         feeRecipient = _feeRecipient;
     }
 

@@ -103,6 +103,10 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Handle incoming cross-chain message from Hyperlane
+    /// @dev The messageId emitted is a payload-derived ID (keccak256 of message body), not Hyperlane's
+    ///      native message ID. Hyperlane's native ID is computed from the full message envelope
+    ///      (version, nonce, origin, sender, destination, recipient, body) which isn't passed to handle().
+    ///      To correlate with Hyperlane's native ID, index Mailbox.Dispatch events on the source chain.
     /// @param _origin Origin chain domain ID
     /// @param _sender Sender address on origin chain (bytes32)
     /// @param _messageBody Encoded payload
@@ -112,7 +116,8 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
             revert CrossChainInboxV2__UntrustedSource();
         }
 
-        // Generate message ID from payload hash
+        // Generate payload-derived ID for idempotency and event correlation
+        // Note: This is NOT Hyperlane's native message ID (see function docs)
         bytes32 messageId = keccak256(_messageBody);
 
         // Extract message type to determine routing

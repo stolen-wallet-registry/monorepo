@@ -95,6 +95,13 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
             revert SpokeRegistryV2__InvalidTimingConfig();
         }
 
+        // Validate hub config: must be both set or both zero
+        bool hubChainIdSet = _hubChainId != 0;
+        bool hubInboxSet = _hubInbox != bytes32(0);
+        if (hubChainIdSet != hubInboxSet) {
+            revert SpokeRegistryV2__InvalidHubConfig();
+        }
+
         // Compute source chain ID as CAIP-2 hash
         sourceChainId = CAIP10Evm.caip2Hash(uint64(block.chainid));
 
@@ -508,10 +515,14 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Update hub chain configuration
+    /// @dev Both values must be set together, or both must be zero (unconfigured)
     /// @param _hubChainId Hub chain domain ID
     /// @param _hubInbox Hub inbox address
     function setHubConfig(uint32 _hubChainId, bytes32 _hubInbox) external onlyOwner {
-        if (_hubChainId != 0 && _hubInbox == bytes32(0)) {
+        // Enforce "both set or both zero" invariant
+        bool hubChainIdSet = _hubChainId != 0;
+        bool hubInboxSet = _hubInbox != bytes32(0);
+        if (hubChainIdSet != hubInboxSet) {
             revert SpokeRegistryV2__InvalidHubConfig();
         }
         hubChainId = _hubChainId;

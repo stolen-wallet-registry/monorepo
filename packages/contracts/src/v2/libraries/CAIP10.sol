@@ -94,11 +94,11 @@ library CAIP10 {
     }
 
     /// @notice Compute wildcard storage key for EVM wallet
-    /// @dev Uses CAIP-363 wildcard: one key for all EVM chains
+    /// @dev Uses CAIP-363 wildcard: one key for all EVM chains. Delegates to CAIP10Evm.
     /// @param wallet The wallet address
     /// @return key The storage key
     function evmWalletKey(address wallet) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked("eip155:_:", wallet));
+        return CAIP10Evm.evmWalletKey(wallet);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

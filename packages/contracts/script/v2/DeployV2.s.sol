@@ -121,9 +121,9 @@ contract DeployV2 is Script {
     address spokeMailbox;
 
     // Hub deployed addresses - Core V2
-    address mockAggregatorAddr;
-    address feeManagerAddr;
-    address operatorRegistryAddr;
+    address hubMockAggregatorAddr;
+    address hubFeeManagerAddr;
+    address hubOperatorRegistryAddr;
     address fraudRegistryAddr;
     address operatorSubmitterAddr;
     address crossChainInboxAddr;
@@ -187,29 +187,29 @@ contract DeployV2 is Script {
 
         // 1. Deploy MockAggregator (price feed for FeeManager)
         MockAggregator mockAggregator = new MockAggregator(350_000_000_000); // $3500 ETH
-        mockAggregatorAddr = address(mockAggregator);
-        console2.log("1. MockAggregator:", mockAggregatorAddr);
+        hubMockAggregatorAddr = address(mockAggregator);
+        console2.log("1. MockAggregator:", hubMockAggregatorAddr);
 
         // 2. Deploy FeeManager
-        FeeManager feeManager = new FeeManager(deployer, mockAggregatorAddr);
-        feeManagerAddr = address(feeManager);
-        console2.log("2. FeeManager:", feeManagerAddr);
+        FeeManager feeManager = new FeeManager(deployer, hubMockAggregatorAddr);
+        hubFeeManagerAddr = address(feeManager);
+        console2.log("2. FeeManager:", hubFeeManagerAddr);
 
         // 3. Deploy OperatorRegistry
         OperatorRegistry operatorRegistry = new OperatorRegistry(deployer);
-        operatorRegistryAddr = address(operatorRegistry);
-        console2.log("3. OperatorRegistry:", operatorRegistryAddr);
+        hubOperatorRegistryAddr = address(operatorRegistry);
+        console2.log("3. OperatorRegistry:", hubOperatorRegistryAddr);
 
         // 4. Deploy FraudRegistryV2 (with feeManager, feeRecipient = deployer for now)
         FraudRegistryV2 registry = new FraudRegistryV2(
-            deployer, operatorRegistryAddr, feeManagerAddr, deployer, hubGraceBlocks, hubDeadlineBlocks
+            deployer, hubOperatorRegistryAddr, hubFeeManagerAddr, deployer, hubGraceBlocks, hubDeadlineBlocks
         );
         fraudRegistryAddr = address(registry);
         console2.log("4. FraudRegistryV2:", fraudRegistryAddr);
 
         // 5. Deploy OperatorSubmitter (with feeManager)
         OperatorSubmitter operatorSubmitter =
-            new OperatorSubmitter(deployer, fraudRegistryAddr, operatorRegistryAddr, feeManagerAddr, deployer);
+            new OperatorSubmitter(deployer, fraudRegistryAddr, hubOperatorRegistryAddr, hubFeeManagerAddr, deployer);
         operatorSubmitterAddr = address(operatorSubmitter);
         console2.log("5. OperatorSubmitter:", operatorSubmitterAddr);
 
@@ -377,9 +377,9 @@ contract DeployV2 is Script {
         console2.log("  Spoke Mailbox: ", spokeMailbox);
         console2.log("");
         console2.log("Hub Chain (31337) - http://localhost:8545:");
-        console2.log("  MockAggregator:       ", mockAggregatorAddr);
-        console2.log("  FeeManager:           ", feeManagerAddr);
-        console2.log("  OperatorRegistry:     ", operatorRegistryAddr);
+        console2.log("  MockAggregator:       ", hubMockAggregatorAddr);
+        console2.log("  FeeManager:           ", hubFeeManagerAddr);
+        console2.log("  OperatorRegistry:     ", hubOperatorRegistryAddr);
         console2.log("  FraudRegistryV2:      ", fraudRegistryAddr);
         console2.log("  OperatorSubmitter:    ", operatorSubmitterAddr);
         console2.log("  CrossChainInboxV2:    ", crossChainInboxAddr);
