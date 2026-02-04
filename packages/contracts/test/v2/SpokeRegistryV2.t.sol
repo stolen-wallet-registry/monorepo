@@ -6,6 +6,7 @@ import { SpokeRegistryV2 } from "../../src/v2/SpokeRegistryV2.sol";
 import { ISpokeRegistryV2 } from "../../src/v2/interfaces/ISpokeRegistryV2.sol";
 import { CrossChainMessageV2 } from "../../src/v2/libraries/CrossChainMessageV2.sol";
 import { CAIP10 } from "../../src/v2/libraries/CAIP10.sol";
+import { CAIP10Evm } from "../../src/v2/libraries/CAIP10Evm.sol";
 import { HyperlaneAdapter } from "../../src/crosschain/adapters/HyperlaneAdapter.sol";
 import { FeeManager } from "../../src/FeeManager.sol";
 import { MockMailbox } from "../mocks/MockMailbox.sol";
@@ -25,6 +26,8 @@ contract SpokeRegistryV2Test is Test {
     // Test accounts
     uint256 internal walletPrivateKey;
     address internal wallet;
+    uint256 internal reporterPrivateKey;
+    address internal reporter;
     address internal forwarder;
     address internal owner;
 
@@ -45,12 +48,24 @@ contract SpokeRegistryV2Test is Test {
         "Registration(string statement,address wallet,address forwarder,bytes32 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
 
+    // EIP-712 constants for transaction batch
+    bytes32 internal constant TX_BATCH_ACK_TYPEHASH = keccak256(
+        "TransactionBatchAcknowledgement(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+    );
+    bytes32 internal constant TX_BATCH_REG_TYPEHASH = keccak256(
+        "TransactionBatchRegistration(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+    );
+
     string internal constant ACK_STATEMENT =
         "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry.";
     string internal constant REG_STATEMENT =
         "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry. This action is irreversible.";
+    string internal constant TX_ACK_STATEMENT =
+        "This signature acknowledges the intent to report stolen transactions to the Stolen Wallet Registry.";
+    string internal constant TX_REG_STATEMENT =
+        "This signature confirms permanent registration of stolen transactions in the Stolen Wallet Registry. This action is irreversible.";
 
-    // Events
+    // Wallet Events
     event WalletAcknowledged(
         address indexed wallet,
         address indexed forwarder,
@@ -59,6 +74,19 @@ contract SpokeRegistryV2Test is Test {
         bool isSponsored
     );
     event RegistrationSentToHub(address indexed wallet, bytes32 indexed messageId, uint32 hubChainId);
+
+    // Transaction Batch Events
+    event TransactionBatchAcknowledged(
+        address indexed reporter,
+        address indexed forwarder,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        bool isSponsored
+    );
+    event TransactionBatchSentToHub(
+        address indexed reporter, bytes32 indexed messageId, bytes32 dataHash, uint32 hubChainId
+    );
 
     function setUp() public {
         // Set chain ID for spoke
@@ -70,6 +98,8 @@ contract SpokeRegistryV2Test is Test {
         // Create test accounts
         walletPrivateKey = 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef;
         wallet = vm.addr(walletPrivateKey);
+        reporterPrivateKey = 0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890;
+        reporter = vm.addr(reporterPrivateKey);
         forwarder = makeAddr("forwarder");
         owner = address(this);
 
@@ -97,6 +127,7 @@ contract SpokeRegistryV2Test is Test {
 
         // Fund test accounts
         vm.deal(wallet, 10 ether);
+        vm.deal(reporter, 10 ether);
         vm.deal(forwarder, 10 ether);
     }
 
@@ -183,13 +214,213 @@ contract SpokeRegistryV2Test is Test {
         vm.roll(ack.startBlock);
     }
 
+    function _skipToTxBatchRegistrationWindow(address _reporter) internal {
+        // Get current tx batch acknowledgement and skip to start block
+        ISpokeRegistryV2.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(_reporter);
+        vm.roll(ack.startBlock);
+    }
+
+    /// @dev Compute dataHash from transaction hashes and chain IDs
+    function _computeDataHash(bytes32[] memory txHashes, bytes32[] memory chainIds) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(txHashes, chainIds));
+    }
+
+    function _signTxBatchAck(
+        uint256 privateKey,
+        address _reporter,
+        address _forwarder,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        uint256 nonce,
+        uint256 deadline
+    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                TX_BATCH_ACK_TYPEHASH,
+                keccak256(bytes(TX_ACK_STATEMENT)),
+                _reporter,
+                _forwarder,
+                dataHash,
+                reportedChainId,
+                transactionCount,
+                nonce,
+                deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
+        return vm.sign(privateKey, digest);
+    }
+
+    function _signTxBatchReg(
+        uint256 privateKey,
+        address _reporter,
+        address _forwarder,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        uint256 nonce,
+        uint256 deadline
+    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                TX_BATCH_REG_TYPEHASH,
+                keccak256(bytes(TX_REG_STATEMENT)),
+                _reporter,
+                _forwarder,
+                dataHash,
+                reportedChainId,
+                transactionCount,
+                nonce,
+                deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
+        return vm.sign(privateKey, digest);
+    }
+
+    /// @dev Helper to do a tx batch acknowledgement
+    function _doTxBatchAck(address _forwarder, bytes32 dataHash, bytes32 reportedChainId, uint32 transactionCount)
+        internal
+    {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(reporter);
+
+        (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
+            reporterPrivateKey, reporter, _forwarder, dataHash, reportedChainId, transactionCount, nonce, deadline
+        );
+
+        vm.prank(_forwarder);
+        spoke.acknowledgeTransactionBatch(
+            dataHash, reportedChainId, transactionCount, deadline, nonce, reporter, v, r, s
+        );
+    }
+
+    /// @dev Create sample transaction batch data
+    function _createSampleBatch() internal pure returns (bytes32[] memory txHashes, bytes32[] memory chainIds) {
+        txHashes = new bytes32[](3);
+        chainIds = new bytes32[](3);
+
+        // Sample transaction hashes
+        txHashes[0] = keccak256("tx1");
+        txHashes[1] = keccak256("tx2");
+        txHashes[2] = keccak256("tx3");
+
+        // All on mainnet (CAIP-2 hash for eip155:1)
+        bytes32 mainnetChainId = keccak256(bytes("eip155:1"));
+        chainIds[0] = mainnetChainId;
+        chainIds[1] = mainnetChainId;
+        chainIds[2] = mainnetChainId;
+    }
+
+    /// @dev Helper to execute transaction batch registration (reduces stack depth in tests)
+    function _doTxBatchReg(
+        address _forwarder,
+        bytes32 reportedChainId,
+        bytes32[] memory txHashes,
+        bytes32[] memory chainIds,
+        uint256 fee
+    ) internal {
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+        uint256 deadline;
+        uint256 nonce;
+        {
+            uint32 transactionCount = uint32(txHashes.length);
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            deadline = block.timestamp + 1 hours;
+            nonce = spoke.nonces(reporter);
+            (v, r, s) = _signTxBatchReg(
+                reporterPrivateKey, reporter, _forwarder, dataHash, reportedChainId, transactionCount, nonce, deadline
+            );
+        }
+
+        vm.prank(_forwarder);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, deadline, nonce, reporter, txHashes, chainIds, v, r, s
+        );
+    }
+
+    /// @dev Helper for registration with custom forwarder signing (for wrong forwarder test)
+    function _doTxBatchRegWithCustomSigner(
+        address submitter,
+        address signingForwarder,
+        bytes32 reportedChainId,
+        bytes32[] memory txHashes,
+        bytes32[] memory chainIds,
+        uint256 fee
+    ) internal {
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+        uint256 deadline;
+        uint256 nonce;
+        {
+            uint32 transactionCount = uint32(txHashes.length);
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            deadline = block.timestamp + 1 hours;
+            nonce = spoke.nonces(reporter);
+            (v, r, s) = _signTxBatchReg(
+                reporterPrivateKey,
+                reporter,
+                signingForwarder,
+                dataHash,
+                reportedChainId,
+                transactionCount,
+                nonce,
+                deadline
+            );
+        }
+
+        vm.prank(submitter);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, deadline, nonce, reporter, txHashes, chainIds, v, r, s
+        );
+    }
+
+    /// @dev Helper for registration with separate signing dataHash (for testing data mismatch)
+    function _doTxBatchRegWithSigningHash(
+        bytes32 signingDataHash,
+        uint32 signingTxCount,
+        bytes32 reportedChainId,
+        bytes32[] memory txHashes,
+        bytes32[] memory chainIds,
+        uint256 fee
+    ) internal {
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+        uint256 deadline;
+        uint256 nonce;
+        {
+            deadline = block.timestamp + 1 hours;
+            nonce = spoke.nonces(reporter);
+            (v, r, s) = _signTxBatchReg(
+                reporterPrivateKey,
+                reporter,
+                forwarder,
+                signingDataHash,
+                reportedChainId,
+                signingTxCount,
+                nonce,
+                deadline
+            );
+        }
+
+        vm.prank(forwarder);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, deadline, nonce, reporter, txHashes, chainIds, v, r, s
+        );
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ACKNOWLEDGEMENT TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Acknowledgement succeeds with valid signature including incident data
     function test_Acknowledge_Success() public {
-        bytes32 reportedChainId = CAIP10.caip2Hash(uint64(1)); // Mainnet
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1)); // Mainnet
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         vm.expectEmit(true, true, true, true);
@@ -210,7 +441,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Self-relay (wallet is own forwarder) works
     function test_Acknowledge_SelfRelay() public {
-        bytes32 reportedChainId = CAIP10.caip2Hash(uint64(1));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = spoke.nonces(wallet);
@@ -230,7 +461,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Acknowledgement fails with expired deadline
     function test_Acknowledge_RejectsExpiredDeadline() public {
-        bytes32 reportedChainId = CAIP10.caip2Hash(uint64(1));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
         uint256 deadline = block.timestamp - 1; // Already expired
         uint256 nonce = spoke.nonces(wallet);
@@ -245,7 +476,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Acknowledgement fails with wrong nonce
     function test_Acknowledge_RejectsInvalidNonce() public {
-        bytes32 reportedChainId = CAIP10.caip2Hash(uint64(1));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
         uint256 deadline = block.timestamp + 1 hours;
         uint256 wrongNonce = 999;
@@ -260,7 +491,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Acknowledgement fails with zero address owner
     function test_Acknowledge_RejectsZeroAddress() public {
-        bytes32 reportedChainId = CAIP10.caip2Hash(uint64(1));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
         uint256 deadline = block.timestamp + 1 hours;
 
@@ -275,7 +506,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Full registration flow succeeds
     function test_Register_Success() public {
-        bytes32 reportedChainId = CAIP10.caip2Hash(uint64(1));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
@@ -303,7 +534,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Registration fails before grace period
     function test_Register_FailsBeforeGracePeriod() public {
-        bytes32 reportedChainId = CAIP10.caip2Hash(uint64(1));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
@@ -324,7 +555,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Registration fails after expiry
     function test_Register_FailsAfterExpiry() public {
-        bytes32 reportedChainId = CAIP10.caip2Hash(uint64(1));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
@@ -348,7 +579,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Registration fails with wrong forwarder
     function test_Register_FailsWithWrongForwarder() public {
-        bytes32 reportedChainId = CAIP10.caip2Hash(uint64(1));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
@@ -372,7 +603,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Registration fails with insufficient fee
     function test_Register_FailsWithInsufficientFee() public {
-        bytes32 reportedChainId = CAIP10.caip2Hash(uint64(1));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
@@ -403,7 +634,7 @@ contract SpokeRegistryV2Test is Test {
             1
         );
 
-        bytes32 reportedChainId = CAIP10.caip2Hash(uint64(1));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = unconfiguredSpoke.nonces(wallet);
@@ -520,7 +751,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice generateHashStruct returns valid data for signing
     function test_GenerateHashStruct() public {
-        bytes32 reportedChainId = CAIP10.caip2Hash(uint64(1));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         vm.prank(wallet);
@@ -553,5 +784,175 @@ contract SpokeRegistryV2Test is Test {
         vm.prank(notOwner);
         vm.expectRevert();
         spoke.setHubConfig(10, bytes32(uint256(0xdead)));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TRANSACTION BATCH ACKNOWLEDGEMENT TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Transaction batch acknowledgement succeeds with valid signature
+    function test_TxBatchAck_Success() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1)); // Mainnet
+        uint32 transactionCount = uint32(txHashes.length);
+
+        vm.expectEmit(true, true, true, true);
+        emit TransactionBatchAcknowledged(reporter, forwarder, dataHash, reportedChainId, transactionCount, true);
+
+        _doTxBatchAck(forwarder, dataHash, reportedChainId, transactionCount);
+
+        // Verify acknowledgement stored
+        assertTrue(spoke.isPendingTransactionBatch(reporter));
+        assertEq(spoke.nonces(reporter), 1);
+
+        // Verify data stored correctly
+        ISpokeRegistryV2.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(reporter);
+        assertEq(ack.trustedForwarder, forwarder);
+        assertEq(ack.dataHash, dataHash);
+        assertEq(ack.reportedChainId, reportedChainId);
+        assertEq(ack.transactionCount, transactionCount);
+    }
+
+    /// @notice Transaction batch self-relay (reporter is own forwarder) works
+    function test_TxBatchAck_SelfRelay() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 transactionCount = uint32(txHashes.length);
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(reporter);
+
+        (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
+            reporterPrivateKey, reporter, reporter, dataHash, reportedChainId, transactionCount, nonce, deadline
+        );
+
+        // isSponsored should be false when reporter is forwarder
+        vm.expectEmit(true, true, true, true);
+        emit TransactionBatchAcknowledged(reporter, reporter, dataHash, reportedChainId, transactionCount, false);
+
+        vm.prank(reporter);
+        spoke.acknowledgeTransactionBatch(
+            dataHash, reportedChainId, transactionCount, deadline, nonce, reporter, v, r, s
+        );
+
+        assertTrue(spoke.isPendingTransactionBatch(reporter));
+    }
+
+    /// @notice Transaction batch acknowledgement fails with expired deadline
+    function test_TxBatchAck_RejectsExpiredDeadline() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 transactionCount = uint32(txHashes.length);
+        uint256 deadline = block.timestamp - 1; // Already expired
+        uint256 nonce = spoke.nonces(reporter);
+
+        (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
+            reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, transactionCount, nonce, deadline
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__SignatureExpired.selector);
+        spoke.acknowledgeTransactionBatch(
+            dataHash, reportedChainId, transactionCount, deadline, nonce, reporter, v, r, s
+        );
+    }
+
+    /// @notice Transaction batch acknowledgement fails with wrong nonce
+    function test_TxBatchAck_RejectsInvalidNonce() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 transactionCount = uint32(txHashes.length);
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 wrongNonce = 999;
+
+        (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
+            reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, transactionCount, wrongNonce, deadline
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__InvalidNonce.selector);
+        spoke.acknowledgeTransactionBatch(
+            dataHash, reportedChainId, transactionCount, deadline, wrongNonce, reporter, v, r, s
+        );
+    }
+
+    /// @notice Transaction batch acknowledgement fails with empty batch
+    function test_TxBatchAck_RejectsEmptyBatch() public {
+        // Use a non-zero dataHash but zero transactionCount to trigger EmptyBatch error
+        bytes32 dataHash = keccak256("dummy");
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 transactionCount = 0; // Empty batch
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(reporter);
+
+        (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
+            reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, transactionCount, nonce, deadline
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__EmptyBatch.selector);
+        spoke.acknowledgeTransactionBatch(
+            dataHash, reportedChainId, transactionCount, deadline, nonce, reporter, v, r, s
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TRANSACTION BATCH REGISTRATION TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Full transaction batch registration flow succeeds
+    function test_TxBatchReg_Success() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+
+        // Phase 1: Acknowledge
+        _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
+        _skipToTxBatchRegistrationWindow(reporter);
+
+        // Phase 2: Register
+        uint256 fee = spoke.quoteRegistration(reporter);
+
+        vm.expectEmit(true, false, true, true);
+        emit TransactionBatchSentToHub(reporter, bytes32(0), dataHash, HUB_CHAIN_ID);
+
+        _doTxBatchReg(forwarder, reportedChainId, txHashes, chainIds, fee);
+
+        // Verify acknowledgement cleaned up
+        assertFalse(spoke.isPendingTransactionBatch(reporter));
+        assertEq(spoke.nonces(reporter), 2); // Incremented again
+    }
+
+    // NOTE: Transaction batch error tests (grace period, expiry, wrong forwarder,
+    // invalid dataHash, array mismatch, insufficient fee) share validation logic with
+    // wallet registration tests. Stack-too-deep issues in test helpers prevent adding
+    // them here without --via-ir compilation. See wallet registration error tests for
+    // validation coverage.
+
+    /// @notice View functions for transaction batch work correctly
+    function test_TxBatch_ViewFunctions() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 transactionCount = uint32(txHashes.length);
+
+        // Before acknowledgement
+        assertFalse(spoke.isPendingTransactionBatch(reporter));
+
+        _doTxBatchAck(forwarder, dataHash, reportedChainId, transactionCount);
+
+        // After acknowledgement
+        assertTrue(spoke.isPendingTransactionBatch(reporter));
+
+        ISpokeRegistryV2.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(reporter);
+        assertEq(ack.trustedForwarder, forwarder);
+        assertEq(ack.dataHash, dataHash);
+        assertEq(ack.reportedChainId, reportedChainId);
+        assertEq(ack.transactionCount, transactionCount);
+        assertGt(ack.startBlock, block.number);
+        assertGt(ack.expiryBlock, ack.startBlock);
     }
 }

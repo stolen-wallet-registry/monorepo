@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import { IFraudRegistryV2 } from "./interfaces/IFraudRegistryV2.sol";
 import { IMessageRecipient } from "@hyperlane-xyz/core/contracts/interfaces/IMessageRecipient.sol";
 import { CrossChainMessageV2 } from "./libraries/CrossChainMessageV2.sol";
-import { CAIP10 } from "./libraries/CAIP10.sol";
+import { CAIP10Evm } from "./libraries/CAIP10Evm.sol";
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 /// @title CrossChainInboxV2
@@ -50,10 +50,10 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     /// @notice Emitted when a transaction batch is received and processed
     /// @param origin The origin chain domain ID
     /// @param reporter The address that submitted the batch
-    /// @param merkleRoot The merkle root of the transaction batch
+    /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
     /// @param messageId The cross-chain message ID
     event TransactionBatchReceived(
-        uint32 indexed origin, address indexed reporter, bytes32 merkleRoot, bytes32 messageId
+        uint32 indexed origin, address indexed reporter, bytes32 dataHash, bytes32 messageId
     );
 
     /// @notice Emitted when trusted source configuration changes
@@ -135,7 +135,7 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
 
         // Defense in depth: verify payload sourceChainId matches Hyperlane origin
         // Convert _origin (Hyperlane domain, typically EIP-155) to CAIP-2 hash
-        bytes32 expectedSourceChainId = CAIP10.caip2Hash(uint64(_origin));
+        bytes32 expectedSourceChainId = CAIP10Evm.caip2Hash(uint64(_origin));
         if (payload.sourceChainId != expectedSourceChainId) {
             revert CrossChainInboxV2__SourceChainMismatch();
         }
@@ -158,21 +158,32 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     }
 
     /// @dev Handle transaction batch messages (V2 format)
-    /// @dev Note: Transaction batch support requires FraudRegistryV2 to have a corresponding method
     function _handleTransactionBatch(uint32 _origin, bytes calldata _messageBody, bytes32 messageId) internal {
         // Decode the V2 transaction batch payload
         CrossChainMessageV2.TransactionBatchPayload memory payload =
             CrossChainMessageV2.decodeTransactionBatch(_messageBody);
 
         // Defense in depth: verify sourceChainId matches origin
-        bytes32 expectedSourceChainId = CAIP10.caip2Hash(uint64(_origin));
+        bytes32 expectedSourceChainId = CAIP10Evm.caip2Hash(uint64(_origin));
         if (payload.sourceChainId != expectedSourceChainId) {
             revert CrossChainInboxV2__SourceChainMismatch();
         }
 
-        // TODO: Forward to FraudRegistryV2 transaction batch method when implemented
-        // For now, emit event for tracking
-        emit TransactionBatchReceived(_origin, payload.reporter, payload.merkleRoot, messageId);
+        // Forward to FraudRegistryV2
+        IFraudRegistryV2(fraudRegistry)
+            .registerTransactionsFromSpoke(
+                payload.reporter,
+                payload.dataHash,
+                payload.reportedChainId,
+                payload.sourceChainId,
+                payload.isSponsored,
+                payload.transactionHashes,
+                payload.chainIds,
+                BRIDGE_ID,
+                messageId
+            );
+
+        emit TransactionBatchReceived(_origin, payload.reporter, payload.dataHash, messageId);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -42,6 +42,7 @@
     "deploy:v2": "pnpm --filter @swr/contracts deploy:v2:local",
     "deploy:v2:testnet": "pnpm --filter @swr/contracts deploy:v2:testnet",
     "deploy:crosschain": "pnpm --filter @swr/contracts deploy:crosschain",
+    "deploy:crosschain:v2": "pnpm --filter @swr/contracts deploy:crosschain:v2",
     "seed:transactions": "pnpm --filter @swr/contracts seed:transactions",
     "deploy:testnet:hub": "pnpm --filter @swr/contracts deploy:testnet:hub",
     "deploy:testnet:spoke": "pnpm --filter @swr/contracts deploy:testnet:spoke",

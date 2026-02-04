@@ -44,9 +44,11 @@ library CrossChainMessageV2 {
     }
 
     /// @notice Cross-chain transaction batch payload (V2)
-    /// @dev Includes full transaction hashes for hub-side event emission.
+    /// @dev Includes full transaction hashes for hub-side direct storage.
+    ///      dataHash = keccak256(abi.encodePacked(transactionHashes, chainIds))
+    ///      Used for signature verification - binds signature to exact data.
     struct TransactionBatchPayload {
-        bytes32 merkleRoot; // Root of the Merkle tree
+        bytes32 dataHash; // Hash of (txHashes, chainIds) - signature commitment
         address reporter; // Address that submitted the registration
         bytes32 reportedChainId; // CAIP-2 chain ID where transactions occurred
         bytes32 sourceChainId; // CAIP-2 chain ID where registration submitted
@@ -98,7 +100,7 @@ library CrossChainMessageV2 {
         return abi.encode(
             MESSAGE_VERSION,
             MSG_TYPE_TRANSACTION_BATCH,
-            payload.merkleRoot,
+            payload.dataHash,
             payload.reporter,
             payload.reportedChainId,
             payload.sourceChainId,
@@ -161,7 +163,7 @@ library CrossChainMessageV2 {
         (
             uint8 version,
             bytes1 msgType,
-            bytes32 merkleRoot,
+            bytes32 dataHash,
             address reporter,
             bytes32 reportedChainId,
             bytes32 sourceChainId,
@@ -186,7 +188,7 @@ library CrossChainMessageV2 {
         }
 
         payload = TransactionBatchPayload({
-            merkleRoot: merkleRoot,
+            dataHash: dataHash,
             reporter: reporter,
             reportedChainId: reportedChainId,
             sourceChainId: sourceChainId,

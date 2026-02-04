@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 /// @title IFraudRegistryV2
 /// @author Stolen Wallet Registry Team
 /// @notice Interface for the V2 Fraud Registry with simplified direct storage
-/// @dev Replaces merkle-proof-based storage with direct mappings using CAIP-363-inspired
+/// @dev Uses direct mappings instead of merkle proofs, with CAIP-363-inspired
 ///      wildcard keys for EVM wallets. This enables simple on-chain verification:
 ///      `isEvmWalletRegistered(address) -> bool`
 ///
@@ -211,6 +211,10 @@ interface IFraudRegistryV2 {
     /// @param operatorRegistry The new operator registry address
     event OperatorRegistrySet(address indexed operatorRegistry);
 
+    /// @notice Emitted when operator submitter is set
+    /// @param operatorSubmitter The new operator submitter address
+    event OperatorSubmitterSet(address indexed operatorSubmitter);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -223,9 +227,6 @@ interface IFraudRegistryV2 {
     error FraudRegistryV2__GracePeriodNotStarted();
     error FraudRegistryV2__RegistrationExpired();
     error FraudRegistryV2__AlreadyRegistered();
-    error FraudRegistryV2__NotApprovedOperator();
-    error FraudRegistryV2__ArrayLengthMismatch();
-    error FraudRegistryV2__EmptyBatch();
     error FraudRegistryV2__InvalidTimingConfig();
     error FraudRegistryV2__InvalidFeeConfig();
     error FraudRegistryV2__InsufficientFee();
@@ -233,6 +234,7 @@ interface IFraudRegistryV2 {
     error FraudRegistryV2__InvalidCaip10Format();
     error FraudRegistryV2__UnsupportedNamespace();
     error FraudRegistryV2__UnauthorizedInbox();
+    error FraudRegistryV2__UnauthorizedOperatorSubmitter();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS - Cross-Chain
@@ -260,6 +262,24 @@ interface IFraudRegistryV2 {
     /// @notice Emitted when registry hub is updated
     /// @param crossChainInbox The new registry hub address
     event CrossChainInboxSet(address indexed crossChainInbox);
+
+    /// @notice Emitted when a transaction batch is registered via cross-chain message
+    /// @param reporter Address that submitted the registration on spoke
+    /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
+    /// @param sourceChainId CAIP-2 hash of chain where registration was submitted
+    /// @param reportedChainId CAIP-2 hash where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param bridgeId Bridge protocol used (1 = Hyperlane)
+    /// @param crossChainMessageId Unique message identifier from bridge
+    event CrossChainTransactionBatchRegistered(
+        address indexed reporter,
+        bytes32 indexed dataHash,
+        bytes32 sourceChainId,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    );
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - Primary CAIP-10 Interface
@@ -444,55 +464,55 @@ interface IFraudRegistryV2 {
     ) external payable;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // WRITE FUNCTIONS - Operator Batch Registration (Chain-Agnostic)
+    // WRITE FUNCTIONS - Trusted Caller Registration (OperatorSubmitter)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Register batch of wallets as operator (single-phase, chain-agnostic)
-    /// @dev Operators bypass two-phase since they're DAO-vetted.
+    /// @notice Register batch of wallets from OperatorSubmitter (trusted caller)
+    /// @dev Only callable by operatorSubmitter. OperatorSubmitter validates operator permissions.
     ///      Supports EVM, Solana, Bitcoin, Cosmos - any CAIP-10 namespace.
-    ///      Fee is flat per batch, collected via msg.value.
-    ///
-    ///      Parameter format matches registerFromSpoke for consistency:
-    ///        - EVM: namespaceHash=NAMESPACE_EIP155, chainRef ignored, identifier=address as bytes32
-    ///        - Solana: namespaceHash=NAMESPACE_SOLANA, chainRef=keccak256("mainnet"), identifier=pubkey
-    ///        - etc.
-    ///
+    /// @param operator The operator address (for events and batch metadata)
     /// @param namespaceHashes Array of namespace hashes (CAIP10.NAMESPACE_EIP155, etc.)
     /// @param chainRefs Array of chain reference hashes (ignored for EVM wallets)
     /// @param identifiers Array of wallet identifiers as bytes32
     /// @param reportedChainIds Array of CAIP-2 hashes where each was reported
     /// @param incidentTimestamps Array of incident timestamps
-    function registerWalletsAsOperator(
+    /// @return batchId The created batch ID
+    function registerWalletsFromOperator(
+        address operator,
         bytes32[] calldata namespaceHashes,
         bytes32[] calldata chainRefs,
         bytes32[] calldata identifiers,
         bytes32[] calldata reportedChainIds,
         uint64[] calldata incidentTimestamps
-    ) external payable;
+    ) external returns (uint32 batchId);
 
-    /// @notice Register batch of transactions as operator (chain-agnostic)
-    /// @dev Fee is flat per batch, collected via msg.value.
-    ///      Transactions are always chain-specific (no wildcard).
+    /// @notice Register batch of transactions from OperatorSubmitter (trusted caller)
+    /// @dev Only callable by operatorSubmitter. OperatorSubmitter validates operator permissions.
+    /// @param operator The operator address (for events and batch metadata)
     /// @param namespaceHashes Array of namespace hashes
     /// @param chainRefs Array of chain reference hashes
     /// @param txHashes Array of transaction hashes/signatures as bytes32
-    function registerTransactionsAsOperator(
+    /// @return batchId The created batch ID
+    function registerTransactionsFromOperator(
+        address operator,
         bytes32[] calldata namespaceHashes,
         bytes32[] calldata chainRefs,
         bytes32[] calldata txHashes
-    ) external payable;
+    ) external returns (uint32 batchId);
 
-    /// @notice Register batch of contracts as operator (chain-agnostic)
-    /// @dev Fee is flat per batch, collected via msg.value.
-    ///      Contracts are always chain-specific (no wildcard).
+    /// @notice Register batch of contracts from OperatorSubmitter (trusted caller)
+    /// @dev Only callable by operatorSubmitter. OperatorSubmitter validates operator permissions.
+    /// @param operator The operator address (for events and batch metadata)
     /// @param namespaceHashes Array of namespace hashes
     /// @param chainRefs Array of chain reference hashes
     /// @param contractIds Array of contract identifiers as bytes32
-    function registerContractsAsOperator(
+    /// @return batchId The created batch ID
+    function registerContractsFromOperator(
+        address operator,
         bytes32[] calldata namespaceHashes,
         bytes32[] calldata chainRefs,
         bytes32[] calldata contractIds
-    ) external payable;
+    ) external returns (uint32 batchId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS - Cross-Chain Registration (Hub Only)
@@ -528,6 +548,30 @@ interface IFraudRegistryV2 {
         bytes32 crossChainMessageId
     ) external;
 
+    /// @notice Register transaction batch from cross-chain message via CrossChainInbox
+    /// @dev Only callable by crossChainInbox. Bypasses two-phase since spoke validated.
+    ///      The spoke has already validated signatures and data integrity via dataHash.
+    /// @param reporter Address that submitted the registration on spoke
+    /// @param dataHash Hash of (txHashes, chainIds) - verified on spoke
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param sourceChainId CAIP-2 hash of chain where registration was submitted
+    /// @param isSponsored True if third party paid gas on spoke
+    /// @param transactionHashes Array of transaction hashes
+    /// @param chainIds Parallel array of CAIP-2 chain IDs per transaction
+    /// @param bridgeId Bridge protocol used (1 = Hyperlane)
+    /// @param crossChainMessageId Unique message identifier from bridge
+    function registerTransactionsFromSpoke(
+        address reporter,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        bytes32 sourceChainId,
+        bool isSponsored,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds,
+        uint8 bridgeId,
+        bytes32 crossChainMessageId
+    ) external;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS - DAO Controls
     // ═══════════════════════════════════════════════════════════════════════════
@@ -535,6 +579,10 @@ interface IFraudRegistryV2 {
     /// @notice Set the operator registry address
     /// @param _operatorRegistry The operator registry address
     function setOperatorRegistry(address _operatorRegistry) external;
+
+    /// @notice Set the operator submitter address
+    /// @param _operatorSubmitter The operator submitter address (address(0) to disable)
+    function setOperatorSubmitter(address _operatorSubmitter) external;
 
     /// @notice Set the registry hub address for cross-chain registrations
     /// @param _crossChainInbox The registry hub address (address(0) to disable)
@@ -548,11 +596,6 @@ interface IFraudRegistryV2 {
     /// @dev Returns 0 if feeManager is not set (free registrations)
     /// @return fee Fee required in native token (wei)
     function quoteRegistration() external view returns (uint256 fee);
-
-    /// @notice Quote operator batch registration fee
-    /// @dev Returns 0 if feeManager is not set (free registrations)
-    /// @return fee Fee required in native token (wei)
-    function quoteOperatorBatchRegistration() external view returns (uint256 fee);
 
     /// @notice Get fee manager address
     /// @return address(0) = free registrations, otherwise FeeManager contract
@@ -569,6 +612,10 @@ interface IFraudRegistryV2 {
     /// @notice Get operator registry address
     /// @return The operator registry address
     function operatorRegistry() external view returns (address);
+
+    /// @notice Get operator submitter address
+    /// @return The operator submitter address (address(0) = operator batch disabled)
+    function operatorSubmitter() external view returns (address);
 
     /// @notice Get registry hub address for cross-chain registrations
     /// @return The registry hub address (address(0) = cross-chain disabled)

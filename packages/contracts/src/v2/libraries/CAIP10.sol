@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
+import { CAIP10Evm } from "./CAIP10Evm.sol";
 
 /// @title CAIP10
 /// @author Stolen Wallet Registry Team
-/// @notice Unified cross-chain library for CAIP-10 identifiers and storage keys
+/// @notice Core cross-chain library for CAIP-10 identifiers and storage keys
 /// @dev This library is designed for CROSS-CHAIN compatibility, not just EVM.
+///      For EVM-specific convenience functions, see CAIP10Evm.sol
 ///
 ///      CAIP-10 format: {namespace}:{chainRef}:{identifier}
 ///      Examples:
@@ -27,12 +28,6 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 ///        - TRANSACTIONS: Always chain-specific (tx hashes are unique per chain)
 ///        - CONTRACTS: Always chain-specific (bytecode may differ per chain)
 ///
-///      Why not OpenZeppelin's CAIP10/CAIP2 libraries?
-///        OZ's implementation (v5.1+) provides string formatting/parsing, returning strings.
-///        We need STORAGE KEYS (keccak256 hashes) for O(1) mapping lookups.
-///        We also need wildcard support (CAIP-363) and cross-chain bytes32 identifiers.
-///        OZ returns strings; we need hashes. Different use case entirely.
-///
 ///      Cross-Chain Design:
 ///        All chain references use bytes32 to accommodate:
 ///        - EVM: numeric chain IDs (1, 8453, etc.) → hash or pad to bytes32
@@ -40,16 +35,12 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 ///        - Bitcoin: 32-byte genesis block hash → use directly
 ///        - Cosmos: string refs ("cosmoshub-4") → keccak256("cosmoshub-4")
 library CAIP10 {
-    using Strings for uint256;
-    using Strings for address;
-
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
     error CAIP10__InvalidFormat();
     error CAIP10__UnsupportedNamespace();
-    error CAIP10__InvalidAddress();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // NAMESPACE CONSTANTS (keccak256 hashes for efficient comparison)
@@ -102,10 +93,6 @@ library CAIP10 {
         return keccak256(abi.encodePacked(namespaceHash, chainRef, contractId));
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // EVM CONVENIENCE FUNCTIONS
-    // ═══════════════════════════════════════════════════════════════════════════
-
     /// @notice Compute wildcard storage key for EVM wallet
     /// @dev Uses CAIP-363 wildcard: one key for all EVM chains
     /// @param wallet The wallet address
@@ -114,34 +101,9 @@ library CAIP10 {
         return keccak256(abi.encodePacked("eip155:_:", wallet));
     }
 
-    /// @notice Compute chain-specific storage key for EVM transaction
-    /// @param txHash The transaction hash
-    /// @param chainId The EIP-155 chain ID
-    /// @return key The storage key
-    function evmTransactionKey(bytes32 txHash, uint64 chainId) internal pure returns (bytes32) {
-        return transactionKey(NAMESPACE_EIP155, keccak256(bytes(uint256(chainId).toString())), txHash);
-    }
-
-    /// @notice Compute chain-specific storage key for EVM contract
-    /// @param contractAddr The contract address
-    /// @param chainId The EIP-155 chain ID
-    /// @return key The storage key
-    function evmContractKey(address contractAddr, uint64 chainId) internal pure returns (bytes32) {
-        return contractKey(
-            NAMESPACE_EIP155, keccak256(bytes(uint256(chainId).toString())), bytes32(uint256(uint160(contractAddr)))
-        );
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // CHAIN REFERENCE HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @notice Convert EVM chain ID to bytes32 chain reference hash
-    /// @param chainId The EIP-155 chain ID
-    /// @return hash The hashed chain reference
-    function evmChainRefHash(uint64 chainId) internal pure returns (bytes32) {
-        return keccak256(bytes(uint256(chainId).toString()));
-    }
 
     /// @notice Convert string chain reference to bytes32 hash
     /// @dev Use for Solana ("mainnet"), Cosmos ("cosmoshub-4"), etc.
@@ -156,7 +118,7 @@ library CAIP10 {
     // ═══════════════════════════════════════════════════════════════════════════
     // These use a pre-hashed chainId (bytes32) for cross-chain compatibility.
     // The chainId should be the keccak256 hash of the CAIP-2 chain identifier:
-    //   - EVM: keccak256("eip155:8453") or use caip2Hash(8453)
+    //   - EVM: keccak256("eip155:8453") or use CAIP10Evm.caip2Hash(8453)
     //   - Solana: keccak256("solana:mainnet") or use caip2Hash("solana", "mainnet")
     //   - Bitcoin: keccak256("bip122:000000000019d6689c085ae165831e93")
     //
@@ -181,14 +143,6 @@ library CAIP10 {
     /// @return key The storage key
     function contractStorageKey(address contractAddr, bytes32 chainId) internal pure returns (bytes32) {
         return keccak256(abi.encode(contractAddr, chainId));
-    }
-
-    /// @notice Compute CAIP-2 hash for an EVM chain
-    /// @dev Produces keccak256("eip155:{chainId}") for use as chainId parameter
-    /// @param chainId The EIP-155 chain ID (e.g., 8453 for Base)
-    /// @return hash The CAIP-2 chain identifier hash
-    function caip2Hash(uint64 chainId) internal pure returns (bytes32) {
-        return keccak256(bytes(string(abi.encodePacked("eip155:", uint256(chainId).toString()))));
     }
 
     /// @notice Compute CAIP-2 hash from namespace and chain reference strings
@@ -230,14 +184,6 @@ library CAIP10 {
         return uint64(uint256(fullHash) >> 192);
     }
 
-    /// @notice Compute truncated chain ID hash for EVM chain
-    /// @dev Convenience function: truncatedChainIdHash("eip155:{chainId}")
-    /// @param chainId The EIP-155 chain ID (e.g., 8453 for Base)
-    /// @return Truncated 64-bit hash
-    function truncatedEvmChainIdHash(uint64 chainId) internal pure returns (uint64) {
-        return truncatedChainIdHash(string(abi.encodePacked("eip155:", uint256(chainId).toString())));
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // CAIP-10 STRING PARSING
     // ═══════════════════════════════════════════════════════════════════════════
@@ -276,39 +222,14 @@ library CAIP10 {
         (bytes32 namespaceHash, bytes32 chainRef, uint256 addrStart, uint256 addrLen) = parse(caip10);
 
         if (namespaceHash == NAMESPACE_EIP155) {
-            address wallet = parseEvmAddress(caip10, addrStart);
+            // Delegate to CAIP10Evm for EVM address parsing
+            address wallet = CAIP10Evm.parseEvmAddress(caip10, addrStart);
             return evmWalletKey(wallet);
         }
 
         // Generic: hash the identifier portion
         bytes memory identifier = _slice(bytes(caip10), addrStart, addrLen);
         return walletKey(namespaceHash, chainRef, keccak256(identifier));
-    }
-
-    /// @notice Parse EVM address from CAIP-10 string at given offset
-    /// @param caip10 The full CAIP-10 string
-    /// @param offset Byte offset where address starts
-    /// @return wallet The parsed address
-    function parseEvmAddress(string memory caip10, uint256 offset) internal pure returns (address) {
-        bytes memory data = bytes(caip10);
-        uint256 len = data.length;
-
-        if (len - offset != 42) revert CAIP10__InvalidAddress();
-        if (data[offset] != "0" || (data[offset + 1] != "x" && data[offset + 1] != "X")) {
-            revert CAIP10__InvalidAddress();
-        }
-
-        uint160 addr = 0;
-        for (uint256 i = 0; i < 40; i++) {
-            uint8 b = uint8(data[offset + 2 + i]);
-            uint8 val;
-            if (b >= 48 && b <= 57) val = b - 48;
-            else if (b >= 65 && b <= 70) val = b - 55;
-            else if (b >= 97 && b <= 102) val = b - 87;
-            else revert CAIP10__InvalidAddress();
-            addr = addr * 16 + val;
-        }
-        return address(addr);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -345,40 +266,6 @@ library CAIP10 {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // FORMATTING (for events/logging)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @notice Format EVM address to CAIP-10 wildcard string (checksummed)
-    /// @param wallet The EVM wallet address
-    /// @return The CAIP-10 string in format "eip155:_:0xChecksum..."
-    function formatEvmWildcard(address wallet) internal pure returns (string memory) {
-        return string(abi.encodePacked("eip155:_:", wallet.toChecksumHexString()));
-    }
-
-    /// @notice Format EVM address to chain-specific CAIP-10 string (checksummed)
-    /// @param wallet The EVM wallet address
-    /// @param chainId The EIP-155 chain ID
-    /// @return The CAIP-10 string in format "eip155:{chainId}:0xChecksum..."
-    function formatEvm(address wallet, uint64 chainId) internal pure returns (string memory) {
-        return string(abi.encodePacked("eip155:", uint256(chainId).toString(), ":", wallet.toChecksumHexString()));
-    }
-
-    /// @notice Format EVM address to CAIP-10 wildcard string (lowercase)
-    /// @param wallet The EVM wallet address
-    /// @return The CAIP-10 string in format "eip155:_:0xlowercase..."
-    function formatEvmWildcardLower(address wallet) internal pure returns (string memory) {
-        return string(abi.encodePacked("eip155:_:", _addressToLowerHex(wallet)));
-    }
-
-    /// @notice Format EVM address to chain-specific CAIP-10 string (lowercase)
-    /// @param wallet The EVM wallet address
-    /// @param chainId The EIP-155 chain ID
-    /// @return The CAIP-10 string in format "eip155:{chainId}:0xlowercase..."
-    function formatEvmLower(address wallet, uint64 chainId) internal pure returns (string memory) {
-        return string(abi.encodePacked("eip155:", uint256(chainId).toString(), ":", _addressToLowerHex(wallet)));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // INTERNAL HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -395,18 +282,5 @@ library CAIP10 {
             result[i] = data[start + i];
         }
         return result;
-    }
-
-    function _addressToLowerHex(address addr) private pure returns (string memory) {
-        bytes memory buffer = new bytes(42);
-        buffer[0] = "0";
-        buffer[1] = "x";
-        bytes memory alphabet = "0123456789abcdef";
-        uint160 value = uint160(addr);
-        for (uint256 i = 41; i > 1; i--) {
-            buffer[i] = alphabet[value & 0xf];
-            value >>= 4;
-        }
-        return string(buffer);
     }
 }

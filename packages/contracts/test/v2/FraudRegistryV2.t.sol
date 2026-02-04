@@ -4,14 +4,18 @@ pragma solidity ^0.8.24;
 import { Test } from "forge-std/Test.sol";
 import { FraudRegistryV2 } from "../../src/v2/FraudRegistryV2.sol";
 import { IFraudRegistryV2 } from "../../src/v2/interfaces/IFraudRegistryV2.sol";
+import { OperatorSubmitter } from "../../src/v2/OperatorSubmitter.sol";
+import { IOperatorSubmitter } from "../../src/v2/interfaces/IOperatorSubmitter.sol";
 import { OperatorRegistry } from "../../src/OperatorRegistry.sol";
 import { IOperatorRegistry } from "../../src/interfaces/IOperatorRegistry.sol";
 import { CAIP10 } from "../../src/v2/libraries/CAIP10.sol";
+import { CAIP10Evm } from "../../src/v2/libraries/CAIP10Evm.sol";
 
 /// @title FraudRegistryV2Test
 /// @notice Comprehensive tests for FraudRegistryV2
 contract FraudRegistryV2Test is Test {
     FraudRegistryV2 public registry;
+    OperatorSubmitter public operatorSubmitter;
     OperatorRegistry public operatorRegistry;
 
     // Test accounts
@@ -65,6 +69,16 @@ contract FraudRegistryV2Test is Test {
             GRACE_BLOCKS,
             DEADLINE_BLOCKS
         );
+
+        // Deploy OperatorSubmitter and configure it as trusted caller
+        operatorSubmitter = new OperatorSubmitter(
+            owner,
+            address(registry),
+            address(operatorRegistry),
+            address(0), // feeManager - disabled for tests
+            address(0) // feeRecipient - disabled for tests
+        );
+        registry.setOperatorSubmitter(address(operatorSubmitter));
 
         // Create test accounts
         walletPrivateKey = 0xA11CE;
@@ -283,7 +297,7 @@ contract FraudRegistryV2Test is Test {
         assertTrue(registered);
         assertEq(uint8(ns), uint8(IFraudRegistryV2.Namespace.EIP155));
         // Stored value is truncated CAIP-2 hash, not raw chain ID
-        assertEq(reportedChainIdHash, CAIP10.truncatedEvmChainIdHash(chainId));
+        assertEq(reportedChainIdHash, CAIP10Evm.truncatedEvmChainIdHash(chainId));
         assertEq(incident, incidentTs);
         assertGt(registeredAt, 0);
         assertEq(batchId, 0); // Individual submission
@@ -377,7 +391,7 @@ contract FraudRegistryV2Test is Test {
             namespaceHashes[i] = CAIP10.NAMESPACE_EIP155;
             chainRefs[i] = bytes32(0); // Ignored for EVM
             identifiers[i] = bytes32(uint256(uint160(wallets[i])));
-            reportedChainIds[i] = CAIP10.caip2Hash(chainIds[i]);
+            reportedChainIds[i] = CAIP10Evm.caip2Hash(chainIds[i]);
         }
     }
 
@@ -394,7 +408,7 @@ contract FraudRegistryV2Test is Test {
 
         for (uint256 i = 0; i < length; i++) {
             namespaceHashes[i] = CAIP10.NAMESPACE_EIP155;
-            chainRefs[i] = CAIP10.evmChainRefHash(chainIds[i]);
+            chainRefs[i] = CAIP10Evm.evmChainRefHash(chainIds[i]);
         }
     }
 
@@ -411,7 +425,7 @@ contract FraudRegistryV2Test is Test {
 
         for (uint256 i = 0; i < length; i++) {
             namespaceHashes[i] = CAIP10.NAMESPACE_EIP155;
-            chainRefs[i] = CAIP10.evmChainRefHash(chainIds[i]);
+            chainRefs[i] = CAIP10Evm.evmChainRefHash(chainIds[i]);
             contractIds[i] = bytes32(uint256(uint160(contracts[i])));
         }
     }
@@ -447,7 +461,7 @@ contract FraudRegistryV2Test is Test {
         ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
 
         vm.prank(operator);
-        registry.registerWalletsAsOperator(
+        operatorSubmitter.registerWalletsAsOperator(
             namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
         );
 
@@ -484,8 +498,8 @@ contract FraudRegistryV2Test is Test {
 
         address notOperator = makeAddr("notOperator");
         vm.prank(notOperator);
-        vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__NotApprovedOperator.selector);
-        registry.registerWalletsAsOperator(
+        vm.expectRevert(IOperatorSubmitter.OperatorSubmitter__NotApprovedOperator.selector);
+        operatorSubmitter.registerWalletsAsOperator(
             namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
         );
     }
@@ -513,7 +527,7 @@ contract FraudRegistryV2Test is Test {
 
         // First registration
         vm.prank(operator);
-        registry.registerWalletsAsOperator(
+        operatorSubmitter.registerWalletsAsOperator(
             namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
         );
 
@@ -521,13 +535,13 @@ contract FraudRegistryV2Test is Test {
 
         // Second registration by same operator
         // Event emits truncated CAIP-2 hash, not raw chain ID
-        uint64 expectedChainIdHash = CAIP10.truncatedEvmChainIdHash(8453);
+        uint64 expectedChainIdHash = CAIP10Evm.truncatedEvmChainIdHash(8453);
         vm.prank(operator);
         vm.expectEmit(true, true, true, true);
         emit IFraudRegistryV2.WalletOperatorSourceAdded(
             victim, IFraudRegistryV2.Namespace.EIP155, expectedChainIdHash, operator, 2
         );
-        registry.registerWalletsAsOperator(
+        operatorSubmitter.registerWalletsAsOperator(
             namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
         );
 
@@ -554,11 +568,11 @@ contract FraudRegistryV2Test is Test {
             _buildEvmTxBatchParams(txHashes, chainIds);
 
         vm.prank(operator);
-        registry.registerTransactionsAsOperator(namespaceHashes, chainRefs, hashes);
+        operatorSubmitter.registerTransactionsAsOperator(namespaceHashes, chainRefs, hashes);
 
         // Compute expected chain IDs for lookup (namespace:chainRef combined)
-        bytes32 expectedChainId1 = keccak256(abi.encodePacked(CAIP10.NAMESPACE_EIP155, CAIP10.evmChainRefHash(8453)));
-        bytes32 expectedChainId2 = keccak256(abi.encodePacked(CAIP10.NAMESPACE_EIP155, CAIP10.evmChainRefHash(10)));
+        bytes32 expectedChainId1 = keccak256(abi.encodePacked(CAIP10.NAMESPACE_EIP155, CAIP10Evm.evmChainRefHash(8453)));
+        bytes32 expectedChainId2 = keccak256(abi.encodePacked(CAIP10.NAMESPACE_EIP155, CAIP10Evm.evmChainRefHash(10)));
 
         assertTrue(registry.isTransactionRegistered(txHashes[0], expectedChainId1));
         assertTrue(registry.isTransactionRegistered(txHashes[1], expectedChainId2));
@@ -582,11 +596,11 @@ contract FraudRegistryV2Test is Test {
             _buildEvmContractBatchParams(contracts, chainIds);
 
         vm.prank(operator);
-        registry.registerContractsAsOperator(namespaceHashes, chainRefs, contractIds);
+        operatorSubmitter.registerContractsAsOperator(namespaceHashes, chainRefs, contractIds);
 
         // Compute expected chain IDs for lookup (namespace:chainRef combined)
-        bytes32 expectedChainId1 = keccak256(abi.encodePacked(CAIP10.NAMESPACE_EIP155, CAIP10.evmChainRefHash(8453)));
-        bytes32 expectedChainId2 = keccak256(abi.encodePacked(CAIP10.NAMESPACE_EIP155, CAIP10.evmChainRefHash(10)));
+        bytes32 expectedChainId1 = keccak256(abi.encodePacked(CAIP10.NAMESPACE_EIP155, CAIP10Evm.evmChainRefHash(8453)));
+        bytes32 expectedChainId2 = keccak256(abi.encodePacked(CAIP10.NAMESPACE_EIP155, CAIP10Evm.evmChainRefHash(10)));
 
         assertTrue(registry.isContractRegistered(contracts[0], expectedChainId1));
         assertTrue(registry.isContractRegistered(contracts[1], expectedChainId2));
@@ -639,7 +653,7 @@ contract FraudRegistryV2Test is Test {
         ) = _buildEvmWalletBatchParams(wallets, chainIds, timestamps);
 
         vm.prank(operator);
-        registry.registerWalletsAsOperator(
+        operatorSubmitter.registerWalletsAsOperator(
             namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
         );
 
@@ -698,7 +712,7 @@ contract FraudRegistryV2Test is Test {
 
         uint256 gasBefore = gasleft();
         vm.prank(operator);
-        registry.registerWalletsAsOperator(
+        operatorSubmitter.registerWalletsAsOperator(
             namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
         );
         uint256 gasUsed = gasBefore - gasleft();
@@ -724,8 +738,8 @@ contract FraudRegistryV2Test is Test {
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         // Cross-chain parameters (bytes32 for cross-blockchain support)
-        bytes32 reportedChainIdFull = CAIP10.caip2Hash(uint64(1)); // Full CAIP-2 hash
-        bytes32 sourceChainIdFull = CAIP10.caip2Hash(uint64(10)); // Optimism
+        bytes32 reportedChainIdFull = CAIP10Evm.caip2Hash(uint64(1)); // Full CAIP-2 hash
+        bytes32 sourceChainIdFull = CAIP10Evm.caip2Hash(uint64(10)); // Optimism
 
         // Expect cross-chain event (uses full bytes32 for indexers)
         vm.expectEmit(true, true, true, true);
@@ -742,7 +756,7 @@ contract FraudRegistryV2Test is Test {
         vm.prank(hub);
         registry.registerFromSpoke(
             CAIP10.NAMESPACE_EIP155,
-            CAIP10.evmChainRefHash(1), // chainRef (ignored for EVM)
+            CAIP10Evm.evmChainRefHash(1), // chainRef (ignored for EVM)
             bytes32(uint256(uint160(victim))), // identifier
             reportedChainIdFull,
             incidentTimestamp,
@@ -787,11 +801,11 @@ contract FraudRegistryV2Test is Test {
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__UnauthorizedInbox.selector);
         registry.registerFromSpoke(
             CAIP10.NAMESPACE_EIP155,
-            CAIP10.evmChainRefHash(1),
+            CAIP10Evm.evmChainRefHash(1),
             bytes32(uint256(uint160(victim))),
-            CAIP10.caip2Hash(uint64(1)),
+            CAIP10Evm.caip2Hash(uint64(1)),
             uint64(block.timestamp),
-            CAIP10.caip2Hash(uint64(10)),
+            CAIP10Evm.caip2Hash(uint64(10)),
             false,
             1,
             bytes32(0)
@@ -808,11 +822,11 @@ contract FraudRegistryV2Test is Test {
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__UnauthorizedInbox.selector);
         registry.registerFromSpoke(
             CAIP10.NAMESPACE_EIP155,
-            CAIP10.evmChainRefHash(1),
+            CAIP10Evm.evmChainRefHash(1),
             bytes32(uint256(uint160(victim))),
-            CAIP10.caip2Hash(uint64(1)),
+            CAIP10Evm.caip2Hash(uint64(1)),
             uint64(block.timestamp),
-            CAIP10.caip2Hash(uint64(10)),
+            CAIP10Evm.caip2Hash(uint64(10)),
             false,
             1,
             bytes32(0)
@@ -831,11 +845,11 @@ contract FraudRegistryV2Test is Test {
         vm.prank(hub);
         registry.registerFromSpoke(
             CAIP10.NAMESPACE_EIP155,
-            CAIP10.evmChainRefHash(1),
+            CAIP10Evm.evmChainRefHash(1),
             identifier,
-            CAIP10.caip2Hash(uint64(1)),
+            CAIP10Evm.caip2Hash(uint64(1)),
             uint64(block.timestamp),
-            CAIP10.caip2Hash(uint64(10)),
+            CAIP10Evm.caip2Hash(uint64(10)),
             false,
             1,
             keccak256("message1")
@@ -849,11 +863,11 @@ contract FraudRegistryV2Test is Test {
         vm.prank(hub);
         registry.registerFromSpoke(
             CAIP10.NAMESPACE_EIP155,
-            CAIP10.evmChainRefHash(1),
+            CAIP10Evm.evmChainRefHash(1),
             identifier,
-            CAIP10.caip2Hash(uint64(8453)),
+            CAIP10Evm.caip2Hash(uint64(8453)),
             uint64(block.timestamp - 1 hours),
-            CAIP10.caip2Hash(uint64(42_161)),
+            CAIP10Evm.caip2Hash(uint64(42_161)),
             true,
             1,
             keccak256("message2")

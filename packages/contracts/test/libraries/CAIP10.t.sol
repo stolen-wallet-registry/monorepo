@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
 import { CAIP10 } from "../../src/v2/libraries/CAIP10.sol";
+import { CAIP10Evm } from "../../src/v2/libraries/CAIP10Evm.sol";
 
 contract CAIP10Wrapper {
     function parse(string memory caip10) external pure returns (bytes32, bytes32, uint256, uint256) {
@@ -10,7 +11,7 @@ contract CAIP10Wrapper {
     }
 
     function parseEvmAddress(string memory caip10, uint256 offset) external pure returns (address) {
-        return CAIP10.parseEvmAddress(caip10, offset);
+        return CAIP10Evm.parseEvmAddress(caip10, offset);
     }
 
     function toWalletStorageKey(string memory caip10) external pure returns (bytes32) {
@@ -88,15 +89,15 @@ contract CAIP10Test is Test {
 
     function test_EvmTransactionKey_ChainSpecific() public pure {
         bytes32 txHash = keccak256("test_tx");
-        bytes32 keyBase = CAIP10.evmTransactionKey(txHash, 8453);
-        bytes32 keyOptimism = CAIP10.evmTransactionKey(txHash, 10);
+        bytes32 keyBase = CAIP10Evm.evmTransactionKey(txHash, 8453);
+        bytes32 keyOptimism = CAIP10Evm.evmTransactionKey(txHash, 10);
         assertTrue(keyBase != keyOptimism);
     }
 
     function test_EvmContractKey_ChainSpecific() public pure {
         address contractAddr = 0x742d35cc6634c0532925A3b844Bc9e7595f0ABcd;
-        bytes32 keyBase = CAIP10.evmContractKey(contractAddr, 8453);
-        bytes32 keyOptimism = CAIP10.evmContractKey(contractAddr, 10);
+        bytes32 keyBase = CAIP10Evm.evmContractKey(contractAddr, 8453);
+        bytes32 keyOptimism = CAIP10Evm.evmContractKey(contractAddr, 10);
         assertTrue(keyBase != keyOptimism);
     }
 
@@ -105,7 +106,7 @@ contract CAIP10Test is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_EvmChainRefHash() public pure {
-        bytes32 hash = CAIP10.evmChainRefHash(8453);
+        bytes32 hash = CAIP10Evm.evmChainRefHash(8453);
         assertEq(hash, keccak256("8453"));
     }
 
@@ -185,17 +186,17 @@ contract CAIP10Test is Test {
 
     function test_ParseEvmAddress_Valid() public pure {
         string memory caip10 = "eip155:8453:0x742d35cc6634c0532925a3b844bc9e7595f0abcd";
-        address wallet = CAIP10.parseEvmAddress(caip10, 12);
+        address wallet = CAIP10Evm.parseEvmAddress(caip10, 12);
         assertEq(wallet, 0x742d35cc6634c0532925A3b844Bc9e7595f0ABcd);
     }
 
     function test_ParseEvmAddress_RevertsWithoutPrefix() public {
-        vm.expectRevert(CAIP10.CAIP10__InvalidAddress.selector);
+        vm.expectRevert(CAIP10Evm.CAIP10Evm__InvalidAddress.selector);
         wrapper.parseEvmAddress("eip155:8453:742d35cc6634c0532925a3b844bc9e7595f0abcd", 12);
     }
 
     function test_ParseEvmAddress_RevertsOnShort() public {
-        vm.expectRevert(CAIP10.CAIP10__InvalidAddress.selector);
+        vm.expectRevert(CAIP10Evm.CAIP10Evm__InvalidAddress.selector);
         wrapper.parseEvmAddress("eip155:8453:0x742d35", 12);
     }
 
@@ -230,25 +231,25 @@ contract CAIP10Test is Test {
 
     function test_FormatEvmWildcard() public pure {
         address wallet = 0x742d35cc6634c0532925A3b844Bc9e7595f0ABcd;
-        string memory formatted = CAIP10.formatEvmWildcard(wallet);
+        string memory formatted = CAIP10Evm.formatEvmWildcard(wallet);
         assertEq(formatted, "eip155:_:0x742d35cc6634c0532925A3b844Bc9e7595f0ABcd");
     }
 
     function test_FormatEvm() public pure {
         address wallet = 0x742d35cc6634c0532925A3b844Bc9e7595f0ABcd;
-        string memory formatted = CAIP10.formatEvm(wallet, 8453);
+        string memory formatted = CAIP10Evm.formatEvm(wallet, 8453);
         assertEq(formatted, "eip155:8453:0x742d35cc6634c0532925A3b844Bc9e7595f0ABcd");
     }
 
     function test_FormatEvmWildcardLower() public pure {
         address wallet = 0x742d35cc6634c0532925A3b844Bc9e7595f0ABcd;
-        string memory formatted = CAIP10.formatEvmWildcardLower(wallet);
+        string memory formatted = CAIP10Evm.formatEvmWildcardLower(wallet);
         assertEq(formatted, "eip155:_:0x742d35cc6634c0532925a3b844bc9e7595f0abcd");
     }
 
     function test_FormatEvmLower() public pure {
         address wallet = 0x742d35cc6634c0532925A3b844Bc9e7595f0ABcd;
-        string memory formatted = CAIP10.formatEvmLower(wallet, 8453);
+        string memory formatted = CAIP10Evm.formatEvmLower(wallet, 8453);
         assertEq(formatted, "eip155:8453:0x742d35cc6634c0532925a3b844bc9e7595f0abcd");
     }
 
@@ -303,14 +304,14 @@ contract CAIP10Test is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_Caip2Hash_Evm() public pure {
-        bytes32 hash = CAIP10.caip2Hash(8453);
+        bytes32 hash = CAIP10Evm.caip2Hash(8453);
         bytes32 expected = keccak256("eip155:8453");
 
         assertEq(hash, expected);
     }
 
     function test_Caip2Hash_EvmMainnet() public pure {
-        bytes32 hash = CAIP10.caip2Hash(1);
+        bytes32 hash = CAIP10Evm.caip2Hash(1);
         bytes32 expected = keccak256("eip155:1");
 
         assertEq(hash, expected);
@@ -332,7 +333,7 @@ contract CAIP10Test is Test {
 
     function test_Caip2Hash_CrossChainConsistency() public pure {
         // Verify that EVM caip2Hash matches what you'd get from string-based
-        bytes32 evmHash = CAIP10.caip2Hash(8453);
+        bytes32 evmHash = CAIP10Evm.caip2Hash(8453);
         bytes32 stringHash = CAIP10.caip2Hash("eip155", "8453");
 
         assertEq(evmHash, stringHash, "EVM and string-based caip2Hash should match");

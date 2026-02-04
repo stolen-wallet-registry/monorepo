@@ -11,7 +11,7 @@ interface ISpokeRegistryV2 {
     // STRUCTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Acknowledgement data for pending registrations
+    /// @notice Acknowledgement data for pending wallet registrations
     /// @param trustedForwarder Address authorized to complete registration
     /// @param incidentTimestamp User-provided timestamp of when theft occurred
     /// @param reportedChainId CAIP-2 hash of chain where incident occurred
@@ -22,6 +22,22 @@ interface ISpokeRegistryV2 {
         address trustedForwarder;
         uint64 incidentTimestamp;
         bytes32 reportedChainId;
+        uint256 startBlock;
+        uint256 expiryBlock;
+    }
+
+    /// @notice Acknowledgement data for pending transaction batch registrations
+    /// @param trustedForwarder Address authorized to complete registration
+    /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param startBlock Block number when grace period ends
+    /// @param expiryBlock Block number when registration window expires
+    struct TransactionAcknowledgementData {
+        address trustedForwarder;
+        bytes32 dataHash;
+        bytes32 reportedChainId;
+        uint32 transactionCount;
         uint256 startBlock;
         uint256 expiryBlock;
     }
@@ -63,6 +79,31 @@ interface ISpokeRegistryV2 {
     /// @param hubInbox The hub inbox address (as bytes32)
     event HubConfigUpdated(uint32 indexed hubChainId, bytes32 hubInbox);
 
+    /// @notice Emitted when transaction batch acknowledgement is recorded
+    /// @param reporter The address reporting the transactions
+    /// @param forwarder The authorized forwarder address
+    /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param isSponsored True if registration is sponsored by third party
+    event TransactionBatchAcknowledged(
+        address indexed reporter,
+        address indexed forwarder,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        bool isSponsored
+    );
+
+    /// @notice Emitted when transaction batch registration message is sent to hub
+    /// @param reporter The address that reported the transactions
+    /// @param messageId Bridge message ID for tracking
+    /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
+    /// @param hubChainId Hub chain domain ID
+    event TransactionBatchSentToHub(
+        address indexed reporter, bytes32 indexed messageId, bytes32 dataHash, uint32 hubChainId
+    );
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -81,6 +122,9 @@ interface ISpokeRegistryV2 {
     error SpokeRegistryV2__RefundFailed();
     error SpokeRegistryV2__WithdrawalFailed();
     error SpokeRegistryV2__InvalidHubConfig();
+    error SpokeRegistryV2__EmptyBatch();
+    error SpokeRegistryV2__ArrayLengthMismatch();
+    error SpokeRegistryV2__InvalidDataHash();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
@@ -128,6 +172,54 @@ interface ISpokeRegistryV2 {
         bytes32 s
     ) external payable;
 
+    /// @notice Phase 1 (Transaction Batch): Record acknowledgement for transaction batch
+    /// @dev Caller becomes trusted forwarder. Reporter signs to prove they intend to report.
+    ///      dataHash = keccak256(abi.encodePacked(txHashes, chainIds))
+    /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param deadline Signature expiry timestamp
+    /// @param nonce Expected nonce for replay protection
+    /// @param reporter Address reporting the transactions (signer)
+    /// @param v Signature v component
+    /// @param r Signature r component
+    /// @param s Signature s component
+    function acknowledgeTransactionBatch(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        uint256 deadline,
+        uint256 nonce,
+        address reporter,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+
+    /// @notice Phase 2 (Transaction Batch): Complete registration and send to hub
+    /// @dev Must be called by trusted forwarder within registration window.
+    ///      Contract recomputes dataHash from arrays and verifies it matches acknowledgement.
+    /// @param reportedChainId CAIP-2 hash (must match acknowledgement)
+    /// @param deadline Signature expiry timestamp
+    /// @param nonce Expected nonce for replay protection
+    /// @param reporter Address that reported (must be signer)
+    /// @param transactionHashes Array of transaction hashes in batch
+    /// @param chainIds Parallel array of CAIP-2 chain IDs per transaction
+    /// @param v Signature v component
+    /// @param r Signature r component
+    /// @param s Signature s component
+    function registerTransactionBatch(
+        bytes32 reportedChainId,
+        uint256 deadline,
+        uint256 nonce,
+        address reporter,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external payable;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -141,6 +233,19 @@ interface ISpokeRegistryV2 {
     /// @param wallet The wallet address
     /// @return The acknowledgement data struct
     function getAcknowledgement(address wallet) external view returns (AcknowledgementData memory);
+
+    /// @notice Check if reporter has pending transaction batch acknowledgement
+    /// @param reporter The reporter address to check
+    /// @return True if the reporter has a pending transaction batch acknowledgement
+    function isPendingTransactionBatch(address reporter) external view returns (bool);
+
+    /// @notice Get transaction batch acknowledgement data
+    /// @param reporter The reporter address
+    /// @return The transaction acknowledgement data struct
+    function getTransactionAcknowledgement(address reporter)
+        external
+        view
+        returns (TransactionAcknowledgementData memory);
 
     /// @notice Get nonce for wallet
     /// @param wallet The wallet address
