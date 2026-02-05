@@ -74,14 +74,20 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   // Parse signature once for reuse (avoid calling parseSignature 4 times)
   const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
 
+  // V2 fields are required - signatures should always include them
+  const hasV2Fields = Boolean(
+    storedSignature?.reportedChainId !== undefined &&
+    storedSignature?.incidentTimestamp !== undefined
+  );
+
   // Build transaction args for gas estimation (needs to be before early returns)
   // V2 unified signature: (wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
   const transactionArgs: WalletRegistrationArgs | undefined =
-    storedSignature && registeree && parsedSig
+    storedSignature && registeree && parsedSig && hasV2Fields
       ? [
           registeree,
-          storedSignature.reportedChainId ?? BigInt(chainId),
-          storedSignature.incidentTimestamp ?? 0n,
+          storedSignature.reportedChainId!, // Safe: hasV2Fields guards this
+          storedSignature.incidentTimestamp!, // Safe: hasV2Fields guards this
           storedSignature.deadline,
           storedSignature.nonce,
           parsedSig.v,
@@ -153,6 +159,19 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
       return;
     }
 
+    // V2 fields are required - guard against missing data instead of silent fallback
+    if (
+      storedSignature.reportedChainId === undefined ||
+      storedSignature.incidentTimestamp === undefined
+    ) {
+      logger.contract.error('Cannot submit acknowledgement - missing V2 fields', {
+        hasReportedChainId: storedSignature.reportedChainId !== undefined,
+        hasIncidentTimestamp: storedSignature.incidentTimestamp !== undefined,
+      });
+      setLocalError('Signature is missing required V2 data. Please go back and sign again.');
+      return;
+    }
+
     setIsSubmitting(true);
     setLocalError(null);
 
@@ -166,18 +185,14 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         chainId,
       });
 
-      // V2 fields from stored signature
-      // Fallback: use current chain for reportedChainId, 0 for incidentTimestamp (unknown)
-      const reportedChainId = storedSignature.reportedChainId ?? BigInt(chainId);
-      const incidentTimestamp = storedSignature.incidentTimestamp ?? 0n;
-
+      // V2 fields from stored signature (validated above - guaranteed to exist)
       await submitAcknowledgement({
         deadline: storedSignature.deadline,
         nonce: storedSignature.nonce,
         registeree,
         signature: parsedSig,
-        reportedChainId,
-        incidentTimestamp,
+        reportedChainId: storedSignature.reportedChainId,
+        incidentTimestamp: storedSignature.incidentTimestamp,
       });
 
       logger.contract.info('Acknowledgement transaction submitted, waiting for confirmation');

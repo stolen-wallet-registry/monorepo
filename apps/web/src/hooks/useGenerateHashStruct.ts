@@ -9,6 +9,7 @@
  * V2 signature: generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
  */
 
+import { useMemo } from 'react';
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
@@ -54,9 +55,17 @@ export function useGenerateHashStruct(
 ): UseGenerateHashStructResult {
   const chainId = useChainId();
 
-  // Default V2 fields if not provided
-  const effectiveReportedChainId = reportedChainId ?? BigInt(chainId);
-  const effectiveIncidentTimestamp = incidentTimestamp ?? BigInt(Math.floor(Date.now() / 1000));
+  // Stabilize V2 fields - useMemo prevents Date.now() from causing re-renders
+  // The timestamp is computed once per mount (when incidentTimestamp is not provided)
+  // This ensures the same timestamp is used for the contract call and won't change between renders
+  const effectiveReportedChainId = useMemo(
+    () => reportedChainId ?? BigInt(chainId),
+    [reportedChainId, chainId]
+  );
+  const effectiveIncidentTimestamp = useMemo(
+    () => incidentTimestamp ?? BigInt(Math.floor(Date.now() / 1000)),
+    [incidentTimestamp]
+  );
 
   // Resolve contract address with built-in error handling and logging
   const { address: contractAddress, role: registryType } = resolveRegistryContract(

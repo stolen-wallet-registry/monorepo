@@ -4,7 +4,6 @@ import { immer } from 'zustand/middleware/immer';
 import { useShallow } from 'zustand/shallow';
 import { logger } from '@/lib/logger';
 import type { Hash } from '@/lib/types/ethereum';
-import { chainIdToBytes32 } from '@swr/caip';
 
 // BigInt-safe JSON storage for Zustand persist middleware
 // JSON.stringify throws on BigInt - this provides custom serialization
@@ -45,8 +44,8 @@ export interface RegistrationState {
   bridgeMessageId: Hash | null;
 
   // V2 additions
-  /** CAIP-2 bytes32 hash of the chain where incident occurred */
-  reportedChainId: Hash | null;
+  /** Raw EVM chain ID where incident occurred (e.g., 1 for mainnet, 8453 for Base) */
+  reportedChainId: bigint | null;
   /** Unix timestamp when incident occurred (user-provided) */
   incidentTimestamp: bigint | null;
 }
@@ -58,7 +57,7 @@ export interface RegistrationActions {
   setRegistrationHash: (hash: Hash, chainId: number) => void;
   setBridgeMessageId: (messageId: Hash) => void;
   // V2 actions
-  setReportedChainId: (chainId: Hash) => void;
+  setReportedChainId: (chainId: bigint) => void;
   setIncidentTimestamp: (timestamp: bigint) => void;
   /** Initialize V2 fields with defaults based on current chain */
   initializeV2Fields: (chainId: number, timestamp?: bigint) => void;
@@ -137,14 +136,15 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
 
         initializeV2Fields: (chainId, timestamp) =>
           set((state) => {
-            // Default reportedChainId to current chain's CAIP-2 hash
-            const reportedChainId = chainIdToBytes32(chainId) as Hash;
+            // Store raw numeric chain ID - V2 contracts accept uint64
+            // The contract converts to CAIP-2 bytes32 hash internally
+            const reportedChainId = BigInt(chainId);
             // Default incidentTimestamp to now if not provided
             const incidentTimestamp = timestamp ?? BigInt(Math.floor(Date.now() / 1000));
 
             logger.registration.info('V2: Fields initialized', {
               chainId,
-              reportedChainId,
+              reportedChainId: reportedChainId.toString(),
               incidentTimestamp: incidentTimestamp.toString(),
             });
 

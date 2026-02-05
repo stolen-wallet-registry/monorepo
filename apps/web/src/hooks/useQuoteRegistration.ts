@@ -1,10 +1,9 @@
 /**
  * Hook to get the registration fee from the registry contract.
  *
- * V2: quoteRegistration() takes no arguments - fee is determined by FeeManager
  * Chain-aware: Uses quoteRegistration() on both hub and spoke.
- * - Hub: returns registration fee only
- * - Spoke: returns bridge fee + registration fee
+ * - Hub (FraudRegistryV2): quoteRegistration() - no arguments
+ * - Spoke (SpokeRegistryV2): quoteRegistration(address owner) - requires owner for bridge fee calculation
  */
 
 import { useReadContract, useChainId } from 'wagmi';
@@ -28,11 +27,10 @@ export interface UseQuoteRegistrationResult {
 /**
  * Get the total registration fee for the current chain.
  *
- * V2: quoteRegistration() takes no arguments - fee is global, not per-wallet.
- * @param _ownerAddress - Optional, kept for interface compatibility but not used in V2
+ * @param ownerAddress - Required for spoke chains (for bridge fee calculation), optional for hub
  */
 export function useQuoteRegistration(
-  _ownerAddress?: Address | null | undefined
+  ownerAddress?: Address | null | undefined
 ): UseQuoteRegistrationResult {
   const chainId = useChainId();
 
@@ -43,6 +41,8 @@ export function useQuoteRegistration(
     'useQuoteRegistration'
   );
 
+  const isSpoke = registryType === 'spoke';
+
   // Get the correct ABI for hub/spoke
   const { abi } = getRegistryMetadata('wallet', registryType);
 
@@ -51,10 +51,11 @@ export function useQuoteRegistration(
     abi,
     chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'quoteRegistration',
-    // V2: quoteRegistration() takes no arguments
-    args: [],
+    // Hub: no arguments; Spoke: requires owner address for bridge fee calculation
+    args: isSpoke && ownerAddress ? [ownerAddress] : [],
     query: {
-      enabled: !!contractAddress,
+      // For spoke, we need the owner address to be set
+      enabled: !!contractAddress && (isSpoke ? !!ownerAddress : true),
       staleTime: 30_000, // 30 seconds
     },
   });

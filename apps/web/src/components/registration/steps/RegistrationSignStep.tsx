@@ -4,7 +4,7 @@
  * Signs the registration message after the grace period.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
 import { Alert, AlertDescription } from '@swr/ui';
@@ -46,6 +46,16 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
 
   // Forwarder is either relayer (self-relay) or registeree (standard)
   const forwarder = isSelfRelay ? relayer : registeree;
+
+  // Stabilize V2 fields for this signing session - computed once per mount
+  // This ensures the same values are used for both signing and storage
+  const stableV2Fields = useMemo(
+    () => ({
+      reportedChainId: BigInt(chainId),
+      incidentTimestamp: BigInt(Math.floor(Date.now() / 1000)),
+    }),
+    [chainId]
+  );
 
   // Local state
   const [signatureStatus, setSignatureStatus] = useState<SignatureStatus>('idle');
@@ -141,14 +151,13 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
     setSignatureError(null);
 
     try {
-      // V2: Generate reportedChainId (raw chain ID) and incidentTimestamp
-      const reportedChainId = BigInt(chainId);
-      const incidentTimestamp = BigInt(Math.floor(Date.now() / 1000));
+      // Use stabilized V2 fields - computed once per mount, not fresh on each sign
+      const { reportedChainId, incidentTimestamp } = stableV2Fields;
 
       logger.signature.info('Requesting V2 EIP-712 registration signature', {
         wallet: registeree,
         forwarder,
-        reportedChainId,
+        reportedChainId: reportedChainId.toString(),
         incidentTimestamp: incidentTimestamp.toString(),
         nonce: nonce.toString(),
         deadline: freshDeadline.toString(),
@@ -168,7 +177,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
       });
 
-      // Store signature with V2 fields
+      // Store signature with stabilized V2 fields (same values used for signing)
       storeSignature({
         signature: sig,
         deadline: freshDeadline,

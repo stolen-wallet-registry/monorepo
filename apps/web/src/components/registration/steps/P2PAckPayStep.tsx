@@ -88,9 +88,23 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     return 'idle';
   };
 
+  // Check if stored signature has required V2 fields
+  const hasV2Fields = Boolean(
+    storedSig?.reportedChainId !== undefined && storedSig?.incidentTimestamp !== undefined
+  );
+
   // Relayer: Submit acknowledgement transaction
   const handleSubmit = useCallback(async () => {
     if (!storedSig || !registeree) {
+      return;
+    }
+
+    // V2 fields are required - don't submit with fallbacks that could mask bugs
+    if (storedSig.reportedChainId === undefined || storedSig.incidentTimestamp === undefined) {
+      logger.p2p.error('Cannot submit ACK - missing V2 fields from registeree signature', {
+        hasReportedChainId: storedSig.reportedChainId !== undefined,
+        hasIncidentTimestamp: storedSig.incidentTimestamp !== undefined,
+      });
       return;
     }
 
@@ -99,21 +113,17 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     // Parse signature to v, r, s components
     const parsedSig = parseSignature(storedSig.signature);
 
-    // V2 fields from stored signature
-    // Fallback: use current chain for reportedChainId, 0 for incidentTimestamp (unknown)
-    const reportedChainId = storedSig.reportedChainId ?? BigInt(chainId);
-    const incidentTimestamp = storedSig.incidentTimestamp ?? 0n;
-
+    // V2 fields from stored signature (validated above - guaranteed to exist)
     await submitAcknowledgement({
       deadline: storedSig.deadline,
       nonce: storedSig.nonce,
       registeree,
       signature: parsedSig,
-      reportedChainId,
-      incidentTimestamp,
+      reportedChainId: storedSig.reportedChainId,
+      incidentTimestamp: storedSig.incidentTimestamp,
       feeWei,
     });
-  }, [storedSig, registeree, chainId, submitAcknowledgement, feeWei]);
+  }, [storedSig, registeree, submitAcknowledgement, feeWei]);
 
   // Cleanup retry timeout on unmount
   useEffect(() => {
@@ -269,11 +279,17 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
             type="acknowledgement"
             status={getStatus()}
             hash={hash}
-            error={error ? sanitizeErrorMessage(error) : null}
+            error={
+              !hasV2Fields && storedSig
+                ? 'Signature is missing V2 data. Registeree may need to sign again.'
+                : error
+                  ? sanitizeErrorMessage(error)
+                  : null
+            }
             chainId={chainId}
             onSubmit={handleSubmit}
             onRetry={reset}
-            disabled={!storedSig}
+            disabled={!storedSig || !hasV2Fields}
           />
           {sendError && isConfirmed && !hasSentHash && (
             <Alert variant="destructive" className="mt-4">

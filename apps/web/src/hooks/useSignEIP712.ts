@@ -9,6 +9,16 @@
  * - `owner` renamed to `wallet` in signatures
  * - New fields: `reportedChainId` (uint64 raw EVM chain ID) and `incidentTimestamp` (uint64)
  * - Different EIP-712 domain names for Hub vs Spoke
+ *
+ * ## Security Model
+ *
+ * - **Wallet validation**: Ensures connected wallet matches the signing wallet (users can only
+ *   sign for wallets they control). This is a UX guard; contract also validates signature.
+ * - **V2 field validation**: reportedChainId and incidentTimestamp are passed through without
+ *   client-side validation. Contract-side validation is authoritative. Invalid values will
+ *   cause contract revert, not silent failures.
+ * - **Signature verification**: Contract verifies EIP-712 signature matches the message fields.
+ *   Any tampering between signing and submission will be detected and rejected.
  */
 
 import { useSignTypedData, useAccount, useChainId } from 'wagmi';

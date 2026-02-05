@@ -89,6 +89,40 @@ export function getSignature(
       return null;
     }
 
+    // Parse and validate V2 fields if present
+    let reportedChainId: bigint | undefined;
+    let incidentTimestamp: bigint | undefined;
+
+    if (parsed.reportedChainId !== undefined) {
+      try {
+        reportedChainId = BigInt(parsed.reportedChainId);
+        // Chain IDs must be positive
+        if (reportedChainId <= 0n) {
+          sessionStorage.removeItem(key);
+          return null;
+        }
+      } catch {
+        sessionStorage.removeItem(key);
+        return null;
+      }
+    }
+
+    if (parsed.incidentTimestamp !== undefined) {
+      try {
+        incidentTimestamp = BigInt(parsed.incidentTimestamp);
+        // Timestamps must be positive and reasonable (after 2020, before 2100)
+        const minTimestamp = 1577836800n; // 2020-01-01
+        const maxTimestamp = 4102444800n; // 2100-01-01
+        if (incidentTimestamp < minTimestamp || incidentTimestamp > maxTimestamp) {
+          sessionStorage.removeItem(key);
+          return null;
+        }
+      } catch {
+        sessionStorage.removeItem(key);
+        return null;
+      }
+    }
+
     const signature: StoredSignature = {
       signature: parsed.signature as Hex,
       deadline: BigInt(parsed.deadline),
@@ -97,9 +131,9 @@ export function getSignature(
       chainId: parsed.chainId,
       step: parsed.step as SignatureStep,
       storedAt: parsed.storedAt,
-      // V2 fields (optional for backward compatibility)
-      reportedChainId: parsed.reportedChainId ? BigInt(parsed.reportedChainId) : undefined,
-      incidentTimestamp: parsed.incidentTimestamp ? BigInt(parsed.incidentTimestamp) : undefined,
+      // V2 fields (validated above)
+      reportedChainId,
+      incidentTimestamp,
     };
 
     return signature;
