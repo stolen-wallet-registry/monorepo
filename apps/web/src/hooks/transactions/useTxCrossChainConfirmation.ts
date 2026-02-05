@@ -89,9 +89,9 @@ export function useTxCrossChainConfirmation({
     try {
       return keccak256(
         encodeAbiParameters(parseAbiParameters('bytes32, address, bytes32'), [
-          merkleRoot as `0x${string}`,
-          reporter as `0x${string}`,
-          reportedChainId as `0x${string}`,
+          merkleRoot as Hash,
+          reporter as Address,
+          reportedChainId as Hex,
         ])
       );
     } catch (err) {

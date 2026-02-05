@@ -48,14 +48,16 @@ library EIP712ConstantsV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice EIP-712 typehash for wallet acknowledgement phase
-    /// @dev V2 includes reportedChainId and incidentTimestamp for incident context
+    /// @dev V2 includes reportedChainId (uint64 for storage efficiency) and incidentTimestamp.
+    ///      Using uint64 reportedChainId supports EVM chain IDs up to 18 quintillion.
+    ///      Both hub and spoke use identical typehashes for signature portability.
     bytes32 internal constant WALLET_ACK_TYPEHASH = keccak256(
-        "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,bytes32 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+        "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
 
     /// @notice EIP-712 typehash for wallet registration phase
     bytes32 internal constant WALLET_REG_TYPEHASH = keccak256(
-        "Registration(string statement,address wallet,address forwarder,bytes32 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+        "Registration(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
 
     // ═══════════════════════════════════════════════════════════════════════════

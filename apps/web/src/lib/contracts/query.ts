@@ -5,7 +5,7 @@
  * Use this for real-time state during registration flows.
  */
 
-import type { PublicClient, Address, Abi } from 'viem';
+import type { PublicClient, Address, Abi, Hash } from 'viem';
 
 /**
  * Registration data from the contract.
@@ -15,7 +15,7 @@ export interface RegistrationData {
   sourceChainId: number;
   bridgeId: number;
   isSponsored: boolean;
-  crossChainMessageId: `0x${string}`;
+  crossChainMessageId: Hash;
 }
 
 /**
@@ -90,7 +90,7 @@ export async function queryRegistryStatus(
       sourceChainId: number;
       bridgeId: number;
       isSponsored: boolean;
-      crossChainMessageId: `0x${string}`;
+      crossChainMessageId: Hash;
     };
     registrationData = {
       registeredAt: result.registeredAt,

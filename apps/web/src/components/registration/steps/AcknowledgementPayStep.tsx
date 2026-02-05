@@ -19,6 +19,7 @@ import { useFormStore } from '@/stores/formStore';
 import { useAcknowledgement } from '@/hooks/useAcknowledgement';
 import { useTransactionCost } from '@/hooks/useTransactionCost';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import type { WalletRegistrationArgs } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
@@ -71,22 +72,26 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
     : null;
 
   // Build transaction args for gas estimation (needs to be before early returns)
-  const transactionArgs =
+  // V2 unified signature: (wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+  const transactionArgs: WalletRegistrationArgs | undefined =
     storedSignature && registeree
-      ? ([
+      ? [
+          registeree,
+          storedSignature.reportedChainId ?? BigInt(chainId),
+          storedSignature.incidentTimestamp ?? 0n,
           storedSignature.deadline,
           storedSignature.nonce,
-          registeree,
           parseSignature(storedSignature.signature).v,
           parseSignature(storedSignature.signature).r,
           parseSignature(storedSignature.signature).s,
-        ] as const)
+        ]
       : undefined;
 
   // Get transaction cost estimate (must be called unconditionally - hooks rule)
   const costEstimate = useTransactionCost({
     step: 'acknowledgement',
     args: transactionArgs,
+    ownerAddress: registeree,
   });
 
   // Map hook state to TransactionStatus
@@ -158,11 +163,18 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         chainId,
       });
 
+      // V2 fields from stored signature
+      // Fallback: use current chain for reportedChainId, 0 for incidentTimestamp (unknown)
+      const reportedChainId = storedSignature.reportedChainId ?? BigInt(chainId);
+      const incidentTimestamp = storedSignature.incidentTimestamp ?? 0n;
+
       await submitAcknowledgement({
         deadline: storedSignature.deadline,
         nonce: storedSignature.nonce,
         registeree,
         signature: parsedSig,
+        reportedChainId,
+        incidentTimestamp,
       });
 
       logger.contract.info('Acknowledgement transaction submitted, waiting for confirmation');

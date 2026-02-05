@@ -132,20 +132,21 @@ interface ISpokeRegistryV2 {
 
     /// @notice Phase 1: Record acknowledgement with EIP-712 signature
     /// @dev Caller becomes trusted forwarder. Signature includes incident details.
-    /// @param reportedChainId CAIP-2 hash of chain where theft occurred
+    ///      Function signature aligns with hub for frontend consistency.
+    /// @param wallet Wallet address being registered as stolen
+    /// @param reportedChainId Chain ID where theft occurred (converted to CAIP-2 hash internally)
     /// @param incidentTimestamp Unix timestamp when theft occurred (user-provided)
     /// @param deadline Signature expiry timestamp
     /// @param nonce Expected nonce for replay protection
-    /// @param owner Wallet address being registered as stolen
     /// @param v Signature v component
     /// @param r Signature r component
     /// @param s Signature s component
     function acknowledgeLocal(
-        bytes32 reportedChainId,
+        address wallet,
+        uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
         uint256 nonce,
-        address owner,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -153,20 +154,21 @@ interface ISpokeRegistryV2 {
 
     /// @notice Phase 2: Complete registration and send to hub
     /// @dev Must be called by trusted forwarder within registration window.
-    /// @param reportedChainId CAIP-2 hash (must match acknowledgement)
+    ///      Function signature aligns with hub for frontend consistency.
+    /// @param wallet Wallet address being registered
+    /// @param reportedChainId Chain ID (must match acknowledgement, converted to CAIP-2 hash)
     /// @param incidentTimestamp Incident timestamp (must match acknowledgement)
     /// @param deadline Signature expiry timestamp
     /// @param nonce Expected nonce for replay protection
-    /// @param owner Wallet address being registered
     /// @param v Signature v component
     /// @param r Signature r component
     /// @param s Signature s component
     function registerLocal(
-        bytes32 reportedChainId,
+        address wallet,
+        uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
         uint256 nonce,
-        address owner,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -263,13 +265,14 @@ interface ISpokeRegistryV2 {
     function quoteFeeBreakdown(address owner) external view returns (FeeBreakdown memory);
 
     /// @notice Generate hash struct for signing (frontend helper)
-    /// @param reportedChainId CAIP-2 hash of incident chain
+    /// @dev Function signature aligns with hub for frontend consistency.
+    /// @param reportedChainId Chain ID where incident occurred
     /// @param incidentTimestamp When theft occurred
     /// @param forwarder Address that will submit the transaction
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline Signature expiry timestamp
     /// @return hashStruct Hash to sign
-    function generateHashStruct(bytes32 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
         external
         view
         returns (uint256 deadline, bytes32 hashStruct);

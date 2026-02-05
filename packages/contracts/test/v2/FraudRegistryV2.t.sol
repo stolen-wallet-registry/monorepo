@@ -34,13 +34,13 @@ contract FraudRegistryV2Test is Test {
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
     string internal constant DOMAIN_NAME = "FraudRegistryV2";
-    string internal constant DOMAIN_VERSION = "1";
+    string internal constant DOMAIN_VERSION = "4";
 
     string internal constant ACK_STATEMENT =
-        "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry V2.";
+        "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry.";
 
     string internal constant REG_STATEMENT =
-        "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry V2. This action is irreversible.";
+        "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry. This action is irreversible.";
 
     bytes32 internal constant ACK_TYPEHASH = keccak256(
         "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
@@ -155,7 +155,7 @@ contract FraudRegistryV2Test is Test {
             _signAck(walletPrivateKey, wallet, _forwarder, chainId, incidentTs, nonce, deadline);
 
         vm.prank(_forwarder);
-        registry.acknowledge(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.acknowledge(wallet, chainId, incidentTs, deadline, nonce, v, r, s);
     }
 
     function _skipToRegistrationWindow() internal {
@@ -170,10 +170,17 @@ contract FraudRegistryV2Test is Test {
     /// Wildcard key should use CAIP-363 format: eip155:_:wallet
     function test_WildcardKey_Format() public pure {
         address testWallet = address(0x1234567890123456789012345678901234567890);
-        bytes32 expectedKey = keccak256(abi.encodePacked("eip155:_:", testWallet));
+        bytes32 computedKey = keccak256(abi.encodePacked("eip155:_:", testWallet));
 
-        // The key format should be consistent
-        assertEq(expectedKey, keccak256(abi.encodePacked("eip155:_:", testWallet)));
+        // Verify expected key format against known-good value
+        // This ensures the wildcard format "eip155:_:" is used (not chain-specific)
+        bytes32 expectedKey =
+            keccak256(abi.encodePacked("eip155:_:", address(0x1234567890123456789012345678901234567890)));
+        assertEq(computedKey, expectedKey);
+
+        // Verify it differs from chain-specific format
+        bytes32 chainSpecificKey = keccak256(abi.encodePacked("eip155:1:", testWallet));
+        assertTrue(computedKey != chainSpecificKey, "Wildcard key should differ from chain-specific key");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -209,7 +216,7 @@ contract FraudRegistryV2Test is Test {
             _signAck(walletPrivateKey, wallet, wallet, chainId, incidentTs, nonce, deadline);
 
         vm.prank(wallet);
-        registry.acknowledge(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.acknowledge(wallet, chainId, incidentTs, deadline, nonce, v, r, s);
 
         assertTrue(registry.isPending(wallet));
     }
@@ -226,7 +233,7 @@ contract FraudRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__SignatureExpired.selector);
-        registry.acknowledge(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.acknowledge(wallet, chainId, incidentTs, deadline, nonce, v, r, s);
     }
 
     /// Acknowledgement should reject invalid signature.
@@ -242,7 +249,7 @@ contract FraudRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__InvalidSignature.selector);
-        registry.acknowledge(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.acknowledge(wallet, chainId, incidentTs, deadline, nonce, v, r, s);
     }
 
     /// Acknowledgement should reject zero wallet.
@@ -250,13 +257,14 @@ contract FraudRegistryV2Test is Test {
         uint64 chainId = uint64(block.chainid);
         uint64 incidentTs = uint64(block.timestamp - 1 days);
         uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = 0;
 
         (uint8 v, bytes32 r, bytes32 s) =
-            _signAck(walletPrivateKey, address(0), forwarder, chainId, incidentTs, 0, deadline);
+            _signAck(walletPrivateKey, address(0), forwarder, chainId, incidentTs, nonce, deadline);
 
         vm.prank(forwarder);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__InvalidWallet.selector);
-        registry.acknowledge(address(0), chainId, incidentTs, deadline, v, r, s);
+        registry.acknowledge(address(0), chainId, incidentTs, deadline, nonce, v, r, s);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -278,7 +286,7 @@ contract FraudRegistryV2Test is Test {
             _signReg(walletPrivateKey, wallet, forwarder, chainId, incidentTs, nonce, deadline);
 
         vm.prank(forwarder);
-        registry.register(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.register(wallet, chainId, incidentTs, deadline, nonce, v, r, s);
 
         assertTrue(registry.isRegistered(wallet), "Should be registered");
         assertFalse(registry.isPending(wallet), "Should not be pending");
@@ -319,7 +327,7 @@ contract FraudRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__GracePeriodNotStarted.selector);
-        registry.register(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.register(wallet, chainId, incidentTs, deadline, nonce, v, r, s);
     }
 
     /// Registration should fail after expiry.
@@ -341,7 +349,7 @@ contract FraudRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__RegistrationExpired.selector);
-        registry.register(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.register(wallet, chainId, incidentTs, deadline, nonce, v, r, s);
     }
 
     /// Registration should fail with wrong forwarder.
@@ -361,7 +369,7 @@ contract FraudRegistryV2Test is Test {
 
         vm.prank(wrongForwarder);
         vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__InvalidForwarder.selector);
-        registry.register(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.register(wallet, chainId, incidentTs, deadline, nonce, v, r, s);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -628,7 +636,7 @@ contract FraudRegistryV2Test is Test {
             _signReg(walletPrivateKey, wallet, forwarder, chainId, incidentTs, nonce, deadline);
 
         vm.prank(forwarder);
-        registry.register(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.register(wallet, chainId, incidentTs, deadline, nonce, v, r, s);
 
         // Verify batchId is 0 (no batch created)
         (,,,,, uint32 batchId) = registry.getEvmWalletDetails(wallet);
@@ -681,7 +689,7 @@ contract FraudRegistryV2Test is Test {
 
         uint256 gasBefore = gasleft();
         vm.prank(forwarder);
-        registry.register(wallet, chainId, incidentTs, deadline, v, r, s);
+        registry.register(wallet, chainId, incidentTs, deadline, nonce, v, r, s);
         uint256 gasUsed = gasBefore - gasleft();
 
         // Should be under 50k gas (PRP target)

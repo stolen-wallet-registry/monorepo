@@ -617,6 +617,10 @@ contract DeployV2 is Script {
     function _getDeployerKey() internal view returns (uint256) {
         uint256 privKey = vm.envOr("PRIVATE_KEY", uint256(0));
         if (privKey == 0) {
+            // Only fall back to Anvil key on local chains
+            require(
+                block.chainid == 31_337 || block.chainid == 31_338, "PRIVATE_KEY required for non-local deployments"
+            );
             // Anvil's first default private key
             privKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
         }

@@ -94,19 +94,26 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
       return;
     }
 
-    logger.p2p.info('Relayer submitting ACK transaction');
+    logger.p2p.info('Relayer submitting V2 ACK transaction');
 
     // Parse signature to v, r, s components
     const parsedSig = parseSignature(storedSig.signature);
+
+    // V2 fields from stored signature
+    // Fallback: use current chain for reportedChainId, 0 for incidentTimestamp (unknown)
+    const reportedChainId = storedSig.reportedChainId ?? BigInt(chainId);
+    const incidentTimestamp = storedSig.incidentTimestamp ?? 0n;
 
     await submitAcknowledgement({
       deadline: storedSig.deadline,
       nonce: storedSig.nonce,
       registeree,
       signature: parsedSig,
+      reportedChainId,
+      incidentTimestamp,
       feeWei,
     });
-  }, [storedSig, registeree, submitAcknowledgement, feeWei]);
+  }, [storedSig, registeree, chainId, submitAcknowledgement, feeWei]);
 
   // Cleanup retry timeout on unmount
   useEffect(() => {

@@ -16,6 +16,7 @@ import { useEthPrice } from './useEthPrice';
 import { logger } from '@/lib/logger';
 import { formatCentsToUsd, formatEthConsistent } from '@/lib/utils';
 import type { FeeLineItem } from '@/lib/types/fees';
+import type { Address } from '@/lib/types/ethereum';
 
 export interface TransactionCost {
   /** Protocol/registration fee (only on registration) */
@@ -47,6 +48,8 @@ export interface UseTransactionCostParams {
   step: 'acknowledgement' | 'registration';
   /** Transaction args for gas estimation */
   args?: UseGasEstimateParams['args'];
+  /** Owner address for fee breakdown (spoke chains need this for quote accuracy) */
+  ownerAddress?: Address | null;
 }
 
 export interface UseTransactionCostResult {
@@ -85,6 +88,7 @@ export interface UseTransactionCostResult {
 export function useTransactionCost({
   step,
   args,
+  ownerAddress,
 }: UseTransactionCostParams): UseTransactionCostResult {
   const { address } = useAccount();
   const chainId = useChainId();
@@ -95,7 +99,8 @@ export function useTransactionCost({
   // Get fee breakdown (works on both hub and spoke)
   // On hub: returns { bridgeFee: null, registrationFee, total, bridgeName: null, isCrossChain: false }
   // On spoke: returns { bridgeFee, registrationFee, total, bridgeName: "Hyperlane", isCrossChain: true }
-  const breakdownResult = useQuoteFeeBreakdown(address);
+  // Use ownerAddress for spoke chains (quote accuracy), fallback to connected wallet
+  const breakdownResult = useQuoteFeeBreakdown(ownerAddress ?? address);
 
   // Determine the value to send with the transaction
   // Registration sends the total fee, acknowledgement sends nothing

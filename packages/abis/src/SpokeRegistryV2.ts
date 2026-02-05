@@ -1,4 +1,4 @@
-export const StolenWalletRegistryABI = [
+export const SpokeRegistryV2ABI = [
   {
     type: 'constructor',
     inputs: [
@@ -8,14 +8,24 @@ export const StolenWalletRegistryABI = [
         internalType: 'address',
       },
       {
+        name: '_bridgeAdapter',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
         name: '_feeManager',
         type: 'address',
         internalType: 'address',
       },
       {
-        name: '_registryHub',
-        type: 'address',
-        internalType: 'address',
+        name: '_hubChainId',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: '_hubInbox',
+        type: 'bytes32',
+        internalType: 'bytes32',
       },
       {
         name: '_graceBlocks',
@@ -27,8 +37,17 @@ export const StolenWalletRegistryABI = [
         type: 'uint256',
         internalType: 'uint256',
       },
+      {
+        name: '_bridgeId',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
     ],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'receive',
+    stateMutability: 'payable',
   },
   {
     type: 'function',
@@ -39,8 +58,23 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'acknowledge',
+    name: 'acknowledgeLocal',
     inputs: [
+      {
+        name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: 'incidentTimestamp',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
       {
         name: 'deadline',
         type: 'uint256',
@@ -52,7 +86,55 @@ export const StolenWalletRegistryABI = [
         internalType: 'uint256',
       },
       {
-        name: 'owner',
+        name: 'v',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+      {
+        name: 'r',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 's',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'acknowledgeTransactionBatch',
+    inputs: [
+      {
+        name: 'dataHash',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'transactionCount',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'nonce',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'reporter',
         type: 'address',
         internalType: 'address',
       },
@@ -73,60 +155,33 @@ export const StolenWalletRegistryABI = [
       },
     ],
     outputs: [],
-    stateMutability: 'payable',
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
-    name: 'computeWalletBatchId',
-    inputs: [
-      {
-        name: 'merkleRoot',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: 'operator',
-        type: 'address',
-        internalType: 'address',
-      },
-      {
-        name: 'reportedChainId',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-    ],
+    name: 'bridgeAdapter',
+    inputs: [],
     outputs: [
       {
         name: '',
-        type: 'bytes32',
-        internalType: 'bytes32',
+        type: 'address',
+        internalType: 'address',
       },
     ],
-    stateMutability: 'pure',
+    stateMutability: 'view',
   },
   {
     type: 'function',
-    name: 'computeWalletEntryHash',
-    inputs: [
-      {
-        name: 'wallet',
-        type: 'address',
-        internalType: 'address',
-      },
-      {
-        name: 'chainId',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-    ],
+    name: 'bridgeId',
+    inputs: [],
     outputs: [
       {
         name: '',
-        type: 'bytes32',
-        internalType: 'bytes32',
+        type: 'uint8',
+        internalType: 'uint8',
       },
     ],
-    stateMutability: 'pure',
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -202,6 +257,16 @@ export const StolenWalletRegistryABI = [
     name: 'generateHashStruct',
     inputs: [
       {
+        name: 'reportedChainId',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: 'incidentTimestamp',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
         name: 'forwarder',
         type: 'address',
         internalType: 'address',
@@ -240,12 +305,22 @@ export const StolenWalletRegistryABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct IStolenWalletRegistry.AcknowledgementData',
+        internalType: 'struct ISpokeRegistryV2.AcknowledgementData',
         components: [
           {
             name: 'trustedForwarder',
             type: 'address',
             internalType: 'address',
+          },
+          {
+            name: 'incidentTimestamp',
+            type: 'uint64',
+            internalType: 'uint64',
+          },
+          {
+            name: 'reportedChainId',
+            type: 'bytes32',
+            internalType: 'bytes32',
           },
           {
             name: 'startBlock',
@@ -308,10 +383,10 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'getRegistration',
+    name: 'getTransactionAcknowledgement',
     inputs: [
       {
-        name: 'wallet',
+        name: 'reporter',
         type: 'address',
         internalType: 'address',
       },
@@ -320,63 +395,17 @@ export const StolenWalletRegistryABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct IStolenWalletRegistry.RegistrationData',
+        internalType: 'struct ISpokeRegistryV2.TransactionAcknowledgementData',
         components: [
           {
-            name: 'registeredAt',
-            type: 'uint64',
-            internalType: 'uint64',
-          },
-          {
-            name: 'sourceChainId',
-            type: 'uint32',
-            internalType: 'uint32',
-          },
-          {
-            name: 'bridgeId',
-            type: 'uint8',
-            internalType: 'uint8',
-          },
-          {
-            name: 'isSponsored',
-            type: 'bool',
-            internalType: 'bool',
-          },
-          {
-            name: 'crossChainMessageId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-        ],
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'getWalletBatch',
-    inputs: [
-      {
-        name: 'batchId',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-    ],
-    outputs: [
-      {
-        name: '',
-        type: 'tuple',
-        internalType: 'struct IStolenWalletRegistry.WalletBatch',
-        components: [
-          {
-            name: 'merkleRoot',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'operator',
+            name: 'trustedForwarder',
             type: 'address',
             internalType: 'address',
+          },
+          {
+            name: 'dataHash',
+            type: 'bytes32',
+            internalType: 'bytes32',
           },
           {
             name: 'reportedChainId',
@@ -384,19 +413,19 @@ export const StolenWalletRegistryABI = [
             internalType: 'bytes32',
           },
           {
-            name: 'registeredAt',
-            type: 'uint64',
-            internalType: 'uint64',
-          },
-          {
-            name: 'walletCount',
+            name: 'transactionCount',
             type: 'uint32',
             internalType: 'uint32',
           },
           {
-            name: 'invalidated',
-            type: 'bool',
-            internalType: 'bool',
+            name: 'startBlock',
+            type: 'uint256',
+            internalType: 'uint256',
+          },
+          {
+            name: 'expiryBlock',
+            type: 'uint256',
+            internalType: 'uint256',
           },
         ],
       },
@@ -418,29 +447,29 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'invalidateWalletBatch',
-    inputs: [
+    name: 'hubChainId',
+    inputs: [],
+    outputs: [
       {
-        name: 'batchId',
-        type: 'bytes32',
-        internalType: 'bytes32',
+        name: '',
+        type: 'uint32',
+        internalType: 'uint32',
       },
     ],
-    outputs: [],
-    stateMutability: 'nonpayable',
+    stateMutability: 'view',
   },
   {
     type: 'function',
-    name: 'invalidateWalletEntry',
-    inputs: [
+    name: 'hubInbox',
+    inputs: [],
+    outputs: [
       {
-        name: 'entryHash',
+        name: '',
         type: 'bytes32',
         internalType: 'bytes32',
       },
     ],
-    outputs: [],
-    stateMutability: 'nonpayable',
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -463,50 +492,12 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'isRegistered',
+    name: 'isPendingTransactionBatch',
     inputs: [
       {
-        name: 'wallet',
+        name: 'reporter',
         type: 'address',
         internalType: 'address',
-      },
-    ],
-    outputs: [
-      {
-        name: '',
-        type: 'bool',
-        internalType: 'bool',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'isWalletBatchRegistered',
-    inputs: [
-      {
-        name: 'batchId',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-    ],
-    outputs: [
-      {
-        name: '',
-        type: 'bool',
-        internalType: 'bool',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'isWalletEntryInvalidated',
-    inputs: [
-      {
-        name: 'entryHash',
-        type: 'bytes32',
-        internalType: 'bytes32',
       },
     ],
     outputs: [
@@ -539,19 +530,6 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'operatorRegistry',
-    inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
     name: 'owner',
     inputs: [],
     outputs: [
@@ -578,13 +556,41 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'quoteOperatorBatchRegistration',
-    inputs: [],
+    name: 'quoteFeeBreakdown',
+    inputs: [
+      {
+        name: 'owner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
     outputs: [
       {
         name: '',
-        type: 'uint256',
-        internalType: 'uint256',
+        type: 'tuple',
+        internalType: 'struct ISpokeRegistryV2.FeeBreakdown',
+        components: [
+          {
+            name: 'bridgeFee',
+            type: 'uint256',
+            internalType: 'uint256',
+          },
+          {
+            name: 'registrationFee',
+            type: 'uint256',
+            internalType: 'uint256',
+          },
+          {
+            name: 'total',
+            type: 'uint256',
+            internalType: 'uint256',
+          },
+          {
+            name: 'bridgeName',
+            type: 'string',
+            internalType: 'string',
+          },
+        ],
       },
     ],
     stateMutability: 'view',
@@ -594,7 +600,7 @@ export const StolenWalletRegistryABI = [
     name: 'quoteRegistration',
     inputs: [
       {
-        name: '',
+        name: 'owner',
         type: 'address',
         internalType: 'address',
       },
@@ -610,8 +616,23 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'register',
+    name: 'registerLocal',
     inputs: [
+      {
+        name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: 'incidentTimestamp',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
       {
         name: 'deadline',
         type: 'uint256',
@@ -621,11 +642,6 @@ export const StolenWalletRegistryABI = [
         name: 'nonce',
         type: 'uint256',
         internalType: 'uint256',
-      },
-      {
-        name: 'owner',
-        type: 'address',
-        internalType: 'address',
       },
       {
         name: 'v',
@@ -648,90 +664,56 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'registerBatchAsOperator',
+    name: 'registerTransactionBatch',
     inputs: [
-      {
-        name: 'merkleRoot',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
       {
         name: 'reportedChainId',
         type: 'bytes32',
         internalType: 'bytes32',
       },
       {
-        name: 'walletAddresses',
-        type: 'address[]',
-        internalType: 'address[]',
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'nonce',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'reporter',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'transactionHashes',
+        type: 'bytes32[]',
+        internalType: 'bytes32[]',
       },
       {
         name: 'chainIds',
         type: 'bytes32[]',
         internalType: 'bytes32[]',
       },
-    ],
-    outputs: [],
-    stateMutability: 'payable',
-  },
-  {
-    type: 'function',
-    name: 'registerFromHub',
-    inputs: [
       {
-        name: 'wallet',
-        type: 'address',
-        internalType: 'address',
-      },
-      {
-        name: 'sourceChainId',
-        type: 'uint32',
-        internalType: 'uint32',
-      },
-      {
-        name: 'isSponsored',
-        type: 'bool',
-        internalType: 'bool',
-      },
-      {
-        name: 'bridgeId',
+        name: 'v',
         type: 'uint8',
         internalType: 'uint8',
       },
       {
-        name: 'crossChainMessageId',
+        name: 'r',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 's',
         type: 'bytes32',
         internalType: 'bytes32',
       },
     ],
     outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    name: 'registryHub',
-    inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'reinstateWalletEntry',
-    inputs: [
-      {
-        name: 'entryHash',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
+    stateMutability: 'payable',
   },
   {
     type: 'function',
@@ -742,16 +724,34 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'setOperatorRegistry',
+    name: 'setHubConfig',
     inputs: [
       {
-        name: '_operatorRegistry',
-        type: 'address',
-        internalType: 'address',
+        name: '_hubChainId',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: '_hubInbox',
+        type: 'bytes32',
+        internalType: 'bytes32',
       },
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'sourceChainId',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -768,37 +768,21 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'function',
-    name: 'verifyWalletInBatch',
+    name: 'withdrawFees',
     inputs: [
       {
-        name: 'wallet',
+        name: 'to',
         type: 'address',
         internalType: 'address',
       },
       {
-        name: 'chainId',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: 'batchId',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: 'merkleProof',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
+        name: 'amount',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
-    outputs: [
-      {
-        name: '',
-        type: 'bool',
-        internalType: 'bool',
-      },
-    ],
-    stateMutability: 'view',
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'event',
@@ -808,13 +792,19 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'event',
-    name: 'OperatorRegistrySet',
+    name: 'HubConfigUpdated',
     inputs: [
       {
-        name: 'operatorRegistry',
-        type: 'address',
+        name: 'hubChainId',
+        type: 'uint32',
         indexed: true,
-        internalType: 'address',
+        internalType: 'uint32',
+      },
+      {
+        name: 'hubInbox',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
       },
     ],
     anonymous: false,
@@ -859,10 +849,35 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'event',
-    name: 'WalletAcknowledged',
+    name: 'RegistrationSentToHub',
     inputs: [
       {
-        name: 'owner',
+        name: 'wallet',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'messageId',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'hubChainId',
+        type: 'uint32',
+        indexed: false,
+        internalType: 'uint32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'TransactionBatchAcknowledged',
+    inputs: [
+      {
+        name: 'reporter',
         type: 'address',
         indexed: true,
         internalType: 'address',
@@ -874,9 +889,27 @@ export const StolenWalletRegistryABI = [
         internalType: 'address',
       },
       {
+        name: 'dataHash',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'transactionCount',
+        type: 'uint32',
+        indexed: false,
+        internalType: 'uint32',
+      },
+      {
         name: 'isSponsored',
         type: 'bool',
-        indexed: true,
+        indexed: false,
         internalType: 'bool',
       },
     ],
@@ -884,41 +917,47 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'event',
-    name: 'WalletBatchInvalidated',
+    name: 'TransactionBatchSentToHub',
     inputs: [
       {
-        name: 'batchId',
+        name: 'reporter',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'messageId',
         type: 'bytes32',
         indexed: true,
         internalType: 'bytes32',
       },
       {
-        name: 'invalidatedBy',
-        type: 'address',
-        indexed: true,
-        internalType: 'address',
+        name: 'dataHash',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'hubChainId',
+        type: 'uint32',
+        indexed: false,
+        internalType: 'uint32',
       },
     ],
     anonymous: false,
   },
   {
     type: 'event',
-    name: 'WalletBatchRegistered',
+    name: 'WalletAcknowledged',
     inputs: [
       {
-        name: 'batchId',
-        type: 'bytes32',
+        name: 'wallet',
+        type: 'address',
         indexed: true,
-        internalType: 'bytes32',
+        internalType: 'address',
       },
       {
-        name: 'merkleRoot',
-        type: 'bytes32',
-        indexed: true,
-        internalType: 'bytes32',
-      },
-      {
-        name: 'operator',
+        name: 'forwarder',
         type: 'address',
         indexed: true,
         internalType: 'address',
@@ -930,97 +969,19 @@ export const StolenWalletRegistryABI = [
         internalType: 'bytes32',
       },
       {
-        name: 'walletCount',
-        type: 'uint32',
+        name: 'incidentTimestamp',
+        type: 'uint64',
         indexed: false,
-        internalType: 'uint32',
-      },
-      {
-        name: 'walletAddresses',
-        type: 'address[]',
-        indexed: false,
-        internalType: 'address[]',
-      },
-      {
-        name: 'chainIds',
-        type: 'bytes32[]',
-        indexed: false,
-        internalType: 'bytes32[]',
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: 'event',
-    name: 'WalletEntryInvalidated',
-    inputs: [
-      {
-        name: 'entryHash',
-        type: 'bytes32',
-        indexed: true,
-        internalType: 'bytes32',
-      },
-      {
-        name: 'invalidatedBy',
-        type: 'address',
-        indexed: true,
-        internalType: 'address',
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: 'event',
-    name: 'WalletEntryReinstated',
-    inputs: [
-      {
-        name: 'entryHash',
-        type: 'bytes32',
-        indexed: true,
-        internalType: 'bytes32',
-      },
-      {
-        name: 'reinstatedBy',
-        type: 'address',
-        indexed: true,
-        internalType: 'address',
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: 'event',
-    name: 'WalletRegistered',
-    inputs: [
-      {
-        name: 'owner',
-        type: 'address',
-        indexed: true,
-        internalType: 'address',
+        internalType: 'uint64',
       },
       {
         name: 'isSponsored',
         type: 'bool',
-        indexed: true,
+        indexed: false,
         internalType: 'bool',
       },
     ],
     anonymous: false,
-  },
-  {
-    type: 'error',
-    name: 'Acknowledgement__Expired',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'Acknowledgement__InvalidSigner',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'AlreadyRegistered',
-    inputs: [],
   },
   {
     type: 'error',
@@ -1051,47 +1012,7 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'error',
-    name: 'FeeForwardFailed',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'InvalidBridgeId',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'InvalidChainId',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'InvalidFeeConfig',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'InvalidNonce',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'InvalidOwner',
-    inputs: [],
-  },
-  {
-    type: 'error',
     name: 'InvalidShortString',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'InvalidTimingConfig',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'LeavesNotSorted',
     inputs: [],
   },
   {
@@ -1118,87 +1039,87 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'error',
-    name: 'Registration__ForwarderExpired',
+    name: 'SpokeRegistryV2__ArrayLengthMismatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'Registration__GracePeriodNotStarted',
+    name: 'SpokeRegistryV2__EmptyBatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'Registration__InvalidForwarder',
+    name: 'SpokeRegistryV2__ForwarderExpired',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'Registration__InvalidSigner',
+    name: 'SpokeRegistryV2__GracePeriodNotStarted',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'Registration__SignatureExpired',
+    name: 'SpokeRegistryV2__HubNotConfigured',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'StolenWalletRegistry__AlreadyInvalidated',
+    name: 'SpokeRegistryV2__InsufficientFee',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'StolenWalletRegistry__ArrayLengthMismatch',
+    name: 'SpokeRegistryV2__InvalidDataHash',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'StolenWalletRegistry__BatchAlreadyRegistered',
+    name: 'SpokeRegistryV2__InvalidForwarder',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'StolenWalletRegistry__BatchNotFound',
+    name: 'SpokeRegistryV2__InvalidHubConfig',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'StolenWalletRegistry__EntryNotInvalidated',
+    name: 'SpokeRegistryV2__InvalidNonce',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'StolenWalletRegistry__InsufficientFee',
+    name: 'SpokeRegistryV2__InvalidOwner',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'StolenWalletRegistry__InvalidChainIdEntry',
+    name: 'SpokeRegistryV2__InvalidSigner',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'StolenWalletRegistry__InvalidMerkleRoot',
+    name: 'SpokeRegistryV2__InvalidTimingConfig',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'StolenWalletRegistry__InvalidWalletAddress',
+    name: 'SpokeRegistryV2__RefundFailed',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'StolenWalletRegistry__InvalidWalletCount',
+    name: 'SpokeRegistryV2__SignatureExpired',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'StolenWalletRegistry__MerkleRootMismatch',
+    name: 'SpokeRegistryV2__WithdrawalFailed',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'StolenWalletRegistry__NotApprovedOperator',
+    name: 'SpokeRegistryV2__ZeroAddress',
     inputs: [],
   },
   {
@@ -1211,10 +1132,5 @@ export const StolenWalletRegistryABI = [
         internalType: 'string',
       },
     ],
-  },
-  {
-    type: 'error',
-    name: 'UnauthorizedCaller',
-    inputs: [],
   },
 ] as const;

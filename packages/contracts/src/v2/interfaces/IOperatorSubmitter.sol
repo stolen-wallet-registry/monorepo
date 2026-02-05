@@ -102,6 +102,7 @@ interface IOperatorSubmitter {
     error OperatorSubmitter__FeeForwardFailed();
     error OperatorSubmitter__RegistryPaused();
     error OperatorSubmitter__InvalidFeeConfig();
+    error OperatorSubmitter__ZeroAddress();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - Validation

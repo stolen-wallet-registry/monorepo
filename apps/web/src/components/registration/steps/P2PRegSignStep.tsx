@@ -103,10 +103,16 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
       setSendError(null);
       resetSign();
 
+      // V2: Generate reportedChainId (raw chain ID) and incidentTimestamp
+      const reportedChainId = BigInt(chainId);
+      const incidentTimestamp = BigInt(Math.floor(Date.now() / 1000));
+
       // Sign the registration
       const sig = await signRegistration({
-        owner: registeree,
+        wallet: registeree,
         forwarder: relayer,
+        reportedChainId,
+        incidentTimestamp,
         nonce,
         deadline: hashData.deadline,
       });
@@ -129,6 +135,9 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
             nonce: nonce.toString(),
             address: registeree,
             chainId,
+            // V2 fields (stringified for P2P serialization)
+            reportedChainId: reportedChainId.toString(),
+            incidentTimestamp: incidentTimestamp.toString(),
           },
         },
       });

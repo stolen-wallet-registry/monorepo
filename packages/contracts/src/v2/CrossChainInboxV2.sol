@@ -200,6 +200,8 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     /// @param spokeRegistry Spoke registry address (as bytes32)
     /// @param trusted Whether the source is trusted
     function setTrustedSource(uint32 chainId, bytes32 spokeRegistry, bool trusted) external onlyOwner {
+        // Prevent trusting zero address (common misconfiguration)
+        if (trusted && spokeRegistry == bytes32(0)) revert CrossChainInboxV2__ZeroAddress();
         _trustedSources[chainId][spokeRegistry] = trusted;
         emit TrustedSourceUpdated(chainId, spokeRegistry, trusted);
     }

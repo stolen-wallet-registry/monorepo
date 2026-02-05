@@ -8,40 +8,102 @@ import {
   getNetwork,
   type HubNetworkConfig,
 } from '@swr/chains';
-import { getSpokeAddress } from './crosschain-addresses';
+import { getSpokeV2Address } from './crosschain-addresses';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DETERMINISTIC ADDRESSES
+// DETERMINISTIC ADDRESSES (V2 - DeployCrossChainV2.s.sol)
 // ═══════════════════════════════════════════════════════════════════════════
-// Anvil default deployer (0xf39F...2266) produces deterministic addresses.
-// Both Deploy.s.sol and DeployCrossChain.s.sol deploy CORE contracts (nonces 0-6)
-// in the SAME ORDER so core addresses are identical:
+// Anvil default deployer (0xf39F...2266) produces deterministic addresses based
+// on `keccak256(rlp([deployer_address, nonce]))`. Addresses are stable given:
+// - Fresh Anvil restart (nonce 0)
+// - Same deployment script execution order
 //
-//   0: MockAggregator           → 0x5FbDB2315678afecb367f032d93F642f64180aa3
-//   1: FeeManager               → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-//   2: RegistryHub              → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
-//   3: StolenWalletReg          → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
-//   4: StolenTransactionReg     → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
-//   5-6: (setRegistry txs)
-//
-// After core, DeployCrossChain adds CrossChainInbox (nonce 7) which shifts
-// subsequent addresses. For cross-chain dev, use these addresses:
-//   7: CrossChainInbox          → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
-//   8: Multicall3               → 0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
-//   11: TranslationRegistry     → 0x610178dA211FEF7D417bC0e6FeD39F05609AD788
-//   12: WalletSoulbound         → 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
-//   13: SupportSoulbound        → 0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0
-//   14: SoulboundReceiver            → 0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82
-//   15: OperatorRegistry             → 0x0B306BF915C4d645ff596e518fAf3F9669b97016
-//   19: FraudulentContractRegistry   → 0x3Aa5ebB10DC797CAC828524e59A333d0A371443c
+// V2 Contract addresses from `pnpm deploy:crosschain:v2`:
+//   FraudRegistryV2             → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+//   TranslationRegistry         → 0x8A791620dd6260079BF849Dc5567aDC3F2FdC318
+//   WalletSoulbound             → 0x610178dA211FEF7D417bC0e6FeD39F05609AD788
+//   SupportSoulbound            → 0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e
+//   SoulboundReceiver           → 0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// V2 CONTRACT ADDRESSES (PRIMARY - FraudRegistryV2)
+// ═══════════════════════════════════════════════════════════════════════════
+// From `pnpm deploy:crosschain:v2` output
+export const V2_CONTRACT_ADDRESSES = {
+  fraudRegistryV2: {
+    [anvilHub.chainId]: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address, // TBD
+  },
+  operatorRegistry: {
+    [anvilHub.chainId]: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  operatorSubmitter: {
+    [anvilHub.chainId]: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  crossChainInboxV2: {
+    [anvilHub.chainId]: '0x0165878A594ca255338adfa4d48449f69242Eb8F' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  walletSoulbound: {
+    [anvilHub.chainId]: '0x610178dA211FEF7D417bC0e6FeD39F05609AD788' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  supportSoulbound: {
+    [anvilHub.chainId]: '0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  translationRegistry: {
+    [anvilHub.chainId]: '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  soulboundReceiver: {
+    [anvilHub.chainId]: '0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0' as Address,
+    [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+} as const;
+
+export type V2ContractName = keyof typeof V2_CONTRACT_ADDRESSES;
+
+/** Get V2 contract address */
+export function getV2ContractAddress(contract: V2ContractName, chainId: number): Address {
+  const addresses = V2_CONTRACT_ADDRESSES[contract];
+  const address = addresses[chainId as keyof typeof addresses];
+  if (!address || address === zeroAddress) {
+    throw new Error(`No ${contract} address configured for chain ID ${chainId}`);
+  }
+  return address;
+}
+
+/** Get FraudRegistryV2 address (main V2 registry) */
+export function getFraudRegistryV2Address(chainId: number): Address {
+  return getV2ContractAddress('fraudRegistryV2', chainId);
+}
+
+/** Get OperatorSubmitter address (V2 operator batch submissions) */
+export function getOperatorSubmitterAddress(chainId: number): Address {
+  return getV2ContractAddress('operatorSubmitter', chainId);
+}
+
+/** Get CrossChainInboxV2 address */
+export function getCrossChainInboxV2Address(chainId: number): Address {
+  return getV2ContractAddress('crossChainInboxV2', chainId);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// V1 CONTRACT ADDRESSES (DEPRECATED - kept for transition)
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const CONTRACT_ADDRESSES = {
+  /** @deprecated Use fraudRegistryV2 for new integrations */
   stolenWalletRegistry: {
     [anvilHub.chainId]: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as Address,
     // Base Sepolia (testnet hub) - fill after deployment
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
+  /** @deprecated Use fraudRegistryV2 for new integrations */
   stolenTransactionRegistry: {
     [anvilHub.chainId]: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9' as Address,
     // Base Sepolia (testnet hub) - fill after deployment
@@ -60,15 +122,15 @@ export const CONTRACT_ADDRESSES = {
   // Soulbound contracts - deployed via DeployCrossChain.s.sol (hub chain only)
   // Languages seeded separately via SeedLanguages.s.sol (keeps addresses deterministic)
   translationRegistry: {
-    [anvilHub.chainId]: '0x610178dA211FEF7D417bC0e6FeD39F05609AD788' as Address,
+    [anvilHub.chainId]: '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   walletSoulbound: {
-    [anvilHub.chainId]: '0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e' as Address,
+    [anvilHub.chainId]: '0x610178dA211FEF7D417bC0e6FeD39F05609AD788' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   supportSoulbound: {
-    [anvilHub.chainId]: '0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0' as Address,
+    [anvilHub.chainId]: '0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   // Operator Registry - manages DAO-approved operators for batch submissions
@@ -213,15 +275,15 @@ export function getFraudulentContractRegistryAddress(chainId: number): Address {
 export type RegistryType = 'hub' | 'spoke';
 
 /**
- * Get the appropriate registry address for the current chain.
- * - Hub chains: returns StolenWalletRegistry address
- * - Spoke chains: returns SpokeRegistry address
+ * Get the appropriate registry address for the current chain (V2).
+ * - Hub chains: returns FraudRegistryV2 address
+ * - Spoke chains: returns SpokeRegistryV2 address
  */
 export function getRegistryAddress(chainId: number): Address {
   if (isSpokeChain(chainId)) {
-    return getSpokeAddress('spokeRegistry', chainId);
+    return getSpokeV2Address('spokeRegistryV2', chainId);
   }
-  return getStolenWalletRegistryAddress(chainId);
+  return getFraudRegistryV2Address(chainId);
 }
 
 /**
@@ -237,15 +299,16 @@ export function getRegistryType(chainId: number): RegistryType {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Get the appropriate transaction registry address for the current chain.
- * - Hub chains: returns StolenTransactionRegistry address
- * - Spoke chains: returns SpokeTransactionRegistry address
+ * Get the appropriate transaction registry address for the current chain (V2).
+ * V2 unifies wallet and transaction registries - both use FraudRegistryV2 on hub.
+ * - Hub chains: returns FraudRegistryV2 address (same as wallet)
+ * - Spoke chains: returns SpokeRegistryV2 address
  */
 export function getTransactionRegistryAddress(chainId: number): Address {
   if (isSpokeChain(chainId)) {
-    return getSpokeAddress('spokeTransactionRegistry', chainId);
+    return getSpokeV2Address('spokeRegistryV2', chainId);
   }
-  return getStolenTransactionRegistryAddress(chainId);
+  return getFraudRegistryV2Address(chainId);
 }
 
 // Re-export cross-chain helpers for convenience

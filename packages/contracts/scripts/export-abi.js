@@ -9,14 +9,19 @@ const abiDir = join(__dirname, '../../abis/src');
 
 // Foundry flattens output - artifacts are at ContractName.sol/ContractName.json
 const contracts = [
-  // Core hub contracts
+  // V2 Core contracts (primary)
+  'FraudRegistryV2.sol/FraudRegistryV2.json',
+  'SpokeRegistryV2.sol/SpokeRegistryV2.json',
+  'CrossChainInboxV2.sol/CrossChainInboxV2.json',
+  'OperatorSubmitter.sol/OperatorSubmitter.json',
+  // V1 Core hub contracts (deprecated - kept for transition)
   'RegistryHub.sol/RegistryHub.json',
   'StolenWalletRegistry.sol/StolenWalletRegistry.json',
   'StolenTransactionRegistry.sol/StolenTransactionRegistry.json',
   'FeeManager.sol/FeeManager.json',
   'OperatorRegistry.sol/OperatorRegistry.json',
   'FraudulentContractRegistry.sol/FraudulentContractRegistry.json',
-  // Cross-chain contracts
+  // V1 Cross-chain contracts (deprecated - kept for transition)
   'CrossChainInbox.sol/CrossChainInbox.json',
   'SpokeRegistry.sol/SpokeRegistry.json',
   'SpokeTransactionRegistry.sol/SpokeTransactionRegistry.json',

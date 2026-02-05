@@ -141,17 +141,25 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
     setSignatureError(null);
 
     try {
-      logger.signature.info('Requesting EIP-712 registration signature', {
-        owner: registeree,
+      // V2: Generate reportedChainId (raw chain ID) and incidentTimestamp
+      const reportedChainId = BigInt(chainId);
+      const incidentTimestamp = BigInt(Math.floor(Date.now() / 1000));
+
+      logger.signature.info('Requesting V2 EIP-712 registration signature', {
+        wallet: registeree,
         forwarder,
+        reportedChainId,
+        incidentTimestamp: incidentTimestamp.toString(),
         nonce: nonce.toString(),
         deadline: freshDeadline.toString(),
         chainId,
       });
 
       const sig = await signRegistration({
-        owner: registeree,
+        wallet: registeree,
         forwarder,
+        reportedChainId,
+        incidentTimestamp,
         nonce,
         deadline: freshDeadline,
       });
@@ -160,7 +168,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
       });
 
-      // Store signature
+      // Store signature with V2 fields
       storeSignature({
         signature: sig,
         deadline: freshDeadline,
@@ -169,8 +177,10 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         chainId,
         step: SIGNATURE_STEP.REGISTRATION,
         storedAt: Date.now(),
+        reportedChainId,
+        incidentTimestamp,
       });
-      logger.signature.debug('Registration signature stored in sessionStorage');
+      logger.signature.debug('V2 registration signature stored in sessionStorage');
 
       setSignature(sig);
       setSignatureStatus('success');

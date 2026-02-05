@@ -41,8 +41,8 @@ interface IFraudRegistryV2 {
     ///
     ///      Storage optimization: reportedChainIdHash is a TRUNCATED hash (top 64 bits of
     ///      keccak256(caip2String)). With ~18 quintillion possible values and only thousands
-    ///      of chains, collision probability is effectively zero. Full chain info is emitted
-    ///      in events for indexers.
+    ///      of chains, collision probability is effectively zero. Events emit the truncated
+    ///      hash; indexers can maintain a lookup table mapping hashes to full chain strings.
     ///
     ///      Total: 1 + 8 + 8 + 8 + 4 + 1 = 30 bytes (fits in 1 storage slot!)
     ///
@@ -386,12 +386,15 @@ interface IFraudRegistryV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Generate hash struct for EIP-712 signature
-    /// @dev Used by frontend to prepare typed data for signing
+    /// @dev Used by frontend to prepare typed data for signing.
+    ///      Both hub and spoke use identical function signature for frontend consistency.
+    /// @param reportedChainId Chain ID where incident occurred
+    /// @param incidentTimestamp When theft occurred (Unix timestamp)
     /// @param forwarder The address that will submit the transaction
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline The signature expiry timestamp
     /// @return hashStruct The EIP-712 hash struct to sign
-    function generateHashStruct(address forwarder, uint8 step)
+    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
         external
         view
         returns (uint256 deadline, bytes32 hashStruct);
@@ -429,6 +432,7 @@ interface IFraudRegistryV2 {
     /// @param reportedChainId Chain ID where reporting (e.g., 8453 for Base)
     /// @param incidentTimestamp When theft occurred (Unix timestamp)
     /// @param deadline Signature expiry timestamp
+    /// @param nonce Expected nonce for replay protection (must match nonces[wallet])
     /// @param v ECDSA v
     /// @param r ECDSA r
     /// @param s ECDSA s
@@ -437,6 +441,7 @@ interface IFraudRegistryV2 {
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
+        uint256 nonce,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -451,6 +456,7 @@ interface IFraudRegistryV2 {
     /// @param reportedChainId Chain ID (must match acknowledgement)
     /// @param incidentTimestamp Incident timestamp (must match acknowledgement)
     /// @param deadline Signature expiry timestamp
+    /// @param nonce Expected nonce for replay protection (must match nonces[wallet])
     /// @param v ECDSA v
     /// @param r ECDSA r
     /// @param s ECDSA s
@@ -459,6 +465,7 @@ interface IFraudRegistryV2 {
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
+        uint256 nonce,
         uint8 v,
         bytes32 r,
         bytes32 s

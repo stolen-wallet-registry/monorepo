@@ -502,6 +502,71 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'ETH sent but fees are disabled.',
     action: 'Do not send ETH when fees are disabled.',
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // V2 FraudRegistryV2 Errors
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  '0xb372ed74': {
+    name: 'FraudRegistryV2__ZeroAddress',
+    message: 'Invalid wallet address.',
+    action: 'Please provide a valid wallet address.',
+  },
+  '0x9a93003b': {
+    name: 'FraudRegistryV2__SignatureExpired',
+    message: 'Your signature has expired.',
+    action: 'Please sign again.',
+  },
+  '0x12f34e19': {
+    name: 'FraudRegistryV2__InvalidSigner',
+    message: 'Signature verification failed.',
+    action: 'Ensure you signed with the correct wallet.',
+  },
+  '0x7a55def3': {
+    name: 'FraudRegistryV2__AlreadyRegistered',
+    message: 'This wallet is already registered.',
+    action: 'Search the registry to view its status.',
+  },
+  '0x6a90152c': {
+    name: 'FraudRegistryV2__InvalidForwarder',
+    message: 'Incorrect forwarder address.',
+    action: 'The wallet that acknowledged must complete registration.',
+  },
+  '0x5943bd3a': {
+    name: 'FraudRegistryV2__GracePeriodNotStarted',
+    message: 'Grace period has not started.',
+    action: 'Please wait before completing registration.',
+  },
+  '0xeb52e0d8': {
+    name: 'FraudRegistryV2__RegistrationExpired',
+    message: 'Registration window has expired.',
+    action: 'Please start the registration process again.',
+  },
+  '0x098d5513': {
+    name: 'FraudRegistryV2__InsufficientFee',
+    message: 'Insufficient registration fee.',
+    action: 'Please include the required fee.',
+  },
+  '0xf07e98e5': {
+    name: 'FraudRegistryV2__UnsupportedNamespace',
+    message: 'Unsupported chain namespace.',
+    action: 'Currently only EVM chains are supported for individual registration.',
+  },
+  '0xbe3a319f': {
+    name: 'FraudRegistryV2__Paused',
+    message: 'The registry is currently paused.',
+    action: 'Please try again later.',
+  },
+  '0xdf3b3dad': {
+    name: 'FraudRegistryV2__NotPending',
+    message: 'No pending acknowledgement found.',
+    action: 'Please complete the acknowledgement step first.',
+  },
+  '0x7d851e3a': {
+    name: 'FraudRegistryV2__NotOperator',
+    message: 'Caller is not an approved operator.',
+    action: 'Contact the DAO to become an approved operator.',
+  },
 };
 
 /**

@@ -1284,6 +1284,11 @@ export const StolenTransactionRegistryABI = [
   },
   {
     type: 'error',
+    name: 'LeavesNotSorted',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'MerkleRootMismatch',
     inputs: [],
   },

@@ -120,71 +120,100 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
 
     /// @inheritdoc ISpokeRegistryV2
     function acknowledgeLocal(
-        bytes32 reportedChainId,
+        address wallet,
+        uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
         uint256 nonce,
-        address owner,
         uint8 v,
         bytes32 r,
         bytes32 s
     ) external {
         // Fail fast: reject zero address
-        if (owner == address(0)) revert SpokeRegistryV2__InvalidOwner();
+        if (wallet == address(0)) revert SpokeRegistryV2__InvalidOwner();
 
         // Validate signature deadline hasn't passed
         if (deadline <= block.timestamp) revert SpokeRegistryV2__SignatureExpired();
 
         // Validate nonce matches expected value
-        if (nonce != nonces[owner]) revert SpokeRegistryV2__InvalidNonce();
+        if (nonce != nonces[wallet]) revert SpokeRegistryV2__InvalidNonce();
 
-        // Verify EIP-712 signature
-        bytes32 digest = _hashTypedDataV4(
-            keccak256(
-                abi.encode(
-                    EIP712ConstantsV2.WALLET_ACK_TYPEHASH,
-                    EIP712ConstantsV2.ACK_STATEMENT_HASH,
-                    owner,
-                    msg.sender,
-                    reportedChainId,
-                    incidentTimestamp,
-                    nonce,
-                    deadline
+        // Compute isSponsored early to reduce stack pressure at emit
+        bool isSponsored = wallet != msg.sender;
+
+        // Verify EIP-712 signature (scoped to free stack slots)
+        {
+            bytes32 digest = _hashTypedDataV4(
+                keccak256(
+                    abi.encode(
+                        EIP712ConstantsV2.WALLET_ACK_TYPEHASH,
+                        EIP712ConstantsV2.ACK_STATEMENT_HASH,
+                        wallet,
+                        msg.sender,
+                        reportedChainId,
+                        incidentTimestamp,
+                        nonce,
+                        deadline
+                    )
                 )
-            )
-        );
-        address signer = ECDSA.recover(digest, v, r, s);
-        if (signer == address(0) || signer != owner) revert SpokeRegistryV2__InvalidSigner();
+            );
+            address signer = ECDSA.recover(digest, v, r, s);
+            if (signer == address(0) || signer != wallet) revert SpokeRegistryV2__InvalidSigner();
+        }
 
         // Increment nonce AFTER validation
-        nonces[owner]++;
+        nonces[wallet]++;
+
+        // Convert uint64 reportedChainId to bytes32 CAIP-2 hash for cross-chain payload
+        bytes32 reportedChainIdHash = CAIP10Evm.caip2Hash(reportedChainId);
 
         // Store acknowledgement with randomized grace period
-        // Struct packing: trustedForwarder (20) + incidentTimestamp (8) fit in slot 1
-        pendingAcknowledgements[owner] = AcknowledgementData({
+        pendingAcknowledgements[wallet] = AcknowledgementData({
             trustedForwarder: msg.sender,
             incidentTimestamp: incidentTimestamp,
-            reportedChainId: reportedChainId,
+            reportedChainId: reportedChainIdHash,
             startBlock: TimingConfig.getGracePeriodEndBlock(graceBlocks),
             expiryBlock: TimingConfig.getDeadlineBlock(deadlineBlocks)
         });
 
-        emit WalletAcknowledged(owner, msg.sender, reportedChainId, incidentTimestamp, owner != msg.sender);
+        emit WalletAcknowledged(wallet, msg.sender, reportedChainIdHash, incidentTimestamp, isSponsored);
     }
 
     /// @inheritdoc ISpokeRegistryV2
     function registerLocal(
-        bytes32 reportedChainId,
+        address wallet,
+        uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
         uint256 nonce,
-        address owner,
         uint8 v,
         bytes32 r,
         bytes32 s
     ) external payable {
+        // Validate inputs and signature, get data needed for payload
+        (bytes32 digest, bytes32 reportedChainIdHash) =
+            _validateWalletRegistration(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+
+        // Determine sponsorship
+        bool isSponsored = wallet != msg.sender;
+
+        // Build and send cross-chain message
+        _executeWalletRegistration(wallet, reportedChainIdHash, incidentTimestamp, nonce, isSponsored, digest);
+    }
+
+    /// @dev Validate wallet registration inputs and signature (reduces stack pressure in main function)
+    function _validateWalletRegistration(
+        address wallet,
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
+        uint256 deadline,
+        uint256 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) internal view returns (bytes32 digest, bytes32 reportedChainIdHash) {
         // Fail fast: reject zero address
-        if (owner == address(0)) revert SpokeRegistryV2__InvalidOwner();
+        if (wallet == address(0)) revert SpokeRegistryV2__InvalidOwner();
 
         // Validate hub is configured
         if (hubInbox == bytes32(0)) revert SpokeRegistryV2__HubNotConfigured();
@@ -193,15 +222,15 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
         if (deadline <= block.timestamp) revert SpokeRegistryV2__SignatureExpired();
 
         // Validate nonce matches expected value
-        if (nonce != nonces[owner]) revert SpokeRegistryV2__InvalidNonce();
+        if (nonce != nonces[wallet]) revert SpokeRegistryV2__InvalidNonce();
 
-        // Verify EIP-712 signature
-        bytes32 digest = _hashTypedDataV4(
+        // Compute digest and verify signature
+        digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
                     EIP712ConstantsV2.WALLET_REG_TYPEHASH,
                     EIP712ConstantsV2.REG_STATEMENT_HASH,
-                    owner,
+                    wallet,
                     msg.sender,
                     reportedChainId,
                     incidentTimestamp,
@@ -211,35 +240,42 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
             )
         );
         address signer = ECDSA.recover(digest, v, r, s);
-        if (signer == address(0) || signer != owner) revert SpokeRegistryV2__InvalidSigner();
+        if (signer == address(0) || signer != wallet) revert SpokeRegistryV2__InvalidSigner();
 
         // Load and validate acknowledgement
-        AcknowledgementData memory ack = pendingAcknowledgements[owner];
+        AcknowledgementData memory ack = pendingAcknowledgements[wallet];
         if (ack.trustedForwarder != msg.sender) revert SpokeRegistryV2__InvalidForwarder();
         if (block.number < ack.startBlock) revert SpokeRegistryV2__GracePeriodNotStarted();
         if (block.number >= ack.expiryBlock) revert SpokeRegistryV2__ForwarderExpired();
 
-        // Validate incident data matches acknowledgement
-        // (prevents submitting different incident than what was acknowledged)
-        if (ack.reportedChainId != reportedChainId || ack.incidentTimestamp != incidentTimestamp) {
+        // Convert uint64 to bytes32 hash for comparison and return
+        reportedChainIdHash = CAIP10Evm.caip2Hash(reportedChainId);
+        if (ack.reportedChainId != reportedChainIdHash || ack.incidentTimestamp != incidentTimestamp) {
             revert SpokeRegistryV2__InvalidForwarder(); // Reuse error for data mismatch
         }
+    }
 
-        // Determine sponsorship
-        bool isSponsored = owner != msg.sender;
-
+    /// @dev Execute wallet registration state changes and cross-chain message (CEI pattern)
+    function _executeWalletRegistration(
+        address wallet,
+        bytes32 reportedChainIdHash,
+        uint64 incidentTimestamp,
+        uint256 nonce,
+        bool isSponsored,
+        bytes32 registrationHash
+    ) internal {
         // Build cross-chain payload (V2 format for FraudRegistryV2)
         CrossChainMessageV2.WalletRegistrationPayload memory payload = CrossChainMessageV2.WalletRegistrationPayload({
             namespaceHash: CAIP10.NAMESPACE_EIP155,
-            chainRef: CAIP10Evm.evmChainRefHash(uint64(block.chainid)), // Not used for EVM (wildcard key)
-            identifier: bytes32(uint256(uint160(owner))),
-            reportedChainId: reportedChainId,
+            chainRef: CAIP10Evm.evmChainRefHash(uint64(block.chainid)),
+            identifier: bytes32(uint256(uint160(wallet))),
+            reportedChainId: reportedChainIdHash,
             incidentTimestamp: incidentTimestamp,
             sourceChainId: sourceChainId,
             isSponsored: isSponsored,
             nonce: nonce,
             timestamp: uint64(block.timestamp),
-            registrationHash: digest
+            registrationHash: registrationHash
         });
 
         bytes memory encodedPayload = payload.encodeWalletRegistration();
@@ -251,17 +287,15 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
 
         if (msg.value < totalRequired) revert SpokeRegistryV2__InsufficientFee();
 
-        // Increment nonce AFTER validation
-        nonces[owner]++;
+        // EFFECTS: State changes before external calls (CEI pattern)
+        nonces[wallet]++;
+        delete pendingAcknowledgements[wallet];
 
-        // Clean up acknowledgement (CEI pattern - before external call)
-        delete pendingAcknowledgements[owner];
-
-        // Send cross-chain message
+        // INTERACTIONS: External calls
         bytes32 messageId =
             IBridgeAdapter(bridgeAdapter).sendMessage{ value: bridgeFee }(hubChainId, hubInbox, encodedPayload);
 
-        emit RegistrationSentToHub(owner, messageId, hubChainId);
+        emit RegistrationSentToHub(wallet, messageId, hubChainId);
 
         // Refund excess (registration fee stays on spoke for treasury sweep)
         uint256 excess = msg.value - totalRequired;
@@ -445,7 +479,7 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
     }
 
     /// @inheritdoc ISpokeRegistryV2
-    function generateHashStruct(bytes32 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
         external
         view
         returns (uint256 deadline, bytes32 hashStruct)
@@ -628,6 +662,7 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
     }
 
     /// @dev Execute transaction batch registration (state changes + cross-chain message)
+    /// @notice Follows CEI pattern: state changes first, then external calls
     function _executeTxBatchRegistration(
         bytes32 dataHash,
         bytes32 reportedChainId,
@@ -636,15 +671,13 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds
     ) internal {
-        // Build and send message, returning required fee amount
-        (bytes32 messageId, uint256 totalRequired) =
-            _buildAndSendTxBatchMessage(dataHash, reportedChainId, nonce, reporter, transactionHashes, chainIds);
-
-        // Increment nonce AFTER message sent
+        // EFFECTS: Update state before external calls (CEI pattern)
         nonces[reporter]++;
-
-        // Clean up acknowledgement
         delete pendingTxAcknowledgements[reporter];
+
+        // INTERACTIONS: External calls after state changes
+        (bytes32 messageId, uint256 totalRequired) =
+            _buildAndSendTxBatchMessage(dataHash, reportedChainId, nonce - 1, reporter, transactionHashes, chainIds);
 
         emit TransactionBatchSentToHub(reporter, messageId, dataHash, hubChainId);
 

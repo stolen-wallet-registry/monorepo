@@ -11,6 +11,7 @@ import { IFeeManager } from "../interfaces/IFeeManager.sol";
 import { TimingConfig } from "../libraries/TimingConfig.sol";
 import { CAIP10 } from "./libraries/CAIP10.sol";
 import { CAIP10Evm } from "./libraries/CAIP10Evm.sol";
+import { EIP712ConstantsV2 } from "./libraries/EIP712ConstantsV2.sol";
 
 /// @title FraudRegistryV2
 /// @author Stolen Wallet Registry Team
@@ -29,24 +30,8 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @dev Human-readable statement for acknowledgement (displayed in MetaMask)
-    string private constant ACK_STATEMENT =
-        "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry V2.";
-
-    /// @dev Human-readable statement for registration (displayed in MetaMask)
-    string private constant REG_STATEMENT =
-        "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry V2. This action is irreversible.";
-
-    /// @dev EIP-712 type hash for acknowledgement phase
-    bytes32 private constant ACKNOWLEDGEMENT_TYPEHASH = keccak256(
-        "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
-    );
-
-    /// @dev EIP-712 type hash for registration phase
-    bytes32 private constant REGISTRATION_TYPEHASH = keccak256(
-        "Registration(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
-    );
+    // NOTE: EIP-712 typehashes and statement hashes are defined in EIP712ConstantsV2.sol
+    // to ensure consistency between hub and spoke contracts.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLE STATE
@@ -121,7 +106,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         address _feeRecipient,
         uint256 _graceBlocks,
         uint256 _deadlineBlocks
-    ) EIP712("FraudRegistryV2", "1") Ownable(_owner) {
+    ) EIP712("FraudRegistryV2", "4") Ownable(_owner) {
         // Validate fee configuration: if feeManager is set, feeRecipient must also be set
         if (_feeManager != address(0) && _feeRecipient == address(0)) {
             revert FraudRegistryV2__InvalidFeeConfig();
@@ -304,23 +289,22 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IFraudRegistryV2
-    function generateHashStruct(address forwarder, uint8 step)
+    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
         external
         view
         returns (uint256 deadline, bytes32 hashStruct)
     {
         deadline = TimingConfig.getSignatureDeadline();
         if (step == 1) {
-            // Acknowledgement - include placeholder values for chainId and timestamp
-            // Frontend will need to fill these in
+            // Acknowledgement
             hashStruct = keccak256(
                 abi.encode(
-                    ACKNOWLEDGEMENT_TYPEHASH,
-                    keccak256(bytes(ACK_STATEMENT)),
+                    EIP712ConstantsV2.WALLET_ACK_TYPEHASH,
+                    EIP712ConstantsV2.ACK_STATEMENT_HASH,
                     msg.sender, // wallet
                     forwarder,
-                    uint64(block.chainid), // reportedChainId placeholder
-                    uint64(0), // incidentTimestamp placeholder
+                    reportedChainId,
+                    incidentTimestamp,
                     nonces[msg.sender],
                     deadline
                 )
@@ -329,12 +313,12 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
             // Registration
             hashStruct = keccak256(
                 abi.encode(
-                    REGISTRATION_TYPEHASH,
-                    keccak256(bytes(REG_STATEMENT)),
+                    EIP712ConstantsV2.WALLET_REG_TYPEHASH,
+                    EIP712ConstantsV2.REG_STATEMENT_HASH,
                     msg.sender,
                     forwarder,
-                    uint64(block.chainid),
-                    uint64(0),
+                    reportedChainId,
+                    incidentTimestamp,
                     nonces[msg.sender],
                     deadline
                 )
@@ -381,6 +365,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
+        uint256 nonce,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -391,8 +376,8 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         // Validate deadline
         if (deadline <= block.timestamp) revert FraudRegistryV2__SignatureExpired();
 
-        // Validate nonce
-        uint256 nonce = nonces[wallet];
+        // Validate nonce matches storage (explicit param for hub/spoke alignment)
+        if (nonce != nonces[wallet]) revert FraudRegistryV2__InvalidNonce();
 
         // Check not already registered
         bytes32 key = CAIP10.evmWalletKey(wallet);
@@ -402,8 +387,8 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
-                    ACKNOWLEDGEMENT_TYPEHASH,
-                    keccak256(bytes(ACK_STATEMENT)),
+                    EIP712ConstantsV2.WALLET_ACK_TYPEHASH,
+                    EIP712ConstantsV2.ACK_STATEMENT_HASH,
                     wallet,
                     msg.sender, // forwarder
                     reportedChainId,
@@ -436,6 +421,7 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
+        uint256 nonce,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -446,8 +432,8 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         // Validate deadline
         if (deadline <= block.timestamp) revert FraudRegistryV2__SignatureExpired();
 
-        // Validate nonce
-        uint256 nonce = nonces[wallet];
+        // Validate nonce matches storage (explicit param for hub/spoke alignment)
+        if (nonce != nonces[wallet]) revert FraudRegistryV2__InvalidNonce();
 
         // Load and validate acknowledgement
         AcknowledgementData memory ack = _pendingAcknowledgements[wallet];
@@ -463,8 +449,8 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
-                    REGISTRATION_TYPEHASH,
-                    keccak256(bytes(REG_STATEMENT)),
+                    EIP712ConstantsV2.WALLET_REG_TYPEHASH,
+                    EIP712ConstantsV2.REG_STATEMENT_HASH,
                     wallet,
                     msg.sender,
                     reportedChainId,

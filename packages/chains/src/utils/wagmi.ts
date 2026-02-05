@@ -19,10 +19,10 @@ import { getNetworkOrUndefined, allNetworks } from '../networks';
  * that remain fixed due to our deployment process always using the same nonces.
  */
 const MULTICALL3_ADDRESSES: Record<number, `0x${string}`> = {
-  // Local Anvil chains - deterministic cross-chain deployment addresses
-  // See DeployCrossChain.s.sol for nonce-based address derivation
-  31337: '0x8A791620dd6260079BF849Dc5567aDC3F2FdC318', // Hub chain (nonce 9)
-  31338: '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6', // Spoke chain (nonce 8)
+  // Local Anvil chains - V2 deployment addresses (DeployV2.s.sol)
+  // Different from V1 due to different deployment order
+  31337: '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6', // Hub chain (V2)
+  31338: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853', // Spoke chain (V2)
   // All other chains use canonical address (pre-deployed)
 };
 

@@ -1,6 +1,7 @@
 /**
  * Hook to get the registration fee from the registry contract.
  *
+ * V2: quoteRegistration() takes no arguments - fee is determined by FeeManager
  * Chain-aware: Uses quoteRegistration() on both hub and spoke.
  * - Hub: returns registration fee only
  * - Spoke: returns bridge fee + registration fee
@@ -27,10 +28,11 @@ export interface UseQuoteRegistrationResult {
 /**
  * Get the total registration fee for the current chain.
  *
- * @param ownerAddress - The wallet being registered (needed for nonce in quote)
+ * V2: quoteRegistration() takes no arguments - fee is global, not per-wallet.
+ * @param _ownerAddress - Optional, kept for interface compatibility but not used in V2
  */
 export function useQuoteRegistration(
-  ownerAddress: Address | null | undefined
+  _ownerAddress?: Address | null | undefined
 ): UseQuoteRegistrationResult {
   const chainId = useChainId();
 
@@ -44,17 +46,15 @@ export function useQuoteRegistration(
   // Get the correct ABI for hub/spoke
   const { abi } = getRegistryMetadata('wallet', registryType);
 
-  // Convert null to undefined for wagmi compatibility
-  const normalizedAddress = ownerAddress ?? undefined;
-
   const result = useReadContract({
     address: contractAddress,
     abi,
     chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'quoteRegistration',
-    args: normalizedAddress ? [normalizedAddress] : undefined,
+    // V2: quoteRegistration() takes no arguments
+    args: [],
     query: {
-      enabled: !!normalizedAddress && !!contractAddress,
+      enabled: !!contractAddress,
       staleTime: 30_000, // 30 seconds
     },
   });
@@ -65,7 +65,6 @@ export function useQuoteRegistration(
       chainId,
       contractAddress,
       registryType,
-      ownerAddress,
       error: result.error?.message,
     });
   } else if (result.data !== undefined) {

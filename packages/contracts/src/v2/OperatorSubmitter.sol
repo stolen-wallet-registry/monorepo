@@ -68,6 +68,9 @@ contract OperatorSubmitter is IOperatorSubmitter, Ownable2Step, Pausable {
         address _feeManager,
         address _feeRecipient
     ) Ownable(_owner) {
+        // Core contracts cannot be zero
+        if (_fraudRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        if (_operatorRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
         // If feeManager is set, feeRecipient must also be set to avoid locked ETH
         if (_feeManager != address(0) && _feeRecipient == address(0)) {
             revert OperatorSubmitter__InvalidFeeConfig();
@@ -415,12 +418,14 @@ contract OperatorSubmitter is IOperatorSubmitter, Ownable2Step, Pausable {
 
     /// @inheritdoc IOperatorSubmitter
     function setFraudRegistry(address _fraudRegistry) external onlyOwner {
+        if (_fraudRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
         fraudRegistry = _fraudRegistry;
         emit FraudRegistrySet(_fraudRegistry);
     }
 
     /// @inheritdoc IOperatorSubmitter
     function setOperatorRegistry(address _operatorRegistry) external onlyOwner {
+        if (_operatorRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
         operatorRegistry = _operatorRegistry;
         emit OperatorRegistrySet(_operatorRegistry);
     }

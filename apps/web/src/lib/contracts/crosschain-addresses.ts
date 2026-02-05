@@ -99,7 +99,55 @@ export const HUB_CROSSCHAIN_ADDRESSES = {
 //   8: Multicall3                 → 0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// V2 SPOKE CHAIN CONTRACTS (SpokeRegistryV2)
+// ═══════════════════════════════════════════════════════════════════════════
+// From `pnpm deploy:crosschain:v2` output
+
+export const V2_SPOKE_ADDRESSES = {
+  spokeRegistryV2: {
+    [anvilSpoke.chainId]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
+    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address, // TBD
+  },
+  hyperlaneAdapter: {
+    [anvilSpoke.chainId]: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address,
+    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  spokeFeeManager: {
+    [anvilSpoke.chainId]: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9' as Address,
+    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+  spokeSoulboundForwarder: {
+    [anvilSpoke.chainId]: '0x0165878A594ca255338adfa4d48449f69242Eb8F' as Address,
+    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+  },
+} as const;
+
+export type V2SpokeContractName = keyof typeof V2_SPOKE_ADDRESSES;
+
+/** Get V2 spoke contract address */
+export function getSpokeV2Address(contract: V2SpokeContractName, chainId: number): Address {
+  const addresses = V2_SPOKE_ADDRESSES[contract];
+  const address = addresses[chainId as keyof typeof addresses];
+  if (!address || address === zeroAddress) {
+    throw new Error(
+      `No ${contract} address configured for spoke chain ID ${chainId}. Deploy V2 contracts first.`
+    );
+  }
+  return address as Address;
+}
+
+/** Get SpokeRegistryV2 address */
+export function getSpokeRegistryV2Address(chainId: number): Address {
+  return getSpokeV2Address('spokeRegistryV2', chainId);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// V1 SPOKE CHAIN CONTRACTS (DEPRECATED - kept for transition)
+// ═══════════════════════════════════════════════════════════════════════════
+
 /**
+ * @deprecated Use V2_SPOKE_ADDRESSES for new integrations.
  * Spoke chain contracts.
  *
  * NOTE: These are deployment-specific addresses. For runtime access, prefer

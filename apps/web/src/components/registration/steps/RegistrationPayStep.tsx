@@ -25,6 +25,7 @@ import {
   needsCrossChainConfirmation,
 } from '@/hooks/useCrossChainConfirmation';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import type { WalletRegistrationArgs } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl, getChainName, getBridgeMessageByIdUrl } from '@/lib/explorer';
 import { getHubChainId } from '@/lib/chains/config';
@@ -82,22 +83,26 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     : null;
 
   // Build transaction args for gas estimation (needs to be before early returns)
-  const transactionArgs =
+  // V2 unified signature: (wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+  const transactionArgs: WalletRegistrationArgs | undefined =
     storedSignature && registeree
-      ? ([
+      ? [
+          registeree,
+          storedSignature.reportedChainId ?? BigInt(chainId),
+          storedSignature.incidentTimestamp ?? 0n,
           storedSignature.deadline,
           storedSignature.nonce,
-          registeree,
           parseSignature(storedSignature.signature).v,
           parseSignature(storedSignature.signature).r,
           parseSignature(storedSignature.signature).s,
-        ] as const)
+        ]
       : undefined;
 
   // Get transaction cost estimate (must be called unconditionally - hooks rule)
   const costEstimate = useTransactionCost({
     step: 'registration',
     args: transactionArgs,
+    ownerAddress: registeree,
   });
 
   // Check if this is a cross-chain registration (spoke → hub)
@@ -277,11 +282,18 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         chainId,
       });
 
+      // V2 fields from stored signature
+      // Fallback: use current chain for reportedChainId, 0 for incidentTimestamp (unknown)
+      const reportedChainId = storedSignature.reportedChainId ?? BigInt(chainId);
+      const incidentTimestamp = storedSignature.incidentTimestamp ?? 0n;
+
       await submitRegistration({
         deadline: storedSignature.deadline,
         nonce: storedSignature.nonce,
         registeree,
         signature: parsedSig,
+        reportedChainId,
+        incidentTimestamp,
         feeWei,
       });
 

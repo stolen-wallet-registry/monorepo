@@ -40,12 +40,12 @@ contract SpokeRegistryV2Test is Test {
     uint32 internal constant SPOKE_CHAIN_ID = 11_155_420; // OP Sepolia
     bytes32 internal constant HUB_INBOX = bytes32(uint256(uint160(0x1234567890123456789012345678901234567890)));
 
-    // EIP-712 constants (V2 - includes reportedChainId and incidentTimestamp)
+    // EIP-712 constants (V2 - uses uint64 reportedChainId for storage efficiency)
     bytes32 internal constant ACK_TYPEHASH = keccak256(
-        "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,bytes32 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+        "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
     bytes32 internal constant REG_TYPEHASH = keccak256(
-        "Registration(string statement,address wallet,address forwarder,bytes32 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+        "Registration(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
 
     // EIP-712 constants for transaction batch
@@ -151,7 +151,7 @@ contract SpokeRegistryV2Test is Test {
         uint256 privateKey,
         address _wallet,
         address _forwarder,
-        bytes32 reportedChainId,
+        uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 nonce,
         uint256 deadline
@@ -176,7 +176,7 @@ contract SpokeRegistryV2Test is Test {
         uint256 privateKey,
         address _wallet,
         address _forwarder,
-        bytes32 reportedChainId,
+        uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 nonce,
         uint256 deadline
@@ -197,7 +197,7 @@ contract SpokeRegistryV2Test is Test {
         return vm.sign(privateKey, digest);
     }
 
-    function _doAck(address _forwarder, bytes32 reportedChainId, uint64 incidentTimestamp) internal {
+    function _doAck(address _forwarder, uint64 reportedChainId, uint64 incidentTimestamp) internal {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = spoke.nonces(wallet);
 
@@ -205,7 +205,7 @@ contract SpokeRegistryV2Test is Test {
             _signAck(walletPrivateKey, wallet, _forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
 
         vm.prank(_forwarder);
-        spoke.acknowledgeLocal(reportedChainId, incidentTimestamp, deadline, nonce, wallet, v, r, s);
+        spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     function _skipToRegistrationWindow() internal {
@@ -420,11 +420,13 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Acknowledgement succeeds with valid signature including incident data
     function test_Acknowledge_Success() public {
-        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1)); // Mainnet
+        uint64 reportedChainId = 1; // Mainnet chain ID
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+        // Spoke converts uint64 to bytes32 hash internally for storage
+        bytes32 reportedChainIdHash = CAIP10Evm.caip2Hash(reportedChainId);
 
         vm.expectEmit(true, true, true, true);
-        emit WalletAcknowledged(wallet, forwarder, reportedChainId, incidentTimestamp, true);
+        emit WalletAcknowledged(wallet, forwarder, reportedChainIdHash, incidentTimestamp, true);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
 
@@ -432,36 +434,37 @@ contract SpokeRegistryV2Test is Test {
         assertTrue(spoke.isPending(wallet));
         assertEq(spoke.nonces(wallet), 1);
 
-        // Verify incident data stored
+        // Verify incident data stored (as bytes32 hash)
         ISpokeRegistryV2.AcknowledgementData memory ack = spoke.getAcknowledgement(wallet);
         assertEq(ack.trustedForwarder, forwarder);
-        assertEq(ack.reportedChainId, reportedChainId);
+        assertEq(ack.reportedChainId, reportedChainIdHash);
         assertEq(ack.incidentTimestamp, incidentTimestamp);
     }
 
     /// @notice Self-relay (wallet is own forwarder) works
     function test_Acknowledge_SelfRelay() public {
-        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint64 reportedChainId = 1; // Mainnet
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = spoke.nonces(wallet);
+        bytes32 reportedChainIdHash = CAIP10Evm.caip2Hash(reportedChainId);
 
         (uint8 v, bytes32 r, bytes32 s) =
             _signAck(walletPrivateKey, wallet, wallet, reportedChainId, incidentTimestamp, nonce, deadline);
 
         // isSponsored should be false when wallet is forwarder
         vm.expectEmit(true, true, true, true);
-        emit WalletAcknowledged(wallet, wallet, reportedChainId, incidentTimestamp, false);
+        emit WalletAcknowledged(wallet, wallet, reportedChainIdHash, incidentTimestamp, false);
 
         vm.prank(wallet);
-        spoke.acknowledgeLocal(reportedChainId, incidentTimestamp, deadline, nonce, wallet, v, r, s);
+        spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
         assertTrue(spoke.isPending(wallet));
     }
 
     /// @notice Acknowledgement fails with expired deadline
     function test_Acknowledge_RejectsExpiredDeadline() public {
-        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint64 reportedChainId = 1;
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
         uint256 deadline = block.timestamp - 1; // Already expired
         uint256 nonce = spoke.nonces(wallet);
@@ -471,12 +474,12 @@ contract SpokeRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__SignatureExpired.selector);
-        spoke.acknowledgeLocal(reportedChainId, incidentTimestamp, deadline, nonce, wallet, v, r, s);
+        spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Acknowledgement fails with wrong nonce
     function test_Acknowledge_RejectsInvalidNonce() public {
-        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint64 reportedChainId = 1;
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
         uint256 deadline = block.timestamp + 1 hours;
         uint256 wrongNonce = 999;
@@ -486,18 +489,18 @@ contract SpokeRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__InvalidNonce.selector);
-        spoke.acknowledgeLocal(reportedChainId, incidentTimestamp, deadline, wrongNonce, wallet, v, r, s);
+        spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, wrongNonce, v, r, s);
     }
 
     /// @notice Acknowledgement fails with zero address owner
     function test_Acknowledge_RejectsZeroAddress() public {
-        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint64 reportedChainId = 1;
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
         uint256 deadline = block.timestamp + 1 hours;
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__InvalidOwner.selector);
-        spoke.acknowledgeLocal(reportedChainId, incidentTimestamp, deadline, 0, address(0), 27, bytes32(0), bytes32(0));
+        spoke.acknowledgeLocal(address(0), reportedChainId, incidentTimestamp, deadline, 0, 27, bytes32(0), bytes32(0));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -506,7 +509,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Full registration flow succeeds
     function test_Register_Success() public {
-        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint64 reportedChainId = 1; // Mainnet
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
@@ -525,7 +528,7 @@ contract SpokeRegistryV2Test is Test {
         emit RegistrationSentToHub(wallet, bytes32(0), HUB_CHAIN_ID); // messageId will be computed
 
         vm.prank(forwarder);
-        spoke.registerLocal{ value: fee }(reportedChainId, incidentTimestamp, deadline, nonce, wallet, v, r, s);
+        spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
         // Verify acknowledgement cleaned up
         assertFalse(spoke.isPending(wallet));
@@ -534,7 +537,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Registration fails before grace period
     function test_Register_FailsBeforeGracePeriod() public {
-        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint64 reportedChainId = 1;
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
@@ -550,12 +553,12 @@ contract SpokeRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__GracePeriodNotStarted.selector);
-        spoke.registerLocal{ value: fee }(reportedChainId, incidentTimestamp, deadline, nonce, wallet, v, r, s);
+        spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Registration fails after expiry
     function test_Register_FailsAfterExpiry() public {
-        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint64 reportedChainId = 1;
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
@@ -574,12 +577,12 @@ contract SpokeRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__ForwarderExpired.selector);
-        spoke.registerLocal{ value: fee }(reportedChainId, incidentTimestamp, deadline, nonce, wallet, v, r, s);
+        spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Registration fails with wrong forwarder
     function test_Register_FailsWithWrongForwarder() public {
-        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint64 reportedChainId = 1;
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
@@ -598,12 +601,12 @@ contract SpokeRegistryV2Test is Test {
 
         vm.prank(wrongForwarder);
         vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__InvalidForwarder.selector);
-        spoke.registerLocal{ value: fee }(reportedChainId, incidentTimestamp, deadline, nonce, wallet, v, r, s);
+        spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Registration fails with insufficient fee
     function test_Register_FailsWithInsufficientFee() public {
-        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint64 reportedChainId = 1;
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
@@ -617,7 +620,7 @@ contract SpokeRegistryV2Test is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__InsufficientFee.selector);
-        spoke.registerLocal{ value: 0 }(reportedChainId, incidentTimestamp, deadline, nonce, wallet, v, r, s);
+        spoke.registerLocal{ value: 0 }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Registration fails when hub not configured
@@ -634,7 +637,7 @@ contract SpokeRegistryV2Test is Test {
             1
         );
 
-        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint64 reportedChainId = 1;
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = unconfiguredSpoke.nonces(wallet);
@@ -645,7 +648,7 @@ contract SpokeRegistryV2Test is Test {
         );
 
         vm.prank(forwarder);
-        unconfiguredSpoke.acknowledgeLocal(reportedChainId, incidentTimestamp, deadline, nonce, wallet, v, r, s);
+        unconfiguredSpoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
         // Skip to registration window
         ISpokeRegistryV2.AcknowledgementData memory ack = unconfiguredSpoke.getAcknowledgement(wallet);
@@ -660,7 +663,7 @@ contract SpokeRegistryV2Test is Test {
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__HubNotConfigured.selector);
         unconfiguredSpoke.registerLocal{ value: 1 ether }(
-            reportedChainId, incidentTimestamp, deadline, nonce, wallet, v, r, s
+            wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s
         );
     }
 
@@ -670,7 +673,7 @@ contract SpokeRegistryV2Test is Test {
         uint256 privateKey,
         address _wallet,
         address _forwarder,
-        bytes32 reportedChainId,
+        uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 nonce,
         uint256 deadline
@@ -705,7 +708,7 @@ contract SpokeRegistryV2Test is Test {
         uint256 privateKey,
         address _wallet,
         address _forwarder,
-        bytes32 reportedChainId,
+        uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 nonce,
         uint256 deadline
@@ -751,7 +754,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice generateHashStruct returns valid data for signing
     function test_GenerateHashStruct() public {
-        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint64 reportedChainId = 1;
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         vm.prank(wallet);

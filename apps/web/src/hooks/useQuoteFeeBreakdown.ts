@@ -70,15 +70,16 @@ export function useQuoteFeeBreakdown(
     },
   });
 
-  // On hub: call quoteRegistration() (single value)
+  // On hub: call quoteRegistration() (single value, V2 takes no arguments)
   const hubResult = useReadContract({
     address: contractAddress,
     abi: hubMetadata.abi,
     chainId,
     functionName: 'quoteRegistration',
-    args: normalizedAddress ? [normalizedAddress] : undefined,
+    // V2: quoteRegistration() takes no arguments - fee is global
+    args: [],
     query: {
-      enabled: registryType === 'hub' && !!normalizedAddress && !!contractAddress,
+      enabled: registryType === 'hub' && !!contractAddress,
       staleTime: 30_000,
     },
   });
