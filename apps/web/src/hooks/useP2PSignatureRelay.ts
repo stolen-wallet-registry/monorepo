@@ -350,7 +350,7 @@ export function useP2PSignatureRelay(
                 return;
               }
 
-              // Store the signature for later use
+              // Store the signature for later use (including V2 fields)
               const sig = data.signature;
               const stored: StoredSignature = {
                 signature: sig.value as Hex,
@@ -360,6 +360,11 @@ export function useP2PSignatureRelay(
                 chainId: sig.chainId,
                 step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
                 storedAt: Date.now(),
+                // V2 fields (convert string to bigint if present)
+                reportedChainId: sig.reportedChainId ? BigInt(sig.reportedChainId) : undefined,
+                incidentTimestamp: sig.incidentTimestamp
+                  ? BigInt(sig.incidentTimestamp)
+                  : undefined,
               };
               storeSignature(stored);
 
@@ -397,7 +402,7 @@ export function useP2PSignatureRelay(
                 return;
               }
 
-              // Store the signature for later use
+              // Store the signature for later use (including V2 fields)
               const sig = data.signature;
               const stored: StoredSignature = {
                 signature: sig.value as Hex,
@@ -407,6 +412,11 @@ export function useP2PSignatureRelay(
                 chainId: sig.chainId,
                 step: SIGNATURE_STEP.REGISTRATION,
                 storedAt: Date.now(),
+                // V2 fields (convert string to bigint if present)
+                reportedChainId: sig.reportedChainId ? BigInt(sig.reportedChainId) : undefined,
+                incidentTimestamp: sig.incidentTimestamp
+                  ? BigInt(sig.incidentTimestamp)
+                  : undefined,
               };
               storeSignature(stored);
 

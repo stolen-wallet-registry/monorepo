@@ -507,25 +507,25 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
   // V2 FraudRegistryV2 Errors
   // ═══════════════════════════════════════════════════════════════════════════
 
-  '0xb372ed74': {
-    name: 'FraudRegistryV2__ZeroAddress',
+  '0x8da9134f': {
+    name: 'FraudRegistryV2__InvalidWallet',
     message: 'Invalid wallet address.',
     action: 'Please provide a valid wallet address.',
+  },
+  '0x0b9a6b1e': {
+    name: 'FraudRegistryV2__InvalidNonce',
+    message: 'Transaction nonce mismatch.',
+    action: 'Please refresh the page and try again.',
   },
   '0x9a93003b': {
     name: 'FraudRegistryV2__SignatureExpired',
     message: 'Your signature has expired.',
     action: 'Please sign again.',
   },
-  '0x12f34e19': {
-    name: 'FraudRegistryV2__InvalidSigner',
+  '0xe08f08da': {
+    name: 'FraudRegistryV2__InvalidSignature',
     message: 'Signature verification failed.',
     action: 'Ensure you signed with the correct wallet.',
-  },
-  '0x7a55def3': {
-    name: 'FraudRegistryV2__AlreadyRegistered',
-    message: 'This wallet is already registered.',
-    action: 'Search the registry to view its status.',
   },
   '0x6a90152c': {
     name: 'FraudRegistryV2__InvalidForwarder',
@@ -542,30 +542,210 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Registration window has expired.',
     action: 'Please start the registration process again.',
   },
+  '0x7a55def3': {
+    name: 'FraudRegistryV2__AlreadyRegistered',
+    message: 'This wallet is already registered.',
+    action: 'Search the registry to view its status.',
+  },
+  '0x8413bb5e': {
+    name: 'FraudRegistryV2__InvalidTimingConfig',
+    message: 'Invalid timing configuration.',
+    action: 'Please contact support.',
+  },
+  '0x1b4ad0af': {
+    name: 'FraudRegistryV2__InvalidFeeConfig',
+    message: 'Invalid fee configuration.',
+    action: 'Please contact support.',
+  },
   '0x098d5513': {
     name: 'FraudRegistryV2__InsufficientFee',
     message: 'Insufficient registration fee.',
     action: 'Please include the required fee.',
+  },
+  '0x26b22fae': {
+    name: 'FraudRegistryV2__FeeForwardFailed',
+    message: 'Failed to forward registration fee.',
+    action: 'Please try again.',
+  },
+  '0xf13cde92': {
+    name: 'FraudRegistryV2__ExcessRefundFailed',
+    message: 'Failed to refund excess fee.',
+    action: 'Please try again or contact support.',
+  },
+  '0x5a2138cd': {
+    name: 'FraudRegistryV2__InvalidCaip10Format',
+    message: 'Invalid CAIP-10 address format.',
+    action: 'Please provide a valid multi-chain address.',
   },
   '0xf07e98e5': {
     name: 'FraudRegistryV2__UnsupportedNamespace',
     message: 'Unsupported chain namespace.',
     action: 'Currently only EVM chains are supported for individual registration.',
   },
-  '0xbe3a319f': {
-    name: 'FraudRegistryV2__Paused',
+  '0xda5251ea': {
+    name: 'FraudRegistryV2__UnauthorizedInbox',
+    message: 'Unauthorized cross-chain inbox.',
+    action: 'Please contact support.',
+  },
+  '0xca473a10': {
+    name: 'FraudRegistryV2__UnauthorizedOperatorSubmitter',
+    message: 'Unauthorized operator submitter.',
+    action: 'Please contact support.',
+  },
+  '0x38873585': {
+    name: 'FraudRegistryV2__InvalidReporter',
+    message: 'Invalid reporter address.',
+    action: 'Please provide a valid reporter address.',
+  },
+  '0x5193e2ce': {
+    name: 'FraudRegistryV2__InvalidDataHash',
+    message: 'Invalid data hash.',
+    action: 'Data hash cannot be zero.',
+  },
+  '0x9752da41': {
+    name: 'FraudRegistryV2__DataHashMismatch',
+    message: 'Data hash does not match acknowledgement.',
+    action: 'Ensure transaction hashes match what was acknowledged.',
+  },
+  '0x722d6e98': {
+    name: 'FraudRegistryV2__EmptyBatch',
+    message: 'Transaction batch cannot be empty.',
+    action: 'Provide at least one transaction to register.',
+  },
+  '0x93a43782': {
+    name: 'FraudRegistryV2__ArrayLengthMismatch',
+    message: 'Array lengths do not match.',
+    action: 'Ensure transaction hashes and chain IDs have the same length.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // V2 SpokeRegistryV2 Errors
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  '0x8b4b46c4': {
+    name: 'SpokeRegistryV2__ZeroAddress',
+    message: 'Invalid address provided.',
+    action: 'Please provide a valid address.',
+  },
+  '0x3d8ff737': {
+    name: 'SpokeRegistryV2__InvalidTimingConfig',
+    message: 'Invalid timing configuration.',
+    action: 'Please contact support.',
+  },
+  '0xc4069ba2': {
+    name: 'SpokeRegistryV2__InvalidOwner',
+    message: 'Invalid wallet address provided.',
+    action: 'Please check the address and try again.',
+  },
+  '0x860f06c2': {
+    name: 'SpokeRegistryV2__SignatureExpired',
+    message: 'Your signature has expired.',
+    action: 'Please sign again.',
+  },
+  '0x58f53864': {
+    name: 'SpokeRegistryV2__InvalidNonce',
+    message: 'Transaction nonce mismatch.',
+    action: 'Please refresh the page and try again.',
+  },
+  '0x3a8e63c6': {
+    name: 'SpokeRegistryV2__InvalidSigner',
+    message: 'Signature verification failed.',
+    action: 'Ensure you signed with the wallet you want to register.',
+  },
+  '0x2f4c1872': {
+    name: 'SpokeRegistryV2__InvalidForwarder',
+    message: 'Wrong wallet connected for this registration.',
+    action: 'Switch to your gas wallet to submit this transaction.',
+  },
+  '0xb23325c9': {
+    name: 'SpokeRegistryV2__GracePeriodNotStarted',
+    message: 'The grace period has not ended yet.',
+    action: 'Please wait for the countdown to complete before registering.',
+  },
+  '0x2fab8da5': {
+    name: 'SpokeRegistryV2__ForwarderExpired',
+    message: 'Your registration window has expired.',
+    action: 'Please start the registration process again from the beginning.',
+  },
+  '0xc343d197': {
+    name: 'SpokeRegistryV2__HubNotConfigured',
+    message: 'Hub chain not configured.',
+    action: 'Cross-chain registration is not available. Please contact support.',
+  },
+  '0x9ea3c99b': {
+    name: 'SpokeRegistryV2__InsufficientFee',
+    message: 'Insufficient fee for cross-chain registration.',
+    action: 'Ensure you have enough ETH for registration and bridge fees.',
+  },
+  '0x99b352da': {
+    name: 'SpokeRegistryV2__RefundFailed',
+    message: 'Failed to refund excess fee.',
+    action: 'Please try again or contact support.',
+  },
+  '0x16392cf6': {
+    name: 'SpokeRegistryV2__InvalidHubConfig',
+    message: 'Invalid hub configuration.',
+    action: 'Please contact support.',
+  },
+  '0x339a0ecf': {
+    name: 'SpokeRegistryV2__EmptyBatch',
+    message: 'Batch cannot be empty.',
+    action: 'Please add at least one item to register.',
+  },
+  '0xaef92cb3': {
+    name: 'SpokeRegistryV2__ArrayLengthMismatch',
+    message: 'Data arrays have mismatched lengths.',
+    action: 'Please try again. If the issue persists, contact support.',
+  },
+  '0x06cf9d53': {
+    name: 'SpokeRegistryV2__InvalidDataHash',
+    message: 'Data hash mismatch.',
+    action: 'Your data may have changed. Please start over.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // V2 OperatorSubmitter Errors
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  '0xbfd711b2': {
+    name: 'OperatorSubmitter__NotApprovedOperator',
+    message: 'Only approved operators can submit.',
+    action: 'Contact the DAO to become an approved operator.',
+  },
+  '0x0f0c34f7': {
+    name: 'OperatorSubmitter__EmptyBatch',
+    message: 'Batch cannot be empty.',
+    action: 'Please add at least one item to register.',
+  },
+  '0x15c1e4ff': {
+    name: 'OperatorSubmitter__ArrayLengthMismatch',
+    message: 'Data arrays have mismatched lengths.',
+    action: 'Please verify your batch data and try again.',
+  },
+  '0x030ff595': {
+    name: 'OperatorSubmitter__InsufficientFee',
+    message: 'Insufficient batch fee.',
+    action: 'Please include the required operator batch fee.',
+  },
+  '0x58614d91': {
+    name: 'OperatorSubmitter__FeeForwardFailed',
+    message: 'Failed to forward fee.',
+    action: 'Please try again.',
+  },
+  '0x732a9f9b': {
+    name: 'OperatorSubmitter__RegistryPaused',
     message: 'The registry is currently paused.',
     action: 'Please try again later.',
   },
-  '0xdf3b3dad': {
-    name: 'FraudRegistryV2__NotPending',
-    message: 'No pending acknowledgement found.',
-    action: 'Please complete the acknowledgement step first.',
+  '0x0079d758': {
+    name: 'OperatorSubmitter__InvalidFeeConfig',
+    message: 'Invalid fee configuration.',
+    action: 'Please contact support.',
   },
-  '0x7d851e3a': {
-    name: 'FraudRegistryV2__NotOperator',
-    message: 'Caller is not an approved operator.',
-    action: 'Contact the DAO to become an approved operator.',
+  '0x13664080': {
+    name: 'OperatorSubmitter__ZeroAddress',
+    message: 'Invalid address provided.',
+    action: 'Please provide a valid address.',
   },
 };
 

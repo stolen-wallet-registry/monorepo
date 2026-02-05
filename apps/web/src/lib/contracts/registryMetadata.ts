@@ -124,21 +124,21 @@ const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
     },
   },
   transaction: {
-    // V2: Transaction registry is part of FraudRegistryV2 (same contract as wallet)
+    // V2: FraudRegistryV2 transaction batch registration (two-phase)
     hub: {
       abi: fraudRegistryV2Abi,
       functions: {
-        acknowledge: 'acknowledgeTransactionBatch', // V2 name
-        register: 'registerTransactionBatch', // V2 name
-        generateHashStruct: 'generateTxHashStruct', // V2 name
-        getDeadlines: 'getTxDeadlines', // V2 name
-        nonces: 'txNonces', // V2: separate nonce for tx
-        quoteRegistration: 'quoteTxRegistration',
-        quoteFeeBreakdown: 'quoteTxRegistration',
-        isPending: 'isTxBatchPending',
+        acknowledge: 'acknowledgeTransactionBatch',
+        register: 'registerTransactionBatch',
+        generateHashStruct: 'generateTxHashStruct',
+        getDeadlines: 'getTransactionDeadlines',
+        nonces: 'nonces',
+        quoteRegistration: 'quoteRegistration',
+        quoteFeeBreakdown: 'quoteRegistration', // Hub doesn't have breakdown
+        isPending: 'isPendingTransactionBatch',
         isRegistered: 'isTransactionRegistered',
-        getAcknowledgement: 'getTxAcknowledgement',
-        getRegistration: 'getTransactionEntry',
+        getAcknowledgement: 'getTransactionAcknowledgement',
+        getRegistration: 'getBatch',
       },
     },
     spoke: {
@@ -146,15 +146,16 @@ const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
       functions: {
         acknowledge: 'acknowledgeTransactionBatch',
         register: 'registerTransactionBatch',
-        generateHashStruct: 'generateTxHashStruct',
-        getDeadlines: 'getTxDeadlines',
-        nonces: 'txNonces',
+        // Spoke uses same functions for wallet and tx (step parameter differentiates)
+        generateHashStruct: 'generateHashStruct',
+        getDeadlines: 'getDeadlines',
+        nonces: 'nonces', // Shared nonce mapping
         quoteRegistration: 'quoteRegistration',
         quoteFeeBreakdown: 'quoteFeeBreakdown',
-        isPending: 'isTxBatchPending',
-        isRegistered: 'isBatchRegistered',
-        getAcknowledgement: 'getTxAcknowledgement',
-        getRegistration: 'getBatch',
+        isPending: 'isPendingTransactionBatch',
+        isRegistered: 'isPendingTransactionBatch', // Spoke doesn't track hub registration
+        getAcknowledgement: 'getTransactionAcknowledgement',
+        getRegistration: 'getTransactionAcknowledgement', // Spoke only has acknowledgement data
       },
     },
   },

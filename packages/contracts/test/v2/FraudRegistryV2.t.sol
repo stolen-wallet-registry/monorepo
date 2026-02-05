@@ -50,6 +50,21 @@ contract FraudRegistryV2Test is Test {
         "Registration(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
 
+    // Transaction batch constants
+    string internal constant TX_ACK_STATEMENT =
+        "This signature acknowledges the intent to report stolen transactions to the Stolen Wallet Registry.";
+
+    string internal constant TX_REG_STATEMENT =
+        "This signature confirms permanent registration of stolen transactions in the Stolen Wallet Registry. This action is irreversible.";
+
+    bytes32 internal constant TX_BATCH_ACK_TYPEHASH = keccak256(
+        "TransactionBatchAcknowledgement(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+    );
+
+    bytes32 internal constant TX_BATCH_REG_TYPEHASH = keccak256(
+        "TransactionBatchRegistration(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+    );
+
     function setUp() public {
         // Set a reasonable starting timestamp (Jan 1, 2024)
         // This prevents underflow when tests use `block.timestamp - 1 days`
@@ -161,6 +176,65 @@ contract FraudRegistryV2Test is Test {
     function _skipToRegistrationWindow() internal {
         (,, uint256 startBlock,,,) = registry.getDeadlines(wallet);
         vm.roll(startBlock + 1);
+    }
+
+    function _skipToTxRegistrationWindow(address reporter) internal {
+        (,, uint256 startBlock,,,) = registry.getTransactionDeadlines(reporter);
+        vm.roll(startBlock + 1);
+    }
+
+    function _signTxBatchAck(
+        uint256 privateKey,
+        address reporter,
+        address _forwarder,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 txCount,
+        uint256 nonce,
+        uint256 deadline
+    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                TX_BATCH_ACK_TYPEHASH,
+                keccak256(bytes(TX_ACK_STATEMENT)),
+                reporter,
+                _forwarder,
+                dataHash,
+                reportedChainId,
+                txCount,
+                nonce,
+                deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
+        (v, r, s) = vm.sign(privateKey, digest);
+    }
+
+    function _signTxBatchReg(
+        uint256 privateKey,
+        address reporter,
+        address _forwarder,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 txCount,
+        uint256 nonce,
+        uint256 deadline
+    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                TX_BATCH_REG_TYPEHASH,
+                keccak256(bytes(TX_REG_STATEMENT)),
+                reporter,
+                _forwarder,
+                dataHash,
+                reportedChainId,
+                txCount,
+                nonce,
+                deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
+        (v, r, s) = vm.sign(privateKey, digest);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -905,5 +979,229 @@ contract FraudRegistryV2Test is Test {
 
         registry.setCrossChainInbox(address(0));
         assertEq(registry.crossChainInbox(), address(0));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TRANSACTION BATCH REGISTRATION TESTS (TWO-PHASE)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Transaction batch acknowledgement should succeed and set pending state.
+    function test_TxBatchAck_Success() public {
+        bytes32[] memory txHashes = new bytes32[](2);
+        txHashes[0] = keccak256("tx1");
+        txHashes[1] = keccak256("tx2");
+
+        bytes32[] memory chainIds = new bytes32[](2);
+        chainIds[0] = CAIP10Evm.caip2Hash(8453);
+        chainIds[1] = CAIP10Evm.caip2Hash(10);
+
+        bytes32 dataHash = keccak256(abi.encodePacked(txHashes, chainIds));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(8453);
+        uint32 txCount = 2;
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = registry.nonces(wallet);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signTxBatchAck(walletPrivateKey, wallet, forwarder, dataHash, reportedChainId, txCount, nonce, deadline);
+
+        vm.prank(forwarder);
+        registry.acknowledgeTransactionBatch(dataHash, reportedChainId, txCount, deadline, nonce, wallet, v, r, s);
+
+        assertTrue(registry.isPendingTransactionBatch(wallet), "Should be pending");
+        assertEq(registry.nonces(wallet), 1, "Nonce should increment");
+
+        IFraudRegistryV2.TransactionAcknowledgementData memory ack = registry.getTransactionAcknowledgement(wallet);
+        assertEq(ack.trustedForwarder, forwarder, "Forwarder should match");
+        assertEq(ack.dataHash, dataHash, "DataHash should match");
+        assertEq(ack.reportedChainId, reportedChainId, "ReportedChainId should match");
+        assertEq(ack.transactionCount, txCount, "TxCount should match");
+    }
+
+    /// Transaction batch acknowledgement should reject empty batch.
+    function test_TxBatchAck_RejectsEmptyBatch() public {
+        bytes32 dataHash = keccak256("somedata");
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(8453);
+        uint32 txCount = 0; // Empty!
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = registry.nonces(wallet);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signTxBatchAck(walletPrivateKey, wallet, forwarder, dataHash, reportedChainId, txCount, nonce, deadline);
+
+        vm.prank(forwarder);
+        vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__EmptyBatch.selector);
+        registry.acknowledgeTransactionBatch(dataHash, reportedChainId, txCount, deadline, nonce, wallet, v, r, s);
+    }
+
+    /// Transaction batch acknowledgement should reject zero dataHash.
+    function test_TxBatchAck_RejectsZeroDataHash() public {
+        bytes32 dataHash = bytes32(0); // Zero!
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(8453);
+        uint32 txCount = 2;
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = registry.nonces(wallet);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signTxBatchAck(walletPrivateKey, wallet, forwarder, dataHash, reportedChainId, txCount, nonce, deadline);
+
+        vm.prank(forwarder);
+        vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__InvalidDataHash.selector);
+        registry.acknowledgeTransactionBatch(dataHash, reportedChainId, txCount, deadline, nonce, wallet, v, r, s);
+    }
+
+    /// Transaction batch registration should succeed after grace period.
+    function test_TxBatchReg_Success() public {
+        // Prepare tx batch data
+        bytes32[] memory txHashes = new bytes32[](2);
+        txHashes[0] = keccak256("tx1");
+        txHashes[1] = keccak256("tx2");
+
+        bytes32[] memory chainIds = new bytes32[](2);
+        chainIds[0] = CAIP10Evm.caip2Hash(8453);
+        chainIds[1] = CAIP10Evm.caip2Hash(10);
+
+        bytes32 dataHash = keccak256(abi.encodePacked(txHashes, chainIds));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(8453);
+        uint32 txCount = 2;
+
+        // Phase 1: Acknowledge
+        {
+            uint256 deadline = block.timestamp + 1 hours;
+            uint256 nonce = registry.nonces(wallet);
+
+            (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
+                walletPrivateKey, wallet, forwarder, dataHash, reportedChainId, txCount, nonce, deadline
+            );
+
+            vm.prank(forwarder);
+            registry.acknowledgeTransactionBatch(dataHash, reportedChainId, txCount, deadline, nonce, wallet, v, r, s);
+        }
+
+        // Skip to registration window
+        _skipToTxRegistrationWindow(wallet);
+
+        // Phase 2: Register
+        {
+            uint256 deadline = block.timestamp + 1 hours;
+            uint256 nonce = registry.nonces(wallet);
+
+            (uint8 v, bytes32 r, bytes32 s) = _signTxBatchReg(
+                walletPrivateKey, wallet, forwarder, dataHash, reportedChainId, txCount, nonce, deadline
+            );
+
+            vm.prank(forwarder);
+            registry.registerTransactionBatch(reportedChainId, deadline, nonce, wallet, txHashes, chainIds, v, r, s);
+        }
+
+        // Verify transactions are registered
+        assertTrue(registry.isTransactionRegistered(txHashes[0], chainIds[0]), "Tx1 should be registered");
+        assertTrue(registry.isTransactionRegistered(txHashes[1], chainIds[1]), "Tx2 should be registered");
+
+        // Verify pending is cleared
+        assertFalse(registry.isPendingTransactionBatch(wallet), "Should not be pending anymore");
+
+        // Verify nonce incremented twice (ack + reg)
+        assertEq(registry.nonces(wallet), 2, "Nonce should be 2");
+    }
+
+    /// Transaction batch registration should fail with mismatched dataHash.
+    function test_TxBatchReg_FailsDataHashMismatch() public {
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(8453);
+        uint32 txCount = 2;
+
+        // Phase 1: Acknowledge with correct data
+        bytes32 dataHash;
+        bytes32[] memory chainIds = new bytes32[](2);
+        {
+            bytes32[] memory txHashes = new bytes32[](2);
+            txHashes[0] = keccak256("tx1");
+            txHashes[1] = keccak256("tx2");
+
+            chainIds[0] = CAIP10Evm.caip2Hash(8453);
+            chainIds[1] = CAIP10Evm.caip2Hash(10);
+
+            dataHash = keccak256(abi.encodePacked(txHashes, chainIds));
+
+            uint256 deadline = block.timestamp + 1 hours;
+            uint256 nonce = registry.nonces(wallet);
+
+            (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
+                walletPrivateKey, wallet, forwarder, dataHash, reportedChainId, txCount, nonce, deadline
+            );
+
+            vm.prank(forwarder);
+            registry.acknowledgeTransactionBatch(dataHash, reportedChainId, txCount, deadline, nonce, wallet, v, r, s);
+        }
+
+        _skipToTxRegistrationWindow(wallet);
+
+        // Phase 2: Try to register with DIFFERENT tx hashes (should fail)
+        {
+            bytes32[] memory wrongTxHashes = new bytes32[](2);
+            wrongTxHashes[0] = keccak256("wrongTx1");
+            wrongTxHashes[1] = keccak256("wrongTx2");
+
+            bytes32 wrongDataHash = keccak256(abi.encodePacked(wrongTxHashes, chainIds));
+            uint256 deadline = block.timestamp + 1 hours;
+            uint256 nonce = registry.nonces(wallet);
+
+            (uint8 v, bytes32 r, bytes32 s) = _signTxBatchReg(
+                walletPrivateKey, wallet, forwarder, wrongDataHash, reportedChainId, txCount, nonce, deadline
+            );
+
+            vm.prank(forwarder);
+            vm.expectRevert(IFraudRegistryV2.FraudRegistryV2__DataHashMismatch.selector);
+            registry.registerTransactionBatch(
+                reportedChainId, deadline, nonce, wallet, wrongTxHashes, chainIds, v, r, s
+            );
+        }
+    }
+
+    /// Transaction batch view functions should work correctly.
+    function test_TxBatch_ViewFunctions() public {
+        bytes32[] memory txHashes = new bytes32[](1);
+        txHashes[0] = keccak256("tx1");
+
+        bytes32[] memory chainIds = new bytes32[](1);
+        chainIds[0] = CAIP10Evm.caip2Hash(8453);
+
+        bytes32 dataHash = keccak256(abi.encodePacked(txHashes, chainIds));
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(8453);
+
+        // Before ack: not pending
+        assertFalse(registry.isPendingTransactionBatch(wallet));
+
+        // Acknowledge
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = registry.nonces(wallet);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signTxBatchAck(walletPrivateKey, wallet, forwarder, dataHash, reportedChainId, 1, nonce, deadline);
+
+        vm.prank(forwarder);
+        registry.acknowledgeTransactionBatch(dataHash, reportedChainId, 1, deadline, nonce, wallet, v, r, s);
+
+        // After ack: pending
+        assertTrue(registry.isPendingTransactionBatch(wallet));
+
+        // Check deadlines
+        (
+            uint256 currentBlock,
+            uint256 expiryBlock,
+            uint256 startBlock,
+            uint256 graceStartsAt,
+            uint256 timeLeft,
+            bool isExpired
+        ) = registry.getTransactionDeadlines(wallet);
+
+        assertEq(currentBlock, block.number);
+        assertGt(expiryBlock, block.number);
+        assertGt(startBlock, block.number);
+        assertGt(graceStartsAt, 0);
+        assertGt(timeLeft, 0);
+        assertFalse(isExpired);
     }
 }

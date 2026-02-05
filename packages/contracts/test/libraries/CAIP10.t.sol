@@ -80,11 +80,17 @@ contract CAIP10Test is Test {
         assertEq(key, expected);
     }
 
-    function test_EvmWalletKey_SameAcrossChains() public pure {
+    /// @notice EVM wallet keys are chain-agnostic (uses wildcard "_" for chain)
+    /// @dev This means the same address on different EVM chains maps to the same key
+    function test_EvmWalletKey_ChainAgnostic() public pure {
         address wallet = 0x742d35cc6634c0532925A3b844Bc9e7595f0ABcd;
+        // evmWalletKey produces deterministic output for the same wallet
+        // The wildcard format "eip155:_:0x..." makes it chain-agnostic
         bytes32 key1 = CAIP10.evmWalletKey(wallet);
         bytes32 key2 = CAIP10.evmWalletKey(wallet);
         assertEq(key1, key2);
+        // Verify it matches the wildcard format
+        assertEq(key1, keccak256(abi.encodePacked("eip155:_:", wallet)));
     }
 
     function test_EvmTransactionKey_ChainSpecific() public pure {

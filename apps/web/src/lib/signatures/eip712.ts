@@ -14,10 +14,13 @@ export {
   /** @deprecated Use getV2EIP712Domain for new integrations */
   getEIP712Domain,
   // Type definitions
+  /** @deprecated V1 type hashes - V2 uses different typed data structure */
   TYPE_HASHES,
   /** @deprecated Use V2_EIP712_TYPES for new integrations */
   EIP712_TYPES,
+  // Step constants (shared by V1 and V2 - not deprecated)
   SIGNATURE_STEP,
+  type SignatureStep,
   // Statement constants
   /** @deprecated Use V2_STATEMENTS for new integrations */
   STATEMENTS,
@@ -26,7 +29,6 @@ export {
   type AcknowledgementMessage,
   /** @deprecated Use V2RegistrationMessage for new integrations */
   type RegistrationMessage,
-  type SignatureStep,
   // Builders
   /** @deprecated Use buildV2AcknowledgementTypedData for new integrations */
   buildAcknowledgementTypedData,

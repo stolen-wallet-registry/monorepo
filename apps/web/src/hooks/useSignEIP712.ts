@@ -75,13 +75,20 @@ export function useSignEIP712(): UseSignEIP712Result {
   const isHub = registryType === 'hub';
 
   /**
-   * Validates that wallet is connected and contract is configured.
+   * Validates that wallet is connected, contract is configured, and signer matches.
+   * @param wallet The wallet address that should be signing
    * @throws Error if validation fails
    * @returns The validated contract address
    */
-  const validateSigningPreconditions = (): Address => {
+  const validateSigningPreconditions = (wallet: Address): Address => {
     if (!address) {
       throw new Error('Wallet not connected');
+    }
+    // Ensure the connected wallet is the one being registered (must sign with their own wallet)
+    if (address.toLowerCase() !== wallet.toLowerCase()) {
+      throw new Error(
+        `Connected wallet (${address}) does not match signing wallet (${wallet}). Please switch to the wallet you want to register.`
+      );
     }
     if (!contractAddress) {
       throw new Error('Contract not configured for this chain');
@@ -94,7 +101,7 @@ export function useSignEIP712(): UseSignEIP712Result {
    * Uses V2 typed data with reportedChainId and incidentTimestamp.
    */
   const signAcknowledgement = async (params: SignParams): Promise<Hex> => {
-    const validatedAddress = validateSigningPreconditions();
+    const validatedAddress = validateSigningPreconditions(params.wallet);
     const message = toV2Message(params);
     const typedData = buildV2AcknowledgementTypedData(chainId, validatedAddress, isHub, message);
 
@@ -139,7 +146,7 @@ export function useSignEIP712(): UseSignEIP712Result {
    * Uses V2 typed data with reportedChainId and incidentTimestamp.
    */
   const signRegistration = async (params: SignParams): Promise<Hex> => {
-    const validatedAddress = validateSigningPreconditions();
+    const validatedAddress = validateSigningPreconditions(params.wallet);
     const message = toV2Message(params);
     const typedData = buildV2RegistrationTypedData(chainId, validatedAddress, isHub, message);
 

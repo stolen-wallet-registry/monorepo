@@ -81,6 +81,8 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     /// @param _fraudRegistry FraudRegistryV2 contract address
     /// @param _owner Initial owner address
     constructor(address _mailbox, address _fraudRegistry, address _owner) Ownable(_owner) {
+        // Note: _owner zero check is redundant with Ownable constructor but kept for
+        // explicit/consistent validation pattern across all address parameters
         if (_owner == address(0)) revert CrossChainInboxV2__ZeroAddress();
         if (_mailbox == address(0)) revert CrossChainInboxV2__ZeroAddress();
         if (_fraudRegistry == address(0)) revert CrossChainInboxV2__ZeroAddress();

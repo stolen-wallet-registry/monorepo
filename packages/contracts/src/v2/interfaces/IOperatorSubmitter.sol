@@ -68,12 +68,12 @@ interface IOperatorSubmitter {
     // ═══════════════════════════════════════════════════════════════════════════
     // ERROR CODES (for validation results)
     // ═══════════════════════════════════════════════════════════════════════════
-
-    // 0 = Valid
-    // 1 = Empty batch
-    // 2 = Array length mismatch
-    // 3 = Not approved operator
-    // 4 = Registry paused
+    // Defined as constants in OperatorSubmitter.sol for type safety:
+    //   ERROR_NONE = 0                  - Validation passed
+    //   ERROR_EMPTY_BATCH = 1           - No entries in batch
+    //   ERROR_ARRAY_LENGTH_MISMATCH = 2 - Input arrays have different lengths
+    //   ERROR_NOT_APPROVED_OPERATOR = 3 - Operator not approved for this capability
+    //   ERROR_REGISTRY_PAUSED = 4       - FraudRegistryV2 is paused
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS

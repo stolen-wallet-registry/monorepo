@@ -82,19 +82,22 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     ? getSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION)
     : null;
 
+  // Parse signature once for reuse (avoid calling parseSignature 4 times)
+  const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
+
   // Build transaction args for gas estimation (needs to be before early returns)
   // V2 unified signature: (wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
   const transactionArgs: WalletRegistrationArgs | undefined =
-    storedSignature && registeree
+    storedSignature && registeree && parsedSig
       ? [
           registeree,
           storedSignature.reportedChainId ?? BigInt(chainId),
           storedSignature.incidentTimestamp ?? 0n,
           storedSignature.deadline,
           storedSignature.nonce,
-          parseSignature(storedSignature.signature).v,
-          parseSignature(storedSignature.signature).r,
-          parseSignature(storedSignature.signature).s,
+          parsedSig.v,
+          parsedSig.r,
+          parsedSig.s,
         ]
       : undefined;
 
@@ -251,9 +254,10 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
       isCorrectWallet,
     });
 
-    if (!storedSignature || !registeree) {
+    if (!storedSignature || !registeree || !parsedSig) {
       logger.contract.error('Cannot submit registration - missing data', {
         hasStoredSignature: !!storedSignature,
+        hasParsedSig: !!parsedSig,
         registeree,
       });
       setLocalError('Missing signature data. Please go back and sign again.');
@@ -272,8 +276,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     setLocalError(null);
 
     try {
-      const parsedSig = parseSignature(storedSignature.signature);
-
+      // parsedSig already computed at component level (reused here)
       logger.contract.info('Submitting walletRegistration to contract', {
         deadline: storedSignature.deadline.toString(),
         nonce: storedSignature.nonce.toString(),

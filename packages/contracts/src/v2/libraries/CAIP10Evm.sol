@@ -94,6 +94,9 @@ library CAIP10Evm {
         bytes memory data = bytes(caip10);
         uint256 len = data.length;
 
+        // Guard against underflow: offset must not exceed length
+        if (offset > len) revert CAIP10Evm__InvalidAddress();
+
         // Validate we have exactly 42 characters (0x + 40 hex)
         if (len - offset != 42) revert CAIP10Evm__InvalidAddress();
 

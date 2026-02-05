@@ -71,19 +71,22 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
     ? getSignature(registeree, chainId, SIGNATURE_STEP.ACKNOWLEDGEMENT)
     : null;
 
+  // Parse signature once for reuse (avoid calling parseSignature 4 times)
+  const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
+
   // Build transaction args for gas estimation (needs to be before early returns)
   // V2 unified signature: (wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
   const transactionArgs: WalletRegistrationArgs | undefined =
-    storedSignature && registeree
+    storedSignature && registeree && parsedSig
       ? [
           registeree,
           storedSignature.reportedChainId ?? BigInt(chainId),
           storedSignature.incidentTimestamp ?? 0n,
           storedSignature.deadline,
           storedSignature.nonce,
-          parseSignature(storedSignature.signature).v,
-          parseSignature(storedSignature.signature).r,
-          parseSignature(storedSignature.signature).s,
+          parsedSig.v,
+          parsedSig.r,
+          parsedSig.s,
         ]
       : undefined;
 
@@ -140,9 +143,10 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
       isCorrectWallet,
     });
 
-    if (!storedSignature || !registeree) {
+    if (!storedSignature || !registeree || !parsedSig) {
       logger.contract.error('Cannot submit acknowledgement - missing data', {
         hasStoredSignature: !!storedSignature,
+        hasParsedSig: !!parsedSig,
         registeree,
       });
       setLocalError('Missing signature data. Please go back and sign again.');
@@ -153,8 +157,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
     setLocalError(null);
 
     try {
-      const parsedSig = parseSignature(storedSignature.signature);
-
+      // parsedSig already computed at component level (reused here)
       logger.contract.info('Submitting acknowledgementOfRegistry to contract', {
         deadline: storedSignature.deadline.toString(),
         nonce: storedSignature.nonce.toString(),

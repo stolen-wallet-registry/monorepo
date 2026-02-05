@@ -1,10 +1,21 @@
 import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
+import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { useShallow } from 'zustand/shallow';
 import { logger } from '@/lib/logger';
 import type { Hash } from '@/lib/types/ethereum';
 import { chainIdToBytes32 } from '@swr/caip';
+
+// BigInt-safe JSON storage for Zustand persist middleware
+// JSON.stringify throws on BigInt - this provides custom serialization
+const BIGINT_PREFIX = '__bigint__:';
+const bigintStorage = createJSONStorage(() => localStorage, {
+  replacer: (_key, value) => (typeof value === 'bigint' ? `${BIGINT_PREFIX}${value}` : value),
+  reviver: (_key, value) =>
+    typeof value === 'string' && value.startsWith(BIGINT_PREFIX)
+      ? BigInt(value.slice(BIGINT_PREFIX.length))
+      : value,
+});
 
 export type RegistrationType = 'standard' | 'selfRelay' | 'p2pRelay';
 
@@ -148,6 +159,7 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
       })),
       {
         name: 'swr-registration-state',
+        storage: bigintStorage, // BigInt-safe serialization for incidentTimestamp
         version: 2, // Bumped for V2 fields
         migrate: (persisted, version) => {
           // Validate basic shape

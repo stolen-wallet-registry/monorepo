@@ -198,8 +198,10 @@ contract OperatorSubmitter is IOperatorSubmitter, Ownable2Step, Pausable {
                 address wallet = address(uint160(uint256(identifiers[i])));
                 registered = IFraudRegistryV2(fraudRegistry).isRegistered(wallet);
             } else {
-                // For non-EVM, use CAIP-10 string check (simplified)
-                registered = false; // TODO: implement for non-EVM when supported
+                // TODO: implement for non-EVM when supported
+                // Currently returns false - validation will show as "new" even if registered
+                // This is acceptable as FraudRegistryV2 handles duplicates gracefully
+                registered = false;
             }
 
             if (registered) {

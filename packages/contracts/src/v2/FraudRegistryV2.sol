@@ -73,8 +73,11 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     /// @notice Next batch ID
     uint32 public nextBatchId = 1;
 
-    /// @notice Pending acknowledgements for two-phase registration
+    /// @notice Pending wallet acknowledgements for two-phase registration
     mapping(address => AcknowledgementData) private _pendingAcknowledgements;
+
+    /// @notice Pending transaction batch acknowledgements for two-phase registration
+    mapping(address => TransactionAcknowledgementData) private _pendingTxAcknowledgements;
 
     /// @notice Nonces for replay protection (keyed to SIGNER, not msg.sender)
     mapping(address => uint256) public nonces;
@@ -270,6 +273,50 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
     }
 
     /// @inheritdoc IFraudRegistryV2
+    function isPendingTransactionBatch(address reporter) external view returns (bool pending) {
+        TransactionAcknowledgementData memory ack = _pendingTxAcknowledgements[reporter];
+        return ack.trustedForwarder != address(0) && block.number < ack.expiryBlock;
+    }
+
+    /// @inheritdoc IFraudRegistryV2
+    function getTransactionAcknowledgement(address reporter)
+        external
+        view
+        returns (TransactionAcknowledgementData memory data)
+    {
+        return _pendingTxAcknowledgements[reporter];
+    }
+
+    /// @inheritdoc IFraudRegistryV2
+    function getTransactionDeadlines(address reporter)
+        external
+        view
+        returns (
+            uint256 currentBlock,
+            uint256 expiryBlock,
+            uint256 startBlock,
+            uint256 graceStartsAt,
+            uint256 timeLeft,
+            bool isExpired
+        )
+    {
+        TransactionAcknowledgementData memory ack = _pendingTxAcknowledgements[reporter];
+        currentBlock = block.number;
+        expiryBlock = ack.expiryBlock;
+        startBlock = ack.startBlock;
+
+        if (ack.expiryBlock <= block.number) {
+            isExpired = true;
+            timeLeft = 0;
+            graceStartsAt = 0;
+        } else {
+            isExpired = false;
+            timeLeft = ack.expiryBlock - block.number;
+            graceStartsAt = ack.startBlock > block.number ? ack.startBlock - block.number : 0;
+        }
+    }
+
+    /// @inheritdoc IFraudRegistryV2
     function getBatch(uint32 batchId) external view returns (Batch memory batch) {
         return _batches[batchId];
     }
@@ -319,6 +366,48 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
                     forwarder,
                     reportedChainId,
                     incidentTimestamp,
+                    nonces[msg.sender],
+                    deadline
+                )
+            );
+        }
+    }
+
+    /// @inheritdoc IFraudRegistryV2
+    function generateTxHashStruct(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        address forwarder,
+        uint8 step
+    ) external view returns (uint256 deadline, bytes32 hashStruct) {
+        deadline = TimingConfig.getSignatureDeadline();
+        if (step == 1) {
+            // Acknowledgement
+            hashStruct = keccak256(
+                abi.encode(
+                    EIP712ConstantsV2.TX_BATCH_ACK_TYPEHASH,
+                    EIP712ConstantsV2.TX_ACK_STATEMENT_HASH,
+                    msg.sender, // reporter
+                    forwarder,
+                    dataHash,
+                    reportedChainId,
+                    transactionCount,
+                    nonces[msg.sender],
+                    deadline
+                )
+            );
+        } else {
+            // Registration
+            hashStruct = keccak256(
+                abi.encode(
+                    EIP712ConstantsV2.TX_BATCH_REG_TYPEHASH,
+                    EIP712ConstantsV2.TX_REG_STATEMENT_HASH,
+                    msg.sender, // reporter
+                    forwarder,
+                    dataHash,
+                    reportedChainId,
+                    transactionCount,
                     nonces[msg.sender],
                     deadline
                 )
@@ -492,6 +581,234 @@ contract FraudRegistryV2 is IFraudRegistryV2, EIP712, Ownable2Step, Pausable {
             bool isSponsored = wallet != msg.sender;
             emit WalletRegistered(wallet, Namespace.EIP155, chainIdHash, incidentTimestamp, isSponsored, 0);
         }
+
+        // === INTERACTIONS (external call last) ===
+        if (feeManager != address(0)) {
+            _collectFee(IFeeManager(feeManager).currentFeeWei());
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WRITE FUNCTIONS - Individual Transaction Batch Registration (Two-Phase)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @inheritdoc IFraudRegistryV2
+    function acknowledgeTransactionBatch(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        uint256 deadline,
+        uint256 nonce,
+        address reporter,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external whenNotPaused {
+        // Validate reporter
+        if (reporter == address(0)) revert FraudRegistryV2__InvalidReporter();
+
+        // Validate dataHash
+        if (dataHash == bytes32(0)) revert FraudRegistryV2__InvalidDataHash();
+
+        // Validate batch size
+        if (transactionCount == 0) revert FraudRegistryV2__EmptyBatch();
+
+        // Validate deadline
+        if (deadline <= block.timestamp) revert FraudRegistryV2__SignatureExpired();
+
+        // Validate nonce
+        if (nonce != nonces[reporter]) revert FraudRegistryV2__InvalidNonce();
+
+        // Verify EIP-712 signature from REPORTER
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    EIP712ConstantsV2.TX_BATCH_ACK_TYPEHASH,
+                    EIP712ConstantsV2.TX_ACK_STATEMENT_HASH,
+                    reporter,
+                    msg.sender, // forwarder
+                    dataHash,
+                    reportedChainId,
+                    transactionCount,
+                    nonce,
+                    deadline
+                )
+            )
+        );
+
+        address signer = ECDSA.recover(digest, v, r, s);
+        if (signer == address(0) || signer != reporter) revert FraudRegistryV2__InvalidSignature();
+
+        // Increment nonce AFTER validation
+        nonces[reporter]++;
+
+        // Store acknowledgement with randomized timing
+        _pendingTxAcknowledgements[reporter] = TransactionAcknowledgementData({
+            trustedForwarder: msg.sender,
+            dataHash: dataHash,
+            reportedChainId: reportedChainId,
+            transactionCount: transactionCount,
+            startBlock: TimingConfig.getGracePeriodEndBlock(graceBlocks),
+            expiryBlock: TimingConfig.getDeadlineBlock(deadlineBlocks)
+        });
+
+        emit TransactionBatchAcknowledged(
+            reporter, msg.sender, dataHash, reportedChainId, transactionCount, reporter != msg.sender
+        );
+    }
+
+    /// @dev Validate tx batch registration inputs and acknowledgement, returns dataHash
+    function _validateTxBatchRegistration(
+        bytes32 reportedChainId,
+        uint256 deadline,
+        uint256 nonce,
+        address reporter,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds
+    ) internal view returns (bytes32 dataHash) {
+        // Validate reporter
+        if (reporter == address(0)) revert FraudRegistryV2__InvalidReporter();
+
+        // Validate array lengths match
+        if (transactionHashes.length != chainIds.length) revert FraudRegistryV2__ArrayLengthMismatch();
+
+        // Validate batch not empty
+        if (transactionHashes.length == 0) revert FraudRegistryV2__EmptyBatch();
+
+        // Validate deadline
+        if (deadline <= block.timestamp) revert FraudRegistryV2__SignatureExpired();
+
+        // Validate nonce
+        if (nonce != nonces[reporter]) revert FraudRegistryV2__InvalidNonce();
+
+        // Load and validate acknowledgement
+        TransactionAcknowledgementData memory ack = _pendingTxAcknowledgements[reporter];
+        if (ack.trustedForwarder != msg.sender) revert FraudRegistryV2__InvalidForwarder();
+
+        // Check grace period has started
+        if (block.number < ack.startBlock) revert FraudRegistryV2__GracePeriodNotStarted();
+
+        // Check not expired
+        if (block.number >= ack.expiryBlock) revert FraudRegistryV2__RegistrationExpired();
+
+        // Compute dataHash from submitted arrays and verify it matches acknowledgement
+        dataHash = keccak256(abi.encodePacked(transactionHashes, chainIds));
+        if (dataHash != ack.dataHash) revert FraudRegistryV2__DataHashMismatch();
+
+        // Verify reportedChainId matches
+        if (reportedChainId != ack.reportedChainId) revert FraudRegistryV2__InvalidForwarder();
+    }
+
+    /// @dev Build the struct hash for tx batch registration signature
+    function _buildTxBatchRegStructHash(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint256 deadline,
+        uint256 nonce,
+        address reporter,
+        uint32 txCount
+    ) internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                EIP712ConstantsV2.TX_BATCH_REG_TYPEHASH,
+                EIP712ConstantsV2.TX_REG_STATEMENT_HASH,
+                reporter,
+                msg.sender,
+                dataHash,
+                reportedChainId,
+                txCount,
+                nonce,
+                deadline
+            )
+        );
+    }
+
+    /// @dev Verify EIP-712 signature for tx batch registration
+    function _verifyTxBatchSignature(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint256 deadline,
+        uint256 nonce,
+        address reporter,
+        uint32 txCount,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) internal view {
+        bytes32 structHash = _buildTxBatchRegStructHash(dataHash, reportedChainId, deadline, nonce, reporter, txCount);
+        bytes32 digest = _hashTypedDataV4(structHash);
+        address signer = ECDSA.recover(digest, v, r, s);
+        if (signer == address(0) || signer != reporter) revert FraudRegistryV2__InvalidSignature();
+    }
+
+    /// @dev Execute tx batch registration (state changes)
+    function _executeTxBatchRegistration(
+        address reporter,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds
+    ) internal {
+        // Clear acknowledgement and increment nonce
+        nonces[reporter]++;
+        delete _pendingTxAcknowledgements[reporter];
+
+        // Create batch for the individual submission
+        uint32 batchId = nextBatchId++;
+        _batches[batchId] = Batch({
+            submitter: address(0), // PRIVACY: Don't expose reporter
+            createdAtTimestamp: uint64(block.timestamp),
+            entryCount: uint32(transactionHashes.length),
+            isOperator: false
+        });
+
+        emit BatchCreated(batchId, address(0), uint32(transactionHashes.length), false);
+
+        // Determine sponsorship for events
+        bool isSponsored = reporter != msg.sender;
+
+        // Register each transaction
+        for (uint256 i = 0; i < transactionHashes.length; i++) {
+            bytes32 txHash = transactionHashes[i];
+            if (txHash == bytes32(0)) continue;
+
+            bytes32 chainId = chainIds[i];
+            bytes32 key = CAIP10.txStorageKey(txHash, chainId);
+
+            if (_transactions[key].registeredAtTimestamp > 0) {
+                // Already registered - skip silently (privacy)
+                continue;
+            }
+
+            _transactions[key] = TransactionEntry({
+                registeredAtTimestamp: uint64(block.timestamp), firstBatchId: batchId, invalidated: false
+            });
+
+            emit TransactionRegistered(txHash, chainId, isSponsored, batchId);
+        }
+    }
+
+    /// @inheritdoc IFraudRegistryV2
+    function registerTransactionBatch(
+        bytes32 reportedChainId,
+        uint256 deadline,
+        uint256 nonce,
+        address reporter,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external payable whenNotPaused {
+        // Validate inputs and acknowledgement, get dataHash
+        bytes32 dataHash =
+            _validateTxBatchRegistration(reportedChainId, deadline, nonce, reporter, transactionHashes, chainIds);
+
+        // Verify EIP-712 signature
+        _verifyTxBatchSignature(
+            dataHash, reportedChainId, deadline, nonce, reporter, uint32(transactionHashes.length), v, r, s
+        );
+
+        // Execute registration (state changes)
+        _executeTxBatchRegistration(reporter, transactionHashes, chainIds);
 
         // === INTERACTIONS (external call last) ===
         if (feeManager != address(0)) {

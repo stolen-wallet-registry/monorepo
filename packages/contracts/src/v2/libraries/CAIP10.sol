@@ -208,6 +208,9 @@ library CAIP10 {
         uint256 secondColon = _findColon(data, firstColon + 1);
         if (secondColon == 0 || secondColon >= len - 1) revert CAIP10__InvalidFormat();
 
+        // Validate chainRef is not empty (secondColon must be > firstColon + 1)
+        if (secondColon <= firstColon + 1) revert CAIP10__InvalidFormat();
+
         namespaceHash = keccak256(_slice(data, 0, firstColon));
         chainRef = keccak256(_slice(data, firstColon + 1, secondColon - firstColon - 1));
         addrStart = secondColon + 1;

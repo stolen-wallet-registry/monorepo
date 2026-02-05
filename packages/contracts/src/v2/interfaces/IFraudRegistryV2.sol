@@ -97,12 +97,28 @@ interface IFraudRegistryV2 {
         bool isOperator;
     }
 
-    /// @notice Pending acknowledgement data for two-phase registration
+    /// @notice Pending acknowledgement data for two-phase wallet registration
     /// @param trustedForwarder Address authorized to complete registration
     /// @param startBlock Block when grace period ends (registration can begin)
     /// @param expiryBlock Block when registration window closes
     struct AcknowledgementData {
         address trustedForwarder;
+        uint256 startBlock;
+        uint256 expiryBlock;
+    }
+
+    /// @notice Pending acknowledgement data for two-phase transaction batch registration
+    /// @param trustedForwarder Address authorized to complete registration
+    /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param startBlock Block when grace period ends (registration can begin)
+    /// @param expiryBlock Block when registration window closes
+    struct TransactionAcknowledgementData {
+        address trustedForwarder;
+        bytes32 dataHash;
+        bytes32 reportedChainId;
+        uint32 transactionCount;
         uint256 startBlock;
         uint256 expiryBlock;
     }
@@ -155,6 +171,22 @@ interface IFraudRegistryV2 {
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS - Transaction Registry
     // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Emitted when a reporter acknowledges intent to register transaction batch
+    /// @param reporter The address reporting the transactions
+    /// @param forwarder The address authorized to complete registration
+    /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param isSponsored True if forwarder is different from reporter
+    event TransactionBatchAcknowledged(
+        address indexed reporter,
+        address indexed forwarder,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        bool isSponsored
+    );
 
     /// @notice Emitted for EACH transaction registration
     /// @dev PRIVACY: Never emit reporter address - they may have used relay
@@ -220,6 +252,11 @@ interface IFraudRegistryV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     error FraudRegistryV2__InvalidWallet();
+    error FraudRegistryV2__InvalidReporter();
+    error FraudRegistryV2__InvalidDataHash();
+    error FraudRegistryV2__DataHashMismatch();
+    error FraudRegistryV2__EmptyBatch();
+    error FraudRegistryV2__ArrayLengthMismatch();
     error FraudRegistryV2__InvalidNonce();
     error FraudRegistryV2__SignatureExpired();
     error FraudRegistryV2__InvalidSignature();
@@ -362,10 +399,43 @@ interface IFraudRegistryV2 {
             uint32 batchId
         );
 
-    /// @notice Get pending acknowledgement data
+    /// @notice Get pending wallet acknowledgement data
     /// @param wallet The wallet address
     /// @return data The acknowledgement data (zeroed if none)
     function getAcknowledgement(address wallet) external view returns (AcknowledgementData memory data);
+
+    /// @notice Check if a transaction batch acknowledgement is pending
+    /// @param reporter The reporter address
+    /// @return pending True if acknowledgement exists and not expired
+    function isPendingTransactionBatch(address reporter) external view returns (bool pending);
+
+    /// @notice Get pending transaction batch acknowledgement data
+    /// @param reporter The reporter address
+    /// @return data The transaction acknowledgement data (zeroed if none)
+    function getTransactionAcknowledgement(address reporter)
+        external
+        view
+        returns (TransactionAcknowledgementData memory data);
+
+    /// @notice Get timing information for a pending transaction batch acknowledgement
+    /// @param reporter The reporter address
+    /// @return currentBlock Current block number
+    /// @return expiryBlock Block when registration window closes
+    /// @return startBlock Block when grace period ends
+    /// @return graceStartsAt Blocks until grace period ends (0 if passed)
+    /// @return timeLeft Blocks until expiry (0 if expired)
+    /// @return isExpired True if registration window closed
+    function getTransactionDeadlines(address reporter)
+        external
+        view
+        returns (
+            uint256 currentBlock,
+            uint256 expiryBlock,
+            uint256 startBlock,
+            uint256 graceStartsAt,
+            uint256 timeLeft,
+            bool isExpired
+        );
 
     /// @notice Get batch metadata
     /// @param batchId The batch ID
@@ -385,7 +455,7 @@ interface IFraudRegistryV2 {
     // VIEW FUNCTIONS - Frontend Compatibility
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Generate hash struct for EIP-712 signature
+    /// @notice Generate hash struct for EIP-712 wallet signature
     /// @dev Used by frontend to prepare typed data for signing.
     ///      Both hub and spoke use identical function signature for frontend consistency.
     /// @param reportedChainId Chain ID where incident occurred
@@ -399,7 +469,25 @@ interface IFraudRegistryV2 {
         view
         returns (uint256 deadline, bytes32 hashStruct);
 
-    /// @notice Get timing information for a pending acknowledgement
+    /// @notice Generate hash struct for EIP-712 transaction batch signature
+    /// @dev Used by frontend to prepare typed data for signing tx batch registration.
+    ///      dataHash = keccak256(abi.encodePacked(txHashes, chainIds))
+    /// @param dataHash Hash commitment of (txHashes || chainIds)
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param forwarder The address that will submit the transaction
+    /// @param step 1 for acknowledgement, 2 for registration
+    /// @return deadline The signature expiry timestamp
+    /// @return hashStruct The EIP-712 hash struct to sign
+    function generateTxHashStruct(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        address forwarder,
+        uint8 step
+    ) external view returns (uint256 deadline, bytes32 hashStruct);
+
+    /// @notice Get timing information for a pending wallet acknowledgement
     /// @param wallet The wallet address
     /// @return currentBlock Current block number
     /// @return expiryBlock Block when registration window closes
@@ -466,6 +554,60 @@ interface IFraudRegistryV2 {
         uint64 incidentTimestamp,
         uint256 deadline,
         uint256 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external payable;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WRITE FUNCTIONS - Individual Transaction Batch Registration (Two-Phase)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Phase 1: Acknowledge intent to register fraudulent transactions
+    /// @dev Creates trusted forwarder relationship and starts grace period.
+    ///      Signature must be from the reporter address.
+    ///      dataHash = keccak256(abi.encodePacked(txHashes, chainIds))
+    /// @param dataHash Hash commitment of transaction data (txHashes || chainIds)
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param deadline Signature expiry timestamp
+    /// @param nonce Expected nonce for replay protection (must match nonces[reporter])
+    /// @param reporter The address reporting the transactions
+    /// @param v ECDSA v
+    /// @param r ECDSA r
+    /// @param s ECDSA s
+    function acknowledgeTransactionBatch(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        uint256 deadline,
+        uint256 nonce,
+        address reporter,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+
+    /// @notice Phase 2: Complete transaction batch registration after grace period
+    /// @dev Must be called by the trusted forwarder from acknowledgement.
+    ///      Must be after grace period but before expiry.
+    ///      Validates dataHash matches keccak256(abi.encodePacked(txHashes, chainIds)).
+    /// @param reportedChainId CAIP-2 hash (must match acknowledgement)
+    /// @param deadline Signature expiry timestamp
+    /// @param nonce Expected nonce for replay protection
+    /// @param reporter The address that acknowledged the batch
+    /// @param transactionHashes Array of transaction hashes to register
+    /// @param chainIds Parallel array of CAIP-2 chain IDs per transaction
+    /// @param v ECDSA v
+    /// @param r ECDSA r
+    /// @param s ECDSA s
+    function registerTransactionBatch(
+        bytes32 reportedChainId,
+        uint256 deadline,
+        uint256 nonce,
+        address reporter,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds,
         uint8 v,
         bytes32 r,
         bytes32 s

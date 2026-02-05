@@ -103,6 +103,7 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
         }
 
         // Compute source chain ID as CAIP-2 hash
+        // Note: block.chainid cast to uint64 is safe - all known chains fit in uint64
         sourceChainId = CAIP10Evm.caip2Hash(uint64(block.chainid));
 
         bridgeAdapter = _bridgeAdapter;
@@ -676,8 +677,9 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
         delete pendingTxAcknowledgements[reporter];
 
         // INTERACTIONS: External calls after state changes
+        // NOTE: Pass the validated nonce (nonce parameter was validated against nonces[reporter] before increment)
         (bytes32 messageId, uint256 totalRequired) =
-            _buildAndSendTxBatchMessage(dataHash, reportedChainId, nonce - 1, reporter, transactionHashes, chainIds);
+            _buildAndSendTxBatchMessage(dataHash, reportedChainId, nonce, reporter, transactionHashes, chainIds);
 
         emit TransactionBatchSentToHub(reporter, messageId, dataHash, hubChainId);
 

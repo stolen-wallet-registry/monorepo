@@ -14,10 +14,15 @@ interface ISpokeRegistryV2 {
     /// @notice Acknowledgement data for pending wallet registrations
     /// @param trustedForwarder Address authorized to complete registration
     /// @param incidentTimestamp User-provided timestamp of when theft occurred
-    /// @param reportedChainId CAIP-2 hash of chain where incident occurred
+    /// @param reportedChainId CAIP-2 hash of chain where incident occurred (full bytes32 for cross-chain)
     /// @param startBlock Block number when grace period ends
     /// @param expiryBlock Block number when registration window expires
-    /// @dev Struct packing: trustedForwarder (20) + incidentTimestamp (8) = 28 bytes in slot 1
+    /// @dev Storage layout (4 slots):
+    ///      Slot 0: trustedForwarder (20) + incidentTimestamp (8) = 28 bytes
+    ///      Slot 1: reportedChainId (32) - kept as bytes32 for cross-chain message compatibility
+    ///      Slot 2: startBlock (32)
+    ///      Slot 3: expiryBlock (32)
+    ///      Note: Could optimize to 3 slots if startBlock/expiryBlock changed to uint64
     struct AcknowledgementData {
         address trustedForwarder;
         uint64 incidentTimestamp;
