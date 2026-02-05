@@ -56,14 +56,15 @@ export function useContractDeadlines(
     'useContractDeadlines'
   );
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata('wallet', registryType);
+  // Get the correct ABI and function names for hub/spoke
+  const { abi, functions } = getRegistryMetadata('wallet', registryType);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
   const result = useReadContract({
     address: contractAddress,
     abi,
     chainId,
-    functionName: 'getDeadlines',
+    functionName: functions.getDeadlines as any,
     args: registereeAddress ? [registereeAddress] : undefined,
     query: {
       enabled: !!registereeAddress && !!contractAddress,
@@ -72,38 +73,41 @@ export function useContractDeadlines(
     },
   });
 
-  // Transform the raw array result into a typed object
-  // Contract returns: [currentBlock, expiry, start, graceBlocks, deadlineBlock, isExpired]
+  // Transform the raw result into a typed object
+  // V2 unified format: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
   let transformedData: DeadlineData | undefined;
-  if (result.data && result.data.length === 6) {
-    const data: DeadlineData = {
-      currentBlock: BigInt(result.data[0]),
-      expiry: BigInt(result.data[1]),
-      start: BigInt(result.data[2]),
-      graceBlocks: BigInt(result.data[3]),
-      deadlineBlock: BigInt(result.data[4]),
-      isExpired: Boolean(result.data[5]),
-    };
-    transformedData = data;
+  if (result.data) {
+    const rawData = result.data as unknown as readonly [
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      boolean,
+    ];
+    if (rawData.length >= 6) {
+      transformedData = {
+        currentBlock: BigInt(rawData[0]),
+        expiry: BigInt(rawData[1]),
+        start: BigInt(rawData[2]),
+        graceBlocks: BigInt(rawData[3]),
+        deadlineBlock: BigInt(rawData[1]),
+        isExpired: Boolean(rawData[5]),
+      };
 
-    // Log deadline data for debugging grace period timer
-    const blocksUntilStart = data.start - data.currentBlock;
-    logger.contract.debug('getDeadlines response (wallet)', {
-      registeree: registereeAddress,
-      currentBlock: data.currentBlock.toString(),
-      start: data.start.toString(),
-      expiry: data.expiry.toString(),
-      graceBlocks: data.graceBlocks.toString(),
-      deadlineBlock: data.deadlineBlock.toString(),
-      isExpired: data.isExpired,
-      blocksUntilStart: blocksUntilStart.toString(),
-      windowAlreadyOpen: blocksUntilStart <= 0n,
-    });
-  } else if (result.data) {
-    logger.contract.error('Unexpected getDeadlines result structure', {
-      dataLength: result.data.length,
-      data: result.data,
-    });
+      logger.contract.debug('getDeadlines response (wallet)', {
+        registeree: registereeAddress,
+        currentBlock: rawData[0].toString(),
+        expiryBlock: rawData[1].toString(),
+        startBlock: rawData[2].toString(),
+        isExpired: rawData[5],
+      });
+    } else {
+      logger.contract.error('Unexpected getDeadlines result structure', {
+        dataLength: (rawData as unknown as unknown[]).length,
+        data: rawData as unknown,
+      });
+    }
   }
 
   return {
@@ -163,12 +167,13 @@ export function useTxContractDeadlines(
     'useTxContractDeadlines'
   );
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata('transaction', registryType);
+  // Get the correct ABI and function names for hub/spoke
+  const { abi, functions } = getRegistryMetadata('transaction', registryType);
 
   const enabled = !!reporter && !!contractAddress;
 
-  // Read deadlines from contract using getDeadlines(reporter)
+  // Read deadlines from contract (hub: getTransactionDeadlines, spoke: getDeadlines)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
   const {
     data: contractData,
     isLoading,
@@ -178,7 +183,7 @@ export function useTxContractDeadlines(
   } = useReadContract({
     address: contractAddress,
     abi,
-    functionName: 'getDeadlines',
+    functionName: functions.getDeadlines as any,
     args: reporter ? [reporter] : undefined,
     chainId,
     query: {
@@ -201,56 +206,59 @@ export function useTxContractDeadlines(
         error: error?.message,
       });
     } else if (contractData) {
-      // Create a key to detect changes and avoid duplicate logs
-      const logKey = `${reporter}-${contractData[0]?.toString()}`;
+      // Cast to typed tuple for safe indexing
+      const raw = contractData as unknown as readonly [
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        boolean,
+      ];
+      const logKey = `${reporter}-${raw[0]?.toString()}`;
       if (logKey !== prevLogKeyRef.current) {
         prevLogKeyRef.current = logKey;
         logger.contract.debug('Transaction registry deadlines read', {
           reporter,
-          currentBlock: contractData[0]?.toString(),
-          expiryBlock: contractData[1]?.toString(),
-          startBlock: contractData[2]?.toString(),
-          graceStartsAt: contractData[3]?.toString(),
-          timeLeft: contractData[4]?.toString(),
-          isExpired: contractData[5],
+          currentBlock: raw[0]?.toString(),
+          expiryBlock: raw[1]?.toString(),
+          startBlock: raw[2]?.toString(),
+          graceStartsAt: raw[3]?.toString(),
+          timeLeft: raw[4]?.toString(),
+          isExpired: raw[5],
         });
       }
     }
   }, [isError, contractData, chainId, contractAddress, reporter, error?.message]);
 
   // Map contract result to TxDeadlineData
-  // getDeadlines returns: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
-  // Note: Contract returns uint32 (mapped to number by viem), convert to bigint for interface
+  // Returns: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
   let data: TxDeadlineData | undefined;
 
   if (contractData) {
-    // Validate tuple shape before BigInt conversions to avoid runtime exceptions
-    if (
-      !Array.isArray(contractData) ||
-      contractData.length < 6 ||
-      contractData[0] === undefined ||
-      contractData[1] === undefined ||
-      contractData[2] === undefined ||
-      contractData[3] === undefined ||
-      contractData[4] === undefined ||
-      contractData[5] === undefined
-    ) {
+    const raw = contractData as unknown as readonly [
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      boolean,
+    ];
+    if (raw.length >= 6 && raw[0] !== undefined) {
+      data = {
+        currentBlock: BigInt(raw[0]),
+        expiry: BigInt(raw[1]),
+        start: BigInt(raw[2]),
+        graceStartsAt: BigInt(raw[3]),
+        timeLeft: BigInt(raw[4]),
+        isExpired: Boolean(raw[5]),
+      };
+    } else {
       logger.contract.error('useTxContractDeadlines: Invalid contractData shape', {
-        isArray: Array.isArray(contractData),
-        length: Array.isArray(contractData) ? contractData.length : 'N/A',
-        contractData,
+        contractData: contractData as unknown,
         reporter,
         chainId,
       });
-    } else {
-      data = {
-        currentBlock: BigInt(contractData[0]),
-        expiry: BigInt(contractData[1]),
-        start: BigInt(contractData[2]),
-        graceStartsAt: BigInt(contractData[3]),
-        timeLeft: BigInt(contractData[4]),
-        isExpired: Boolean(contractData[5]),
-      };
     }
   }
 

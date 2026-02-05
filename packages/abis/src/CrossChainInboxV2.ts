@@ -8,7 +8,7 @@ export const CrossChainInboxV2ABI = [
         internalType: 'address',
       },
       {
-        name: '_fraudRegistry',
+        name: '_hub',
         type: 'address',
         internalType: 'address',
       },
@@ -55,19 +55,6 @@ export const CrossChainInboxV2ABI = [
   },
   {
     type: 'function',
-    name: 'fraudRegistry',
-    inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
     name: 'handle',
     inputs: [
       {
@@ -88,6 +75,19 @@ export const CrossChainInboxV2ABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'hub',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address payable',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',

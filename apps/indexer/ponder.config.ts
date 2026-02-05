@@ -1,15 +1,15 @@
 import { createConfig } from 'ponder';
 import type { Address } from 'viem';
 import {
-  StolenWalletRegistryABI,
-  StolenTransactionRegistryABI,
-  RegistryHubABI,
-  CrossChainInboxABI,
+  WalletRegistryV2ABI,
+  TransactionRegistryV2ABI,
+  FraudRegistryHubV2ABI,
+  CrossChainInboxV2ABI,
   WalletSoulboundABI,
   SupportSoulboundABI,
   FeeManagerABI,
   OperatorRegistryABI,
-  FraudulentContractRegistryABI,
+  ContractRegistryV2ABI,
 } from '@swr/abis';
 import { anvilHub, baseSepolia, base, type Environment, type HubContracts } from '@swr/chains';
 
@@ -152,30 +152,30 @@ export default createConfig({
     },
   },
   contracts: {
-    // Core Registries (from @swr/chains hubContracts)
-    StolenWalletRegistry: {
+    // Core Registries (V2 - from @swr/chains hubContracts)
+    WalletRegistryV2: {
       chain: chainConfig.name,
-      abi: StolenWalletRegistryABI,
+      abi: WalletRegistryV2ABI,
       address: hubContracts!.stolenWalletRegistry,
       startBlock: chainConfig.startBlock,
     },
-    StolenTransactionRegistry: {
+    TransactionRegistryV2: {
       chain: chainConfig.name,
-      abi: StolenTransactionRegistryABI,
+      abi: TransactionRegistryV2ABI,
       address: hubContracts!.stolenTransactionRegistry,
       startBlock: chainConfig.startBlock,
     },
-    RegistryHub: {
+    FraudRegistryHubV2: {
       chain: chainConfig.name,
-      abi: RegistryHubABI,
+      abi: FraudRegistryHubV2ABI,
       address: hubContracts!.registryHub,
       startBlock: chainConfig.startBlock,
     },
 
     // Cross-Chain (from @swr/chains hubContracts)
-    CrossChainInbox: {
+    CrossChainInboxV2: {
       chain: chainConfig.name,
-      abi: CrossChainInboxABI,
+      abi: CrossChainInboxV2ABI,
       address: hubContracts!.crossChainInbox!,
       startBlock: chainConfig.startBlock,
     },
@@ -210,10 +210,10 @@ export default createConfig({
       startBlock: chainConfig.startBlock,
     },
 
-    // Fraudulent Contract Registry (from @swr/chains hubContracts)
-    FraudulentContractRegistry: {
+    // Fraudulent Contract Registry (V2 - from @swr/chains hubContracts)
+    ContractRegistryV2: {
       chain: chainConfig.name,
-      abi: FraudulentContractRegistryABI,
+      abi: ContractRegistryV2ABI,
       address: hubContracts!.fraudulentContractRegistry,
       startBlock: chainConfig.startBlock,
     },

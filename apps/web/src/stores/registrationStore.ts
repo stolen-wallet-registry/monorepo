@@ -140,7 +140,7 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
             // The contract converts to CAIP-2 bytes32 hash internally
             const reportedChainId = BigInt(chainId);
             // Default incidentTimestamp to now if not provided
-            const incidentTimestamp = timestamp ?? BigInt(Math.floor(Date.now() / 1000));
+            const incidentTimestamp = timestamp ?? 0n; // TODO: Add incident timestamp selection UI
 
             logger.registration.info('V2: Fields initialized', {
               chainId,

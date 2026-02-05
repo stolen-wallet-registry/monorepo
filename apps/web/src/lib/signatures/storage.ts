@@ -110,10 +110,13 @@ export function getSignature(
     if (parsed.incidentTimestamp !== undefined) {
       try {
         incidentTimestamp = BigInt(parsed.incidentTimestamp);
-        // Timestamps must be positive and reasonable (after 2020, before 2100)
+        // Allow 0 (placeholder) or reasonable range (2020-2100)
         const minTimestamp = 1577836800n; // 2020-01-01
         const maxTimestamp = 4102444800n; // 2100-01-01
-        if (incidentTimestamp < minTimestamp || incidentTimestamp > maxTimestamp) {
+        if (
+          incidentTimestamp !== 0n &&
+          (incidentTimestamp < minTimestamp || incidentTimestamp > maxTimestamp)
+        ) {
           sessionStorage.removeItem(key);
           return null;
         }

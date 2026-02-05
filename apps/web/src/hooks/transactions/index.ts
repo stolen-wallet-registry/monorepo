@@ -5,12 +5,16 @@ export { useMerkleTree, type TransactionLeaf, type MerkleTreeData } from './useM
 export {
   useTransactionAcknowledgement,
   type TxAcknowledgementParams,
+  type TxAcknowledgementParamsHub,
+  type TxAcknowledgementParamsSpoke,
   type UseTxAcknowledgementResult,
 } from './useTransactionAcknowledgement';
 
 export {
   useTransactionRegistration,
   type TxRegistrationParams,
+  type TxRegistrationParamsHub,
+  type TxRegistrationParamsSpoke,
   type UseTxRegistrationResult,
 } from './useTransactionRegistration';
 
@@ -19,6 +23,7 @@ export {
   useTransactionAcknowledgementHashStruct,
   useTransactionRegistrationHashStruct,
   type TxHashStructData,
+  type TxHashStructRefetchResult,
   type UseTxHashStructResult,
 } from './useTransactionHashStruct';
 

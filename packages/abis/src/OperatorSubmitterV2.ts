@@ -1,4 +1,4 @@
-export const OperatorSubmitterABI = [
+export const OperatorSubmitterV2ABI = [
   {
     type: 'constructor',
     inputs: [
@@ -8,7 +8,17 @@ export const OperatorSubmitterABI = [
         internalType: 'address',
       },
       {
-        name: '_fraudRegistry',
+        name: '_walletRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: '_transactionRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: '_contractRegistry',
         type: 'address',
         internalType: 'address',
       },
@@ -39,6 +49,19 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'function',
+    name: 'contractRegistry',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'feeManager',
     inputs: [],
     outputs: [
@@ -65,13 +88,24 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'function',
-    name: 'fraudRegistry',
-    inputs: [],
+    name: 'isApprovedOperator',
+    inputs: [
+      {
+        name: 'operator',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'capability',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
     outputs: [
       {
         name: '',
-        type: 'address',
-        internalType: 'address',
+        type: 'bool',
+        internalType: 'bool',
       },
     ],
     stateMutability: 'view',
@@ -153,17 +187,12 @@ export const OperatorSubmitterABI = [
     name: 'registerContractsAsOperator',
     inputs: [
       {
-        name: 'namespaceHashes',
+        name: 'identifiers',
         type: 'bytes32[]',
         internalType: 'bytes32[]',
       },
       {
-        name: 'chainRefs',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
-      },
-      {
-        name: 'contractIds',
+        name: 'reportedChainIds',
         type: 'bytes32[]',
         internalType: 'bytes32[]',
       },
@@ -176,17 +205,12 @@ export const OperatorSubmitterABI = [
     name: 'registerTransactionsAsOperator',
     inputs: [
       {
-        name: 'namespaceHashes',
+        name: 'transactionHashes',
         type: 'bytes32[]',
         internalType: 'bytes32[]',
       },
       {
-        name: 'chainRefs',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
-      },
-      {
-        name: 'txHashes',
+        name: 'chainIds',
         type: 'bytes32[]',
         internalType: 'bytes32[]',
       },
@@ -198,16 +222,6 @@ export const OperatorSubmitterABI = [
     type: 'function',
     name: 'registerWalletsAsOperator',
     inputs: [
-      {
-        name: 'namespaceHashes',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
-      },
-      {
-        name: 'chainRefs',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
-      },
       {
         name: 'identifiers',
         type: 'bytes32[]',
@@ -231,6 +245,19 @@ export const OperatorSubmitterABI = [
     type: 'function',
     name: 'renounceOwnership',
     inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setContractRegistry',
+    inputs: [
+      {
+        name: '_contractRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -262,19 +289,6 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'function',
-    name: 'setFraudRegistry',
-    inputs: [
-      {
-        name: '_fraudRegistry',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
     name: 'setOperatorRegistry',
     inputs: [
       {
@@ -285,6 +299,45 @@ export const OperatorSubmitterABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setTransactionRegistry',
+    inputs: [
+      {
+        name: '_transactionRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setWalletRegistry',
+    inputs: [
+      {
+        name: '_walletRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'transactionRegistry',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -308,226 +361,60 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'function',
-    name: 'validateContractBatch',
-    inputs: [
-      {
-        name: 'operator',
-        type: 'address',
-        internalType: 'address',
-      },
-      {
-        name: 'namespaceHashes',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
-      },
-      {
-        name: 'chainRefs',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
-      },
-      {
-        name: 'contractIds',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
-      },
-    ],
+    name: 'walletRegistry',
+    inputs: [],
     outputs: [
       {
-        name: 'result',
-        type: 'tuple',
-        internalType: 'struct IOperatorSubmitter.ContractBatchValidation',
-        components: [
-          {
-            name: 'isValid',
-            type: 'bool',
-            internalType: 'bool',
-          },
-          {
-            name: 'isApprovedOperator',
-            type: 'bool',
-            internalType: 'bool',
-          },
-          {
-            name: 'requiredFee',
-            type: 'uint256',
-            internalType: 'uint256',
-          },
-          {
-            name: 'newEntryCount',
-            type: 'uint256',
-            internalType: 'uint256',
-          },
-          {
-            name: 'duplicateCount',
-            type: 'uint256',
-            internalType: 'uint256',
-          },
-          {
-            name: 'isDuplicate',
-            type: 'bool[]',
-            internalType: 'bool[]',
-          },
-          {
-            name: 'errorCode',
-            type: 'uint8',
-            internalType: 'uint8',
-          },
-        ],
+        name: '',
+        type: 'address',
+        internalType: 'address',
       },
     ],
     stateMutability: 'view',
   },
   {
-    type: 'function',
-    name: 'validateTransactionBatch',
+    type: 'event',
+    name: 'BatchSubmitted',
     inputs: [
       {
         name: 'operator',
         type: 'address',
+        indexed: true,
         internalType: 'address',
       },
       {
-        name: 'namespaceHashes',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
+        name: 'registry',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
       },
       {
-        name: 'chainRefs',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
+        name: 'batchId',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
       },
       {
-        name: 'txHashes',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
+        name: 'entryCount',
+        type: 'uint32',
+        indexed: false,
+        internalType: 'uint32',
       },
     ],
-    outputs: [
-      {
-        name: 'result',
-        type: 'tuple',
-        internalType: 'struct IOperatorSubmitter.TransactionBatchValidation',
-        components: [
-          {
-            name: 'isValid',
-            type: 'bool',
-            internalType: 'bool',
-          },
-          {
-            name: 'isApprovedOperator',
-            type: 'bool',
-            internalType: 'bool',
-          },
-          {
-            name: 'requiredFee',
-            type: 'uint256',
-            internalType: 'uint256',
-          },
-          {
-            name: 'newEntryCount',
-            type: 'uint256',
-            internalType: 'uint256',
-          },
-          {
-            name: 'duplicateCount',
-            type: 'uint256',
-            internalType: 'uint256',
-          },
-          {
-            name: 'isDuplicate',
-            type: 'bool[]',
-            internalType: 'bool[]',
-          },
-          {
-            name: 'errorCode',
-            type: 'uint8',
-            internalType: 'uint8',
-          },
-        ],
-      },
-    ],
-    stateMutability: 'view',
+    anonymous: false,
   },
   {
-    type: 'function',
-    name: 'validateWalletBatch',
+    type: 'event',
+    name: 'ContractRegistrySet',
     inputs: [
       {
-        name: 'operator',
+        name: 'contractRegistry',
         type: 'address',
+        indexed: true,
         internalType: 'address',
       },
-      {
-        name: 'namespaceHashes',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
-      },
-      {
-        name: 'chainRefs',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
-      },
-      {
-        name: 'identifiers',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
-      },
-      {
-        name: 'reportedChainIds',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
-      },
-      {
-        name: 'incidentTimestamps',
-        type: 'uint64[]',
-        internalType: 'uint64[]',
-      },
     ],
-    outputs: [
-      {
-        name: 'result',
-        type: 'tuple',
-        internalType: 'struct IOperatorSubmitter.WalletBatchValidation',
-        components: [
-          {
-            name: 'isValid',
-            type: 'bool',
-            internalType: 'bool',
-          },
-          {
-            name: 'isApprovedOperator',
-            type: 'bool',
-            internalType: 'bool',
-          },
-          {
-            name: 'requiredFee',
-            type: 'uint256',
-            internalType: 'uint256',
-          },
-          {
-            name: 'newEntryCount',
-            type: 'uint256',
-            internalType: 'uint256',
-          },
-          {
-            name: 'duplicateCount',
-            type: 'uint256',
-            internalType: 'uint256',
-          },
-          {
-            name: 'isDuplicate',
-            type: 'bool[]',
-            internalType: 'bool[]',
-          },
-          {
-            name: 'errorCode',
-            type: 'uint8',
-            internalType: 'uint8',
-          },
-        ],
-      },
-    ],
-    stateMutability: 'view',
+    anonymous: false,
   },
   {
     type: 'event',
@@ -544,10 +431,10 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'event',
-    name: 'FraudRegistrySet',
+    name: 'FeeRecipientSet',
     inputs: [
       {
-        name: 'fraudRegistry',
+        name: 'feeRecipient',
         type: 'address',
         indexed: true,
         internalType: 'address',
@@ -621,12 +508,38 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'event',
+    name: 'TransactionRegistrySet',
+    inputs: [
+      {
+        name: 'transactionRegistry',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'Unpaused',
     inputs: [
       {
         name: 'account',
         type: 'address',
         indexed: false,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'WalletRegistrySet',
+    inputs: [
+      {
+        name: 'walletRegistry',
+        type: 'address',
+        indexed: true,
         internalType: 'address',
       },
     ],
@@ -644,42 +557,37 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'error',
-    name: 'OperatorSubmitter__ArrayLengthMismatch',
+    name: 'OperatorSubmitterV2__ArrayLengthMismatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'OperatorSubmitter__EmptyBatch',
+    name: 'OperatorSubmitterV2__EmptyBatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'OperatorSubmitter__FeeForwardFailed',
+    name: 'OperatorSubmitterV2__FeeForwardFailed',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'OperatorSubmitter__InsufficientFee',
+    name: 'OperatorSubmitterV2__InsufficientFee',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'OperatorSubmitter__InvalidFeeConfig',
+    name: 'OperatorSubmitterV2__InvalidFeeConfig',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'OperatorSubmitter__NotApprovedOperator',
+    name: 'OperatorSubmitterV2__NotApprovedOperator',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'OperatorSubmitter__RegistryPaused',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'OperatorSubmitter__ZeroAddress',
+    name: 'OperatorSubmitterV2__ZeroAddress',
     inputs: [],
   },
   {

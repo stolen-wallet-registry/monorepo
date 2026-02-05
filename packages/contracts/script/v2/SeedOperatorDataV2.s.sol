@@ -2,11 +2,10 @@
 pragma solidity ^0.8.24;
 
 import { Script, console2 } from "forge-std/Script.sol";
-import { OperatorSubmitter } from "../../src/v2/OperatorSubmitter.sol";
-import { FraudRegistryV2 } from "../../src/v2/FraudRegistryV2.sol";
+import { OperatorSubmitterV2 } from "../../src/v2/OperatorSubmitterV2.sol";
+import { IFraudRegistryHubV2 } from "../../src/v2/interfaces/IFraudRegistryHubV2.sol";
 import { OperatorRegistry } from "../../src/OperatorRegistry.sol";
 import { FeeManager } from "../../src/FeeManager.sol";
-import { CAIP10 } from "../../src/v2/libraries/CAIP10.sol";
 
 /// @title SeedOperatorDataV2
 /// @notice Seeds operator data for V2 contracts: wallets, transactions, and contracts
@@ -25,8 +24,8 @@ contract SeedOperatorDataV2 is Script {
     // Update if deploy order changes
 
     address constant DEFAULT_OPERATOR_REGISTRY = 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0;
-    address constant DEFAULT_FRAUD_REGISTRY_V2 = 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9;
-    address constant DEFAULT_OPERATOR_SUBMITTER = 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9;
+    address constant DEFAULT_FRAUD_REGISTRY_HUB_V2 = 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9;
+    address constant DEFAULT_OPERATOR_SUBMITTER_V2 = 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853;
     address constant DEFAULT_FEE_MANAGER = 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -91,8 +90,8 @@ contract SeedOperatorDataV2 is Script {
 
         // Load contract addresses (env vars or defaults)
         address operatorRegistryAddr = vm.envOr("OPERATOR_REGISTRY", DEFAULT_OPERATOR_REGISTRY);
-        address fraudRegistryAddr = vm.envOr("FRAUD_REGISTRY_V2", DEFAULT_FRAUD_REGISTRY_V2);
-        address operatorSubmitterAddr = vm.envOr("OPERATOR_SUBMITTER", DEFAULT_OPERATOR_SUBMITTER);
+        address fraudRegistryHubAddr = vm.envOr("FRAUD_REGISTRY_HUB_V2", DEFAULT_FRAUD_REGISTRY_HUB_V2);
+        address operatorSubmitterAddr = vm.envOr("OPERATOR_SUBMITTER_V2", DEFAULT_OPERATOR_SUBMITTER_V2);
         address feeManagerAddr = vm.envOr("FEE_MANAGER", DEFAULT_FEE_MANAGER);
 
         console2.log("");
@@ -102,8 +101,8 @@ contract SeedOperatorDataV2 is Script {
         console2.log("");
         console2.log("Contracts:");
         console2.log("  OperatorRegistry:", operatorRegistryAddr);
-        console2.log("  FraudRegistryV2:", fraudRegistryAddr);
-        console2.log("  OperatorSubmitter:", operatorSubmitterAddr);
+        console2.log("  FraudRegistryHubV2:", fraudRegistryHubAddr);
+        console2.log("  OperatorSubmitterV2:", operatorSubmitterAddr);
         console2.log("  FeeManager:", feeManagerAddr);
         console2.log("");
         console2.log("Operators:");
@@ -113,8 +112,8 @@ contract SeedOperatorDataV2 is Script {
 
         // Instantiate contracts
         OperatorRegistry opRegistry = OperatorRegistry(operatorRegistryAddr);
-        FraudRegistryV2 fraudRegistry = FraudRegistryV2(fraudRegistryAddr);
-        OperatorSubmitter operatorSubmitter = OperatorSubmitter(operatorSubmitterAddr);
+        IFraudRegistryHubV2 hub = IFraudRegistryHubV2(payable(fraudRegistryHubAddr));
+        OperatorSubmitterV2 operatorSubmitter = OperatorSubmitterV2(operatorSubmitterAddr);
         FeeManager feeManager = FeeManager(feeManagerAddr);
 
         // Get batch fee (same for all batch types)
@@ -135,7 +134,7 @@ contract SeedOperatorDataV2 is Script {
         }
 
         // Check if already seeded (wallet 1 would be registered)
-        if (fraudRegistry.isRegistered(STOLEN_WALLET_1)) {
+        if (hub.isWalletRegistered(STOLEN_WALLET_1)) {
             console2.log("");
             console2.log("V2 Operator data already seeded, skipping...");
             return;
@@ -189,43 +188,30 @@ contract SeedOperatorDataV2 is Script {
     // WALLET BATCH SUBMISSION (Operator A)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _submitWalletBatch(OperatorSubmitter operatorSubmitter, uint256 batchFee) internal {
+    function _submitWalletBatch(OperatorSubmitterV2 operatorSubmitter, uint256 batchFee) internal {
         vm.startBroadcast(OPERATOR_A_PRIVATE_KEY);
 
-        // Build batch arrays
-        bytes32[] memory namespaceHashes = new bytes32[](4);
-        bytes32[] memory chainRefs = new bytes32[](4);
+        // Build batch arrays - OperatorSubmitterV2 takes (identifiers, reportedChainIds, incidentTimestamps)
         bytes32[] memory identifiers = new bytes32[](4);
         bytes32[] memory reportedChainIds = new bytes32[](4);
         uint64[] memory incidentTimestamps = new uint64[](4);
 
-        // All EVM wallets use same namespace hash
-        bytes32 eip155Namespace = CAIP10.NAMESPACE_EIP155;
-
         // Wallet 1: Ethereum Mainnet
-        namespaceHashes[0] = eip155Namespace;
-        chainRefs[0] = bytes32(0); // Ignored for EVM
         identifiers[0] = bytes32(uint256(uint160(STOLEN_WALLET_1)));
         reportedChainIds[0] = CHAIN_ID_ETH_MAINNET;
         incidentTimestamps[0] = uint64(block.timestamp - 1 days);
 
         // Wallet 2: Base
-        namespaceHashes[1] = eip155Namespace;
-        chainRefs[1] = bytes32(0);
         identifiers[1] = bytes32(uint256(uint160(STOLEN_WALLET_2)));
         reportedChainIds[1] = CHAIN_ID_BASE;
         incidentTimestamps[1] = uint64(block.timestamp - 2 days);
 
         // Wallet 3: Arbitrum
-        namespaceHashes[2] = eip155Namespace;
-        chainRefs[2] = bytes32(0);
         identifiers[2] = bytes32(uint256(uint160(STOLEN_WALLET_3)));
         reportedChainIds[2] = CHAIN_ID_ARBITRUM;
         incidentTimestamps[2] = uint64(block.timestamp - 3 days);
 
         // Wallet 4: Local (same as hub for testing)
-        namespaceHashes[3] = eip155Namespace;
-        chainRefs[3] = bytes32(0);
         identifiers[3] = bytes32(uint256(uint160(STOLEN_WALLET_4)));
         reportedChainIds[3] = CHAIN_ID_LOCAL;
         incidentTimestamps[3] = uint64(block.timestamp - 4 days);
@@ -236,9 +222,9 @@ contract SeedOperatorDataV2 is Script {
         console2.log("    - ", STOLEN_WALLET_3, " (Arbitrum)");
         console2.log("    - ", STOLEN_WALLET_4, " (Local)");
 
-        // Submit batch with fee (registerWalletsAsOperator returns void, not batchId)
+        // Submit batch with fee
         operatorSubmitter.registerWalletsAsOperator{ value: batchFee }(
-            namespaceHashes, chainRefs, identifiers, reportedChainIds, incidentTimestamps
+            identifiers, reportedChainIds, incidentTimestamps
         );
 
         console2.log("  Status: REGISTERED");
@@ -250,26 +236,23 @@ contract SeedOperatorDataV2 is Script {
     // TRANSACTION BATCH SUBMISSION (Operator A)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _submitTransactionBatch(OperatorSubmitter operatorSubmitter, uint256 batchFee) internal {
+    function _submitTransactionBatch(OperatorSubmitterV2 operatorSubmitter, uint256 batchFee) internal {
         vm.startBroadcast(OPERATOR_A_PRIVATE_KEY);
 
-        // Build batch arrays
-        bytes32[] memory namespaceHashes = new bytes32[](4);
-        bytes32[] memory chainRefs = new bytes32[](4);
+        // Build batch arrays - OperatorSubmitterV2 takes (transactionHashes, chainIds)
         bytes32[] memory txHashes = new bytes32[](4);
-
-        bytes32 eip155Namespace = CAIP10.NAMESPACE_EIP155;
-
-        // All transactions use EIP155 namespace
-        for (uint256 i = 0; i < 4; i++) {
-            namespaceHashes[i] = eip155Namespace;
-            chainRefs[i] = bytes32(0);
-        }
+        bytes32[] memory chainIds = new bytes32[](4);
 
         txHashes[0] = STOLEN_TX_1;
         txHashes[1] = STOLEN_TX_2;
         txHashes[2] = STOLEN_TX_3;
         txHashes[3] = STOLEN_TX_4;
+
+        // All transactions on the same chain for simplicity
+        chainIds[0] = CHAIN_ID_ETH_MAINNET;
+        chainIds[1] = CHAIN_ID_ETH_MAINNET;
+        chainIds[2] = CHAIN_ID_BASE;
+        chainIds[3] = CHAIN_ID_ARBITRUM;
 
         console2.log("  Transactions: 4");
         console2.log("    - ", vm.toString(STOLEN_TX_1));
@@ -278,7 +261,7 @@ contract SeedOperatorDataV2 is Script {
         console2.log("    - ", vm.toString(STOLEN_TX_4));
 
         // Submit batch with fee
-        operatorSubmitter.registerTransactionsAsOperator{ value: batchFee }(namespaceHashes, chainRefs, txHashes);
+        operatorSubmitter.registerTransactionsAsOperator{ value: batchFee }(txHashes, chainIds);
 
         console2.log("  Status: REGISTERED");
 
@@ -289,26 +272,24 @@ contract SeedOperatorDataV2 is Script {
     // CONTRACT BATCH SUBMISSION (Operator A)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _submitContractBatchA(OperatorSubmitter operatorSubmitter, uint256 batchFee) internal {
+    function _submitContractBatchA(OperatorSubmitterV2 operatorSubmitter, uint256 batchFee) internal {
         vm.startBroadcast(OPERATOR_A_PRIVATE_KEY);
 
-        // Build batch arrays (5 contracts across different chains)
-        bytes32[] memory namespaceHashes = new bytes32[](5);
-        bytes32[] memory chainRefs = new bytes32[](5);
+        // Build batch arrays - OperatorSubmitterV2 takes (identifiers, reportedChainIds)
         bytes32[] memory contractIds = new bytes32[](5);
-
-        bytes32 eip155Namespace = CAIP10.NAMESPACE_EIP155;
-
-        for (uint256 i = 0; i < 5; i++) {
-            namespaceHashes[i] = eip155Namespace;
-            chainRefs[i] = bytes32(0);
-        }
+        bytes32[] memory reportedChainIds = new bytes32[](5);
 
         contractIds[0] = bytes32(uint256(uint160(SCAM_CONTRACT_1)));
         contractIds[1] = bytes32(uint256(uint160(SCAM_CONTRACT_2)));
         contractIds[2] = bytes32(uint256(uint160(SCAM_CONTRACT_3)));
         contractIds[3] = bytes32(uint256(uint160(SCAM_CONTRACT_4)));
         contractIds[4] = bytes32(uint256(uint160(SCAM_CONTRACT_5)));
+
+        reportedChainIds[0] = CHAIN_ID_ETH_MAINNET;
+        reportedChainIds[1] = CHAIN_ID_ETH_MAINNET;
+        reportedChainIds[2] = CHAIN_ID_BASE;
+        reportedChainIds[3] = CHAIN_ID_BASE;
+        reportedChainIds[4] = CHAIN_ID_ARBITRUM;
 
         console2.log("  Contracts: 5");
         console2.log("    - ", SCAM_CONTRACT_1);
@@ -318,7 +299,7 @@ contract SeedOperatorDataV2 is Script {
         console2.log("    - ", SCAM_CONTRACT_5);
 
         // Submit batch with fee
-        operatorSubmitter.registerContractsAsOperator{ value: batchFee }(namespaceHashes, chainRefs, contractIds);
+        operatorSubmitter.registerContractsAsOperator{ value: batchFee }(contractIds, reportedChainIds);
 
         console2.log("  Status: REGISTERED");
 
@@ -329,30 +310,25 @@ contract SeedOperatorDataV2 is Script {
     // CONTRACT BATCH SUBMISSION (Operator B)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _submitContractBatchB(OperatorSubmitter operatorSubmitter, uint256 batchFee) internal {
+    function _submitContractBatchB(OperatorSubmitterV2 operatorSubmitter, uint256 batchFee) internal {
         vm.startBroadcast(OPERATOR_B_PRIVATE_KEY);
 
         // Build batch arrays (2 contracts)
-        bytes32[] memory namespaceHashes = new bytes32[](2);
-        bytes32[] memory chainRefs = new bytes32[](2);
         bytes32[] memory contractIds = new bytes32[](2);
-
-        bytes32 eip155Namespace = CAIP10.NAMESPACE_EIP155;
-
-        namespaceHashes[0] = eip155Namespace;
-        namespaceHashes[1] = eip155Namespace;
-        chainRefs[0] = bytes32(0);
-        chainRefs[1] = bytes32(0);
+        bytes32[] memory reportedChainIds = new bytes32[](2);
 
         contractIds[0] = bytes32(uint256(uint160(SCAM_CONTRACT_6)));
         contractIds[1] = bytes32(uint256(uint160(SCAM_CONTRACT_7)));
+
+        reportedChainIds[0] = CHAIN_ID_LOCAL;
+        reportedChainIds[1] = CHAIN_ID_LOCAL;
 
         console2.log("  Contracts: 2");
         console2.log("    - ", SCAM_CONTRACT_6);
         console2.log("    - ", SCAM_CONTRACT_7);
 
         // Submit batch with fee
-        operatorSubmitter.registerContractsAsOperator{ value: batchFee }(namespaceHashes, chainRefs, contractIds);
+        operatorSubmitter.registerContractsAsOperator{ value: batchFee }(contractIds, reportedChainIds);
 
         console2.log("  Status: REGISTERED");
 

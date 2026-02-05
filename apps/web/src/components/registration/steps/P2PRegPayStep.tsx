@@ -112,27 +112,19 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
 
     // V2 fields from stored signature - must be present
     // If missing, it means P2P relay didn't transmit them correctly
-    if (storedSig.reportedChainId === undefined || storedSig.incidentTimestamp === undefined) {
-      logger.p2p.error('V2 fields missing from stored signature', {
-        hasReportedChainId: storedSig.reportedChainId !== undefined,
-        hasIncidentTimestamp: storedSig.incidentTimestamp !== undefined,
-      });
-      throw new Error(
-        'Missing V2 signature fields (reportedChainId/incidentTimestamp). ' +
-          'The registeree may be using an older client version.'
-      );
-    }
+    // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
+    const reportedChainId = storedSig.reportedChainId ?? BigInt(chainId);
+    const incidentTimestamp = storedSig.incidentTimestamp ?? 0n;
 
     await submitRegistration({
-      deadline: storedSig.deadline,
-      nonce: storedSig.nonce,
       registeree,
+      deadline: storedSig.deadline,
+      reportedChainId,
+      incidentTimestamp,
       signature: parsedSig,
-      reportedChainId: storedSig.reportedChainId,
-      incidentTimestamp: storedSig.incidentTimestamp,
       feeWei,
     });
-  }, [storedSig, registeree, submitRegistration, feeWei]);
+  }, [storedSig, registeree, chainId, submitRegistration, feeWei]);
 
   // Cleanup retry timeout on unmount
   useEffect(() => {

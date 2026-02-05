@@ -1,9 +1,9 @@
 /**
  * Hook to get the registration fee from the registry contract.
  *
- * Chain-aware: Uses quoteRegistration() on both hub and spoke.
- * - Hub (FraudRegistryV2): quoteRegistration() - no arguments
- * - Spoke (SpokeRegistryV2): quoteRegistration(address owner) - requires owner for bridge fee calculation
+ * Unified interface: Both hub and spoke expose quoteRegistration(address).
+ * - Hub (WalletRegistryV2): quoteRegistration(address) - reads from FeeManager, ignores address
+ * - Spoke (SpokeRegistryV2): quoteRegistration(address owner) - includes bridge fee
  */
 
 import { useReadContract, useChainId } from 'wagmi';
@@ -27,7 +27,7 @@ export interface UseQuoteRegistrationResult {
 /**
  * Get the total registration fee for the current chain.
  *
- * @param ownerAddress - Required for spoke chains (for bridge fee calculation), optional for hub
+ * @param ownerAddress - The wallet being registered (used by spoke for bridge quote accuracy, ignored on hub)
  */
 export function useQuoteRegistration(
   ownerAddress?: Address | null | undefined
@@ -41,21 +41,18 @@ export function useQuoteRegistration(
     'useQuoteRegistration'
   );
 
-  const isSpoke = registryType === 'spoke';
+  // Get the correct ABI and function name (unified: quoteRegistration on both hub and spoke)
+  const { abi, functions } = getRegistryMetadata('wallet', registryType);
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata('wallet', registryType);
-
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
   const result = useReadContract({
     address: contractAddress,
     abi,
-    chainId, // Explicit chain ID ensures RPC call targets correct chain
-    functionName: 'quoteRegistration',
-    // Hub: no arguments; Spoke: requires owner address for bridge fee calculation
-    args: isSpoke && ownerAddress ? [ownerAddress] : [],
+    chainId,
+    functionName: functions.quoteRegistration as any,
+    args: ownerAddress ? [ownerAddress] : undefined,
     query: {
-      // For spoke, we need the owner address to be set
-      enabled: !!contractAddress && (isSpoke ? !!ownerAddress : true),
+      enabled: !!contractAddress && !!ownerAddress,
       staleTime: 30_000, // 30 seconds
     },
   });

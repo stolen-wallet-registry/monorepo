@@ -65,7 +65,7 @@ library EIP712ConstantsV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice EIP-712 typehash for transaction batch acknowledgement
-    /// @dev dataHash = keccak256(abi.encodePacked(txHashes, chainIds))
+    /// @dev dataHash = keccak256(abi.encode(txHashes, chainIds))
     bytes32 internal constant TX_BATCH_ACK_TYPEHASH = keccak256(
         "TransactionBatchAcknowledgement(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
     );

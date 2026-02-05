@@ -383,7 +383,7 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
         bytes32 s
     ) external payable {
         // Compute dataHash from submitted arrays - this is the key verification
-        bytes32 dataHash = keccak256(abi.encodePacked(transactionHashes, chainIds));
+        bytes32 dataHash = keccak256(abi.encode(transactionHashes, chainIds));
 
         // Validate inputs and acknowledgement (reverts on failure)
         _validateTxBatchRegistration(dataHash, reportedChainId, deadline, nonce, reporter, transactionHashes, chainIds);
@@ -664,6 +664,12 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
 
     /// @dev Execute transaction batch registration (state changes + cross-chain message)
     /// @notice Follows CEI pattern: state changes first, then external calls
+    /// @param dataHash Hash of (txHashes, chainIds) for verification
+    /// @param reportedChainId CAIP-2 chain ID hash where incident occurred
+    /// @param nonce The validated nonce for replay protection
+    /// @param reporter The address that acknowledged the registration
+    /// @param transactionHashes Array of transaction hashes to register
+    /// @param chainIds Array of CAIP-2 chain ID hashes for each transaction
     function _executeTxBatchRegistration(
         bytes32 dataHash,
         bytes32 reportedChainId,

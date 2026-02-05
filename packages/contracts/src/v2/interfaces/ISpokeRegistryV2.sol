@@ -181,7 +181,7 @@ interface ISpokeRegistryV2 {
 
     /// @notice Phase 1 (Transaction Batch): Record acknowledgement for transaction batch
     /// @dev Caller becomes trusted forwarder. Reporter signs to prove they intend to report.
-    ///      dataHash = keccak256(abi.encodePacked(txHashes, chainIds))
+    ///      dataHash = keccak256(abi.encode(txHashes, chainIds))
     /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
     /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
     /// @param transactionCount Number of transactions in batch

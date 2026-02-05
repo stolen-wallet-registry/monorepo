@@ -15,7 +15,10 @@ import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
 import { useEthPrice } from './useEthPrice';
 import { logger } from '@/lib/logger';
 import { formatCentsToUsd, formatEthConsistent } from '@/lib/utils';
-import type { WalletRegistrationArgs } from '@/lib/signatures';
+import type { WalletAcknowledgeArgs, WalletRegistrationArgs } from '@/lib/signatures';
+
+/** Union type for gas estimation args (either acknowledge or register) */
+type WalletContractArgs = WalletAcknowledgeArgs | WalletRegistrationArgs;
 
 export interface GasEstimate {
   /** Estimated gas units for the transaction */
@@ -36,10 +39,11 @@ export interface UseGasEstimateParams {
   /** Which step we're estimating for - maps to correct function based on chain */
   step: 'acknowledgement' | 'registration';
   /**
-   * V2 unified function arguments (both hub and spoke):
-   * [wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s]
+   * Contract function arguments:
+   * - acknowledge: [registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s]
+   * - register: [registeree, deadline, reportedChainId, incidentTimestamp, v, r, s]
    */
-  args: WalletRegistrationArgs | undefined;
+  args: WalletContractArgs | undefined;
   /** Value to send with the transaction (for registration) */
   value?: bigint;
   /** Whether to enable the estimate (default: true) */

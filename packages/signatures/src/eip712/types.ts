@@ -250,19 +250,35 @@ export interface V2RegistrationMessage {
 }
 
 /**
- * V2 Wallet Registration contract arguments.
- * Both hub and spoke now use identical function signatures:
- * - Hub: acknowledge(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
- * - Spoke: acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ * V2 Wallet Acknowledgement contract arguments.
+ * Hub: acknowledge(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
+ * Spoke: acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
  *
- * @note reportedChainId is the raw EVM chain ID (1, 8453, etc.), not a hash.
+ * isSponsored is derived on-chain as (registeree != forwarder).
  */
-export type WalletRegistrationArgs = readonly [
-  wallet: Address,
+export type WalletAcknowledgeArgs = readonly [
+  registeree: Address,
+  forwarder: Address,
   reportedChainId: bigint, // Raw EVM chain ID (uint64)
   incidentTimestamp: bigint, // Unix timestamp (uint64)
   deadline: bigint, // Signature expiry (uint256)
-  nonce: bigint, // Replay protection (uint256)
+  v: number, // Signature v (uint8)
+  r: Hash, // Signature r (bytes32)
+  s: Hash, // Signature s (bytes32)
+];
+
+/**
+ * V2 Wallet Registration contract arguments.
+ * Hub: register(registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
+ * Spoke: registerLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ *
+ * @note reportedChainId is uint64 raw EVM chain ID. Contract converts to CAIP-2 hash internally.
+ */
+export type WalletRegistrationArgs = readonly [
+  registeree: Address,
+  deadline: bigint, // Signature expiry (uint256)
+  reportedChainId: bigint, // Raw EVM chain ID (uint64) — contract converts to CAIP-2 hash
+  incidentTimestamp: bigint, // Unix timestamp (uint64)
   v: number, // Signature v (uint8)
   r: Hash, // Signature r (bytes32)
   s: Hash, // Signature s (bytes32)
@@ -271,7 +287,7 @@ export type WalletRegistrationArgs = readonly [
 /**
  * V2 Transaction Batch EIP-712 Types.
  * Changes from V1:
- * - `merkleRoot` replaced by `dataHash` (keccak256 of packed txHashes + chainIds)
+ * - `merkleRoot` replaced by `dataHash` (keccak256(abi.encode(txHashes, chainIds)))
  * - Added `reporter` field (explicit signer address)
  * - `transactionCount` present in both ACK and REG (was only in ACK before)
  */
@@ -303,7 +319,7 @@ export interface V2TxAcknowledgementMessage {
   statement: string;
   reporter: Address;
   forwarder: Address;
-  dataHash: Hash; // keccak256(abi.encodePacked(txHashes, chainIds))
+  dataHash: Hash; // keccak256(abi.encode(txHashes, chainIds))
   reportedChainId: Hash;
   transactionCount: number;
   nonce: bigint;

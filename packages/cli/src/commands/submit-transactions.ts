@@ -12,8 +12,7 @@ import { buildTransactionMerkleTree, serializeTree } from '../lib/merkle.js';
 import { parseTransactionFile } from '../lib/files.js';
 import { createClients } from '../lib/client.js';
 import { getConfig } from '../lib/config.js';
-import { chainIdToBytes32 } from '../lib/caip.js';
-import { StolenTransactionRegistryABI } from '@swr/abis';
+import { OperatorSubmitterV2ABI, TransactionRegistryV2ABI } from '@swr/abis';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
@@ -45,8 +44,11 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
     // 1. Load configuration
     const config = getConfig(options.env);
 
-    if (config.contracts.stolenTransactionRegistry === zeroAddress) {
-      throw new Error(`Contract addresses not configured for environment: ${options.env}`);
+    if (config.contracts.operatorSubmitter === zeroAddress) {
+      throw new Error(
+        `OperatorSubmitter not configured for environment: ${options.env}. ` +
+          'Set operatorSubmitter in @swr/chains hub contracts.'
+      );
     }
 
     // 2. Parse input file
@@ -55,7 +57,7 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
     const entries = await parseTransactionFile(options.file, defaultChainId);
     spinner.succeed(`Loaded ${entries.length} transaction hashes`);
 
-    // 3. Build Merkle tree
+    // 3. Build Merkle tree (kept locally for reference/verification)
     spinner.start('Building Merkle tree...');
     const { root, tree } = buildTransactionMerkleTree(entries);
     spinner.succeed(`Merkle root: ${chalk.cyan(root)}`);
@@ -70,28 +72,27 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
     spinner.start('Fetching fee quote...');
     const fee = await publicClient.readContract({
       address: config.contracts.stolenTransactionRegistry,
-      abi: StolenTransactionRegistryABI,
+      abi: TransactionRegistryV2ABI,
       functionName: 'quoteRegistration',
-      args: [zeroAddress], // reporter param unused on hub, for interface compatibility
+      args: [zeroAddress],
     });
     spinner.succeed(`Fee: ${chalk.yellow(formatEther(fee))} ETH`);
 
-    // 6. Prepare transaction data
-    const reportedChainId = chainIdToBytes32(defaultChainId);
+    // 6. Prepare V2 transaction data
     const txHashes = entries.map((e) => e.txHash);
     const chainIds = entries.map((e) => e.chainId);
 
-    // 7. Encode calldata
+    // 7. Encode calldata for OperatorSubmitterV2
     const calldata = encodeFunctionData({
-      abi: StolenTransactionRegistryABI,
-      functionName: 'registerBatchAsOperator',
-      args: [root, reportedChainId, txHashes, chainIds],
+      abi: OperatorSubmitterV2ABI,
+      functionName: 'registerTransactionsAsOperator',
+      args: [txHashes, chainIds],
     });
 
     // Handle --build-only mode (for multisig/DAO workflows)
     if (options.buildOnly) {
       const txData: MultisigTransaction = {
-        to: config.contracts.stolenTransactionRegistry,
+        to: config.contracts.operatorSubmitter,
         value: fee.toString(),
         data: calldata,
         operation: 0,
@@ -131,7 +132,6 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
       console.log(chalk.yellow('\n--- DRY RUN ---'));
       console.log('Would submit:');
       console.log(`  Merkle root: ${root}`);
-      console.log(`  Chain ID: ${reportedChainId}`);
       console.log(`  Transactions: ${entries.length}`);
       console.log(`  Fee: ${formatEther(fee)} ETH`);
       return;
@@ -148,15 +148,15 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
 
     console.log(chalk.gray(`Operator address: ${account}`));
 
-    // 9. Submit transaction
+    // 9. Submit through OperatorSubmitterV2
     spinner.start('Submitting batch...');
     const hash = await walletClient.writeContract({
       chain: config.chain,
       account,
-      address: config.contracts.stolenTransactionRegistry,
-      abi: StolenTransactionRegistryABI,
-      functionName: 'registerBatchAsOperator',
-      args: [root, reportedChainId, txHashes, chainIds],
+      address: config.contracts.operatorSubmitter,
+      abi: OperatorSubmitterV2ABI,
+      functionName: 'registerTransactionsAsOperator',
+      args: [txHashes, chainIds],
       value: fee,
     });
     spinner.succeed(`Transaction submitted: ${chalk.green(hash)}`);

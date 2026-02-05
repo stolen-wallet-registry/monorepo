@@ -3,7 +3,7 @@
  */
 
 import type { Address, Hash } from 'viem';
-import { keccak256, encodePacked } from 'viem';
+import { keccak256, encodeAbiParameters } from 'viem';
 import {
   getEIP712Domain,
   getTxEIP712Domain,
@@ -267,8 +267,8 @@ export function buildV2TxRegistrationTypedData(
  * Compute transaction data hash for V2 registration.
  * V2 stores transactions directly - dataHash is used for signature binding only.
  *
- * The dataHash is computed as: keccak256(abi.encodePacked(txHashes, chainIds))
- * This matches the contract's computation in FraudRegistryV2 and SpokeRegistryV2.
+ * The dataHash is computed as: keccak256(abi.encode(txHashes, chainIds))
+ * This matches the contract's computation in TransactionRegistryV2 and SpokeRegistryV2.
  *
  * @param txHashes - Array of transaction hashes (bytes32)
  * @param chainIds - Array of CAIP-2 chain ID hashes (bytes32), same length as txHashes
@@ -284,12 +284,9 @@ export function computeTransactionDataHash(txHashes: Hash[], chainIds: Hash[]): 
     throw new Error('Cannot compute data hash for empty arrays');
   }
 
-  // Pack txHashes first, then chainIds (matches contract)
-  // encodePacked creates: txHash1 | txHash2 | ... | chainId1 | chainId2 | ...
+  // Use abi.encode (not encodePacked) to avoid hash collision risk with dynamic arrays.
+  // Matches contract: keccak256(abi.encode(transactionHashes, chainIds))
   return keccak256(
-    encodePacked(
-      [...txHashes.map(() => 'bytes32' as const), ...chainIds.map(() => 'bytes32' as const)],
-      [...txHashes, ...chainIds]
-    )
+    encodeAbiParameters([{ type: 'bytes32[]' }, { type: 'bytes32[]' }], [txHashes, chainIds])
   );
 }

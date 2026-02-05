@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { BaseSoulbound } from "./BaseSoulbound.sol";
-import { IStolenWalletRegistry } from "../interfaces/IStolenWalletRegistry.sol";
+import { IWalletRegistryV2 } from "../v2/interfaces/IWalletRegistryV2.sol";
 import { SVGRenderer } from "./libraries/SVGRenderer.sol";
 import { Base64 } from "@openzeppelin/contracts/utils/Base64.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
@@ -26,8 +26,8 @@ contract WalletSoulbound is BaseSoulbound {
     // STATE
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Reference to the Stolen Wallet Registry
-    IStolenWalletRegistry public immutable registry;
+    /// @notice Reference to the Wallet Registry V2
+    IWalletRegistryV2 public immutable registry;
 
     /// @notice Tracks which wallet each token represents
     mapping(uint256 tokenId => address wallet) public tokenWallet;
@@ -74,7 +74,7 @@ contract WalletSoulbound is BaseSoulbound {
         BaseSoulbound("SWR Wallet Soulbound", "SWRW", _translations, _feeCollector, _domain)
     {
         if (_registry == address(0)) revert InvalidRegistry();
-        registry = IStolenWalletRegistry(_registry);
+        registry = IWalletRegistryV2(_registry);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -89,7 +89,7 @@ contract WalletSoulbound is BaseSoulbound {
     /// @param wallet The wallet address to mint for (must be registered or pending)
     function mintTo(address wallet) external payable {
         // Check wallet is in registry (registered or pending acknowledgement)
-        if (!registry.isRegistered(wallet) && !registry.isPending(wallet)) {
+        if (!registry.isWalletRegistered(wallet) && !registry.isWalletPending(wallet)) {
             revert NotRegisteredOrPending();
         }
 
@@ -161,7 +161,7 @@ contract WalletSoulbound is BaseSoulbound {
         if (hasMinted[wallet]) {
             return (false, "Already minted");
         }
-        if (!registry.isRegistered(wallet) && !registry.isPending(wallet)) {
+        if (!registry.isWalletRegistered(wallet) && !registry.isWalletPending(wallet)) {
             return (false, "This wallet is not registered");
         }
         return (true, "");

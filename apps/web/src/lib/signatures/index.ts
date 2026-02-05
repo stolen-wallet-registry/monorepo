@@ -29,6 +29,7 @@ export {
   buildV2RegistrationTypedData,
   type V2AcknowledgementMessage,
   type V2RegistrationMessage,
+  type WalletAcknowledgeArgs,
   type WalletRegistrationArgs,
 } from './eip712';
 

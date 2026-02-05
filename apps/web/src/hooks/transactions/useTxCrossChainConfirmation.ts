@@ -17,8 +17,8 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useReadContract } from 'wagmi';
 import { keccak256, encodeAbiParameters, parseAbiParameters } from 'viem';
-import { registryHubAbi } from '@/lib/contracts/abis';
-import { getRegistryHubAddress } from '@/lib/contracts/addresses';
+import { fraudRegistryHubV2Abi } from '@/lib/contracts/abis';
+import { getFraudRegistryHubV2Address } from '@/lib/contracts/addresses';
 import { getHubChainId, isSpokeChain } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
@@ -109,7 +109,7 @@ export function useTxCrossChainConfirmation({
   let hubRegistryAddress: Address | undefined;
   try {
     if (hubChainId) {
-      hubRegistryAddress = getRegistryHubAddress(hubChainId);
+      hubRegistryAddress = getFraudRegistryHubV2Address(hubChainId);
     }
   } catch (err) {
     logger.registration.warn('Failed to get hub registry address for tx batch', {
@@ -125,24 +125,33 @@ export function useTxCrossChainConfirmation({
   const shouldPoll = enabled && elapsedTime >= INITIAL_DELAY && elapsedTime < maxPollingTime;
 
   // Query hub chain for transaction batch registration status using computed batchId
+  // TODO: Update for V2 - FraudRegistryHubV2.isTransactionRegistered takes (txHash, chainId)
+  // The old batch-based architecture no longer applies. For now, we stub this to always return false.
+  // This hook needs to be redesigned for V2's transaction-by-transaction lookup.
   const {
-    data: isRegisteredOnHub,
+    data: isRegisteredOnHubRaw,
     refetch,
     isError: isQueryError,
   } = useReadContract({
     address: hubRegistryAddress,
-    abi: registryHubAbi,
-    functionName: 'isTransactionBatchRegistered',
-    args: batchId ? [batchId] : undefined,
+    abi: fraudRegistryHubV2Abi,
+    functionName: 'isTransactionRegistered',
+    // V2 signature: isTransactionRegistered(bytes32 txHash, bytes32 chainId)
+    // We pass merkleRoot as txHash and reportedChainId as chainId for now
+    args: batchId && reportedChainId ? [batchId, reportedChainId] : undefined,
     chainId: hubChainId,
     query: {
       // Keep enabled independent of shouldPoll so manual refetch() works after timeout
-      enabled: enabled && !!batchId && !!hubChainId && !!hubRegistryAddress,
+      enabled: enabled && !!batchId && !!reportedChainId && !!hubChainId && !!hubRegistryAddress,
       // Auto-polling stops after timeout, but manual refresh still works
       refetchInterval: shouldPoll ? pollInterval : false,
       staleTime: 1000, // Consider data stale after 1 second
     },
   });
+
+  // Coerce to boolean - wagmi may return unexpected types with overloaded functions
+  const isRegisteredOnHub =
+    typeof isRegisteredOnHubRaw === 'boolean' ? isRegisteredOnHubRaw : false;
 
   // Log batchId computation for debugging
   useEffect(() => {

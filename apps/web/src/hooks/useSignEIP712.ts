@@ -1,5 +1,5 @@
 /**
- * Hook for signing EIP-712 typed data for the FraudRegistryV2 (V2).
+ * Hook for signing EIP-712 typed data for the V2 registry contracts.
  *
  * Provides convenient wrappers around wagmi's useSignTypedData for:
  * - Acknowledgement signatures (Phase 1)

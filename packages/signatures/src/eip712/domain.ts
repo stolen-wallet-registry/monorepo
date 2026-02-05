@@ -52,20 +52,20 @@ export function getTxEIP712Domain(chainId: number, verifyingContract: Address): 
 // V2 FRAUD REGISTRY (PRIMARY)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** EIP-712 domain name for FraudRegistryV2 (Hub) */
-export const V2_EIP712_DOMAIN_NAME = 'FraudRegistryV2';
+/** EIP-712 domain name for all V2 registries (hub + spoke) */
+export const V2_EIP712_DOMAIN_NAME = 'StolenWalletRegistry';
 
-/** EIP-712 domain version for FraudRegistryV2 */
+/** EIP-712 domain version for all V2 registries */
 export const V2_EIP712_DOMAIN_VERSION = '4';
 
-/** EIP-712 domain name for SpokeRegistryV2 (Spoke) - matches V1 for compatibility */
-export const SPOKE_V2_EIP712_DOMAIN_NAME = 'StolenWalletRegistry';
+/** @deprecated Use V2_EIP712_DOMAIN_NAME — hub and spoke now share the same domain name */
+export const SPOKE_V2_EIP712_DOMAIN_NAME = V2_EIP712_DOMAIN_NAME;
 
 /**
- * Get EIP-712 domain for FraudRegistryV2 (Hub).
+ * Get EIP-712 domain for V2 hub registries (WalletRegistryV2, TransactionRegistryV2).
  *
  * @param chainId - The chain ID
- * @param verifyingContract - The FraudRegistryV2 contract address
+ * @param verifyingContract - The registry contract address
  * @returns EIP-712 domain object
  */
 export function getV2EIP712Domain(chainId: number, verifyingContract: Address): TypedDataDomain {

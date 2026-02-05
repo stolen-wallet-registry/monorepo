@@ -52,7 +52,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
   const stableV2Fields = useMemo(
     () => ({
       reportedChainId: BigInt(chainId),
-      incidentTimestamp: BigInt(Math.floor(Date.now() / 1000)),
+      incidentTimestamp: 0n, // TODO: Add incident timestamp selection UI
     }),
     [chainId]
   );

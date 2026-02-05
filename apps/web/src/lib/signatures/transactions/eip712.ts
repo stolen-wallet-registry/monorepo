@@ -1,19 +1,31 @@
-// EIP-712 typed data definitions for StolenTransactionRegistry
+// EIP-712 typed data definitions for transaction registry
 // Re-exports from shared package for use in web app
 
+// V1 exports (deprecated)
 export {
-  // Domain configuration
   TX_EIP712_DOMAIN_NAME,
   TX_EIP712_DOMAIN_VERSION,
   getTxEIP712Domain,
-  // Type definitions
   TX_EIP712_TYPES,
   TX_SIGNATURE_STEP,
-  // Types
   type TxAcknowledgementMessage,
   type TxRegistrationMessage,
   type TxSignatureStep,
-  // Builders
+  /** @deprecated Use buildV2TxAcknowledgementTypedData */
   buildTxAcknowledgementTypedData,
+  /** @deprecated Use buildV2TxRegistrationTypedData */
   buildTxRegistrationTypedData,
+} from '@swr/signatures';
+
+// V2 exports (primary)
+export {
+  V2_TX_EIP712_TYPES,
+  V2_STATEMENTS,
+  getV2EIP712Domain,
+  getSpokeV2EIP712Domain,
+  buildV2TxAcknowledgementTypedData,
+  buildV2TxRegistrationTypedData,
+  computeTransactionDataHash,
+  type V2TxAcknowledgementMessage,
+  type V2TxRegistrationMessage,
 } from '@swr/signatures';

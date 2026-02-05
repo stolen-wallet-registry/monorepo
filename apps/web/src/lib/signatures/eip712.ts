@@ -53,6 +53,7 @@ export {
   // V2 Types
   type V2AcknowledgementMessage,
   type V2RegistrationMessage,
+  type WalletAcknowledgeArgs,
   type WalletRegistrationArgs,
   // V2 Builders
   buildV2AcknowledgementTypedData,

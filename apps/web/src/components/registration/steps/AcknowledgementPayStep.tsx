@@ -19,7 +19,7 @@ import { useFormStore } from '@/stores/formStore';
 import { useAcknowledgement } from '@/hooks/useAcknowledgement';
 import { useTransactionCost } from '@/hooks/useTransactionCost';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
-import type { WalletRegistrationArgs } from '@/lib/signatures';
+import type { WalletAcknowledgeArgs } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
@@ -74,26 +74,24 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   // Parse signature once for reuse (avoid calling parseSignature 4 times)
   const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
 
-  // V2 fields are required - signatures should always include them
-  const hasV2Fields = Boolean(
-    storedSignature?.reportedChainId !== undefined &&
-    storedSignature?.incidentTimestamp !== undefined
-  );
+  // Determine forwarder: for standard registration, it's the same as registeree
+  // For self-relay, it's the relayer wallet
+  const forwarder = isSelfRelay && relayer ? relayer : registeree;
 
   // Build transaction args for gas estimation (needs to be before early returns)
-  // V2 unified signature: (wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
-  const transactionArgs: WalletRegistrationArgs | undefined =
-    storedSignature && registeree && parsedSig && hasV2Fields
-      ? [
+  // WalletRegistryV2.acknowledge: (registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
+  const transactionArgs: WalletAcknowledgeArgs | undefined =
+    storedSignature && registeree && forwarder && parsedSig
+      ? ([
           registeree,
-          storedSignature.reportedChainId!, // Safe: hasV2Fields guards this
-          storedSignature.incidentTimestamp!, // Safe: hasV2Fields guards this
+          forwarder,
+          storedSignature.reportedChainId ?? BigInt(chainId),
+          storedSignature.incidentTimestamp ?? 0n,
           storedSignature.deadline,
-          storedSignature.nonce,
           parsedSig.v,
           parsedSig.r,
           parsedSig.s,
-        ]
+        ] as unknown as WalletAcknowledgeArgs)
       : undefined;
 
   // Get transaction cost estimate (must be called unconditionally - hooks rule)
@@ -185,14 +183,17 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         chainId,
       });
 
-      // V2 fields from stored signature (validated above - guaranteed to exist)
+      // Determine forwarder: for standard registration, it's the same as registeree
+      // For self-relay, it's the relayer wallet
+      const forwarder = isSelfRelay && relayer ? relayer : registeree;
+
       await submitAcknowledgement({
-        deadline: storedSignature.deadline,
-        nonce: storedSignature.nonce,
         registeree,
+        forwarder,
+        reportedChainId: storedSignature.reportedChainId ?? BigInt(chainId),
+        incidentTimestamp: storedSignature.incidentTimestamp ?? 0n,
+        deadline: storedSignature.deadline,
         signature: parsedSig,
-        reportedChainId: storedSignature.reportedChainId,
-        incidentTimestamp: storedSignature.incidentTimestamp,
       });
 
       logger.contract.info('Acknowledgement transaction submitted, waiting for confirmation');

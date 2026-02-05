@@ -77,6 +77,7 @@ export {
   type V2RegistrationMessage,
   type V2TxAcknowledgementMessage,
   type V2TxRegistrationMessage,
+  type WalletAcknowledgeArgs,
   type WalletRegistrationArgs,
 } from './eip712/types';
 

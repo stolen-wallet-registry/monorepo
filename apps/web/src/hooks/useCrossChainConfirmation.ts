@@ -16,8 +16,8 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useReadContract } from 'wagmi';
-import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
-import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
+import { walletRegistryV2Abi } from '@/lib/contracts/abis';
+import { getWalletRegistryV2Address } from '@/lib/contracts/addresses';
 import { getHubChainId, isSpokeChain } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
@@ -79,7 +79,7 @@ export function useCrossChainConfirmation({
   let hubRegistryAddress: Address | undefined;
   try {
     if (hubChainId) {
-      hubRegistryAddress = getStolenWalletRegistryAddress(hubChainId);
+      hubRegistryAddress = getWalletRegistryV2Address(hubChainId);
     }
   } catch (err) {
     logger.registration.warn('Failed to get hub registry address', {
@@ -93,14 +93,16 @@ export function useCrossChainConfirmation({
   const shouldPoll = enabled && elapsedTime >= INITIAL_DELAY;
 
   // Query hub chain for registration status
+  // Note: WalletRegistryV2 has overloaded isWalletRegistered(address) and isWalletRegistered(string caip10)
+  // We use the address version here
   const {
-    data: isRegisteredOnHub,
+    data: isRegisteredOnHubRaw,
     refetch,
     isError: isQueryError,
   } = useReadContract({
     address: hubRegistryAddress,
-    abi: stolenWalletRegistryAbi,
-    functionName: 'isRegistered',
+    abi: walletRegistryV2Abi,
+    functionName: 'isWalletRegistered',
     args: wallet ? [wallet] : undefined,
     chainId: hubChainId,
     query: {
@@ -109,6 +111,10 @@ export function useCrossChainConfirmation({
       staleTime: 1000, // Consider data stale after 1 second
     },
   });
+
+  // Coerce to boolean - wagmi returns boolean for isWalletRegistered(address)
+  const isRegisteredOnHub =
+    typeof isRegisteredOnHubRaw === 'boolean' ? isRegisteredOnHubRaw : false;
 
   // DERIVE status from inputs - no useState for status
   const status: CrossChainStatus = useMemo(() => {

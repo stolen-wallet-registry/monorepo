@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { IFraudRegistryV2 } from "./interfaces/IFraudRegistryV2.sol";
+import { IFraudRegistryHubV2 } from "./interfaces/IFraudRegistryHubV2.sol";
 import { IMessageRecipient } from "@hyperlane-xyz/core/contracts/interfaces/IMessageRecipient.sol";
 import { CrossChainMessageV2 } from "./libraries/CrossChainMessageV2.sol";
 import { CAIP10Evm } from "./libraries/CAIP10Evm.sol";
@@ -10,7 +10,7 @@ import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2St
 /// @title CrossChainInboxV2
 /// @author Stolen Wallet Registry Team
 /// @notice Hub chain message receiver for cross-chain registrations (V2)
-/// @dev Receives messages from Hyperlane and forwards to FraudRegistryV2.registerFromSpoke.
+/// @dev Receives messages from Hyperlane and forwards to FraudRegistryHubV2.
 ///      Uses CrossChainMessageV2 format with full CAIP-10 support.
 contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
@@ -27,8 +27,8 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     /// @notice Hyperlane mailbox contract address
     address public immutable mailbox;
 
-    /// @notice FraudRegistryV2 contract address
-    address public immutable fraudRegistry;
+    /// @notice FraudRegistryHubV2 contract address
+    address payable public immutable hub;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // MUTABLE STATE
@@ -78,17 +78,17 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
 
     /// @notice Initialize the CrossChainInboxV2
     /// @param _mailbox Hyperlane mailbox contract address
-    /// @param _fraudRegistry FraudRegistryV2 contract address
+    /// @param _hub FraudRegistryHubV2 contract address
     /// @param _owner Initial owner address
-    constructor(address _mailbox, address _fraudRegistry, address _owner) Ownable(_owner) {
+    constructor(address _mailbox, address _hub, address _owner) Ownable(_owner) {
         // Note: _owner zero check is redundant with Ownable constructor but kept for
         // explicit/consistent validation pattern across all address parameters
         if (_owner == address(0)) revert CrossChainInboxV2__ZeroAddress();
         if (_mailbox == address(0)) revert CrossChainInboxV2__ZeroAddress();
-        if (_fraudRegistry == address(0)) revert CrossChainInboxV2__ZeroAddress();
+        if (_hub == address(0)) revert CrossChainInboxV2__ZeroAddress();
 
         mailbox = _mailbox;
-        fraudRegistry = _fraudRegistry;
+        hub = payable(_hub);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -147,9 +147,9 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
             revert CrossChainInboxV2__SourceChainMismatch();
         }
 
-        // Forward to FraudRegistryV2.registerFromSpoke with full CAIP-10 data
-        IFraudRegistryV2(fraudRegistry)
-            .registerFromSpoke(
+        // Forward to FraudRegistryHubV2.registerWalletFromSpoke with full CAIP-10 data
+        IFraudRegistryHubV2(hub)
+            .registerWalletFromSpoke(
                 payload.namespaceHash,
                 payload.chainRef,
                 payload.identifier,
@@ -176,8 +176,8 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
             revert CrossChainInboxV2__SourceChainMismatch();
         }
 
-        // Forward to FraudRegistryV2
-        IFraudRegistryV2(fraudRegistry)
+        // Forward to FraudRegistryHubV2
+        IFraudRegistryHubV2(hub)
             .registerTransactionsFromSpoke(
                 payload.reporter,
                 payload.dataHash,

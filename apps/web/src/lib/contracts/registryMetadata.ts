@@ -4,10 +4,16 @@
  * Consolidates the ABI selection and function name mapping logic that was
  * previously duplicated across 15+ hooks. Use this instead of inline ternaries.
  *
+ * V2 Architecture: Hub + Separate Registries
+ * - WalletRegistryV2: Wallet-specific registration
+ * - TransactionRegistryV2: Transaction batch registration
+ * - ContractRegistryV2: Contract address registration (operator-only)
+ * - SpokeRegistryV2: Cross-chain spoke contracts (all variants)
+ *
  * @example
  * ```ts
  * // Before (duplicated in each hook)
- * const abi = registryType === 'spoke' ? spokeRegistryV2Abi : fraudRegistryV2Abi;
+ * const abi = registryType === 'spoke' ? spokeRegistryV2Abi : walletRegistryV2Abi;
  * const functionName = registryType === 'spoke' ? 'acknowledgeLocal' : 'acknowledge';
  *
  * // After (using metadata)
@@ -17,18 +23,14 @@
  */
 
 import {
-  // V2 ABIs (primary)
-  fraudRegistryV2Abi,
+  walletRegistryV2Abi,
+  transactionRegistryV2Abi,
+  contractRegistryV2Abi,
   spokeRegistryV2Abi,
-  // V1 ABIs (deprecated - kept for reference)
-  stolenWalletRegistryAbi,
-  spokeRegistryAbi,
-  stolenTransactionRegistryAbi,
-  spokeTransactionRegistryAbi,
 } from './abis';
 import type { RegistryType } from './addresses';
 
-export type RegistryVariant = 'wallet' | 'transaction';
+export type RegistryVariant = 'wallet' | 'transaction' | 'contract';
 
 /**
  * Function name mappings for registry operations.
@@ -45,9 +47,9 @@ export interface RegistryFunctions {
   getDeadlines: string;
   /** Get current nonce for address */
   nonces: string;
-  /** Quote registration fee (single value) */
+  /** Quote total registration fee — unified across hub and spoke */
   quoteRegistration: string;
-  /** Quote fee breakdown (spoke only, with bridge fee) */
+  /** Quote fee breakdown (bridgeFee, registrationFee, total, bridgeName) — unified across hub and spoke */
   quoteFeeBreakdown: string;
   /** Check if address is pending acknowledgement */
   isPending: string;
@@ -65,33 +67,32 @@ export interface RegistryFunctions {
 export interface RegistryMetadata {
   /** The ABI for this registry */
   abi:
-    | typeof fraudRegistryV2Abi
-    | typeof spokeRegistryV2Abi
-    | typeof stolenWalletRegistryAbi
-    | typeof spokeRegistryAbi
-    | typeof stolenTransactionRegistryAbi
-    | typeof spokeTransactionRegistryAbi;
+    | typeof walletRegistryV2Abi
+    | typeof transactionRegistryV2Abi
+    | typeof contractRegistryV2Abi
+    | typeof spokeRegistryV2Abi;
   /** Function name mappings */
   functions: RegistryFunctions;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// V2 REGISTRY METADATA (PRIMARY)
+// V2 REGISTRY METADATA (HUB + SEPARATE REGISTRIES)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * V2 Registry metadata organized by variant (wallet/transaction) and chain role (hub/spoke).
+ * V2 Registry metadata organized by variant (wallet/transaction/contract) and chain role (hub/spoke).
  *
  * V2 changes:
- * - Hub: FraudRegistryV2 handles both wallet and transaction registries
- * - Wallet registration: `acknowledge` / `register` (no longer `acknowledge`/`register` with different ABI)
- * - Transaction registration: `acknowledgeTransactionBatch` / `registerTransactionBatch`
- * - New query functions: `getEvmWalletDetails`, `getTransactionEntry`
+ * - Hub: Separate registries for wallet, transaction, and contract
+ * - Wallet registration: WalletRegistryV2 with `acknowledge` / `register`
+ * - Transaction registration: TransactionRegistryV2 with `acknowledgeTransactions` / `registerTransactions`
+ * - Contract registration: ContractRegistryV2 with operator-only `registerContracts`
+ * - Spoke: SpokeRegistryV2 handles all variants with cross-chain messaging
  */
 const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, RegistryMetadata>> = {
   wallet: {
     hub: {
-      abi: fraudRegistryV2Abi,
+      abi: walletRegistryV2Abi,
       functions: {
         acknowledge: 'acknowledge',
         register: 'register',
@@ -99,11 +100,11 @@ const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
         getDeadlines: 'getDeadlines',
         nonces: 'nonces',
         quoteRegistration: 'quoteRegistration',
-        quoteFeeBreakdown: 'quoteRegistration', // Hub doesn't have breakdown
-        isPending: 'isPending',
-        isRegistered: 'isRegistered',
-        getAcknowledgement: 'getAcknowledgement',
-        getRegistration: 'getEvmWalletDetails', // V2 uses getEvmWalletDetails
+        quoteFeeBreakdown: 'quoteFeeBreakdown',
+        isPending: 'isWalletPending',
+        isRegistered: 'isWalletRegistered',
+        getAcknowledgement: 'getAcknowledgementData',
+        getRegistration: 'getWalletEntry',
       },
     },
     spoke: {
@@ -124,116 +125,72 @@ const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
     },
   },
   transaction: {
-    // V2: FraudRegistryV2 transaction batch registration (two-phase)
     hub: {
-      abi: fraudRegistryV2Abi,
+      abi: transactionRegistryV2Abi,
       functions: {
-        acknowledge: 'acknowledgeTransactionBatch',
-        register: 'registerTransactionBatch',
-        generateHashStruct: 'generateTxHashStruct',
+        acknowledge: 'acknowledgeTransactions',
+        register: 'registerTransactions',
+        generateHashStruct: 'generateTransactionHashStruct',
         getDeadlines: 'getTransactionDeadlines',
-        nonces: 'nonces',
+        nonces: 'transactionNonces',
         quoteRegistration: 'quoteRegistration',
-        quoteFeeBreakdown: 'quoteRegistration', // Hub doesn't have breakdown
-        isPending: 'isPendingTransactionBatch',
+        quoteFeeBreakdown: 'quoteFeeBreakdown',
+        isPending: 'isPending',
         isRegistered: 'isTransactionRegistered',
-        getAcknowledgement: 'getTransactionAcknowledgement',
-        getRegistration: 'getBatch',
+        getAcknowledgement: 'getTransactionAcknowledgementData',
+        getRegistration: 'getTransactionEntry',
       },
     },
     spoke: {
       abi: spokeRegistryV2Abi,
       functions: {
-        acknowledge: 'acknowledgeTransactionBatch',
-        register: 'registerTransactionBatch',
-        // Spoke uses same functions for wallet and tx (step parameter differentiates)
+        acknowledge: 'acknowledgeTransactions',
+        register: 'registerTransactions',
         generateHashStruct: 'generateHashStruct',
         getDeadlines: 'getDeadlines',
-        nonces: 'nonces', // Shared nonce mapping
+        nonces: 'nonces',
         quoteRegistration: 'quoteRegistration',
         quoteFeeBreakdown: 'quoteFeeBreakdown',
-        isPending: 'isPendingTransactionBatch',
-        isRegistered: 'isPendingTransactionBatch', // Spoke doesn't track hub registration
-        getAcknowledgement: 'getTransactionAcknowledgement',
-        getRegistration: 'getTransactionAcknowledgement', // Spoke only has acknowledgement data
+        isPending: 'isPending',
+        isRegistered: 'isPending', // Spoke doesn't track hub registration
+        getAcknowledgement: 'getAcknowledgement',
+        getRegistration: 'getAcknowledgement', // Spoke only has acknowledgement data
       },
     },
   },
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// V1 REGISTRY METADATA (DEPRECATED - kept for reference)
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * @deprecated Use V2_REGISTRY_METADATA for new integrations
- */
-const V1_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, RegistryMetadata>> = {
-  wallet: {
+  contract: {
+    // Contract registry is operator-only, no two-phase registration
     hub: {
-      abi: stolenWalletRegistryAbi,
+      abi: contractRegistryV2Abi,
       functions: {
-        acknowledge: 'acknowledge',
-        register: 'register',
-        generateHashStruct: 'generateHashStruct',
-        getDeadlines: 'getDeadlines',
-        nonces: 'nonces',
+        acknowledge: 'registerContracts', // No acknowledgement phase
+        register: 'registerContracts',
+        generateHashStruct: 'generateHashStruct', // Placeholder
+        getDeadlines: 'getDeadlines', // Placeholder
+        nonces: 'nonces', // Placeholder
         quoteRegistration: 'quoteRegistration',
         quoteFeeBreakdown: 'quoteRegistration',
-        isPending: 'isPending',
-        isRegistered: 'isRegistered',
-        getAcknowledgement: 'getAcknowledgement',
-        getRegistration: 'getRegistration',
+        isPending: 'isContractRegistered', // No pending state
+        isRegistered: 'isContractRegistered',
+        getAcknowledgement: 'getContractEntry',
+        getRegistration: 'getContractEntry',
       },
     },
     spoke: {
-      abi: spokeRegistryAbi,
+      // Contract registration from spoke chains (operator-only)
+      abi: spokeRegistryV2Abi,
       functions: {
-        acknowledge: 'acknowledgeLocal',
-        register: 'registerLocal',
+        acknowledge: 'registerContracts',
+        register: 'registerContracts',
         generateHashStruct: 'generateHashStruct',
         getDeadlines: 'getDeadlines',
         nonces: 'nonces',
         quoteRegistration: 'quoteRegistration',
         quoteFeeBreakdown: 'quoteFeeBreakdown',
-        isPending: 'isPending',
-        isRegistered: 'isRegistered',
-        getAcknowledgement: 'getAcknowledgement',
-        getRegistration: 'getRegistration',
-      },
-    },
-  },
-  transaction: {
-    hub: {
-      abi: stolenTransactionRegistryAbi,
-      functions: {
-        acknowledge: 'acknowledge',
-        register: 'register',
-        generateHashStruct: 'generateHashStruct',
-        getDeadlines: 'getDeadlines',
-        nonces: 'nonces',
-        quoteRegistration: 'quoteRegistration',
-        quoteFeeBreakdown: 'quoteRegistration',
-        isPending: 'isPending',
-        isRegistered: 'isBatchRegistered',
-        getAcknowledgement: 'getAcknowledgement',
-        getRegistration: 'getBatch',
-      },
-    },
-    spoke: {
-      abi: spokeTransactionRegistryAbi,
-      functions: {
-        acknowledge: 'acknowledgeLocal',
-        register: 'registerLocal',
-        generateHashStruct: 'generateHashStruct',
-        getDeadlines: 'getDeadlines',
-        nonces: 'nonces',
-        quoteRegistration: 'quoteRegistration',
-        quoteFeeBreakdown: 'quoteFeeBreakdown',
-        isPending: 'isPending',
-        isRegistered: 'isBatchRegistered',
-        getAcknowledgement: 'getAcknowledgement',
-        getRegistration: 'getBatch',
+        isPending: 'isContractRegistered',
+        isRegistered: 'isContractRegistered',
+        getAcknowledgement: 'getContractEntry',
+        getRegistration: 'getContractEntry',
       },
     },
   },
@@ -241,9 +198,9 @@ const V1_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
 
 /**
  * Get V2 registry metadata for a specific variant and chain role.
- * This is the primary function to use for new integrations.
+ * This is the primary function to use for all integrations.
  *
- * @param variant - 'wallet' or 'transaction'
+ * @param variant - 'wallet', 'transaction', or 'contract'
  * @param chainRole - 'hub' or 'spoke'
  * @returns Registry metadata with ABI and function names
  */
@@ -252,15 +209,4 @@ export function getRegistryMetadata(
   chainRole: RegistryType
 ): RegistryMetadata {
   return V2_REGISTRY_METADATA[variant][chainRole];
-}
-
-/**
- * @deprecated Use getRegistryMetadata for V2 contracts
- * Get V1 registry metadata (kept for migration period).
- */
-export function getV1RegistryMetadata(
-  variant: RegistryVariant,
-  chainRole: RegistryType
-): RegistryMetadata {
-  return V1_REGISTRY_METADATA[variant][chainRole];
 }

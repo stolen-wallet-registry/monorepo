@@ -26,13 +26,13 @@
 import { logger } from '@/lib/logger';
 import {
   getRegistryAddress,
-  getTransactionRegistryAddress,
   getRegistryType,
   type RegistryType,
+  type RegistryVariant,
 } from './addresses';
 import type { Address } from '@/lib/types/ethereum';
 
-export type RegistryVariant = 'wallet' | 'transaction';
+export type { RegistryVariant } from './addresses';
 
 export interface ResolvedContract {
   /** The resolved contract address (undefined if resolution failed) */
@@ -65,8 +65,7 @@ export function resolveRegistryContract(
   const logContext = context ? `${context}: ` : '';
 
   try {
-    const address =
-      variant === 'wallet' ? getRegistryAddress(chainId) : getTransactionRegistryAddress(chainId);
+    const address = getRegistryAddress(chainId, variant);
     const role = getRegistryType(chainId);
 
     logger.contract.debug(`${logContext}Registry resolved`, {

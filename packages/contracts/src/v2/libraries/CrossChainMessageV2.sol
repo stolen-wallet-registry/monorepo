@@ -45,7 +45,7 @@ library CrossChainMessageV2 {
 
     /// @notice Cross-chain transaction batch payload (V2)
     /// @dev Includes full transaction hashes for hub-side direct storage.
-    ///      dataHash = keccak256(abi.encodePacked(transactionHashes, chainIds))
+    ///      dataHash = keccak256(abi.encode(transactionHashes, chainIds))
     ///      Used for signature verification - binds signature to exact data.
     struct TransactionBatchPayload {
         bytes32 dataHash; // Hash of (txHashes, chainIds) - signature commitment

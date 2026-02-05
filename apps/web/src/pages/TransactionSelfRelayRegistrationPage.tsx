@@ -412,7 +412,7 @@ export function TransactionSelfRelayRegistrationPage() {
 
                     <div className="flex items-start gap-2">
                       <span className="text-muted-foreground flex items-center gap-1 shrink-0">
-                        Merkle Root:
+                        Data Hash:
                         <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
                       </span>
                       <Tooltip>

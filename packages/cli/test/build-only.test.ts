@@ -1,12 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { encodeFunctionData } from 'viem';
-import {
-  StolenWalletRegistryABI,
-  FraudulentContractRegistryABI,
-  StolenTransactionRegistryABI,
-} from '@swr/abis';
+import { encodeFunctionData, pad } from 'viem';
+import { OperatorSubmitterV2ABI } from '@swr/abis';
 import {
   buildWalletMerkleTree,
   buildContractMerkleTree,
@@ -27,75 +23,79 @@ describe('--build-only mode', () => {
       const entries = await parseWalletFile(walletsFixture, 8453n);
       const { root } = buildWalletMerkleTree(entries);
 
-      const reportedChainId = chainIdToBytes32(8453n);
-      const walletAddresses = entries.map((e) => e.address);
-      const chainIds = entries.map((e) => e.chainId);
+      const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
+      const reportedChainIds = entries.map((e) => e.chainId);
+      const incidentTimestamps = entries.map(() => 0n);
 
       const calldata = encodeFunctionData({
-        abi: StolenWalletRegistryABI,
-        functionName: 'registerBatchAsOperator',
-        args: [root, reportedChainId, walletAddresses, chainIds],
+        abi: OperatorSubmitterV2ABI,
+        functionName: 'registerWalletsAsOperator',
+        args: [identifiers, reportedChainIds, incidentTimestamps],
       });
 
-      expect(calldata).toMatch(/^0x[a-f0-9]+$/);
-      // registerBatchAsOperator selector should be at start
+      expect(calldata).toMatch(/^0x[a-fA-F0-9]+$/);
+      // registerWalletsAsOperator selector should be at start
       expect(calldata.slice(0, 10)).toBe(
         encodeFunctionData({
-          abi: StolenWalletRegistryABI,
-          functionName: 'registerBatchAsOperator',
-          args: [root, reportedChainId, [], []],
+          abi: OperatorSubmitterV2ABI,
+          functionName: 'registerWalletsAsOperator',
+          args: [[], [], []],
         }).slice(0, 10)
       );
+      // Merkle root still built locally for reference
+      expect(root).toMatch(/^0x[a-f0-9]{64}$/);
     });
 
     it('generates correct contract batch calldata', async () => {
       const entries = await parseContractFile(contractsFixture, 8453n);
       const { root } = buildContractMerkleTree(entries);
 
-      const reportedChainId = chainIdToBytes32(8453n);
-      const contractAddresses = entries.map((e) => e.address);
-      const chainIds = entries.map((e) => e.chainId);
+      const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
+      const reportedChainIds = entries.map((e) => e.chainId);
 
       const calldata = encodeFunctionData({
-        abi: FraudulentContractRegistryABI,
-        functionName: 'registerBatch',
-        args: [root, reportedChainId, contractAddresses, chainIds],
+        abi: OperatorSubmitterV2ABI,
+        functionName: 'registerContractsAsOperator',
+        args: [identifiers, reportedChainIds],
       });
 
       expect(calldata).toMatch(/^0x[a-f0-9]+$/);
-      // registerBatch selector
+      // registerContractsAsOperator selector
       expect(calldata.slice(0, 10)).toBe(
         encodeFunctionData({
-          abi: FraudulentContractRegistryABI,
-          functionName: 'registerBatch',
-          args: [root, reportedChainId, [], []],
+          abi: OperatorSubmitterV2ABI,
+          functionName: 'registerContractsAsOperator',
+          args: [[], []],
         }).slice(0, 10)
       );
+      // Merkle root still built locally for reference
+      expect(root).toMatch(/^0x[a-f0-9]{64}$/);
     });
 
     it('generates correct transaction batch calldata', async () => {
       const entries = await parseTransactionFile(transactionsFixture, 8453n);
       const { root } = buildTransactionMerkleTree(entries);
 
-      const reportedChainId = chainIdToBytes32(8453n);
-      const txHashes = entries.map((e) => e.txHash);
+      const transactionHashes = entries.map((e) => e.txHash);
       const chainIds = entries.map((e) => e.chainId);
 
       const calldata = encodeFunctionData({
-        abi: StolenTransactionRegistryABI,
-        functionName: 'registerBatchAsOperator',
-        args: [root, reportedChainId, txHashes, chainIds],
+        abi: OperatorSubmitterV2ABI,
+        functionName: 'registerTransactionsAsOperator',
+        args: [transactionHashes, chainIds],
       });
 
       expect(calldata).toMatch(/^0x[a-f0-9]+$/);
-      // registerBatchAsOperator selector
+      // registerTransactionsAsOperator selector
       expect(calldata.slice(0, 10)).toBe(
         encodeFunctionData({
-          abi: StolenTransactionRegistryABI,
-          functionName: 'registerBatchAsOperator',
-          args: [root, reportedChainId, [], []],
+          abi: OperatorSubmitterV2ABI,
+          functionName: 'registerTransactionsAsOperator',
+          args: [[], []],
         }).slice(0, 10)
       );
+      // Merkle root still built locally for reference
+      expect(root).toMatch(/^0x[a-f0-9]{64}$/);
     });
   });
 
@@ -107,14 +107,14 @@ describe('--build-only mode', () => {
       const fee = 1000000000000000n; // 0.001 ETH mock
       const targetContract = '0x1234567890123456789012345678901234567890';
 
-      const reportedChainId = chainIdToBytes32(8453n);
-      const walletAddresses = entries.map((e) => e.address);
-      const chainIds = entries.map((e) => e.chainId);
+      const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
+      const reportedChainIds = entries.map((e) => e.chainId);
+      const incidentTimestamps = entries.map(() => 0n);
 
       const calldata = encodeFunctionData({
-        abi: StolenWalletRegistryABI,
-        functionName: 'registerBatchAsOperator',
-        args: [root, reportedChainId, walletAddresses, chainIds],
+        abi: OperatorSubmitterV2ABI,
+        functionName: 'registerWalletsAsOperator',
+        args: [identifiers, reportedChainIds, incidentTimestamps],
       });
 
       const txData = {
@@ -129,7 +129,7 @@ describe('--build-only mode', () => {
 
       expect(txData.to).toBe(targetContract);
       expect(txData.value).toBe('1000000000000000');
-      expect(txData.data).toMatch(/^0x[a-f0-9]+$/);
+      expect(txData.data).toMatch(/^0x[a-fA-F0-9]+$/);
       expect(txData.operation).toBe(0);
       expect(txData.description).toContain(`${entries.length} stolen wallets`);
       expect(txData.merkleRoot).toBe(root);
@@ -143,14 +143,13 @@ describe('--build-only mode', () => {
       const fee = 2000000000000000n; // 0.002 ETH mock
       const targetContract = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd';
 
-      const reportedChainId = chainIdToBytes32(8453n);
-      const contractAddresses = entries.map((e) => e.address);
-      const chainIds = entries.map((e) => e.chainId);
+      const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
+      const reportedChainIds = entries.map((e) => e.chainId);
 
       const calldata = encodeFunctionData({
-        abi: FraudulentContractRegistryABI,
-        functionName: 'registerBatch',
-        args: [root, reportedChainId, contractAddresses, chainIds],
+        abi: OperatorSubmitterV2ABI,
+        functionName: 'registerContractsAsOperator',
+        args: [identifiers, reportedChainIds],
       });
 
       const txData = {

@@ -222,7 +222,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @dev Compute dataHash from transaction hashes and chain IDs
     function _computeDataHash(bytes32[] memory txHashes, bytes32[] memory chainIds) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(txHashes, chainIds));
+        return keccak256(abi.encode(txHashes, chainIds));
     }
 
     function _signTxBatchAck(

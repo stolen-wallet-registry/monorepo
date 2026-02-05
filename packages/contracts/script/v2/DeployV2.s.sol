@@ -4,9 +4,12 @@ pragma solidity ^0.8.24;
 import { Script, console2 } from "forge-std/Script.sol";
 import { IMulticall3 } from "forge-std/interfaces/IMulticall3.sol";
 
-// V2 core contracts
-import { FraudRegistryV2 } from "../../src/v2/FraudRegistryV2.sol";
-import { OperatorSubmitter } from "../../src/v2/OperatorSubmitter.sol";
+// V2 core contracts - Hub + Registries architecture
+import { FraudRegistryHubV2 } from "../../src/v2/FraudRegistryHubV2.sol";
+import { WalletRegistryV2 } from "../../src/v2/registries/WalletRegistryV2.sol";
+import { TransactionRegistryV2 } from "../../src/v2/registries/TransactionRegistryV2.sol";
+import { ContractRegistryV2 } from "../../src/v2/registries/ContractRegistryV2.sol";
+import { OperatorSubmitterV2 } from "../../src/v2/OperatorSubmitterV2.sol";
 import { OperatorRegistry } from "../../src/OperatorRegistry.sol";
 import { CrossChainInboxV2 } from "../../src/v2/CrossChainInboxV2.sol";
 import { SpokeRegistryV2 } from "../../src/v2/SpokeRegistryV2.sol";
@@ -120,12 +123,15 @@ contract DeployV2 is Script {
     address hubMailbox;
     address spokeMailbox;
 
-    // Hub deployed addresses - Core V2
+    // Hub deployed addresses - Core V2 (Hub + Registries architecture)
     address hubMockAggregatorAddr;
     address hubFeeManagerAddr;
     address hubOperatorRegistryAddr;
-    address fraudRegistryAddr;
-    address operatorSubmitterAddr;
+    address hubAddr;
+    address walletRegistryAddr;
+    address transactionRegistryAddr;
+    address contractRegistryAddr;
+    address operatorSubmitterV2Addr;
     address crossChainInboxAddr;
     address hubMulticall3Addr;
 
@@ -200,75 +206,104 @@ contract DeployV2 is Script {
         hubOperatorRegistryAddr = address(operatorRegistry);
         console2.log("3. OperatorRegistry:", hubOperatorRegistryAddr);
 
-        // 4. Deploy FraudRegistryV2 (with feeManager, feeRecipient = deployer for now)
-        FraudRegistryV2 registry = new FraudRegistryV2(
-            deployer, hubOperatorRegistryAddr, hubFeeManagerAddr, deployer, hubGraceBlocks, hubDeadlineBlocks
+        // 4. Deploy FraudRegistryHubV2 (entry point and fee aggregator)
+        FraudRegistryHubV2 hub = new FraudRegistryHubV2(deployer, deployer);
+        hubAddr = address(hub);
+        console2.log("4. FraudRegistryHubV2:", hubAddr);
+
+        // 5. Deploy WalletRegistryV2
+        WalletRegistryV2 walletRegistry =
+            new WalletRegistryV2(deployer, hubFeeManagerAddr, hubGraceBlocks, hubDeadlineBlocks);
+        walletRegistryAddr = address(walletRegistry);
+        console2.log("5. WalletRegistryV2:", walletRegistryAddr);
+
+        // 6. Deploy TransactionRegistryV2
+        TransactionRegistryV2 transactionRegistry =
+            new TransactionRegistryV2(deployer, hubFeeManagerAddr, hubGraceBlocks, hubDeadlineBlocks);
+        transactionRegistryAddr = address(transactionRegistry);
+        console2.log("6. TransactionRegistryV2:", transactionRegistryAddr);
+
+        // 7. Deploy ContractRegistryV2
+        ContractRegistryV2 contractRegistry = new ContractRegistryV2(deployer);
+        contractRegistryAddr = address(contractRegistry);
+        console2.log("7. ContractRegistryV2:", contractRegistryAddr);
+
+        // 8. Deploy OperatorSubmitterV2 (references all 3 registries)
+        OperatorSubmitterV2 operatorSubmitter = new OperatorSubmitterV2(
+            deployer,
+            walletRegistryAddr,
+            transactionRegistryAddr,
+            contractRegistryAddr,
+            hubOperatorRegistryAddr,
+            hubFeeManagerAddr,
+            deployer
         );
-        fraudRegistryAddr = address(registry);
-        console2.log("4. FraudRegistryV2:", fraudRegistryAddr);
+        operatorSubmitterV2Addr = address(operatorSubmitter);
+        console2.log("8. OperatorSubmitterV2:", operatorSubmitterV2Addr);
 
-        // 5. Deploy OperatorSubmitter (with feeManager)
-        OperatorSubmitter operatorSubmitter =
-            new OperatorSubmitter(deployer, fraudRegistryAddr, hubOperatorRegistryAddr, hubFeeManagerAddr, deployer);
-        operatorSubmitterAddr = address(operatorSubmitter);
-        console2.log("5. OperatorSubmitter:", operatorSubmitterAddr);
-
-        // 6. Link OperatorSubmitter to Registry
-        registry.setOperatorSubmitter(operatorSubmitterAddr);
-        console2.log("   -> OperatorSubmitter linked");
-
-        // 7. Deploy CrossChainInboxV2
-        CrossChainInboxV2 inbox = new CrossChainInboxV2(hubMailbox, fraudRegistryAddr, deployer);
+        // 9. Deploy CrossChainInboxV2
+        CrossChainInboxV2 inbox = new CrossChainInboxV2(hubMailbox, hubAddr, deployer);
         crossChainInboxAddr = address(inbox);
-        console2.log("6. CrossChainInboxV2:", crossChainInboxAddr);
+        console2.log("9. CrossChainInboxV2:", crossChainInboxAddr);
 
-        // 8. Link CrossChainInbox to Registry
-        registry.setCrossChainInbox(crossChainInboxAddr);
-        console2.log("   -> CrossChainInboxV2 linked");
+        // 10. Wire Hub to registries
+        hub.setWalletRegistry(walletRegistryAddr);
+        hub.setTransactionRegistry(transactionRegistryAddr);
+        hub.setContractRegistry(contractRegistryAddr);
+        hub.setInbox(crossChainInboxAddr);
+        console2.log("   -> Hub wired to registries and inbox");
 
-        // 9. Deploy Multicall3 (for local chains only)
+        // 11. Wire registries to Hub and OperatorSubmitter
+        walletRegistry.setHub(hubAddr);
+        walletRegistry.setOperatorSubmitter(operatorSubmitterV2Addr);
+        transactionRegistry.setHub(hubAddr);
+        transactionRegistry.setOperatorSubmitter(operatorSubmitterV2Addr);
+        contractRegistry.setOperatorSubmitter(operatorSubmitterV2Addr);
+        console2.log("   -> Registries wired to Hub and OperatorSubmitter");
+
+        // 12. Deploy Multicall3 (for local chains only)
         hubMulticall3Addr = _deployMulticall3();
-        console2.log("7. Multicall3:", hubMulticall3Addr);
+        console2.log("10. Multicall3:", hubMulticall3Addr);
 
         console2.log("");
         console2.log("--- HUB CHAIN (31337) - Soulbound Contracts ---");
 
-        // 10. Deploy TranslationRegistry
+        // 13. Deploy TranslationRegistry
         TranslationRegistry translationRegistry = new TranslationRegistry();
         translationRegistryAddr = address(translationRegistry);
-        console2.log("8. TranslationRegistry:", translationRegistryAddr);
+        console2.log("11. TranslationRegistry:", translationRegistryAddr);
 
-        // 11. Deploy WalletSoulbound (gated by FraudRegistryV2)
+        // 14. Deploy WalletSoulbound (gated by WalletRegistryV2)
         WalletSoulbound walletSoulbound =
-            new WalletSoulbound(fraudRegistryAddr, translationRegistryAddr, deployer, DEFAULT_DOMAIN);
+            new WalletSoulbound(walletRegistryAddr, translationRegistryAddr, deployer, DEFAULT_DOMAIN);
         walletSoulboundAddr = address(walletSoulbound);
-        console2.log("9. WalletSoulbound:", walletSoulboundAddr);
+        console2.log("12. WalletSoulbound:", walletSoulboundAddr);
 
-        // 12. Deploy SupportSoulbound
+        // 15. Deploy SupportSoulbound
         SupportSoulbound supportSoulbound =
             new SupportSoulbound(MIN_DONATION, translationRegistryAddr, deployer, DEFAULT_DOMAIN);
         supportSoulboundAddr = address(supportSoulbound);
-        console2.log("10. SupportSoulbound:", supportSoulboundAddr);
+        console2.log("13. SupportSoulbound:", supportSoulboundAddr);
 
-        // 13. Deploy SoulboundReceiver
+        // 16. Deploy SoulboundReceiver
         SoulboundReceiver soulboundReceiver =
             new SoulboundReceiver(deployer, hubMailbox, walletSoulboundAddr, supportSoulboundAddr);
         soulboundReceiverAddr = address(soulboundReceiver);
-        console2.log("11. SoulboundReceiver:", soulboundReceiverAddr);
+        console2.log("14. SoulboundReceiver:", soulboundReceiverAddr);
 
-        // 14. Authorize SoulboundReceiver to mint on SupportSoulbound
+        // 17. Authorize SoulboundReceiver to mint on SupportSoulbound
         supportSoulbound.setAuthorizedMinter(soulboundReceiverAddr, true);
         console2.log("    -> SoulboundReceiver authorized to mint SupportSoulbound");
 
         console2.log("");
         console2.log("--- HUB CHAIN (31337) - Operator Seeding ---");
 
-        // 15. Approve test operators (Anvil accounts 3 and 4)
+        // 18. Approve test operators (Anvil accounts 3 and 4)
         operatorRegistry.approveOperator(OPERATOR_A, operatorRegistry.ALL_REGISTRIES(), "TestOperatorA-ALL");
-        console2.log("12. Operator A (ALL):", OPERATOR_A);
+        console2.log("15. Operator A (ALL):", OPERATOR_A);
 
         operatorRegistry.approveOperator(OPERATOR_B, operatorRegistry.CONTRACT_REGISTRY(), "TestOperatorB-CONTRACT");
-        console2.log("13. Operator B (CONTRACT):", OPERATOR_B);
+        console2.log("16. Operator B (CONTRACT):", OPERATOR_B);
         console2.log("    Approved operator count:", operatorRegistry.approvedOperatorCount());
 
         vm.stopBroadcast();
@@ -377,17 +412,20 @@ contract DeployV2 is Script {
         console2.log("  Spoke Mailbox: ", spokeMailbox);
         console2.log("");
         console2.log("Hub Chain (31337) - http://localhost:8545:");
-        console2.log("  MockAggregator:       ", hubMockAggregatorAddr);
-        console2.log("  FeeManager:           ", hubFeeManagerAddr);
-        console2.log("  OperatorRegistry:     ", hubOperatorRegistryAddr);
-        console2.log("  FraudRegistryV2:      ", fraudRegistryAddr);
-        console2.log("  OperatorSubmitter:    ", operatorSubmitterAddr);
-        console2.log("  CrossChainInboxV2:    ", crossChainInboxAddr);
-        console2.log("  Multicall3:           ", hubMulticall3Addr);
-        console2.log("  TranslationRegistry:  ", translationRegistryAddr);
-        console2.log("  WalletSoulbound:      ", walletSoulboundAddr);
-        console2.log("  SupportSoulbound:     ", supportSoulboundAddr);
-        console2.log("  SoulboundReceiver:    ", soulboundReceiverAddr);
+        console2.log("  MockAggregator:         ", hubMockAggregatorAddr);
+        console2.log("  FeeManager:             ", hubFeeManagerAddr);
+        console2.log("  OperatorRegistry:       ", hubOperatorRegistryAddr);
+        console2.log("  FraudRegistryHubV2:     ", hubAddr);
+        console2.log("  WalletRegistryV2:       ", walletRegistryAddr);
+        console2.log("  TransactionRegistryV2:  ", transactionRegistryAddr);
+        console2.log("  ContractRegistryV2:     ", contractRegistryAddr);
+        console2.log("  OperatorSubmitterV2:    ", operatorSubmitterV2Addr);
+        console2.log("  CrossChainInboxV2:      ", crossChainInboxAddr);
+        console2.log("  Multicall3:             ", hubMulticall3Addr);
+        console2.log("  TranslationRegistry:    ", translationRegistryAddr);
+        console2.log("  WalletSoulbound:        ", walletSoulboundAddr);
+        console2.log("  SupportSoulbound:       ", supportSoulboundAddr);
+        console2.log("  SoulboundReceiver:      ", soulboundReceiverAddr);
         console2.log("");
         console2.log("Spoke Chain (31338) - http://localhost:8546:");
         console2.log("  MockGasPaymaster:         ", spokeGasPaymaster);
@@ -416,6 +454,16 @@ contract DeployV2 is Script {
     // SINGLE-CHAIN HUB DEPLOYMENT (Testnet/Mainnet)
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TEMPORARY STATE FOR DEPLOYMENT (avoids stack depth issues)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    address private _tempFeeManager;
+    address private _tempFeeRecipient;
+    address private _tempMailbox;
+    uint256 private _tempGraceBlocks;
+    uint256 private _tempDeadlineBlocks;
+
     /// @notice Deploy hub contracts for testnet/mainnet (requires Hyperlane addresses in env)
     /// @dev Use for Base Sepolia, Base Mainnet, etc.
     ///      Required env vars: PRIVATE_KEY, HUB_HYPERLANE_MAILBOX, HUB_GAS_PAYMASTER
@@ -423,66 +471,94 @@ contract DeployV2 is Script {
         uint256 privKey = _getDeployerKey();
         address _deployer = vm.addr(privKey);
 
-        // Fee configuration (optional)
-        address feeManagerAddr = vm.envOr("FEE_MANAGER", address(0));
-        address feeRecipientAddr = vm.envOr("FEE_RECIPIENT", address(0));
+        // Store in contract state to avoid stack depth issues
+        _tempFeeManager = vm.envOr("FEE_MANAGER", address(0));
+        _tempFeeRecipient = vm.envOr("FEE_RECIPIENT", _deployer);
+        _tempMailbox = vm.envAddress("HUB_HYPERLANE_MAILBOX");
+        require(_tempMailbox != address(0), "HUB_HYPERLANE_MAILBOX required");
+        (_tempGraceBlocks, _tempDeadlineBlocks) = _getTimingConfig(block.chainid);
 
-        // Hyperlane configuration (required for hub)
-        address mailbox = vm.envAddress("HUB_HYPERLANE_MAILBOX");
-        require(mailbox != address(0), "HUB_HYPERLANE_MAILBOX required");
-        address gasPaymaster = vm.envAddress("HUB_GAS_PAYMASTER");
-        require(gasPaymaster != address(0), "HUB_GAS_PAYMASTER required");
-
-        // Timing configuration
-        (uint256 graceBlocks, uint256 deadlineBlocks) = _getTimingConfig(block.chainid);
-
-        console2.log("=== FraudRegistryV2 Hub Deployment ===");
+        console2.log("=== FraudRegistryHubV2 Deployment ===");
         console2.log("Chain ID:", block.chainid);
         console2.log("Deployer:", _deployer);
-        console2.log("FeeManager:", feeManagerAddr);
-        console2.log("FeeRecipient:", feeRecipientAddr);
-        console2.log("Hyperlane Mailbox:", mailbox);
-        console2.log("Gas Paymaster:", gasPaymaster);
-        console2.log("Grace Blocks:", graceBlocks);
-        console2.log("Deadline Blocks:", deadlineBlocks);
+        console2.log("FeeManager:", _tempFeeManager);
+        console2.log("FeeRecipient:", _tempFeeRecipient);
+        console2.log("Hyperlane Mailbox:", _tempMailbox);
+        console2.log("Grace Blocks:", _tempGraceBlocks);
+        console2.log("Deadline Blocks:", _tempDeadlineBlocks);
         console2.log("");
 
         vm.startBroadcast(privKey);
 
         // 1. Deploy OperatorRegistry
-        OperatorRegistry operatorRegistry = new OperatorRegistry(_deployer);
-        console2.log("1. OperatorRegistry:", address(operatorRegistry));
+        address operatorRegAddr = address(new OperatorRegistry(_deployer));
+        console2.log("1. OperatorRegistry:", operatorRegAddr);
 
-        // 2. Deploy FraudRegistryV2
-        FraudRegistryV2 registry = new FraudRegistryV2(
-            _deployer, address(operatorRegistry), feeManagerAddr, feeRecipientAddr, graceBlocks, deadlineBlocks
+        // 2. Deploy FraudRegistryHubV2
+        address hubDeployedAddr = address(new FraudRegistryHubV2(_deployer, _tempFeeRecipient));
+        console2.log("2. FraudRegistryHubV2:", hubDeployedAddr);
+
+        // 3. Deploy WalletRegistryV2
+        address walletRegAddr =
+            address(new WalletRegistryV2(_deployer, _tempFeeManager, _tempGraceBlocks, _tempDeadlineBlocks));
+        console2.log("3. WalletRegistryV2:", walletRegAddr);
+
+        // 4. Deploy TransactionRegistryV2
+        address txRegAddr =
+            address(new TransactionRegistryV2(_deployer, _tempFeeManager, _tempGraceBlocks, _tempDeadlineBlocks));
+        console2.log("4. TransactionRegistryV2:", txRegAddr);
+
+        // 5. Deploy ContractRegistryV2
+        address contractRegAddr = address(new ContractRegistryV2(_deployer));
+        console2.log("5. ContractRegistryV2:", contractRegAddr);
+
+        // 6. Deploy OperatorSubmitterV2
+        address operatorSubmitterAddr = address(
+            new OperatorSubmitterV2(
+                _deployer,
+                walletRegAddr,
+                txRegAddr,
+                contractRegAddr,
+                operatorRegAddr,
+                _tempFeeManager,
+                _tempFeeRecipient
+            )
         );
-        console2.log("2. FraudRegistryV2:", address(registry));
+        console2.log("6. OperatorSubmitterV2:", operatorSubmitterAddr);
 
-        // 3. Deploy OperatorSubmitter
-        OperatorSubmitter operatorSubmitter = new OperatorSubmitter(
-            _deployer, address(registry), address(operatorRegistry), feeManagerAddr, feeRecipientAddr
-        );
-        console2.log("3. OperatorSubmitter:", address(operatorSubmitter));
+        // 7. Deploy CrossChainInboxV2
+        address inboxAddr = address(new CrossChainInboxV2(_tempMailbox, hubDeployedAddr, _deployer));
+        console2.log("7. CrossChainInboxV2:", inboxAddr);
 
-        // 4. Link OperatorSubmitter to Registry
-        registry.setOperatorSubmitter(address(operatorSubmitter));
-        console2.log("   -> OperatorSubmitter linked");
+        // 8. Wire Hub to registries and inbox
+        FraudRegistryHubV2(payable(hubDeployedAddr)).setWalletRegistry(walletRegAddr);
+        FraudRegistryHubV2(payable(hubDeployedAddr)).setTransactionRegistry(txRegAddr);
+        FraudRegistryHubV2(payable(hubDeployedAddr)).setContractRegistry(contractRegAddr);
+        FraudRegistryHubV2(payable(hubDeployedAddr)).setInbox(inboxAddr);
+        console2.log("   -> Hub wired to registries and inbox");
 
-        // 5. Deploy CrossChainInboxV2
-        CrossChainInboxV2 inbox = new CrossChainInboxV2(mailbox, address(registry), _deployer);
-        console2.log("4. CrossChainInboxV2:", address(inbox));
-
-        // 6. Link CrossChainInbox to Registry
-        registry.setCrossChainInbox(address(inbox));
-        console2.log("   -> CrossChainInboxV2 linked");
+        // 9. Wire registries to Hub and OperatorSubmitter
+        WalletRegistryV2(walletRegAddr).setHub(hubDeployedAddr);
+        WalletRegistryV2(walletRegAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        TransactionRegistryV2(txRegAddr).setHub(hubDeployedAddr);
+        TransactionRegistryV2(txRegAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        ContractRegistryV2(contractRegAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        console2.log("   -> Registries wired to Hub and OperatorSubmitter");
 
         vm.stopBroadcast();
 
         // Output for frontend config
         console2.log("");
         console2.log("=== Frontend Config ===");
-        _logHubConfig(address(registry), address(operatorRegistry), address(operatorSubmitter), address(inbox));
+        _logHubConfig(
+            hubDeployedAddr,
+            walletRegAddr,
+            txRegAddr,
+            contractRegAddr,
+            operatorRegAddr,
+            operatorSubmitterAddr,
+            inboxAddr
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -577,37 +653,72 @@ contract DeployV2 is Script {
         uint256 privKey = _getDeployerKey();
         address _deployer = vm.addr(privKey);
 
-        address feeManagerAddr = vm.envOr("FEE_MANAGER", address(0));
-        address feeRecipientAddr = vm.envOr("FEE_RECIPIENT", address(0));
+        // Store in contract state to avoid stack depth issues
+        _tempFeeManager = vm.envOr("FEE_MANAGER", address(0));
+        _tempFeeRecipient = vm.envOr("FEE_RECIPIENT", _deployer);
+        (_tempGraceBlocks, _tempDeadlineBlocks) = _getTimingConfig(block.chainid);
 
-        (uint256 graceBlocks, uint256 deadlineBlocks) = _getTimingConfig(block.chainid);
-
-        console2.log("=== FraudRegistryV2 Deployment (Basic) ===");
+        console2.log("=== FraudRegistryHubV2 Deployment (Basic) ===");
         console2.log("Chain ID:", block.chainid);
         console2.log("Deployer:", _deployer);
         console2.log("");
 
         vm.startBroadcast(privKey);
 
-        OperatorRegistry operatorRegistry = new OperatorRegistry(_deployer);
-        console2.log("OperatorRegistry:", address(operatorRegistry));
+        // 1. Deploy OperatorRegistry
+        address operatorRegAddr = address(new OperatorRegistry(_deployer));
+        console2.log("OperatorRegistry:", operatorRegAddr);
 
-        FraudRegistryV2 registry = new FraudRegistryV2(
-            _deployer, address(operatorRegistry), feeManagerAddr, feeRecipientAddr, graceBlocks, deadlineBlocks
+        // 2. Deploy FraudRegistryHubV2
+        address hubDeployedAddr = address(new FraudRegistryHubV2(_deployer, _tempFeeRecipient));
+        console2.log("FraudRegistryHubV2:", hubDeployedAddr);
+
+        // 3. Deploy WalletRegistryV2
+        address walletRegAddr =
+            address(new WalletRegistryV2(_deployer, _tempFeeManager, _tempGraceBlocks, _tempDeadlineBlocks));
+        console2.log("WalletRegistryV2:", walletRegAddr);
+
+        // 4. Deploy TransactionRegistryV2
+        address txRegAddr =
+            address(new TransactionRegistryV2(_deployer, _tempFeeManager, _tempGraceBlocks, _tempDeadlineBlocks));
+        console2.log("TransactionRegistryV2:", txRegAddr);
+
+        // 5. Deploy ContractRegistryV2
+        address contractRegAddr = address(new ContractRegistryV2(_deployer));
+        console2.log("ContractRegistryV2:", contractRegAddr);
+
+        // 6. Deploy OperatorSubmitterV2
+        address operatorSubmitterAddr = address(
+            new OperatorSubmitterV2(
+                _deployer,
+                walletRegAddr,
+                txRegAddr,
+                contractRegAddr,
+                operatorRegAddr,
+                _tempFeeManager,
+                _tempFeeRecipient
+            )
         );
-        console2.log("FraudRegistryV2:", address(registry));
+        console2.log("OperatorSubmitterV2:", operatorSubmitterAddr);
 
-        OperatorSubmitter operatorSubmitter = new OperatorSubmitter(
-            _deployer, address(registry), address(operatorRegistry), feeManagerAddr, feeRecipientAddr
-        );
-        console2.log("OperatorSubmitter:", address(operatorSubmitter));
+        // 7. Wire Hub to registries
+        FraudRegistryHubV2(payable(hubDeployedAddr)).setWalletRegistry(walletRegAddr);
+        FraudRegistryHubV2(payable(hubDeployedAddr)).setTransactionRegistry(txRegAddr);
+        FraudRegistryHubV2(payable(hubDeployedAddr)).setContractRegistry(contractRegAddr);
 
-        registry.setOperatorSubmitter(address(operatorSubmitter));
+        // 8. Wire registries to Hub and OperatorSubmitter
+        WalletRegistryV2(walletRegAddr).setHub(hubDeployedAddr);
+        WalletRegistryV2(walletRegAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        TransactionRegistryV2(txRegAddr).setHub(hubDeployedAddr);
+        TransactionRegistryV2(txRegAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        ContractRegistryV2(contractRegAddr).setOperatorSubmitter(operatorSubmitterAddr);
 
         vm.stopBroadcast();
 
         console2.log("");
-        _logFrontendConfig(address(registry), address(operatorRegistry), address(operatorSubmitter));
+        _logFrontendConfig(
+            hubDeployedAddr, walletRegAddr, txRegAddr, contractRegAddr, operatorRegAddr, operatorSubmitterAddr
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -668,15 +779,23 @@ contract DeployV2 is Script {
         }
     }
 
-    function _logHubConfig(address registry, address operatorReg, address operatorSubmitter, address inbox)
-        internal
-        view
-    {
+    function _logHubConfig(
+        address hub,
+        address walletReg,
+        address txReg,
+        address contractReg,
+        address operatorReg,
+        address operatorSubmitter,
+        address inbox
+    ) internal view {
         console2.log("// Add to apps/web/src/lib/contracts/addresses.ts:");
         console2.log("//", block.chainid, ": {");
-        console2.log("//   fraudRegistryV2: '", registry, "',");
+        console2.log("//   fraudRegistryHubV2: '", hub, "',");
+        console2.log("//   walletRegistryV2: '", walletReg, "',");
+        console2.log("//   transactionRegistryV2: '", txReg, "',");
+        console2.log("//   contractRegistryV2: '", contractReg, "',");
         console2.log("//   operatorRegistry: '", operatorReg, "',");
-        console2.log("//   operatorSubmitter: '", operatorSubmitter, "',");
+        console2.log("//   operatorSubmitterV2: '", operatorSubmitter, "',");
         console2.log("//   crossChainInboxV2: '", inbox, "',");
         console2.log("// },");
     }
@@ -690,7 +809,14 @@ contract DeployV2 is Script {
         console2.log("// },");
     }
 
-    function _logFrontendConfig(address registry, address operatorReg, address operatorSubmitter) internal view {
+    function _logFrontendConfig(
+        address hub,
+        address walletReg,
+        address txReg,
+        address contractReg,
+        address operatorReg,
+        address operatorSubmitter
+    ) internal view {
         uint256 chainId = block.chainid;
 
         if (chainId == 31_337) {
@@ -704,9 +830,12 @@ contract DeployV2 is Script {
         }
 
         console2.log(chainId, ": {");
-        console2.log("  fraudRegistryV2: '", registry, "',");
+        console2.log("  fraudRegistryHubV2: '", hub, "',");
+        console2.log("  walletRegistryV2: '", walletReg, "',");
+        console2.log("  transactionRegistryV2: '", txReg, "',");
+        console2.log("  contractRegistryV2: '", contractReg, "',");
         console2.log("  operatorRegistry: '", operatorReg, "',");
-        console2.log("  operatorSubmitter: '", operatorSubmitter, "',");
+        console2.log("  operatorSubmitterV2: '", operatorSubmitter, "',");
         console2.log("},");
     }
 }

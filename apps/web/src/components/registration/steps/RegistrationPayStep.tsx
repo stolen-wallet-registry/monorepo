@@ -86,19 +86,19 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
 
   // Build transaction args for gas estimation (needs to be before early returns)
-  // V2 unified signature: (wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+  // WalletRegistryV2.register: (registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
+  // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
   const transactionArgs: WalletRegistrationArgs | undefined =
     storedSignature && registeree && parsedSig
-      ? [
+      ? ([
           registeree,
+          storedSignature.deadline,
           storedSignature.reportedChainId ?? BigInt(chainId),
           storedSignature.incidentTimestamp ?? 0n,
-          storedSignature.deadline,
-          storedSignature.nonce,
           parsedSig.v,
           parsedSig.r,
           parsedSig.s,
-        ]
+        ] as unknown as WalletRegistrationArgs)
       : undefined;
 
   // Get transaction cost estimate (must be called unconditionally - hooks rule)
@@ -285,18 +285,16 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         chainId,
       });
 
-      // V2 fields from stored signature
-      // Fallback: use current chain for reportedChainId, 0 for incidentTimestamp (unknown)
+      // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
       const reportedChainId = storedSignature.reportedChainId ?? BigInt(chainId);
       const incidentTimestamp = storedSignature.incidentTimestamp ?? 0n;
 
       await submitRegistration({
-        deadline: storedSignature.deadline,
-        nonce: storedSignature.nonce,
         registeree,
-        signature: parsedSig,
+        deadline: storedSignature.deadline,
         reportedChainId,
         incidentTimestamp,
+        signature: parsedSig,
         feeWei,
       });
 

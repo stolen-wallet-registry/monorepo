@@ -237,7 +237,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
 
       // V2: Generate reportedChainId (raw chain ID) and incidentTimestamp
       const reportedChainId = BigInt(chainId);
-      const incidentTimestamp = BigInt(Math.floor(Date.now() / 1000));
+      const incidentTimestamp = 0n; // TODO: Add incident timestamp selection UI (block/tx picker)
 
       logger.signature.info('Requesting V2 EIP-712 acknowledgement signature', {
         wallet: address,
