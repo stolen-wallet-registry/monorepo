@@ -236,6 +236,24 @@ library CAIP10 {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // CAIP-2 EXTRACTION FROM CAIP-10 STRINGS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Extract CAIP-2 chain identifier hash from a CAIP-10 string
+    /// @dev Hashes the "namespace:chainRef" portion directly (e.g., keccak256("eip155:8453")).
+    ///      This matches caip2Hash() output, unlike hashing namespace and chainRef separately.
+    /// @param caip10 The CAIP-10 string (e.g., "eip155:8453:0x...")
+    /// @return The CAIP-2 chain identifier hash
+    function extractCaip2Hash(string memory caip10) internal pure returns (bytes32) {
+        bytes memory data = bytes(caip10);
+        uint256 firstColon = _findColon(data, 0);
+        if (firstColon == 0) revert CAIP10__InvalidFormat();
+        uint256 secondColon = _findColon(data, firstColon + 1);
+        if (secondColon == 0) revert CAIP10__InvalidFormat();
+        return keccak256(_slice(data, 0, secondColon));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // VALIDATION
     // ═══════════════════════════════════════════════════════════════════════════
 

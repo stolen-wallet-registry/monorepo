@@ -5,11 +5,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { request } from 'graphql-request';
 import {
-  WALLET_BATCH_DETAIL_QUERY,
-  TRANSACTION_BATCH_DETAIL_QUERY,
+  WALLET_BATCH_ONLY_QUERY,
+  WALLET_ENTRIES_BY_TX_HASH_QUERY,
+  TRANSACTION_BATCH_ONLY_QUERY,
+  TRANSACTION_ENTRIES_BY_TX_HASH_QUERY,
   CONTRACT_BATCH_DETAIL_QUERY,
-  type RawWalletBatchDetailResponse,
-  type RawTransactionBatchDetailResponse,
+  type RawWalletBatchOnlyResponse,
+  type RawWalletEntriesByTxHashResponse,
+  type RawTransactionBatchOnlyResponse,
+  type RawTransactionEntriesByTxHashResponse,
   type RawContractBatchDetailResponse,
 } from '@swr/search';
 import { logger } from '@/lib/logger';
@@ -93,7 +97,6 @@ export interface ContractBatchEntry {
   numericChainId?: number;
   operator: Address;
   reportedAt: bigint;
-  entryHash: string;
 }
 
 export type BatchDetailResult =
@@ -139,25 +142,38 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
       logger.contract.debug('Fetching batch detail', { batchId, type, limit, offset });
 
       if (type === 'wallet') {
-        const response = await request<RawWalletBatchDetailResponse>(
+        // Step 1: Fetch batch by ID
+        const batchRes = await request<RawWalletBatchOnlyResponse>(
           INDEXER_URL,
-          WALLET_BATCH_DETAIL_QUERY,
-          { batchId, limit, offset }
+          WALLET_BATCH_ONLY_QUERY,
+          { batchId }
         );
 
-        if (!response.walletBatch) return null;
+        if (!batchRes.walletBatch) return null;
+
+        // Step 2: Fetch entries by batch's transactionHash (join key)
+        const entriesRes = await request<RawWalletEntriesByTxHashResponse>(
+          INDEXER_URL,
+          WALLET_ENTRIES_BY_TX_HASH_QUERY,
+          { txHash: batchRes.walletBatch.transactionHash, limit, offset }
+        );
+
+        // Derive chain from first entry if batch-level is missing
+        const walletReportedChain =
+          batchRes.walletBatch.reportedChainCAIP2 ??
+          entriesRes.stolenWallets.items[0]?.reportedChainCAIP2;
 
         const batch: WalletBatchDetail = {
-          id: response.walletBatch.id,
-          operatorId: response.walletBatch.operatorId,
-          operator: response.walletBatch.operator as Address,
-          reportedChainId: response.walletBatch.reportedChainCAIP2,
-          walletCount: response.walletBatch.walletCount,
-          registeredAt: safeBigInt(response.walletBatch.registeredAt),
-          transactionHash: response.walletBatch.transactionHash as Hash,
+          id: batchRes.walletBatch.id,
+          operatorId: batchRes.walletBatch.operatorId,
+          operator: batchRes.walletBatch.operator as Address,
+          reportedChainId: walletReportedChain,
+          walletCount: batchRes.walletBatch.walletCount,
+          registeredAt: safeBigInt(batchRes.walletBatch.registeredAt),
+          transactionHash: batchRes.walletBatch.transactionHash as Hash,
         };
 
-        const entries = response.stolenWallets.items.map<WalletBatchEntry>((raw) => ({
+        const entries = entriesRes.stolenWallets.items.map<WalletBatchEntry>((raw) => ({
           id: raw.id,
           caip10: raw.caip10,
           registeredAt: safeBigInt(raw.registeredAt),
@@ -170,28 +186,41 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
       }
 
       if (type === 'transaction') {
-        const response = await request<RawTransactionBatchDetailResponse>(
+        // Step 1: Fetch batch by ID
+        const batchRes = await request<RawTransactionBatchOnlyResponse>(
           INDEXER_URL,
-          TRANSACTION_BATCH_DETAIL_QUERY,
-          { batchId, limit, offset }
+          TRANSACTION_BATCH_ONLY_QUERY,
+          { batchId }
         );
 
-        if (!response.transactionBatch) return null;
+        if (!batchRes.transactionBatch) return null;
+
+        // Step 2: Fetch entries by batch's transactionHash (join key)
+        const entriesRes = await request<RawTransactionEntriesByTxHashResponse>(
+          INDEXER_URL,
+          TRANSACTION_ENTRIES_BY_TX_HASH_QUERY,
+          { txHash: batchRes.transactionBatch.transactionHash, limit, offset }
+        );
+
+        // Derive chain from first entry if batch-level is missing
+        const txReportedChain =
+          batchRes.transactionBatch.reportedChainCAIP2 ??
+          entriesRes.transactionInBatchs.items[0]?.caip2ChainId;
 
         const batch: TransactionBatchDetail = {
-          id: response.transactionBatch.id,
-          dataHash: response.transactionBatch.dataHash,
-          reporter: response.transactionBatch.reporter as Address,
-          reportedChainId: response.transactionBatch.reportedChainCAIP2,
-          transactionCount: response.transactionBatch.transactionCount,
-          isSponsored: response.transactionBatch.isSponsored,
-          isOperator: response.transactionBatch.isOperator,
-          operatorId: response.transactionBatch.operatorId,
-          registeredAt: safeBigInt(response.transactionBatch.registeredAt),
-          transactionHash: response.transactionBatch.transactionHash as Hash,
+          id: batchRes.transactionBatch.id,
+          dataHash: batchRes.transactionBatch.dataHash,
+          reporter: batchRes.transactionBatch.reporter as Address,
+          reportedChainId: txReportedChain,
+          transactionCount: batchRes.transactionBatch.transactionCount,
+          isSponsored: batchRes.transactionBatch.isSponsored,
+          isOperator: batchRes.transactionBatch.isOperator,
+          operatorId: batchRes.transactionBatch.operatorId,
+          registeredAt: safeBigInt(batchRes.transactionBatch.registeredAt),
+          transactionHash: batchRes.transactionBatch.transactionHash as Hash,
         };
 
-        const entries = response.transactionInBatchs.items.map<TransactionBatchEntry>((raw) => ({
+        const entries = entriesRes.transactionInBatchs.items.map<TransactionBatchEntry>((raw) => ({
           id: raw.id,
           txHash: raw.txHash,
           caip2ChainId: raw.caip2ChainId,
@@ -227,7 +256,6 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
         numericChainId: raw.numericChainId,
         operator: raw.operator as Address,
         reportedAt: safeBigInt(raw.reportedAt),
-        entryHash: raw.entryHash,
       }));
 
       return { type: 'contract', batch, entries };

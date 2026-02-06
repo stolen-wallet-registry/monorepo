@@ -18,7 +18,7 @@ import { EIP712ConstantsV2 } from "./libraries/EIP712ConstantsV2.sol";
 /// @author Stolen Wallet Registry Team
 /// @notice Spoke chain registration contract for cross-chain stolen wallet registry (V2)
 /// @dev V2 includes incidentTimestamp and reportedChainId in user signatures.
-///      Sends messages to FraudRegistryV2 on hub chain via bridge adapter.
+///      Sends messages to FraudRegistryHubV2 on hub chain via bridge adapter.
 contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
     using CrossChainMessageV2 for CrossChainMessageV2.WalletRegistrationPayload;
     using CrossChainMessageV2 for CrossChainMessageV2.TransactionBatchPayload;
@@ -265,7 +265,7 @@ contract SpokeRegistryV2 is ISpokeRegistryV2, EIP712, Ownable2Step {
         bool isSponsored,
         bytes32 registrationHash
     ) internal {
-        // Build cross-chain payload (V2 format for FraudRegistryV2)
+        // Build cross-chain payload (V2 format for FraudRegistryHubV2)
         CrossChainMessageV2.WalletRegistrationPayload memory payload = CrossChainMessageV2.WalletRegistrationPayload({
             namespaceHash: CAIP10.NAMESPACE_EIP155,
             chainRef: CAIP10Evm.evmChainRefHash(uint64(block.chainid)),

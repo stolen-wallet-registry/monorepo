@@ -30,6 +30,8 @@ export const stolenWallet = onchainTable(
     messageId: t.hex(),
     /** V2: bytes32 CAIP-2 hash where incident occurred */
     reportedChainId: t.hex(),
+    /** V2: Resolved CAIP-2 string (e.g. "eip155:1") from reportedChainId hash */
+    reportedChainCAIP2: t.text(),
     /** V2: uint64 when theft happened */
     incidentTimestamp: t.bigint(),
     /** V2: 0=local, 1=Hyperlane */
@@ -394,11 +396,6 @@ export const fraudulentContract = onchainTable(
   (t) => ({
     /** contractAddress-chainIdHash composite */
     id: t.text().primaryKey(),
-    /**
-     * Entry hash for joining with invalidatedEntry table (keccak256(address, chainId)).
-     * Kept for frontend compatibility — will be removed during V1 cleanup.
-     */
-    entryHash: t.hex().notNull(),
     /** Contract address */
     contractAddress: t.hex().notNull(),
     /** Chain ID hash (bytes32) */
@@ -415,33 +412,12 @@ export const fraudulentContract = onchainTable(
     reportedAt: t.bigint().notNull(),
   }),
   (table) => ({
-    entryHashIdx: index().on(table.entryHash),
     contractAddressIdx: index().on(table.contractAddress),
     caip2ChainIdIdx: index().on(table.caip2ChainId),
     batchIdIdx: index().on(table.batchId),
     operatorIdx: index().on(table.operator),
   })
 );
-
-/**
- * Invalidated entries (individual contract+chain combinations).
- * DEPRECATED in V2: ContractRegistryV2 has no invalidation events.
- * Kept for schema compatibility — table will never be populated in V2.
- */
-export const invalidatedEntry = onchainTable('invalidated_entry', (t) => ({
-  /** entryHash (keccak256(contract, chainId)) */
-  id: t.hex().primaryKey(),
-  /** When invalidated */
-  invalidatedAt: t.bigint().notNull(),
-  /** Who invalidated */
-  invalidatedBy: t.hex().notNull(),
-  /** Transaction hash */
-  transactionHash: t.hex().notNull(),
-  /** Has been reinstated */
-  reinstated: t.boolean().notNull(),
-  /** When reinstated (null if still invalid) */
-  reinstatedAt: t.bigint(),
-}));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATISTICS
@@ -481,8 +457,6 @@ export const registryStats = onchainTable('registry_stats', (t) => ({
   totalContractBatches: t.integer().notNull(),
   /** Total individual fraudulent contracts reported */
   totalFraudulentContracts: t.integer().notNull(),
-  /** Invalidated contract batches (deprecated in V2) */
-  invalidatedContractBatches: t.integer().notNull(),
   /** Last update timestamp */
   lastUpdated: t.bigint().notNull(),
 }));

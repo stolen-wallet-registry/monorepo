@@ -6,7 +6,7 @@
  *
  * Flow:
  * 1. Spoke tx confirms → enabled becomes true
- * 2. Polls hub chain isTransactionBatchRegistered(merkleRoot) every N seconds
+ * 2. Polls hub chain isTransactionBatchRegistered(dataHash) every N seconds
  * 3. Returns 'confirmed' when hub shows batch as registered
  * 4. Returns 'timeout' if max polling time exceeded
  *
@@ -31,8 +31,8 @@ export type TxCrossChainStatus =
   | 'timeout'; // Max polling time exceeded (transient errors handled via timeout)
 
 export interface UseTxCrossChainConfirmationOptions {
-  /** The merkle root of the transaction batch being registered */
-  merkleRoot: Hash | undefined;
+  /** The data hash of the transaction batch being registered */
+  dataHash: Hash | undefined;
   /** The reporter address who signed the registration */
   reporter: Address | undefined;
   /** The reported chain ID hash (CAIP-2 keccak256) */
@@ -65,7 +65,7 @@ const DEFAULT_MAX_POLLING_TIME = 120000; // 2 minutes
 const INITIAL_DELAY = 1000; // 1 second delay before polling starts
 
 export function useTxCrossChainConfirmation({
-  merkleRoot,
+  dataHash,
   reporter,
   reportedChainId,
   spokeChainId,
@@ -82,28 +82,28 @@ export function useTxCrossChainConfirmation({
   // Get the hub chain ID for this spoke
   const hubChainId = spokeChainId ? getHubChainId(spokeChainId) : undefined;
 
-  // Compute the batchId: keccak256(abi.encode(merkleRoot, reporter, reportedChainId))
+  // Compute the batchId: keccak256(abi.encode(dataHash, reporter, reportedChainId))
   // This must match the contract's _computeBatchId function
   const batchId = useMemo(() => {
-    if (!merkleRoot || !reporter || !reportedChainId) return undefined;
+    if (!dataHash || !reporter || !reportedChainId) return undefined;
     try {
       return keccak256(
         encodeAbiParameters(parseAbiParameters('bytes32, address, bytes32'), [
-          merkleRoot as Hash,
+          dataHash as Hash,
           reporter as Address,
           reportedChainId as Hex,
         ])
       );
     } catch (err) {
       logger.registration.error('Failed to compute batchId', {
-        merkleRoot,
+        dataHash,
         reporter,
         reportedChainId,
         error: err instanceof Error ? err.message : String(err),
       });
       return undefined;
     }
-  }, [merkleRoot, reporter, reportedChainId]);
+  }, [dataHash, reporter, reportedChainId]);
 
   // Get hub registry address (RegistryHub, not the subregistry)
   let hubRegistryAddress: Address | undefined;
@@ -137,7 +137,7 @@ export function useTxCrossChainConfirmation({
     abi: fraudRegistryHubV2Abi,
     functionName: 'isTransactionRegistered',
     // V2 signature: isTransactionRegistered(bytes32 txHash, bytes32 chainId)
-    // We pass merkleRoot as txHash and reportedChainId as chainId for now
+    // We pass dataHash as txHash and reportedChainId as chainId for now
     args: batchId && reportedChainId ? [batchId, reportedChainId] : undefined,
     chainId: hubChainId,
     query: {
@@ -157,14 +157,14 @@ export function useTxCrossChainConfirmation({
   useEffect(() => {
     if (enabled && batchId) {
       logger.registration.debug('Cross-chain tx batch confirmation initialized', {
-        merkleRoot,
+        dataHash,
         reporter,
         reportedChainId,
         computedBatchId: batchId,
         hubChainId,
       });
     }
-  }, [enabled, batchId, merkleRoot, reporter, reportedChainId, hubChainId]);
+  }, [enabled, batchId, dataHash, reporter, reportedChainId, hubChainId]);
 
   // DERIVE status from inputs - no useState for status
   const status: TxCrossChainStatus = useMemo(() => {
@@ -195,7 +195,7 @@ export function useTxCrossChainConfirmation({
     prevStatusRef.current = 'idle';
 
     logger.registration.info('Starting cross-chain tx batch confirmation polling', {
-      merkleRoot,
+      dataHash,
       reporter,
       reportedChainId,
       computedBatchId: batchId,
@@ -221,7 +221,7 @@ export function useTxCrossChainConfirmation({
     };
   }, [
     enabled,
-    merkleRoot,
+    dataHash,
     reporter,
     reportedChainId,
     batchId,
@@ -236,39 +236,39 @@ export function useTxCrossChainConfirmation({
     if (status !== prevStatusRef.current) {
       if (status === 'confirmed') {
         logger.registration.info('Cross-chain tx batch confirmation received!', {
-          merkleRoot,
+          dataHash,
           hubChainId,
           elapsedTime,
         });
       }
       if (status === 'timeout') {
         logger.registration.warn('Cross-chain tx batch confirmation timeout', {
-          merkleRoot,
+          dataHash,
           elapsedTime,
           maxPollingTime,
         });
       }
       if (status === 'polling' && prevStatusRef.current === 'waiting') {
         logger.registration.debug('Cross-chain tx batch polling started', {
-          merkleRoot,
+          dataHash,
           hubChainId,
         });
       }
       prevStatusRef.current = status;
     }
-  }, [status, merkleRoot, hubChainId, elapsedTime, maxPollingTime]);
+  }, [status, dataHash, hubChainId, elapsedTime, maxPollingTime]);
 
   // Log query errors (read-only, no setState)
   useEffect(() => {
     if (status === 'polling' && isQueryError) {
       logger.registration.error('Cross-chain tx batch confirmation query error', {
-        merkleRoot,
+        dataHash,
         hubChainId,
       });
       // Don't immediately fail - could be transient network issue
       // Let timeout handle persistent failures
     }
-  }, [status, isQueryError, merkleRoot, hubChainId]);
+  }, [status, isQueryError, dataHash, hubChainId]);
 
   const refresh = useCallback(() => {
     refetch();

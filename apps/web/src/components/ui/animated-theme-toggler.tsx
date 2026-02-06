@@ -90,8 +90,8 @@ export const AnimatedThemeToggler = forwardRef<ThemeTogglerHandle, AnimatedTheme
         // Skip if already on this variant
         if (themeVariant === variant) return;
         animateTransition(() => setThemeVariant(variant)).catch((err) => {
-          // AbortError is expected when View Transition is skipped (e.g., during init)
-          if (err.name !== 'AbortError') console.error(err);
+          // AbortError/InvalidStateError are expected when View Transition is skipped or interrupted
+          if (err.name !== 'AbortError' && err.name !== 'InvalidStateError') console.error(err);
         });
       },
       [themeVariant, animateTransition, setThemeVariant]
@@ -108,7 +108,9 @@ export const AnimatedThemeToggler = forwardRef<ThemeTogglerHandle, AnimatedTheme
 
     const handleClick = useCallback(
       (event: React.MouseEvent<HTMLButtonElement>) => {
-        toggleColorScheme().catch(console.error);
+        toggleColorScheme().catch((err) => {
+          if (err.name !== 'AbortError' && err.name !== 'InvalidStateError') console.error(err);
+        });
         onClick?.(event);
       },
       [toggleColorScheme, onClick]

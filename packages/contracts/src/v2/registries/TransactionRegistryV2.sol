@@ -154,14 +154,13 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
     /// @inheritdoc ITransactionRegistryV2
     function isTransactionRegistered(string calldata chainQualifiedRef) external view returns (bool) {
         // Parse: namespace:chainId:txHash
-        (bytes32 namespaceHash, bytes32 chainRef, uint256 txStart, uint256 txLen) = CAIP10.parse(chainQualifiedRef);
+        (,, uint256 txStart, uint256 txLen) = CAIP10.parse(chainQualifiedRef);
         // Validate tx hash length: 66 chars = "0x" + 64 hex chars (standard EVM tx hash)
         require(txLen == 66, "Invalid tx hash length");
-        bytes memory txHashBytes = bytes(chainQualifiedRef)[txStart:txStart + txLen];
-        bytes32 txHash = bytes32(txHashBytes);
+        bytes32 txHash = CAIP10Evm.parseHexToBytes32(chainQualifiedRef, txStart, txLen);
 
-        // Compute storage key
-        bytes32 chainId = keccak256(abi.encodePacked(namespaceHash, chainRef));
+        // Compute storage key using CAIP-2 hash extracted directly from the string
+        bytes32 chainId = CAIP10.extractCaip2Hash(chainQualifiedRef);
         bytes32 key = CAIP10.txStorageKey(txHash, chainId);
 
         return _transactions[key].registeredAt > 0;
@@ -169,13 +168,12 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
 
     /// @inheritdoc ITransactionRegistryV2
     function getTransactionEntry(string calldata chainQualifiedRef) external view returns (TransactionEntry memory) {
-        (bytes32 namespaceHash, bytes32 chainRef, uint256 txStart, uint256 txLen) = CAIP10.parse(chainQualifiedRef);
+        (,, uint256 txStart, uint256 txLen) = CAIP10.parse(chainQualifiedRef);
         // Validate tx hash length: 66 chars = "0x" + 64 hex chars (standard EVM tx hash)
         require(txLen == 66, "Invalid tx hash length");
-        bytes memory txHashBytes = bytes(chainQualifiedRef)[txStart:txStart + txLen];
-        bytes32 txHash = bytes32(txHashBytes);
+        bytes32 txHash = CAIP10Evm.parseHexToBytes32(chainQualifiedRef, txStart, txLen);
 
-        bytes32 chainId = keccak256(abi.encodePacked(namespaceHash, chainRef));
+        bytes32 chainId = CAIP10.extractCaip2Hash(chainQualifiedRef);
         bytes32 key = CAIP10.txStorageKey(txHash, chainId);
 
         return _transactions[key];
@@ -373,6 +371,7 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         bytes32 s
     ) external payable {
         if (reporter == address(0)) revert TransactionRegistryV2__ZeroAddress();
+        if (forwarder == address(0)) revert TransactionRegistryV2__ZeroAddress();
         if (dataHash == bytes32(0)) revert TransactionRegistryV2__DataHashMismatch();
         if (transactionCount == 0) revert TransactionRegistryV2__EmptyBatch();
         if (deadline <= block.timestamp) revert TransactionRegistryV2__DeadlineExpired();

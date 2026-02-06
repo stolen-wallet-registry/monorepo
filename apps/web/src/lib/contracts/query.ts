@@ -5,17 +5,35 @@
  * Use this for real-time state during registration flows.
  */
 
-import type { PublicClient, Address, Abi, Hash } from 'viem';
+import { parseAbi, type PublicClient, type Address, type Abi, type Hash } from 'viem';
 
 /**
- * Registration data from the contract.
+ * Minimal ABI for isWalletRegistered(address) to avoid viem ambiguity
+ * with the string overload isWalletRegistered(string).
+ */
+const isWalletRegisteredAbi = parseAbi([
+  'function isWalletRegistered(address wallet) view returns (bool)',
+]);
+
+/**
+ * Minimal ABI for getWalletEntry(address) to avoid viem ambiguity
+ * with the string overload getWalletEntry(string).
+ */
+const getWalletEntryAbi = parseAbi([
+  'function getWalletEntry(address wallet) view returns ((bytes32 reportedChainId, bytes32 sourceChainId, bytes32 messageId, uint64 registeredAt, uint64 incidentTimestamp, uint8 bridgeId, bool isSponsored))',
+]);
+
+/**
+ * Registration data from the contract (V2 WalletEntry struct).
  */
 export interface RegistrationData {
+  reportedChainId: Hash;
+  sourceChainId: Hash;
+  messageId: Hash;
   registeredAt: bigint;
-  sourceChainId: number;
+  incidentTimestamp: bigint;
   bridgeId: number;
   isSponsored: boolean;
-  crossChainMessageId: Hash;
 }
 
 /**
@@ -55,7 +73,7 @@ export async function queryRegistryStatus(
     contracts: [
       {
         address: contractAddress,
-        abi,
+        abi: isWalletRegisteredAbi,
         functionName: 'isWalletRegistered',
         args: [address],
       },
@@ -67,7 +85,7 @@ export async function queryRegistryStatus(
       },
       {
         address: contractAddress,
-        abi,
+        abi: getWalletEntryAbi,
         functionName: 'getWalletEntry',
         args: [address],
       },
@@ -86,18 +104,22 @@ export async function queryRegistryStatus(
   let registrationData: RegistrationData | null = null;
   if (results[2].status === 'success' && isRegistered) {
     const result = results[2].result as {
+      reportedChainId: Hash;
+      sourceChainId: Hash;
+      messageId: Hash;
       registeredAt: bigint;
-      sourceChainId: number;
+      incidentTimestamp: bigint;
       bridgeId: number;
       isSponsored: boolean;
-      crossChainMessageId: Hash;
     };
     registrationData = {
-      registeredAt: result.registeredAt,
+      reportedChainId: result.reportedChainId,
       sourceChainId: result.sourceChainId,
+      messageId: result.messageId,
+      registeredAt: result.registeredAt,
+      incidentTimestamp: result.incidentTimestamp,
       bridgeId: result.bridgeId,
       isSponsored: result.isSponsored,
-      crossChainMessageId: result.crossChainMessageId,
     };
   }
 

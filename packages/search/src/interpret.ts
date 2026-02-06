@@ -83,14 +83,7 @@ export function getAddressStatusLabel(result: AddressSearchResult): string {
   }
 
   if (result.foundInContractRegistry) {
-    const contractData = result.data?.contract;
-    const chainCount = contractData?.chains.length ?? 0;
-    const invalidatedCount = contractData?.chains.filter((c) => c.isInvalidated).length ?? 0;
-    if (invalidatedCount === chainCount && chainCount > 0) {
-      labels.push('Contract (Invalidated)');
-    } else {
-      labels.push('Fraudulent Contract');
-    }
+    labels.push('Fraudulent Contract');
   }
 
   return labels.join(' & ');
@@ -159,10 +152,7 @@ export function getAddressStatusDescription(result: AddressSearchResult): string
   if (result.foundInContractRegistry) {
     const contractData = result.data?.contract;
     const chainCount = contractData?.chains.length ?? 0;
-    const invalidatedCount = contractData?.chains.filter((c) => c.isInvalidated).length ?? 0;
-    if (invalidatedCount === chainCount && chainCount > 0) {
-      descriptions.push('Previously flagged as fraudulent contract (invalidated).');
-    } else if (chainCount === 1) {
+    if (chainCount === 1) {
       descriptions.push('Flagged as a fraudulent contract.');
     } else {
       descriptions.push(`Flagged as a fraudulent contract on ${chainCount} chains.`);

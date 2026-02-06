@@ -580,7 +580,7 @@ function BatchDetailContent({
                         ? getExplorerAddressUrl(chainIdForExplorer, entry.contractAddress)
                         : null;
                       return (
-                        <TableRow key={entry.entryHash}>
+                        <TableRow key={`${entry.contractAddress}-${entry.caip2ChainId}`}>
                           <TableCell>
                             <Caip10Entry
                               identifier={entry.contractAddress}

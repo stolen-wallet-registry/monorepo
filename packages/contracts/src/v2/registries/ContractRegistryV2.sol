@@ -67,7 +67,8 @@ contract ContractRegistryV2 is IContractRegistryV2, Ownable2Step {
         // Parse CAIP-10: namespace:chainId:address
         (bytes32 namespaceHash, bytes32 chainRef, uint256 addrStart,) = CAIP10.parse(caip10);
 
-        bytes32 chainId = keccak256(abi.encodePacked(namespaceHash, chainRef));
+        // Extract CAIP-2 hash directly from the string (e.g., keccak256("eip155:8453"))
+        bytes32 chainId = CAIP10.extractCaip2Hash(caip10);
 
         // Extract address from CAIP-10 string
         if (namespaceHash == CAIP10.NAMESPACE_EIP155) {
@@ -87,7 +88,8 @@ contract ContractRegistryV2 is IContractRegistryV2, Ownable2Step {
     function getContractEntry(string calldata caip10) external view returns (ContractEntry memory) {
         (bytes32 namespaceHash, bytes32 chainRef, uint256 addrStart,) = CAIP10.parse(caip10);
 
-        bytes32 chainId = keccak256(abi.encodePacked(namespaceHash, chainRef));
+        // Extract CAIP-2 hash directly from the string
+        bytes32 chainId = CAIP10.extractCaip2Hash(caip10);
 
         if (namespaceHash == CAIP10.NAMESPACE_EIP155) {
             address contractAddr = CAIP10Evm.parseEvmAddress(caip10, addrStart);

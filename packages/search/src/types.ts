@@ -118,8 +118,6 @@ export interface ContractChainReport {
   operator: Address;
   /** Timestamp when reported (Unix seconds as bigint) */
   reportedAt: bigint;
-  /** Whether entry is invalidated */
-  isInvalidated: boolean;
 }
 
 /**

@@ -5,7 +5,7 @@ pragma solidity ^0.8.24;
 /// @author Stolen Wallet Registry Team
 /// @notice Interface for spoke chain wallet registration (V2)
 /// @dev V2 includes incidentTimestamp and reportedChainId in user signatures.
-///      Works with FraudRegistryV2 on hub chain.
+///      Works with FraudRegistryHubV2 on hub chain.
 interface ISpokeRegistryV2 {
     // ═══════════════════════════════════════════════════════════════════════════
     // STRUCTS

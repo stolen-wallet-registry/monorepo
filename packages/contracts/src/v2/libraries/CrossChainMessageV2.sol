@@ -5,7 +5,7 @@ pragma solidity ^0.8.24;
 /// @author Stolen Wallet Registry Team
 /// @notice Library for encoding/decoding cross-chain registration messages (V2)
 /// @dev V2 uses full CAIP-10 compatible format with bytes32 identifiers for cross-blockchain support.
-///      Designed to work with FraudRegistryV2.registerFromHub interface.
+///      Designed to work with FraudRegistryHubV2.registerFromHub interface.
 library CrossChainMessageV2 {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
@@ -25,7 +25,7 @@ library CrossChainMessageV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Cross-chain wallet registration payload (V2)
-    /// @dev Matches FraudRegistryV2.registerFromHub parameters for direct forwarding.
+    /// @dev Matches FraudRegistryHubV2.registerFromHub parameters for direct forwarding.
     ///      Uses bytes32 identifiers for cross-blockchain compatibility.
     struct WalletRegistrationPayload {
         // === CAIP-10 Identity (cross-blockchain) ===

@@ -372,6 +372,7 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
         bytes32 s
     ) external payable {
         if (registeree == address(0)) revert WalletRegistryV2__ZeroAddress();
+        if (forwarder == address(0)) revert WalletRegistryV2__ZeroAddress();
         if (deadline <= block.timestamp) revert WalletRegistryV2__DeadlineExpired();
 
         // Check not already registered

@@ -43,7 +43,7 @@ import type { Hash } from '@/lib/types/ethereum';
 import { parseSignature } from '@/lib/signatures';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { getHubChainId } from '@/lib/chains/config';
-import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
+import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import {
   getExplorerTxUrl,
   getChainName as getChainNameFromExplorer,
@@ -67,17 +67,22 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   const chainId = useChainId();
   const { registrationType, bridgeMessageId, setRegistrationHash, setBridgeMessageId } =
     useTransactionRegistrationStore();
-  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
-    useTransactionSelection();
+  const {
+    selectedTxHashes,
+    selectedTxDetails,
+    reportedChainId,
+    txHashesForContract,
+    chainIdsForContract,
+  } = useTransactionSelection();
 
   const isSelfRelay = registrationType === 'selfRelay';
 
-  // V2: Compute dataHash from sorted arrays (replaces merkle root)
+  // V2: Compute dataHash from sorted arrays for signing/contract calls
   const dataHash: Hash | undefined =
-    sortedTxHashes.length > 0 &&
-    sortedChainIds.length > 0 &&
-    sortedTxHashes.length === sortedChainIds.length
-      ? computeTransactionDataHash(sortedTxHashes, sortedChainIds)
+    txHashesForContract.length > 0 &&
+    chainIdsForContract.length > 0 &&
+    txHashesForContract.length === chainIdsForContract.length
+      ? computeTransactionDataHash(txHashesForContract, chainIdsForContract)
       : undefined;
 
   // Contract hooks
@@ -140,10 +145,12 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
 
-  // Use sorted hashes and chain IDs from merkle tree for contract calls
-  // These must match the order used to compute the merkle root
-  const txHashesForContract = sortedTxHashes.length > 0 ? sortedTxHashes : undefined;
-  const chainIdsForContract = sortedChainIds.length > 0 ? sortedChainIds : undefined;
+  // Use sorted hashes and chain IDs for contract calls
+  // These must match the order used to compute the data hash
+  const txHashesForContractGuarded =
+    txHashesForContract.length > 0 ? txHashesForContract : undefined;
+  const chainIdsForContractGuarded =
+    chainIdsForContract.length > 0 ? chainIdsForContract : undefined;
 
   // Parse signature for gas estimation (need the parsed v, r, s values)
   const parsedSigForEstimate = storedSignatureState
@@ -162,8 +169,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     refetch: refetchGas,
   } = useTxGasEstimate({
     step: 'registration',
-    transactionHashes: txHashesForContract,
-    chainIds: chainIdsForContract,
+    transactionHashes: txHashesForContractGuarded,
+    chainIds: chainIdsForContractGuarded,
     reporter: storedSignatureState?.reporter,
     deadline: storedSignatureState?.deadline,
     // Spoke-specific params
@@ -173,8 +180,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     value: feeWei,
     enabled:
       !!storedSignatureState &&
-      !!txHashesForContract &&
-      !!chainIdsForContract &&
+      !!txHashesForContractGuarded &&
+      !!chainIdsForContractGuarded &&
       feeWei !== undefined &&
       isCorrectWallet, // Only estimate gas when correct wallet is connected
   });
@@ -182,7 +189,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   // Cross-chain confirmation - polls hub chain after spoke tx confirms
   // Must pass reporter and reportedChainId to compute the correct batchId
   const crossChainConfirmation = useTxCrossChainConfirmation({
-    merkleRoot: dataHash, // V2: dataHash replaces merkle root
+    dataHash,
     reporter: storedSignatureState?.reporter,
     reportedChainId: reportedChainIdHash,
     spokeChainId: chainId,
@@ -370,11 +377,11 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     try {
       const parsedSig = parseSignature(storedSignatureState.signature);
 
-      // Validate sorted data is available
-      if (!txHashesForContract || !chainIdsForContract) {
-        logger.contract.error('Missing sorted transaction data for registration', {
-          hasSortedTxHashes: !!txHashesForContract,
-          hasSortedChainIds: !!chainIdsForContract,
+      // Validate transaction data is available
+      if (!txHashesForContractGuarded || !chainIdsForContractGuarded) {
+        logger.contract.error('Missing transaction data for registration', {
+          hasTxHashes: !!txHashesForContractGuarded,
+          hasChainIds: !!chainIdsForContractGuarded,
         });
         setLocalError('Transaction data not ready. Please go back and try again.');
         return;
@@ -397,8 +404,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         const hubParams: TxRegistrationParamsHub = {
           reporter: storedSignatureState.reporter,
           deadline: storedSignatureState.deadline,
-          transactionHashes: txHashesForContract,
-          chainIds: chainIdsForContract,
+          transactionHashes: txHashesForContractGuarded,
+          chainIds: chainIdsForContractGuarded,
           signature: parsedSig,
           feeWei,
         };
@@ -410,8 +417,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
           reportedChainId: reportedChainIdHash,
           deadline: storedSignatureState.deadline,
           nonce: storedSignatureState.nonce,
-          transactionHashes: txHashesForContract,
-          chainIds: chainIdsForContract,
+          transactionHashes: txHashesForContractGuarded,
+          chainIds: chainIdsForContractGuarded,
           signature: parsedSig,
           feeWei,
         };
@@ -584,7 +591,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
           <div className="flex items-start gap-2">
             <span className="text-muted-foreground flex items-center gap-1 shrink-0">
               Data Hash:
-              <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
+              <InfoTooltip content={DATA_HASH_TOOLTIP} side="right" />
             </span>
             <Tooltip>
               <TooltipTrigger asChild>

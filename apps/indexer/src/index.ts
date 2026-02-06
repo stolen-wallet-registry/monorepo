@@ -25,7 +25,7 @@ import {
   base,
   type Environment,
 } from '@swr/chains';
-import { keccak256, encodePacked, type Address, type Hex } from 'viem';
+import { type Address, type Hex } from 'viem';
 
 // Hub chain configuration - determined by environment
 const PONDER_ENV = (process.env.PONDER_ENV ?? 'development') as Environment;
@@ -73,7 +73,6 @@ type StatsDelta = {
   totalOperatorTransactionBatches?: number;
   totalContractBatches?: number;
   totalFraudulentContracts?: number;
-  invalidatedContractBatches?: number;
 };
 
 async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) {
@@ -108,8 +107,6 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
       totalContractBatches: existing.totalContractBatches + (delta.totalContractBatches ?? 0),
       totalFraudulentContracts:
         existing.totalFraudulentContracts + (delta.totalFraudulentContracts ?? 0),
-      invalidatedContractBatches:
-        existing.invalidatedContractBatches + (delta.invalidatedContractBatches ?? 0),
       lastUpdated: timestamp,
     });
   } else {
@@ -136,7 +133,6 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
       totalOperatorTransactionBatches: delta.totalOperatorTransactionBatches ?? 0,
       totalContractBatches: delta.totalContractBatches ?? 0,
       totalFraudulentContracts: delta.totalFraudulentContracts ?? 0,
-      invalidatedContractBatches: delta.invalidatedContractBatches ?? 0,
       lastUpdated: timestamp,
     });
   }
@@ -200,6 +196,7 @@ ponder.on('WalletRegistryV2:WalletRegistered', async ({ event, context }) => {
       transactionHash: event.transaction.hash,
       isSponsored,
       reportedChainId,
+      reportedChainCAIP2,
       incidentTimestamp: BigInt(incidentTimestamp),
     })
     .onConflictDoNothing();
@@ -456,9 +453,6 @@ ponder.on('ContractRegistryV2:ContractRegistered', async ({ event, context }) =>
     .insert(fraudulentContract)
     .values({
       id: `${contractAddress}-${reportedChainId}`,
-      entryHash: keccak256(
-        encodePacked(['address', 'bytes32'], [contractAddress, reportedChainId])
-      ),
       contractAddress,
       chainIdHash: reportedChainId,
       caip2ChainId,

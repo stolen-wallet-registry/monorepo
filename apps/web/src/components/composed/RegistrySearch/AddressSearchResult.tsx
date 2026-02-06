@@ -72,61 +72,40 @@ function WalletSection({ data }: { data: WalletSearchData }) {
  * Section showing contract registry results.
  */
 function ContractSection({ data }: { data: ContractSearchData }) {
-  const activeChains = data.chains.filter((c) => !c.isInvalidated);
-  const invalidatedChains = data.chains.filter((c) => c.isInvalidated);
-  const isAllInvalidated = activeChains.length === 0 && invalidatedChains.length > 0;
-
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 font-medium">
         <FileWarning className="h-4 w-4" />
         <span>Fraudulent Contract Registry</span>
-        {isAllInvalidated ? (
-          <Badge variant="secondary" className="text-xs">
-            Invalidated
-          </Badge>
-        ) : (
-          <Badge variant="destructive" className="text-xs">
-            Flagged
-          </Badge>
-        )}
+        <Badge variant="destructive" className="text-xs">
+          Flagged
+        </Badge>
       </div>
 
-      {activeChains.length > 0 && (
-        <div className="text-xs space-y-2 pl-6">
-          <p className="text-muted-foreground">
-            Flagged on {activeChains.length} chain{activeChains.length > 1 ? 's' : ''}:
-          </p>
-          {activeChains.map((chain) => {
-            const reportedDate = new Date(Number(chain.reportedAt) * 1000);
-            return (
-              <div
-                key={`${chain.caip2ChainId}-${chain.batchId}`}
-                className="pl-2 border-l border-muted"
-              >
-                <p className="font-medium">{chain.chainName}</p>
-                <p>
-                  <span className="text-muted-foreground">Reported:</span>{' '}
-                  {reportedDate.toLocaleString()}
-                </p>
-                <p className="flex items-center gap-1">
-                  <span className="text-muted-foreground">Operator:</span>{' '}
-                  <ExplorerLink type="address" value={chain.operator} />
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {invalidatedChains.length > 0 && (
-        <div className="text-xs space-y-1 pl-6 opacity-60">
-          <p className="text-muted-foreground">
-            Previously flagged on {invalidatedChains.length} chain
-            {invalidatedChains.length > 1 ? 's' : ''} (invalidated)
-          </p>
-        </div>
-      )}
+      <div className="text-xs space-y-2 pl-6">
+        <p className="text-muted-foreground">
+          Flagged on {data.chains.length} chain{data.chains.length > 1 ? 's' : ''}:
+        </p>
+        {data.chains.map((chain) => {
+          const reportedDate = new Date(Number(chain.reportedAt) * 1000);
+          return (
+            <div
+              key={`${chain.caip2ChainId}-${chain.batchId}`}
+              className="pl-2 border-l border-muted"
+            >
+              <p className="font-medium">{chain.chainName}</p>
+              <p>
+                <span className="text-muted-foreground">Reported:</span>{' '}
+                {reportedDate.toLocaleString()}
+              </p>
+              <p className="flex items-center gap-1">
+                <span className="text-muted-foreground">Operator:</span>{' '}
+                <ExplorerLink type="address" value={chain.operator} />
+              </p>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

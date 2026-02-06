@@ -105,6 +105,39 @@ library CAIP10Evm {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // HEX STRING PARSING
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    error CAIP10Evm__InvalidHexChar();
+
+    /// @notice Parse a hex-encoded bytes32 from a string at a given offset
+    /// @dev Handles both "0x"-prefixed (66 chars) and raw (64 chars) hex strings
+    /// @param str The source string containing hex data
+    /// @param offset Byte offset where the hex string starts
+    /// @param len Length of the hex string (64 or 66 with 0x prefix)
+    /// @return result The decoded bytes32 value
+    function parseHexToBytes32(string memory str, uint256 offset, uint256 len) internal pure returns (bytes32 result) {
+        bytes memory data = bytes(str);
+        uint256 start = offset;
+        if (len >= 2 && data[offset] == "0" && (data[offset + 1] == "x" || data[offset + 1] == "X")) {
+            start += 2;
+        }
+        for (uint256 i = 0; i < 32; i++) {
+            uint8 hi = _hexCharToNibble(data[start + i * 2]);
+            uint8 lo = _hexCharToNibble(data[start + i * 2 + 1]);
+            result |= bytes32(bytes1(hi << 4 | lo)) >> (i * 8);
+        }
+    }
+
+    /// @dev Convert a single hex character to its numeric value
+    function _hexCharToNibble(bytes1 c) private pure returns (uint8) {
+        if (c >= "0" && c <= "9") return uint8(c) - uint8(bytes1("0"));
+        if (c >= "a" && c <= "f") return uint8(c) - uint8(bytes1("a")) + 10;
+        if (c >= "A" && c <= "F") return uint8(c) - uint8(bytes1("A")) + 10;
+        revert CAIP10Evm__InvalidHexChar();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // EVM FORMATTING (for events/logging)
     // ═══════════════════════════════════════════════════════════════════════════
 

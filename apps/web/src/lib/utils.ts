@@ -35,6 +35,3 @@ export function sanitizeErrorMessage(error: unknown): string {
  * phases, ensuring the same transactions are used throughout.
  */
 export const DATA_HASH_TOOLTIP = `A cryptographic hash of your selected transactions that links the acknowledgement and registration phases. This ensures the same set of transactions is used in both steps, preventing tampering. When registered, each transaction emits a blockchain event that off-ramps, wallets, and other services can monitor.`;
-
-/** @deprecated Use DATA_HASH_TOOLTIP */
-export const MERKLE_ROOT_TOOLTIP = DATA_HASH_TOOLTIP;

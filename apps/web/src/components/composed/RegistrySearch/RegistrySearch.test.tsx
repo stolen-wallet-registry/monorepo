@@ -15,12 +15,14 @@ describe('RegistrySearchResult', () => {
 
   describe('registered status', () => {
     const mockRegistrationData = {
+      reportedChainId:
+        '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
+      sourceChainId: '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
+      messageId: '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
       registeredAt: 12345678n,
-      sourceChainId: 0,
+      incidentTimestamp: 0n,
       bridgeId: 0,
       isSponsored: false,
-      crossChainMessageId:
-        '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
     };
 
     it('displays registered alert with destructive styling', () => {
