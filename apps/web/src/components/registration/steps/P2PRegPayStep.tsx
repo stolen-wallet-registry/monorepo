@@ -105,19 +105,26 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       return;
     }
 
-    logger.p2p.info('Relayer submitting REG transaction');
+    logger.p2p.info('Relayer submitting V2 REG transaction');
 
     // Parse signature to v, r, s components
     const parsedSig = parseSignature(storedSig.signature);
 
+    // V2 fields from stored signature - must be present
+    // If missing, it means P2P relay didn't transmit them correctly
+    // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
+    const reportedChainId = storedSig.reportedChainId ?? BigInt(chainId);
+    const incidentTimestamp = storedSig.incidentTimestamp ?? 0n;
+
     await submitRegistration({
-      deadline: storedSig.deadline,
-      nonce: storedSig.nonce,
       registeree,
+      deadline: storedSig.deadline,
+      reportedChainId,
+      incidentTimestamp,
       signature: parsedSig,
       feeWei,
     });
-  }, [storedSig, registeree, submitRegistration, feeWei]);
+  }, [storedSig, registeree, chainId, submitRegistration, feeWei]);
 
   // Cleanup retry timeout on unmount
   useEffect(() => {

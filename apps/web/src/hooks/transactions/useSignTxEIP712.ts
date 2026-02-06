@@ -1,36 +1,55 @@
 /**
- * Hook for signing EIP-712 typed data for the transaction registry.
- * Supports both hub (StolenTransactionRegistry) and spoke (SpokeTransactionRegistry) chains.
+ * Hook for signing EIP-712 typed data for the V2 transaction registry.
+ * Supports both hub (TransactionRegistryV2) and spoke (SpokeRegistryV2) chains.
  *
- * Provides convenient wrappers around wagmi's useSignTypedData for:
- * - Acknowledgement signatures (Phase 1)
- * - Registration signatures (Phase 2)
+ * V2 changes from V1:
+ * - `reporter` is an explicit field in the typed data
+ * - `merkleRoot` replaced by `dataHash` (keccak256(abi.encode(txHashes, chainIds)))
+ * - `transactionCount` present in both ACK and REG types
+ * - Domain name unified to "StolenWalletRegistry" across all registries
  */
 
 import { useCallback } from 'react';
 import { useSignTypedData, useAccount, useChainId } from 'wagmi';
 import {
-  buildTxAcknowledgementTypedData,
-  buildTxRegistrationTypedData,
+  buildV2TxAcknowledgementTypedData,
+  buildV2TxRegistrationTypedData,
 } from '@/lib/signatures/transactions';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
 export interface TxSignAckParams {
-  merkleRoot: Hash;
+  /** Reporter address (signer) */
+  reporter: Address;
+  /** Data hash: keccak256(abi.encodePacked(txHashes, chainIds)) */
+  dataHash: Hash;
+  /** CAIP-2 chain ID as bytes32 */
   reportedChainId: Hash;
+  /** Number of transactions in the batch */
   transactionCount: number;
+  /** Trusted forwarder address */
   forwarder: Address;
+  /** Contract nonce for reporter */
   nonce: bigint;
+  /** Signature deadline (timestamp) */
   deadline: bigint;
 }
 
 export interface TxSignRegParams {
-  merkleRoot: Hash;
+  /** Reporter address (signer) */
+  reporter: Address;
+  /** Data hash: keccak256(abi.encodePacked(txHashes, chainIds)) */
+  dataHash: Hash;
+  /** CAIP-2 chain ID as bytes32 */
   reportedChainId: Hash;
+  /** Number of transactions in the batch */
+  transactionCount: number;
+  /** Trusted forwarder address */
   forwarder: Address;
+  /** Contract nonce for reporter */
   nonce: bigint;
+  /** Signature deadline (timestamp) */
   deadline: bigint;
 }
 
@@ -44,7 +63,7 @@ export interface UseSignTxEIP712Result {
 }
 
 /**
- * Hook for signing EIP-712 messages for the transaction batch registration flow.
+ * Hook for signing EIP-712 messages for the V2 transaction batch registration flow.
  *
  * @returns Functions for signing acknowledgement and registration messages
  */
@@ -55,47 +74,64 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
   const { signTypedDataAsync, isPending, isError, error, reset } = useSignTypedData();
 
   // Resolve contract address with built-in error handling and logging
-  const { address: contractAddress } = resolveRegistryContract(
+  const { address: contractAddress, role: registryType } = resolveRegistryContract(
     chainId,
     'transaction',
     'useSignTxEIP712'
   );
+  const isHub = registryType === 'hub';
 
   /**
-   * Validates that wallet is connected and contract is configured.
+   * Validates that wallet is connected, contract is configured, and reporter matches signer.
    * @throws Error if validation fails
    * @returns The validated contract address
    */
-  const validateSigningPreconditions = useCallback((): Address => {
-    if (!address) {
-      throw new Error('Wallet not connected');
-    }
-    if (!contractAddress) {
-      throw new Error('Contract not configured for this chain');
-    }
-    return contractAddress;
-  }, [address, contractAddress]);
+  const validateSigningPreconditions = useCallback(
+    (reporter?: Address): Address => {
+      if (!address) {
+        throw new Error('Wallet not connected');
+      }
+      if (!contractAddress) {
+        throw new Error('Contract not configured for this chain');
+      }
+      if (reporter && reporter.toLowerCase() !== address.toLowerCase()) {
+        throw new Error(
+          `Connected wallet ${address} does not match reporter ${reporter}. Please switch wallets.`
+        );
+      }
+      return contractAddress;
+    },
+    [address, contractAddress]
+  );
 
   /**
    * Sign a transaction batch acknowledgement message (Phase 1).
    */
   const signTxAcknowledgement = useCallback(
     async (params: TxSignAckParams): Promise<Hex> => {
-      const validatedAddress = validateSigningPreconditions();
+      const validatedAddress = validateSigningPreconditions(params.reporter);
       const message = {
-        merkleRoot: params.merkleRoot,
+        reporter: params.reporter,
+        forwarder: params.forwarder,
+        dataHash: params.dataHash,
         reportedChainId: params.reportedChainId,
         transactionCount: params.transactionCount,
-        forwarder: params.forwarder,
         nonce: params.nonce,
         deadline: params.deadline,
       };
-      const typedData = buildTxAcknowledgementTypedData(chainId, validatedAddress, message);
+      const typedData = buildV2TxAcknowledgementTypedData(
+        chainId,
+        validatedAddress,
+        isHub,
+        message
+      );
 
-      logger.signature.info('Requesting transaction batch acknowledgement signature', {
+      logger.signature.info('Requesting V2 transaction batch acknowledgement signature', {
         chainId,
         contractAddress: validatedAddress,
-        merkleRoot: params.merkleRoot,
+        isHub,
+        reporter: params.reporter,
+        dataHash: params.dataHash,
         transactionCount: params.transactionCount,
         forwarder: params.forwarder,
         nonce: params.nonce.toString(),
@@ -110,22 +146,22 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
           message: typedData.message,
         });
 
-        logger.signature.info('Transaction batch acknowledgement signature received', {
+        logger.signature.info('V2 transaction batch acknowledgement signature received', {
           signatureLength: signature.length,
-          merkleRoot: params.merkleRoot,
+          dataHash: params.dataHash,
         });
 
         return signature;
       } catch (err) {
-        logger.signature.error('Transaction batch acknowledgement signature failed', {
+        logger.signature.error('V2 transaction batch acknowledgement signature failed', {
           chainId,
-          merkleRoot: params.merkleRoot,
+          dataHash: params.dataHash,
           error: err instanceof Error ? err.message : String(err),
         });
         throw err;
       }
     },
-    [chainId, signTypedDataAsync, validateSigningPreconditions]
+    [chainId, isHub, signTypedDataAsync, validateSigningPreconditions]
   );
 
   /**
@@ -133,20 +169,24 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
    */
   const signTxRegistration = useCallback(
     async (params: TxSignRegParams): Promise<Hex> => {
-      const validatedAddress = validateSigningPreconditions();
+      const validatedAddress = validateSigningPreconditions(params.reporter);
       const message = {
-        merkleRoot: params.merkleRoot,
-        reportedChainId: params.reportedChainId,
+        reporter: params.reporter,
         forwarder: params.forwarder,
+        dataHash: params.dataHash,
+        reportedChainId: params.reportedChainId,
+        transactionCount: params.transactionCount,
         nonce: params.nonce,
         deadline: params.deadline,
       };
-      const typedData = buildTxRegistrationTypedData(chainId, validatedAddress, message);
+      const typedData = buildV2TxRegistrationTypedData(chainId, validatedAddress, isHub, message);
 
-      logger.signature.info('Requesting transaction batch registration signature', {
+      logger.signature.info('Requesting V2 transaction batch registration signature', {
         chainId,
         contractAddress: validatedAddress,
-        merkleRoot: params.merkleRoot,
+        isHub,
+        reporter: params.reporter,
+        dataHash: params.dataHash,
         forwarder: params.forwarder,
         nonce: params.nonce.toString(),
         deadline: params.deadline.toString(),
@@ -160,22 +200,22 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
           message: typedData.message,
         });
 
-        logger.signature.info('Transaction batch registration signature received', {
+        logger.signature.info('V2 transaction batch registration signature received', {
           signatureLength: signature.length,
-          merkleRoot: params.merkleRoot,
+          dataHash: params.dataHash,
         });
 
         return signature;
       } catch (err) {
-        logger.signature.error('Transaction batch registration signature failed', {
+        logger.signature.error('V2 transaction batch registration signature failed', {
           chainId,
-          merkleRoot: params.merkleRoot,
+          dataHash: params.dataHash,
           error: err instanceof Error ? err.message : String(err),
         });
         throw err;
       }
     },
-    [chainId, signTypedDataAsync, validateSigningPreconditions]
+    [chainId, isHub, signTypedDataAsync, validateSigningPreconditions]
   );
 
   return {

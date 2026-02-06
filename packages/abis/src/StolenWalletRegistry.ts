@@ -1091,6 +1091,11 @@ export const StolenWalletRegistryABI = [
   },
   {
     type: 'error',
+    name: 'LeavesNotSorted',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'OwnableInvalidOwner',
     inputs: [
       {

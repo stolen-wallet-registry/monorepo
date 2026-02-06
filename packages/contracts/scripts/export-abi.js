@@ -9,23 +9,22 @@ const abiDir = join(__dirname, '../../abis/src');
 
 // Foundry flattens output - artifacts are at ContractName.sol/ContractName.json
 const contracts = [
-  // Core hub contracts
-  'RegistryHub.sol/RegistryHub.json',
-  'StolenWalletRegistry.sol/StolenWalletRegistry.json',
-  'StolenTransactionRegistry.sol/StolenTransactionRegistry.json',
+  // V2 Hub + Separate Registries (current architecture)
+  'FraudRegistryHubV2.sol/FraudRegistryHubV2.json',
+  'WalletRegistryV2.sol/WalletRegistryV2.json',
+  'TransactionRegistryV2.sol/TransactionRegistryV2.json',
+  'ContractRegistryV2.sol/ContractRegistryV2.json',
+  'OperatorSubmitterV2.sol/OperatorSubmitterV2.json',
+  'SpokeRegistryV2.sol/SpokeRegistryV2.json',
+  'CrossChainInboxV2.sol/CrossChainInboxV2.json',
+  // Infrastructure contracts
   'FeeManager.sol/FeeManager.json',
   'OperatorRegistry.sol/OperatorRegistry.json',
-  'FraudulentContractRegistry.sol/FraudulentContractRegistry.json',
-  // Cross-chain contracts
-  'CrossChainInbox.sol/CrossChainInbox.json',
-  'SpokeRegistry.sol/SpokeRegistry.json',
-  'SpokeTransactionRegistry.sol/SpokeTransactionRegistry.json',
   'HyperlaneAdapter.sol/HyperlaneAdapter.json',
   // Soulbound contracts
   'TranslationRegistry.sol/TranslationRegistry.json',
   'WalletSoulbound.sol/WalletSoulbound.json',
   'SupportSoulbound.sol/SupportSoulbound.json',
-  // Cross-chain soulbound contracts
   'SpokeSoulboundForwarder.sol/SpokeSoulboundForwarder.json',
   'SoulboundReceiver.sol/SoulboundReceiver.json',
 ];

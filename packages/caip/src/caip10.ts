@@ -125,3 +125,47 @@ export function extractCAIP2FromCAIP10(caip10: string): CAIP2 | null {
   if (!parsed) return null;
   return `${parsed.namespace}:${parsed.chainId}`;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// V2 WILDCARD SUPPORT (CAIP-363)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Build CAIP-10 wildcard address for EVM (CAIP-363).
+ * Format: "eip155:_:0x..."
+ *
+ * This matches all EVM chains for a given wallet address.
+ * Used by FraudRegistryV2 for cross-chain wallet lookups.
+ *
+ * @param address - Wallet address (will be lowercased)
+ * @returns CAIP-10 wildcard string
+ *
+ * @example
+ * ```ts
+ * toCAIP10Wildcard("0x742d35Cc6634C0532925a3b844Bc454e83c4b3a1")
+ * // => "eip155:_:0x742d35cc6634c0532925a3b844bc454e83c4b3a1"
+ * ```
+ */
+export function toCAIP10Wildcard(address: string): CAIP10 {
+  return `eip155:_:${address.toLowerCase()}`;
+}
+
+/**
+ * Check if CAIP-10 string uses wildcard chain reference.
+ *
+ * @param caip10 - CAIP-10 string to check
+ * @returns true if chain reference is "_" (wildcard)
+ *
+ * @example
+ * ```ts
+ * isWildcardCAIP10("eip155:_:0x123...abc")
+ * // => true
+ *
+ * isWildcardCAIP10("eip155:8453:0x123...abc")
+ * // => false
+ * ```
+ */
+export function isWildcardCAIP10(caip10: string): boolean {
+  const parsed = parseCAIP10(caip10);
+  return parsed?.chainId === '_';
+}

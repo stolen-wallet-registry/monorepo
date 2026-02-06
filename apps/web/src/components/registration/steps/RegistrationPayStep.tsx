@@ -25,6 +25,7 @@ import {
   needsCrossChainConfirmation,
 } from '@/hooks/useCrossChainConfirmation';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import type { WalletRegistrationArgs } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl, getChainName, getBridgeMessageByIdUrl } from '@/lib/explorer';
 import { getHubChainId } from '@/lib/chains/config';
@@ -81,23 +82,34 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     ? getSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION)
     : null;
 
+  // Parse signature once for reuse (avoid calling parseSignature 4 times)
+  const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
+
   // Build transaction args for gas estimation (needs to be before early returns)
-  const transactionArgs =
-    storedSignature && registeree
-      ? ([
-          storedSignature.deadline,
-          storedSignature.nonce,
+  // WalletRegistryV2.register: (registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
+  // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
+  const transactionArgs: WalletRegistrationArgs | undefined =
+    storedSignature &&
+    registeree &&
+    parsedSig &&
+    storedSignature.reportedChainId !== undefined &&
+    storedSignature.incidentTimestamp !== undefined
+      ? [
           registeree,
-          parseSignature(storedSignature.signature).v,
-          parseSignature(storedSignature.signature).r,
-          parseSignature(storedSignature.signature).s,
-        ] as const)
+          storedSignature.deadline,
+          storedSignature.reportedChainId,
+          storedSignature.incidentTimestamp,
+          parsedSig.v,
+          parsedSig.r,
+          parsedSig.s,
+        ]
       : undefined;
 
   // Get transaction cost estimate (must be called unconditionally - hooks rule)
   const costEstimate = useTransactionCost({
     step: 'registration',
     args: transactionArgs,
+    ownerAddress: registeree,
   });
 
   // Check if this is a cross-chain registration (spoke → hub)
@@ -246,9 +258,10 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
       isCorrectWallet,
     });
 
-    if (!storedSignature || !registeree) {
+    if (!storedSignature || !registeree || !parsedSig) {
       logger.contract.error('Cannot submit registration - missing data', {
         hasStoredSignature: !!storedSignature,
+        hasParsedSig: !!parsedSig,
         registeree,
       });
       setLocalError('Missing signature data. Please go back and sign again.');
@@ -267,8 +280,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     setLocalError(null);
 
     try {
-      const parsedSig = parseSignature(storedSignature.signature);
-
+      // parsedSig already computed at component level (reused here)
       logger.contract.info('Submitting walletRegistration to contract', {
         deadline: storedSignature.deadline.toString(),
         nonce: storedSignature.nonce.toString(),
@@ -277,10 +289,15 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         chainId,
       });
 
+      // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
+      const reportedChainId = storedSignature.reportedChainId ?? BigInt(chainId);
+      const incidentTimestamp = storedSignature.incidentTimestamp ?? 0n;
+
       await submitRegistration({
-        deadline: storedSignature.deadline,
-        nonce: storedSignature.nonce,
         registeree,
+        deadline: storedSignature.deadline,
+        reportedChainId,
+        incidentTimestamp,
         signature: parsedSig,
         feeWei,
       });

@@ -235,17 +235,25 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     try {
       const forwarder = isSelfRelay ? (form.getValues('relayer') as Address) : address;
 
-      logger.signature.info('Requesting EIP-712 acknowledgement signature', {
-        owner: address,
+      // V2: Generate reportedChainId (raw chain ID) and incidentTimestamp
+      const reportedChainId = BigInt(chainId);
+      const incidentTimestamp = 0n; // TODO: Add incident timestamp selection UI (block/tx picker)
+
+      logger.signature.info('Requesting V2 EIP-712 acknowledgement signature', {
+        wallet: address,
         forwarder,
+        reportedChainId,
+        incidentTimestamp: incidentTimestamp.toString(),
         nonce: nonce.toString(),
         deadline: freshDeadline.toString(),
         chainId,
       });
 
       const sig = await signAcknowledgement({
-        owner: address,
+        wallet: address,
         forwarder,
+        reportedChainId,
+        incidentTimestamp,
         nonce,
         deadline: freshDeadline,
       });
@@ -254,7 +262,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
       });
 
-      // Store signature
+      // Store signature with V2 fields
       storeSignature({
         signature: sig,
         deadline: freshDeadline,
@@ -263,8 +271,10 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         chainId,
         step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
         storedAt: Date.now(),
+        reportedChainId,
+        incidentTimestamp,
       });
-      logger.signature.debug('Acknowledgement signature stored in sessionStorage');
+      logger.signature.debug('V2 acknowledgement signature stored in sessionStorage');
 
       setSignature(sig);
       setSignatureStatus('success');

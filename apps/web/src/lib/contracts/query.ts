@@ -5,7 +5,7 @@
  * Use this for real-time state during registration flows.
  */
 
-import type { PublicClient, Address, Abi } from 'viem';
+import type { PublicClient, Address, Abi, Hash } from 'viem';
 
 /**
  * Registration data from the contract.
@@ -15,7 +15,7 @@ export interface RegistrationData {
   sourceChainId: number;
   bridgeId: number;
   isSponsored: boolean;
-  crossChainMessageId: `0x${string}`;
+  crossChainMessageId: Hash;
 }
 
 /**
@@ -42,7 +42,7 @@ export interface RegistryStatusResult {
  *
  * @param client - viem PublicClient
  * @param address - Wallet address to query
- * @param contractAddress - StolenWalletRegistry contract address
+ * @param contractAddress - WalletRegistryV2 contract address
  * @param abi - Contract ABI
  */
 export async function queryRegistryStatus(
@@ -56,25 +56,25 @@ export async function queryRegistryStatus(
       {
         address: contractAddress,
         abi,
-        functionName: 'isRegistered',
+        functionName: 'isWalletRegistered',
         args: [address],
       },
       {
         address: contractAddress,
         abi,
-        functionName: 'isPending',
+        functionName: 'isWalletPending',
         args: [address],
       },
       {
         address: contractAddress,
         abi,
-        functionName: 'getRegistration',
+        functionName: 'getWalletEntry',
         args: [address],
       },
       {
         address: contractAddress,
         abi,
-        functionName: 'getAcknowledgement',
+        functionName: 'getAcknowledgementData',
         args: [address],
       },
     ],
@@ -90,7 +90,7 @@ export async function queryRegistryStatus(
       sourceChainId: number;
       bridgeId: number;
       isSponsored: boolean;
-      crossChainMessageId: `0x${string}`;
+      crossChainMessageId: Hash;
     };
     registrationData = {
       registeredAt: result.registeredAt,

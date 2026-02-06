@@ -60,8 +60,8 @@ export function useContractNonce(
     'useContractNonce'
   );
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata(variant, registryType);
+  // Get the correct ABI and function names for hub/spoke
+  const { abi, functions } = getRegistryMetadata(variant, registryType);
 
   // Transaction registry needs faster polling for merkle batch workflows
   const refetchInterval = variant === 'transaction' ? 5_000 : undefined;
@@ -71,7 +71,7 @@ export function useContractNonce(
     address: contractAddress,
     abi,
     chainId,
-    functionName: 'nonces',
+    functionName: functions.nonces,
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
       enabled: !!ownerAddress && !!contractAddress,
@@ -117,8 +117,8 @@ export function useTxContractNonce(address: Address | undefined): UseContractNon
     'useTxContractNonce'
   );
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata('transaction', registryType);
+  // Get the correct ABI and function names for hub/spoke
+  const { abi, functions } = getRegistryMetadata('transaction', registryType);
 
   const enabled = !!address && !!contractAddress;
 
@@ -131,7 +131,7 @@ export function useTxContractNonce(address: Address | undefined): UseContractNon
   } = useReadContract({
     address: contractAddress,
     abi,
-    functionName: 'nonces',
+    functionName: functions.nonces,
     args: address ? [address] : undefined,
     chainId,
     query: {

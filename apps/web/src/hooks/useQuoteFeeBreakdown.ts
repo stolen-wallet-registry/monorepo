@@ -2,9 +2,9 @@
  * Hooks to get detailed fee breakdown for registration.
  *
  * Supports both wallet and transaction registries.
- * Chain-aware: Uses quoteFeeBreakdown() on spoke chains, quoteRegistration() on hub.
- * - Hub: returns { bridgeFee: null, registrationFee, total, bridgeName: null, isCrossChain: false }
- * - Spoke: returns { bridgeFee, registrationFee, total, bridgeName: "Hyperlane", isCrossChain: true }
+ * Unified interface: Both hub and spoke expose quoteFeeBreakdown(address).
+ * - Hub: returns { bridgeFee: 0, registrationFee, total, bridgeName: "" }
+ * - Spoke: returns { bridgeFee, registrationFee, total, bridgeName: "Hyperlane" }
  */
 
 import { useMemo } from 'react';
@@ -35,7 +35,7 @@ export interface UseQuoteFeeBreakdownResult {
 /**
  * Get detailed fee breakdown for wallet registration.
  *
- * @param ownerAddress - The wallet being registered (needed for nonce in quote)
+ * @param ownerAddress - The wallet being registered (used by spoke for bridge quote, ignored on hub)
  */
 export function useQuoteFeeBreakdown(
   ownerAddress: Address | null | undefined
@@ -50,116 +50,75 @@ export function useQuoteFeeBreakdown(
     'useQuoteFeeBreakdown'
   );
 
-  // Get the correct ABIs for hub/spoke (need both for conditional queries)
-  const hubMetadata = getRegistryMetadata('wallet', 'hub');
-  const spokeMetadata = getRegistryMetadata('wallet', 'spoke');
+  // Get the correct ABI and function name (unified: quoteFeeBreakdown on both hub and spoke)
+  const { abi, functions } = getRegistryMetadata('wallet', registryType);
 
   // Convert null to undefined for wagmi compatibility
   const normalizedAddress = ownerAddress ?? undefined;
 
-  // On spoke: call quoteFeeBreakdown()
-  const spokeResult = useReadContract({
+  // Unified call: quoteFeeBreakdown(address) on both hub and spoke
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
+  const result = useReadContract({
     address: contractAddress,
-    abi: spokeMetadata.abi,
+    abi,
     chainId,
-    functionName: 'quoteFeeBreakdown',
+    functionName: functions.quoteFeeBreakdown as any,
     args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {
-      enabled: registryType === 'spoke' && !!normalizedAddress && !!contractAddress,
+      enabled: !!normalizedAddress && !!contractAddress,
       staleTime: 30_000,
     },
   });
 
-  // On hub: call quoteRegistration() (single value)
-  const hubResult = useReadContract({
-    address: contractAddress,
-    abi: hubMetadata.abi,
-    chainId,
-    functionName: 'quoteRegistration',
-    args: normalizedAddress ? [normalizedAddress] : undefined,
-    query: {
-      enabled: registryType === 'hub' && !!normalizedAddress && !!contractAddress,
-      staleTime: 30_000,
-    },
-  });
-
-  // Normalize data from either chain type
+  // Normalize data from contract response
   const { data, raw } = useMemo(() => {
+    if (!result.data) return { data: null, raw: null };
+
     const ethPriceUsd = ethPrice?.usd;
+    const isCrossChain = registryType === 'spoke';
 
-    // Spoke chain: quoteFeeBreakdown returns a struct
-    if (registryType === 'spoke' && spokeResult.data) {
-      const breakdown = spokeResult.data as {
-        bridgeFee: bigint;
-        registrationFee: bigint;
-        total: bigint;
-        bridgeName: string;
-      };
+    // Both hub and spoke return the same FeeBreakdown struct
+    const breakdown = result.data as {
+      bridgeFee: bigint;
+      registrationFee: bigint;
+      total: bigint;
+      bridgeName: string;
+    };
 
-      logger.contract.debug('useQuoteFeeBreakdown: Spoke breakdown received', {
-        bridgeFee: breakdown.bridgeFee.toString(),
-        registrationFee: breakdown.registrationFee.toString(),
-        total: breakdown.total.toString(),
-        bridgeName: breakdown.bridgeName,
-      });
+    logger.contract.debug('useQuoteFeeBreakdown: Breakdown received', {
+      registryType,
+      bridgeFee: breakdown.bridgeFee.toString(),
+      registrationFee: breakdown.registrationFee.toString(),
+      total: breakdown.total.toString(),
+      bridgeName: breakdown.bridgeName,
+    });
 
-      const rawBreakdown: RawFeeBreakdown = {
-        bridgeFee: breakdown.bridgeFee,
-        registrationFee: breakdown.registrationFee,
-        total: breakdown.total,
-        bridgeName: breakdown.bridgeName,
-      };
+    const rawBreakdown: RawFeeBreakdown = {
+      bridgeFee: breakdown.bridgeFee,
+      registrationFee: breakdown.registrationFee,
+      total: breakdown.total,
+      bridgeName: breakdown.bridgeName,
+    };
 
-      const formatted: FeeBreakdown = {
-        bridgeFee: formatFeeLineItem(breakdown.bridgeFee, ethPriceUsd),
-        registrationFee: formatFeeLineItem(breakdown.registrationFee, ethPriceUsd),
-        total: formatFeeLineItem(breakdown.total, ethPriceUsd),
-        bridgeName: breakdown.bridgeName,
-        isCrossChain: true,
-      };
+    const formatted: FeeBreakdown = {
+      bridgeFee:
+        breakdown.bridgeFee > 0n ? formatFeeLineItem(breakdown.bridgeFee, ethPriceUsd) : null,
+      registrationFee: formatFeeLineItem(breakdown.registrationFee, ethPriceUsd),
+      total: formatFeeLineItem(breakdown.total, ethPriceUsd),
+      bridgeName: breakdown.bridgeName || null,
+      isCrossChain,
+    };
 
-      return { data: formatted, raw: rawBreakdown };
-    }
-
-    // Hub chain: quoteRegistration returns single uint256 (all registration fee, no bridge)
-    if (registryType === 'hub' && hubResult.data) {
-      const feeWei = hubResult.data as bigint;
-
-      logger.contract.debug('useQuoteFeeBreakdown: Hub fee received', {
-        feeWei: feeWei.toString(),
-      });
-
-      const rawBreakdown: RawFeeBreakdown = {
-        bridgeFee: 0n,
-        registrationFee: feeWei,
-        total: feeWei,
-        bridgeName: '',
-      };
-
-      const formatted: FeeBreakdown = {
-        bridgeFee: null,
-        registrationFee: formatFeeLineItem(feeWei, ethPriceUsd),
-        total: formatFeeLineItem(feeWei, ethPriceUsd),
-        bridgeName: null,
-        isCrossChain: false,
-      };
-
-      return { data: formatted, raw: rawBreakdown };
-    }
-
-    return { data: null, raw: null };
-  }, [registryType, spokeResult.data, hubResult.data, ethPrice?.usd]);
-
-  // Determine loading/error state based on active query
-  const activeResult = registryType === 'spoke' ? spokeResult : hubResult;
+    return { data: formatted, raw: rawBreakdown };
+  }, [result.data, ethPrice?.usd, registryType]);
 
   return {
     data,
     raw,
-    isLoading: activeResult.isLoading,
-    isError: activeResult.isError,
-    error: activeResult.error,
-    refetch: activeResult.refetch,
+    isLoading: result.isLoading,
+    isError: result.isError,
+    error: result.error,
+    refetch: result.refetch,
   };
 }
 
@@ -183,12 +142,12 @@ export interface UseTxQuoteFeeBreakdownResult {
 /**
  * Get detailed fee breakdown for transaction batch registration.
  *
- * @param reporter - The reporter address (needed for hub nonce-based quote)
- * @param transactionCount - Number of transactions in batch (needed for spoke quote)
+ * @param reporter - The reporter address (used by spoke for bridge quote, ignored on hub)
+ * @param _transactionCount - Deprecated: V2 uses flat fees, count is no longer needed
  */
 export function useTxQuoteFeeBreakdown(
   reporter: Address | null | undefined,
-  transactionCount: number
+  _transactionCount?: number // eslint-disable-line @typescript-eslint/no-unused-vars
 ): UseTxQuoteFeeBreakdownResult {
   const chainId = useChainId();
   const { data: ethPrice } = useEthPrice();
@@ -199,117 +158,74 @@ export function useTxQuoteFeeBreakdown(
     'transaction',
     'useTxQuoteFeeBreakdown'
   );
-  const isSpoke = registryType === 'spoke';
 
-  // Get the correct ABIs for hub/spoke (need both for conditional queries)
-  const hubMetadata = getRegistryMetadata('transaction', 'hub');
-  const spokeMetadata = getRegistryMetadata('transaction', 'spoke');
+  // Get the correct ABI and function name (unified: quoteFeeBreakdown on both hub and spoke)
+  const { abi, functions } = getRegistryMetadata('transaction', registryType);
 
-  // On spoke: call quoteFeeBreakdown(transactionCount)
-  const spokeResult = useReadContract({
+  // Unified call: quoteFeeBreakdown(address) on both hub and spoke
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
+  const result = useReadContract({
     address: contractAddress,
-    abi: spokeMetadata.abi,
+    abi,
     chainId,
-    functionName: 'quoteFeeBreakdown',
-    args: [transactionCount],
-    query: {
-      enabled: isSpoke && transactionCount > 0 && !!contractAddress,
-      staleTime: 30_000,
-      refetchInterval: 60_000,
-    },
-  });
-
-  // On hub: call quoteRegistration(reporter)
-  const hubResult = useReadContract({
-    address: contractAddress,
-    abi: hubMetadata.abi,
-    chainId,
-    functionName: 'quoteRegistration',
+    functionName: functions.quoteFeeBreakdown as any,
     args: reporter ? [reporter] : undefined,
     query: {
-      enabled: !isSpoke && !!reporter && !!contractAddress,
+      enabled: !!reporter && !!contractAddress,
       staleTime: 30_000,
       refetchInterval: 60_000,
     },
   });
 
-  // Normalize data from either chain type
+  // Normalize data from contract response
   const { data, raw, totalWei } = useMemo(() => {
+    if (!result.data) return { data: null, raw: null, totalWei: undefined };
+
     const ethPriceUsd = ethPrice?.usd;
+    const isCrossChain = registryType === 'spoke';
 
-    // Spoke chain: quoteFeeBreakdown returns a struct
-    if (isSpoke && spokeResult.data) {
-      const breakdown = spokeResult.data as {
-        bridgeFee: bigint;
-        registrationFee: bigint;
-        total: bigint;
-        bridgeName: string;
-      };
+    // Both hub and spoke return the same FeeBreakdown struct
+    const breakdown = result.data as {
+      bridgeFee: bigint;
+      registrationFee: bigint;
+      total: bigint;
+      bridgeName: string;
+    };
 
-      logger.contract.debug('useTxQuoteFeeBreakdown: Spoke breakdown received', {
-        bridgeFee: breakdown.bridgeFee.toString(),
-        registrationFee: breakdown.registrationFee.toString(),
-        total: breakdown.total.toString(),
-        bridgeName: breakdown.bridgeName,
-      });
+    logger.contract.debug('useTxQuoteFeeBreakdown: Breakdown received', {
+      registryType,
+      bridgeFee: breakdown.bridgeFee.toString(),
+      registrationFee: breakdown.registrationFee.toString(),
+      total: breakdown.total.toString(),
+      bridgeName: breakdown.bridgeName,
+    });
 
-      const rawBreakdown: RawFeeBreakdown = {
-        bridgeFee: breakdown.bridgeFee,
-        registrationFee: breakdown.registrationFee,
-        total: breakdown.total,
-        bridgeName: breakdown.bridgeName,
-      };
+    const rawBreakdown: RawFeeBreakdown = {
+      bridgeFee: breakdown.bridgeFee,
+      registrationFee: breakdown.registrationFee,
+      total: breakdown.total,
+      bridgeName: breakdown.bridgeName,
+    };
 
-      const formatted: FeeBreakdown = {
-        bridgeFee: formatFeeLineItem(breakdown.bridgeFee, ethPriceUsd),
-        registrationFee: formatFeeLineItem(breakdown.registrationFee, ethPriceUsd),
-        total: formatFeeLineItem(breakdown.total, ethPriceUsd),
-        bridgeName: breakdown.bridgeName,
-        isCrossChain: true,
-      };
+    const formatted: FeeBreakdown = {
+      bridgeFee:
+        breakdown.bridgeFee > 0n ? formatFeeLineItem(breakdown.bridgeFee, ethPriceUsd) : null,
+      registrationFee: formatFeeLineItem(breakdown.registrationFee, ethPriceUsd),
+      total: formatFeeLineItem(breakdown.total, ethPriceUsd),
+      bridgeName: breakdown.bridgeName || null,
+      isCrossChain,
+    };
 
-      return { data: formatted, raw: rawBreakdown, totalWei: breakdown.total };
-    }
-
-    // Hub chain: quoteRegistration returns single uint256 (all registration fee, no bridge)
-    if (!isSpoke && hubResult.data) {
-      const feeWei = hubResult.data as bigint;
-
-      logger.contract.debug('useTxQuoteFeeBreakdown: Hub fee received', {
-        feeWei: feeWei.toString(),
-      });
-
-      const rawBreakdown: RawFeeBreakdown = {
-        bridgeFee: 0n,
-        registrationFee: feeWei,
-        total: feeWei,
-        bridgeName: '',
-      };
-
-      const formatted: FeeBreakdown = {
-        bridgeFee: null,
-        registrationFee: formatFeeLineItem(feeWei, ethPriceUsd),
-        total: formatFeeLineItem(feeWei, ethPriceUsd),
-        bridgeName: null,
-        isCrossChain: false,
-      };
-
-      return { data: formatted, raw: rawBreakdown, totalWei: feeWei };
-    }
-
-    return { data: null, raw: null, totalWei: undefined };
-  }, [isSpoke, spokeResult.data, hubResult.data, ethPrice?.usd]);
-
-  // Determine loading/error state based on active query
-  const activeResult = isSpoke ? spokeResult : hubResult;
+    return { data: formatted, raw: rawBreakdown, totalWei: breakdown.total };
+  }, [result.data, ethPrice?.usd, registryType]);
 
   return {
     data,
     raw,
     totalWei,
-    isLoading: activeResult.isLoading,
-    isError: activeResult.isError,
-    error: activeResult.error,
-    refetch: activeResult.refetch,
+    isLoading: result.isLoading,
+    isError: result.isError,
+    error: result.error,
+    refetch: result.refetch,
   };
 }

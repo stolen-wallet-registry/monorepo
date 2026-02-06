@@ -4,6 +4,7 @@ import {
   encodeFunctionData,
   createPublicClient,
   http,
+  pad,
   type Hex,
 } from 'viem';
 import chalk from 'chalk';
@@ -12,8 +13,7 @@ import { buildWalletMerkleTree, serializeTree } from '../lib/merkle.js';
 import { parseWalletFile } from '../lib/files.js';
 import { createClients } from '../lib/client.js';
 import { getConfig } from '../lib/config.js';
-import { chainIdToBytes32 } from '../lib/caip.js';
-import { StolenWalletRegistryABI } from '@swr/abis';
+import { OperatorSubmitterV2ABI, WalletRegistryV2ABI } from '@swr/abis';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
@@ -45,8 +45,11 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
     // 1. Load configuration
     const config = getConfig(options.env);
 
-    if (config.contracts.stolenWalletRegistry === zeroAddress) {
-      throw new Error(`Contract addresses not configured for environment: ${options.env}`);
+    if (config.contracts.operatorSubmitter === zeroAddress) {
+      throw new Error(
+        `OperatorSubmitter not configured for environment: ${options.env}. ` +
+          'Set operatorSubmitter in @swr/chains hub contracts.'
+      );
     }
 
     // 2. Parse input file
@@ -55,7 +58,7 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
     const entries = await parseWalletFile(options.file, defaultChainId);
     spinner.succeed(`Loaded ${entries.length} wallet addresses`);
 
-    // 3. Build Merkle tree
+    // 3. Build Merkle tree (kept locally for reference/verification)
     spinner.start('Building Merkle tree...');
     const { root, tree } = buildWalletMerkleTree(entries);
     spinner.succeed(`Merkle root: ${chalk.cyan(root)}`);
@@ -66,31 +69,33 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
       transport: http(config.rpcUrl),
     });
 
-    // 5. Quote fee for operator batch registration
+    // 5. Quote fee
     spinner.start('Fetching fee quote...');
     const fee = await publicClient.readContract({
       address: config.contracts.stolenWalletRegistry,
-      abi: StolenWalletRegistryABI,
-      functionName: 'quoteOperatorBatchRegistration',
+      abi: WalletRegistryV2ABI,
+      functionName: 'quoteRegistration',
+      args: [zeroAddress],
     });
     spinner.succeed(`Fee: ${chalk.yellow(formatEther(fee))} ETH`);
 
-    // 6. Prepare transaction data
-    const reportedChainId = chainIdToBytes32(defaultChainId);
-    const walletAddresses = entries.map((e) => e.address);
-    const chainIds = entries.map((e) => e.chainId);
+    // 6. Prepare V2 transaction data
+    // V2: identifiers are addresses padded to bytes32, incidentTimestamps default to 0
+    const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
+    const reportedChainIds = entries.map((e) => e.chainId);
+    const incidentTimestamps = entries.map(() => 0n);
 
-    // 7. Encode calldata
+    // 7. Encode calldata for OperatorSubmitterV2
     const calldata = encodeFunctionData({
-      abi: StolenWalletRegistryABI,
-      functionName: 'registerBatchAsOperator',
-      args: [root, reportedChainId, walletAddresses, chainIds],
+      abi: OperatorSubmitterV2ABI,
+      functionName: 'registerWalletsAsOperator',
+      args: [identifiers, reportedChainIds, incidentTimestamps],
     });
 
     // Handle --build-only mode (for multisig/DAO workflows)
     if (options.buildOnly) {
       const txData: MultisigTransaction = {
-        to: config.contracts.stolenWalletRegistry,
+        to: config.contracts.operatorSubmitter,
         value: fee.toString(),
         data: calldata,
         operation: 0,
@@ -130,7 +135,6 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
       console.log(chalk.yellow('\n--- DRY RUN ---'));
       console.log('Would submit:');
       console.log(`  Merkle root: ${root}`);
-      console.log(`  Chain ID: ${reportedChainId}`);
       console.log(`  Wallets: ${entries.length}`);
       console.log(`  Fee: ${formatEther(fee)} ETH`);
       return;
@@ -147,15 +151,15 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
 
     console.log(chalk.gray(`Operator address: ${account}`));
 
-    // 9. Submit transaction
+    // 9. Submit through OperatorSubmitterV2
     spinner.start('Submitting batch...');
     const hash = await walletClient.writeContract({
       chain: config.chain,
       account,
-      address: config.contracts.stolenWalletRegistry,
-      abi: StolenWalletRegistryABI,
-      functionName: 'registerBatchAsOperator',
-      args: [root, reportedChainId, walletAddresses, chainIds],
+      address: config.contracts.operatorSubmitter,
+      abi: OperatorSubmitterV2ABI,
+      functionName: 'registerWalletsAsOperator',
+      args: [identifiers, reportedChainIds, incidentTimestamps],
       value: fee,
     });
     spinner.succeed(`Transaction submitted: ${chalk.green(hash)}`);

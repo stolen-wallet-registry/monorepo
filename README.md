@@ -289,8 +289,6 @@ The registration flow uses EIP-712 typed data signing with a two-phase commit sc
 | 9     | DAO governance + operator approval     | Future      |
 | 10    | Additional chain support               | Future      |
 
-See `PRPs/` for detailed planning documents.
-
 ---
 
 ## License

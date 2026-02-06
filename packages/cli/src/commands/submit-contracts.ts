@@ -4,6 +4,7 @@ import {
   encodeFunctionData,
   createPublicClient,
   http,
+  pad,
   type Hex,
 } from 'viem';
 import chalk from 'chalk';
@@ -12,8 +13,7 @@ import { buildContractMerkleTree, serializeTree } from '../lib/merkle.js';
 import { parseContractFile } from '../lib/files.js';
 import { createClients } from '../lib/client.js';
 import { getConfig } from '../lib/config.js';
-import { chainIdToBytes32 } from '../lib/caip.js';
-import { FraudulentContractRegistryABI } from '@swr/abis';
+import { OperatorSubmitterV2ABI, FeeManagerABI } from '@swr/abis';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
@@ -45,8 +45,11 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
     // 1. Load configuration
     const config = getConfig(options.env);
 
-    if (config.contracts.fraudulentContractRegistry === zeroAddress) {
-      throw new Error(`Contract addresses not configured for environment: ${options.env}`);
+    if (config.contracts.operatorSubmitter === zeroAddress) {
+      throw new Error(
+        `OperatorSubmitter not configured for environment: ${options.env}. ` +
+          'Set operatorSubmitter in @swr/chains hub contracts.'
+      );
     }
 
     // 2. Parse input file
@@ -55,7 +58,7 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
     const entries = await parseContractFile(options.file, defaultChainId);
     spinner.succeed(`Loaded ${entries.length} contract addresses`);
 
-    // 3. Build Merkle tree
+    // 3. Build Merkle tree (kept locally for reference/verification)
     spinner.start('Building Merkle tree...');
     const { root, tree } = buildContractMerkleTree(entries);
     spinner.succeed(`Merkle root: ${chalk.cyan(root)}`);
@@ -69,28 +72,27 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
     // 5. Quote fee
     spinner.start('Fetching fee quote...');
     const fee = await publicClient.readContract({
-      address: config.contracts.fraudulentContractRegistry,
-      abi: FraudulentContractRegistryABI,
-      functionName: 'quoteRegistration',
+      address: config.contracts.feeManager,
+      abi: FeeManagerABI,
+      functionName: 'currentFeeWei',
     });
     spinner.succeed(`Fee: ${chalk.yellow(formatEther(fee))} ETH`);
 
-    // 6. Prepare transaction data
-    const reportedChainId = chainIdToBytes32(defaultChainId);
-    const contractAddresses = entries.map((e) => e.address);
-    const chainIds = entries.map((e) => e.chainId);
+    // 6. Prepare V2 transaction data
+    const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
+    const reportedChainIds = entries.map((e) => e.chainId);
 
-    // 7. Encode calldata
+    // 7. Encode calldata for OperatorSubmitterV2
     const calldata = encodeFunctionData({
-      abi: FraudulentContractRegistryABI,
-      functionName: 'registerBatch',
-      args: [root, reportedChainId, contractAddresses, chainIds],
+      abi: OperatorSubmitterV2ABI,
+      functionName: 'registerContractsAsOperator',
+      args: [identifiers, reportedChainIds],
     });
 
     // Handle --build-only mode (for multisig/DAO workflows)
     if (options.buildOnly) {
       const txData: MultisigTransaction = {
-        to: config.contracts.fraudulentContractRegistry,
+        to: config.contracts.operatorSubmitter,
         value: fee.toString(),
         data: calldata,
         operation: 0,
@@ -130,7 +132,6 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
       console.log(chalk.yellow('\n--- DRY RUN ---'));
       console.log('Would submit:');
       console.log(`  Merkle root: ${root}`);
-      console.log(`  Chain ID: ${reportedChainId}`);
       console.log(`  Contracts: ${entries.length}`);
       console.log(`  Fee: ${formatEther(fee)} ETH`);
       return;
@@ -147,15 +148,15 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
 
     console.log(chalk.gray(`Operator address: ${account}`));
 
-    // 9. Submit transaction
+    // 9. Submit through OperatorSubmitterV2
     spinner.start('Submitting batch...');
     const hash = await walletClient.writeContract({
       chain: config.chain,
       account,
-      address: config.contracts.fraudulentContractRegistry,
-      abi: FraudulentContractRegistryABI,
-      functionName: 'registerBatch',
-      args: [root, reportedChainId, contractAddresses, chainIds],
+      address: config.contracts.operatorSubmitter,
+      abi: OperatorSubmitterV2ABI,
+      functionName: 'registerContractsAsOperator',
+      args: [identifiers, reportedChainIds],
       value: fee,
     });
     spinner.succeed(`Transaction submitted: ${chalk.green(hash)}`);

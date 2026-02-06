@@ -2,23 +2,23 @@
 // Stores EIP-712 signatures in sessionStorage (clears on tab close for security)
 // NOTE: This file stays in web app (browser-specific, uses sessionStorage)
 
-import { isHex, isAddress } from 'viem';
+import { isHex, isAddress, size } from 'viem';
 import { TX_SIGNATURE_STEP, type TxSignatureStep } from '@swr/signatures';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 /** Signature session TTL in milliseconds (30 minutes) */
 export const TX_SIGNATURE_TTL_MS = 30 * 60 * 1000;
 
-// Storage key format: swr_tx_sig_{merkleRoot}_{chainId}_{step}
-function getStorageKey(merkleRoot: Hash, chainId: number, step: TxSignatureStep): string {
-  return `swr_tx_sig_${merkleRoot.toLowerCase()}_${chainId}_${step}`;
+// Storage key format: swr_tx_sig_{dataHash}_{chainId}_{step}
+function getStorageKey(dataHash: Hash, chainId: number, step: TxSignatureStep): string {
+  return `swr_tx_sig_${dataHash.toLowerCase()}_${chainId}_${step}`;
 }
 
 export interface StoredTxSignature {
   signature: Hex;
   deadline: bigint;
   nonce: bigint;
-  merkleRoot: Hash;
+  dataHash: Hash;
   reportedChainId: Hash;
   transactionCount: number;
   reporter: Address;
@@ -33,7 +33,7 @@ interface SerializedTxSignature {
   signature: string;
   deadline: string;
   nonce: string;
-  merkleRoot: string;
+  dataHash: string;
   reportedChainId: string;
   transactionCount: number;
   reporter: string;
@@ -45,12 +45,12 @@ interface SerializedTxSignature {
 
 // Store a signature
 export function storeTxSignature(sig: StoredTxSignature): void {
-  const key = getStorageKey(sig.merkleRoot, sig.chainId, sig.step);
+  const key = getStorageKey(sig.dataHash, sig.chainId, sig.step);
   const serialized: SerializedTxSignature = {
     signature: sig.signature,
     deadline: sig.deadline.toString(),
     nonce: sig.nonce.toString(),
-    merkleRoot: sig.merkleRoot,
+    dataHash: sig.dataHash,
     reportedChainId: sig.reportedChainId,
     transactionCount: sig.transactionCount,
     reporter: sig.reporter,
@@ -64,11 +64,11 @@ export function storeTxSignature(sig: StoredTxSignature): void {
 
 // Retrieve a signature (returns null if not found or expired)
 export function getTxSignature(
-  merkleRoot: Hash,
+  dataHash: Hash,
   chainId: number,
   step: TxSignatureStep
 ): StoredTxSignature | null {
-  const key = getStorageKey(merkleRoot, chainId, step);
+  const key = getStorageKey(dataHash, chainId, step);
   const stored = sessionStorage.getItem(key);
 
   if (!stored) {
@@ -85,10 +85,11 @@ export function getTxSignature(
     }
 
     // Validate hex format for security-critical signature data
+    // dataHash and reportedChainId must be exactly 32 bytes (bytes32 in EIP-712)
     if (
       !isHex(parsed.signature, { strict: true }) ||
-      !isHex(parsed.merkleRoot, { strict: true }) ||
-      !isHex(parsed.reportedChainId, { strict: true }) ||
+      !(isHex(parsed.dataHash, { strict: true }) && size(parsed.dataHash) === 32) ||
+      !(isHex(parsed.reportedChainId, { strict: true }) && size(parsed.reportedChainId) === 32) ||
       !isAddress(parsed.reporter) ||
       !isAddress(parsed.forwarder)
     ) {
@@ -106,7 +107,7 @@ export function getTxSignature(
       signature: parsed.signature as Hex,
       deadline: BigInt(parsed.deadline),
       nonce: BigInt(parsed.nonce),
-      merkleRoot: parsed.merkleRoot as Hash,
+      dataHash: parsed.dataHash as Hash,
       reportedChainId: parsed.reportedChainId as Hash,
       transactionCount: parsed.transactionCount,
       reporter: parsed.reporter as Address,
@@ -125,16 +126,16 @@ export function getTxSignature(
 }
 
 // Remove a signature
-export function removeTxSignature(merkleRoot: Hash, chainId: number, step: TxSignatureStep): void {
-  const key = getStorageKey(merkleRoot, chainId, step);
+export function removeTxSignature(dataHash: Hash, chainId: number, step: TxSignatureStep): void {
+  const key = getStorageKey(dataHash, chainId, step);
   sessionStorage.removeItem(key);
 }
 
-// Clear all signatures for a merkle root on a chain
-export function clearTxSignatures(merkleRoot: Hash, chainId: number): void {
+// Clear all signatures for a dataHash on a chain
+export function clearTxSignatures(dataHash: Hash, chainId: number): void {
   const steps = Object.values(TX_SIGNATURE_STEP);
   for (const step of steps) {
-    removeTxSignature(merkleRoot, chainId, step);
+    removeTxSignature(dataHash, chainId, step);
   }
 }
 

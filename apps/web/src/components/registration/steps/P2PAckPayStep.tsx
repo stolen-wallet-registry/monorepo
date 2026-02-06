@@ -88,9 +88,20 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     return 'idle';
   };
 
+  // Check if stored signature has required V2 fields
+  const hasV2Fields = Boolean(
+    storedSig?.reportedChainId !== undefined && storedSig?.incidentTimestamp !== undefined
+  );
+
   // Relayer: Submit acknowledgement transaction
   const handleSubmit = useCallback(async () => {
     if (!storedSig || !registeree) {
+      return;
+    }
+
+    // Relayer address is required for P2P
+    if (!relayerAddress) {
+      logger.p2p.error('Cannot submit ACK - relayer wallet not connected');
       return;
     }
 
@@ -99,14 +110,17 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     // Parse signature to v, r, s components
     const parsedSig = parseSignature(storedSig.signature);
 
+    // P2P relay: relayer is the forwarder (contract derives isSponsored from registeree != forwarder)
     await submitAcknowledgement({
-      deadline: storedSig.deadline,
-      nonce: storedSig.nonce,
       registeree,
+      forwarder: relayerAddress,
+      reportedChainId: storedSig.reportedChainId ?? BigInt(chainId),
+      incidentTimestamp: storedSig.incidentTimestamp ?? 0n,
+      deadline: storedSig.deadline,
       signature: parsedSig,
       feeWei,
     });
-  }, [storedSig, registeree, submitAcknowledgement, feeWei]);
+  }, [storedSig, registeree, relayerAddress, chainId, submitAcknowledgement, feeWei]);
 
   // Cleanup retry timeout on unmount
   useEffect(() => {
@@ -262,11 +276,17 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
             type="acknowledgement"
             status={getStatus()}
             hash={hash}
-            error={error ? sanitizeErrorMessage(error) : null}
+            error={
+              !hasV2Fields && storedSig
+                ? 'Signature is missing V2 data. Registeree may need to sign again.'
+                : error
+                  ? sanitizeErrorMessage(error)
+                  : null
+            }
             chainId={chainId}
             onSubmit={handleSubmit}
             onRetry={reset}
-            disabled={!storedSig}
+            disabled={!storedSig || !hasV2Fields}
           />
           {sendError && isConfirmed && !hasSentHash && (
             <Alert variant="destructive" className="mt-4">

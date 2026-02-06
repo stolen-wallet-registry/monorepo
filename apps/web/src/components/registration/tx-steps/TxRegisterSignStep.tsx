@@ -20,12 +20,16 @@ import {
   useTransactionRegistrationHashStruct,
   useTxContractNonce,
 } from '@/hooks/transactions';
-import { storeTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
+import {
+  storeTxSignature,
+  TX_SIGNATURE_STEP,
+  computeTransactionDataHash,
+} from '@/lib/signatures/transactions';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
-import type { Hex, Hash } from '@/lib/types/ethereum';
+import type { Hash, Hex } from '@/lib/types/ethereum';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 export interface TxRegisterSignStepProps {
@@ -39,7 +43,7 @@ export interface TxRegisterSignStepProps {
 export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
-  const { selectedTxHashes, selectedTxDetails, reportedChainId, merkleRoot } =
+  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
     useTransactionSelection();
   const { registrationType } = useTransactionRegistrationStore();
   const storedReporter = useTransactionFormStore((s) => s.reporter);
@@ -76,6 +80,12 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
 
+  // V2: Compute dataHash from sorted arrays (replaces merkle root for signing/contract calls)
+  const dataHash: Hash | undefined =
+    sortedTxHashes.length > 0 && sortedChainIds.length > 0
+      ? computeTransactionDataHash(sortedTxHashes, sortedChainIds)
+      : undefined;
+
   // Contract hooks - use reporter address for nonce since they're the signer
   const {
     nonce,
@@ -90,7 +100,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
     isError: hashError,
     refetch: refetchHashStruct,
   } = useTransactionRegistrationHashStruct(
-    merkleRoot ?? undefined,
+    dataHash,
     reportedChainIdHash,
     selectedTxHashes.length,
     forwarderAddress ?? undefined // forwarder from store for self-relay, connected wallet for standard
@@ -106,7 +116,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
    */
   const handleSign = async () => {
     logger.signature.info('Transaction batch registration sign requested', {
-      merkleRoot,
+      dataHash,
       hasHashStructData: !!hashStructData,
       hasNonce: nonce !== undefined,
       connectedAddress: address,
@@ -114,16 +124,10 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
       isSelfRelay,
     });
 
-    if (
-      !address ||
-      !merkleRoot ||
-      !reportedChainIdHash ||
-      nonce === undefined ||
-      !forwarderAddress
-    ) {
+    if (!address || !dataHash || !reportedChainIdHash || nonce === undefined || !forwarderAddress) {
       logger.signature.error('Missing required data for transaction registration signing', {
         address,
-        merkleRoot,
+        dataHash,
         reportedChainIdHash,
         hashStructData: !!hashStructData,
         nonce,
@@ -145,10 +149,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
     ]);
 
     // Extract fresh nonce from refetch result
-    const freshNonce = nonceResult.status === 'success' ? (nonceResult.data as bigint) : undefined;
-
-    // Extract fresh deadline from refetch result
-    const rawData = hashStructResult.status === 'success' ? hashStructResult.data : undefined;
+    const freshNonce = nonceResult.status === 'success' ? nonceResult.data : undefined;
 
     // Require fresh nonce - registration uses incremented nonce after ack
     if (freshNonce === undefined) {
@@ -161,22 +162,18 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
       return;
     }
 
-    // Require fresh deadline - do not fall back to stale hashStructData
-    // Contract returns tuple [deadline: bigint, hashStruct: Hash] - validate structure
-    if (!Array.isArray(rawData) || rawData.length < 2 || typeof rawData[0] !== 'bigint') {
+    // Extract fresh deadline from refetch result
+    const freshDeadline = hashStructResult.data?.deadline;
+
+    if (freshDeadline === undefined) {
       logger.signature.error('Failed to get fresh hash struct data', {
-        hasData: !!rawData,
-        dataType: Array.isArray(rawData) ? 'array' : typeof rawData,
-        arrayLength: Array.isArray(rawData) ? rawData.length : 0,
+        hasData: !!hashStructResult.data,
         hashStructStatus: hashStructResult.status,
       });
       setSignatureError('Failed to load fresh signing data. Please try again.');
       setSignatureStatus('error');
       return;
     }
-
-    // Explicit tuple destructuring for clarity and type safety
-    const [freshDeadline] = rawData as [bigint, Hash];
 
     logger.contract.debug('Fresh registration data fetched', {
       freshNonce: freshNonce.toString(),
@@ -189,7 +186,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
 
     try {
       logger.signature.info('Requesting EIP-712 transaction batch registration signature', {
-        merkleRoot,
+        dataHash,
         reporter: address,
         forwarder: forwarderAddress,
         isSelfRelay,
@@ -199,8 +196,10 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
       });
 
       const sig = await signTxRegistration({
-        merkleRoot,
+        reporter: address,
+        dataHash: dataHash!,
         reportedChainId: reportedChainIdHash,
+        transactionCount: selectedTxHashes.length,
         forwarder: forwarderAddress,
         nonce: freshNonce,
         deadline: freshDeadline,
@@ -220,7 +219,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
           signature: sig,
           deadline: freshDeadline,
           nonce: freshNonce,
-          merkleRoot,
+          dataHash: dataHash!,
           reportedChainId: reportedChainIdHash,
           transactionCount: selectedTxHashes.length,
           reporter: address,
@@ -279,7 +278,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   }
 
   // Missing required data
-  if (!merkleRoot || selectedTxHashes.length === 0) {
+  if (!dataHash || selectedTxHashes.length === 0) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -362,15 +361,15 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
           )}
           <div className="flex items-start gap-2">
             <span className="text-muted-foreground flex items-center gap-1 shrink-0">
-              Merkle Root:
+              Data Hash:
               <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <code className="font-mono text-xs break-all cursor-default">{merkleRoot}</code>
+                <code className="font-mono text-xs break-all cursor-default">{dataHash}</code>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-md">
-                <p className="text-xs font-mono break-all">{merkleRoot}</p>
+                <p className="text-xs font-mono break-all">{dataHash}</p>
               </TooltipContent>
             </Tooltip>
           </div>

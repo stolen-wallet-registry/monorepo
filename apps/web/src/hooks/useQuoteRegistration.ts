@@ -1,9 +1,9 @@
 /**
  * Hook to get the registration fee from the registry contract.
  *
- * Chain-aware: Uses quoteRegistration() on both hub and spoke.
- * - Hub: returns registration fee only
- * - Spoke: returns bridge fee + registration fee
+ * Unified interface: Both hub and spoke expose quoteRegistration(address).
+ * - Hub (WalletRegistryV2): quoteRegistration(address) - reads from FeeManager, ignores address
+ * - Spoke (SpokeRegistryV2): quoteRegistration(address owner) - includes bridge fee
  */
 
 import { useReadContract, useChainId } from 'wagmi';
@@ -27,10 +27,10 @@ export interface UseQuoteRegistrationResult {
 /**
  * Get the total registration fee for the current chain.
  *
- * @param ownerAddress - The wallet being registered (needed for nonce in quote)
+ * @param ownerAddress - The wallet being registered (used by spoke for bridge quote accuracy, ignored on hub)
  */
 export function useQuoteRegistration(
-  ownerAddress: Address | null | undefined
+  ownerAddress?: Address | null | undefined
 ): UseQuoteRegistrationResult {
   const chainId = useChainId();
 
@@ -41,20 +41,18 @@ export function useQuoteRegistration(
     'useQuoteRegistration'
   );
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata('wallet', registryType);
+  // Get the correct ABI and function name (unified: quoteRegistration on both hub and spoke)
+  const { abi, functions } = getRegistryMetadata('wallet', registryType);
 
-  // Convert null to undefined for wagmi compatibility
-  const normalizedAddress = ownerAddress ?? undefined;
-
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
   const result = useReadContract({
     address: contractAddress,
     abi,
-    chainId, // Explicit chain ID ensures RPC call targets correct chain
-    functionName: 'quoteRegistration',
-    args: normalizedAddress ? [normalizedAddress] : undefined,
+    chainId,
+    functionName: functions.quoteRegistration as any,
+    args: ownerAddress ? [ownerAddress] : undefined,
     query: {
-      enabled: !!normalizedAddress && !!contractAddress,
+      enabled: !!contractAddress && !!ownerAddress,
       staleTime: 30_000, // 30 seconds
     },
   });
@@ -65,7 +63,6 @@ export function useQuoteRegistration(
       chainId,
       contractAddress,
       registryType,
-      ownerAddress,
       error: result.error?.message,
     });
   } else if (result.data !== undefined) {

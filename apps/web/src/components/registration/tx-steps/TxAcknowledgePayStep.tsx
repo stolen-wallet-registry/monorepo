@@ -23,10 +23,18 @@ import {
   useTransactionAcknowledgement,
   useTxGasEstimate,
   type TxAcknowledgementParams,
+  type TxAcknowledgementParamsHub,
+  type TxAcknowledgementParamsSpoke,
 } from '@/hooks/transactions';
+import { isHubChain, isSpokeChain } from '@swr/chains';
 import type { TransactionCost } from '@/hooks/useTransactionCost';
 import { useEthPrice } from '@/hooks/useEthPrice';
-import { getTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
+import {
+  getTxSignature,
+  TX_SIGNATURE_STEP,
+  computeTransactionDataHash,
+} from '@/lib/signatures/transactions';
+import type { Hash } from '@/lib/types/ethereum';
 import { parseSignature } from '@/lib/signatures';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
@@ -47,16 +55,18 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   const { address } = useAccount();
   const chainId = useChainId();
   const { registrationType, setAcknowledgementHash } = useTransactionRegistrationStore();
-  const {
-    selectedTxHashes,
-    selectedTxDetails,
-    reportedChainId,
-    merkleRoot,
-    sortedTxHashes,
-    sortedChainIds,
-  } = useTransactionSelection();
+  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
+    useTransactionSelection();
 
   const isSelfRelay = registrationType === 'selfRelay';
+
+  // V2: Compute dataHash from sorted arrays (replaces merkle root)
+  const dataHash: Hash | undefined =
+    sortedTxHashes.length > 0 &&
+    sortedChainIds.length > 0 &&
+    sortedTxHashes.length === sortedChainIds.length
+      ? computeTransactionDataHash(sortedTxHashes, sortedChainIds)
+      : undefined;
 
   // Contract hook
   const {
@@ -84,12 +94,12 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   >(undefined);
 
   useEffect(() => {
-    if (merkleRoot) {
-      setStoredSignature(getTxSignature(merkleRoot, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT));
+    if (dataHash) {
+      setStoredSignature(getTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT));
     } else {
       setStoredSignature(null);
     }
-  }, [merkleRoot, chainId]);
+  }, [dataHash, chainId]);
 
   // Signature is still loading from sessionStorage
   const isSignatureLoading = storedSignature === undefined;
@@ -130,6 +140,10 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     ? parseSignature(storedSignature.signature)
     : undefined;
 
+  // Determine if hub or spoke for proper params
+  const isHub = isHubChain(chainId);
+  const isSpoke = isSpokeChain(chainId);
+
   // Get gas estimate (acknowledgement step - no fees, just gas)
   const {
     data: gasEstimate,
@@ -138,21 +152,17 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     refetch: refetchGas,
   } = useTxGasEstimate({
     step: 'acknowledgement',
-    merkleRoot: merkleRoot ?? undefined,
+    dataHash: dataHash,
     reportedChainId: reportedChainIdHash,
     transactionCount: selectedTxHashes.length,
-    transactionHashes: txHashesForContract,
-    chainIds: chainIdsForContract,
     reporter: storedSignature?.reporter,
+    // Hub-specific params
+    forwarder: isHub ? storedSignature?.forwarder : undefined,
+    // Spoke-specific params
+    nonce: isSpoke ? storedSignature?.nonce : undefined,
     deadline: storedSignature?.deadline,
     signature: parsedSigForEstimate,
-    enabled:
-      !!storedSignature &&
-      !!merkleRoot &&
-      !!reportedChainIdHash &&
-      !!txHashesForContract &&
-      !!chainIdsForContract &&
-      isCorrectWallet, // Only estimate gas when correct wallet is connected
+    enabled: !!storedSignature && !!dataHash && !!reportedChainIdHash && isCorrectWallet, // Only estimate gas when correct wallet is connected
   });
 
   // Map hook state to TransactionStatus
@@ -169,7 +179,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     if (isConfirmed && hash) {
       logger.contract.info('Transaction batch acknowledgement transaction confirmed', {
         hash,
-        merkleRoot,
+        dataHash,
         transactionCount: selectedTxHashes.length,
       });
       setAcknowledgementHash(hash, chainId);
@@ -180,15 +190,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
       const timerId = setTimeout(onComplete, 3000);
       return () => clearTimeout(timerId);
     }
-  }, [
-    isConfirmed,
-    hash,
-    setAcknowledgementHash,
-    chainId,
-    onComplete,
-    merkleRoot,
-    selectedTxHashes,
-  ]);
+  }, [isConfirmed, hash, setAcknowledgementHash, chainId, onComplete, dataHash, selectedTxHashes]);
 
   /**
    * Submit the acknowledgement transaction.
@@ -203,7 +205,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     }
 
     logger.contract.info('Transaction batch acknowledgement submission initiated', {
-      merkleRoot,
+      dataHash,
       transactionCount: selectedTxHashes.length,
       hasStoredSignature: !!storedSignature,
       registrationType,
@@ -212,10 +214,10 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
       isCorrectWallet,
     });
 
-    if (!storedSignature || !merkleRoot || !reportedChainIdHash) {
+    if (!storedSignature || !dataHash || !reportedChainIdHash) {
       logger.contract.error('Cannot submit transaction acknowledgement - missing data', {
         hasStoredSignature: !!storedSignature,
-        merkleRoot,
+        dataHash,
         reportedChainIdHash,
       });
       setLocalError('Missing signature data. Please go back and sign again.');
@@ -250,37 +252,55 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
       }
 
       logger.contract.info('Submitting transaction batch acknowledge to contract', {
-        merkleRoot,
+        dataHash,
         reportedChainId: reportedChainIdHash,
         transactionCount: selectedTxHashes.length,
         deadline: storedSignature.deadline.toString(),
         chainId,
-        // Log sorted hashes for debugging merkle root mismatch
         sortedTxHashesCount: txHashesForContract?.length,
         firstSortedTxHash: txHashesForContract?.[0],
         lastSortedTxHash: txHashesForContract?.[txHashesForContract?.length - 1],
         firstSortedChainId: chainIdsForContract?.[0],
       });
 
-      const params: TxAcknowledgementParams = {
-        merkleRoot,
+      // Build params based on chain type (hub vs spoke have different signatures)
+      let params: TxAcknowledgementParams;
+
+      if (isHub) {
+        // Hub: acknowledgeTransactions(reporter, forwarder, deadline, dataHash, reportedChainId, transactionCount, v, r, s)
+        // isSponsored is derived on-chain as (reporter != forwarder)
+        const hubParams: TxAcknowledgementParamsHub = {
+          reporter: storedSignature.reporter,
+          forwarder: storedSignature.forwarder,
+          deadline: storedSignature.deadline,
+          dataHash: dataHash!,
+          reportedChainId: reportedChainIdHash!,
+          transactionCount: selectedTxHashes.length,
+          signature: parsedSig,
+        };
+        params = hubParams;
+      } else {
+        // Spoke: acknowledgeTransactionBatch(dataHash, reportedChainId, transactionCount, deadline, nonce, reporter, v, r, s)
+        const spokeParams: TxAcknowledgementParamsSpoke = {
+          reporter: storedSignature.reporter,
+          dataHash: dataHash!,
+          reportedChainId: reportedChainIdHash,
+          transactionCount: selectedTxHashes.length,
+          deadline: storedSignature.deadline,
+          nonce: storedSignature.nonce,
+          signature: parsedSig,
+        };
+        params = spokeParams;
+      }
+
+      logger.contract.debug('Transaction acknowledgement params', {
+        dataHash,
         reportedChainId: reportedChainIdHash,
         transactionCount: selectedTxHashes.length,
-        transactionHashes: txHashesForContract,
-        chainIds: chainIdsForContract,
-        reporter: storedSignature.reporter,
-        deadline: storedSignature.deadline,
-        signature: parsedSig,
-      };
-
-      // Debug log to trace merkle root mismatch issues
-      logger.contract.debug('Transaction acknowledgement params', {
-        merkleRoot,
-        reportedChainId: reportedChainIdHash,
-        transactionCount: params.transactionCount,
-        // Log capped sample to keep logs manageable in stress tests
+        isHub,
+        isSpoke,
         transactionHashesSample: txHashesForContract?.slice(0, 10),
-        chainIds: chainIdsForContract?.slice(0, 2), // Just first 2 to keep log readable
+        chainIds: chainIdsForContract?.slice(0, 2),
       });
 
       await submitAcknowledgement(params);
@@ -293,7 +313,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         'Transaction batch acknowledgement transaction failed',
         {
           error: err instanceof Error ? err.message : String(err),
-          merkleRoot,
+          dataHash,
         },
         err instanceof Error ? err : undefined
       );
@@ -304,7 +324,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   }, [
     isSubmitting,
     storedSignature,
-    merkleRoot,
+    dataHash,
     reportedChainIdHash,
     selectedTxHashes,
     txHashesForContract,
@@ -336,7 +356,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   }
 
   // Missing required data
-  if (!merkleRoot || selectedTxHashes.length === 0) {
+  if (!dataHash || selectedTxHashes.length === 0) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -451,15 +471,15 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
           )}
           <div className="flex items-start gap-2">
             <span className="text-muted-foreground flex items-center gap-1 shrink-0">
-              Merkle Root:
+              Data Hash:
               <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <code className="font-mono text-xs break-all cursor-default">{merkleRoot}</code>
+                <code className="font-mono text-xs break-all cursor-default">{dataHash}</code>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-md">
-                <p className="text-xs font-mono break-all">{merkleRoot}</p>
+                <p className="text-xs font-mono break-all">{dataHash}</p>
               </TooltipContent>
             </Tooltip>
           </div>

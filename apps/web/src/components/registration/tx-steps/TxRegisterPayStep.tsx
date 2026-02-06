@@ -30,8 +30,16 @@ import {
   useTxCrossChainConfirmation,
   needsTxCrossChainConfirmation,
   type TxRegistrationParams,
+  type TxRegistrationParamsHub,
+  type TxRegistrationParamsSpoke,
 } from '@/hooks/transactions';
-import { getTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
+import { isHubChain, isSpokeChain } from '@swr/chains';
+import {
+  getTxSignature,
+  TX_SIGNATURE_STEP,
+  computeTransactionDataHash,
+} from '@/lib/signatures/transactions';
+import type { Hash } from '@/lib/types/ethereum';
 import { parseSignature } from '@/lib/signatures';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { getHubChainId } from '@/lib/chains/config';
@@ -59,16 +67,18 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   const chainId = useChainId();
   const { registrationType, bridgeMessageId, setRegistrationHash, setBridgeMessageId } =
     useTransactionRegistrationStore();
-  const {
-    selectedTxHashes,
-    selectedTxDetails,
-    reportedChainId,
-    merkleRoot,
-    sortedTxHashes,
-    sortedChainIds,
-  } = useTransactionSelection();
+  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
+    useTransactionSelection();
 
   const isSelfRelay = registrationType === 'selfRelay';
+
+  // V2: Compute dataHash from sorted arrays (replaces merkle root)
+  const dataHash: Hash | undefined =
+    sortedTxHashes.length > 0 &&
+    sortedChainIds.length > 0 &&
+    sortedTxHashes.length === sortedChainIds.length
+      ? computeTransactionDataHash(sortedTxHashes, sortedChainIds)
+      : undefined;
 
   // Contract hooks
   const { submitRegistration, hash, isPending, isConfirming, isConfirmed, isError, error, reset } =
@@ -108,12 +118,12 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     if (typeof window === 'undefined') {
       return;
     }
-    if (!merkleRoot) {
+    if (!dataHash) {
       setStoredSignatureState(null);
       return;
     }
-    setStoredSignatureState(getTxSignature(merkleRoot, chainId, TX_SIGNATURE_STEP.REGISTRATION));
-  }, [merkleRoot, chainId]);
+    setStoredSignatureState(getTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.REGISTRATION));
+  }, [dataHash, chainId]);
 
   // Expected wallet for this step: forwarder (gas wallet) for self-relay, reporter for standard
   const expectedWallet = storedSignatureState
@@ -140,6 +150,10 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     ? parseSignature(storedSignatureState.signature)
     : undefined;
 
+  // Determine if hub or spoke for proper params
+  const isHub = isHubChain(chainId);
+  const isSpoke = isSpokeChain(chainId);
+
   // Get gas estimate
   const {
     data: gasEstimate,
@@ -148,18 +162,17 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     refetch: refetchGas,
   } = useTxGasEstimate({
     step: 'registration',
-    merkleRoot: merkleRoot ?? undefined,
-    reportedChainId: reportedChainIdHash,
     transactionHashes: txHashesForContract,
     chainIds: chainIdsForContract,
     reporter: storedSignatureState?.reporter,
     deadline: storedSignatureState?.deadline,
+    // Spoke-specific params
+    reportedChainId: isSpoke ? reportedChainIdHash : undefined,
+    nonce: isSpoke ? storedSignatureState?.nonce : undefined,
     signature: parsedSigForEstimate,
     value: feeWei,
     enabled:
       !!storedSignatureState &&
-      !!merkleRoot &&
-      !!reportedChainIdHash &&
       !!txHashesForContract &&
       !!chainIdsForContract &&
       feeWei !== undefined &&
@@ -169,14 +182,14 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   // Cross-chain confirmation - polls hub chain after spoke tx confirms
   // Must pass reporter and reportedChainId to compute the correct batchId
   const crossChainConfirmation = useTxCrossChainConfirmation({
-    merkleRoot: merkleRoot ?? undefined,
+    merkleRoot: dataHash, // V2: dataHash replaces merkle root
     reporter: storedSignatureState?.reporter,
     reportedChainId: reportedChainIdHash,
     spokeChainId: chainId,
     enabled:
       isCrossChain &&
       isConfirmed &&
-      !!merkleRoot &&
+      !!dataHash &&
       !!storedSignatureState?.reporter &&
       !!reportedChainIdHash,
     pollInterval: 3000,
@@ -243,7 +256,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     if (isCrossChain && isConfirmed && hash) {
       logger.contract.info('Transaction batch registration confirmed on spoke chain', {
         hash,
-        merkleRoot,
+        dataHash,
         transactionCount: selectedTxHashes.length,
         isCrossChain: true,
       });
@@ -252,7 +265,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       // Wait for hub confirmation before completing
       if (crossChainConfirmation.status === 'confirmed') {
         logger.registration.info('Cross-chain tx batch registration confirmed on hub!', {
-          merkleRoot,
+          dataHash,
           transactionCount: selectedTxHashes.length,
           transactionHash: hash,
           elapsedTime: crossChainConfirmation.elapsedTime,
@@ -265,7 +278,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       // User must click "Continue Anyway" to proceed
       if (crossChainConfirmation.status === 'timeout') {
         logger.registration.warn('Cross-chain tx batch confirmation timed out', {
-          merkleRoot,
+          dataHash,
           transactionCount: selectedTxHashes.length,
           transactionHash: hash,
           elapsedTime: crossChainConfirmation.elapsedTime,
@@ -281,14 +294,14 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     if (!isCrossChain && isConfirmed && hash) {
       logger.contract.info('Transaction batch registration transaction confirmed', {
         hash,
-        merkleRoot,
+        dataHash,
         transactionCount: selectedTxHashes.length,
       });
       setRegistrationHash(hash, chainId);
       logger.registration.info(
         'Transaction batch registration complete! Transactions successfully registered.',
         {
-          merkleRoot,
+          dataHash,
           transactionCount: selectedTxHashes.length,
           transactionHash: hash,
         }
@@ -306,7 +319,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     setRegistrationHash,
     chainId,
     onComplete,
-    merkleRoot,
+    dataHash,
     selectedTxHashes.length,
     isCrossChain,
     crossChainConfirmation.status,
@@ -321,7 +334,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     }
 
     logger.contract.info('Transaction batch registration submission initiated', {
-      merkleRoot,
+      dataHash,
       transactionCount: selectedTxHashes.length,
       hasStoredSignature: !!storedSignatureState,
       registrationType,
@@ -330,10 +343,10 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       isCorrectWallet,
     });
 
-    if (!storedSignatureState || !merkleRoot || !reportedChainIdHash) {
+    if (!storedSignatureState || !dataHash || !reportedChainIdHash) {
       logger.contract.error('Cannot submit transaction registration - missing data', {
         hasStoredSignature: !!storedSignatureState,
-        merkleRoot,
+        dataHash,
         reportedChainIdHash,
       });
       setLocalError('Missing signature data. Please go back and sign again.');
@@ -368,7 +381,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       }
 
       logger.contract.info('Submitting transaction batch register to contract', {
-        merkleRoot,
+        dataHash,
         reportedChainId: reportedChainIdHash,
         transactionCount: selectedTxHashes.length,
         deadline: storedSignatureState.deadline.toString(),
@@ -376,16 +389,34 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         feeWei: feeWei.toString(),
       });
 
-      const params: TxRegistrationParams = {
-        merkleRoot,
-        reportedChainId: reportedChainIdHash,
-        transactionHashes: txHashesForContract,
-        chainIds: chainIdsForContract,
-        reporter: storedSignatureState.reporter,
-        deadline: storedSignatureState.deadline,
-        signature: parsedSig,
-        feeWei,
-      };
+      // Build params based on chain type (hub vs spoke have different signatures)
+      let params: TxRegistrationParams;
+
+      if (isHub) {
+        // Hub: registerTransactions(reporter, deadline, transactionHashes, chainIds, v, r, s) - payable
+        const hubParams: TxRegistrationParamsHub = {
+          reporter: storedSignatureState.reporter,
+          deadline: storedSignatureState.deadline,
+          transactionHashes: txHashesForContract,
+          chainIds: chainIdsForContract,
+          signature: parsedSig,
+          feeWei,
+        };
+        params = hubParams;
+      } else {
+        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter, transactionHashes, chainIds, v, r, s)
+        const spokeParams: TxRegistrationParamsSpoke = {
+          reporter: storedSignatureState.reporter,
+          reportedChainId: reportedChainIdHash,
+          deadline: storedSignatureState.deadline,
+          nonce: storedSignatureState.nonce,
+          transactionHashes: txHashesForContract,
+          chainIds: chainIdsForContract,
+          signature: parsedSig,
+          feeWei,
+        };
+        params = spokeParams;
+      }
 
       await submitRegistration(params);
 
@@ -397,7 +428,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         'Transaction batch registration transaction failed',
         {
           error: err instanceof Error ? err.message : String(err),
-          merkleRoot,
+          dataHash,
         },
         err instanceof Error ? err : undefined
       );
@@ -421,7 +452,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
    */
   const handleContinueAnyway = () => {
     logger.registration.info('User clicked Continue Anyway after cross-chain timeout', {
-      merkleRoot,
+      dataHash,
       transactionCount: selectedTxHashes.length,
       transactionHash: hash,
       elapsedTime: crossChainConfirmation.elapsedTime,
@@ -440,7 +471,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   }
 
   // Missing required data
-  if (!merkleRoot || selectedTxHashes.length === 0) {
+  if (!dataHash || selectedTxHashes.length === 0) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -552,15 +583,15 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
           )}
           <div className="flex items-start gap-2">
             <span className="text-muted-foreground flex items-center gap-1 shrink-0">
-              Merkle Root:
+              Data Hash:
               <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <code className="font-mono text-xs break-all cursor-default">{merkleRoot}</code>
+                <code className="font-mono text-xs break-all cursor-default">{dataHash}</code>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-md">
-                <p className="text-xs font-mono break-all">{merkleRoot}</p>
+                <p className="text-xs font-mono break-all">{dataHash}</p>
               </TooltipContent>
             </Tooltip>
           </div>

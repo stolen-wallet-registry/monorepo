@@ -4,7 +4,7 @@
  * Registeree signs registration and sends signature to relayer via P2P.
  */
 
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useRef, useEffect, useMemo } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 import type { Libp2p } from 'libp2p';
 
@@ -52,6 +52,16 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
   useEffect(() => {
     getLibp2pRef.current = getLibp2p;
   }, [getLibp2p]);
+
+  // Stabilize V2 fields for this signing session - computed once per mount
+  // This ensures the same values are used for both signing and P2P transmission
+  const stableV2Fields = useMemo(
+    () => ({
+      reportedChainId: BigInt(chainId),
+      incidentTimestamp: 0n, // TODO: Add incident timestamp selection UI
+    }),
+    [chainId]
+  );
 
   // Get hash struct data for signing (deadline)
   const {
@@ -103,10 +113,15 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
       setSendError(null);
       resetSign();
 
+      // Use stabilized V2 fields - computed once per mount, not fresh on each sign
+      const { reportedChainId, incidentTimestamp } = stableV2Fields;
+
       // Sign the registration
       const sig = await signRegistration({
-        owner: registeree,
+        wallet: registeree,
         forwarder: relayer,
+        reportedChainId,
+        incidentTimestamp,
         nonce,
         deadline: hashData.deadline,
       });
@@ -129,6 +144,9 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
             nonce: nonce.toString(),
             address: registeree,
             chainId,
+            // V2 fields (stringified for P2P serialization)
+            reportedChainId: reportedChainId.toString(),
+            incidentTimestamp: incidentTimestamp.toString(),
           },
         },
       });
@@ -151,6 +169,7 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
     relayer,
     nonce,
     chainId,
+    stableV2Fields,
     signRegistration,
     resetSign,
   ]);

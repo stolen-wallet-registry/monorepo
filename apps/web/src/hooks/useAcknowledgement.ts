@@ -4,7 +4,10 @@
  * This is Phase 1 of the two-phase registration flow.
  * After acknowledgement, a grace period begins before registration can be completed.
  *
- * Chain-aware: Uses StolenWalletRegistry on hub chains, SpokeRegistry on spoke chains.
+ * WalletRegistryV2 signature:
+ *   acknowledge(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
+ *
+ * isSponsored is derived on-chain as (registeree != forwarder).
  */
 
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
@@ -15,18 +18,19 @@ import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
 export interface AcknowledgementParams {
-  deadline: bigint;
-  nonce: bigint;
-  /**
-   * The wallet address being registered as stolen.
-   * Maps to `owner` parameter in the contract ABI.
-   */
+  /** The wallet address being registered as stolen */
   registeree: Address;
+  /** The address authorized to complete registration (same as registeree for standard) */
+  forwarder: Address;
+  /** Raw EVM chain ID where incident occurred (uint64) */
+  reportedChainId: bigint;
+  /** Unix timestamp when incident occurred */
+  incidentTimestamp: bigint;
+  /** Signature deadline (timestamp) */
+  deadline: bigint;
+  /** EIP-712 signature */
   signature: ParsedSignature;
-  /**
-   * Protocol fee to send with the acknowledgement transaction.
-   * Obtained from useFeeEstimate hook.
-   */
+  /** Protocol fee to send with the acknowledgement transaction */
   feeWei?: bigint;
 }
 
@@ -84,9 +88,17 @@ export function useAcknowledgement(): UseAcknowledgementResult {
       throw new Error('Contract not configured for this chain');
     }
 
-    const { deadline, nonce, registeree, signature, feeWei } = params;
+    const {
+      registeree,
+      forwarder,
+      reportedChainId,
+      incidentTimestamp,
+      deadline,
+      signature,
+      feeWei,
+    } = params;
 
-    // Use metadata for correct ABI and function name based on chain type
+    // Use metadata for correct function name based on chain type
     const functionName = functions.acknowledge;
 
     logger.registration.info('Submitting acknowledgement transaction', {
@@ -95,19 +107,29 @@ export function useAcknowledgement(): UseAcknowledgementResult {
       contractAddress,
       functionName,
       registeree,
+      forwarder,
+      reportedChainId: reportedChainId.toString(),
+      incidentTimestamp: incidentTimestamp.toString(),
       deadline: deadline.toString(),
-      nonce: nonce.toString(),
       feeWei: feeWei?.toString() ?? '0',
     });
 
     try {
-      // Cast to any for value since wagmi's strict typing with union ABIs
-      // incorrectly infers value as undefined for some ABI function combinations
+      // WalletRegistryV2: acknowledge(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi,
-        functionName: functionName as 'acknowledge',
-        args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
+        functionName: functionName as 'acknowledge' | 'acknowledgeLocal',
+        args: [
+          registeree,
+          forwarder,
+          reportedChainId,
+          incidentTimestamp,
+          deadline,
+          signature.v,
+          signature.r,
+          signature.s,
+        ],
         value: feeWei ?? 0n,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
@@ -115,6 +137,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
       logger.registration.info('Acknowledgement transaction submitted', {
         txHash,
         registeree,
+        forwarder,
         chainId,
         registryType,
       });

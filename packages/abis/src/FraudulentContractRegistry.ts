@@ -481,25 +481,6 @@ export const FraudulentContractRegistryABI = [
   },
   {
     type: 'event',
-    name: 'OperatorRegistrySet',
-    inputs: [
-      {
-        name: 'oldRegistry',
-        type: 'address',
-        indexed: true,
-        internalType: 'address',
-      },
-      {
-        name: 'newRegistry',
-        type: 'address',
-        indexed: true,
-        internalType: 'address',
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: 'event',
     name: 'OwnershipTransferStarted',
     inputs: [
       {
@@ -554,11 +535,6 @@ export const FraudulentContractRegistryABI = [
   {
     type: 'error',
     name: 'FraudulentContractRegistry__BatchNotFound',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'FraudulentContractRegistry__BatchSizeExceedsLimit',
     inputs: [],
   },
   {
@@ -624,6 +600,11 @@ export const FraudulentContractRegistryABI = [
   {
     type: 'error',
     name: 'FraudulentContractRegistry__UnexpectedEthWithFeesDisabled',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'LeavesNotSorted',
     inputs: [],
   },
   {

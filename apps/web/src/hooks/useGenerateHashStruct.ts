@@ -4,9 +4,12 @@
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  * The hash struct returned can be used for verification but is typically not needed client-side.
  *
- * Chain-aware: Works with both StolenWalletRegistry (hub) and SpokeRegistry (spoke).
+ * Chain-aware: Works with both hub registries (WalletRegistryV2/TransactionRegistryV2) and SpokeRegistryV2 (spoke).
+ *
+ * V2 signature: generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
  */
 
+import { useMemo } from 'react';
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
@@ -27,18 +30,42 @@ export interface UseGenerateHashStructResult {
   refetch: UseReadContractReturnType['refetch'];
 }
 
+export interface UseGenerateHashStructParams {
+  /** The trusted forwarder address (who can submit the tx) */
+  forwarderAddress: Address | undefined;
+  /** The signature step (1 = Acknowledgement, 2 = Registration) */
+  step: SignatureStep;
+  /** V2: Raw EVM chain ID where incident occurred (defaults to current chain) */
+  reportedChainId?: bigint;
+  /** V2: Unix timestamp when incident occurred (defaults to now) */
+  incidentTimestamp?: bigint;
+}
+
 /**
  * Reads the deadline and hash struct for signing from the contract.
  *
- * @param forwarderAddress - The trusted forwarder address (who can submit the tx)
- * @param step - The signature step (1 = Acknowledgement, 2 = Registration)
+ * @param params - Parameters for hash struct generation
  * @returns The deadline and hash struct for the EIP-712 message
  */
 export function useGenerateHashStruct(
   forwarderAddress: Address | undefined,
-  step: SignatureStep
+  step: SignatureStep,
+  reportedChainId?: bigint,
+  incidentTimestamp?: bigint
 ): UseGenerateHashStructResult {
   const chainId = useChainId();
+
+  // Stabilize V2 fields - useMemo prevents Date.now() from causing re-renders
+  // The timestamp is computed once per mount (when incidentTimestamp is not provided)
+  // This ensures the same timestamp is used for the contract call and won't change between renders
+  const effectiveReportedChainId = useMemo(
+    () => reportedChainId ?? BigInt(chainId),
+    [reportedChainId, chainId]
+  );
+  const effectiveIncidentTimestamp = useMemo(
+    () => incidentTimestamp ?? 0n, // TODO: Add incident timestamp selection UI
+    [incidentTimestamp]
+  );
 
   // Resolve contract address with built-in error handling and logging
   const { address: contractAddress, role: registryType } = resolveRegistryContract(
@@ -55,7 +82,10 @@ export function useGenerateHashStruct(
     abi,
     chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'generateHashStruct',
-    args: forwarderAddress ? [forwarderAddress, step] : undefined,
+    // V2 signature: (uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+    args: forwarderAddress
+      ? [effectiveReportedChainId, effectiveIncidentTimestamp, forwarderAddress, step]
+      : undefined,
     query: {
       enabled: !!forwarderAddress && !!contractAddress,
       // Deadline changes with each block, but we don't need real-time updates

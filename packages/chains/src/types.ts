@@ -103,6 +103,7 @@ export interface HubContracts {
   registryHub: Address;
   crossChainInbox?: Address;
   operatorRegistry?: Address;
+  operatorSubmitter?: Address;
 }
 
 /** Spoke chain contract addresses */

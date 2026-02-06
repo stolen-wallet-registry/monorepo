@@ -15,7 +15,10 @@ import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
 import { useEthPrice } from './useEthPrice';
 import { logger } from '@/lib/logger';
 import { formatCentsToUsd, formatEthConsistent } from '@/lib/utils';
-import type { Address, Hex } from '@/lib/types/ethereum';
+import type { WalletAcknowledgeArgs, WalletRegistrationArgs } from '@/lib/signatures';
+
+/** Union type for gas estimation args (either acknowledge or register) */
+type WalletContractArgs = WalletAcknowledgeArgs | WalletRegistrationArgs;
 
 export interface GasEstimate {
   /** Estimated gas units for the transaction */
@@ -35,8 +38,12 @@ export interface GasEstimate {
 export interface UseGasEstimateParams {
   /** Which step we're estimating for - maps to correct function based on chain */
   step: 'acknowledgement' | 'registration';
-  /** Function arguments (must match the function signature) */
-  args: readonly [bigint, bigint, Address, number, Hex, Hex] | undefined;
+  /**
+   * Contract function arguments:
+   * - acknowledge: [registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s]
+   * - register: [registeree, deadline, reportedChainId, incidentTimestamp, v, r, s]
+   */
+  args: WalletContractArgs | undefined;
   /** Value to send with the transaction (for registration) */
   value?: bigint;
   /** Whether to enable the estimate (default: true) */
@@ -106,12 +113,13 @@ export function useGasEstimate({
   const functionName = step === 'acknowledgement' ? functions.acknowledge : functions.register;
 
   // Build call data for gas estimation
-  // Cast functionName since viem expects specific literal type from ABI
+  // Cast functionName and args since viem expects specific literal types from ABI
   const callData = args
     ? encodeFunctionData({
         abi,
         functionName: functionName as 'acknowledge' | 'register',
-        args,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        args: args as any,
       })
     : undefined;
 

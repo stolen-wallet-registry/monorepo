@@ -18,9 +18,14 @@ import {
   useTransactionAcknowledgementHashStruct,
   useTxContractNonce,
 } from '@/hooks/transactions';
-import { storeTxSignature, TX_SIGNATURE_STEP } from '@/lib/signatures/transactions';
+import {
+  storeTxSignature,
+  TX_SIGNATURE_STEP,
+  computeTransactionDataHash,
+} from '@/lib/signatures/transactions';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
+import type { Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import type { Hex } from '@/lib/types/ethereum';
@@ -39,7 +44,7 @@ export interface TxAcknowledgeSignStepProps {
 export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
-  const { selectedTxHashes, selectedTxDetails, reportedChainId, merkleRoot } =
+  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
     useTransactionSelection();
   const { registrationType } = useTransactionRegistrationStore();
   const storedForwarder = useTransactionFormStore((s) => s.forwarder);
@@ -68,6 +73,14 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
 
+  // V2: Compute dataHash from sorted arrays (replaces merkle root for signing/contract calls)
+  const dataHash: Hash | undefined =
+    sortedTxHashes.length > 0 &&
+    sortedChainIds.length > 0 &&
+    sortedTxHashes.length === sortedChainIds.length
+      ? computeTransactionDataHash(sortedTxHashes, sortedChainIds)
+      : undefined;
+
   // Contract hooks
   const { nonce, isLoading: nonceLoading, isError: nonceError } = useTxContractNonce(address);
 
@@ -77,7 +90,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
     isError: hashError,
     refetch: refetchHashStruct,
   } = useTransactionAcknowledgementHashStruct(
-    merkleRoot ?? undefined,
+    dataHash,
     reportedChainIdHash,
     selectedTxHashes.length,
     forwarderAddress ?? undefined // forwarder from store for self-relay, connected wallet for standard
@@ -94,22 +107,16 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   const handleSign = async () => {
     logger.signature.info('Transaction batch acknowledgement sign requested', {
       hasAddress: !!address,
-      hasMerkleRoot: !!merkleRoot,
+      hasDataHash: !!dataHash,
       hasHashStructData: !!hashStructData,
       hasNonce: nonce !== undefined,
       transactionCount: selectedTxHashes.length,
     });
 
-    if (
-      !address ||
-      nonce === undefined ||
-      !merkleRoot ||
-      !reportedChainIdHash ||
-      !forwarderAddress
-    ) {
+    if (!address || nonce === undefined || !dataHash || !reportedChainIdHash || !forwarderAddress) {
       logger.signature.error('Missing required data for transaction acknowledgement signing', {
         address,
-        merkleRoot,
+        dataHash,
         hashStructData: !!hashStructData,
         nonce,
       });
@@ -121,14 +128,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
     // Refetch hash struct to get fresh deadline
     logger.contract.debug('Refetching hash struct for fresh deadline');
     const refetchResult = await refetchHashStruct();
-    // Extract deadline from refetch result - data shape matches TxHashStructData
-    const refetchedDeadline =
-      refetchResult?.data &&
-      typeof refetchResult.data === 'object' &&
-      'deadline' in refetchResult.data
-        ? (refetchResult.data.deadline as bigint)
-        : undefined;
-    const freshDeadline = refetchedDeadline ?? hashStructData?.deadline;
+    const freshDeadline = refetchResult.data?.deadline ?? hashStructData?.deadline;
 
     if (freshDeadline === undefined) {
       logger.signature.error('Failed to get hash struct data');
@@ -142,7 +142,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
 
     try {
       logger.signature.info('Requesting EIP-712 transaction batch acknowledgement signature', {
-        merkleRoot,
+        dataHash,
         transactionCount: selectedTxHashes.length,
         reporter: address,
         forwarder: forwarderAddress,
@@ -153,7 +153,8 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
       });
 
       const sig = await signTxAcknowledgement({
-        merkleRoot,
+        reporter: address,
+        dataHash: dataHash!,
         reportedChainId: reportedChainIdHash,
         transactionCount: selectedTxHashes.length,
         forwarder: forwarderAddress,
@@ -175,7 +176,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
           signature: sig,
           deadline: freshDeadline,
           nonce,
-          merkleRoot,
+          dataHash: dataHash!,
           reportedChainId: reportedChainIdHash,
           transactionCount: selectedTxHashes.length,
           reporter: address,
@@ -235,7 +236,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   }
 
   // Missing required data
-  if (!merkleRoot || selectedTxHashes.length === 0) {
+  if (!dataHash || selectedTxHashes.length === 0) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -325,15 +326,15 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
           )}
           <div className="flex items-start gap-2">
             <span className="text-muted-foreground flex items-center gap-1 shrink-0">
-              Merkle Root:
+              Data Hash:
               <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <code className="font-mono text-xs break-all cursor-default">{merkleRoot}</code>
+                <code className="font-mono text-xs break-all cursor-default">{dataHash}</code>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-md">
-                <p className="text-xs font-mono break-all">{merkleRoot}</p>
+                <p className="text-xs font-mono break-all">{dataHash}</p>
               </TooltipContent>
             </Tooltip>
           </div>

@@ -2,11 +2,7 @@ import { createPublicClient, http, formatEther, zeroAddress } from 'viem';
 import chalk from 'chalk';
 import ora from 'ora';
 import { getConfig } from '../lib/config.js';
-import {
-  FraudulentContractRegistryABI,
-  StolenWalletRegistryABI,
-  StolenTransactionRegistryABI,
-} from '@swr/abis';
+import { WalletRegistryV2ABI, TransactionRegistryV2ABI, FeeManagerABI } from '@swr/abis';
 
 export interface QuoteOptions {
   env: 'local' | 'testnet' | 'mainnet';
@@ -35,11 +31,11 @@ export async function quote(options: QuoteOptions): Promise<void> {
         if (config.contracts.stolenWalletRegistry === zeroAddress) {
           throw new Error('Wallet registry not configured for this environment');
         }
-        // Use operator batch quote for CLI (operators use batch registration)
         fee = await publicClient.readContract({
           address: config.contracts.stolenWalletRegistry,
-          abi: StolenWalletRegistryABI,
-          functionName: 'quoteOperatorBatchRegistration',
+          abi: WalletRegistryV2ABI,
+          functionName: 'quoteRegistration',
+          args: [zeroAddress],
         });
         registryName = 'Stolen Wallet Registry';
         break;
@@ -48,10 +44,9 @@ export async function quote(options: QuoteOptions): Promise<void> {
         if (config.contracts.stolenTransactionRegistry === zeroAddress) {
           throw new Error('Transaction registry not configured for this environment');
         }
-        // quoteRegistration takes reporter param (unused on hub, for interface compatibility)
         fee = await publicClient.readContract({
           address: config.contracts.stolenTransactionRegistry,
-          abi: StolenTransactionRegistryABI,
+          abi: TransactionRegistryV2ABI,
           functionName: 'quoteRegistration',
           args: [zeroAddress],
         });
@@ -62,10 +57,13 @@ export async function quote(options: QuoteOptions): Promise<void> {
         if (config.contracts.fraudulentContractRegistry === zeroAddress) {
           throw new Error('Contract registry not configured for this environment');
         }
+        if (config.contracts.feeManager === zeroAddress) {
+          throw new Error('FeeManager not configured for this environment');
+        }
         fee = await publicClient.readContract({
-          address: config.contracts.fraudulentContractRegistry,
-          abi: FraudulentContractRegistryABI,
-          functionName: 'quoteRegistration',
+          address: config.contracts.feeManager,
+          abi: FeeManagerABI,
+          functionName: 'currentFeeWei',
         });
         registryName = 'Fraudulent Contract Registry';
         break;
