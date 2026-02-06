@@ -357,12 +357,16 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IWalletRegistryV2
+    /// @dev Two distinct deadlines are in play:
+    ///   1. `deadline` param: TIMESTAMP — EIP-712 signature expiry, validated against block.timestamp
+    ///   2. `AcknowledgementData.deadline`: BLOCK NUMBER — grace period window, from TimingConfig.getDeadlineBlock()
+    ///   These serve different purposes: (1) prevents stale signatures, (2) enforces the registration window.
     function acknowledge(
         address registeree,
         address forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
-        uint256 deadline,
+        uint256 deadline, // EIP-712 signature expiry (timestamp, compared to block.timestamp)
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -413,9 +417,11 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IWalletRegistryV2
+    /// @dev `deadline` param is a TIMESTAMP (EIP-712 signature expiry, compared to block.timestamp).
+    ///      `ack.deadline` is a BLOCK NUMBER (grace period window, compared to block.number).
     function register(
         address registeree,
-        uint256 deadline,
+        uint256 deadline, // EIP-712 signature expiry (timestamp, compared to block.timestamp)
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint8 v,
@@ -425,7 +431,7 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
         if (registeree == address(0)) revert WalletRegistryV2__ZeroAddress();
         if (deadline <= block.timestamp) revert WalletRegistryV2__DeadlineExpired();
 
-        // Load and validate acknowledgement
+        // Load and validate acknowledgement (ack.deadline and ack.gracePeriodStart are BLOCK NUMBERS)
         AcknowledgementData memory ack = _pendingAcknowledgements[registeree];
         if (ack.forwarder != msg.sender) revert WalletRegistryV2__NotAuthorizedForwarder();
         if (block.number < ack.gracePeriodStart) revert WalletRegistryV2__GracePeriodNotStarted();
@@ -534,15 +540,12 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
             revert WalletRegistryV2__ArrayLengthMismatch();
         }
 
-        // Create batch
+        // Create batch (walletCount updated after loop with actual count)
         batchId = _nextBatchId++;
-        _batches[batchId] =
-            Batch({ operatorId: operatorId, timestamp: uint64(block.timestamp), walletCount: uint32(length) });
 
-        emit BatchCreated(batchId, operatorId, uint32(length));
-
-        // Register each wallet
+        // Register each wallet, counting actual registrations
         bytes32 localSourceChainId = CAIP10Evm.caip2Hash(uint64(block.chainid));
+        uint32 actualCount = 0;
 
         for (uint256 i = 0; i < length; i++) {
             bytes32 identifier = identifiers[i];
@@ -564,8 +567,14 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
                 isSponsored: false
             });
 
+            actualCount++;
             emit WalletRegistered(identifier, reportedChainIds[i], incidentTimestamps[i], false);
         }
+
+        _batches[batchId] =
+            Batch({ operatorId: operatorId, timestamp: uint64(block.timestamp), walletCount: actualCount });
+
+        emit BatchCreated(batchId, operatorId, actualCount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

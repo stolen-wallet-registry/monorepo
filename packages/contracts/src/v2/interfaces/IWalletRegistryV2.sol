@@ -337,8 +337,8 @@ interface IWalletRegistryV2 {
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Set hub address (one-time setup)
-    /// @param newHub The FraudRegistryHubV2 address
+    /// @notice Set or update hub address (owner-only, can be called multiple times)
+    /// @param newHub The FraudRegistryHubV2 address (must not be address(0))
     function setHub(address newHub) external;
 
     /// @notice Set operator submitter address

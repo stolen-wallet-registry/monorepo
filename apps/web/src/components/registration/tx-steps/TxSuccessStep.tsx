@@ -24,7 +24,8 @@ import { ChainIcon } from '@/components/composed/ChainIcon';
 import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
-import { clearAllTxSignatures } from '@/lib/signatures/transactions';
+import { clearAllTxSignatures, computeTransactionDataHash } from '@/lib/signatures/transactions';
+import type { Hash } from '@/lib/types/ethereum';
 import {
   getExplorerTxUrl,
   getChainName,
@@ -50,8 +51,16 @@ export function TxSuccessStep() {
     bridgeMessageId,
     reset: resetRegistration,
   } = useTransactionRegistrationStore();
-  const { selectedTxHashes, selectedTxDetails, merkleRoot, reportedChainId } =
+  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
     useTransactionSelection();
+
+  // V2: Compute dataHash from sorted arrays (replaces merkle root for display)
+  const dataHash: Hash | undefined =
+    sortedTxHashes.length > 0 &&
+    sortedChainIds.length > 0 &&
+    sortedTxHashes.length === sortedChainIds.length
+      ? computeTransactionDataHash(sortedTxHashes, sortedChainIds)
+      : undefined;
   const formStore = useTransactionFormStore();
   // Guard against invalid chain IDs (must be positive safe integer)
   const reportedChainIdHash =
@@ -79,7 +88,7 @@ export function TxSuccessStep() {
    */
   const handleGoHome = () => {
     logger.registration.info('User navigating home, resetting transaction registration state', {
-      merkleRoot,
+      dataHash,
       acknowledgementHash,
       registrationHash,
       transactionCount: selectedTxHashes.length,
@@ -95,7 +104,7 @@ export function TxSuccessStep() {
    */
   const handleRegisterAnother = () => {
     logger.registration.info('User starting new transaction registration, resetting state', {
-      previousMerkleRoot: merkleRoot,
+      previousDataHash: dataHash,
       previousTransactionCount: selectedTxHashes.length,
     });
     resetRegistration();
@@ -186,7 +195,7 @@ export function TxSuccessStep() {
             )}
 
             {/* Data Hash */}
-            {merkleRoot && (
+            {dataHash && (
               <div className="flex items-start gap-2">
                 <span className="text-muted-foreground flex items-center gap-1 shrink-0">
                   Data Hash:
@@ -194,10 +203,10 @@ export function TxSuccessStep() {
                 </span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <code className="font-mono text-xs break-all cursor-default">{merkleRoot}</code>
+                    <code className="font-mono text-xs break-all cursor-default">{dataHash}</code>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-md">
-                    <p className="text-xs font-mono break-all">{merkleRoot}</p>
+                    <p className="text-xs font-mono break-all">{dataHash}</p>
                   </TooltipContent>
                 </Tooltip>
               </div>

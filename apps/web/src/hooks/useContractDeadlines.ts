@@ -21,8 +21,10 @@ export interface DeadlineData {
   currentBlock: bigint;
   expiry: bigint;
   start: bigint;
-  graceBlocks: bigint;
-  deadlineBlock: bigint;
+  /** Block number when grace period started (rawData[3]) */
+  graceStartsAt: bigint;
+  /** Blocks remaining until window opens (rawData[4]) */
+  timeLeft: bigint;
   isExpired: boolean;
 }
 
@@ -90,8 +92,8 @@ export function useContractDeadlines(
         currentBlock: BigInt(rawData[0]),
         expiry: BigInt(rawData[1]),
         start: BigInt(rawData[2]),
-        graceBlocks: BigInt(rawData[3]),
-        deadlineBlock: BigInt(rawData[1]),
+        graceStartsAt: BigInt(rawData[3]),
+        timeLeft: BigInt(rawData[4]),
         isExpired: Boolean(rawData[5]),
       };
 

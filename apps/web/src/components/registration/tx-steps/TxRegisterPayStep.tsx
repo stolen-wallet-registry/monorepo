@@ -67,20 +67,16 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   const chainId = useChainId();
   const { registrationType, bridgeMessageId, setRegistrationHash, setBridgeMessageId } =
     useTransactionRegistrationStore();
-  const {
-    selectedTxHashes,
-    selectedTxDetails,
-    reportedChainId,
-    merkleRoot,
-    sortedTxHashes,
-    sortedChainIds,
-  } = useTransactionSelection();
+  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
+    useTransactionSelection();
 
   const isSelfRelay = registrationType === 'selfRelay';
 
   // V2: Compute dataHash from sorted arrays (replaces merkle root)
   const dataHash: Hash | undefined =
-    sortedTxHashes.length > 0 && sortedChainIds.length > 0
+    sortedTxHashes.length > 0 &&
+    sortedChainIds.length > 0 &&
+    sortedTxHashes.length === sortedChainIds.length
       ? computeTransactionDataHash(sortedTxHashes, sortedChainIds)
       : undefined;
 
@@ -592,10 +588,10 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <code className="font-mono text-xs break-all cursor-default">{merkleRoot}</code>
+                <code className="font-mono text-xs break-all cursor-default">{dataHash}</code>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-md">
-                <p className="text-xs font-mono break-all">{merkleRoot}</p>
+                <p className="text-xs font-mono break-all">{dataHash}</p>
               </TooltipContent>
             </Tooltip>
           </div>

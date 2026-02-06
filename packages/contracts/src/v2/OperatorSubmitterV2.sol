@@ -306,6 +306,8 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
     }
 
     /// @notice Set fee manager address
+    /// @dev If setting both feeManager and feeRecipient from scratch, use setFeeConfig() instead.
+    ///      Order constraint: feeRecipient must be set before feeManager (cannot enable fees without a recipient).
     /// @param _feeManager The new fee manager address (address(0) for free)
     function setFeeManager(address _feeManager) external onlyOwner {
         if (_feeManager != address(0) && feeRecipient == address(0)) {
@@ -322,6 +324,21 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
             revert OperatorSubmitterV2__InvalidFeeConfig();
         }
         feeRecipient = _feeRecipient;
+        emit FeeRecipientSet(_feeRecipient);
+    }
+
+    /// @notice Set both fee manager and fee recipient atomically
+    /// @dev Avoids ordering issues when configuring fees from scratch.
+    ///      To disable fees, pass address(0) for both.
+    /// @param _feeManager The fee manager address (address(0) to disable)
+    /// @param _feeRecipient The fee recipient address
+    function setFeeConfig(address _feeManager, address _feeRecipient) external onlyOwner {
+        if (_feeManager != address(0) && _feeRecipient == address(0)) {
+            revert OperatorSubmitterV2__InvalidFeeConfig();
+        }
+        feeManager = _feeManager;
+        feeRecipient = _feeRecipient;
+        emit FeeManagerSet(_feeManager);
         emit FeeRecipientSet(_feeRecipient);
     }
 

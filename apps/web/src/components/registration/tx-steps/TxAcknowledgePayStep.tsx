@@ -55,20 +55,16 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   const { address } = useAccount();
   const chainId = useChainId();
   const { registrationType, setAcknowledgementHash } = useTransactionRegistrationStore();
-  const {
-    selectedTxHashes,
-    selectedTxDetails,
-    reportedChainId,
-    merkleRoot,
-    sortedTxHashes,
-    sortedChainIds,
-  } = useTransactionSelection();
+  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
+    useTransactionSelection();
 
   const isSelfRelay = registrationType === 'selfRelay';
 
   // V2: Compute dataHash from sorted arrays (replaces merkle root)
   const dataHash: Hash | undefined =
-    sortedTxHashes.length > 0 && sortedChainIds.length > 0
+    sortedTxHashes.length > 0 &&
+    sortedChainIds.length > 0 &&
+    sortedTxHashes.length === sortedChainIds.length
       ? computeTransactionDataHash(sortedTxHashes, sortedChainIds)
       : undefined;
 
@@ -161,7 +157,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     transactionCount: selectedTxHashes.length,
     reporter: storedSignature?.reporter,
     // Hub-specific params
-    forwarder: isHub ? storedSignature?.reporter : undefined, // self-relay: forwarder === reporter
+    forwarder: isHub ? storedSignature?.forwarder : undefined,
     // Spoke-specific params
     nonce: isSpoke ? storedSignature?.nonce : undefined,
     deadline: storedSignature?.deadline,
@@ -275,7 +271,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         // isSponsored is derived on-chain as (reporter != forwarder)
         const hubParams: TxAcknowledgementParamsHub = {
           reporter: storedSignature.reporter,
-          forwarder: storedSignature.reporter, // self-relay: forwarder === reporter
+          forwarder: storedSignature.forwarder,
           deadline: storedSignature.deadline,
           dataHash: dataHash!,
           reportedChainId: reportedChainIdHash!,
@@ -480,10 +476,10 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <code className="font-mono text-xs break-all cursor-default">{merkleRoot}</code>
+                <code className="font-mono text-xs break-all cursor-default">{dataHash}</code>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-md">
-                <p className="text-xs font-mono break-all">{merkleRoot}</p>
+                <p className="text-xs font-mono break-all">{dataHash}</p>
               </TooltipContent>
             </Tooltip>
           </div>

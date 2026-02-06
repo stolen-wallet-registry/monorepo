@@ -61,6 +61,20 @@ function isValidSignature(sig: unknown): sig is SignatureOverTheWire {
   if (typeof s.deadline !== 'string' || !/^\d+$/.test(s.deadline)) return false;
   if (typeof s.nonce !== 'string' || !/^\d+$/.test(s.nonce)) return false;
 
+  // V2 optional fields: if present, must be valid numeric strings for BigInt conversion
+  if (
+    s.reportedChainId !== undefined &&
+    (typeof s.reportedChainId !== 'string' || !/^\d+$/.test(s.reportedChainId))
+  ) {
+    return false;
+  }
+  if (
+    s.incidentTimestamp !== undefined &&
+    (typeof s.incidentTimestamp !== 'string' || !/^\d+$/.test(s.incidentTimestamp))
+  ) {
+    return false;
+  }
+
   return true;
 }
 

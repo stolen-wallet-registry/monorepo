@@ -89,16 +89,20 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // WalletRegistryV2.register: (registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
   // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
   const transactionArgs: WalletRegistrationArgs | undefined =
-    storedSignature && registeree && parsedSig
-      ? ([
+    storedSignature &&
+    registeree &&
+    parsedSig &&
+    storedSignature.reportedChainId !== undefined &&
+    storedSignature.incidentTimestamp !== undefined
+      ? [
           registeree,
           storedSignature.deadline,
-          storedSignature.reportedChainId ?? BigInt(chainId),
-          storedSignature.incidentTimestamp ?? 0n,
+          storedSignature.reportedChainId,
+          storedSignature.incidentTimestamp,
           parsedSig.v,
           parsedSig.r,
           parsedSig.s,
-        ] as unknown as WalletRegistrationArgs)
+        ]
       : undefined;
 
   // Get transaction cost estimate (must be called unconditionally - hooks rule)

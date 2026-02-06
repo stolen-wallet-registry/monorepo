@@ -80,6 +80,9 @@ interface ITransactionRegistryV2 {
     error TransactionRegistryV2__EmptyBatch();
     error TransactionRegistryV2__ArrayLengthMismatch();
     error TransactionRegistryV2__DataHashMismatch();
+    error TransactionRegistryV2__InvalidStep();
+    error TransactionRegistryV2__HubTransferFailed();
+    error TransactionRegistryV2__RefundFailed();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -359,8 +362,8 @@ interface ITransactionRegistryV2 {
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Set hub address (one-time setup)
-    /// @param newHub The FraudRegistryHubV2 address
+    /// @notice Set or update hub address (owner-only, can be called multiple times)
+    /// @param newHub The FraudRegistryHubV2 address (must not be address(0))
     function setHub(address newHub) external;
 
     /// @notice Set operator submitter address

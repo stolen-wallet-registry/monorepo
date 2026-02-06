@@ -42,7 +42,7 @@ export interface RegistryStatusResult {
  *
  * @param client - viem PublicClient
  * @param address - Wallet address to query
- * @param contractAddress - StolenWalletRegistry contract address
+ * @param contractAddress - WalletRegistryV2 contract address
  * @param abi - Contract ABI
  */
 export async function queryRegistryStatus(
@@ -56,25 +56,25 @@ export async function queryRegistryStatus(
       {
         address: contractAddress,
         abi,
-        functionName: 'isRegistered',
+        functionName: 'isWalletRegistered',
         args: [address],
       },
       {
         address: contractAddress,
         abi,
-        functionName: 'isPending',
+        functionName: 'isWalletPending',
         args: [address],
       },
       {
         address: contractAddress,
         abi,
-        functionName: 'getRegistration',
+        functionName: 'getWalletEntry',
         args: [address],
       },
       {
         address: contractAddress,
         abi,
-        functionName: 'getAcknowledgement',
+        functionName: 'getAcknowledgementData',
         args: [address],
       },
     ],

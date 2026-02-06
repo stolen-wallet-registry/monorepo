@@ -43,14 +43,8 @@ export interface TxRegisterSignStepProps {
 export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
-  const {
-    selectedTxHashes,
-    selectedTxDetails,
-    reportedChainId,
-    merkleRoot,
-    sortedTxHashes,
-    sortedChainIds,
-  } = useTransactionSelection();
+  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
+    useTransactionSelection();
   const { registrationType } = useTransactionRegistrationStore();
   const storedReporter = useTransactionFormStore((s) => s.reporter);
   const storedForwarder = useTransactionFormStore((s) => s.forwarder);
@@ -372,10 +366,10 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <code className="font-mono text-xs break-all cursor-default">{merkleRoot}</code>
+                <code className="font-mono text-xs break-all cursor-default">{dataHash}</code>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-md">
-                <p className="text-xs font-mono break-all">{merkleRoot}</p>
+                <p className="text-xs font-mono break-all">{dataHash}</p>
               </TooltipContent>
             </Tooltip>
           </div>

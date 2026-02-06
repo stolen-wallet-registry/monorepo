@@ -28,9 +28,9 @@ import {
   contractRegistryV2Abi,
   spokeRegistryV2Abi,
 } from './abis';
-import type { RegistryType } from './addresses';
+import type { RegistryType, RegistryVariant } from './addresses';
 
-export type RegistryVariant = 'wallet' | 'transaction' | 'contract';
+export type { RegistryVariant } from './addresses';
 
 /**
  * Function name mappings for registry operations.
@@ -152,45 +152,53 @@ const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
         quoteRegistration: 'quoteRegistration',
         quoteFeeBreakdown: 'quoteFeeBreakdown',
         isPending: 'isPending',
-        isRegistered: 'isPending', // Spoke doesn't track hub registration
+        // Spoke has no local registration state — it only forwards to hub.
+        // We map to isPending so callers get a "not yet registered" signal.
+        isRegistered: 'isPending',
         getAcknowledgement: 'getAcknowledgement',
-        getRegistration: 'getAcknowledgement', // Spoke only has acknowledgement data
+        // Spoke never stores final registration; return acknowledgement as best-effort data.
+        getRegistration: 'getAcknowledgement',
       },
     },
   },
   contract: {
-    // Contract registry is operator-only, no two-phase registration
+    // Contract registry is operator-only, single-phase (no acknowledgement/grace period).
+    // Placeholder mappings exist so callers using the generic RegistryFunctions interface
+    // don't need special-case logic — they'll hit the contract and get a revert or no-op
+    // rather than a missing function name at compile time.
     hub: {
       abi: contractRegistryV2Abi,
       functions: {
-        acknowledge: 'registerContracts', // No acknowledgement phase
+        acknowledge: 'registerContracts', // No acknowledgement phase — maps to register
         register: 'registerContracts',
-        generateHashStruct: 'generateHashStruct', // Placeholder
-        getDeadlines: 'getDeadlines', // Placeholder
-        nonces: 'nonces', // Placeholder
+        generateHashStruct: 'generateHashStruct', // Not used — placeholder for interface
+        getDeadlines: 'getDeadlines', // Not used — placeholder for interface
+        nonces: 'nonces', // Not used — placeholder for interface
         quoteRegistration: 'quoteRegistration',
-        quoteFeeBreakdown: 'quoteRegistration',
-        isPending: 'isContractRegistered', // No pending state
+        quoteFeeBreakdown: 'quoteRegistration', // ContractRegistryV2 has no separate breakdown
+        isPending: 'isContractRegistered', // No pending state — always returns registered or not
         isRegistered: 'isContractRegistered',
         getAcknowledgement: 'getContractEntry',
         getRegistration: 'getContractEntry',
       },
     },
     spoke: {
-      // Contract registration from spoke chains (operator-only)
+      // Contract registration is NOT supported on spoke chains — SpokeRegistryV2
+      // has no contract-specific functions. These mappings use generic spoke functions
+      // as best-effort fallbacks. Callers should not invoke contract registration on spoke.
       abi: spokeRegistryV2Abi,
       functions: {
-        acknowledge: 'registerContracts',
-        register: 'registerContracts',
+        acknowledge: 'acknowledgeLocal', // Fallback — no contract ack on spoke
+        register: 'registerLocal', // Fallback — no contract reg on spoke
         generateHashStruct: 'generateHashStruct',
         getDeadlines: 'getDeadlines',
         nonces: 'nonces',
         quoteRegistration: 'quoteRegistration',
         quoteFeeBreakdown: 'quoteFeeBreakdown',
-        isPending: 'isContractRegistered',
-        isRegistered: 'isContractRegistered',
-        getAcknowledgement: 'getContractEntry',
-        getRegistration: 'getContractEntry',
+        isPending: 'isPending', // Generic spoke pending check
+        isRegistered: 'isPending', // Spoke has no registration state
+        getAcknowledgement: 'getAcknowledgement',
+        getRegistration: 'getAcknowledgement', // Spoke has no registration data
       },
     },
   },

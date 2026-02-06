@@ -57,6 +57,9 @@ export async function quote(options: QuoteOptions): Promise<void> {
         if (config.contracts.fraudulentContractRegistry === zeroAddress) {
           throw new Error('Contract registry not configured for this environment');
         }
+        if (config.contracts.feeManager === zeroAddress) {
+          throw new Error('FeeManager not configured for this environment');
+        }
         fee = await publicClient.readContract({
           address: config.contracts.feeManager,
           abi: FeeManagerABI,

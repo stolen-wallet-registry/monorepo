@@ -81,12 +81,17 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   // Build transaction args for gas estimation (needs to be before early returns)
   // WalletRegistryV2.acknowledge: (registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
   const transactionArgs: WalletAcknowledgeArgs | undefined =
-    storedSignature && registeree && forwarder && parsedSig
+    storedSignature &&
+    registeree &&
+    forwarder &&
+    parsedSig &&
+    storedSignature.reportedChainId !== undefined &&
+    storedSignature.incidentTimestamp !== undefined
       ? ([
           registeree,
           forwarder,
-          storedSignature.reportedChainId ?? BigInt(chainId),
-          storedSignature.incidentTimestamp ?? 0n,
+          storedSignature.reportedChainId,
+          storedSignature.incidentTimestamp,
           storedSignature.deadline,
           parsedSig.v,
           parsedSig.r,
@@ -147,11 +152,12 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
       isCorrectWallet,
     });
 
-    if (!storedSignature || !registeree || !parsedSig) {
+    if (!storedSignature || !registeree || !forwarder || !parsedSig) {
       logger.contract.error('Cannot submit acknowledgement - missing data', {
         hasStoredSignature: !!storedSignature,
         hasParsedSig: !!parsedSig,
         registeree,
+        forwarder,
       });
       setLocalError('Missing signature data. Please go back and sign again.');
       return;
@@ -183,15 +189,11 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         chainId,
       });
 
-      // Determine forwarder: for standard registration, it's the same as registeree
-      // For self-relay, it's the relayer wallet
-      const forwarder = isSelfRelay && relayer ? relayer : registeree;
-
       await submitAcknowledgement({
         registeree,
         forwarder,
-        reportedChainId: storedSignature.reportedChainId ?? BigInt(chainId),
-        incidentTimestamp: storedSignature.incidentTimestamp ?? 0n,
+        reportedChainId: storedSignature.reportedChainId,
+        incidentTimestamp: storedSignature.incidentTimestamp,
         deadline: storedSignature.deadline,
         signature: parsedSig,
       });

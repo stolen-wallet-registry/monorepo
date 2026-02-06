@@ -44,14 +44,8 @@ export interface TxAcknowledgeSignStepProps {
 export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
-  const {
-    selectedTxHashes,
-    selectedTxDetails,
-    reportedChainId,
-    merkleRoot,
-    sortedTxHashes,
-    sortedChainIds,
-  } = useTransactionSelection();
+  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
+    useTransactionSelection();
   const { registrationType } = useTransactionRegistrationStore();
   const storedForwarder = useTransactionFormStore((s) => s.forwarder);
 
@@ -81,7 +75,9 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
 
   // V2: Compute dataHash from sorted arrays (replaces merkle root for signing/contract calls)
   const dataHash: Hash | undefined =
-    sortedTxHashes.length > 0 && sortedChainIds.length > 0
+    sortedTxHashes.length > 0 &&
+    sortedChainIds.length > 0 &&
+    sortedTxHashes.length === sortedChainIds.length
       ? computeTransactionDataHash(sortedTxHashes, sortedChainIds)
       : undefined;
 
@@ -111,7 +107,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   const handleSign = async () => {
     logger.signature.info('Transaction batch acknowledgement sign requested', {
       hasAddress: !!address,
-      hasMerkleRoot: !!merkleRoot,
+      hasDataHash: !!dataHash,
       hasHashStructData: !!hashStructData,
       hasNonce: nonce !== undefined,
       transactionCount: selectedTxHashes.length,
@@ -146,7 +142,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
 
     try {
       logger.signature.info('Requesting EIP-712 transaction batch acknowledgement signature', {
-        merkleRoot,
+        dataHash,
         transactionCount: selectedTxHashes.length,
         reporter: address,
         forwarder: forwarderAddress,
@@ -240,7 +236,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   }
 
   // Missing required data
-  if (!merkleRoot || selectedTxHashes.length === 0) {
+  if (!dataHash || selectedTxHashes.length === 0) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -335,10 +331,10 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <code className="font-mono text-xs break-all cursor-default">{merkleRoot}</code>
+                <code className="font-mono text-xs break-all cursor-default">{dataHash}</code>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-md">
-                <p className="text-xs font-mono break-all">{merkleRoot}</p>
+                <p className="text-xs font-mono break-all">{dataHash}</p>
               </TooltipContent>
             </Tooltip>
           </div>

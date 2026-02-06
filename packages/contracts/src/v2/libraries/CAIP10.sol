@@ -280,6 +280,7 @@ library CAIP10 {
     }
 
     function _slice(bytes memory data, uint256 start, uint256 len) private pure returns (bytes memory) {
+        if (start + len > data.length) revert CAIP10__InvalidFormat();
         bytes memory result = new bytes(len);
         for (uint256 i = 0; i < len; i++) {
             result[i] = data[start + i];

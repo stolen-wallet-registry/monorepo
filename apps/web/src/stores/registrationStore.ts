@@ -319,3 +319,18 @@ export const useRegistrationFlow = () =>
       reset: s.reset,
     }))
   );
+
+/**
+ * Select V2 registration fields and setters.
+ * Use when component needs incident chain and timestamp info.
+ */
+export const useRegistrationV2Fields = () =>
+  useRegistrationStore(
+    useShallow((s) => ({
+      reportedChainId: s.reportedChainId,
+      incidentTimestamp: s.incidentTimestamp,
+      setReportedChainId: s.setReportedChainId,
+      setIncidentTimestamp: s.setIncidentTimestamp,
+      initializeV2Fields: s.initializeV2Fields,
+    }))
+  );

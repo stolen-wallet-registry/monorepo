@@ -59,7 +59,7 @@ describe('--build-only mode', () => {
         args: [identifiers, reportedChainIds],
       });
 
-      expect(calldata).toMatch(/^0x[a-f0-9]+$/);
+      expect(calldata).toMatch(/^0x[a-fA-F0-9]+$/);
       // registerContractsAsOperator selector
       expect(calldata.slice(0, 10)).toBe(
         encodeFunctionData({
@@ -85,7 +85,7 @@ describe('--build-only mode', () => {
         args: [transactionHashes, chainIds],
       });
 
-      expect(calldata).toMatch(/^0x[a-f0-9]+$/);
+      expect(calldata).toMatch(/^0x[a-fA-F0-9]+$/);
       // registerTransactionsAsOperator selector
       expect(calldata.slice(0, 10)).toBe(
         encodeFunctionData({

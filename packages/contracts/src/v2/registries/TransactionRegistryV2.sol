@@ -109,6 +109,9 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
     // INTERNAL HELPERS - Fee Handling
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @dev Collects fee via FeeManager and forwards to hub. Refunds excess to sender.
+    ///      When hub == address(0), fees are held in this contract and can be recovered
+    ///      via withdrawCollectedFees().
     function _collectFee() internal {
         if (feeManager == address(0)) return;
 
@@ -117,11 +120,11 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
             revert TransactionRegistryV2__InsufficientFee();
         }
 
-        // Forward to hub
+        // Forward to hub (fees held locally if hub not yet configured)
         if (hub != address(0)) {
             (bool success,) = hub.call{ value: requiredFee }("");
             if (!success) {
-                revert TransactionRegistryV2__InsufficientFee();
+                revert TransactionRegistryV2__HubTransferFailed();
             }
         }
 
@@ -130,9 +133,18 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         if (excess > 0) {
             (bool refundSuccess,) = msg.sender.call{ value: excess }("");
             if (!refundSuccess) {
-                revert TransactionRegistryV2__InsufficientFee();
+                revert TransactionRegistryV2__RefundFailed();
             }
         }
+    }
+
+    /// @notice Withdraw fees held when hub was not configured
+    /// @dev Only callable by owner. Sends entire contract balance to owner.
+    function withdrawCollectedFees() external onlyOwner {
+        uint256 balance = address(this).balance;
+        if (balance == 0) return;
+        (bool success,) = msg.sender.call{ value: balance }("");
+        if (!success) revert TransactionRegistryV2__RefundFailed();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -143,6 +155,8 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
     function isTransactionRegistered(string calldata chainQualifiedRef) external view returns (bool) {
         // Parse: namespace:chainId:txHash
         (bytes32 namespaceHash, bytes32 chainRef, uint256 txStart, uint256 txLen) = CAIP10.parse(chainQualifiedRef);
+        // Validate tx hash length: 66 chars = "0x" + 64 hex chars (standard EVM tx hash)
+        require(txLen == 66, "Invalid tx hash length");
         bytes memory txHashBytes = bytes(chainQualifiedRef)[txStart:txStart + txLen];
         bytes32 txHash = bytes32(txHashBytes);
 
@@ -156,6 +170,8 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
     /// @inheritdoc ITransactionRegistryV2
     function getTransactionEntry(string calldata chainQualifiedRef) external view returns (TransactionEntry memory) {
         (bytes32 namespaceHash, bytes32 chainRef, uint256 txStart, uint256 txLen) = CAIP10.parse(chainQualifiedRef);
+        // Validate tx hash length: 66 chars = "0x" + 64 hex chars (standard EVM tx hash)
+        require(txLen == 66, "Invalid tx hash length");
         bytes memory txHashBytes = bytes(chainQualifiedRef)[txStart:txStart + txLen];
         bytes32 txHash = bytes32(txHashBytes);
 
@@ -233,6 +249,7 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         address forwarder,
         uint8 step
     ) external view returns (uint256 deadline, bytes32 hashStruct) {
+        if (step != 1 && step != 2) revert TransactionRegistryV2__InvalidStep();
         deadline = TimingConfig.getSignatureDeadline();
         if (step == 1) {
             // Acknowledgement
@@ -554,8 +571,8 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         bytes32[] calldata chainIds
     ) internal {
         // Create batch
-        _nextBatchId++;
-        _batches[_nextBatchId - 1] = TransactionBatch({
+        uint256 batchId = _nextBatchId++;
+        _batches[batchId] = TransactionBatch({
             operatorId: bytes32(0),
             timestamp: uint64(block.timestamp),
             transactionCount: uint32(transactionHashes.length)
@@ -585,6 +602,7 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
             emit CrossChainTransactionRegistered(txHash, params.sourceChainId, params.bridgeId, params.messageId);
         }
 
+        emit TransactionBatchCreated(batchId, bytes32(0), uint32(transactionHashes.length));
         emit TransactionBatchRegistered(reporter, dataHash, uint32(transactionHashes.length), params.isSponsored);
     }
 
@@ -629,16 +647,12 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         if (length == 0) revert TransactionRegistryV2__EmptyBatch();
         if (length != chainIds.length) revert TransactionRegistryV2__ArrayLengthMismatch();
 
-        // Create batch
+        // Create batch (transactionCount updated after loop with actual count)
         batchId = _nextBatchId++;
-        _batches[batchId] = TransactionBatch({
-            operatorId: operatorId, timestamp: uint64(block.timestamp), transactionCount: uint32(length)
-        });
 
-        emit TransactionBatchCreated(batchId, operatorId, uint32(length));
-
-        // Register transactions
+        // Register transactions, counting actual registrations
         bytes32 localSourceChainId = CAIP10Evm.caip2Hash(uint64(block.chainid));
+        uint32 actualCount = 0;
 
         for (uint256 i = 0; i < length; i++) {
             bytes32 txHash = transactionHashes[i];
@@ -659,8 +673,15 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
                 isSponsored: false
             });
 
+            actualCount++;
             emit TransactionRegistered(txHash, chainId, address(0), false);
         }
+
+        _batches[batchId] = TransactionBatch({
+            operatorId: operatorId, timestamp: uint64(block.timestamp), transactionCount: actualCount
+        });
+
+        emit TransactionBatchCreated(batchId, operatorId, actualCount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

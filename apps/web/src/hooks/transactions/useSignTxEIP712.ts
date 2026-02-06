@@ -82,26 +82,34 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
   const isHub = registryType === 'hub';
 
   /**
-   * Validates that wallet is connected and contract is configured.
+   * Validates that wallet is connected, contract is configured, and reporter matches signer.
    * @throws Error if validation fails
    * @returns The validated contract address
    */
-  const validateSigningPreconditions = useCallback((): Address => {
-    if (!address) {
-      throw new Error('Wallet not connected');
-    }
-    if (!contractAddress) {
-      throw new Error('Contract not configured for this chain');
-    }
-    return contractAddress;
-  }, [address, contractAddress]);
+  const validateSigningPreconditions = useCallback(
+    (reporter?: Address): Address => {
+      if (!address) {
+        throw new Error('Wallet not connected');
+      }
+      if (!contractAddress) {
+        throw new Error('Contract not configured for this chain');
+      }
+      if (reporter && reporter.toLowerCase() !== address.toLowerCase()) {
+        throw new Error(
+          `Connected wallet ${address} does not match reporter ${reporter}. Please switch wallets.`
+        );
+      }
+      return contractAddress;
+    },
+    [address, contractAddress]
+  );
 
   /**
    * Sign a transaction batch acknowledgement message (Phase 1).
    */
   const signTxAcknowledgement = useCallback(
     async (params: TxSignAckParams): Promise<Hex> => {
-      const validatedAddress = validateSigningPreconditions();
+      const validatedAddress = validateSigningPreconditions(params.reporter);
       const message = {
         reporter: params.reporter,
         forwarder: params.forwarder,
@@ -161,7 +169,7 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
    */
   const signTxRegistration = useCallback(
     async (params: TxSignRegParams): Promise<Hex> => {
-      const validatedAddress = validateSigningPreconditions();
+      const validatedAddress = validateSigningPreconditions(params.reporter);
       const message = {
         reporter: params.reporter,
         forwarder: params.forwarder,

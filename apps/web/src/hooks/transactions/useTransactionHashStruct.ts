@@ -1,6 +1,7 @@
 /**
  * Hook to read deadline and hash struct from the transaction registry contract.
- * Supports both hub (TransactionRegistryV2) and spoke (SpokeRegistryV2) chains.
+ * Currently hub-only (TransactionRegistryV2). Spoke (SpokeRegistryV2) support is not yet implemented —
+ * spoke transaction batches use different function signatures for acknowledgement/registration.
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  */

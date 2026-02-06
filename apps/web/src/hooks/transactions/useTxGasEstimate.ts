@@ -115,12 +115,21 @@ export function useTxGasEstimate({
   const isSpoke = isSpokeChain(chainId);
   const isHub = isHubChain(chainId);
 
-  // Get contract address
+  // Get contract address (may throw for unconfigured chains)
   let contractAddress: Address | undefined;
-  if (isSpoke) {
-    contractAddress = getSpokeV2Address('spokeRegistryV2', chainId);
-  } else if (isHub) {
-    contractAddress = getTransactionRegistryV2Address(chainId);
+  try {
+    if (isSpoke) {
+      contractAddress = getSpokeV2Address('spokeRegistryV2', chainId);
+    } else if (isHub) {
+      contractAddress = getTransactionRegistryV2Address(chainId);
+    }
+  } catch (err) {
+    logger.contract.error('useTxGasEstimate: Failed to resolve contract address', {
+      chainId,
+      isSpoke,
+      isHub,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // Check if we have all required params based on step and chain type

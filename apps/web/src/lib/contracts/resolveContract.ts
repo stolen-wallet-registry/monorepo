@@ -53,7 +53,7 @@ export interface ResolvedContract {
  * 4. Returning undefined on error instead of throwing
  *
  * @param chainId - The chain ID to resolve for
- * @param variant - 'wallet' for StolenWalletRegistry, 'transaction' for StolenTransactionRegistry
+ * @param variant - 'wallet' for WalletRegistryV2, 'transaction' for TransactionRegistryV2, 'contract' for ContractRegistryV2
  * @param context - Optional context string for logging (e.g., 'useContractDeadlines')
  * @returns Resolved contract info with address, role, and success flag
  */

@@ -222,7 +222,7 @@ export function useCrossChainConfirmation({
 
   return {
     status,
-    isRegisteredOnHub: isRegisteredOnHub ?? false,
+    isRegisteredOnHub,
     elapsedTime,
     refresh,
     reset,

@@ -2,7 +2,7 @@
 // Stores EIP-712 signatures in sessionStorage (clears on tab close for security)
 // NOTE: This file stays in web app (browser-specific, uses sessionStorage)
 
-import { isHex, isAddress } from 'viem';
+import { isHex, isAddress, size } from 'viem';
 import { TX_SIGNATURE_STEP, type TxSignatureStep } from '@swr/signatures';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
@@ -85,10 +85,11 @@ export function getTxSignature(
     }
 
     // Validate hex format for security-critical signature data
+    // dataHash and reportedChainId must be exactly 32 bytes (bytes32 in EIP-712)
     if (
       !isHex(parsed.signature, { strict: true }) ||
-      !isHex(parsed.dataHash, { strict: true }) ||
-      !isHex(parsed.reportedChainId, { strict: true }) ||
+      !(isHex(parsed.dataHash, { strict: true }) && size(parsed.dataHash) === 32) ||
+      !(isHex(parsed.reportedChainId, { strict: true }) && size(parsed.reportedChainId) === 32) ||
       !isAddress(parsed.reporter) ||
       !isAddress(parsed.forwarder)
     ) {
