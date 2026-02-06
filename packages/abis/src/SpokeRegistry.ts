@@ -1,4 +1,4 @@
-export const SpokeRegistryV2ABI = [
+export const SpokeRegistryABI = [
   {
     type: 'constructor',
     inputs: [
@@ -305,7 +305,7 @@ export const SpokeRegistryV2ABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct ISpokeRegistryV2.AcknowledgementData',
+        internalType: 'struct ISpokeRegistry.AcknowledgementData',
         components: [
           {
             name: 'trustedForwarder',
@@ -395,7 +395,7 @@ export const SpokeRegistryV2ABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct ISpokeRegistryV2.TransactionAcknowledgementData',
+        internalType: 'struct ISpokeRegistry.TransactionAcknowledgementData',
         components: [
           {
             name: 'trustedForwarder',
@@ -568,7 +568,7 @@ export const SpokeRegistryV2ABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct ISpokeRegistryV2.FeeBreakdown',
+        internalType: 'struct ISpokeRegistry.FeeBreakdown',
         components: [
           {
             name: 'bridgeFee',
@@ -1039,87 +1039,87 @@ export const SpokeRegistryV2ABI = [
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__ArrayLengthMismatch',
+    name: 'SpokeRegistry__ArrayLengthMismatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__EmptyBatch',
+    name: 'SpokeRegistry__EmptyBatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__ForwarderExpired',
+    name: 'SpokeRegistry__ForwarderExpired',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__GracePeriodNotStarted',
+    name: 'SpokeRegistry__GracePeriodNotStarted',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__HubNotConfigured',
+    name: 'SpokeRegistry__HubNotConfigured',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__InsufficientFee',
+    name: 'SpokeRegistry__InsufficientFee',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__InvalidDataHash',
+    name: 'SpokeRegistry__InvalidDataHash',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__InvalidForwarder',
+    name: 'SpokeRegistry__InvalidForwarder',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__InvalidHubConfig',
+    name: 'SpokeRegistry__InvalidHubConfig',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__InvalidNonce',
+    name: 'SpokeRegistry__InvalidNonce',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__InvalidOwner',
+    name: 'SpokeRegistry__InvalidOwner',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__InvalidSigner',
+    name: 'SpokeRegistry__InvalidSigner',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__InvalidTimingConfig',
+    name: 'SpokeRegistry__InvalidTimingConfig',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__RefundFailed',
+    name: 'SpokeRegistry__RefundFailed',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__SignatureExpired',
+    name: 'SpokeRegistry__SignatureExpired',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__WithdrawalFailed',
+    name: 'SpokeRegistry__WithdrawalFailed',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'SpokeRegistryV2__ZeroAddress',
+    name: 'SpokeRegistry__ZeroAddress',
     inputs: [],
   },
   {

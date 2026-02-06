@@ -127,7 +127,7 @@ export function extractCAIP2FromCAIP10(caip10: string): CAIP2 | null {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// V2 WILDCARD SUPPORT (CAIP-363)
+// WILDCARD SUPPORT (CAIP-363)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -135,7 +135,7 @@ export function extractCAIP2FromCAIP10(caip10: string): CAIP2 | null {
  * Format: "eip155:_:0x..."
  *
  * This matches all EVM chains for a given wallet address.
- * Used by FraudRegistryV2 for cross-chain wallet lookups.
+ * Used by FraudRegistryHub for cross-chain wallet lookups.
  *
  * @param address - Wallet address (will be lowercased)
  * @returns CAIP-10 wildcard string

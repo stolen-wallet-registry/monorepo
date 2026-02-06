@@ -2,7 +2,7 @@ import { createPublicClient, http, formatEther, zeroAddress } from 'viem';
 import chalk from 'chalk';
 import ora from 'ora';
 import { getConfig } from '../lib/config.js';
-import { WalletRegistryV2ABI, TransactionRegistryV2ABI, FeeManagerABI } from '@swr/abis';
+import { WalletRegistryABI, TransactionRegistryABI, FeeManagerABI } from '@swr/abis';
 
 export interface QuoteOptions {
   env: 'local' | 'testnet' | 'mainnet';
@@ -33,7 +33,7 @@ export async function quote(options: QuoteOptions): Promise<void> {
         }
         fee = await publicClient.readContract({
           address: config.contracts.stolenWalletRegistry,
-          abi: WalletRegistryV2ABI,
+          abi: WalletRegistryABI,
           functionName: 'quoteRegistration',
           args: [zeroAddress],
         });
@@ -46,7 +46,7 @@ export async function quote(options: QuoteOptions): Promise<void> {
         }
         fee = await publicClient.readContract({
           address: config.contracts.stolenTransactionRegistry,
-          abi: TransactionRegistryV2ABI,
+          abi: TransactionRegistryABI,
           functionName: 'quoteRegistration',
           args: [zeroAddress],
         });

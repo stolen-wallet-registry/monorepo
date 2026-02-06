@@ -1,4 +1,4 @@
-export const FraudRegistryHubV2ABI = [
+export const FraudRegistryHubABI = [
   {
     type: 'constructor',
     inputs: [
@@ -71,7 +71,7 @@ export const FraudRegistryHubV2ABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct IContractRegistryV2.ContractEntry',
+        internalType: 'struct IContractRegistry.ContractEntry',
         components: [
           {
             name: 'registeredAt',
@@ -112,7 +112,7 @@ export const FraudRegistryHubV2ABI = [
       {
         name: 'registeredIn',
         type: 'uint8[]',
-        internalType: 'enum IFraudRegistryHubV2.RegistryType[]',
+        internalType: 'enum IFraudRegistryHub.RegistryType[]',
       },
     ],
     stateMutability: 'view',
@@ -136,7 +136,7 @@ export const FraudRegistryHubV2ABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct ITransactionRegistryV2.TransactionEntry',
+        internalType: 'struct ITransactionRegistry.TransactionEntry',
         components: [
           {
             name: 'reportedChainId',
@@ -192,7 +192,7 @@ export const FraudRegistryHubV2ABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct IWalletRegistryV2.WalletEntry',
+        internalType: 'struct IWalletRegistry.WalletEntry',
         components: [
           {
             name: 'reportedChainId',
@@ -726,7 +726,7 @@ export const FraudRegistryHubV2ABI = [
         name: 'registryType',
         type: 'uint8',
         indexed: true,
-        internalType: 'enum IFraudRegistryHubV2.RegistryType',
+        internalType: 'enum IFraudRegistryHub.RegistryType',
       },
       {
         name: 'oldRegistry',
@@ -773,27 +773,27 @@ export const FraudRegistryHubV2ABI = [
   },
   {
     type: 'error',
-    name: 'FraudRegistryHubV2__InvalidIdentifierLength',
+    name: 'FraudRegistryHub__InvalidIdentifierLength',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'FraudRegistryHubV2__OnlyInbox',
+    name: 'FraudRegistryHub__OnlyInbox',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'FraudRegistryHubV2__UnknownRegistryType',
+    name: 'FraudRegistryHub__UnknownRegistryType',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'FraudRegistryHubV2__WithdrawFailed',
+    name: 'FraudRegistryHub__WithdrawFailed',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'FraudRegistryHubV2__ZeroAddress',
+    name: 'FraudRegistryHub__ZeroAddress',
     inputs: [],
   },
   {

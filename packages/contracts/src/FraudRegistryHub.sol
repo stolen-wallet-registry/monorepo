@@ -4,13 +4,13 @@ pragma solidity ^0.8.24;
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
-import { IFraudRegistryHubV2 } from "./interfaces/IFraudRegistryHubV2.sol";
-import { IWalletRegistryV2 } from "./interfaces/IWalletRegistryV2.sol";
-import { ITransactionRegistryV2 } from "./interfaces/ITransactionRegistryV2.sol";
-import { IContractRegistryV2 } from "./interfaces/IContractRegistryV2.sol";
+import { IFraudRegistryHub } from "./interfaces/IFraudRegistryHub.sol";
+import { IWalletRegistry } from "./interfaces/IWalletRegistry.sol";
+import { ITransactionRegistry } from "./interfaces/ITransactionRegistry.sol";
+import { IContractRegistry } from "./interfaces/IContractRegistry.sol";
 import { CAIP10 } from "./libraries/CAIP10.sol";
 
-/// @title FraudRegistryHubV2
+/// @title FraudRegistryHub
 /// @author Stolen Wallet Registry Team
 /// @notice Entry point and cross-chain coordinator for the fraud registry system
 /// @dev Key responsibilities:
@@ -21,7 +21,7 @@ import { CAIP10 } from "./libraries/CAIP10.sol";
 ///
 ///      NOTE: Pause only affects cross-chain registrations.
 ///      Users can still register directly to individual registries on the hub chain.
-contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
+contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
     // ═══════════════════════════════════════════════════════════════════════════
     // MUTABLE STATE
     // ═══════════════════════════════════════════════════════════════════════════
@@ -49,8 +49,8 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
     /// @param _owner Initial owner
     /// @param _feeRecipient Initial fee recipient
     constructor(address _owner, address _feeRecipient) Ownable(_owner) {
-        if (_owner == address(0)) revert FraudRegistryHubV2__ZeroAddress();
-        if (_feeRecipient == address(0)) revert FraudRegistryHubV2__ZeroAddress();
+        if (_owner == address(0)) revert FraudRegistryHub__ZeroAddress();
+        if (_feeRecipient == address(0)) revert FraudRegistryHub__ZeroAddress();
         feeRecipient = _feeRecipient;
     }
 
@@ -60,7 +60,7 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
 
     modifier onlyInbox() {
         if (msg.sender != inbox || inbox == address(0)) {
-            revert FraudRegistryHubV2__OnlyInbox();
+            revert FraudRegistryHub__OnlyInbox();
         }
         _;
     }
@@ -69,7 +69,7 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
     // CROSS-CHAIN ROUTING (Inbox Only)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function registerWalletFromSpoke(
         bytes32 namespaceHash,
         bytes32 chainRefHash,
@@ -81,9 +81,9 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
         uint8 bridgeId,
         bytes32 messageId
     ) external onlyInbox whenNotPaused {
-        if (walletRegistry == address(0)) revert FraudRegistryHubV2__ZeroAddress();
+        if (walletRegistry == address(0)) revert FraudRegistryHub__ZeroAddress();
 
-        IWalletRegistryV2(walletRegistry)
+        IWalletRegistry(walletRegistry)
             .registerFromHub(
                 namespaceHash,
                 chainRefHash,
@@ -97,7 +97,7 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
             );
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function registerTransactionsFromSpoke(
         address reporter,
         bytes32 dataHash,
@@ -109,9 +109,9 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
         uint8 bridgeId,
         bytes32 messageId
     ) external onlyInbox whenNotPaused {
-        if (transactionRegistry == address(0)) revert FraudRegistryHubV2__ZeroAddress();
+        if (transactionRegistry == address(0)) revert FraudRegistryHub__ZeroAddress();
 
-        ITransactionRegistryV2(transactionRegistry)
+        ITransactionRegistry(transactionRegistry)
             .registerTransactionsFromHub(
                 reporter,
                 dataHash,
@@ -129,7 +129,7 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
     // UNIFIED QUERY INTERFACE - CAIP-10 String
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function isRegistered(string calldata caip10) external view returns (bool) {
         // Parse CAIP-10 to determine identifier length
         (,,, uint256 addrLen) = CAIP10.parse(caip10);
@@ -141,12 +141,12 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
         if (addrLen == 42) {
             // Could be wallet or contract - check both
             if (walletRegistry != address(0)) {
-                if (IWalletRegistryV2(walletRegistry).isWalletRegistered(caip10)) {
+                if (IWalletRegistry(walletRegistry).isWalletRegistered(caip10)) {
                     return true;
                 }
             }
             if (contractRegistry != address(0)) {
-                if (IContractRegistryV2(contractRegistry).isContractRegistered(caip10)) {
+                if (IContractRegistry(contractRegistry).isContractRegistered(caip10)) {
                     return true;
                 }
             }
@@ -154,7 +154,7 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
         } else if (addrLen == 64 || addrLen == 66) {
             // Transaction hash
             if (transactionRegistry != address(0)) {
-                return ITransactionRegistryV2(transactionRegistry).isTransactionRegistered(caip10);
+                return ITransactionRegistry(transactionRegistry).isTransactionRegistered(caip10);
             }
             return false;
         }
@@ -162,7 +162,7 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
         return false;
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function getRegisteredTypes(string calldata caip10) external view returns (RegistryType[] memory registeredIn) {
         (,,, uint256 addrLen) = CAIP10.parse(caip10);
 
@@ -173,18 +173,18 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
 
         if (addrLen == 42) {
             // Check wallet and contract registries
-            if (walletRegistry != address(0) && IWalletRegistryV2(walletRegistry).isWalletRegistered(caip10)) {
+            if (walletRegistry != address(0) && IWalletRegistry(walletRegistry).isWalletRegistered(caip10)) {
                 isWallet = true;
                 count++;
             }
-            if (contractRegistry != address(0) && IContractRegistryV2(contractRegistry).isContractRegistered(caip10)) {
+            if (contractRegistry != address(0) && IContractRegistry(contractRegistry).isContractRegistered(caip10)) {
                 isContract = true;
                 count++;
             }
         } else if (addrLen == 64 || addrLen == 66) {
             if (
                 transactionRegistry != address(0)
-                    && ITransactionRegistryV2(transactionRegistry).isTransactionRegistered(caip10)
+                    && ITransactionRegistry(transactionRegistry).isTransactionRegistered(caip10)
             ) {
                 isTransaction = true;
                 count++;
@@ -203,28 +203,28 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
     // PASSTHROUGH VIEW FUNCTIONS - Typed EVM Interface (Gas Efficient)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function isWalletRegistered(address wallet) external view returns (bool) {
         if (walletRegistry == address(0)) return false;
-        return IWalletRegistryV2(walletRegistry).isWalletRegistered(wallet);
+        return IWalletRegistry(walletRegistry).isWalletRegistered(wallet);
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function isTransactionRegistered(bytes32 txHash, bytes32 chainId) external view returns (bool) {
         if (transactionRegistry == address(0)) return false;
-        return ITransactionRegistryV2(transactionRegistry).isTransactionRegistered(txHash, chainId);
+        return ITransactionRegistry(transactionRegistry).isTransactionRegistered(txHash, chainId);
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function isContractRegistered(address contractAddress, bytes32 chainId) external view returns (bool) {
         if (contractRegistry == address(0)) return false;
-        return IContractRegistryV2(contractRegistry).isContractRegistered(contractAddress, chainId);
+        return IContractRegistry(contractRegistry).isContractRegistered(contractAddress, chainId);
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
-    function getWalletEntry(address wallet) external view returns (IWalletRegistryV2.WalletEntry memory) {
+    /// @inheritdoc IFraudRegistryHub
+    function getWalletEntry(address wallet) external view returns (IWalletRegistry.WalletEntry memory) {
         if (walletRegistry == address(0)) {
-            return IWalletRegistryV2.WalletEntry({
+            return IWalletRegistry.WalletEntry({
                 registeredAt: 0,
                 reportedChainId: bytes32(0),
                 incidentTimestamp: 0,
@@ -234,17 +234,17 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
                 messageId: bytes32(0)
             });
         }
-        return IWalletRegistryV2(walletRegistry).getWalletEntry(wallet);
+        return IWalletRegistry(walletRegistry).getWalletEntry(wallet);
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function getTransactionEntry(bytes32 txHash, bytes32 chainId)
         external
         view
-        returns (ITransactionRegistryV2.TransactionEntry memory)
+        returns (ITransactionRegistry.TransactionEntry memory)
     {
         if (transactionRegistry == address(0)) {
-            return ITransactionRegistryV2.TransactionEntry({
+            return ITransactionRegistry.TransactionEntry({
                 registeredAt: 0,
                 reportedChainId: bytes32(0),
                 reporter: address(0),
@@ -254,39 +254,39 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
                 messageId: bytes32(0)
             });
         }
-        return ITransactionRegistryV2(transactionRegistry).getTransactionEntry(txHash, chainId);
+        return ITransactionRegistry(transactionRegistry).getTransactionEntry(txHash, chainId);
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function getContractEntry(address contractAddress, bytes32 chainId)
         external
         view
-        returns (IContractRegistryV2.ContractEntry memory)
+        returns (IContractRegistry.ContractEntry memory)
     {
         if (contractRegistry == address(0)) {
-            return IContractRegistryV2.ContractEntry({
+            return IContractRegistry.ContractEntry({
                 registeredAt: 0, reportedChainId: bytes32(0), operatorId: bytes32(0), batchId: 0
             });
         }
-        return IContractRegistryV2(contractRegistry).getContractEntry(contractAddress, chainId);
+        return IContractRegistry(contractRegistry).getContractEntry(contractAddress, chainId);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // FEE MANAGEMENT
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     receive() external payable {
         // Accept fees from registries
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function withdrawFees() external onlyOwner {
         uint256 balance = address(this).balance;
         if (balance == 0) return;
 
         (bool success,) = feeRecipient.call{ value: balance }("");
-        if (!success) revert FraudRegistryHubV2__WithdrawFailed();
+        if (!success) revert FraudRegistryHub__WithdrawFailed();
 
         emit FeesWithdrawn(feeRecipient, balance);
     }
@@ -295,52 +295,52 @@ contract FraudRegistryHubV2 is IFraudRegistryHubV2, Ownable2Step, Pausable {
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function setWalletRegistry(address newWalletRegistry) external onlyOwner {
-        if (newWalletRegistry == address(0)) revert FraudRegistryHubV2__ZeroAddress();
+        if (newWalletRegistry == address(0)) revert FraudRegistryHub__ZeroAddress();
         address old = walletRegistry;
         walletRegistry = newWalletRegistry;
         emit RegistryUpdated(RegistryType.WALLET, old, newWalletRegistry);
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function setTransactionRegistry(address newTransactionRegistry) external onlyOwner {
-        if (newTransactionRegistry == address(0)) revert FraudRegistryHubV2__ZeroAddress();
+        if (newTransactionRegistry == address(0)) revert FraudRegistryHub__ZeroAddress();
         address old = transactionRegistry;
         transactionRegistry = newTransactionRegistry;
         emit RegistryUpdated(RegistryType.TRANSACTION, old, newTransactionRegistry);
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function setContractRegistry(address newContractRegistry) external onlyOwner {
-        if (newContractRegistry == address(0)) revert FraudRegistryHubV2__ZeroAddress();
+        if (newContractRegistry == address(0)) revert FraudRegistryHub__ZeroAddress();
         address old = contractRegistry;
         contractRegistry = newContractRegistry;
         emit RegistryUpdated(RegistryType.CONTRACT, old, newContractRegistry);
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function setInbox(address newInbox) external onlyOwner {
-        if (newInbox == address(0)) revert FraudRegistryHubV2__ZeroAddress();
+        if (newInbox == address(0)) revert FraudRegistryHub__ZeroAddress();
         address old = inbox;
         inbox = newInbox;
         emit InboxUpdated(old, newInbox);
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function setFeeRecipient(address newFeeRecipient) external onlyOwner {
-        if (newFeeRecipient == address(0)) revert FraudRegistryHubV2__ZeroAddress();
+        if (newFeeRecipient == address(0)) revert FraudRegistryHub__ZeroAddress();
         address old = feeRecipient;
         feeRecipient = newFeeRecipient;
         emit FeeRecipientUpdated(old, newFeeRecipient);
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function pause() external onlyOwner {
         _pause();
     }
 
-    /// @inheritdoc IFraudRegistryHubV2
+    /// @inheritdoc IFraudRegistryHub
     function unpause() external onlyOwner {
         _unpause();
     }

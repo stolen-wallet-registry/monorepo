@@ -143,7 +143,7 @@ export interface UseTxQuoteFeeBreakdownResult {
  * Get detailed fee breakdown for transaction batch registration.
  *
  * @param reporter - The reporter address (used by spoke for bridge quote, ignored on hub)
- * @param _transactionCount - Deprecated: V2 uses flat fees, count is no longer needed
+ * @param _transactionCount - Deprecated: uses flat fees, count is no longer needed
  */
 export function useTxQuoteFeeBreakdown(
   reporter: Address | null | undefined,

@@ -2,8 +2,8 @@
 pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
-import { CAIP10 } from "../../src/v2/libraries/CAIP10.sol";
-import { CAIP10Evm } from "../../src/v2/libraries/CAIP10Evm.sol";
+import { CAIP10 } from "../../src/libraries/CAIP10.sol";
+import { CAIP10Evm } from "../../src/libraries/CAIP10Evm.sol";
 
 contract CAIP10Wrapper {
     function parse(string memory caip10) external pure returns (bytes32, bytes32, uint256, uint256) {

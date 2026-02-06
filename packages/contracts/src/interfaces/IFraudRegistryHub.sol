@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { IWalletRegistryV2 } from "./IWalletRegistryV2.sol";
-import { ITransactionRegistryV2 } from "./ITransactionRegistryV2.sol";
-import { IContractRegistryV2 } from "./IContractRegistryV2.sol";
+import { IWalletRegistry } from "./IWalletRegistry.sol";
+import { ITransactionRegistry } from "./ITransactionRegistry.sol";
+import { IContractRegistry } from "./IContractRegistry.sol";
 
-/// @title IFraudRegistryHubV2
+/// @title IFraudRegistryHub
 /// @author Stolen Wallet Registry Team
-/// @notice Interface for the Fraud Registry Hub V2 - entry point and cross-chain coordinator
+/// @notice Interface for the Fraud Registry Hub - entry point and cross-chain coordinator
 /// @dev Routes cross-chain messages to appropriate registries and provides unified query interface
-interface IFraudRegistryHubV2 {
+interface IFraudRegistryHub {
     // ═══════════════════════════════════════════════════════════════════════════
     // ENUMS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -25,11 +25,11 @@ interface IFraudRegistryHubV2 {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    error FraudRegistryHubV2__ZeroAddress();
-    error FraudRegistryHubV2__OnlyInbox();
-    error FraudRegistryHubV2__InvalidIdentifierLength();
-    error FraudRegistryHubV2__UnknownRegistryType();
-    error FraudRegistryHubV2__WithdrawFailed();
+    error FraudRegistryHub__ZeroAddress();
+    error FraudRegistryHub__OnlyInbox();
+    error FraudRegistryHub__InvalidIdentifierLength();
+    error FraudRegistryHub__UnknownRegistryType();
+    error FraudRegistryHub__WithdrawFailed();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -61,7 +61,7 @@ interface IFraudRegistryHubV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Route wallet registration from cross-chain message
-    /// @dev Called by CrossChainInboxV2 when receiving wallet registration messages
+    /// @dev Called by CrossChainInbox when receiving wallet registration messages
     /// @param namespaceHash CAIP-2 namespace hash
     /// @param chainRefHash CAIP-2 chain reference hash (ignored for EVM wallets due to wildcard key)
     /// @param identifier Wallet identifier
@@ -84,7 +84,7 @@ interface IFraudRegistryHubV2 {
     ) external;
 
     /// @notice Route transaction batch registration from cross-chain message
-    /// @dev Called by CrossChainInboxV2 when receiving transaction registration messages
+    /// @dev Called by CrossChainInbox when receiving transaction registration messages
     /// @param reporter Address that submitted the registration
     /// @param dataHash Hash of (txHashes, chainIds)
     /// @param reportedChainId CAIP-2 chain ID hash where transactions were reported
@@ -126,64 +126,64 @@ interface IFraudRegistryHubV2 {
     // PASSTHROUGH VIEW FUNCTIONS - Typed EVM Interface (Gas Efficient)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Check if wallet is registered (passthrough to WalletRegistryV2)
+    /// @notice Check if wallet is registered (passthrough to WalletRegistry)
     /// @param wallet The wallet address
     /// @return True if registered
     function isWalletRegistered(address wallet) external view returns (bool);
 
-    /// @notice Check if transaction is registered (passthrough to TransactionRegistryV2)
+    /// @notice Check if transaction is registered (passthrough to TransactionRegistry)
     /// @param txHash The transaction hash
     /// @param chainId CAIP-2 chain ID hash (e.g., keccak256("eip155:8453"))
     /// @return True if registered
     function isTransactionRegistered(bytes32 txHash, bytes32 chainId) external view returns (bool);
 
-    /// @notice Check if contract is registered (passthrough to ContractRegistryV2)
+    /// @notice Check if contract is registered (passthrough to ContractRegistry)
     /// @param contractAddress The contract address
     /// @param chainId CAIP-2 chain ID hash
     /// @return True if registered
     function isContractRegistered(address contractAddress, bytes32 chainId) external view returns (bool);
 
-    /// @notice Get wallet entry (passthrough to WalletRegistryV2)
+    /// @notice Get wallet entry (passthrough to WalletRegistry)
     /// @param wallet The wallet address
     /// @return The wallet entry data
-    function getWalletEntry(address wallet) external view returns (IWalletRegistryV2.WalletEntry memory);
+    function getWalletEntry(address wallet) external view returns (IWalletRegistry.WalletEntry memory);
 
-    /// @notice Get transaction entry (passthrough to TransactionRegistryV2)
+    /// @notice Get transaction entry (passthrough to TransactionRegistry)
     /// @param txHash The transaction hash
     /// @param chainId CAIP-2 chain ID hash
     /// @return The transaction entry data
     function getTransactionEntry(bytes32 txHash, bytes32 chainId)
         external
         view
-        returns (ITransactionRegistryV2.TransactionEntry memory);
+        returns (ITransactionRegistry.TransactionEntry memory);
 
-    /// @notice Get contract entry (passthrough to ContractRegistryV2)
+    /// @notice Get contract entry (passthrough to ContractRegistry)
     /// @param contractAddress The contract address
     /// @param chainId CAIP-2 chain ID hash
     /// @return The contract entry data
     function getContractEntry(address contractAddress, bytes32 chainId)
         external
         view
-        returns (IContractRegistryV2.ContractEntry memory);
+        returns (IContractRegistry.ContractEntry memory);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // REGISTRY ADDRESSES
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Get wallet registry address
-    /// @return The WalletRegistryV2 address
+    /// @return The WalletRegistry address
     function walletRegistry() external view returns (address);
 
     /// @notice Get transaction registry address
-    /// @return The TransactionRegistryV2 address
+    /// @return The TransactionRegistry address
     function transactionRegistry() external view returns (address);
 
     /// @notice Get contract registry address
-    /// @return The ContractRegistryV2 address
+    /// @return The ContractRegistry address
     function contractRegistry() external view returns (address);
 
     /// @notice Get cross-chain inbox address
-    /// @return The CrossChainInboxV2 address
+    /// @return The CrossChainInbox address
     function inbox() external view returns (address);
 
     /// @notice Get fee recipient address
@@ -207,19 +207,19 @@ interface IFraudRegistryHubV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Set wallet registry address
-    /// @param newWalletRegistry The new WalletRegistryV2 address
+    /// @param newWalletRegistry The new WalletRegistry address
     function setWalletRegistry(address newWalletRegistry) external;
 
     /// @notice Set transaction registry address
-    /// @param newTransactionRegistry The new TransactionRegistryV2 address
+    /// @param newTransactionRegistry The new TransactionRegistry address
     function setTransactionRegistry(address newTransactionRegistry) external;
 
     /// @notice Set contract registry address
-    /// @param newContractRegistry The new ContractRegistryV2 address
+    /// @param newContractRegistry The new ContractRegistry address
     function setContractRegistry(address newContractRegistry) external;
 
     /// @notice Set cross-chain inbox address
-    /// @param newInbox The new CrossChainInboxV2 address
+    /// @param newInbox The new CrossChainInbox address
     function setInbox(address newInbox) external;
 
     /// @notice Set fee recipient address

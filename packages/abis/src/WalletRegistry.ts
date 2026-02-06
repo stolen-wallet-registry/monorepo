@@ -1,4 +1,4 @@
-export const TransactionRegistryV2ABI = [
+export const WalletRegistryABI = [
   {
     type: 'constructor',
     inputs: [
@@ -34,10 +34,10 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'acknowledgeTransactions',
+    name: 'acknowledge',
     inputs: [
       {
-        name: 'reporter',
+        name: 'registeree',
         type: 'address',
         internalType: 'address',
       },
@@ -47,24 +47,19 @@ export const TransactionRegistryV2ABI = [
         internalType: 'address',
       },
       {
+        name: 'reportedChainId',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: 'incidentTimestamp',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
         name: 'deadline',
         type: 'uint256',
         internalType: 'uint256',
-      },
-      {
-        name: 'dataHash',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: 'reportedChainId',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: 'transactionCount',
-        type: 'uint32',
-        internalType: 'uint32',
       },
       {
         name: 'v',
@@ -84,6 +79,19 @@ export const TransactionRegistryV2ABI = [
     ],
     outputs: [],
     stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'batchCount',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -156,22 +164,17 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'generateTransactionHashStruct',
+    name: 'generateHashStruct',
     inputs: [
       {
-        name: 'dataHash',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
         name: 'reportedChainId',
-        type: 'bytes32',
-        internalType: 'bytes32',
+        type: 'uint64',
+        internalType: 'uint64',
       },
       {
-        name: 'transactionCount',
-        type: 'uint32',
-        internalType: 'uint32',
+        name: 'incidentTimestamp',
+        type: 'uint64',
+        internalType: 'uint64',
       },
       {
         name: 'forwarder',
@@ -200,10 +203,10 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'getTransactionAcknowledgementData',
+    name: 'getAcknowledgementData',
     inputs: [
       {
-        name: 'reporter',
+        name: 'wallet',
         type: 'address',
         internalType: 'address',
       },
@@ -212,7 +215,7 @@ export const TransactionRegistryV2ABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct ITransactionRegistryV2.TransactionAcknowledgementData',
+        internalType: 'struct IWalletRegistry.AcknowledgementData',
         components: [
           {
             name: 'deadline',
@@ -230,11 +233,6 @@ export const TransactionRegistryV2ABI = [
             internalType: 'uint256',
           },
           {
-            name: 'dataHash',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
             name: 'reportedChainId',
             type: 'bytes32',
             internalType: 'bytes32',
@@ -245,9 +243,9 @@ export const TransactionRegistryV2ABI = [
             internalType: 'address',
           },
           {
-            name: 'transactionCount',
-            type: 'uint32',
-            internalType: 'uint32',
+            name: 'incidentTimestamp',
+            type: 'uint64',
+            internalType: 'uint64',
           },
           {
             name: 'isSponsored',
@@ -261,7 +259,7 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'getTransactionBatch',
+    name: 'getBatch',
     inputs: [
       {
         name: 'batchId',
@@ -273,7 +271,7 @@ export const TransactionRegistryV2ABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct ITransactionRegistryV2.TransactionBatch',
+        internalType: 'struct IWalletRegistry.Batch',
         components: [
           {
             name: 'operatorId',
@@ -281,22 +279,12 @@ export const TransactionRegistryV2ABI = [
             internalType: 'bytes32',
           },
           {
-            name: 'dataHash',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'reporter',
-            type: 'address',
-            internalType: 'address',
-          },
-          {
             name: 'timestamp',
             type: 'uint64',
             internalType: 'uint64',
           },
           {
-            name: 'transactionCount',
+            name: 'walletCount',
             type: 'uint32',
             internalType: 'uint32',
           },
@@ -307,10 +295,10 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'getTransactionDeadlines',
+    name: 'getDeadlines',
     inputs: [
       {
-        name: 'reporter',
+        name: 'registeree',
         type: 'address',
         internalType: 'address',
       },
@@ -351,10 +339,10 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'getTransactionEntry',
+    name: 'getWalletEntry',
     inputs: [
       {
-        name: 'chainQualifiedRef',
+        name: 'caip10',
         type: 'string',
         internalType: 'string',
       },
@@ -363,7 +351,7 @@ export const TransactionRegistryV2ABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct ITransactionRegistryV2.TransactionEntry',
+        internalType: 'struct IWalletRegistry.WalletEntry',
         components: [
           {
             name: 'reportedChainId',
@@ -381,12 +369,12 @@ export const TransactionRegistryV2ABI = [
             internalType: 'bytes32',
           },
           {
-            name: 'reporter',
-            type: 'address',
-            internalType: 'address',
+            name: 'registeredAt',
+            type: 'uint64',
+            internalType: 'uint64',
           },
           {
-            name: 'registeredAt',
+            name: 'incidentTimestamp',
             type: 'uint64',
             internalType: 'uint64',
           },
@@ -407,24 +395,19 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'getTransactionEntry',
+    name: 'getWalletEntry',
     inputs: [
       {
-        name: 'txHash',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: 'chainId',
-        type: 'bytes32',
-        internalType: 'bytes32',
+        name: 'wallet',
+        type: 'address',
+        internalType: 'address',
       },
     ],
     outputs: [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct ITransactionRegistryV2.TransactionEntry',
+        internalType: 'struct IWalletRegistry.WalletEntry',
         components: [
           {
             name: 'reportedChainId',
@@ -442,12 +425,12 @@ export const TransactionRegistryV2ABI = [
             internalType: 'bytes32',
           },
           {
-            name: 'reporter',
-            type: 'address',
-            internalType: 'address',
+            name: 'registeredAt',
+            type: 'uint64',
+            internalType: 'uint64',
           },
           {
-            name: 'registeredAt',
+            name: 'incidentTimestamp',
             type: 'uint64',
             internalType: 'uint64',
           },
@@ -494,10 +477,10 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'isTransactionPending',
+    name: 'isWalletPending',
     inputs: [
       {
-        name: 'reporter',
+        name: 'wallet',
         type: 'address',
         internalType: 'address',
       },
@@ -513,17 +496,12 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'isTransactionRegistered',
+    name: 'isWalletRegistered',
     inputs: [
       {
-        name: 'txHash',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: 'chainId',
-        type: 'bytes32',
-        internalType: 'bytes32',
+        name: 'caip10',
+        type: 'string',
+        internalType: 'string',
       },
     ],
     outputs: [
@@ -537,12 +515,12 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'isTransactionRegistered',
+    name: 'isWalletRegistered',
     inputs: [
       {
-        name: 'chainQualifiedRef',
-        type: 'string',
-        internalType: 'string',
+        name: 'wallet',
+        type: 'address',
+        internalType: 'address',
       },
     ],
     outputs: [
@@ -550,6 +528,25 @@ export const TransactionRegistryV2ABI = [
         name: '',
         type: 'bool',
         internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'nonces',
+    inputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
     stateMutability: 'view',
@@ -607,7 +604,7 @@ export const TransactionRegistryV2ABI = [
       {
         name: 'breakdown',
         type: 'tuple',
-        internalType: 'struct ITransactionRegistryV2.FeeBreakdown',
+        internalType: 'struct IWalletRegistry.FeeBreakdown',
         components: [
           {
             name: 'bridgeFee',
@@ -655,10 +652,10 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'registerTransactions',
+    name: 'register',
     inputs: [
       {
-        name: 'reporter',
+        name: 'registeree',
         type: 'address',
         internalType: 'address',
       },
@@ -668,14 +665,14 @@ export const TransactionRegistryV2ABI = [
         internalType: 'uint256',
       },
       {
-        name: 'transactionHashes',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
+        name: 'reportedChainId',
+        type: 'uint64',
+        internalType: 'uint64',
       },
       {
-        name: 'chainIds',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
+        name: 'incidentTimestamp',
+        type: 'uint64',
+        internalType: 'uint64',
       },
       {
         name: 'v',
@@ -698,15 +695,20 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'registerTransactionsFromHub',
+    name: 'registerFromHub',
     inputs: [
       {
-        name: 'reporter',
-        type: 'address',
-        internalType: 'address',
+        name: 'namespaceHash',
+        type: 'bytes32',
+        internalType: 'bytes32',
       },
       {
-        name: 'dataHash',
+        name: 'chainRefHash',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'identifier',
         type: 'bytes32',
         internalType: 'bytes32',
       },
@@ -714,6 +716,11 @@ export const TransactionRegistryV2ABI = [
         name: 'reportedChainId',
         type: 'bytes32',
         internalType: 'bytes32',
+      },
+      {
+        name: 'incidentTimestamp',
+        type: 'uint64',
+        internalType: 'uint64',
       },
       {
         name: 'sourceChainId',
@@ -724,16 +731,6 @@ export const TransactionRegistryV2ABI = [
         name: 'isSponsored',
         type: 'bool',
         internalType: 'bool',
-      },
-      {
-        name: 'transactionHashes',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
-      },
-      {
-        name: 'chainIds',
-        type: 'bytes32[]',
-        internalType: 'bytes32[]',
       },
       {
         name: 'bridgeId',
@@ -751,7 +748,7 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'registerTransactionsFromOperator',
+    name: 'registerWalletsFromOperator',
     inputs: [
       {
         name: 'operatorId',
@@ -759,14 +756,19 @@ export const TransactionRegistryV2ABI = [
         internalType: 'bytes32',
       },
       {
-        name: 'transactionHashes',
+        name: 'identifiers',
         type: 'bytes32[]',
         internalType: 'bytes32[]',
       },
       {
-        name: 'chainIds',
+        name: 'reportedChainIds',
         type: 'bytes32[]',
         internalType: 'bytes32[]',
+      },
+      {
+        name: 'incidentTimestamps',
+        type: 'uint64[]',
+        internalType: 'uint64[]',
       },
     ],
     outputs: [
@@ -813,38 +815,6 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'function',
-    name: 'transactionBatchCount',
-    inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'transactionNonces',
-    inputs: [
-      {
-        name: '',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
-    outputs: [
-      {
-        name: '',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
     name: 'transferOwnership',
     inputs: [
       {
@@ -857,15 +827,33 @@ export const TransactionRegistryV2ABI = [
     stateMutability: 'nonpayable',
   },
   {
-    type: 'function',
-    name: 'withdrawCollectedFees',
-    inputs: [],
-    outputs: [],
-    stateMutability: 'nonpayable',
+    type: 'event',
+    name: 'BatchCreated',
+    inputs: [
+      {
+        name: 'batchId',
+        type: 'uint256',
+        indexed: true,
+        internalType: 'uint256',
+      },
+      {
+        name: 'operatorId',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'walletCount',
+        type: 'uint32',
+        indexed: false,
+        internalType: 'uint32',
+      },
+    ],
+    anonymous: false,
   },
   {
     type: 'event',
-    name: 'CrossChainTransactionRegistered',
+    name: 'CrossChainWalletRegistered',
     inputs: [
       {
         name: 'identifier',
@@ -978,10 +966,10 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'event',
-    name: 'TransactionBatchAcknowledged',
+    name: 'WalletAcknowledged',
     inputs: [
       {
-        name: 'reporter',
+        name: 'registeree',
         type: 'address',
         indexed: true,
         internalType: 'address',
@@ -993,12 +981,6 @@ export const TransactionRegistryV2ABI = [
         internalType: 'address',
       },
       {
-        name: 'dataHash',
-        type: 'bytes32',
-        indexed: false,
-        internalType: 'bytes32',
-      },
-      {
         name: 'isSponsored',
         type: 'bool',
         indexed: false,
@@ -1009,69 +991,7 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'event',
-    name: 'TransactionBatchCreated',
-    inputs: [
-      {
-        name: 'batchId',
-        type: 'uint256',
-        indexed: true,
-        internalType: 'uint256',
-      },
-      {
-        name: 'operatorId',
-        type: 'bytes32',
-        indexed: true,
-        internalType: 'bytes32',
-      },
-      {
-        name: 'transactionCount',
-        type: 'uint32',
-        indexed: false,
-        internalType: 'uint32',
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: 'event',
-    name: 'TransactionBatchRegistered',
-    inputs: [
-      {
-        name: 'batchId',
-        type: 'uint256',
-        indexed: true,
-        internalType: 'uint256',
-      },
-      {
-        name: 'reporter',
-        type: 'address',
-        indexed: true,
-        internalType: 'address',
-      },
-      {
-        name: 'dataHash',
-        type: 'bytes32',
-        indexed: true,
-        internalType: 'bytes32',
-      },
-      {
-        name: 'transactionCount',
-        type: 'uint32',
-        indexed: false,
-        internalType: 'uint32',
-      },
-      {
-        name: 'isSponsored',
-        type: 'bool',
-        indexed: false,
-        internalType: 'bool',
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: 'event',
-    name: 'TransactionRegistered',
+    name: 'WalletRegistered',
     inputs: [
       {
         name: 'identifier',
@@ -1086,10 +1006,10 @@ export const TransactionRegistryV2ABI = [
         internalType: 'bytes32',
       },
       {
-        name: 'reporter',
-        type: 'address',
-        indexed: true,
-        internalType: 'address',
+        name: 'incidentTimestamp',
+        type: 'uint64',
+        indexed: false,
+        internalType: 'uint64',
       },
       {
         name: 'isSponsored',
@@ -1099,6 +1019,11 @@ export const TransactionRegistryV2ABI = [
       },
     ],
     anonymous: false,
+  },
+  {
+    type: 'error',
+    name: 'CAIP10Evm__InvalidAddress',
+    inputs: [],
   },
   {
     type: 'error',
@@ -1172,97 +1097,82 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__AlreadyAcknowledged',
+    name: 'StringsInvalidAddressFormat',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__AlreadyRegistered',
+    name: 'WalletRegistry__AlreadyAcknowledged',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__ArrayLengthMismatch',
+    name: 'WalletRegistry__AlreadyRegistered',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__DataHashMismatch',
+    name: 'WalletRegistry__ArrayLengthMismatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__DeadlineExpired',
+    name: 'WalletRegistry__DeadlineExpired',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__DeadlineInPast',
+    name: 'WalletRegistry__DeadlineInPast',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__EmptyBatch',
+    name: 'WalletRegistry__EmptyBatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__GracePeriodNotStarted',
+    name: 'WalletRegistry__GracePeriodNotStarted',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__HubTransferFailed',
+    name: 'WalletRegistry__InsufficientFee',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__InsufficientFee',
+    name: 'WalletRegistry__InvalidSignature',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__InvalidSignature',
+    name: 'WalletRegistry__InvalidSigner',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__InvalidSigner',
+    name: 'WalletRegistry__NotAcknowledged',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__InvalidStep',
+    name: 'WalletRegistry__NotAuthorizedForwarder',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__NotAcknowledged',
+    name: 'WalletRegistry__OnlyHub',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__NotAuthorizedForwarder',
+    name: 'WalletRegistry__OnlyOperatorSubmitter',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'TransactionRegistryV2__OnlyHub',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'TransactionRegistryV2__OnlyOperatorSubmitter',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'TransactionRegistryV2__RefundFailed',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'TransactionRegistryV2__ZeroAddress',
+    name: 'WalletRegistry__ZeroAddress',
     inputs: [],
   },
 ] as const;

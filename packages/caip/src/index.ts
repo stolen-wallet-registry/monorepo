@@ -56,7 +56,7 @@ export {
   isValidCAIP10,
   extractAddressFromCAIP10,
   extractCAIP2FromCAIP10,
-  // V2 wildcard support
+  // Wildcard support
   toCAIP10Wildcard,
   isWildcardCAIP10,
 } from './caip10';
@@ -69,7 +69,7 @@ export {
   computeCAIP2Hash,
   chainIdToBytes32,
   caip2ToBytes32,
-  // V2 truncated hashes for Hub contract
+  // Truncated hashes for Hub contract
   truncateChainIdHash,
   getTruncatedChainIdHash,
 } from './bytes32';

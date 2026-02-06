@@ -12,7 +12,7 @@ import ora from 'ora';
 import { parseWalletFile } from '../lib/files.js';
 import { createClients } from '../lib/client.js';
 import { getConfig } from '../lib/config.js';
-import { OperatorSubmitterV2ABI, WalletRegistryV2ABI } from '@swr/abis';
+import { OperatorSubmitterABI, WalletRegistryABI } from '@swr/abis';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
@@ -66,21 +66,21 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
     spinner.start('Fetching fee quote...');
     const fee = await publicClient.readContract({
       address: config.contracts.stolenWalletRegistry,
-      abi: WalletRegistryV2ABI,
+      abi: WalletRegistryABI,
       functionName: 'quoteRegistration',
       args: [zeroAddress],
     });
     spinner.succeed(`Fee: ${chalk.yellow(formatEther(fee))} ETH`);
 
-    // 5. Prepare V2 transaction data
-    // V2: identifiers are addresses padded to bytes32, incidentTimestamps default to 0
+    // 5. Prepare transaction data
+    // Identifiers are addresses padded to bytes32, incidentTimestamps default to 0
     const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
     const reportedChainIds = entries.map((e) => e.chainId);
     const incidentTimestamps = entries.map(() => 0n);
 
-    // 6. Encode calldata for OperatorSubmitterV2
+    // 6. Encode calldata for OperatorSubmitter
     const calldata = encodeFunctionData({
-      abi: OperatorSubmitterV2ABI,
+      abi: OperatorSubmitterABI,
       functionName: 'registerWalletsAsOperator',
       args: [identifiers, reportedChainIds, incidentTimestamps],
     });
@@ -137,13 +137,13 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
 
     console.log(chalk.gray(`Operator address: ${account}`));
 
-    // 8. Submit through OperatorSubmitterV2
+    // 8. Submit through OperatorSubmitter
     spinner.start('Submitting batch...');
     const hash = await walletClient.writeContract({
       chain: config.chain,
       account,
       address: config.contracts.operatorSubmitter,
-      abi: OperatorSubmitterV2ABI,
+      abi: OperatorSubmitterABI,
       functionName: 'registerWalletsAsOperator',
       args: [identifiers, reportedChainIds, incidentTimestamps],
       value: fee,

@@ -1,10 +1,10 @@
 /**
- * Hook for signing EIP-712 typed data for the V2 transaction registry.
- * Supports both hub (TransactionRegistryV2) and spoke (SpokeRegistryV2) chains.
+ * Hook for signing EIP-712 typed data for the transaction registry.
+ * Supports both hub (TransactionRegistry) and spoke (SpokeRegistry) chains.
  *
- * V2 changes from V1:
+ * Key features:
  * - `reporter` is an explicit field in the typed data
- * - `merkleRoot` replaced by `dataHash` (keccak256(abi.encode(txHashes, chainIds)))
+ * - `dataHash` (keccak256(abi.encode(txHashes, chainIds)))
  * - `transactionCount` present in both ACK and REG types
  * - Domain name unified to "StolenWalletRegistry" across all registries
  */
@@ -12,8 +12,8 @@
 import { useCallback } from 'react';
 import { useSignTypedData, useAccount, useChainId } from 'wagmi';
 import {
-  buildV2TxAcknowledgementTypedData,
-  buildV2TxRegistrationTypedData,
+  buildTxAcknowledgementTypedData,
+  buildTxRegistrationTypedData,
 } from '@/lib/signatures/transactions';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
@@ -63,7 +63,7 @@ export interface UseSignTxEIP712Result {
 }
 
 /**
- * Hook for signing EIP-712 messages for the V2 transaction batch registration flow.
+ * Hook for signing EIP-712 messages for the transaction batch registration flow.
  *
  * @returns Functions for signing acknowledgement and registration messages
  */
@@ -119,14 +119,9 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
         nonce: params.nonce,
         deadline: params.deadline,
       };
-      const typedData = buildV2TxAcknowledgementTypedData(
-        chainId,
-        validatedAddress,
-        isHub,
-        message
-      );
+      const typedData = buildTxAcknowledgementTypedData(chainId, validatedAddress, isHub, message);
 
-      logger.signature.info('Requesting V2 transaction batch acknowledgement signature', {
+      logger.signature.info('Requesting transaction batch acknowledgement signature', {
         chainId,
         contractAddress: validatedAddress,
         isHub,
@@ -146,14 +141,14 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
           message: typedData.message,
         });
 
-        logger.signature.info('V2 transaction batch acknowledgement signature received', {
+        logger.signature.info('Transaction batch acknowledgement signature received', {
           signatureLength: signature.length,
           dataHash: params.dataHash,
         });
 
         return signature;
       } catch (err) {
-        logger.signature.error('V2 transaction batch acknowledgement signature failed', {
+        logger.signature.error('Transaction batch acknowledgement signature failed', {
           chainId,
           dataHash: params.dataHash,
           error: err instanceof Error ? err.message : String(err),
@@ -179,9 +174,9 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
         nonce: params.nonce,
         deadline: params.deadline,
       };
-      const typedData = buildV2TxRegistrationTypedData(chainId, validatedAddress, isHub, message);
+      const typedData = buildTxRegistrationTypedData(chainId, validatedAddress, isHub, message);
 
-      logger.signature.info('Requesting V2 transaction batch registration signature', {
+      logger.signature.info('Requesting transaction batch registration signature', {
         chainId,
         contractAddress: validatedAddress,
         isHub,
@@ -200,14 +195,14 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
           message: typedData.message,
         });
 
-        logger.signature.info('V2 transaction batch registration signature received', {
+        logger.signature.info('Transaction batch registration signature received', {
           signatureLength: signature.length,
           dataHash: params.dataHash,
         });
 
         return signature;
       } catch (err) {
-        logger.signature.error('V2 transaction batch registration signature failed', {
+        logger.signature.error('Transaction batch registration signature failed', {
           chainId,
           dataHash: params.dataHash,
           error: err instanceof Error ? err.message : String(err),

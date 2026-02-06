@@ -22,9 +22,9 @@ export interface StoredSignature {
   chainId: number;
   step: SignatureStep;
   storedAt: number; // timestamp
-  /** V2: Raw EVM chain ID where incident occurred (e.g., 1 for mainnet, 8453 for Base) */
+  /** Raw EVM chain ID where incident occurred (e.g., 1 for mainnet, 8453 for Base) */
   reportedChainId?: bigint;
-  /** V2: Unix timestamp when incident occurred */
+  /** Unix timestamp when incident occurred */
   incidentTimestamp?: bigint;
 }
 
@@ -37,7 +37,7 @@ interface SerializedSignature {
   chainId: number;
   step: number;
   storedAt: number;
-  // V2 fields
+  // Optional fields for incident context
   reportedChainId?: string;
   incidentTimestamp?: string;
 }
@@ -53,7 +53,7 @@ export function storeSignature(sig: StoredSignature): void {
     chainId: sig.chainId,
     step: sig.step,
     storedAt: sig.storedAt,
-    // V2 fields (optional for backward compatibility)
+    // Optional fields (backward compatible)
     reportedChainId: sig.reportedChainId?.toString(),
     incidentTimestamp: sig.incidentTimestamp?.toString(),
   };
@@ -89,7 +89,7 @@ export function getSignature(
       return null;
     }
 
-    // Parse and validate V2 fields if present
+    // Parse and validate optional fields if present
     let reportedChainId: bigint | undefined;
     let incidentTimestamp: bigint | undefined;
 
@@ -134,7 +134,7 @@ export function getSignature(
       chainId: parsed.chainId,
       step: parsed.step as SignatureStep,
       storedAt: parsed.storedAt,
-      // V2 fields (validated above)
+      // Optional fields (validated above)
       reportedChainId,
       incidentTimestamp,
     };

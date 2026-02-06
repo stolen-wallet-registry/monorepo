@@ -5,22 +5,22 @@ import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-import { ITransactionRegistryV2 } from "../interfaces/ITransactionRegistryV2.sol";
-import { IFeeManager } from "../../interfaces/IFeeManager.sol";
-import { TimingConfig } from "../../libraries/TimingConfig.sol";
+import { ITransactionRegistry } from "../interfaces/ITransactionRegistry.sol";
+import { IFeeManager } from "../interfaces/IFeeManager.sol";
+import { TimingConfig } from "../libraries/TimingConfig.sol";
 import { CAIP10 } from "../libraries/CAIP10.sol";
 import { CAIP10Evm } from "../libraries/CAIP10Evm.sol";
-import { EIP712ConstantsV2 } from "../libraries/EIP712ConstantsV2.sol";
+import { EIP712Constants } from "../libraries/EIP712Constants.sol";
 
-/// @title TransactionRegistryV2
+/// @title TransactionRegistry
 /// @author Stolen Wallet Registry Team
 /// @notice Stolen transaction registry with two-phase batch registration
-/// @dev Extracted from FraudRegistryV2 for contract size optimization.
+/// @dev Extracted from FraudRegistryHub for contract size optimization.
 ///      Key features:
 ///      - Chain-qualified reference interface (similar to CAIP-10 but for transactions)
 ///      - Two-phase registration with dataHash commitment
 ///      - Single-phase for operator/cross-chain submissions
-contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
+contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLE STATE
     // ═══════════════════════════════════════════════════════════════════════════
@@ -75,11 +75,11 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         EIP712("StolenWalletRegistry", "4")
         Ownable(_owner)
     {
-        if (_owner == address(0)) revert TransactionRegistryV2__ZeroAddress();
+        if (_owner == address(0)) revert TransactionRegistry__ZeroAddress();
 
         // Validate timing
         if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks) {
-            revert TransactionRegistryV2__DeadlineInPast();
+            revert TransactionRegistry__DeadlineInPast();
         }
 
         feeManager = _feeManager;
@@ -93,14 +93,14 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
 
     modifier onlyHub() {
         if (msg.sender != hub || hub == address(0)) {
-            revert TransactionRegistryV2__OnlyHub();
+            revert TransactionRegistry__OnlyHub();
         }
         _;
     }
 
     modifier onlyOperatorSubmitter() {
         if (msg.sender != operatorSubmitter || operatorSubmitter == address(0)) {
-            revert TransactionRegistryV2__OnlyOperatorSubmitter();
+            revert TransactionRegistry__OnlyOperatorSubmitter();
         }
         _;
     }
@@ -117,14 +117,14 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
 
         uint256 requiredFee = IFeeManager(feeManager).currentFeeWei();
         if (msg.value < requiredFee) {
-            revert TransactionRegistryV2__InsufficientFee();
+            revert TransactionRegistry__InsufficientFee();
         }
 
         // Forward to hub (fees held locally if hub not yet configured)
         if (hub != address(0)) {
             (bool success,) = hub.call{ value: requiredFee }("");
             if (!success) {
-                revert TransactionRegistryV2__HubTransferFailed();
+                revert TransactionRegistry__HubTransferFailed();
             }
         }
 
@@ -133,7 +133,7 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         if (excess > 0) {
             (bool refundSuccess,) = msg.sender.call{ value: excess }("");
             if (!refundSuccess) {
-                revert TransactionRegistryV2__RefundFailed();
+                revert TransactionRegistry__RefundFailed();
             }
         }
     }
@@ -144,14 +144,14 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         uint256 balance = address(this).balance;
         if (balance == 0) return;
         (bool success,) = msg.sender.call{ value: balance }("");
-        if (!success) revert TransactionRegistryV2__RefundFailed();
+        if (!success) revert TransactionRegistry__RefundFailed();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - Chain-Qualified Reference Interface
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function isTransactionRegistered(string calldata chainQualifiedRef) external view returns (bool) {
         // Parse: namespace:chainId:txHash
         (,, uint256 txStart, uint256 txLen) = CAIP10.parse(chainQualifiedRef);
@@ -166,7 +166,7 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         return _transactions[key].registeredAt > 0;
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function getTransactionEntry(string calldata chainQualifiedRef) external view returns (TransactionEntry memory) {
         (,, uint256 txStart, uint256 txLen) = CAIP10.parse(chainQualifiedRef);
         // Validate tx hash length: 66 chars = "0x" + 64 hex chars (standard EVM tx hash)
@@ -183,25 +183,25 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
     // VIEW FUNCTIONS - Typed Interface (Gas Efficient)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function isTransactionRegistered(bytes32 txHash, bytes32 chainId) external view returns (bool) {
         bytes32 key = CAIP10.txStorageKey(txHash, chainId);
         return _transactions[key].registeredAt > 0;
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function getTransactionEntry(bytes32 txHash, bytes32 chainId) external view returns (TransactionEntry memory) {
         bytes32 key = CAIP10.txStorageKey(txHash, chainId);
         return _transactions[key];
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function isTransactionPending(address reporter) external view returns (bool) {
         TransactionAcknowledgementData memory ack = _pendingAcknowledgements[reporter];
         return ack.forwarder != address(0) && block.number < ack.deadline;
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function getTransactionAcknowledgementData(address reporter)
         external
         view
@@ -210,7 +210,7 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         return _pendingAcknowledgements[reporter];
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function getTransactionDeadlines(address reporter)
         external
         view
@@ -239,7 +239,7 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         }
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function generateTransactionHashStruct(
         bytes32 dataHash,
         bytes32 reportedChainId,
@@ -247,14 +247,14 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         address forwarder,
         uint8 step
     ) external view returns (uint256 deadline, bytes32 hashStruct) {
-        if (step != 1 && step != 2) revert TransactionRegistryV2__InvalidStep();
+        if (step != 1 && step != 2) revert TransactionRegistry__InvalidStep();
         deadline = TimingConfig.getSignatureDeadline();
         if (step == 1) {
             // Acknowledgement
             hashStruct = keccak256(
                 abi.encode(
-                    EIP712ConstantsV2.TX_BATCH_ACK_TYPEHASH,
-                    EIP712ConstantsV2.TX_ACK_STATEMENT_HASH,
+                    EIP712Constants.TX_BATCH_ACK_TYPEHASH,
+                    EIP712Constants.TX_ACK_STATEMENT_HASH,
                     msg.sender, // reporter
                     forwarder,
                     dataHash,
@@ -268,8 +268,8 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
             // Registration
             hashStruct = keccak256(
                 abi.encode(
-                    EIP712ConstantsV2.TX_BATCH_REG_TYPEHASH,
-                    EIP712ConstantsV2.TX_REG_STATEMENT_HASH,
+                    EIP712Constants.TX_BATCH_REG_TYPEHASH,
+                    EIP712Constants.TX_REG_STATEMENT_HASH,
                     msg.sender,
                     forwarder,
                     dataHash,
@@ -282,21 +282,21 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         }
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function getTransactionBatch(uint256 batchId) external view returns (TransactionBatch memory) {
         return _batches[batchId];
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function transactionBatchCount() external view returns (uint256) {
         return _nextBatchId - 1;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // FEE QUOTING (Unified interface matching SpokeRegistryV2)
+    // FEE QUOTING (Unified interface matching SpokeRegistry)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function quoteRegistration(
         address /* reporter */
     )
@@ -308,7 +308,7 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         return IFeeManager(feeManager).currentFeeWei();
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function quoteFeeBreakdown(
         address /* reporter */
     )
@@ -340,8 +340,8 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
-                    EIP712ConstantsV2.TX_BATCH_ACK_TYPEHASH,
-                    EIP712ConstantsV2.TX_ACK_STATEMENT_HASH,
+                    EIP712Constants.TX_BATCH_ACK_TYPEHASH,
+                    EIP712Constants.TX_ACK_STATEMENT_HASH,
                     reporter,
                     forwarder,
                     dataHash,
@@ -354,11 +354,11 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         );
         address signer = ECDSA.recover(digest, v, r, s);
         if (signer == address(0) || signer != reporter) {
-            revert TransactionRegistryV2__InvalidSignature();
+            revert TransactionRegistry__InvalidSignature();
         }
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function acknowledgeTransactions(
         address reporter,
         address forwarder,
@@ -370,17 +370,17 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         bytes32 r,
         bytes32 s
     ) external payable {
-        if (reporter == address(0)) revert TransactionRegistryV2__ZeroAddress();
-        if (forwarder == address(0)) revert TransactionRegistryV2__ZeroAddress();
-        if (dataHash == bytes32(0)) revert TransactionRegistryV2__DataHashMismatch();
-        if (transactionCount == 0) revert TransactionRegistryV2__EmptyBatch();
-        if (deadline <= block.timestamp) revert TransactionRegistryV2__DeadlineExpired();
+        if (reporter == address(0)) revert TransactionRegistry__ZeroAddress();
+        if (forwarder == address(0)) revert TransactionRegistry__ZeroAddress();
+        if (dataHash == bytes32(0)) revert TransactionRegistry__DataHashMismatch();
+        if (transactionCount == 0) revert TransactionRegistry__EmptyBatch();
+        if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
 
         // Check not already acknowledged
         {
             TransactionAcknowledgementData memory existing = _pendingAcknowledgements[reporter];
             if (existing.forwarder != address(0) && block.number < existing.deadline) {
-                revert TransactionRegistryV2__AlreadyAcknowledged();
+                revert TransactionRegistry__AlreadyAcknowledged();
             }
         }
 
@@ -425,8 +425,8 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
     ) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
-                EIP712ConstantsV2.TX_BATCH_REG_TYPEHASH,
-                EIP712ConstantsV2.TX_REG_STATEMENT_HASH,
+                EIP712Constants.TX_BATCH_REG_TYPEHASH,
+                EIP712Constants.TX_REG_STATEMENT_HASH,
                 reporter,
                 msg.sender,
                 dataHash,
@@ -504,11 +504,11 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = ECDSA.recover(digest, v, r, s);
         if (signer == address(0) || signer != reporter) {
-            revert TransactionRegistryV2__InvalidSignature();
+            revert TransactionRegistry__InvalidSignature();
         }
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function registerTransactions(
         address reporter,
         uint256 deadline,
@@ -518,24 +518,24 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         bytes32 r,
         bytes32 s
     ) external payable {
-        if (reporter == address(0)) revert TransactionRegistryV2__ZeroAddress();
-        if (transactionHashes.length == 0) revert TransactionRegistryV2__EmptyBatch();
-        if (transactionHashes.length != chainIds.length) revert TransactionRegistryV2__ArrayLengthMismatch();
-        if (deadline <= block.timestamp) revert TransactionRegistryV2__DeadlineExpired();
+        if (reporter == address(0)) revert TransactionRegistry__ZeroAddress();
+        if (transactionHashes.length == 0) revert TransactionRegistry__EmptyBatch();
+        if (transactionHashes.length != chainIds.length) revert TransactionRegistry__ArrayLengthMismatch();
+        if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
 
         // Load and validate acknowledgement
         TransactionAcknowledgementData memory ack = _pendingAcknowledgements[reporter];
-        if (ack.forwarder != msg.sender) revert TransactionRegistryV2__NotAuthorizedForwarder();
-        if (block.number < ack.gracePeriodStart) revert TransactionRegistryV2__GracePeriodNotStarted();
-        if (block.number >= ack.deadline) revert TransactionRegistryV2__DeadlineExpired();
+        if (ack.forwarder != msg.sender) revert TransactionRegistry__NotAuthorizedForwarder();
+        if (block.number < ack.gracePeriodStart) revert TransactionRegistry__GracePeriodNotStarted();
+        if (block.number >= ack.deadline) revert TransactionRegistry__DeadlineExpired();
 
         // Verify dataHash matches
         bytes32 dataHash = keccak256(abi.encode(transactionHashes, chainIds));
-        if (dataHash != ack.dataHash) revert TransactionRegistryV2__DataHashMismatch();
+        if (dataHash != ack.dataHash) revert TransactionRegistry__DataHashMismatch();
 
         // Validate transactionCount matches acknowledge phase
         if (ack.transactionCount != uint32(transactionHashes.length)) {
-            revert TransactionRegistryV2__ArrayLengthMismatch();
+            revert TransactionRegistry__ArrayLengthMismatch();
         }
 
         // Verify EIP-712 signature (uses real reportedChainId from ack data)
@@ -616,7 +616,7 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         emit TransactionBatchRegistered(batchId, reporter, dataHash, actualCount, params.isSponsored);
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function registerTransactionsFromHub(
         address reporter,
         bytes32 dataHash,
@@ -628,8 +628,8 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         uint8 bridgeId,
         bytes32 messageId
     ) external onlyHub {
-        if (transactionHashes.length == 0) revert TransactionRegistryV2__EmptyBatch();
-        if (transactionHashes.length != chainIds.length) revert TransactionRegistryV2__ArrayLengthMismatch();
+        if (transactionHashes.length == 0) revert TransactionRegistry__EmptyBatch();
+        if (transactionHashes.length != chainIds.length) revert TransactionRegistry__ArrayLengthMismatch();
 
         CrossChainParams memory params = CrossChainParams({
             reportedChainId: reportedChainId,
@@ -646,7 +646,7 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
     // OPERATOR BATCH REGISTRATION
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function registerTransactionsFromOperator(
         bytes32 operatorId,
         bytes32[] calldata transactionHashes,
@@ -654,8 +654,8 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
     ) external onlyOperatorSubmitter returns (uint256 batchId) {
         uint256 length = transactionHashes.length;
 
-        if (length == 0) revert TransactionRegistryV2__EmptyBatch();
-        if (length != chainIds.length) revert TransactionRegistryV2__ArrayLengthMismatch();
+        if (length == 0) revert TransactionRegistry__EmptyBatch();
+        if (length != chainIds.length) revert TransactionRegistry__ArrayLengthMismatch();
 
         // Create batch (transactionCount updated after loop with actual count)
         batchId = _nextBatchId++;
@@ -702,17 +702,17 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function setHub(address newHub) external onlyOwner {
-        if (newHub == address(0)) revert TransactionRegistryV2__ZeroAddress();
+        if (newHub == address(0)) revert TransactionRegistry__ZeroAddress();
         address oldHub = hub;
         hub = newHub;
         emit HubUpdated(oldHub, newHub);
     }
 
-    /// @inheritdoc ITransactionRegistryV2
+    /// @inheritdoc ITransactionRegistry
     function setOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
-        if (newOperatorSubmitter == address(0)) revert TransactionRegistryV2__ZeroAddress();
+        if (newOperatorSubmitter == address(0)) revert TransactionRegistry__ZeroAddress();
         address oldOperatorSubmitter = operatorSubmitter;
         operatorSubmitter = newOperatorSubmitter;
         emit OperatorSubmitterUpdated(oldOperatorSubmitter, newOperatorSubmitter);

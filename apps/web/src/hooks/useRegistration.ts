@@ -4,7 +4,7 @@
  * This is Phase 2 of the two-phase registration flow.
  * Must be called after the grace period has elapsed following acknowledgement.
  *
- * WalletRegistryV2 signature:
+ * WalletRegistry signature:
  *   register(registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
  *
  * @note reportedChainId is uint64 raw EVM chain ID. Contract converts to CAIP-2 hash internally.
@@ -112,7 +112,7 @@ export function useRegistration(): UseRegistrationResult {
     });
 
     try {
-      // WalletRegistryV2: register(registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
+      // WalletRegistry: register(registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi,

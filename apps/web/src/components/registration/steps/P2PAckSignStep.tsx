@@ -97,7 +97,7 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
       setSendError(null);
       resetSign();
 
-      // V2: Generate reportedChainId (raw chain ID) and incidentTimestamp
+      // Generate reportedChainId (raw chain ID) and incidentTimestamp
       const reportedChainId = BigInt(chainId);
       const incidentTimestamp = 0n; // TODO: Add incident timestamp selection UI
 
@@ -129,7 +129,7 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
             nonce: nonce.toString(),
             address: registeree,
             chainId,
-            // V2 fields (stringified for P2P serialization)
+            // Field data (stringified for P2P serialization)
             reportedChainId: reportedChainId.toString(),
             incidentTimestamp: incidentTimestamp.toString(),
           },

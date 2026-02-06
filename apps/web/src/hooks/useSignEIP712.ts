@@ -1,20 +1,20 @@
 /**
- * Hook for signing EIP-712 typed data for the V2 registry contracts.
+ * Hook for signing EIP-712 typed data for the registry contracts.
  *
  * Provides convenient wrappers around wagmi's useSignTypedData for:
  * - Acknowledgement signatures (Phase 1)
  * - Registration signatures (Phase 2)
  *
- * V2 changes:
- * - `owner` renamed to `wallet` in signatures
- * - New fields: `reportedChainId` (uint64 raw EVM chain ID) and `incidentTimestamp` (uint64)
+ * Key details:
+ * - `wallet` field in signatures identifies the wallet being registered
+ * - Fields: `reportedChainId` (uint64 raw EVM chain ID) and `incidentTimestamp` (uint64)
  * - Different EIP-712 domain names for Hub vs Spoke
  *
  * ## Security Model
  *
  * - **Wallet validation**: Ensures connected wallet matches the signing wallet (users can only
  *   sign for wallets they control). This is a UX guard; contract also validates signature.
- * - **V2 field validation**: reportedChainId and incidentTimestamp are passed through without
+ * - **Field validation**: reportedChainId and incidentTimestamp are passed through without
  *   client-side validation. Contract-side validation is authoritative. Invalid values will
  *   cause contract revert, not silent failures.
  * - **Signature verification**: Contract verifies EIP-712 signature matches the message fields.
@@ -22,19 +22,19 @@
  */
 
 import { useSignTypedData, useAccount, useChainId } from 'wagmi';
-import { buildV2AcknowledgementTypedData, buildV2RegistrationTypedData } from '@/lib/signatures';
+import { buildAcknowledgementTypedData, buildRegistrationTypedData } from '@/lib/signatures';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import type { Address, Hex } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
 export interface SignParams {
-  /** The wallet address being registered (renamed from 'owner' in V1) */
+  /** The wallet address being registered */
   wallet: Address;
   /** The trusted forwarder who can submit the transaction */
   forwarder: Address;
-  /** V2: Raw EVM chain ID where incident occurred (e.g., 1 for mainnet, 8453 for Base) */
+  /** Raw EVM chain ID where incident occurred (e.g., 1 for mainnet, 8453 for Base) */
   reportedChainId: bigint;
-  /** V2: Unix timestamp when the incident occurred */
+  /** Unix timestamp when the incident occurred */
   incidentTimestamp: bigint;
   /** Nonce for replay protection */
   nonce: bigint;
@@ -43,9 +43,9 @@ export interface SignParams {
 }
 
 /**
- * Converts SignParams to the V2 message structure (without statement).
+ * Converts SignParams to the message structure (without statement).
  */
-function toV2Message(params: SignParams) {
+function toMessage(params: SignParams) {
   return {
     wallet: params.wallet,
     forwarder: params.forwarder,
@@ -66,7 +66,7 @@ export interface UseSignEIP712Result {
 }
 
 /**
- * Hook for signing EIP-712 messages for the V2 registration flow.
+ * Hook for signing EIP-712 messages for the registration flow.
  *
  * @returns Functions for signing acknowledgement and registration messages
  */
@@ -108,14 +108,14 @@ export function useSignEIP712(): UseSignEIP712Result {
 
   /**
    * Sign an acknowledgement message (Phase 1).
-   * Uses V2 typed data with reportedChainId and incidentTimestamp.
+   * Uses typed data with reportedChainId and incidentTimestamp.
    */
   const signAcknowledgement = async (params: SignParams): Promise<Hex> => {
     const validatedAddress = validateSigningPreconditions(params.wallet);
-    const message = toV2Message(params);
-    const typedData = buildV2AcknowledgementTypedData(chainId, validatedAddress, isHub, message);
+    const message = toMessage(params);
+    const typedData = buildAcknowledgementTypedData(chainId, validatedAddress, isHub, message);
 
-    logger.signature.info('Requesting V2 acknowledgement signature', {
+    logger.signature.info('Requesting acknowledgement signature', {
       chainId,
       contractAddress: validatedAddress,
       isHub,
@@ -135,14 +135,14 @@ export function useSignEIP712(): UseSignEIP712Result {
         message: typedData.message,
       });
 
-      logger.signature.info('V2 acknowledgement signature received', {
+      logger.signature.info('Acknowledgement signature received', {
         signatureLength: signature.length,
         wallet: params.wallet,
       });
 
       return signature;
     } catch (error) {
-      logger.signature.error('V2 acknowledgement signature failed', {
+      logger.signature.error('Acknowledgement signature failed', {
         chainId,
         wallet: params.wallet,
         error: error instanceof Error ? error.message : String(error),
@@ -153,14 +153,14 @@ export function useSignEIP712(): UseSignEIP712Result {
 
   /**
    * Sign a registration message (Phase 2).
-   * Uses V2 typed data with reportedChainId and incidentTimestamp.
+   * Uses typed data with reportedChainId and incidentTimestamp.
    */
   const signRegistration = async (params: SignParams): Promise<Hex> => {
     const validatedAddress = validateSigningPreconditions(params.wallet);
-    const message = toV2Message(params);
-    const typedData = buildV2RegistrationTypedData(chainId, validatedAddress, isHub, message);
+    const message = toMessage(params);
+    const typedData = buildRegistrationTypedData(chainId, validatedAddress, isHub, message);
 
-    logger.signature.info('Requesting V2 registration signature', {
+    logger.signature.info('Requesting registration signature', {
       chainId,
       contractAddress: validatedAddress,
       isHub,
@@ -180,14 +180,14 @@ export function useSignEIP712(): UseSignEIP712Result {
         message: typedData.message,
       });
 
-      logger.signature.info('V2 registration signature received', {
+      logger.signature.info('Registration signature received', {
         signatureLength: signature.length,
         wallet: params.wallet,
       });
 
       return signature;
     } catch (error) {
-      logger.signature.error('V2 registration signature failed', {
+      logger.signature.error('Registration signature failed', {
         chainId,
         wallet: params.wallet,
         error: error instanceof Error ? error.message : String(error),

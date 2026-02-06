@@ -1,4 +1,4 @@
-export const OperatorSubmitterV2ABI = [
+export const OperatorSubmitterABI = [
   {
     type: 'constructor',
     inputs: [
@@ -575,37 +575,37 @@ export const OperatorSubmitterV2ABI = [
   },
   {
     type: 'error',
-    name: 'OperatorSubmitterV2__ArrayLengthMismatch',
+    name: 'OperatorSubmitter__ArrayLengthMismatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'OperatorSubmitterV2__EmptyBatch',
+    name: 'OperatorSubmitter__EmptyBatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'OperatorSubmitterV2__FeeForwardFailed',
+    name: 'OperatorSubmitter__FeeForwardFailed',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'OperatorSubmitterV2__InsufficientFee',
+    name: 'OperatorSubmitter__InsufficientFee',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'OperatorSubmitterV2__InvalidFeeConfig',
+    name: 'OperatorSubmitter__InvalidFeeConfig',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'OperatorSubmitterV2__NotApprovedOperator',
+    name: 'OperatorSubmitter__NotApprovedOperator',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'OperatorSubmitterV2__ZeroAddress',
+    name: 'OperatorSubmitter__ZeroAddress',
     inputs: [],
   },
   {

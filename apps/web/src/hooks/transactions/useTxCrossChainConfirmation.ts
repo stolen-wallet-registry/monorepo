@@ -17,8 +17,8 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useReadContract } from 'wagmi';
 import { keccak256, encodeAbiParameters, parseAbiParameters } from 'viem';
-import { fraudRegistryHubV2Abi } from '@/lib/contracts/abis';
-import { getFraudRegistryHubV2Address } from '@/lib/contracts/addresses';
+import { fraudRegistryHubAbi } from '@/lib/contracts/abis';
+import { getFraudRegistryHubAddress } from '@/lib/contracts/addresses';
 import { getHubChainId, isSpokeChain } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
@@ -109,7 +109,7 @@ export function useTxCrossChainConfirmation({
   let hubRegistryAddress: Address | undefined;
   try {
     if (hubChainId) {
-      hubRegistryAddress = getFraudRegistryHubV2Address(hubChainId);
+      hubRegistryAddress = getFraudRegistryHubAddress(hubChainId);
     }
   } catch (err) {
     logger.registration.warn('Failed to get hub registry address for tx batch', {
@@ -125,18 +125,18 @@ export function useTxCrossChainConfirmation({
   const shouldPoll = enabled && elapsedTime >= INITIAL_DELAY && elapsedTime < maxPollingTime;
 
   // Query hub chain for transaction batch registration status using computed batchId
-  // TODO: Update for V2 - FraudRegistryHubV2.isTransactionRegistered takes (txHash, chainId)
+  // TODO: Update - FraudRegistryHub.isTransactionRegistered takes (txHash, chainId)
   // The old batch-based architecture no longer applies. For now, we stub this to always return false.
-  // This hook needs to be redesigned for V2's transaction-by-transaction lookup.
+  // This hook needs to be redesigned for transaction-by-transaction lookup.
   const {
     data: isRegisteredOnHubRaw,
     refetch,
     isError: isQueryError,
   } = useReadContract({
     address: hubRegistryAddress,
-    abi: fraudRegistryHubV2Abi,
+    abi: fraudRegistryHubAbi,
     functionName: 'isTransactionRegistered',
-    // V2 signature: isTransactionRegistered(bytes32 txHash, bytes32 chainId)
+    // Signature: isTransactionRegistered(bytes32 txHash, bytes32 chainId)
     // We pass dataHash as txHash and reportedChainId as chainId for now
     args: batchId && reportedChainId ? [batchId, reportedChainId] : undefined,
     chainId: hubChainId,

@@ -1,15 +1,15 @@
 import { createConfig } from 'ponder';
 import type { Address } from 'viem';
 import {
-  WalletRegistryV2ABI,
-  TransactionRegistryV2ABI,
-  FraudRegistryHubV2ABI,
-  CrossChainInboxV2ABI,
+  WalletRegistryABI,
+  TransactionRegistryABI,
+  FraudRegistryHubABI,
+  CrossChainInboxABI,
   WalletSoulboundABI,
   SupportSoulboundABI,
   FeeManagerABI,
   OperatorRegistryABI,
-  ContractRegistryV2ABI,
+  ContractRegistryABI,
 } from '@swr/abis';
 import { anvilHub, baseSepolia, base, type Environment, type HubContracts } from '@swr/chains';
 
@@ -152,30 +152,30 @@ export default createConfig({
     },
   },
   contracts: {
-    // Core Registries (V2 - from @swr/chains hubContracts)
-    WalletRegistryV2: {
+    // Core Registries (from @swr/chains hubContracts)
+    WalletRegistry: {
       chain: chainConfig.name,
-      abi: WalletRegistryV2ABI,
+      abi: WalletRegistryABI,
       address: hubContracts!.stolenWalletRegistry,
       startBlock: chainConfig.startBlock,
     },
-    TransactionRegistryV2: {
+    TransactionRegistry: {
       chain: chainConfig.name,
-      abi: TransactionRegistryV2ABI,
+      abi: TransactionRegistryABI,
       address: hubContracts!.stolenTransactionRegistry,
       startBlock: chainConfig.startBlock,
     },
-    FraudRegistryHubV2: {
+    FraudRegistryHub: {
       chain: chainConfig.name,
-      abi: FraudRegistryHubV2ABI,
+      abi: FraudRegistryHubABI,
       address: hubContracts!.registryHub,
       startBlock: chainConfig.startBlock,
     },
 
     // Cross-Chain (from @swr/chains hubContracts)
-    CrossChainInboxV2: {
+    CrossChainInbox: {
       chain: chainConfig.name,
-      abi: CrossChainInboxV2ABI,
+      abi: CrossChainInboxABI,
       address: hubContracts!.crossChainInbox!,
       startBlock: chainConfig.startBlock,
     },
@@ -210,10 +210,10 @@ export default createConfig({
       startBlock: chainConfig.startBlock,
     },
 
-    // Fraudulent Contract Registry (V2 - from @swr/chains hubContracts)
-    ContractRegistryV2: {
+    // Fraudulent Contract Registry (from @swr/chains hubContracts)
+    ContractRegistry: {
       chain: chainConfig.name,
-      abi: ContractRegistryV2ABI,
+      abi: ContractRegistryABI,
       address: hubContracts!.fraudulentContractRegistry,
       startBlock: chainConfig.startBlock,
     },

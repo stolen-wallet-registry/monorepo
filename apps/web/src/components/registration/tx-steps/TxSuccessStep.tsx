@@ -59,7 +59,7 @@ export function TxSuccessStep() {
     chainIdsForContract,
   } = useTransactionSelection();
 
-  // V2: Compute dataHash from sorted arrays for display
+  // Compute dataHash from sorted arrays for display
   const dataHash: Hash | undefined =
     txHashesForContract.length > 0 &&
     chainIdsForContract.length > 0 &&

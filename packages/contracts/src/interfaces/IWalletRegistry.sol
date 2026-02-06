@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title IWalletRegistryV2
+/// @title IWalletRegistry
 /// @author Stolen Wallet Registry Team
-/// @notice Interface for the Wallet Registry V2 - handles two-phase wallet registration
-/// @dev Extracted from FraudRegistryV2 for contract size optimization
-interface IWalletRegistryV2 {
+/// @notice Interface for the Wallet Registry - handles two-phase wallet registration
+/// @dev Extracted from FraudRegistryHub for contract size optimization
+interface IWalletRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
     // STRUCTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -62,21 +62,21 @@ interface IWalletRegistryV2 {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    error WalletRegistryV2__AlreadyRegistered();
-    error WalletRegistryV2__AlreadyAcknowledged();
-    error WalletRegistryV2__NotAcknowledged();
-    error WalletRegistryV2__DeadlineExpired();
-    error WalletRegistryV2__DeadlineInPast();
-    error WalletRegistryV2__GracePeriodNotStarted();
-    error WalletRegistryV2__InvalidSignature();
-    error WalletRegistryV2__InvalidSigner();
-    error WalletRegistryV2__NotAuthorizedForwarder();
-    error WalletRegistryV2__InsufficientFee();
-    error WalletRegistryV2__ZeroAddress();
-    error WalletRegistryV2__OnlyHub();
-    error WalletRegistryV2__OnlyOperatorSubmitter();
-    error WalletRegistryV2__EmptyBatch();
-    error WalletRegistryV2__ArrayLengthMismatch();
+    error WalletRegistry__AlreadyRegistered();
+    error WalletRegistry__AlreadyAcknowledged();
+    error WalletRegistry__NotAcknowledged();
+    error WalletRegistry__DeadlineExpired();
+    error WalletRegistry__DeadlineInPast();
+    error WalletRegistry__GracePeriodNotStarted();
+    error WalletRegistry__InvalidSignature();
+    error WalletRegistry__InvalidSigner();
+    error WalletRegistry__NotAuthorizedForwarder();
+    error WalletRegistry__InsufficientFee();
+    error WalletRegistry__ZeroAddress();
+    error WalletRegistry__OnlyHub();
+    error WalletRegistry__OnlyOperatorSubmitter();
+    error WalletRegistry__EmptyBatch();
+    error WalletRegistry__ArrayLengthMismatch();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -119,7 +119,7 @@ interface IWalletRegistryV2 {
     event OperatorSubmitterUpdated(address oldOperatorSubmitter, address newOperatorSubmitter);
 
     /// @notice Fee breakdown for quoting registration costs
-    /// @dev Matches SpokeRegistryV2.FeeBreakdown for unified frontend interface
+    /// @dev Matches SpokeRegistry.FeeBreakdown for unified frontend interface
     /// @param bridgeFee Cross-chain bridge fee (always 0 on hub)
     /// @param registrationFee Protocol registration fee
     /// @param total Total fee (bridgeFee + registrationFee)
@@ -184,7 +184,7 @@ interface IWalletRegistryV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Register a wallet from cross-chain message (Hub only)
-    /// @dev Called by FraudRegistryHubV2 when processing cross-chain messages
+    /// @dev Called by FraudRegistryHub when processing cross-chain messages
     /// @param namespaceHash CAIP-2 namespace hash (e.g., keccak256("eip155"))
     /// @param chainRefHash CAIP-2 chain reference hash (ignored for EVM wallets due to wildcard key)
     /// @param identifier Wallet identifier (address as bytes32)
@@ -326,7 +326,7 @@ interface IWalletRegistryV2 {
     function quoteFeeBreakdown(address owner) external view returns (FeeBreakdown memory breakdown);
 
     /// @notice Get hub address
-    /// @return The FraudRegistryHubV2 address
+    /// @return The FraudRegistryHub address
     function hub() external view returns (address);
 
     /// @notice Get operator submitter address
@@ -338,7 +338,7 @@ interface IWalletRegistryV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Set or update hub address (owner-only, can be called multiple times)
-    /// @param newHub The FraudRegistryHubV2 address (must not be address(0))
+    /// @param newHub The FraudRegistryHub address (must not be address(0))
     function setHub(address newHub) external;
 
     /// @notice Set operator submitter address

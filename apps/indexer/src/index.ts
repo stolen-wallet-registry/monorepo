@@ -43,7 +43,7 @@ const toLowerAddress = (addr: Address): Address => addr.toLowerCase() as Address
 
 /**
  * Extract EVM address from bytes32 identifier.
- * V2 stores addresses as bytes32(uint256(uint160(address))).
+ * Addresses are stored as bytes32(uint256(uint160(address))).
  * The address is in the rightmost 20 bytes.
  */
 function identifierToAddress(identifier: Hex): Address {
@@ -139,11 +139,11 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// WALLET REGISTRY V2
+// WALLET REGISTRY
 // ═══════════════════════════════════════════════════════════════════════════
 
-// WalletAcknowledged — same event signature as V1
-ponder.on('WalletRegistryV2:WalletAcknowledged', async ({ event, context }) => {
+// WalletAcknowledged — tracks pending acknowledgements in grace period
+ponder.on('WalletRegistry:WalletAcknowledged', async ({ event, context }) => {
   const { registeree, forwarder, isSponsored } = event.args;
   const { db } = context;
 
@@ -179,7 +179,7 @@ ponder.on('WalletRegistryV2:WalletAcknowledged', async ({ event, context }) => {
 // NOTE: This event does NOT carry a batchId (zero per-entry gas impact).
 // For operator batches, the BatchCreated handler fires in the same tx and shares transactionHash.
 // Wallet batch detail queries join stolenWallet ↔ walletBatch on transactionHash.
-ponder.on('WalletRegistryV2:WalletRegistered', async ({ event, context }) => {
+ponder.on('WalletRegistry:WalletRegistered', async ({ event, context }) => {
   const { identifier, reportedChainId, incidentTimestamp, isSponsored } = event.args;
   const { db } = context;
 
@@ -219,7 +219,7 @@ ponder.on('WalletRegistryV2:WalletRegistered', async ({ event, context }) => {
 
 // CrossChainWalletRegistered — fires alongside WalletRegistered for cross-chain
 // Use this to UPDATE the wallet record with cross-chain metadata
-ponder.on('WalletRegistryV2:CrossChainWalletRegistered', async ({ event, context }) => {
+ponder.on('WalletRegistry:CrossChainWalletRegistered', async ({ event, context }) => {
   const { identifier, sourceChainId, bridgeId, messageId } = event.args;
   const { db } = context;
 
@@ -251,7 +251,7 @@ ponder.on('WalletRegistryV2:CrossChainWalletRegistered', async ({ event, context
 // BatchCreated — operator wallet batch
 // Fires AFTER all WalletRegistered events in the same tx.
 // Use transactionHash to correlate wallets to this batch.
-ponder.on('WalletRegistryV2:BatchCreated', async ({ event, context }) => {
+ponder.on('WalletRegistry:BatchCreated', async ({ event, context }) => {
   const { batchId, operatorId, walletCount } = event.args;
   const { db } = context;
 
@@ -276,11 +276,11 @@ ponder.on('WalletRegistryV2:BatchCreated', async ({ event, context }) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TRANSACTION REGISTRY V2
+// TRANSACTION REGISTRY
 // ═══════════════════════════════════════════════════════════════════════════
 
 // TransactionBatchAcknowledged
-ponder.on('TransactionRegistryV2:TransactionBatchAcknowledged', async ({ event, context }) => {
+ponder.on('TransactionRegistry:TransactionBatchAcknowledged', async ({ event, context }) => {
   const { reporter, forwarder, dataHash, isSponsored } = event.args;
   const { db } = context;
 
@@ -320,7 +320,7 @@ ponder.on('TransactionRegistryV2:TransactionBatchAcknowledged', async ({ event, 
 // Entries link to their parent batch via transactionHash — the batch summary event
 // (TransactionBatchRegistered or TransactionBatchCreated) fires in the same tx.
 // Batch detail queries join on transactionHash.
-ponder.on('TransactionRegistryV2:TransactionRegistered', async ({ event, context }) => {
+ponder.on('TransactionRegistry:TransactionRegistered', async ({ event, context }) => {
   const { identifier, reportedChainId, reporter, isSponsored } = event.args;
   const { db } = context;
 
@@ -346,7 +346,7 @@ ponder.on('TransactionRegistryV2:TransactionRegistered', async ({ event, context
 
 // TransactionBatchRegistered — individual + cross-chain batch summary
 // Updated for Phase 0: event now includes uint256 indexed batchId as first param
-ponder.on('TransactionRegistryV2:TransactionBatchRegistered', async ({ event, context }) => {
+ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, context }) => {
   const { batchId, reporter, dataHash, transactionCount, isSponsored } = event.args;
   const { db } = context;
 
@@ -386,7 +386,7 @@ ponder.on('TransactionRegistryV2:TransactionBatchRegistered', async ({ event, co
 });
 
 // CrossChainTransactionRegistered — fires per tx alongside TransactionRegistered for cross-chain
-ponder.on('TransactionRegistryV2:CrossChainTransactionRegistered', async ({ event, context }) => {
+ponder.on('TransactionRegistry:CrossChainTransactionRegistered', async ({ event, context }) => {
   const { identifier, sourceChainId, bridgeId, messageId } = event.args;
   const { db } = context;
 
@@ -402,7 +402,7 @@ ponder.on('TransactionRegistryV2:CrossChainTransactionRegistered', async ({ even
 });
 
 // TransactionBatchCreated — operator batch summary
-ponder.on('TransactionRegistryV2:TransactionBatchCreated', async ({ event, context }) => {
+ponder.on('TransactionRegistry:TransactionBatchCreated', async ({ event, context }) => {
   const { batchId, operatorId, transactionCount } = event.args;
   const { db } = context;
 
@@ -436,11 +436,11 @@ ponder.on('TransactionRegistryV2:TransactionBatchCreated', async ({ event, conte
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CONTRACT REGISTRY V2
+// CONTRACT REGISTRY
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ContractRegistered — fires per contract (operator batches only)
-ponder.on('ContractRegistryV2:ContractRegistered', async ({ event, context }) => {
+ponder.on('ContractRegistry:ContractRegistered', async ({ event, context }) => {
   const { identifier, reportedChainId, operatorId, batchId } = event.args;
   const { db } = context;
 
@@ -467,7 +467,7 @@ ponder.on('ContractRegistryV2:ContractRegistered', async ({ event, context }) =>
 });
 
 // ContractBatchCreated — operator batch summary
-ponder.on('ContractRegistryV2:ContractBatchCreated', async ({ event, context }) => {
+ponder.on('ContractRegistry:ContractBatchCreated', async ({ event, context }) => {
   const { batchId, operatorId, contractCount } = event.args;
   const { db } = context;
 
@@ -491,11 +491,11 @@ ponder.on('ContractRegistryV2:ContractBatchCreated', async ({ event, context }) 
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CROSS-CHAIN INBOX V2
+// CROSS-CHAIN INBOX
 // ═══════════════════════════════════════════════════════════════════════════
 
 // WalletRegistrationReceived — message received from spoke chain
-ponder.on('CrossChainInboxV2:WalletRegistrationReceived', async ({ event, context }) => {
+ponder.on('CrossChainInbox:WalletRegistrationReceived', async ({ event, context }) => {
   const { origin, identifier, messageId } = event.args;
   const { db } = context;
 
@@ -522,7 +522,7 @@ ponder.on('CrossChainInboxV2:WalletRegistrationReceived', async ({ event, contex
 });
 
 // TransactionBatchReceived — message received from spoke chain
-ponder.on('CrossChainInboxV2:TransactionBatchReceived', async ({ event, context }) => {
+ponder.on('CrossChainInbox:TransactionBatchReceived', async ({ event, context }) => {
   const { origin, reporter, dataHash, messageId } = event.args;
   const { db } = context;
 

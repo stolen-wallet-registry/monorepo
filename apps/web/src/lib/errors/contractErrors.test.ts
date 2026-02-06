@@ -5,157 +5,95 @@ import { decodeContractError, getContractErrorInfo, CONTRACT_ERROR_MAP } from '.
 describe('contractErrors', () => {
   // Expected selectors from contract interfaces - used for coverage validation
   const expectedSelectors: Record<string, string> = {
-    // IStolenWalletRegistry errors (16)
-    InvalidNonce: '0x756688fe',
-    Acknowledgement__Expired: '0x66af96ee',
-    Acknowledgement__InvalidSigner: '0xb4c67c0a',
-    Registration__SignatureExpired: '0x5a2eae05',
-    Registration__InvalidSigner: '0x21ae99f4',
-    Registration__InvalidForwarder: '0x5fd8c8bb',
-    Registration__ForwarderExpired: '0xec5c97a6',
-    Registration__GracePeriodNotStarted: '0x6d2d2de4',
-    AlreadyRegistered: '0x3a81d6fc',
-    InvalidOwner: '0x49e27cff',
-    InsufficientFee: '0x025dbdd4',
-    FeeForwardFailed: '0x4073ee10',
-    InvalidTimingConfig: '0x87b5e90b',
-    UnauthorizedCaller: '0x5c427cd9',
-    InvalidBridgeId: '0xb91e5870',
-    InvalidChainId: '0x7a47c9a2',
-    // ISpokeRegistry errors (10)
-    SpokeRegistry__InvalidTimingConfig: '0xe08eb492',
-    SpokeRegistry__InvalidNonce: '0x7a15c36a',
-    SpokeRegistry__SignatureExpired: '0x36a83b56',
-    SpokeRegistry__InvalidSigner: '0x8baa579f',
-    SpokeRegistry__InvalidForwarder: '0x6e67e4e2',
-    SpokeRegistry__ForwarderExpired: '0x86f63dce',
-    SpokeRegistry__GracePeriodNotStarted: '0x9ab3c3ae',
-    SpokeRegistry__InsufficientFee: '0xf4d678b8',
-    SpokeRegistry__InvalidOwner: '0x664e4519',
-    SpokeRegistry__BridgeFailed: '0x0cc5729a',
-    // IBridgeAdapter errors (3)
-    BridgeAdapter__InsufficientFee: '0x2c460928',
-    BridgeAdapter__UnsupportedChain: '0x3c8f137c',
-    BridgeAdapter__PayloadTooLarge: '0xb8aa6394',
-    // IFeeManager errors (4)
-    Fee__Insufficient: '0xb05591b8',
-    Fee__InvalidPrice: '0x3add2ca9',
-    Fee__NoOracle: '0x1d3997c8',
-    Fee__StalePrice: '0x82599075',
-    // IRegistryHub errors (5)
-    Hub__Paused: '0x719cea76',
-    Hub__InvalidRegistry: '0xbf7c72a6',
-    Hub__InsufficientFee: '0xba85f0bb',
-    Hub__WithdrawalFailed: '0x066df40f',
-    Hub__UnauthorizedInbox: '0x8791d1d6',
-    // ICrossChainInbox errors (5)
-    CrossChainInbox__UntrustedSource: '0x7d60d71c',
-    CrossChainInbox__OnlyBridge: '0xaea84e78',
-    CrossChainInbox__InvalidMessage: '0x23e92f31',
-    CrossChainInbox__ZeroAddress: '0x6d50853e',
-    CrossChainInbox__SourceChainMismatch: '0x249d64fe',
-    // IOperatorRegistry errors (5)
-    OperatorRegistry__ZeroAddress: '0x2c2b0fe3',
-    OperatorRegistry__AlreadyApproved: '0x84fd1a86',
-    OperatorRegistry__NotApproved: '0x970753c1',
-    OperatorRegistry__InvalidCapabilities: '0x4f93924f',
-    OperatorRegistry__NotAuthorizedForRegistry: '0x0790c247',
-    // IFraudulentContractRegistry errors (6 additional)
-    FraudulentContractRegistry__InvalidOperatorRegistry: '0x7020d8c8',
-    FraudulentContractRegistry__MissingRegistryHub: '0x3e81b8ca',
-    FraudulentContractRegistry__InvalidContractAddress: '0x54689933',
-    FraudulentContractRegistry__InvalidChainIdEntry: '0x4b2858dd',
-    FraudulentContractRegistry__BatchSizeExceedsLimit: '0x86eaeab5',
-    FraudulentContractRegistry__UnexpectedEthWithFeesDisabled: '0xf53a0b5c',
-    // V2 FraudRegistryHubV2 errors (5)
-    FraudRegistryHubV2__ZeroAddress: '0x7b8aa786',
-    FraudRegistryHubV2__OnlyInbox: '0x463051ce',
-    FraudRegistryHubV2__InvalidIdentifierLength: '0xe706f014',
-    FraudRegistryHubV2__UnknownRegistryType: '0x79fc992a',
-    FraudRegistryHubV2__WithdrawFailed: '0x6317676b',
-    // V2 WalletRegistryV2 errors (15)
-    WalletRegistryV2__AlreadyRegistered: '0x07d38419',
-    WalletRegistryV2__AlreadyAcknowledged: '0x2055835e',
-    WalletRegistryV2__NotAcknowledged: '0x9d0170bd',
-    WalletRegistryV2__DeadlineExpired: '0xf5916161',
-    WalletRegistryV2__DeadlineInPast: '0xe69d38d2',
-    WalletRegistryV2__GracePeriodNotStarted: '0xb4945575',
-    WalletRegistryV2__InvalidSignature: '0x68611c32',
-    WalletRegistryV2__InvalidSigner: '0xa3f32d50',
-    WalletRegistryV2__NotAuthorizedForwarder: '0x7347c19f',
-    WalletRegistryV2__InsufficientFee: '0x1a5595d9',
-    WalletRegistryV2__ZeroAddress: '0x35223e8e',
-    WalletRegistryV2__OnlyHub: '0x003b91cb',
-    WalletRegistryV2__OnlyOperatorSubmitter: '0x36e01a5b',
-    WalletRegistryV2__EmptyBatch: '0x204fb9b9',
-    WalletRegistryV2__ArrayLengthMismatch: '0x94a50787',
-    // V2 TransactionRegistryV2 errors (19)
-    TransactionRegistryV2__AlreadyRegistered: '0xc279298b',
-    TransactionRegistryV2__AlreadyAcknowledged: '0x17659821',
-    TransactionRegistryV2__NotAcknowledged: '0x57c093b9',
-    TransactionRegistryV2__DeadlineExpired: '0x09cb7eb6',
-    TransactionRegistryV2__DeadlineInPast: '0x40a02780',
-    TransactionRegistryV2__GracePeriodNotStarted: '0x260be5b0',
-    TransactionRegistryV2__InvalidSignature: '0x38bd4206',
-    TransactionRegistryV2__InvalidSigner: '0x2eec674d',
-    TransactionRegistryV2__NotAuthorizedForwarder: '0xc1caf254',
-    TransactionRegistryV2__InsufficientFee: '0x800d138f',
-    TransactionRegistryV2__ZeroAddress: '0x17e6065b',
-    TransactionRegistryV2__OnlyHub: '0x83c11802',
-    TransactionRegistryV2__OnlyOperatorSubmitter: '0x45e73680',
-    TransactionRegistryV2__EmptyBatch: '0x42c9bec0',
-    TransactionRegistryV2__ArrayLengthMismatch: '0xf7626ca5',
-    TransactionRegistryV2__DataHashMismatch: '0xcaf23a5c',
-    TransactionRegistryV2__InvalidStep: '0xec906808',
-    TransactionRegistryV2__HubTransferFailed: '0x2b41b959',
-    TransactionRegistryV2__RefundFailed: '0x57185e22',
-    // V2 ContractRegistryV2 errors (5)
-    ContractRegistryV2__AlreadyRegistered: '0x181fd563',
-    ContractRegistryV2__ZeroAddress: '0xe35a3d90',
-    ContractRegistryV2__OnlyOperatorSubmitter: '0x75e566b0',
-    ContractRegistryV2__EmptyBatch: '0x7e211981',
-    ContractRegistryV2__ArrayLengthMismatch: '0x2171219a',
-    // V2 OperatorSubmitterV2 errors (7)
-    OperatorSubmitterV2__ZeroAddress: '0x862624c3',
-    OperatorSubmitterV2__NotApprovedOperator: '0x498aaa04',
-    OperatorSubmitterV2__EmptyBatch: '0x84155f3c',
-    OperatorSubmitterV2__ArrayLengthMismatch: '0x3f7ebde1',
-    OperatorSubmitterV2__InsufficientFee: '0x2ae4ced4',
-    OperatorSubmitterV2__FeeForwardFailed: '0xc12f791a',
-    OperatorSubmitterV2__InvalidFeeConfig: '0xd2e0c1e5',
-    // V2 CAIP-10 parsing errors (3)
-    CAIP10__InvalidFormat: '0xfd0a5b1e',
+    // FraudRegistryHub Errors
+    FraudRegistryHub__ZeroAddress: '0x92788ffd',
+    FraudRegistryHub__OnlyInbox: '0x25da34a1',
+    FraudRegistryHub__InvalidIdentifierLength: '0xf6c88e35',
+    FraudRegistryHub__UnknownRegistryType: '0x00472d32',
+    FraudRegistryHub__WithdrawFailed: '0x7fa366d3',
+    // WalletRegistry Errors
+    WalletRegistry__AlreadyRegistered: '0xa74e7b8b',
+    WalletRegistry__AlreadyAcknowledged: '0x133ee0d6',
+    WalletRegistry__NotAcknowledged: '0x4da4c90e',
+    WalletRegistry__DeadlineExpired: '0x5915fdb8',
+    WalletRegistry__DeadlineInPast: '0x5bc89f7d',
+    WalletRegistry__GracePeriodNotStarted: '0x3214c145',
+    WalletRegistry__InvalidSignature: '0xbf69e113',
+    WalletRegistry__InvalidSigner: '0x4cd2cf7c',
+    WalletRegistry__NotAuthorizedForwarder: '0x6bd7e909',
+    WalletRegistry__InsufficientFee: '0x747dde89',
+    WalletRegistry__ZeroAddress: '0xa6565bcd',
+    WalletRegistry__OnlyHub: '0x31a0af95',
+    WalletRegistry__OnlyOperatorSubmitter: '0x637b467b',
+    WalletRegistry__EmptyBatch: '0x39f0ba50',
+    WalletRegistry__ArrayLengthMismatch: '0x545fd576',
+    // TransactionRegistry Errors
+    TransactionRegistry__AlreadyRegistered: '0xd37e23c3',
+    TransactionRegistry__AlreadyAcknowledged: '0x378855ef',
+    TransactionRegistry__NotAcknowledged: '0xe72eb6fd',
+    TransactionRegistry__DeadlineExpired: '0x2015cf13',
+    TransactionRegistry__DeadlineInPast: '0x98de1e59',
+    TransactionRegistry__GracePeriodNotStarted: '0xe4fcb386',
+    TransactionRegistry__InvalidSignature: '0x6376fd7d',
+    TransactionRegistry__InvalidSigner: '0x2f6ed989',
+    TransactionRegistry__NotAuthorizedForwarder: '0x9e63d130',
+    TransactionRegistry__InsufficientFee: '0xe0ff51d7',
+    TransactionRegistry__ZeroAddress: '0xd6a30fe5',
+    TransactionRegistry__OnlyHub: '0x6b588216',
+    TransactionRegistry__OnlyOperatorSubmitter: '0x40064f87',
+    TransactionRegistry__EmptyBatch: '0x1f86fd29',
+    TransactionRegistry__ArrayLengthMismatch: '0x85758e90',
+    TransactionRegistry__DataHashMismatch: '0x97606fef',
+    TransactionRegistry__InvalidStep: '0xef0b2ab3',
+    TransactionRegistry__HubTransferFailed: '0xc6eb8cd2',
+    TransactionRegistry__RefundFailed: '0xef7a7943',
+    // ContractRegistry Errors
+    ContractRegistry__AlreadyRegistered: '0x5b6ca878',
+    ContractRegistry__ZeroAddress: '0x047c1f80',
+    ContractRegistry__OnlyOperatorSubmitter: '0xc00e0835',
+    ContractRegistry__EmptyBatch: '0xcd74ea8c',
+    ContractRegistry__ArrayLengthMismatch: '0x0fc15e9d',
+    // OperatorSubmitter Errors
+    OperatorSubmitter__ZeroAddress: '0x13664080',
+    OperatorSubmitter__NotApprovedOperator: '0xbfd711b2',
+    OperatorSubmitter__EmptyBatch: '0x0f0c34f7',
+    OperatorSubmitter__ArrayLengthMismatch: '0x15c1e4ff',
+    OperatorSubmitter__InsufficientFee: '0x030ff595',
+    OperatorSubmitter__FeeForwardFailed: '0x58614d91',
+    OperatorSubmitter__InvalidFeeConfig: '0x0079d758',
+    // CAIP-10 parsing errors
+    CAIP10__InvalidFormat: '0xfd0a5b5c',
     CAIP10__UnsupportedNamespace: '0x96c95b05',
     CAIP10Evm__InvalidAddress: '0x31d8ad42',
-    // V2 CrossChainMessageV2 errors (4)
-    CrossChainMessageV2__InvalidMessageType: '0x3f56613b',
-    CrossChainMessageV2__UnsupportedVersion: '0x4bf3cb4b',
-    CrossChainMessageV2__InvalidMessageLength: '0x49036e73',
-    CrossChainMessageV2__BatchSizeMismatch: '0x0bc8e29a',
-    // V2 CrossChainInboxV2 errors (5)
-    CrossChainInboxV2__ZeroAddress: '0x9705f71a',
-    CrossChainInboxV2__OnlyMailbox: '0x462ea0ab',
-    CrossChainInboxV2__UntrustedSource: '0x0e8260da',
-    CrossChainInboxV2__SourceChainMismatch: '0xf6407ddf',
-    CrossChainInboxV2__UnknownMessageType: '0xb039e7a9',
-    // V2 SpokeRegistryV2 errors (17)
-    SpokeRegistryV2__ZeroAddress: '0x8b4b46c4',
-    SpokeRegistryV2__InvalidTimingConfig: '0x3d8ff737',
-    SpokeRegistryV2__InvalidOwner: '0xc4069ba2',
-    SpokeRegistryV2__SignatureExpired: '0x860f06c2',
-    SpokeRegistryV2__InvalidNonce: '0x58f53864',
-    SpokeRegistryV2__InvalidSigner: '0x3a8e63c6',
-    SpokeRegistryV2__InvalidForwarder: '0x2f4c1872',
-    SpokeRegistryV2__GracePeriodNotStarted: '0xb23325c9',
-    SpokeRegistryV2__ForwarderExpired: '0x2fab8da5',
-    SpokeRegistryV2__HubNotConfigured: '0xc343d197',
-    SpokeRegistryV2__InsufficientFee: '0x9ea3c99b',
-    SpokeRegistryV2__RefundFailed: '0x99b352da',
-    SpokeRegistryV2__WithdrawalFailed: '0x141e8e83',
-    SpokeRegistryV2__InvalidHubConfig: '0x16392cf6',
-    SpokeRegistryV2__EmptyBatch: '0x339a0ecf',
-    SpokeRegistryV2__ArrayLengthMismatch: '0xaef92cb3',
-    SpokeRegistryV2__InvalidDataHash: '0x06cf9d53',
+    // CrossChainMessage Library Errors
+    CrossChainMessage__InvalidMessageType: '0xd5fd8f7a',
+    CrossChainMessage__UnsupportedVersion: '0x57d73aa3',
+    CrossChainMessage__InvalidMessageLength: '0x2019eeca',
+    CrossChainMessage__BatchSizeMismatch: '0x315ba0c5',
+    // CrossChainInbox Errors
+    CrossChainInbox__ZeroAddress: '0x6d50853e',
+    CrossChainInbox__OnlyMailbox: '0x4babc769',
+    CrossChainInbox__UntrustedSource: '0x7d60d71c',
+    CrossChainInbox__SourceChainMismatch: '0x249d64fe',
+    CrossChainInbox__UnknownMessageType: '0x2f5f5948',
+    // SpokeRegistry Errors
+    SpokeRegistry__ZeroAddress: '0xc718cb18',
+    SpokeRegistry__InvalidTimingConfig: '0xe08eb492',
+    SpokeRegistry__InvalidOwner: '0x664e4519',
+    SpokeRegistry__SignatureExpired: '0xcd4e1023',
+    SpokeRegistry__InvalidNonce: '0x8a2ee99e',
+    SpokeRegistry__InvalidSigner: '0xae315749',
+    SpokeRegistry__InvalidForwarder: '0x18a34ddf',
+    SpokeRegistry__GracePeriodNotStarted: '0xa5434e70',
+    SpokeRegistry__ForwarderExpired: '0x9525dee7',
+    SpokeRegistry__HubNotConfigured: '0x4160d098',
+    SpokeRegistry__InsufficientFee: '0x6151896c',
+    SpokeRegistry__RefundFailed: '0x28bcfd67',
+    SpokeRegistry__WithdrawalFailed: '0xa8682eaf',
+    SpokeRegistry__InvalidHubConfig: '0x6f59b28e',
+    SpokeRegistry__EmptyBatch: '0xe3e9689e',
+    SpokeRegistry__ArrayLengthMismatch: '0x81a72855',
+    SpokeRegistry__InvalidDataHash: '0xba8873e4',
   };
 
   describe('CONTRACT_ERROR_MAP', () => {
@@ -185,8 +123,8 @@ describe('contractErrors', () => {
   });
 
   describe('decodeContractError', () => {
-    it('decodes Registration__ForwarderExpired', () => {
-      const errorMsg = 'Execution reverted with reason: custom error 0xec5c97a6';
+    it('decodes SpokeRegistry__ForwarderExpired', () => {
+      const errorMsg = 'Execution reverted with reason: custom error 0x9525dee7';
       const result = decodeContractError(errorMsg);
 
       expect(result).toBe(
@@ -194,17 +132,15 @@ describe('contractErrors', () => {
       );
     });
 
-    it('decodes Acknowledgement__Expired', () => {
-      const errorMsg = 'custom error 0x66af96ee';
+    it('decodes WalletRegistry__DeadlineExpired', () => {
+      const errorMsg = 'custom error 0x5915fdb8';
       const result = decodeContractError(errorMsg);
 
-      expect(result).toBe(
-        'Your acknowledgement signature has expired. Please sign again to continue.'
-      );
+      expect(result).toBe('Your signature has expired. Please sign again.');
     });
 
-    it('decodes Registration__GracePeriodNotStarted', () => {
-      const errorMsg = 'Execution reverted: custom error 0x6d2d2de4';
+    it('decodes WalletRegistry__GracePeriodNotStarted', () => {
+      const errorMsg = 'Execution reverted: custom error 0x3214c145';
       const result = decodeContractError(errorMsg);
 
       expect(result).toBe(
@@ -212,16 +148,18 @@ describe('contractErrors', () => {
       );
     });
 
-    it('decodes AlreadyRegistered (no action)', () => {
-      const errorMsg = 'custom error 0x3a81d6fc';
+    it('decodes WalletRegistry__AlreadyRegistered (no action)', () => {
+      const errorMsg = 'custom error 0xa74e7b8b';
       const result = decodeContractError(errorMsg);
 
-      // AlreadyRegistered has no action, just message
-      expect(result).toBe('This wallet is already registered as stolen.');
+      // WalletRegistry__AlreadyRegistered has no action field, just message
+      expect(result).toBe(
+        'This wallet is already registered. Search the registry to view its status.'
+      );
     });
 
     it('handles uppercase hex selectors', () => {
-      const errorMsg = 'custom error 0xEC5C97A6'; // uppercase
+      const errorMsg = 'custom error 0x9525DEE7'; // uppercase
       const result = decodeContractError(errorMsg);
 
       expect(result).toBe(
@@ -230,7 +168,7 @@ describe('contractErrors', () => {
     });
 
     it('handles mixed case hex selectors', () => {
-      const errorMsg = 'custom error 0xEc5C97a6'; // mixed case
+      const errorMsg = 'custom error 0x9525DeE7'; // mixed case
       const result = decodeContractError(errorMsg);
 
       expect(result).toBe(
@@ -259,14 +197,14 @@ describe('contractErrors', () => {
     });
 
     it('extracts selector from verbose error messages', () => {
-      const verboseError = `CallExecutionError: Execution reverted with reason: custom error 0xec5c97a6.
+      const verboseError = `CallExecutionError: Execution reverted with reason: custom error 0x9525dee7.
 
 Raw Call Arguments:
   from: 0x70997970c51812dc3a010c7d01b50e0d17dc79c8
   to: 0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9
   value: 0.001428571428571428 ETH
 
-Details: execution reverted: custom error 0xec5c97a6
+Details: execution reverted: custom error 0x9525dee7
 Version: viem@2.41.2`;
 
       const result = decodeContractError(verboseError);
@@ -278,19 +216,19 @@ Version: viem@2.41.2`;
 
   describe('getContractErrorInfo', () => {
     it('returns error info for known selector', () => {
-      const info = getContractErrorInfo('0xec5c97a6');
+      const info = getContractErrorInfo('0x9525dee7');
 
       expect(info).toEqual({
-        name: 'Registration__ForwarderExpired',
+        name: 'SpokeRegistry__ForwarderExpired',
         message: 'Your registration window has expired.',
         action: 'Please start the registration process again from the beginning.',
       });
     });
 
     it('handles uppercase selector', () => {
-      const info = getContractErrorInfo('0xEC5C97A6');
+      const info = getContractErrorInfo('0x9525DEE7');
 
-      expect(info?.name).toBe('Registration__ForwarderExpired');
+      expect(info?.name).toBe('SpokeRegistry__ForwarderExpired');
     });
 
     it('returns undefined for unknown selector', () => {

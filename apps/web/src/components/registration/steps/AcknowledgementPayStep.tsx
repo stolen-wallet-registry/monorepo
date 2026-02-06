@@ -79,7 +79,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   const forwarder = isSelfRelay && relayer ? relayer : registeree;
 
   // Build transaction args for gas estimation (needs to be before early returns)
-  // WalletRegistryV2.acknowledge: (registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
+  // WalletRegistry.acknowledge: (registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
   const transactionArgs: WalletAcknowledgeArgs | undefined =
     storedSignature &&
     registeree &&
@@ -163,16 +163,16 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
       return;
     }
 
-    // V2 fields are required - guard against missing data instead of silent fallback
+    // Required fields guard - guard against missing data instead of silent fallback
     if (
       storedSignature.reportedChainId === undefined ||
       storedSignature.incidentTimestamp === undefined
     ) {
-      logger.contract.error('Cannot submit acknowledgement - missing V2 fields', {
+      logger.contract.error('Cannot submit acknowledgement - missing required fields', {
         hasReportedChainId: storedSignature.reportedChainId !== undefined,
         hasIncidentTimestamp: storedSignature.incidentTimestamp !== undefined,
       });
-      setLocalError('Signature is missing required V2 data. Please go back and sign again.');
+      setLocalError('Signature is missing required data. Please go back and sign again.');
       return;
     }
 

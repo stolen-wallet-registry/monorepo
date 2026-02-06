@@ -1,4 +1,4 @@
-export const ContractRegistryV2ABI = [
+export const ContractRegistryABI = [
   {
     type: 'constructor',
     inputs: [
@@ -44,7 +44,7 @@ export const ContractRegistryV2ABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct IContractRegistryV2.ContractBatch',
+        internalType: 'struct IContractRegistry.ContractBatch',
         components: [
           {
             name: 'operatorId',
@@ -85,7 +85,7 @@ export const ContractRegistryV2ABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct IContractRegistryV2.ContractEntry',
+        internalType: 'struct IContractRegistry.ContractEntry',
         components: [
           {
             name: 'registeredAt',
@@ -126,7 +126,7 @@ export const ContractRegistryV2ABI = [
       {
         name: '',
         type: 'tuple',
-        internalType: 'struct IContractRegistryV2.ContractEntry',
+        internalType: 'struct IContractRegistry.ContractEntry',
         components: [
           {
             name: 'registeredAt',
@@ -422,27 +422,27 @@ export const ContractRegistryV2ABI = [
   },
   {
     type: 'error',
-    name: 'ContractRegistryV2__AlreadyRegistered',
+    name: 'ContractRegistry__AlreadyRegistered',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'ContractRegistryV2__ArrayLengthMismatch',
+    name: 'ContractRegistry__ArrayLengthMismatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'ContractRegistryV2__EmptyBatch',
+    name: 'ContractRegistry__EmptyBatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'ContractRegistryV2__OnlyOperatorSubmitter',
+    name: 'ContractRegistry__OnlyOperatorSubmitter',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'ContractRegistryV2__ZeroAddress',
+    name: 'ContractRegistry__ZeroAddress',
     inputs: [],
   },
   {

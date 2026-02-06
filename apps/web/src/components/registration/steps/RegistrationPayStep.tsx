@@ -86,7 +86,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
 
   // Build transaction args for gas estimation (needs to be before early returns)
-  // WalletRegistryV2.register: (registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
+  // WalletRegistry.register: (registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
   // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
   const transactionArgs: WalletRegistrationArgs | undefined =
     storedSignature &&

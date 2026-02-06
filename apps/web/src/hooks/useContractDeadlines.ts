@@ -75,7 +75,7 @@ export function useContractDeadlines(
   });
 
   // Transform the raw result into a typed object
-  // V2 unified format: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
+  // Unified format: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
   let transformedData: DeadlineData | undefined;
   if (result.data) {
     const rawData = result.data as unknown as readonly [

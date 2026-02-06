@@ -4,14 +4,14 @@ pragma solidity ^0.8.24;
 import { Test } from "forge-std/Test.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
-import { TransactionRegistryV2 } from "../../src/v2/registries/TransactionRegistryV2.sol";
-import { ITransactionRegistryV2 } from "../../src/v2/interfaces/ITransactionRegistryV2.sol";
-import { ContractRegistryV2 } from "../../src/v2/registries/ContractRegistryV2.sol";
-import { IContractRegistryV2 } from "../../src/v2/interfaces/IContractRegistryV2.sol";
-import { WalletRegistryV2 } from "../../src/v2/registries/WalletRegistryV2.sol";
-import { IWalletRegistryV2 } from "../../src/v2/interfaces/IWalletRegistryV2.sol";
-import { FraudRegistryHubV2 } from "../../src/v2/FraudRegistryHubV2.sol";
-import { CAIP10Evm } from "../../src/v2/libraries/CAIP10Evm.sol";
+import { TransactionRegistry } from "../src/registries/TransactionRegistry.sol";
+import { ITransactionRegistry } from "../src/interfaces/ITransactionRegistry.sol";
+import { ContractRegistry } from "../src/registries/ContractRegistry.sol";
+import { IContractRegistry } from "../src/interfaces/IContractRegistry.sol";
+import { WalletRegistry } from "../src/registries/WalletRegistry.sol";
+import { IWalletRegistry } from "../src/interfaces/IWalletRegistry.sol";
+import { FraudRegistryHub } from "../src/FraudRegistryHub.sol";
+import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
 
 /// @title StringLookupAndForwarderCheckTest
 /// @notice Tests for:
@@ -21,10 +21,10 @@ contract StringLookupAndForwarderCheckTest is Test {
     using Strings for uint256;
     using Strings for address;
 
-    TransactionRegistryV2 public txRegistry;
-    ContractRegistryV2 public contractRegistry;
-    WalletRegistryV2 public walletRegistry;
-    FraudRegistryHubV2 public hub;
+    TransactionRegistry public txRegistry;
+    ContractRegistry public contractRegistry;
+    WalletRegistry public walletRegistry;
+    FraudRegistryHub public hub;
 
     address public owner;
     address public operatorSubmitter;
@@ -42,12 +42,12 @@ contract StringLookupAndForwarderCheckTest is Test {
         operatorSubmitter = makeAddr("operatorSubmitter");
 
         // Deploy registries
-        txRegistry = new TransactionRegistryV2(owner, address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
-        contractRegistry = new ContractRegistryV2(owner);
-        walletRegistry = new WalletRegistryV2(owner, address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        txRegistry = new TransactionRegistry(owner, address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        contractRegistry = new ContractRegistry(owner);
+        walletRegistry = new WalletRegistry(owner, address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
 
         // Deploy hub
-        hub = new FraudRegistryHubV2(owner, owner);
+        hub = new FraudRegistryHub(owner, owner);
         hub.setWalletRegistry(address(walletRegistry));
         hub.setTransactionRegistry(address(txRegistry));
         hub.setContractRegistry(address(contractRegistry));
@@ -139,7 +139,7 @@ contract StringLookupAndForwarderCheckTest is Test {
 
         // Query via string
         string memory ref = _buildTxRef(txHash, CHAIN_ID);
-        ITransactionRegistryV2.TransactionEntry memory entry = txRegistry.getTransactionEntry(ref);
+        ITransactionRegistry.TransactionEntry memory entry = txRegistry.getTransactionEntry(ref);
 
         assertGt(entry.registeredAt, 0, "registeredAt should be set");
         assertEq(entry.reportedChainId, chainId, "reportedChainId should match");
@@ -218,7 +218,7 @@ contract StringLookupAndForwarderCheckTest is Test {
 
         // Query via string
         string memory caip10 = _buildContractCaip10(maliciousContract, CHAIN_ID);
-        IContractRegistryV2.ContractEntry memory entry = contractRegistry.getContractEntry(caip10);
+        IContractRegistry.ContractEntry memory entry = contractRegistry.getContractEntry(caip10);
 
         assertGt(entry.registeredAt, 0, "registeredAt should be set");
         assertEq(entry.reportedChainId, chainId, "reportedChainId should match");
@@ -301,12 +301,12 @@ contract StringLookupAndForwarderCheckTest is Test {
     // ISSUE 3: FORWARDER ZERO-ADDRESS CHECK
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice WalletRegistryV2.acknowledge should revert when forwarder is address(0)
+    /// @notice WalletRegistry.acknowledge should revert when forwarder is address(0)
     /// @dev Zero-address check happens before signature verification, so dummy sig values suffice
     function test_walletAcknowledge_revertsOnZeroForwarder() public {
         address registeree = makeAddr("registeree");
 
-        vm.expectRevert(IWalletRegistryV2.WalletRegistryV2__ZeroAddress.selector);
+        vm.expectRevert(IWalletRegistry.WalletRegistry__ZeroAddress.selector);
         walletRegistry.acknowledge(
             registeree,
             address(0), // zero forwarder
@@ -319,14 +319,14 @@ contract StringLookupAndForwarderCheckTest is Test {
         );
     }
 
-    /// @notice TransactionRegistryV2.acknowledgeTransactions should revert when forwarder is address(0)
+    /// @notice TransactionRegistry.acknowledgeTransactions should revert when forwarder is address(0)
     /// @dev Zero-address check happens before signature verification, so dummy sig values suffice
     function test_txAcknowledge_revertsOnZeroForwarder() public {
         address reporter = makeAddr("reporter");
         bytes32 dataHash = keccak256("dummy");
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(CHAIN_ID);
 
-        vm.expectRevert(ITransactionRegistryV2.TransactionRegistryV2__ZeroAddress.selector);
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__ZeroAddress.selector);
         txRegistry.acknowledgeTransactions(
             reporter,
             address(0), // zero forwarder

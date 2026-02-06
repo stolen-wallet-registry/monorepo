@@ -2,21 +2,21 @@
 pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
-import { SpokeRegistryV2 } from "../../src/v2/SpokeRegistryV2.sol";
-import { ISpokeRegistryV2 } from "../../src/v2/interfaces/ISpokeRegistryV2.sol";
-import { CrossChainMessageV2 } from "../../src/v2/libraries/CrossChainMessageV2.sol";
-import { CAIP10 } from "../../src/v2/libraries/CAIP10.sol";
-import { CAIP10Evm } from "../../src/v2/libraries/CAIP10Evm.sol";
-import { HyperlaneAdapter } from "../../src/crosschain/adapters/HyperlaneAdapter.sol";
-import { FeeManager } from "../../src/FeeManager.sol";
-import { MockMailbox } from "../mocks/MockMailbox.sol";
-import { MockInterchainGasPaymaster } from "../mocks/MockInterchainGasPaymaster.sol";
-import { MockAggregator } from "../mocks/MockAggregator.sol";
+import { SpokeRegistry } from "../src/spoke/SpokeRegistry.sol";
+import { ISpokeRegistry } from "../src/interfaces/ISpokeRegistry.sol";
+import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
+import { CAIP10 } from "../src/libraries/CAIP10.sol";
+import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
+import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
+import { FeeManager } from "../src/FeeManager.sol";
+import { MockMailbox } from "./mocks/MockMailbox.sol";
+import { MockInterchainGasPaymaster } from "./mocks/MockInterchainGasPaymaster.sol";
+import { MockAggregator } from "./mocks/MockAggregator.sol";
 
-/// @title SpokeRegistryV2Test
-/// @notice Tests for SpokeRegistryV2 cross-chain wallet registration
-contract SpokeRegistryV2Test is Test {
-    SpokeRegistryV2 public spoke;
+/// @title SpokeRegistryTest
+/// @notice Tests for SpokeRegistry cross-chain wallet registration
+contract SpokeRegistryTest is Test {
+    SpokeRegistry public spoke;
     HyperlaneAdapter public bridgeAdapter;
     FeeManager public feeManager;
     MockMailbox public mailbox;
@@ -40,7 +40,7 @@ contract SpokeRegistryV2Test is Test {
     uint32 internal constant SPOKE_CHAIN_ID = 11_155_420; // OP Sepolia
     bytes32 internal constant HUB_INBOX = bytes32(uint256(uint160(0x1234567890123456789012345678901234567890)));
 
-    // EIP-712 constants (V2 - uses uint64 reportedChainId for storage efficiency)
+    // EIP-712 constants (uses uint64 reportedChainId for storage efficiency)
     bytes32 internal constant ACK_TYPEHASH = keccak256(
         "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
@@ -113,8 +113,8 @@ contract SpokeRegistryV2Test is Test {
         oracle = new MockAggregator(300_000_000_000); // $3000 ETH price
         feeManager = new FeeManager(owner, address(oracle));
 
-        // Deploy SpokeRegistryV2
-        spoke = new SpokeRegistryV2(
+        // Deploy SpokeRegistry
+        spoke = new SpokeRegistry(
             owner,
             address(bridgeAdapter),
             address(feeManager),
@@ -210,13 +210,13 @@ contract SpokeRegistryV2Test is Test {
 
     function _skipToRegistrationWindow() internal {
         // Get current acknowledgement and skip to start block
-        ISpokeRegistryV2.AcknowledgementData memory ack = spoke.getAcknowledgement(wallet);
+        ISpokeRegistry.AcknowledgementData memory ack = spoke.getAcknowledgement(wallet);
         vm.roll(ack.startBlock);
     }
 
     function _skipToTxBatchRegistrationWindow(address _reporter) internal {
         // Get current tx batch acknowledgement and skip to start block
-        ISpokeRegistryV2.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(_reporter);
+        ISpokeRegistry.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(_reporter);
         vm.roll(ack.startBlock);
     }
 
@@ -435,7 +435,7 @@ contract SpokeRegistryV2Test is Test {
         assertEq(spoke.nonces(wallet), 1);
 
         // Verify incident data stored (as bytes32 hash)
-        ISpokeRegistryV2.AcknowledgementData memory ack = spoke.getAcknowledgement(wallet);
+        ISpokeRegistry.AcknowledgementData memory ack = spoke.getAcknowledgement(wallet);
         assertEq(ack.trustedForwarder, forwarder);
         assertEq(ack.reportedChainId, reportedChainIdHash);
         assertEq(ack.incidentTimestamp, incidentTimestamp);
@@ -473,7 +473,7 @@ contract SpokeRegistryV2Test is Test {
             _signAck(walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
 
         vm.prank(forwarder);
-        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__SignatureExpired.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__SignatureExpired.selector);
         spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
@@ -488,7 +488,7 @@ contract SpokeRegistryV2Test is Test {
             _signAck(walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, wrongNonce, deadline);
 
         vm.prank(forwarder);
-        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__InvalidNonce.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidNonce.selector);
         spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, wrongNonce, v, r, s);
     }
 
@@ -499,7 +499,7 @@ contract SpokeRegistryV2Test is Test {
         uint256 deadline = block.timestamp + 1 hours;
 
         vm.prank(forwarder);
-        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__InvalidOwner.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidOwner.selector);
         spoke.acknowledgeLocal(address(0), reportedChainId, incidentTimestamp, deadline, 0, 27, bytes32(0), bytes32(0));
     }
 
@@ -552,7 +552,7 @@ contract SpokeRegistryV2Test is Test {
         uint256 fee = spoke.quoteRegistration(wallet);
 
         vm.prank(forwarder);
-        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__GracePeriodNotStarted.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__GracePeriodNotStarted.selector);
         spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
@@ -564,7 +564,7 @@ contract SpokeRegistryV2Test is Test {
         _doAck(forwarder, reportedChainId, incidentTimestamp);
 
         // Skip past expiry
-        ISpokeRegistryV2.AcknowledgementData memory ack = spoke.getAcknowledgement(wallet);
+        ISpokeRegistry.AcknowledgementData memory ack = spoke.getAcknowledgement(wallet);
         vm.roll(ack.expiryBlock);
 
         uint256 deadline = block.timestamp + 1 hours;
@@ -576,7 +576,7 @@ contract SpokeRegistryV2Test is Test {
         uint256 fee = spoke.quoteRegistration(wallet);
 
         vm.prank(forwarder);
-        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__ForwarderExpired.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__ForwarderExpired.selector);
         spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
@@ -600,7 +600,7 @@ contract SpokeRegistryV2Test is Test {
         uint256 fee = spoke.quoteRegistration(wallet);
 
         vm.prank(wrongForwarder);
-        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__InvalidForwarder.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidForwarder.selector);
         spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
@@ -619,14 +619,14 @@ contract SpokeRegistryV2Test is Test {
             _signReg(walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
 
         vm.prank(forwarder);
-        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__InsufficientFee.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InsufficientFee.selector);
         spoke.registerLocal{ value: 0 }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Registration fails when hub not configured
     function test_Register_FailsWhenHubNotConfigured() public {
         // Deploy spoke with no hub configured
-        SpokeRegistryV2 unconfiguredSpoke = new SpokeRegistryV2(
+        SpokeRegistry unconfiguredSpoke = new SpokeRegistry(
             owner,
             address(bridgeAdapter),
             address(feeManager),
@@ -651,7 +651,7 @@ contract SpokeRegistryV2Test is Test {
         unconfiguredSpoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
         // Skip to registration window
-        ISpokeRegistryV2.AcknowledgementData memory ack = unconfiguredSpoke.getAcknowledgement(wallet);
+        ISpokeRegistry.AcknowledgementData memory ack = unconfiguredSpoke.getAcknowledgement(wallet);
         vm.roll(ack.startBlock);
 
         // Try to register
@@ -661,7 +661,7 @@ contract SpokeRegistryV2Test is Test {
         );
 
         vm.prank(forwarder);
-        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__HubNotConfigured.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__HubNotConfigured.selector);
         unconfiguredSpoke.registerLocal{ value: 1 ether }(
             wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s
         );
@@ -669,7 +669,7 @@ contract SpokeRegistryV2Test is Test {
 
     // Helper for signing with different spoke contract
     function _signAckForSpoke(
-        SpokeRegistryV2 _spoke,
+        SpokeRegistry _spoke,
         uint256 privateKey,
         address _wallet,
         address _forwarder,
@@ -704,7 +704,7 @@ contract SpokeRegistryV2Test is Test {
     }
 
     function _signRegForSpoke(
-        SpokeRegistryV2 _spoke,
+        SpokeRegistry _spoke,
         uint256 privateKey,
         address _wallet,
         address _forwarder,
@@ -744,7 +744,7 @@ contract SpokeRegistryV2Test is Test {
 
     /// @notice Fee quote includes bridge and registration fees
     function test_QuoteFeeBreakdown() public view {
-        ISpokeRegistryV2.FeeBreakdown memory fees = spoke.quoteFeeBreakdown(wallet);
+        ISpokeRegistry.FeeBreakdown memory fees = spoke.quoteFeeBreakdown(wallet);
 
         assertGt(fees.bridgeFee, 0);
         assertGt(fees.registrationFee, 0);
@@ -810,7 +810,7 @@ contract SpokeRegistryV2Test is Test {
         assertEq(spoke.nonces(reporter), 1);
 
         // Verify data stored correctly
-        ISpokeRegistryV2.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(reporter);
+        ISpokeRegistry.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(reporter);
         assertEq(ack.trustedForwarder, forwarder);
         assertEq(ack.dataHash, dataHash);
         assertEq(ack.reportedChainId, reportedChainId);
@@ -856,7 +856,7 @@ contract SpokeRegistryV2Test is Test {
         );
 
         vm.prank(forwarder);
-        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__SignatureExpired.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__SignatureExpired.selector);
         spoke.acknowledgeTransactionBatch(
             dataHash, reportedChainId, transactionCount, deadline, nonce, reporter, v, r, s
         );
@@ -876,7 +876,7 @@ contract SpokeRegistryV2Test is Test {
         );
 
         vm.prank(forwarder);
-        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__InvalidNonce.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidNonce.selector);
         spoke.acknowledgeTransactionBatch(
             dataHash, reportedChainId, transactionCount, deadline, wrongNonce, reporter, v, r, s
         );
@@ -896,7 +896,7 @@ contract SpokeRegistryV2Test is Test {
         );
 
         vm.prank(forwarder);
-        vm.expectRevert(ISpokeRegistryV2.SpokeRegistryV2__EmptyBatch.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__EmptyBatch.selector);
         spoke.acknowledgeTransactionBatch(
             dataHash, reportedChainId, transactionCount, deadline, nonce, reporter, v, r, s
         );
@@ -950,7 +950,7 @@ contract SpokeRegistryV2Test is Test {
         // After acknowledgement
         assertTrue(spoke.isPendingTransactionBatch(reporter));
 
-        ISpokeRegistryV2.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(reporter);
+        ISpokeRegistry.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(reporter);
         assertEq(ack.trustedForwarder, forwarder);
         assertEq(ack.dataHash, dataHash);
         assertEq(ack.reportedChainId, reportedChainId);

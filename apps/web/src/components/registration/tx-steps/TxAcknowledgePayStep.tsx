@@ -65,7 +65,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
 
   const isSelfRelay = registrationType === 'selfRelay';
 
-  // V2: Compute dataHash from sorted arrays for signing/contract calls
+  // Compute dataHash from sorted arrays for signing/contract calls
   const dataHash: Hash | undefined =
     txHashesForContract.length > 0 &&
     chainIdsForContract.length > 0 &&

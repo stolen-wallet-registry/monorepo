@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title ISpokeRegistryV2
+/// @title ISpokeRegistry
 /// @author Stolen Wallet Registry Team
-/// @notice Interface for spoke chain wallet registration (V2)
-/// @dev V2 includes incidentTimestamp and reportedChainId in user signatures.
-///      Works with FraudRegistryHubV2 on hub chain.
-interface ISpokeRegistryV2 {
+/// @notice Interface for spoke chain wallet registration
+/// @dev Includes incidentTimestamp and reportedChainId in user signatures.
+///      Works with FraudRegistryHub on hub chain.
+interface ISpokeRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
     // STRUCTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -113,23 +113,23 @@ interface ISpokeRegistryV2 {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    error SpokeRegistryV2__ZeroAddress();
-    error SpokeRegistryV2__InvalidTimingConfig();
-    error SpokeRegistryV2__InvalidOwner();
-    error SpokeRegistryV2__SignatureExpired();
-    error SpokeRegistryV2__InvalidNonce();
-    error SpokeRegistryV2__InvalidSigner();
-    error SpokeRegistryV2__InvalidForwarder();
-    error SpokeRegistryV2__GracePeriodNotStarted();
-    error SpokeRegistryV2__ForwarderExpired();
-    error SpokeRegistryV2__HubNotConfigured();
-    error SpokeRegistryV2__InsufficientFee();
-    error SpokeRegistryV2__RefundFailed();
-    error SpokeRegistryV2__WithdrawalFailed();
-    error SpokeRegistryV2__InvalidHubConfig();
-    error SpokeRegistryV2__EmptyBatch();
-    error SpokeRegistryV2__ArrayLengthMismatch();
-    error SpokeRegistryV2__InvalidDataHash();
+    error SpokeRegistry__ZeroAddress();
+    error SpokeRegistry__InvalidTimingConfig();
+    error SpokeRegistry__InvalidOwner();
+    error SpokeRegistry__SignatureExpired();
+    error SpokeRegistry__InvalidNonce();
+    error SpokeRegistry__InvalidSigner();
+    error SpokeRegistry__InvalidForwarder();
+    error SpokeRegistry__GracePeriodNotStarted();
+    error SpokeRegistry__ForwarderExpired();
+    error SpokeRegistry__HubNotConfigured();
+    error SpokeRegistry__InsufficientFee();
+    error SpokeRegistry__RefundFailed();
+    error SpokeRegistry__WithdrawalFailed();
+    error SpokeRegistry__InvalidHubConfig();
+    error SpokeRegistry__EmptyBatch();
+    error SpokeRegistry__ArrayLengthMismatch();
+    error SpokeRegistry__InvalidDataHash();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS

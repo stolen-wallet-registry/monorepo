@@ -4,9 +4,9 @@
  * This is Phase 1 of the two-phase registration flow for transaction batches.
  * After acknowledgement, a grace period begins before registration can be completed.
  *
- * V2 Architecture:
- * - Hub chains: TransactionRegistryV2.acknowledgeTransactions
- * - Spoke chains: SpokeRegistryV2.acknowledgeTransactionBatch
+ * Architecture:
+ * - Hub chains: TransactionRegistry.acknowledgeTransactions
+ * - Spoke chains: SpokeRegistry.acknowledgeTransactionBatch
  *
  * Both use v, r, s as separate params, but with different argument orders due to
  * cross-chain requirements (spoke needs reportedChainId, transactionCount, nonce).
@@ -14,9 +14,9 @@
 
 import { useMemo } from 'react';
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
-import { transactionRegistryV2Abi, spokeRegistryV2Abi } from '@/lib/contracts/abis';
-import { getTransactionRegistryV2Address } from '@/lib/contracts/addresses';
-import { getSpokeV2Address } from '@/lib/contracts/crosschain-addresses';
+import { transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
+import { getTransactionRegistryAddress } from '@/lib/contracts/addresses';
+import { getSpokeContractAddress } from '@/lib/contracts/crosschain-addresses';
 import { isHubChain, isSpokeChain } from '@swr/chains';
 import type { ParsedSignature } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
@@ -97,13 +97,13 @@ export function useTransactionAcknowledgement(): UseTxAcknowledgementResult {
   const contractAddress = useMemo(() => {
     try {
       if (isSpoke) {
-        const address = getSpokeV2Address('spokeRegistryV2', chainId);
+        const address = getSpokeContractAddress('spokeRegistry', chainId);
         if (!address) {
-          throw new Error(`SpokeRegistryV2 not configured for chain ${chainId}`);
+          throw new Error(`SpokeRegistry not configured for chain ${chainId}`);
         }
         return address;
       } else if (isHub) {
-        return getTransactionRegistryV2Address(chainId);
+        return getTransactionRegistryAddress(chainId);
       }
       throw new Error(`Chain ${chainId} is neither hub nor spoke`);
     } catch (error) {
@@ -165,7 +165,7 @@ export function useTransactionAcknowledgement(): UseTxAcknowledgementResult {
 
         txHash = await writeContractAsync({
           address: contractAddress,
-          abi: transactionRegistryV2Abi,
+          abi: transactionRegistryAbi,
           functionName: 'acknowledgeTransactions',
           args: [
             reporter,
@@ -185,7 +185,7 @@ export function useTransactionAcknowledgement(): UseTxAcknowledgementResult {
 
         txHash = await writeContractAsync({
           address: contractAddress,
-          abi: spokeRegistryV2Abi,
+          abi: spokeRegistryAbi,
           functionName: 'acknowledgeTransactionBatch',
           args: [
             dataHash,

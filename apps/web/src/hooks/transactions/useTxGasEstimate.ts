@@ -6,17 +6,17 @@
  * - Current gas price
  * - Total gas cost in ETH and USD
  *
- * V2 Architecture:
- * - Hub chains: TransactionRegistryV2 (acknowledgeTransactions, registerTransactions)
- * - Spoke chains: SpokeRegistryV2 (acknowledgeTransactionBatch, registerTransactionBatch)
+ * Architecture:
+ * - Hub chains: TransactionRegistry (acknowledgeTransactions, registerTransactions)
+ * - Spoke chains: SpokeRegistry (acknowledgeTransactionBatch, registerTransactionBatch)
  */
 
 import { useMemo, useEffect, useRef } from 'react';
 import { useEstimateGas, useGasPrice, useChainId } from 'wagmi';
 import { formatGwei, encodeFunctionData } from 'viem';
-import { transactionRegistryV2Abi, spokeRegistryV2Abi } from '@/lib/contracts/abis';
-import { getTransactionRegistryV2Address } from '@/lib/contracts/addresses';
-import { getSpokeV2Address } from '@/lib/contracts/crosschain-addresses';
+import { transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
+import { getTransactionRegistryAddress } from '@/lib/contracts/addresses';
+import { getSpokeContractAddress } from '@/lib/contracts/crosschain-addresses';
 import { isHubChain, isSpokeChain } from '@swr/chains';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { logger } from '@/lib/logger';
@@ -119,9 +119,9 @@ export function useTxGasEstimate({
   let contractAddress: Address | undefined;
   try {
     if (isSpoke) {
-      contractAddress = getSpokeV2Address('spokeRegistryV2', chainId);
+      contractAddress = getSpokeContractAddress('spokeRegistry', chainId);
     } else if (isHub) {
-      contractAddress = getTransactionRegistryV2Address(chainId);
+      contractAddress = getTransactionRegistryAddress(chainId);
     }
   } catch (err) {
     logger.contract.error('useTxGasEstimate: Failed to resolve contract address', {
@@ -195,7 +195,7 @@ export function useTxGasEstimate({
       ) {
         // Hub: acknowledgeTransactions(reporter, forwarder, deadline, dataHash, reportedChainId, transactionCount, v, r, s)
         return encodeFunctionData({
-          abi: transactionRegistryV2Abi,
+          abi: transactionRegistryAbi,
           functionName: 'acknowledgeTransactions',
           args: [
             reporter,
@@ -222,7 +222,7 @@ export function useTxGasEstimate({
       ) {
         // Spoke: acknowledgeTransactionBatch(dataHash, reportedChainId, transactionCount, deadline, nonce, reporter, v, r, s)
         return encodeFunctionData({
-          abi: spokeRegistryV2Abi,
+          abi: spokeRegistryAbi,
           functionName: 'acknowledgeTransactionBatch',
           args: [
             dataHash,
@@ -241,7 +241,7 @@ export function useTxGasEstimate({
       if (hasHubRegParams && reporter && deadline !== undefined && transactionHashes && chainIds) {
         // Hub: registerTransactions(reporter, deadline, transactionHashes, chainIds, v, r, s)
         return encodeFunctionData({
-          abi: transactionRegistryV2Abi,
+          abi: transactionRegistryAbi,
           functionName: 'registerTransactions',
           args: [
             reporter,
@@ -266,7 +266,7 @@ export function useTxGasEstimate({
       ) {
         // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter, transactionHashes, chainIds, v, r, s)
         return encodeFunctionData({
-          abi: spokeRegistryV2Abi,
+          abi: spokeRegistryAbi,
           functionName: 'registerTransactionBatch',
           args: [
             reportedChainId,

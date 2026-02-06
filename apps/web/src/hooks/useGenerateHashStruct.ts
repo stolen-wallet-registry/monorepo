@@ -4,9 +4,9 @@
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  * The hash struct returned can be used for verification but is typically not needed client-side.
  *
- * Chain-aware: Works with both hub registries (WalletRegistryV2/TransactionRegistryV2) and SpokeRegistryV2 (spoke).
+ * Chain-aware: Works with both hub registries (WalletRegistry/TransactionRegistry) and SpokeRegistry (spoke).
  *
- * V2 signature: generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+ * Contract signature: generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
  */
 
 import { useMemo } from 'react';
@@ -35,9 +35,9 @@ export interface UseGenerateHashStructParams {
   forwarderAddress: Address | undefined;
   /** The signature step (1 = Acknowledgement, 2 = Registration) */
   step: SignatureStep;
-  /** V2: Raw EVM chain ID where incident occurred (defaults to current chain) */
+  /** Raw EVM chain ID where incident occurred (defaults to current chain) */
   reportedChainId?: bigint;
-  /** V2: Unix timestamp when incident occurred (defaults to now) */
+  /** Unix timestamp when incident occurred (defaults to now) */
   incidentTimestamp?: bigint;
 }
 
@@ -55,7 +55,7 @@ export function useGenerateHashStruct(
 ): UseGenerateHashStructResult {
   const chainId = useChainId();
 
-  // Stabilize V2 fields - useMemo prevents Date.now() from causing re-renders
+  // Stabilize fields - useMemo prevents Date.now() from causing re-renders
   // The timestamp is computed once per mount (when incidentTimestamp is not provided)
   // This ensures the same timestamp is used for the contract call and won't change between renders
   const effectiveReportedChainId = useMemo(
@@ -82,7 +82,7 @@ export function useGenerateHashStruct(
     abi,
     chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'generateHashStruct',
-    // V2 signature: (uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+    // Contract signature: (uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
     args: forwarderAddress
       ? [effectiveReportedChainId, effectiveIncidentTimestamp, forwarderAddress, step]
       : undefined,

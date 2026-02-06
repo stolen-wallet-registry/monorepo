@@ -5,23 +5,23 @@ import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-import { IWalletRegistryV2 } from "../interfaces/IWalletRegistryV2.sol";
-import { IFeeManager } from "../../interfaces/IFeeManager.sol";
-import { TimingConfig } from "../../libraries/TimingConfig.sol";
+import { IWalletRegistry } from "../interfaces/IWalletRegistry.sol";
+import { IFeeManager } from "../interfaces/IFeeManager.sol";
+import { TimingConfig } from "../libraries/TimingConfig.sol";
 import { CAIP10 } from "../libraries/CAIP10.sol";
 import { CAIP10Evm } from "../libraries/CAIP10Evm.sol";
-import { EIP712ConstantsV2 } from "../libraries/EIP712ConstantsV2.sol";
+import { EIP712Constants } from "../libraries/EIP712Constants.sol";
 
-/// @title WalletRegistryV2
+/// @title WalletRegistry
 /// @author Stolen Wallet Registry Team
 /// @notice Stolen wallet registry with two-phase registration (anti-phishing)
-/// @dev Extracted from FraudRegistryV2 for contract size optimization.
+/// @dev Extracted from FraudRegistryHub for contract size optimization.
 ///      Key features:
 ///      - CAIP-10 string interface with typed EVM overloads
 ///      - CAIP-363 wildcard keys for EVM wallets
 ///      - Two-phase registration (acknowledge → grace period → register)
 ///      - Single-phase for operator/cross-chain submissions
-contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
+contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLE STATE
     // ═══════════════════════════════════════════════════════════════════════════
@@ -76,11 +76,11 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
         EIP712("StolenWalletRegistry", "4")
         Ownable(_owner)
     {
-        if (_owner == address(0)) revert WalletRegistryV2__ZeroAddress();
+        if (_owner == address(0)) revert WalletRegistry__ZeroAddress();
 
         // Validate timing: deadline must allow for worst-case grace period
         if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks) {
-            revert WalletRegistryV2__DeadlineInPast();
+            revert WalletRegistry__DeadlineInPast();
         }
 
         feeManager = _feeManager;
@@ -94,14 +94,14 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
 
     modifier onlyHub() {
         if (msg.sender != hub || hub == address(0)) {
-            revert WalletRegistryV2__OnlyHub();
+            revert WalletRegistry__OnlyHub();
         }
         _;
     }
 
     modifier onlyOperatorSubmitter() {
         if (msg.sender != operatorSubmitter || operatorSubmitter == address(0)) {
-            revert WalletRegistryV2__OnlyOperatorSubmitter();
+            revert WalletRegistry__OnlyOperatorSubmitter();
         }
         _;
     }
@@ -115,14 +115,14 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
 
         uint256 requiredFee = IFeeManager(feeManager).currentFeeWei();
         if (msg.value < requiredFee) {
-            revert WalletRegistryV2__InsufficientFee();
+            revert WalletRegistry__InsufficientFee();
         }
 
         // Forward to hub (which collects all fees)
         if (hub != address(0)) {
             (bool success,) = hub.call{ value: requiredFee }("");
             if (!success) {
-                revert WalletRegistryV2__InsufficientFee();
+                revert WalletRegistry__InsufficientFee();
             }
         }
 
@@ -131,7 +131,7 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
         if (excess > 0) {
             (bool refundSuccess,) = msg.sender.call{ value: excess }("");
             if (!refundSuccess) {
-                revert WalletRegistryV2__InsufficientFee();
+                revert WalletRegistry__InsufficientFee();
             }
         }
     }
@@ -151,8 +151,8 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
-                    EIP712ConstantsV2.WALLET_ACK_TYPEHASH,
-                    EIP712ConstantsV2.ACK_STATEMENT_HASH,
+                    EIP712Constants.WALLET_ACK_TYPEHASH,
+                    EIP712Constants.ACK_STATEMENT_HASH,
                     registeree,
                     forwarder,
                     reportedChainId,
@@ -165,7 +165,7 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
 
         address signer = ECDSA.recover(digest, v, r, s);
         if (signer == address(0) || signer != registeree) {
-            revert WalletRegistryV2__InvalidSignature();
+            revert WalletRegistry__InvalidSignature();
         }
     }
 
@@ -184,8 +184,8 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
-                    EIP712ConstantsV2.WALLET_REG_TYPEHASH,
-                    EIP712ConstantsV2.REG_STATEMENT_HASH,
+                    EIP712Constants.WALLET_REG_TYPEHASH,
+                    EIP712Constants.REG_STATEMENT_HASH,
                     registeree,
                     forwarder,
                     reportedChainId,
@@ -198,7 +198,7 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
 
         address signer = ECDSA.recover(digest, v, r, s);
         if (signer == address(0) || signer != registeree) {
-            revert WalletRegistryV2__InvalidSignature();
+            revert WalletRegistry__InvalidSignature();
         }
     }
 
@@ -206,14 +206,14 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
     // VIEW FUNCTIONS - CAIP-10 String Interface
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function isWalletRegistered(string calldata caip10) external view returns (bool) {
         bytes32 key = CAIP10.toWalletStorageKey(caip10);
         WalletEntry memory entry = _wallets[key];
         return entry.registeredAt > 0;
     }
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function getWalletEntry(string calldata caip10) external view returns (WalletEntry memory) {
         bytes32 key = CAIP10.toWalletStorageKey(caip10);
         return _wallets[key];
@@ -223,31 +223,31 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
     // VIEW FUNCTIONS - Typed EVM Interface (Gas Efficient)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function isWalletRegistered(address wallet) external view returns (bool) {
         bytes32 key = CAIP10Evm.evmWalletKey(wallet);
         WalletEntry memory entry = _wallets[key];
         return entry.registeredAt > 0;
     }
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function getWalletEntry(address wallet) external view returns (WalletEntry memory) {
         bytes32 key = CAIP10Evm.evmWalletKey(wallet);
         return _wallets[key];
     }
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function isWalletPending(address wallet) external view returns (bool) {
         AcknowledgementData memory ack = _pendingAcknowledgements[wallet];
         return ack.forwarder != address(0) && block.number < ack.deadline;
     }
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function getAcknowledgementData(address wallet) external view returns (AcknowledgementData memory) {
         return _pendingAcknowledgements[wallet];
     }
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function getDeadlines(address registeree)
         external
         view
@@ -276,7 +276,7 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
         }
     }
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
         external
         view
@@ -287,8 +287,8 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
             // Acknowledgement
             hashStruct = keccak256(
                 abi.encode(
-                    EIP712ConstantsV2.WALLET_ACK_TYPEHASH,
-                    EIP712ConstantsV2.ACK_STATEMENT_HASH,
+                    EIP712Constants.WALLET_ACK_TYPEHASH,
+                    EIP712Constants.ACK_STATEMENT_HASH,
                     msg.sender, // wallet
                     forwarder,
                     reportedChainId,
@@ -301,8 +301,8 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
             // Registration
             hashStruct = keccak256(
                 abi.encode(
-                    EIP712ConstantsV2.WALLET_REG_TYPEHASH,
-                    EIP712ConstantsV2.REG_STATEMENT_HASH,
+                    EIP712Constants.WALLET_REG_TYPEHASH,
+                    EIP712Constants.REG_STATEMENT_HASH,
                     msg.sender,
                     forwarder,
                     reportedChainId,
@@ -314,21 +314,21 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
         }
     }
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function getBatch(uint256 batchId) external view returns (Batch memory) {
         return _batches[batchId];
     }
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function batchCount() external view returns (uint256) {
         return _nextBatchId - 1;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // FEE QUOTING (Unified interface matching SpokeRegistryV2)
+    // FEE QUOTING (Unified interface matching SpokeRegistry)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function quoteRegistration(
         address /* owner */
     )
@@ -340,7 +340,7 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
         return IFeeManager(feeManager).currentFeeWei();
     }
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function quoteFeeBreakdown(
         address /* owner */
     )
@@ -356,7 +356,7 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
     // TWO-PHASE REGISTRATION - Phase 1: Acknowledgement
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     /// @dev Two distinct deadlines are in play:
     ///   1. `deadline` param: TIMESTAMP — EIP-712 signature expiry, validated against block.timestamp
     ///   2. `AcknowledgementData.deadline`: BLOCK NUMBER — grace period window, from TimingConfig.getDeadlineBlock()
@@ -371,18 +371,18 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
         bytes32 r,
         bytes32 s
     ) external payable {
-        if (registeree == address(0)) revert WalletRegistryV2__ZeroAddress();
-        if (forwarder == address(0)) revert WalletRegistryV2__ZeroAddress();
-        if (deadline <= block.timestamp) revert WalletRegistryV2__DeadlineExpired();
+        if (registeree == address(0)) revert WalletRegistry__ZeroAddress();
+        if (forwarder == address(0)) revert WalletRegistry__ZeroAddress();
+        if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
 
         // Check not already registered
         bytes32 key = CAIP10Evm.evmWalletKey(registeree);
-        if (_wallets[key].registeredAt > 0) revert WalletRegistryV2__AlreadyRegistered();
+        if (_wallets[key].registeredAt > 0) revert WalletRegistry__AlreadyRegistered();
 
         // Check not already acknowledged
         AcknowledgementData memory existing = _pendingAcknowledgements[registeree];
         if (existing.forwarder != address(0) && block.number < existing.deadline) {
-            revert WalletRegistryV2__AlreadyAcknowledged();
+            revert WalletRegistry__AlreadyAcknowledged();
         }
 
         uint256 nonce = nonces[registeree];
@@ -417,7 +417,7 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
     // TWO-PHASE REGISTRATION - Phase 2: Registration
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     /// @dev `deadline` param is a TIMESTAMP (EIP-712 signature expiry, compared to block.timestamp).
     ///      `ack.deadline` is a BLOCK NUMBER (grace period window, compared to block.number).
     function register(
@@ -429,19 +429,19 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
         bytes32 r,
         bytes32 s
     ) external payable {
-        if (registeree == address(0)) revert WalletRegistryV2__ZeroAddress();
-        if (deadline <= block.timestamp) revert WalletRegistryV2__DeadlineExpired();
+        if (registeree == address(0)) revert WalletRegistry__ZeroAddress();
+        if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
 
         // Load and validate acknowledgement (ack.deadline and ack.gracePeriodStart are BLOCK NUMBERS)
         AcknowledgementData memory ack = _pendingAcknowledgements[registeree];
-        if (ack.forwarder != msg.sender) revert WalletRegistryV2__NotAuthorizedForwarder();
-        if (block.number < ack.gracePeriodStart) revert WalletRegistryV2__GracePeriodNotStarted();
-        if (block.number >= ack.deadline) revert WalletRegistryV2__DeadlineExpired();
+        if (ack.forwarder != msg.sender) revert WalletRegistry__NotAuthorizedForwarder();
+        if (block.number < ack.gracePeriodStart) revert WalletRegistry__GracePeriodNotStarted();
+        if (block.number >= ack.deadline) revert WalletRegistry__DeadlineExpired();
 
         // Validate reportedChainId and incidentTimestamp match acknowledge phase
         bytes32 reportedChainIdHash = CAIP10Evm.caip2Hash(reportedChainId);
         if (ack.reportedChainId != reportedChainIdHash || ack.incidentTimestamp != incidentTimestamp) {
-            revert WalletRegistryV2__InvalidSignature();
+            revert WalletRegistry__InvalidSignature();
         }
 
         uint256 nonce = nonces[registeree];
@@ -480,7 +480,7 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
     // CROSS-CHAIN REGISTRATION (Hub Only)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function registerFromHub(
         bytes32 namespaceHash,
         bytes32 chainRefHash,
@@ -527,7 +527,7 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
     // OPERATOR BATCH REGISTRATION
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function registerWalletsFromOperator(
         bytes32 operatorId,
         bytes32[] calldata identifiers,
@@ -536,9 +536,9 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
     ) external onlyOperatorSubmitter returns (uint256 batchId) {
         uint256 length = identifiers.length;
 
-        if (length == 0) revert WalletRegistryV2__EmptyBatch();
+        if (length == 0) revert WalletRegistry__EmptyBatch();
         if (length != reportedChainIds.length || length != incidentTimestamps.length) {
-            revert WalletRegistryV2__ArrayLengthMismatch();
+            revert WalletRegistry__ArrayLengthMismatch();
         }
 
         // Create batch (walletCount updated after loop with actual count)
@@ -582,17 +582,17 @@ contract WalletRegistryV2 is IWalletRegistryV2, EIP712, Ownable2Step {
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function setHub(address newHub) external onlyOwner {
-        if (newHub == address(0)) revert WalletRegistryV2__ZeroAddress();
+        if (newHub == address(0)) revert WalletRegistry__ZeroAddress();
         address oldHub = hub;
         hub = newHub;
         emit HubUpdated(oldHub, newHub);
     }
 
-    /// @inheritdoc IWalletRegistryV2
+    /// @inheritdoc IWalletRegistry
     function setOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
-        if (newOperatorSubmitter == address(0)) revert WalletRegistryV2__ZeroAddress();
+        if (newOperatorSubmitter == address(0)) revert WalletRegistry__ZeroAddress();
         address oldOperatorSubmitter = operatorSubmitter;
         operatorSubmitter = newOperatorSubmitter;
         emit OperatorSubmitterUpdated(oldOperatorSubmitter, newOperatorSubmitter);

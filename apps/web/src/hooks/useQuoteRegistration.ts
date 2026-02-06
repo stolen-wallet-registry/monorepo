@@ -2,8 +2,8 @@
  * Hook to get the registration fee from the registry contract.
  *
  * Unified interface: Both hub and spoke expose quoteRegistration(address).
- * - Hub (WalletRegistryV2): quoteRegistration(address) - reads from FeeManager, ignores address
- * - Spoke (SpokeRegistryV2): quoteRegistration(address owner) - includes bridge fee
+ * - Hub (WalletRegistry): quoteRegistration(address) - reads from FeeManager, ignores address
+ * - Spoke (SpokeRegistry): quoteRegistration(address owner) - includes bridge fee
  */
 
 import { useReadContract, useChainId } from 'wagmi';

@@ -1,4 +1,4 @@
-export const CrossChainInboxV2ABI = [
+export const CrossChainInboxABI = [
   {
     type: 'constructor',
     inputs: [
@@ -316,47 +316,47 @@ export const CrossChainInboxV2ABI = [
   },
   {
     type: 'error',
-    name: 'CrossChainInboxV2__OnlyMailbox',
+    name: 'CrossChainInbox__OnlyMailbox',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'CrossChainInboxV2__SourceChainMismatch',
+    name: 'CrossChainInbox__SourceChainMismatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'CrossChainInboxV2__UnknownMessageType',
+    name: 'CrossChainInbox__UnknownMessageType',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'CrossChainInboxV2__UntrustedSource',
+    name: 'CrossChainInbox__UntrustedSource',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'CrossChainInboxV2__ZeroAddress',
+    name: 'CrossChainInbox__ZeroAddress',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'CrossChainMessageV2__BatchSizeMismatch',
+    name: 'CrossChainMessage__BatchSizeMismatch',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'CrossChainMessageV2__InvalidMessageLength',
+    name: 'CrossChainMessage__InvalidMessageLength',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'CrossChainMessageV2__InvalidMessageType',
+    name: 'CrossChainMessage__InvalidMessageType',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'CrossChainMessageV2__UnsupportedVersion',
+    name: 'CrossChainMessage__UnsupportedVersion',
     inputs: [],
   },
   {

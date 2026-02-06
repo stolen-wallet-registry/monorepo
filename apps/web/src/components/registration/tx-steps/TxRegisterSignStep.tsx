@@ -85,7 +85,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
 
-  // V2: Compute dataHash from sorted arrays for signing/contract calls
+  // Compute dataHash from sorted arrays for signing/contract calls
   const dataHash: Hash | undefined =
     txHashesForContract.length > 0 && chainIdsForContract.length > 0
       ? computeTransactionDataHash(txHashesForContract, chainIdsForContract)

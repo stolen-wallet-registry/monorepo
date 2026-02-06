@@ -6,19 +6,19 @@
 //   pnpm --filter @swr/contracts export-abi
 
 // ═══════════════════════════════════════════════════════════════════════════
-// V2 HUB + SEPARATE REGISTRIES ABIs
+// HUB + SEPARATE REGISTRIES ABIs
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Hub + Separate Registries (core V2 architecture)
-export { FraudRegistryHubV2ABI as fraudRegistryHubV2Abi } from '@swr/abis';
-export { WalletRegistryV2ABI as walletRegistryV2Abi } from '@swr/abis';
-export { TransactionRegistryV2ABI as transactionRegistryV2Abi } from '@swr/abis';
-export { ContractRegistryV2ABI as contractRegistryV2Abi } from '@swr/abis';
-export { OperatorSubmitterV2ABI as operatorSubmitterV2Abi } from '@swr/abis';
-export { CrossChainInboxV2ABI as crossChainInboxV2Abi } from '@swr/abis';
+// Hub + Separate Registries (core architecture)
+export { FraudRegistryHubABI as fraudRegistryHubAbi } from '@swr/abis';
+export { WalletRegistryABI as walletRegistryAbi } from '@swr/abis';
+export { TransactionRegistryABI as transactionRegistryAbi } from '@swr/abis';
+export { ContractRegistryABI as contractRegistryAbi } from '@swr/abis';
+export { OperatorSubmitterABI as operatorSubmitterAbi } from '@swr/abis';
+export { CrossChainInboxABI as crossChainInboxAbi } from '@swr/abis';
 
 // Spoke contracts
-export { SpokeRegistryV2ABI as spokeRegistryV2Abi } from '@swr/abis';
+export { SpokeRegistryABI as spokeRegistryAbi } from '@swr/abis';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INFRASTRUCTURE ABIs

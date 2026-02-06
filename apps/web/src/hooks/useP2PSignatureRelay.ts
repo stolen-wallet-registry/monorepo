@@ -61,7 +61,7 @@ function isValidSignature(sig: unknown): sig is SignatureOverTheWire {
   if (typeof s.deadline !== 'string' || !/^\d+$/.test(s.deadline)) return false;
   if (typeof s.nonce !== 'string' || !/^\d+$/.test(s.nonce)) return false;
 
-  // V2 optional fields: if present, must be valid numeric strings for BigInt conversion
+  // Optional fields: if present, must be valid numeric strings for BigInt conversion
   if (
     s.reportedChainId !== undefined &&
     (typeof s.reportedChainId !== 'string' || !/^\d+$/.test(s.reportedChainId))
@@ -364,7 +364,7 @@ export function useP2PSignatureRelay(
                 return;
               }
 
-              // Store the signature for later use (including V2 fields)
+              // Store the signature for later use
               const sig = data.signature;
               const stored: StoredSignature = {
                 signature: sig.value as Hex,
@@ -374,7 +374,7 @@ export function useP2PSignatureRelay(
                 chainId: sig.chainId,
                 step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
                 storedAt: Date.now(),
-                // V2 fields (convert string to bigint if present)
+                // Optional fields (convert string to bigint if present)
                 reportedChainId: sig.reportedChainId ? BigInt(sig.reportedChainId) : undefined,
                 incidentTimestamp: sig.incidentTimestamp
                   ? BigInt(sig.incidentTimestamp)
@@ -416,7 +416,7 @@ export function useP2PSignatureRelay(
                 return;
               }
 
-              // Store the signature for later use (including V2 fields)
+              // Store the signature for later use
               const sig = data.signature;
               const stored: StoredSignature = {
                 signature: sig.value as Hex,
@@ -426,7 +426,7 @@ export function useP2PSignatureRelay(
                 chainId: sig.chainId,
                 step: SIGNATURE_STEP.REGISTRATION,
                 storedAt: Date.now(),
-                // V2 fields (convert string to bigint if present)
+                // Optional fields (convert string to bigint if present)
                 reportedChainId: sig.reportedChainId ? BigInt(sig.reportedChainId) : undefined,
                 incidentTimestamp: sig.incidentTimestamp
                   ? BigInt(sig.incidentTimestamp)

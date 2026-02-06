@@ -4,14 +4,14 @@ pragma solidity ^0.8.24;
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
-import { IWalletRegistryV2 } from "./interfaces/IWalletRegistryV2.sol";
-import { ITransactionRegistryV2 } from "./interfaces/ITransactionRegistryV2.sol";
-import { IContractRegistryV2 } from "./interfaces/IContractRegistryV2.sol";
-import { IOperatorRegistry } from "../interfaces/IOperatorRegistry.sol";
-import { IFeeManager } from "../interfaces/IFeeManager.sol";
-import { RegistryCapabilities } from "../libraries/RegistryCapabilities.sol";
+import { IWalletRegistry } from "./interfaces/IWalletRegistry.sol";
+import { ITransactionRegistry } from "./interfaces/ITransactionRegistry.sol";
+import { IContractRegistry } from "./interfaces/IContractRegistry.sol";
+import { IOperatorRegistry } from "./interfaces/IOperatorRegistry.sol";
+import { IFeeManager } from "./interfaces/IFeeManager.sol";
+import { RegistryCapabilities } from "./libraries/RegistryCapabilities.sol";
 
-/// @title OperatorSubmitterV2
+/// @title OperatorSubmitter
 /// @author Stolen Wallet Registry Team
 /// @notice Handles operator batch submissions to separate registries
 /// @dev Updated to work with the Hub + Separate Registries architecture.
@@ -19,7 +19,7 @@ import { RegistryCapabilities } from "../libraries/RegistryCapabilities.sol";
 ///      1. Validates operator permissions via OperatorRegistry
 ///      2. Collects fees via FeeManager
 ///      3. Forwards validated data to appropriate registry
-contract OperatorSubmitterV2 is Ownable2Step, Pausable {
+contract OperatorSubmitter is Ownable2Step, Pausable {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -32,13 +32,13 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    error OperatorSubmitterV2__ZeroAddress();
-    error OperatorSubmitterV2__NotApprovedOperator();
-    error OperatorSubmitterV2__EmptyBatch();
-    error OperatorSubmitterV2__ArrayLengthMismatch();
-    error OperatorSubmitterV2__InsufficientFee();
-    error OperatorSubmitterV2__FeeForwardFailed();
-    error OperatorSubmitterV2__InvalidFeeConfig();
+    error OperatorSubmitter__ZeroAddress();
+    error OperatorSubmitter__NotApprovedOperator();
+    error OperatorSubmitter__EmptyBatch();
+    error OperatorSubmitter__ArrayLengthMismatch();
+    error OperatorSubmitter__InsufficientFee();
+    error OperatorSubmitter__FeeForwardFailed();
+    error OperatorSubmitter__InvalidFeeConfig();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -99,9 +99,9 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
 
     /// @notice Initialize the operator submitter
     /// @param _owner Initial owner
-    /// @param _walletRegistry WalletRegistryV2 contract
-    /// @param _transactionRegistry TransactionRegistryV2 contract
-    /// @param _contractRegistry ContractRegistryV2 contract
+    /// @param _walletRegistry WalletRegistry contract
+    /// @param _transactionRegistry TransactionRegistry contract
+    /// @param _contractRegistry ContractRegistry contract
     /// @param _operatorRegistry OperatorRegistry contract
     /// @param _feeManager FeeManager contract (address(0) for free)
     /// @param _feeRecipient Where fees go
@@ -114,15 +114,15 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
         address _feeManager,
         address _feeRecipient
     ) Ownable(_owner) {
-        if (_owner == address(0)) revert OperatorSubmitterV2__ZeroAddress();
-        if (_walletRegistry == address(0)) revert OperatorSubmitterV2__ZeroAddress();
-        if (_transactionRegistry == address(0)) revert OperatorSubmitterV2__ZeroAddress();
-        if (_contractRegistry == address(0)) revert OperatorSubmitterV2__ZeroAddress();
-        if (_operatorRegistry == address(0)) revert OperatorSubmitterV2__ZeroAddress();
+        if (_owner == address(0)) revert OperatorSubmitter__ZeroAddress();
+        if (_walletRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        if (_transactionRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        if (_contractRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        if (_operatorRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
 
         // If feeManager is set, feeRecipient must also be set
         if (_feeManager != address(0) && _feeRecipient == address(0)) {
-            revert OperatorSubmitterV2__InvalidFeeConfig();
+            revert OperatorSubmitter__InvalidFeeConfig();
         }
 
         walletRegistry = _walletRegistry;
@@ -138,9 +138,9 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     modifier onlyApprovedOperator(uint8 capability) {
-        if (operatorRegistry == address(0)) revert OperatorSubmitterV2__NotApprovedOperator();
+        if (operatorRegistry == address(0)) revert OperatorSubmitter__NotApprovedOperator();
         if (!IOperatorRegistry(operatorRegistry).isApprovedFor(msg.sender, capability)) {
-            revert OperatorSubmitterV2__NotApprovedOperator();
+            revert OperatorSubmitter__NotApprovedOperator();
         }
         _;
     }
@@ -159,13 +159,13 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
 
         uint256 requiredFee = IFeeManager(feeManager).operatorBatchFeeWei();
         if (msg.value < requiredFee) {
-            revert OperatorSubmitterV2__InsufficientFee();
+            revert OperatorSubmitter__InsufficientFee();
         }
 
         if (feeRecipient != address(0) && msg.value > 0) {
             (bool success,) = feeRecipient.call{ value: msg.value }("");
             if (!success) {
-                revert OperatorSubmitterV2__FeeForwardFailed();
+                revert OperatorSubmitter__FeeForwardFailed();
             }
         }
     }
@@ -210,14 +210,14 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
         uint64[] calldata incidentTimestamps
     ) external payable whenNotPaused onlyApprovedOperator(WALLET_CAPABILITY) {
         uint256 length = identifiers.length;
-        if (length == 0) revert OperatorSubmitterV2__EmptyBatch();
+        if (length == 0) revert OperatorSubmitter__EmptyBatch();
         if (length != reportedChainIds.length || length != incidentTimestamps.length) {
-            revert OperatorSubmitterV2__ArrayLengthMismatch();
+            revert OperatorSubmitter__ArrayLengthMismatch();
         }
 
         _collectFee();
 
-        uint256 batchId = IWalletRegistryV2(walletRegistry)
+        uint256 batchId = IWalletRegistry(walletRegistry)
             .registerWalletsFromOperator(_getOperatorId(), identifiers, reportedChainIds, incidentTimestamps);
 
         emit BatchSubmitted(msg.sender, walletRegistry, batchId, uint32(length));
@@ -233,14 +233,14 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
         onlyApprovedOperator(TX_CAPABILITY)
     {
         uint256 length = transactionHashes.length;
-        if (length == 0) revert OperatorSubmitterV2__EmptyBatch();
+        if (length == 0) revert OperatorSubmitter__EmptyBatch();
         if (length != chainIds.length) {
-            revert OperatorSubmitterV2__ArrayLengthMismatch();
+            revert OperatorSubmitter__ArrayLengthMismatch();
         }
 
         _collectFee();
 
-        uint256 batchId = ITransactionRegistryV2(transactionRegistry)
+        uint256 batchId = ITransactionRegistry(transactionRegistry)
             .registerTransactionsFromOperator(_getOperatorId(), transactionHashes, chainIds);
 
         emit BatchSubmitted(msg.sender, transactionRegistry, batchId, uint32(length));
@@ -256,14 +256,14 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
         onlyApprovedOperator(CONTRACT_CAPABILITY)
     {
         uint256 length = identifiers.length;
-        if (length == 0) revert OperatorSubmitterV2__EmptyBatch();
+        if (length == 0) revert OperatorSubmitter__EmptyBatch();
         if (length != reportedChainIds.length) {
-            revert OperatorSubmitterV2__ArrayLengthMismatch();
+            revert OperatorSubmitter__ArrayLengthMismatch();
         }
 
         _collectFee();
 
-        uint256 batchId = IContractRegistryV2(contractRegistry)
+        uint256 batchId = IContractRegistry(contractRegistry)
             .registerContractsFromOperator(_getOperatorId(), identifiers, reportedChainIds);
 
         emit BatchSubmitted(msg.sender, contractRegistry, batchId, uint32(length));
@@ -276,7 +276,7 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
     /// @notice Set wallet registry address
     /// @param _walletRegistry The new wallet registry address
     function setWalletRegistry(address _walletRegistry) external onlyOwner {
-        if (_walletRegistry == address(0)) revert OperatorSubmitterV2__ZeroAddress();
+        if (_walletRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
         walletRegistry = _walletRegistry;
         emit WalletRegistrySet(_walletRegistry);
     }
@@ -284,7 +284,7 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
     /// @notice Set transaction registry address
     /// @param _transactionRegistry The new transaction registry address
     function setTransactionRegistry(address _transactionRegistry) external onlyOwner {
-        if (_transactionRegistry == address(0)) revert OperatorSubmitterV2__ZeroAddress();
+        if (_transactionRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
         transactionRegistry = _transactionRegistry;
         emit TransactionRegistrySet(_transactionRegistry);
     }
@@ -292,7 +292,7 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
     /// @notice Set contract registry address
     /// @param _contractRegistry The new contract registry address
     function setContractRegistry(address _contractRegistry) external onlyOwner {
-        if (_contractRegistry == address(0)) revert OperatorSubmitterV2__ZeroAddress();
+        if (_contractRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
         contractRegistry = _contractRegistry;
         emit ContractRegistrySet(_contractRegistry);
     }
@@ -300,7 +300,7 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
     /// @notice Set operator registry address
     /// @param _operatorRegistry The new operator registry address
     function setOperatorRegistry(address _operatorRegistry) external onlyOwner {
-        if (_operatorRegistry == address(0)) revert OperatorSubmitterV2__ZeroAddress();
+        if (_operatorRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
         operatorRegistry = _operatorRegistry;
         emit OperatorRegistrySet(_operatorRegistry);
     }
@@ -311,7 +311,7 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
     /// @param _feeManager The new fee manager address (address(0) for free)
     function setFeeManager(address _feeManager) external onlyOwner {
         if (_feeManager != address(0) && feeRecipient == address(0)) {
-            revert OperatorSubmitterV2__InvalidFeeConfig();
+            revert OperatorSubmitter__InvalidFeeConfig();
         }
         feeManager = _feeManager;
         emit FeeManagerSet(_feeManager);
@@ -321,7 +321,7 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
     /// @param _feeRecipient The new fee recipient address
     function setFeeRecipient(address _feeRecipient) external onlyOwner {
         if (feeManager != address(0) && _feeRecipient == address(0)) {
-            revert OperatorSubmitterV2__InvalidFeeConfig();
+            revert OperatorSubmitter__InvalidFeeConfig();
         }
         feeRecipient = _feeRecipient;
         emit FeeRecipientSet(_feeRecipient);
@@ -334,7 +334,7 @@ contract OperatorSubmitterV2 is Ownable2Step, Pausable {
     /// @param _feeRecipient The fee recipient address
     function setFeeConfig(address _feeManager, address _feeRecipient) external onlyOwner {
         if (_feeManager != address(0) && _feeRecipient == address(0)) {
-            revert OperatorSubmitterV2__InvalidFeeConfig();
+            revert OperatorSubmitter__InvalidFeeConfig();
         }
         feeManager = _feeManager;
         feeRecipient = _feeRecipient;

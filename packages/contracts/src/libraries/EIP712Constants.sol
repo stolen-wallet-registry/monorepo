@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title EIP712ConstantsV2
+/// @title EIP712Constants
 /// @author Stolen Wallet Registry Team
-/// @notice Shared EIP-712 constants for V2 contracts
+/// @notice Shared EIP-712 constants for contracts
 /// @dev Centralizes statement strings, statement hashes, and typehashes
 ///      to ensure consistency between hub and spoke contracts
-library EIP712ConstantsV2 {
+library EIP712Constants {
     // ═══════════════════════════════════════════════════════════════════════════
     // STATEMENT STRINGS (displayed in MetaMask during signing)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -44,11 +44,11 @@ library EIP712ConstantsV2 {
     bytes32 internal constant TX_REG_STATEMENT_HASH = keccak256(bytes(TX_REG_STATEMENT));
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // WALLET REGISTRATION TYPEHASHES (V2 format with reportedChainId + incidentTimestamp)
+    // WALLET REGISTRATION TYPEHASHES (format with reportedChainId + incidentTimestamp)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice EIP-712 typehash for wallet acknowledgement phase
-    /// @dev V2 includes reportedChainId (uint64 for storage efficiency) and incidentTimestamp.
+    /// @dev Includes reportedChainId (uint64 for storage efficiency) and incidentTimestamp.
     ///      Using uint64 reportedChainId supports EVM chain IDs up to 18 quintillion.
     ///      Both hub and spoke use identical typehashes for signature portability.
     bytes32 internal constant WALLET_ACK_TYPEHASH = keccak256(
@@ -61,7 +61,7 @@ library EIP712ConstantsV2 {
     );
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // TRANSACTION BATCH TYPEHASHES (V2 format with dataHash commitment)
+    // TRANSACTION BATCH TYPEHASHES (format with dataHash commitment)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice EIP-712 typehash for transaction batch acknowledgement

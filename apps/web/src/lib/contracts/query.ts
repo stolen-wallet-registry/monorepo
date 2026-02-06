@@ -24,7 +24,7 @@ const getWalletEntryAbi = parseAbi([
 ]);
 
 /**
- * Registration data from the contract (V2 WalletEntry struct).
+ * Registration data from the contract (WalletEntry struct).
  */
 export interface RegistrationData {
   reportedChainId: Hash;
@@ -60,7 +60,7 @@ export interface RegistryStatusResult {
  *
  * @param client - viem PublicClient
  * @param address - Wallet address to query
- * @param contractAddress - WalletRegistryV2 contract address
+ * @param contractAddress - WalletRegistry contract address
  * @param abi - Contract ABI
  */
 export async function queryRegistryStatus(

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { encodeFunctionData, pad } from 'viem';
-import { OperatorSubmitterV2ABI } from '@swr/abis';
+import { OperatorSubmitterABI } from '@swr/abis';
 import { parseWalletFile, parseContractFile, parseTransactionFile } from '../src/lib/files.js';
 import { chainIdToBytes32 } from '../src/lib/caip.js';
 
@@ -22,7 +22,7 @@ describe('--build-only mode', () => {
       const incidentTimestamps = entries.map(() => 0n);
 
       const calldata = encodeFunctionData({
-        abi: OperatorSubmitterV2ABI,
+        abi: OperatorSubmitterABI,
         functionName: 'registerWalletsAsOperator',
         args: [identifiers, reportedChainIds, incidentTimestamps],
       });
@@ -31,7 +31,7 @@ describe('--build-only mode', () => {
       // registerWalletsAsOperator selector should be at start
       expect(calldata.slice(0, 10)).toBe(
         encodeFunctionData({
-          abi: OperatorSubmitterV2ABI,
+          abi: OperatorSubmitterABI,
           functionName: 'registerWalletsAsOperator',
           args: [[], [], []],
         }).slice(0, 10)
@@ -45,7 +45,7 @@ describe('--build-only mode', () => {
       const reportedChainIds = entries.map((e) => e.chainId);
 
       const calldata = encodeFunctionData({
-        abi: OperatorSubmitterV2ABI,
+        abi: OperatorSubmitterABI,
         functionName: 'registerContractsAsOperator',
         args: [identifiers, reportedChainIds],
       });
@@ -54,7 +54,7 @@ describe('--build-only mode', () => {
       // registerContractsAsOperator selector
       expect(calldata.slice(0, 10)).toBe(
         encodeFunctionData({
-          abi: OperatorSubmitterV2ABI,
+          abi: OperatorSubmitterABI,
           functionName: 'registerContractsAsOperator',
           args: [[], []],
         }).slice(0, 10)
@@ -68,7 +68,7 @@ describe('--build-only mode', () => {
       const chainIds = entries.map((e) => e.chainId);
 
       const calldata = encodeFunctionData({
-        abi: OperatorSubmitterV2ABI,
+        abi: OperatorSubmitterABI,
         functionName: 'registerTransactionsAsOperator',
         args: [transactionHashes, chainIds],
       });
@@ -77,7 +77,7 @@ describe('--build-only mode', () => {
       // registerTransactionsAsOperator selector
       expect(calldata.slice(0, 10)).toBe(
         encodeFunctionData({
-          abi: OperatorSubmitterV2ABI,
+          abi: OperatorSubmitterABI,
           functionName: 'registerTransactionsAsOperator',
           args: [[], []],
         }).slice(0, 10)
@@ -97,7 +97,7 @@ describe('--build-only mode', () => {
       const incidentTimestamps = entries.map(() => 0n);
 
       const calldata = encodeFunctionData({
-        abi: OperatorSubmitterV2ABI,
+        abi: OperatorSubmitterABI,
         functionName: 'registerWalletsAsOperator',
         args: [identifiers, reportedChainIds, incidentTimestamps],
       });
@@ -129,7 +129,7 @@ describe('--build-only mode', () => {
       const reportedChainIds = entries.map((e) => e.chainId);
 
       const calldata = encodeFunctionData({
-        abi: OperatorSubmitterV2ABI,
+        abi: OperatorSubmitterABI,
         functionName: 'registerContractsAsOperator',
         args: [identifiers, reportedChainIds],
       });

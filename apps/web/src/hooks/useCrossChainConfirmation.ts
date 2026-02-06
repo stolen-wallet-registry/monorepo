@@ -17,7 +17,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { parseAbi } from 'viem';
 import { useReadContract } from 'wagmi';
-import { getWalletRegistryV2Address } from '@/lib/contracts/addresses';
+import { getWalletRegistryAddress } from '@/lib/contracts/addresses';
 
 /**
  * Minimal ABI for isWalletRegistered(address) to avoid viem ambiguity
@@ -87,7 +87,7 @@ export function useCrossChainConfirmation({
   let hubRegistryAddress: Address | undefined;
   try {
     if (hubChainId) {
-      hubRegistryAddress = getWalletRegistryV2Address(hubChainId);
+      hubRegistryAddress = getWalletRegistryAddress(hubChainId);
     }
   } catch (err) {
     logger.registration.warn('Failed to get hub registry address', {

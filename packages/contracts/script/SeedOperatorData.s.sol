@@ -2,30 +2,30 @@
 pragma solidity ^0.8.24;
 
 import { Script, console2 } from "forge-std/Script.sol";
-import { OperatorSubmitterV2 } from "../../src/v2/OperatorSubmitterV2.sol";
-import { IFraudRegistryHubV2 } from "../../src/v2/interfaces/IFraudRegistryHubV2.sol";
-import { OperatorRegistry } from "../../src/OperatorRegistry.sol";
-import { FeeManager } from "../../src/FeeManager.sol";
+import { OperatorSubmitter } from "../src/OperatorSubmitter.sol";
+import { IFraudRegistryHub } from "../src/interfaces/IFraudRegistryHub.sol";
+import { OperatorRegistry } from "../src/OperatorRegistry.sol";
+import { FeeManager } from "../src/FeeManager.sol";
 
-/// @title SeedOperatorDataV2
-/// @notice Seeds operator data for V2 contracts: wallets, transactions, and contracts
-/// @dev Run after deploying V2 contracts to populate dashboard test data
+/// @title SeedOperatorData
+/// @notice Seeds operator data for contracts: wallets, transactions, and contracts
+/// @dev Run after deploying contracts to populate dashboard test data
 ///
 /// Usage:
 /// ```bash
 /// # Local (after deploy:crosschain:v2)
-/// forge script script/v2/SeedOperatorDataV2.s.sol --rpc-url localhost --broadcast
+/// forge script script/SeedOperatorData.s.sol --rpc-url localhost --broadcast
 /// ```
-contract SeedOperatorDataV2 is Script {
+contract SeedOperatorData is Script {
     // ═══════════════════════════════════════════════════════════════════════════
-    // V2 CONTRACT ADDRESSES (deployed by DeployV2.s.sol)
+    // CONTRACT ADDRESSES (deployed by Deploy.s.sol)
     // ═══════════════════════════════════════════════════════════════════════════
     // These addresses are deterministic based on deployer nonce
     // Update if deploy order changes
 
     address constant DEFAULT_OPERATOR_REGISTRY = 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0;
-    address constant DEFAULT_FRAUD_REGISTRY_HUB_V2 = 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9;
-    address constant DEFAULT_OPERATOR_SUBMITTER_V2 = 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853;
+    address constant DEFAULT_FRAUD_REGISTRY_HUB = 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9;
+    address constant DEFAULT_OPERATOR_SUBMITTER = 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853;
     address constant DEFAULT_FEE_MANAGER = 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -82,7 +82,7 @@ contract SeedOperatorDataV2 is Script {
     function run() external {
         // Guard: This script uses hardcoded anvil keys - only run on local chains
         if (block.chainid != 31_337 && block.chainid != 31_338) {
-            console2.log("ERROR: SeedOperatorDataV2 uses hardcoded anvil keys.");
+            console2.log("ERROR: SeedOperatorData uses hardcoded anvil keys.");
             console2.log("This script is only intended for local development (chain IDs 31337/31338).");
             console2.log("Current chain ID:", block.chainid);
             return;
@@ -90,19 +90,19 @@ contract SeedOperatorDataV2 is Script {
 
         // Load contract addresses (env vars or defaults)
         address operatorRegistryAddr = vm.envOr("OPERATOR_REGISTRY", DEFAULT_OPERATOR_REGISTRY);
-        address fraudRegistryHubAddr = vm.envOr("FRAUD_REGISTRY_HUB_V2", DEFAULT_FRAUD_REGISTRY_HUB_V2);
-        address operatorSubmitterAddr = vm.envOr("OPERATOR_SUBMITTER_V2", DEFAULT_OPERATOR_SUBMITTER_V2);
+        address fraudRegistryHubAddr = vm.envOr("FRAUD_REGISTRY_HUB", DEFAULT_FRAUD_REGISTRY_HUB);
+        address operatorSubmitterAddr = vm.envOr("OPERATOR_SUBMITTER", DEFAULT_OPERATOR_SUBMITTER);
         address feeManagerAddr = vm.envOr("FEE_MANAGER", DEFAULT_FEE_MANAGER);
 
         console2.log("");
         console2.log("==========================================");
-        console2.log("=== SEEDING V2 OPERATOR DATA ===");
+        console2.log("=== SEEDING OPERATOR DATA ===");
         console2.log("==========================================");
         console2.log("");
         console2.log("Contracts:");
         console2.log("  OperatorRegistry:", operatorRegistryAddr);
-        console2.log("  FraudRegistryHubV2:", fraudRegistryHubAddr);
-        console2.log("  OperatorSubmitterV2:", operatorSubmitterAddr);
+        console2.log("  FraudRegistryHub:", fraudRegistryHubAddr);
+        console2.log("  OperatorSubmitter:", operatorSubmitterAddr);
         console2.log("  FeeManager:", feeManagerAddr);
         console2.log("");
         console2.log("Operators:");
@@ -112,8 +112,8 @@ contract SeedOperatorDataV2 is Script {
 
         // Instantiate contracts
         OperatorRegistry opRegistry = OperatorRegistry(operatorRegistryAddr);
-        IFraudRegistryHubV2 hub = IFraudRegistryHubV2(payable(fraudRegistryHubAddr));
-        OperatorSubmitterV2 operatorSubmitter = OperatorSubmitterV2(operatorSubmitterAddr);
+        IFraudRegistryHub hub = IFraudRegistryHub(payable(fraudRegistryHubAddr));
+        OperatorSubmitter operatorSubmitter = OperatorSubmitter(operatorSubmitterAddr);
         FeeManager feeManager = FeeManager(feeManagerAddr);
 
         // Get batch fee (same for all batch types)
@@ -136,7 +136,7 @@ contract SeedOperatorDataV2 is Script {
         // Check if already seeded (wallet 1 would be registered)
         if (hub.isWalletRegistered(STOLEN_WALLET_1)) {
             console2.log("");
-            console2.log("V2 Operator data already seeded, skipping...");
+            console2.log("Operator data already seeded, skipping...");
             return;
         }
 
@@ -168,7 +168,7 @@ contract SeedOperatorDataV2 is Script {
         // Summary
         console2.log("");
         console2.log("==========================================");
-        console2.log("=== V2 SEEDING COMPLETE ===");
+        console2.log("=== SEEDING COMPLETE ===");
         console2.log("==========================================");
         console2.log("");
         console2.log("Summary:");
@@ -188,10 +188,10 @@ contract SeedOperatorDataV2 is Script {
     // WALLET BATCH SUBMISSION (Operator A)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _submitWalletBatch(OperatorSubmitterV2 operatorSubmitter, uint256 batchFee) internal {
+    function _submitWalletBatch(OperatorSubmitter operatorSubmitter, uint256 batchFee) internal {
         vm.startBroadcast(OPERATOR_A_PRIVATE_KEY);
 
-        // Build batch arrays - OperatorSubmitterV2 takes (identifiers, reportedChainIds, incidentTimestamps)
+        // Build batch arrays - OperatorSubmitter takes (identifiers, reportedChainIds, incidentTimestamps)
         bytes32[] memory identifiers = new bytes32[](4);
         bytes32[] memory reportedChainIds = new bytes32[](4);
         uint64[] memory incidentTimestamps = new uint64[](4);
@@ -236,10 +236,10 @@ contract SeedOperatorDataV2 is Script {
     // TRANSACTION BATCH SUBMISSION (Operator A)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _submitTransactionBatch(OperatorSubmitterV2 operatorSubmitter, uint256 batchFee) internal {
+    function _submitTransactionBatch(OperatorSubmitter operatorSubmitter, uint256 batchFee) internal {
         vm.startBroadcast(OPERATOR_A_PRIVATE_KEY);
 
-        // Build batch arrays - OperatorSubmitterV2 takes (transactionHashes, chainIds)
+        // Build batch arrays - OperatorSubmitter takes (transactionHashes, chainIds)
         bytes32[] memory txHashes = new bytes32[](4);
         bytes32[] memory chainIds = new bytes32[](4);
 
@@ -272,10 +272,10 @@ contract SeedOperatorDataV2 is Script {
     // CONTRACT BATCH SUBMISSION (Operator A)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _submitContractBatchA(OperatorSubmitterV2 operatorSubmitter, uint256 batchFee) internal {
+    function _submitContractBatchA(OperatorSubmitter operatorSubmitter, uint256 batchFee) internal {
         vm.startBroadcast(OPERATOR_A_PRIVATE_KEY);
 
-        // Build batch arrays - OperatorSubmitterV2 takes (identifiers, reportedChainIds)
+        // Build batch arrays - OperatorSubmitter takes (identifiers, reportedChainIds)
         bytes32[] memory contractIds = new bytes32[](5);
         bytes32[] memory reportedChainIds = new bytes32[](5);
 
@@ -310,7 +310,7 @@ contract SeedOperatorDataV2 is Script {
     // CONTRACT BATCH SUBMISSION (Operator B)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _submitContractBatchB(OperatorSubmitterV2 operatorSubmitter, uint256 batchFee) internal {
+    function _submitContractBatchB(OperatorSubmitter operatorSubmitter, uint256 batchFee) internal {
         vm.startBroadcast(OPERATOR_B_PRIVATE_KEY);
 
         // Build batch arrays (2 contracts)

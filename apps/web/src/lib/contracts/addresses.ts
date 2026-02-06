@@ -2,45 +2,45 @@ import { zeroAddress, isAddress } from 'viem';
 import type { Address } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 import { anvilHub, baseSepolia, isSpokeChain } from '@swr/chains';
-import { getSpokeV2Address } from './crosschain-addresses';
+import { getSpokeContractAddress } from './crosschain-addresses';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// V2 HUB + SEPARATE REGISTRIES ARCHITECTURE
+// HUB + SEPARATE REGISTRIES ARCHITECTURE
 // ═══════════════════════════════════════════════════════════════════════════
-// Deployed via `pnpm deploy:crosschain:v2` (script/v2/DeployV2.s.sol)
+// Deployed via `pnpm deploy:crosschain` (script/Deploy.s.sol)
 //
 // Architecture:
-//   FraudRegistryHubV2     - Entry point, cross-chain routing, fee aggregation
-//   WalletRegistryV2       - Wallet registration (two-phase EIP-712)
-//   TransactionRegistryV2  - Transaction batch registration
-//   ContractRegistryV2     - Fraudulent contract registry (operator-only)
-//   OperatorSubmitterV2    - Operator batch submissions
-//   CrossChainInboxV2      - Cross-chain message receiver
+//   FraudRegistryHub       - Entry point, cross-chain routing, fee aggregation
+//   WalletRegistry         - Wallet registration (two-phase EIP-712)
+//   TransactionRegistry    - Transaction batch registration
+//   ContractRegistry       - Fraudulent contract registry (operator-only)
+//   OperatorSubmitter      - Operator batch submissions
+//   CrossChainInbox        - Cross-chain message receiver
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const V2_CONTRACT_ADDRESSES = {
-  // Hub + Separate Registries (core V2 architecture)
-  fraudRegistryHubV2: {
+export const CONTRACT_ADDRESSES = {
+  // Hub + Separate Registries (core architecture)
+  fraudRegistryHub: {
     [anvilHub.chainId]: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address, // TBD
   },
-  walletRegistryV2: {
+  walletRegistry: {
     [anvilHub.chainId]: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
-  transactionRegistryV2: {
+  transactionRegistry: {
     [anvilHub.chainId]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
-  contractRegistryV2: {
+  contractRegistry: {
     [anvilHub.chainId]: '0x0165878A594ca255338adfa4d48449f69242Eb8F' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
-  operatorSubmitterV2: {
+  operatorSubmitter: {
     [anvilHub.chainId]: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
-  crossChainInboxV2: {
+  crossChainInbox: {
     [anvilHub.chainId]: '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
@@ -72,15 +72,15 @@ export const V2_CONTRACT_ADDRESSES = {
   },
 } as const;
 
-export type V2ContractName = keyof typeof V2_CONTRACT_ADDRESSES;
+export type ContractName = keyof typeof CONTRACT_ADDRESSES;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONTRACT ADDRESS GETTERS
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Get any V2 contract address by name */
-export function getV2ContractAddress(contract: V2ContractName, chainId: number): Address {
-  const logContext = 'getV2ContractAddress';
+/** Get any contract address by name */
+export function getContractAddress(contract: ContractName, chainId: number): Address {
+  const logContext = 'getContractAddress';
 
   // Check for env override
   const envKey = `VITE_${contract.toUpperCase()}_ADDRESS_${chainId}`;
@@ -98,7 +98,7 @@ export function getV2ContractAddress(contract: V2ContractName, chainId: number):
     return envValue as Address;
   }
 
-  const addresses = V2_CONTRACT_ADDRESSES[contract];
+  const addresses = CONTRACT_ADDRESSES[contract];
   const address = addresses[chainId as keyof typeof addresses];
   if (!address || address === zeroAddress) {
     throw new Error(`No ${contract} address configured for chain ID ${chainId}`);
@@ -110,34 +110,34 @@ export function getV2ContractAddress(contract: V2ContractName, chainId: number):
 // REGISTRY-SPECIFIC GETTERS
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Get FraudRegistryHubV2 address (entry point for lookups and cross-chain) */
-export function getFraudRegistryHubV2Address(chainId: number): Address {
-  return getV2ContractAddress('fraudRegistryHubV2', chainId);
+/** Get FraudRegistryHub address (entry point for lookups and cross-chain) */
+export function getFraudRegistryHubAddress(chainId: number): Address {
+  return getContractAddress('fraudRegistryHub', chainId);
 }
 
-/** Get WalletRegistryV2 address (wallet registration) */
-export function getWalletRegistryV2Address(chainId: number): Address {
-  return getV2ContractAddress('walletRegistryV2', chainId);
+/** Get WalletRegistry address (wallet registration) */
+export function getWalletRegistryAddress(chainId: number): Address {
+  return getContractAddress('walletRegistry', chainId);
 }
 
-/** Get TransactionRegistryV2 address (transaction batch registration) */
-export function getTransactionRegistryV2Address(chainId: number): Address {
-  return getV2ContractAddress('transactionRegistryV2', chainId);
+/** Get TransactionRegistry address (transaction batch registration) */
+export function getTransactionRegistryAddress(chainId: number): Address {
+  return getContractAddress('transactionRegistry', chainId);
 }
 
-/** Get ContractRegistryV2 address (fraudulent contract registry) */
-export function getContractRegistryV2Address(chainId: number): Address {
-  return getV2ContractAddress('contractRegistryV2', chainId);
+/** Get ContractRegistry address (fraudulent contract registry) */
+export function getContractRegistryAddress(chainId: number): Address {
+  return getContractAddress('contractRegistry', chainId);
 }
 
-/** Get OperatorSubmitterV2 address (operator batch submissions) */
-export function getOperatorSubmitterV2Address(chainId: number): Address {
-  return getV2ContractAddress('operatorSubmitterV2', chainId);
+/** Get OperatorSubmitter address (operator batch submissions) */
+export function getOperatorSubmitterAddress(chainId: number): Address {
+  return getContractAddress('operatorSubmitter', chainId);
 }
 
-/** Get CrossChainInboxV2 address */
-export function getCrossChainInboxV2Address(chainId: number): Address {
-  return getV2ContractAddress('crossChainInboxV2', chainId);
+/** Get CrossChainInbox address */
+export function getCrossChainInboxAddress(chainId: number): Address {
+  return getContractAddress('crossChainInbox', chainId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -145,11 +145,11 @@ export function getCrossChainInboxV2Address(chainId: number): Address {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function getOperatorRegistryAddress(chainId: number): Address {
-  return getV2ContractAddress('operatorRegistry', chainId);
+  return getContractAddress('operatorRegistry', chainId);
 }
 
 export function getFeeManagerAddress(chainId: number): Address {
-  return getV2ContractAddress('feeManager', chainId);
+  return getContractAddress('feeManager', chainId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -157,19 +157,19 @@ export function getFeeManagerAddress(chainId: number): Address {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function getTranslationRegistryAddress(chainId: number): Address {
-  return getV2ContractAddress('translationRegistry', chainId);
+  return getContractAddress('translationRegistry', chainId);
 }
 
 export function getWalletSoulboundAddress(chainId: number): Address {
-  return getV2ContractAddress('walletSoulbound', chainId);
+  return getContractAddress('walletSoulbound', chainId);
 }
 
 export function getSupportSoulboundAddress(chainId: number): Address {
-  return getV2ContractAddress('supportSoulbound', chainId);
+  return getContractAddress('supportSoulbound', chainId);
 }
 
 export function getSoulboundReceiverAddress(chainId: number): Address {
-  return getV2ContractAddress('soulboundReceiver', chainId);
+  return getContractAddress('soulboundReceiver', chainId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -181,21 +181,21 @@ export type RegistryVariant = 'wallet' | 'transaction' | 'contract';
 
 /**
  * Get the appropriate registry address for the current chain.
- * - Hub chains: returns the specific registry (WalletRegistryV2, TransactionRegistryV2, etc.)
- * - Spoke chains: returns SpokeRegistryV2 (handles all variants)
+ * - Hub chains: returns the specific registry (WalletRegistry, TransactionRegistry, etc.)
+ * - Spoke chains: returns SpokeRegistry (handles all variants)
  */
 export function getRegistryAddress(chainId: number, variant: RegistryVariant = 'wallet'): Address {
   if (isSpokeChain(chainId)) {
-    return getSpokeV2Address('spokeRegistryV2', chainId);
+    return getSpokeContractAddress('spokeRegistry', chainId);
   }
 
   switch (variant) {
     case 'wallet':
-      return getWalletRegistryV2Address(chainId);
+      return getWalletRegistryAddress(chainId);
     case 'transaction':
-      return getTransactionRegistryV2Address(chainId);
+      return getTransactionRegistryAddress(chainId);
     case 'contract':
-      return getContractRegistryV2Address(chainId);
+      return getContractRegistryAddress(chainId);
   }
 }
 

@@ -11,7 +11,7 @@ import ora from 'ora';
 import { parseTransactionFile } from '../lib/files.js';
 import { createClients } from '../lib/client.js';
 import { getConfig } from '../lib/config.js';
-import { OperatorSubmitterV2ABI, TransactionRegistryV2ABI } from '@swr/abis';
+import { OperatorSubmitterABI, TransactionRegistryABI } from '@swr/abis';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
@@ -65,19 +65,19 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
     spinner.start('Fetching fee quote...');
     const fee = await publicClient.readContract({
       address: config.contracts.stolenTransactionRegistry,
-      abi: TransactionRegistryV2ABI,
+      abi: TransactionRegistryABI,
       functionName: 'quoteRegistration',
       args: [zeroAddress],
     });
     spinner.succeed(`Fee: ${chalk.yellow(formatEther(fee))} ETH`);
 
-    // 5. Prepare V2 transaction data
+    // 5. Prepare transaction data
     const txHashes = entries.map((e) => e.txHash);
     const chainIds = entries.map((e) => e.chainId);
 
-    // 6. Encode calldata for OperatorSubmitterV2
+    // 6. Encode calldata for OperatorSubmitter
     const calldata = encodeFunctionData({
-      abi: OperatorSubmitterV2ABI,
+      abi: OperatorSubmitterABI,
       functionName: 'registerTransactionsAsOperator',
       args: [txHashes, chainIds],
     });
@@ -134,13 +134,13 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
 
     console.log(chalk.gray(`Operator address: ${account}`));
 
-    // 8. Submit through OperatorSubmitterV2
+    // 8. Submit through OperatorSubmitter
     spinner.start('Submitting batch...');
     const hash = await walletClient.writeContract({
       chain: config.chain,
       account,
       address: config.contracts.operatorSubmitter,
-      abi: OperatorSubmitterV2ABI,
+      abi: OperatorSubmitterABI,
       functionName: 'registerTransactionsAsOperator',
       args: [txHashes, chainIds],
       value: fee,

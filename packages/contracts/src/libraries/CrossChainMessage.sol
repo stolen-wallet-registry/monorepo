@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title CrossChainMessageV2
+/// @title CrossChainMessage
 /// @author Stolen Wallet Registry Team
-/// @notice Library for encoding/decoding cross-chain registration messages (V2)
-/// @dev V2 uses full CAIP-10 compatible format with bytes32 identifiers for cross-blockchain support.
-///      Designed to work with FraudRegistryHubV2.registerFromHub interface.
-library CrossChainMessageV2 {
+/// @notice Library for encoding/decoding cross-chain registration messages
+/// @dev Uses full CAIP-10 compatible format with bytes32 identifiers for cross-blockchain support.
+///      Designed to work with FraudRegistryHub.registerFromHub interface.
+library CrossChainMessage {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -17,15 +17,15 @@ library CrossChainMessageV2 {
     /// @notice Message type identifier for transaction batch messages
     bytes1 public constant MSG_TYPE_TRANSACTION_BATCH = 0x02;
 
-    /// @notice Current message format version (V2)
+    /// @notice Current message format version
     uint8 public constant MESSAGE_VERSION = 2;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // STRUCTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Cross-chain wallet registration payload (V2)
-    /// @dev Matches FraudRegistryHubV2.registerFromHub parameters for direct forwarding.
+    /// @notice Cross-chain wallet registration payload
+    /// @dev Matches FraudRegistryHub.registerFromHub parameters for direct forwarding.
     ///      Uses bytes32 identifiers for cross-blockchain compatibility.
     struct WalletRegistrationPayload {
         // === CAIP-10 Identity (cross-blockchain) ===
@@ -43,7 +43,7 @@ library CrossChainMessageV2 {
         bytes32 registrationHash; // Hash of signed EIP-712 data
     }
 
-    /// @notice Cross-chain transaction batch payload (V2)
+    /// @notice Cross-chain transaction batch payload
     /// @dev Includes full transaction hashes for hub-side direct storage.
     ///      dataHash = keccak256(abi.encode(transactionHashes, chainIds))
     ///      Used for signature verification - binds signature to exact data.
@@ -64,10 +64,10 @@ library CrossChainMessageV2 {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    error CrossChainMessageV2__InvalidMessageType();
-    error CrossChainMessageV2__UnsupportedVersion();
-    error CrossChainMessageV2__InvalidMessageLength();
-    error CrossChainMessageV2__BatchSizeMismatch();
+    error CrossChainMessage__InvalidMessageType();
+    error CrossChainMessage__UnsupportedVersion();
+    error CrossChainMessage__InvalidMessageLength();
+    error CrossChainMessage__BatchSizeMismatch();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ENCODING
@@ -126,14 +126,14 @@ library CrossChainMessageV2 {
         returns (WalletRegistrationPayload memory payload)
     {
         // Validate minimum length (12 fields × 32 bytes = 384 bytes)
-        if (data.length < 384) revert CrossChainMessageV2__InvalidMessageLength();
+        if (data.length < 384) revert CrossChainMessage__InvalidMessageLength();
 
         // Validate header
         uint8 version = abi.decode(data[0:32], (uint8));
-        if (version != MESSAGE_VERSION) revert CrossChainMessageV2__UnsupportedVersion();
+        if (version != MESSAGE_VERSION) revert CrossChainMessage__UnsupportedVersion();
 
         bytes1 msgType = abi.decode(data[32:64], (bytes1));
-        if (msgType != MSG_TYPE_WALLET) revert CrossChainMessageV2__InvalidMessageType();
+        if (msgType != MSG_TYPE_WALLET) revert CrossChainMessage__InvalidMessageType();
 
         // Decode payload fields from their respective slots
         payload.namespaceHash = abi.decode(data[64:96], (bytes32));
@@ -157,7 +157,7 @@ library CrossChainMessageV2 {
         returns (TransactionBatchPayload memory payload)
     {
         // Minimum length check
-        if (data.length < 384) revert CrossChainMessageV2__InvalidMessageLength();
+        if (data.length < 384) revert CrossChainMessage__InvalidMessageLength();
 
         // Decode everything together (dynamic arrays need relative offsets)
         (
@@ -179,12 +179,12 @@ library CrossChainMessageV2 {
         );
 
         // Validate header
-        if (version != MESSAGE_VERSION) revert CrossChainMessageV2__UnsupportedVersion();
-        if (msgType != MSG_TYPE_TRANSACTION_BATCH) revert CrossChainMessageV2__InvalidMessageType();
+        if (version != MESSAGE_VERSION) revert CrossChainMessage__UnsupportedVersion();
+        if (msgType != MSG_TYPE_TRANSACTION_BATCH) revert CrossChainMessage__InvalidMessageType();
 
         // Validate batch size consistency
         if (transactionCount != transactionHashes.length || transactionCount != chainIds.length) {
-            revert CrossChainMessageV2__BatchSizeMismatch();
+            revert CrossChainMessage__BatchSizeMismatch();
         }
 
         payload = TransactionBatchPayload({
@@ -205,7 +205,7 @@ library CrossChainMessageV2 {
     /// @param data Encoded message bytes
     /// @return The message type byte
     function getMessageType(bytes calldata data) internal pure returns (bytes1) {
-        if (data.length < 64) revert CrossChainMessageV2__InvalidMessageLength();
+        if (data.length < 64) revert CrossChainMessage__InvalidMessageLength();
         return abi.decode(data[32:64], (bytes1));
     }
 

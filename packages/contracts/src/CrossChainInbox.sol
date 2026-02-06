@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { IFraudRegistryHubV2 } from "./interfaces/IFraudRegistryHubV2.sol";
+import { IFraudRegistryHub } from "./interfaces/IFraudRegistryHub.sol";
 import { IMessageRecipient } from "@hyperlane-xyz/core/contracts/interfaces/IMessageRecipient.sol";
-import { CrossChainMessageV2 } from "./libraries/CrossChainMessageV2.sol";
+import { CrossChainMessage } from "./libraries/CrossChainMessage.sol";
 import { CAIP10Evm } from "./libraries/CAIP10Evm.sol";
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-/// @title CrossChainInboxV2
+/// @title CrossChainInbox
 /// @author Stolen Wallet Registry Team
-/// @notice Hub chain message receiver for cross-chain registrations (V2)
-/// @dev Receives messages from Hyperlane and forwards to FraudRegistryHubV2.
-///      Uses CrossChainMessageV2 format with full CAIP-10 support.
-contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
+/// @notice Hub chain message receiver for cross-chain registrations
+/// @dev Receives messages from Hyperlane and forwards to FraudRegistryHub.
+///      Uses CrossChainMessage format with full CAIP-10 support.
+contract CrossChainInbox is IMessageRecipient, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -27,7 +27,7 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     /// @notice Hyperlane mailbox contract address
     address public immutable mailbox;
 
-    /// @notice FraudRegistryHubV2 contract address
+    /// @notice FraudRegistryHub contract address
     address payable public immutable hub;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -66,26 +66,26 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    error CrossChainInboxV2__ZeroAddress();
-    error CrossChainInboxV2__OnlyMailbox();
-    error CrossChainInboxV2__UntrustedSource();
-    error CrossChainInboxV2__SourceChainMismatch();
-    error CrossChainInboxV2__UnknownMessageType();
+    error CrossChainInbox__ZeroAddress();
+    error CrossChainInbox__OnlyMailbox();
+    error CrossChainInbox__UntrustedSource();
+    error CrossChainInbox__SourceChainMismatch();
+    error CrossChainInbox__UnknownMessageType();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Initialize the CrossChainInboxV2
+    /// @notice Initialize the CrossChainInbox
     /// @param _mailbox Hyperlane mailbox contract address
-    /// @param _hub FraudRegistryHubV2 contract address
+    /// @param _hub FraudRegistryHub contract address
     /// @param _owner Initial owner address
     constructor(address _mailbox, address _hub, address _owner) Ownable(_owner) {
         // Note: _owner zero check is redundant with Ownable constructor but kept for
         // explicit/consistent validation pattern across all address parameters
-        if (_owner == address(0)) revert CrossChainInboxV2__ZeroAddress();
-        if (_mailbox == address(0)) revert CrossChainInboxV2__ZeroAddress();
-        if (_hub == address(0)) revert CrossChainInboxV2__ZeroAddress();
+        if (_owner == address(0)) revert CrossChainInbox__ZeroAddress();
+        if (_mailbox == address(0)) revert CrossChainInbox__ZeroAddress();
+        if (_hub == address(0)) revert CrossChainInbox__ZeroAddress();
 
         mailbox = _mailbox;
         hub = payable(_hub);
@@ -96,7 +96,7 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     modifier onlyMailbox() {
-        if (msg.sender != mailbox) revert CrossChainInboxV2__OnlyMailbox();
+        if (msg.sender != mailbox) revert CrossChainInbox__OnlyMailbox();
         _;
     }
 
@@ -115,7 +115,7 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     function handle(uint32 _origin, bytes32 _sender, bytes calldata _messageBody) external onlyMailbox {
         // Validate source is trusted
         if (!_trustedSources[_origin][_sender]) {
-            revert CrossChainInboxV2__UntrustedSource();
+            revert CrossChainInbox__UntrustedSource();
         }
 
         // Generate payload-derived ID for idempotency and event correlation
@@ -123,32 +123,32 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
         bytes32 messageId = keccak256(_messageBody);
 
         // Extract message type to determine routing
-        bytes1 msgType = CrossChainMessageV2.getMessageType(_messageBody);
+        bytes1 msgType = CrossChainMessage.getMessageType(_messageBody);
 
-        if (msgType == CrossChainMessageV2.MSG_TYPE_WALLET) {
+        if (msgType == CrossChainMessage.MSG_TYPE_WALLET) {
             _handleWalletRegistration(_origin, _messageBody, messageId);
-        } else if (msgType == CrossChainMessageV2.MSG_TYPE_TRANSACTION_BATCH) {
+        } else if (msgType == CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH) {
             _handleTransactionBatch(_origin, _messageBody, messageId);
         } else {
-            revert CrossChainInboxV2__UnknownMessageType();
+            revert CrossChainInbox__UnknownMessageType();
         }
     }
 
-    /// @dev Handle wallet registration messages (V2 format)
+    /// @dev Handle wallet registration messages (format)
     function _handleWalletRegistration(uint32 _origin, bytes calldata _messageBody, bytes32 messageId) internal {
-        // Decode the V2 registration payload
-        CrossChainMessageV2.WalletRegistrationPayload memory payload =
-            CrossChainMessageV2.decodeWalletRegistration(_messageBody);
+        // Decode the registration payload
+        CrossChainMessage.WalletRegistrationPayload memory payload =
+            CrossChainMessage.decodeWalletRegistration(_messageBody);
 
         // Defense in depth: verify payload sourceChainId matches Hyperlane origin
         // Convert _origin (Hyperlane domain, typically EIP-155) to CAIP-2 hash
         bytes32 expectedSourceChainId = CAIP10Evm.caip2Hash(uint64(_origin));
         if (payload.sourceChainId != expectedSourceChainId) {
-            revert CrossChainInboxV2__SourceChainMismatch();
+            revert CrossChainInbox__SourceChainMismatch();
         }
 
-        // Forward to FraudRegistryHubV2.registerWalletFromSpoke with full CAIP-10 data
-        IFraudRegistryHubV2(hub)
+        // Forward to FraudRegistryHub.registerWalletFromSpoke with full CAIP-10 data
+        IFraudRegistryHub(hub)
             .registerWalletFromSpoke(
                 payload.namespaceHash,
                 payload.chainRef,
@@ -164,20 +164,20 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
         emit WalletRegistrationReceived(_origin, payload.identifier, messageId);
     }
 
-    /// @dev Handle transaction batch messages (V2 format)
+    /// @dev Handle transaction batch messages (format)
     function _handleTransactionBatch(uint32 _origin, bytes calldata _messageBody, bytes32 messageId) internal {
-        // Decode the V2 transaction batch payload
-        CrossChainMessageV2.TransactionBatchPayload memory payload =
-            CrossChainMessageV2.decodeTransactionBatch(_messageBody);
+        // Decode the transaction batch payload
+        CrossChainMessage.TransactionBatchPayload memory payload =
+            CrossChainMessage.decodeTransactionBatch(_messageBody);
 
         // Defense in depth: verify sourceChainId matches origin
         bytes32 expectedSourceChainId = CAIP10Evm.caip2Hash(uint64(_origin));
         if (payload.sourceChainId != expectedSourceChainId) {
-            revert CrossChainInboxV2__SourceChainMismatch();
+            revert CrossChainInbox__SourceChainMismatch();
         }
 
-        // Forward to FraudRegistryHubV2
-        IFraudRegistryHubV2(hub)
+        // Forward to FraudRegistryHub
+        IFraudRegistryHub(hub)
             .registerTransactionsFromSpoke(
                 payload.reporter,
                 payload.dataHash,
@@ -203,7 +203,7 @@ contract CrossChainInboxV2 is IMessageRecipient, Ownable2Step {
     /// @param trusted Whether the source is trusted
     function setTrustedSource(uint32 chainId, bytes32 spokeRegistry, bool trusted) external onlyOwner {
         // Prevent trusting zero address (common misconfiguration)
-        if (trusted && spokeRegistry == bytes32(0)) revert CrossChainInboxV2__ZeroAddress();
+        if (trusted && spokeRegistry == bytes32(0)) revert CrossChainInbox__ZeroAddress();
         _trustedSources[chainId][spokeRegistry] = trusted;
         emit TrustedSourceUpdated(chainId, spokeRegistry, trusted);
     }

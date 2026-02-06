@@ -28,13 +28,13 @@ export const stolenWallet = onchainTable(
     sourceChainCAIP2: t.text(),
     /** If cross-chain, Hyperlane message ID */
     messageId: t.hex(),
-    /** V2: bytes32 CAIP-2 hash where incident occurred */
+    /** bytes32 CAIP-2 hash where incident occurred */
     reportedChainId: t.hex(),
-    /** V2: Resolved CAIP-2 string (e.g. "eip155:1") from reportedChainId hash */
+    /** Resolved CAIP-2 string (e.g. "eip155:1") from reportedChainId hash */
     reportedChainCAIP2: t.text(),
-    /** V2: uint64 when theft happened */
+    /** uint64 when theft happened */
     incidentTimestamp: t.bigint(),
-    /** V2: 0=local, 1=Hyperlane */
+    /** 0=local, 1=Hyperlane */
     bridgeId: t.integer(),
     /** If from operator batch, the batch ID (uint256 as string) */
     batchId: t.text(),
@@ -48,7 +48,7 @@ export const stolenWallet = onchainTable(
   })
 );
 
-/** Operator-submitted wallet batches (V2: BatchCreated event) */
+/** Operator-submitted wallet batches (BatchCreated event) */
 export const walletBatch = onchainTable(
   'wallet_batch',
   (t) => ({
@@ -107,7 +107,7 @@ export const walletAcknowledgement = onchainTable(
 // TRANSACTION REGISTRY
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Transaction batch (V2: unified batchId across individual and operator) */
+/** Transaction batch (unified batchId across individual and operator) */
 export const transactionBatch = onchainTable(
   'transaction_batch',
   (t) => ({
@@ -150,7 +150,7 @@ export const transactionBatch = onchainTable(
 
 /**
  * Individual transactions in a batch (for querying "is this tx reported?")
- * V2: entries link to parent batch via transactionHash join (no batchId on per-entry events)
+ * Entries link to parent batch via transactionHash join (no batchId on per-entry events)
  */
 export const transactionInBatch = onchainTable(
   'transaction_in_batch',
@@ -182,7 +182,7 @@ export const transactionInBatch = onchainTable(
   })
 );
 
-/** Pending transaction batch acknowledgements (V2: simplified) */
+/** Pending transaction batch acknowledgements */
 export const transactionBatchAcknowledgement = onchainTable(
   'transaction_batch_acknowledgement',
   (t) => ({
@@ -244,7 +244,7 @@ export const crossChainMessage = onchainTable(
     receivedAt: t.bigint(),
     /** When registration completed */
     registeredAt: t.bigint(),
-    /** V2: Bridge protocol ID */
+    /** Bridge protocol ID */
     bridgeId: t.integer(),
   }),
   (table) => ({
@@ -363,7 +363,7 @@ export const operatorCapabilityChange = onchainTable(
 // FRAUDULENT CONTRACT REGISTRY
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Batches of fraudulent contracts submitted by operators (V2: ContractBatchCreated) */
+/** Batches of fraudulent contracts submitted by operators (ContractBatchCreated) */
 export const fraudulentContractBatch = onchainTable(
   'fraudulent_contract_batch',
   (t) => ({

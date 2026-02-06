@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title IContractRegistryV2
+/// @title IContractRegistry
 /// @author Stolen Wallet Registry Team
-/// @notice Interface for the Contract Registry V2 - handles operator-only malicious contract registration
-/// @dev Extracted from FraudRegistryV2 for contract size optimization
+/// @notice Interface for the Contract Registry - handles operator-only malicious contract registration
+/// @dev Extracted from FraudRegistryHub for contract size optimization
 ///      NOTE: This registry is operator-only (no individual submissions) because:
 ///      - Contract maliciousness requires technical expertise to verify
 ///      - DAO-approved operators (security firms) provide trusted bulk intel
 ///      - Operator approval process substitutes for two-phase EIP-712 protection
-interface IContractRegistryV2 {
+interface IContractRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
     // STRUCTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -40,11 +40,11 @@ interface IContractRegistryV2 {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    error ContractRegistryV2__AlreadyRegistered();
-    error ContractRegistryV2__ZeroAddress();
-    error ContractRegistryV2__OnlyOperatorSubmitter();
-    error ContractRegistryV2__EmptyBatch();
-    error ContractRegistryV2__ArrayLengthMismatch();
+    error ContractRegistry__AlreadyRegistered();
+    error ContractRegistry__ZeroAddress();
+    error ContractRegistry__OnlyOperatorSubmitter();
+    error ContractRegistry__EmptyBatch();
+    error ContractRegistry__ArrayLengthMismatch();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS

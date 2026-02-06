@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title ITransactionRegistryV2
+/// @title ITransactionRegistry
 /// @author Stolen Wallet Registry Team
-/// @notice Interface for the Transaction Registry V2 - handles two-phase transaction batch registration
-/// @dev Extracted from FraudRegistryV2 for contract size optimization
-interface ITransactionRegistryV2 {
+/// @notice Interface for the Transaction Registry - handles two-phase transaction batch registration
+/// @dev Extracted from FraudRegistryHub for contract size optimization
+interface ITransactionRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
     // STRUCTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -68,25 +68,25 @@ interface ITransactionRegistryV2 {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    error TransactionRegistryV2__AlreadyRegistered();
-    error TransactionRegistryV2__AlreadyAcknowledged();
-    error TransactionRegistryV2__NotAcknowledged();
-    error TransactionRegistryV2__DeadlineExpired();
-    error TransactionRegistryV2__DeadlineInPast();
-    error TransactionRegistryV2__GracePeriodNotStarted();
-    error TransactionRegistryV2__InvalidSignature();
-    error TransactionRegistryV2__InvalidSigner();
-    error TransactionRegistryV2__NotAuthorizedForwarder();
-    error TransactionRegistryV2__InsufficientFee();
-    error TransactionRegistryV2__ZeroAddress();
-    error TransactionRegistryV2__OnlyHub();
-    error TransactionRegistryV2__OnlyOperatorSubmitter();
-    error TransactionRegistryV2__EmptyBatch();
-    error TransactionRegistryV2__ArrayLengthMismatch();
-    error TransactionRegistryV2__DataHashMismatch();
-    error TransactionRegistryV2__InvalidStep();
-    error TransactionRegistryV2__HubTransferFailed();
-    error TransactionRegistryV2__RefundFailed();
+    error TransactionRegistry__AlreadyRegistered();
+    error TransactionRegistry__AlreadyAcknowledged();
+    error TransactionRegistry__NotAcknowledged();
+    error TransactionRegistry__DeadlineExpired();
+    error TransactionRegistry__DeadlineInPast();
+    error TransactionRegistry__GracePeriodNotStarted();
+    error TransactionRegistry__InvalidSignature();
+    error TransactionRegistry__InvalidSigner();
+    error TransactionRegistry__NotAuthorizedForwarder();
+    error TransactionRegistry__InsufficientFee();
+    error TransactionRegistry__ZeroAddress();
+    error TransactionRegistry__OnlyHub();
+    error TransactionRegistry__OnlyOperatorSubmitter();
+    error TransactionRegistry__EmptyBatch();
+    error TransactionRegistry__ArrayLengthMismatch();
+    error TransactionRegistry__DataHashMismatch();
+    error TransactionRegistry__InvalidStep();
+    error TransactionRegistry__HubTransferFailed();
+    error TransactionRegistry__RefundFailed();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -146,7 +146,7 @@ interface ITransactionRegistryV2 {
     event OperatorSubmitterUpdated(address oldOperatorSubmitter, address newOperatorSubmitter);
 
     /// @notice Fee breakdown for quoting registration costs
-    /// @dev Matches SpokeRegistryV2.FeeBreakdown for unified frontend interface
+    /// @dev Matches SpokeRegistry.FeeBreakdown for unified frontend interface
     /// @param bridgeFee Cross-chain bridge fee (always 0 on hub)
     /// @param registrationFee Protocol registration fee
     /// @param total Total fee (bridgeFee + registrationFee)
@@ -212,7 +212,7 @@ interface ITransactionRegistryV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Register transactions from cross-chain message (Hub only)
-    /// @dev Called by FraudRegistryHubV2 when processing cross-chain messages
+    /// @dev Called by FraudRegistryHub when processing cross-chain messages
     /// @param reporter The address that submitted the registration
     /// @param dataHash Hash of (txHashes, chainIds) - for verification
     /// @param reportedChainId CAIP-2 chain ID hash where transactions were reported
@@ -360,7 +360,7 @@ interface ITransactionRegistryV2 {
     function quoteFeeBreakdown(address reporter) external view returns (FeeBreakdown memory breakdown);
 
     /// @notice Get hub address
-    /// @return The FraudRegistryHubV2 address
+    /// @return The FraudRegistryHub address
     function hub() external view returns (address);
 
     /// @notice Get operator submitter address
@@ -372,7 +372,7 @@ interface ITransactionRegistryV2 {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Set or update hub address (owner-only, can be called multiple times)
-    /// @param newHub The FraudRegistryHubV2 address (must not be address(0))
+    /// @param newHub The FraudRegistryHub address (must not be address(0))
     function setHub(address newHub) external;
 
     /// @notice Set operator submitter address

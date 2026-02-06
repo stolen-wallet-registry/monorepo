@@ -23,7 +23,7 @@ export const SignatureOverTheWireSchema = z
     value: z.string().max(500), // Signatures are ~130 chars
     deadline: z.string().max(50), // BigInt as string
     nonce: z.string().max(50), // BigInt as string
-    // V2 fields (optional for backward compatibility)
+    // Extended fields (optional for backward compatibility)
     /** CAIP-2 bytes32 hash of chain where incident occurred */
     reportedChainId: z.string().max(66).optional(), // bytes32 hex string
     /** Unix timestamp when incident occurred (0 = unknown) */
