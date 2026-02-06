@@ -44,12 +44,11 @@ export function useQuoteRegistration(
   // Get the correct ABI and function name (unified: quoteRegistration on both hub and spoke)
   const { abi, functions } = getRegistryMetadata('wallet', registryType);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
   const result = useReadContract({
     address: contractAddress,
     abi,
     chainId,
-    functionName: functions.quoteRegistration as any,
+    functionName: functions.quoteRegistration as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
       enabled: !!contractAddress && !!ownerAddress,

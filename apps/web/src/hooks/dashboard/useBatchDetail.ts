@@ -8,11 +8,9 @@ import {
   WALLET_BATCH_DETAIL_QUERY,
   TRANSACTION_BATCH_DETAIL_QUERY,
   CONTRACT_BATCH_DETAIL_QUERY,
-  INVALIDATIONS_BATCH_QUERY,
   type RawWalletBatchDetailResponse,
   type RawTransactionBatchDetailResponse,
   type RawContractBatchDetailResponse,
-  type RawInvalidationsBatchResponse,
 } from '@swr/search';
 import { logger } from '@/lib/logger';
 import { INDEXER_URL } from '@/lib/indexer';
@@ -40,7 +38,7 @@ function asOptionalAddress(value?: string | null): Address | undefined {
 
 export interface WalletBatchDetail {
   id: string;
-  merkleRoot: string;
+  operatorId: string;
   operator: Address;
   reportedChainId?: string;
   walletCount: number;
@@ -59,13 +57,13 @@ export interface WalletBatchEntry {
 
 export interface TransactionBatchDetail {
   id: string;
-  merkleRoot: string;
+  dataHash: string;
   reporter: Address;
   reportedChainId?: string;
   transactionCount: number;
   isSponsored: boolean;
-  isOperatorVerified: boolean;
-  verifyingOperator?: Address;
+  isOperator: boolean;
+  operatorId?: string;
   registeredAt: bigint;
   transactionHash: Hash;
 }
@@ -81,14 +79,12 @@ export interface TransactionBatchEntry {
 
 export interface ContractBatchDetail {
   id: string;
-  merkleRoot: string;
+  operatorId: string;
   operator: Address;
   reportedChainId?: string;
   contractCount: number;
   registeredAt: bigint;
   transactionHash: Hash;
-  invalidated: boolean;
-  invalidatedAt?: bigint | null;
 }
 
 export interface ContractBatchEntry {
@@ -98,8 +94,6 @@ export interface ContractBatchEntry {
   operator: Address;
   reportedAt: bigint;
   entryHash: string;
-  invalidated: boolean;
-  invalidatedAt?: bigint | null;
 }
 
 export type BatchDetailResult =
@@ -155,7 +149,7 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
 
         const batch: WalletBatchDetail = {
           id: response.walletBatch.id,
-          merkleRoot: response.walletBatch.merkleRoot,
+          operatorId: response.walletBatch.operatorId,
           operator: response.walletBatch.operator as Address,
           reportedChainId: response.walletBatch.reportedChainCAIP2,
           walletCount: response.walletBatch.walletCount,
@@ -186,13 +180,13 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
 
         const batch: TransactionBatchDetail = {
           id: response.transactionBatch.id,
-          merkleRoot: response.transactionBatch.merkleRoot,
+          dataHash: response.transactionBatch.dataHash,
           reporter: response.transactionBatch.reporter as Address,
           reportedChainId: response.transactionBatch.reportedChainCAIP2,
           transactionCount: response.transactionBatch.transactionCount,
           isSponsored: response.transactionBatch.isSponsored,
-          isOperatorVerified: response.transactionBatch.isOperatorVerified,
-          verifyingOperator: asOptionalAddress(response.transactionBatch.verifyingOperator),
+          isOperator: response.transactionBatch.isOperator,
+          operatorId: response.transactionBatch.operatorId,
           registeredAt: safeBigInt(response.transactionBatch.registeredAt),
           transactionHash: response.transactionBatch.transactionHash as Hash,
         };
@@ -219,50 +213,22 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
 
       const batch: ContractBatchDetail = {
         id: response.fraudulentContractBatch.id,
-        merkleRoot: response.fraudulentContractBatch.merkleRoot,
+        operatorId: response.fraudulentContractBatch.operatorId,
         operator: response.fraudulentContractBatch.operator as Address,
         reportedChainId: response.fraudulentContractBatch.reportedChainCAIP2,
         contractCount: response.fraudulentContractBatch.contractCount,
         registeredAt: safeBigInt(response.fraudulentContractBatch.registeredAt),
         transactionHash: response.fraudulentContractBatch.transactionHash as Hash,
-        invalidated: response.fraudulentContractBatch.invalidated,
-        invalidatedAt: response.fraudulentContractBatch.invalidatedAt
-          ? safeBigInt(response.fraudulentContractBatch.invalidatedAt)
-          : null,
       };
 
-      const entryHashes = response.fraudulentContracts.items.map((entry) => entry.entryHash);
-      const invalidationMap = new Map<string, { invalidatedAt: bigint; reinstated: boolean }>();
-
-      if (entryHashes.length > 0) {
-        const invalidations = await request<RawInvalidationsBatchResponse>(
-          INDEXER_URL,
-          INVALIDATIONS_BATCH_QUERY,
-          { entryHashes }
-        );
-
-        for (const item of invalidations.invalidatedEntrys.items) {
-          invalidationMap.set(item.id, {
-            invalidatedAt: safeBigInt(item.invalidatedAt),
-            reinstated: item.reinstated,
-          });
-        }
-      }
-
-      const entries = response.fraudulentContracts.items.map<ContractBatchEntry>((raw) => {
-        const invalidation = invalidationMap.get(raw.entryHash);
-        const invalidated = invalidation ? !invalidation.reinstated : false;
-        return {
-          contractAddress: raw.contractAddress,
-          caip2ChainId: raw.caip2ChainId,
-          numericChainId: raw.numericChainId,
-          operator: raw.operator as Address,
-          reportedAt: safeBigInt(raw.reportedAt),
-          entryHash: raw.entryHash,
-          invalidated,
-          invalidatedAt: invalidation ? invalidation.invalidatedAt : null,
-        };
-      });
+      const entries = response.fraudulentContracts.items.map<ContractBatchEntry>((raw) => ({
+        contractAddress: raw.contractAddress,
+        caip2ChainId: raw.caip2ChainId,
+        numericChainId: raw.numericChainId,
+        operator: raw.operator as Address,
+        reportedAt: safeBigInt(raw.reportedAt),
+        entryHash: raw.entryHash,
+      }));
 
       return { type: 'contract', batch, entries };
     },

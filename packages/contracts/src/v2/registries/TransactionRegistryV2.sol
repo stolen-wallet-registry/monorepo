@@ -447,16 +447,11 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds
     ) internal {
-        // Create batch
         uint256 batchId = _nextBatchId++;
-        _batches[batchId] = TransactionBatch({
-            operatorId: bytes32(0),
-            timestamp: uint64(block.timestamp),
-            transactionCount: uint32(transactionHashes.length)
-        });
 
-        // Register transactions
+        // Register transactions, counting actual registrations
         bytes32 localSourceChainId = CAIP10Evm.caip2Hash(uint64(block.chainid));
+        uint32 actualCount = 0;
 
         for (uint256 i = 0; i < transactionHashes.length; i++) {
             bytes32 txHash = transactionHashes[i];
@@ -477,10 +472,20 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
                 isSponsored: isSponsored
             });
 
+            actualCount++;
             emit TransactionRegistered(txHash, chainId, reporter, isSponsored);
         }
 
-        emit TransactionBatchRegistered(reporter, dataHash, uint32(transactionHashes.length), isSponsored);
+        // Write batch after loop with accurate count
+        _batches[batchId] = TransactionBatch({
+            operatorId: bytes32(0),
+            dataHash: dataHash,
+            reporter: reporter,
+            timestamp: uint64(block.timestamp),
+            transactionCount: actualCount
+        });
+
+        emit TransactionBatchRegistered(batchId, reporter, dataHash, actualCount, isSponsored);
     }
 
     /// @dev Internal signature verification for registration
@@ -570,15 +575,11 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds
     ) internal {
-        // Create batch
         uint256 batchId = _nextBatchId++;
-        _batches[batchId] = TransactionBatch({
-            operatorId: bytes32(0),
-            timestamp: uint64(block.timestamp),
-            transactionCount: uint32(transactionHashes.length)
-        });
 
-        // Register transactions
+        // Register transactions, counting actual registrations
+        uint32 actualCount = 0;
+
         for (uint256 i = 0; i < transactionHashes.length; i++) {
             bytes32 txHash = transactionHashes[i];
             if (txHash == bytes32(0)) continue;
@@ -598,12 +599,22 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
                 isSponsored: params.isSponsored
             });
 
+            actualCount++;
             emit TransactionRegistered(txHash, chainId, reporter, params.isSponsored);
             emit CrossChainTransactionRegistered(txHash, params.sourceChainId, params.bridgeId, params.messageId);
         }
 
-        emit TransactionBatchCreated(batchId, bytes32(0), uint32(transactionHashes.length));
-        emit TransactionBatchRegistered(reporter, dataHash, uint32(transactionHashes.length), params.isSponsored);
+        // Write batch after loop with accurate count
+        _batches[batchId] = TransactionBatch({
+            operatorId: bytes32(0),
+            dataHash: dataHash,
+            reporter: reporter,
+            timestamp: uint64(block.timestamp),
+            transactionCount: actualCount
+        });
+
+        // Only TransactionBatchRegistered — no duplicate TransactionBatchCreated for cross-chain
+        emit TransactionBatchRegistered(batchId, reporter, dataHash, actualCount, params.isSponsored);
     }
 
     /// @inheritdoc ITransactionRegistryV2
@@ -678,7 +689,11 @@ contract TransactionRegistryV2 is ITransactionRegistryV2, EIP712, Ownable2Step {
         }
 
         _batches[batchId] = TransactionBatch({
-            operatorId: operatorId, timestamp: uint64(block.timestamp), transactionCount: actualCount
+            operatorId: operatorId,
+            dataHash: bytes32(0),
+            reporter: address(0),
+            timestamp: uint64(block.timestamp),
+            transactionCount: actualCount
         });
 
         emit TransactionBatchCreated(batchId, operatorId, actualCount);

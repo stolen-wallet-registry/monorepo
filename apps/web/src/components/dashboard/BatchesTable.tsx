@@ -7,7 +7,6 @@
 import { useMemo } from 'react';
 import { Link, useLocation, useSearch } from 'wouter';
 import {
-  Badge,
   Button,
   Card,
   CardContent,
@@ -71,8 +70,9 @@ function BatchRow({ batch, operatorNames, detailHref }: BatchRowProps) {
 
   const submitterKey = batch.submitter.toLowerCase();
   const operatorLabel = operatorNames.get(submitterKey);
+  // Wallet and contract batches are always from operators; transaction batches check isOperator flag
   const isOperator =
-    batch.type !== 'transaction' || (batch.type === 'transaction' && batch.isOperatorVerified);
+    batch.type !== 'transaction' || (batch.type === 'transaction' && batch.isOperator === true);
   const submitterLabel = isOperator
     ? (operatorLabel ?? truncateHash(submitterKey, 6, 4))
     : 'Individual';
@@ -88,11 +88,6 @@ function BatchRow({ batch, operatorNames, detailHref }: BatchRowProps) {
             <TypeIcon className="h-3 w-3" />
           </div>
           <span className="text-xs text-muted-foreground">{config.label}</span>
-          {batch.type === 'contract' && batch.invalidated && (
-            <Badge variant="destructive" className="text-[10px]">
-              Invalidated
-            </Badge>
-          )}
         </div>
       </TableCell>
       <TableCell>
@@ -187,8 +182,8 @@ export function BatchesTable({ className }: BatchesTableProps) {
       if (batch.type !== 'transaction') {
         return submitterFilter === 'operator';
       }
-      const isOperator = batch.isOperatorVerified === true;
-      return submitterFilter === 'operator' ? isOperator : !isOperator;
+      const isOp = batch.isOperator === true;
+      return submitterFilter === 'operator' ? isOp : !isOp;
     });
   }, [batches, submitterFilter]);
 

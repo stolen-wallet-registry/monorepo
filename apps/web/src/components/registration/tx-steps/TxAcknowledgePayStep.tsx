@@ -335,6 +335,8 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     registrationType,
     expectedWallet,
     isCorrectWallet,
+    isHub,
+    isSpoke,
   ]);
 
   /**

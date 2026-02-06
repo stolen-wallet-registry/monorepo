@@ -281,6 +281,16 @@ export const TransactionRegistryV2ABI = [
             internalType: 'bytes32',
           },
           {
+            name: 'dataHash',
+            type: 'bytes32',
+            internalType: 'bytes32',
+          },
+          {
+            name: 'reporter',
+            type: 'address',
+            internalType: 'address',
+          },
+          {
             name: 'timestamp',
             type: 'uint64',
             internalType: 'uint64',
@@ -847,6 +857,13 @@ export const TransactionRegistryV2ABI = [
     stateMutability: 'nonpayable',
   },
   {
+    type: 'function',
+    name: 'withdrawCollectedFees',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
     type: 'event',
     name: 'CrossChainTransactionRegistered',
     inputs: [
@@ -1020,6 +1037,12 @@ export const TransactionRegistryV2ABI = [
     name: 'TransactionBatchRegistered',
     inputs: [
       {
+        name: 'batchId',
+        type: 'uint256',
+        indexed: true,
+        internalType: 'uint256',
+      },
+      {
         name: 'reporter',
         type: 'address',
         indexed: true,
@@ -1189,6 +1212,11 @@ export const TransactionRegistryV2ABI = [
   },
   {
     type: 'error',
+    name: 'TransactionRegistryV2__HubTransferFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TransactionRegistryV2__InsufficientFee',
     inputs: [],
   },
@@ -1200,6 +1228,11 @@ export const TransactionRegistryV2ABI = [
   {
     type: 'error',
     name: 'TransactionRegistryV2__InvalidSigner',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TransactionRegistryV2__InvalidStep',
     inputs: [],
   },
   {
@@ -1220,6 +1253,11 @@ export const TransactionRegistryV2ABI = [
   {
     type: 'error',
     name: 'TransactionRegistryV2__OnlyOperatorSubmitter',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TransactionRegistryV2__RefundFailed',
     inputs: [],
   },
   {

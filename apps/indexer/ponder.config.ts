@@ -41,8 +41,8 @@ const SOULBOUND_ADDRESSES: Record<
   { walletSoulbound: Address; supportSoulbound: Address }
 > = {
   development: {
-    walletSoulbound: '0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e',
-    supportSoulbound: '0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0',
+    walletSoulbound: '0xc6e7DF5E7b4f2A278906862b61205850344D4e7d',
+    supportSoulbound: '0x59b670e9fA9D0A427751Af201D676719a970857b',
   },
   staging: {
     walletSoulbound: '0x0000000000000000000000000000000000000000',

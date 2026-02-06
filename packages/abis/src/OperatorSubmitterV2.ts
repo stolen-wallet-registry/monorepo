@@ -263,6 +263,24 @@ export const OperatorSubmitterV2ABI = [
   },
   {
     type: 'function',
+    name: 'setFeeConfig',
+    inputs: [
+      {
+        name: '_feeManager',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: '_feeRecipient',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'setFeeManager',
     inputs: [
       {

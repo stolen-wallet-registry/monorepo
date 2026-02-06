@@ -50,12 +50,16 @@ interface ITransactionRegistryV2 {
         bool isSponsored;
     }
 
-    /// @notice Batch registration data (for operator submissions)
-    /// @param operatorId The operator who submitted this batch
+    /// @notice Batch registration data (unified across individual, operator, and cross-chain)
+    /// @param operatorId The operator who submitted (bytes32(0) for individual/cross-chain)
+    /// @param dataHash Hash of (txHashes, chainIds) committed (bytes32(0) for operator)
+    /// @param reporter Address that reported (address(0) for operator)
     /// @param timestamp When the batch was submitted
     /// @param transactionCount Number of transactions in the batch
     struct TransactionBatch {
         bytes32 operatorId;
+        bytes32 dataHash;
+        address reporter;
         uint64 timestamp;
         uint32 transactionCount;
     }
@@ -107,12 +111,17 @@ interface ITransactionRegistryV2 {
     );
 
     /// @notice Emitted when a transaction batch registration is completed
+    /// @param batchId The batch ID (auto-incrementing counter)
     /// @param reporter The address that registered the transactions
     /// @param dataHash Hash of (txHashes, chainIds)
     /// @param transactionCount Number of transactions registered
     /// @param isSponsored Whether registration was gas-sponsored
     event TransactionBatchRegistered(
-        address indexed reporter, bytes32 indexed dataHash, uint32 transactionCount, bool isSponsored
+        uint256 indexed batchId,
+        address indexed reporter,
+        bytes32 indexed dataHash,
+        uint32 transactionCount,
+        bool isSponsored
     );
 
     /// @notice Emitted when a transaction is registered via cross-chain message

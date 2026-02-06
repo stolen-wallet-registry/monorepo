@@ -236,13 +236,13 @@ export const RECENT_TRANSACTIONS_QUERY = gql`
     ) {
       items {
         id
-        merkleRoot
+        dataHash
         reporter
         reportedChainCAIP2
         transactionCount
         isSponsored
-        isOperatorVerified
-        verifyingOperator
+        isOperator
+        operatorId
         registeredAt
         transactionHash
       }
@@ -283,7 +283,7 @@ export const RECENT_WALLET_BATCHES_QUERY = gql`
     walletBatchs(orderBy: "registeredAt", orderDirection: "desc", limit: $limit, offset: $offset) {
       items {
         id
-        merkleRoot
+        operatorId
         operator
         reportedChainCAIP2
         walletCount
@@ -307,14 +307,12 @@ export const RECENT_CONTRACT_BATCHES_QUERY = gql`
     ) {
       items {
         id
-        merkleRoot
+        operatorId
         operator
         reportedChainCAIP2
         contractCount
         registeredAt
         transactionHash
-        invalidated
-        invalidatedAt
       }
     }
   }
@@ -327,7 +325,7 @@ export const WALLET_BATCH_DETAIL_QUERY = gql`
   query WalletBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
     walletBatch(id: $batchId) {
       id
-      merkleRoot
+      operatorId
       operator
       reportedChainCAIP2
       walletCount
@@ -360,13 +358,13 @@ export const TRANSACTION_BATCH_DETAIL_QUERY = gql`
   query TransactionBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
     transactionBatch(id: $batchId) {
       id
-      merkleRoot
+      dataHash
       reporter
       reportedChainCAIP2
       transactionCount
       isSponsored
-      isOperatorVerified
-      verifyingOperator
+      isOperator
+      operatorId
       registeredAt
       transactionHash
     }
@@ -396,14 +394,12 @@ export const CONTRACT_BATCH_DETAIL_QUERY = gql`
   query ContractBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
     fraudulentContractBatch(id: $batchId) {
       id
-      merkleRoot
+      operatorId
       operator
       reportedChainCAIP2
       contractCount
       registeredAt
       transactionHash
-      invalidated
-      invalidatedAt
     }
     fraudulentContracts(
       where: { batchId: $batchId }
@@ -588,13 +584,13 @@ export interface RawRecentTransactionsResponse {
   transactionBatchs: {
     items: Array<{
       id: string;
-      merkleRoot: string;
+      dataHash: string;
       reporter: string;
       reportedChainCAIP2?: string;
       transactionCount: number;
       isSponsored: boolean;
-      isOperatorVerified: boolean;
-      verifyingOperator?: string;
+      isOperator: boolean;
+      operatorId?: string;
       registeredAt: string;
       transactionHash: string;
     }>;
@@ -619,7 +615,7 @@ export interface RawRecentWalletBatchesResponse {
   walletBatchs: {
     items: Array<{
       id: string;
-      merkleRoot: string;
+      operatorId: string;
       operator: string;
       reportedChainCAIP2?: string;
       walletCount: number;
@@ -633,14 +629,12 @@ export interface RawRecentContractBatchesResponse {
   fraudulentContractBatchs: {
     items: Array<{
       id: string;
-      merkleRoot: string;
+      operatorId: string;
       operator: string;
       reportedChainCAIP2?: string;
       contractCount: number;
       registeredAt: string;
       transactionHash: string;
-      invalidated: boolean;
-      invalidatedAt?: string | null;
     }>;
   };
 }
@@ -648,7 +642,7 @@ export interface RawRecentContractBatchesResponse {
 export interface RawWalletBatchDetailResponse {
   walletBatch: {
     id: string;
-    merkleRoot: string;
+    operatorId: string;
     operator: string;
     reportedChainCAIP2?: string;
     walletCount: number;
@@ -670,13 +664,13 @@ export interface RawWalletBatchDetailResponse {
 export interface RawTransactionBatchDetailResponse {
   transactionBatch: {
     id: string;
-    merkleRoot: string;
+    dataHash: string;
     reporter: string;
     reportedChainCAIP2?: string;
     transactionCount: number;
     isSponsored: boolean;
-    isOperatorVerified: boolean;
-    verifyingOperator?: string;
+    isOperator: boolean;
+    operatorId?: string;
     registeredAt: string;
     transactionHash: string;
   } | null;
@@ -695,14 +689,12 @@ export interface RawTransactionBatchDetailResponse {
 export interface RawContractBatchDetailResponse {
   fraudulentContractBatch: {
     id: string;
-    merkleRoot: string;
+    operatorId: string;
     operator: string;
     reportedChainCAIP2?: string;
     contractCount: number;
     registeredAt: string;
     transactionHash: string;
-    invalidated: boolean;
-    invalidatedAt?: string | null;
   } | null;
   fraudulentContracts: {
     items: Array<{
