@@ -79,7 +79,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   const forwarder = isSelfRelay && relayer ? relayer : registeree;
 
   // Build transaction args for gas estimation (needs to be before early returns)
-  // WalletRegistry.acknowledge: (registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
+  // Unified: acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
   const transactionArgs: WalletAcknowledgeArgs | undefined =
     storedSignature &&
     registeree &&
@@ -93,6 +93,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
           storedSignature.reportedChainId,
           storedSignature.incidentTimestamp,
           storedSignature.deadline,
+          storedSignature.nonce,
           parsedSig.v,
           parsedSig.r,
           parsedSig.s,
@@ -195,6 +196,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         reportedChainId: storedSignature.reportedChainId,
         incidentTimestamp: storedSignature.incidentTimestamp,
         deadline: storedSignature.deadline,
+        nonce: storedSignature.nonce,
         signature: parsedSig,
       });
 

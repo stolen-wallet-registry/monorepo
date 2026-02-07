@@ -313,6 +313,7 @@ contract StringLookupAndForwarderCheckTest is Test {
             CHAIN_ID,
             uint64(block.timestamp - 1 hours),
             block.timestamp + 1 hours,
+            0, // nonce
             27,
             bytes32(uint256(1)),
             bytes32(uint256(2)) // dummy sig

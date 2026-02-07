@@ -1,13 +1,15 @@
 /**
  * Hook to read deadline and hash struct from the transaction registry contract.
- * Currently hub-only (TransactionRegistry). Spoke (SpokeRegistry) support is not yet implemented —
- * spoke transaction batches use different function signatures for acknowledgement/registration.
+ * Chain-aware: works on both hub (TransactionRegistry) and spoke (SpokeRegistry).
+ *
+ * Both contracts expose `generateTransactionHashStruct` with the same signature:
+ *   (bytes32 dataHash, bytes32 reportedChainId, uint32 transactionCount, address forwarder, uint8 step)
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  */
 
 import { useReadContract, useChainId } from 'wagmi';
-import { transactionRegistryAbi } from '@/lib/contracts/abis';
+import { transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { getTransactionRegistryAddress } from '@/lib/contracts/addresses';
 import { getSpokeContractAddress } from '@/lib/contracts/crosschain-addresses';
 import { isHubChain, isSpokeChain } from '@swr/chains';
@@ -87,18 +89,29 @@ export function useTransactionHashStruct(
     },
   });
 
-  // Note: SpokeRegistry uses different functions for transaction batches
-  // (acknowledgeTransactionBatch/registerTransactionBatch) with different signature generation.
-  // Transaction hash struct generation is currently only implemented for hub chains.
-  // Spoke transaction registration may need separate handling.
+  // Spoke chain: SpokeRegistry.generateTransactionHashStruct (same signature)
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'generateTransactionHashStruct',
+    args: enabled
+      ? [dataHash!, reportedChainId!, transactionCount!, forwarderAddress!, step]
+      : undefined,
+    query: {
+      enabled: enabled && isSpoke,
+      staleTime: 10_000,
+    },
+  });
 
-  // Use hub result - spoke not yet supported for transaction hash struct
-  const result = hubResult;
+  // Select result based on chain role
+  const result = isSpoke ? spokeResult : hubResult;
 
   if (result.isError) {
-    logger.contract.error('generateHashStruct call failed (transaction registry)', {
+    logger.contract.error('generateTransactionHashStruct call failed', {
       chainId,
       contractAddress,
+      isSpoke,
       dataHash,
       transactionCount,
       forwarderAddress,
@@ -112,9 +125,10 @@ export function useTransactionHashStruct(
   if (result.data && Array.isArray(result.data) && result.data.length >= 2) {
     const [deadline, hashStruct] = result.data as [bigint, Hash];
     transformedData = { deadline, hashStruct };
-    logger.contract.debug('generateHashStruct call succeeded (transaction registry)', {
+    logger.contract.debug('generateTransactionHashStruct call succeeded', {
       chainId,
       contractAddress,
+      isSpoke,
       deadline: deadline.toString(),
     });
   }

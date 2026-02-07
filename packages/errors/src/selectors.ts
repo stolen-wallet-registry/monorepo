@@ -120,6 +120,11 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Only the operator submitter can perform this action.',
     action: 'Please contact support.',
   },
+  '0x5934e5e0': {
+    name: 'WalletRegistry__InvalidNonce',
+    message: 'Transaction nonce mismatch.',
+    action: 'Please refresh the page and try again.',
+  },
   '0x39f0ba50': {
     name: 'WalletRegistry__EmptyBatch',
     message: 'Batch cannot be empty.',
@@ -429,6 +434,11 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     name: 'SpokeRegistry__InvalidHubConfig',
     message: 'Invalid hub configuration.',
     action: 'Please contact support.',
+  },
+  '0xbefa3abb': {
+    name: 'SpokeRegistry__InvalidStep',
+    message: 'Invalid signing step.',
+    action: 'Please restart the registration flow.',
   },
   '0xe3e9689e': {
     name: 'SpokeRegistry__EmptyBatch',

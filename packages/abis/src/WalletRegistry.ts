@@ -62,6 +62,11 @@ export const WalletRegistryABI = [
         internalType: 'uint256',
       },
       {
+        name: 'nonce',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
         name: 'v',
         type: 'uint8',
         internalType: 'uint8',
@@ -660,9 +665,9 @@ export const WalletRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'deadline',
-        type: 'uint256',
-        internalType: 'uint256',
+        name: 'forwarder',
+        type: 'address',
+        internalType: 'address',
       },
       {
         name: 'reportedChainId',
@@ -673,6 +678,16 @@ export const WalletRegistryABI = [
         name: 'incidentTimestamp',
         type: 'uint64',
         internalType: 'uint64',
+      },
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'nonce',
+        type: 'uint256',
+        internalType: 'uint256',
       },
       {
         name: 'v',
@@ -1138,6 +1153,11 @@ export const WalletRegistryABI = [
   {
     type: 'error',
     name: 'WalletRegistry__InsufficientFee',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'WalletRegistry__InvalidNonce',
     inputs: [],
   },
   {

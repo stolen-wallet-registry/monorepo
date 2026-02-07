@@ -157,11 +157,10 @@ export const TX_SIGNATURE_STEP = {
 export type TxSignatureStep = (typeof TX_SIGNATURE_STEP)[keyof typeof TX_SIGNATURE_STEP];
 
 /**
- * Wallet Acknowledgement contract arguments.
- * Hub: acknowledge(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
- * Spoke: acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ * Wallet Acknowledgement contract arguments (unified hub and spoke).
+ * acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
  *
- * isSponsored is derived on-chain as (registeree != forwarder).
+ * isSponsored is derived on-chain as (wallet != forwarder).
  */
 export type WalletAcknowledgeArgs = readonly [
   registeree: Address,
@@ -169,23 +168,25 @@ export type WalletAcknowledgeArgs = readonly [
   reportedChainId: bigint, // Raw EVM chain ID (uint64)
   incidentTimestamp: bigint, // Unix timestamp (uint64)
   deadline: bigint, // Signature expiry (uint256)
+  nonce: bigint, // Replay protection nonce (uint256)
   v: number, // Signature v (uint8)
   r: Hash, // Signature r (bytes32)
   s: Hash, // Signature s (bytes32)
 ];
 
 /**
- * Wallet Registration contract arguments.
- * Hub: register(registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
- * Spoke: registerLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ * Wallet Registration contract arguments (unified hub and spoke).
+ * register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
  *
  * @note reportedChainId is uint64 raw EVM chain ID. Contract converts to CAIP-2 hash internally.
  */
 export type WalletRegistrationArgs = readonly [
   registeree: Address,
-  deadline: bigint, // Signature expiry (uint256)
+  forwarder: Address, // Must match acknowledge phase and msg.sender
   reportedChainId: bigint, // Raw EVM chain ID (uint64) — contract converts to CAIP-2 hash
   incidentTimestamp: bigint, // Unix timestamp (uint64)
+  deadline: bigint, // Signature expiry (uint256)
+  nonce: bigint, // Replay protection nonce (uint256)
   v: number, // Signature v (uint8)
   r: Hash, // Signature r (bytes32)
   s: Hash, // Signature s (bytes32)

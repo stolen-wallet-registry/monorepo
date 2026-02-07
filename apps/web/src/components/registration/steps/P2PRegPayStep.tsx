@@ -118,13 +118,15 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
 
     await submitRegistration({
       registeree,
-      deadline: storedSig.deadline,
+      forwarder: relayerAddress!,
       reportedChainId,
       incidentTimestamp,
+      deadline: storedSig.deadline,
+      nonce: storedSig.nonce,
       signature: parsedSig,
       feeWei,
     });
-  }, [storedSig, registeree, chainId, submitRegistration, feeWei]);
+  }, [storedSig, registeree, relayerAddress, chainId, submitRegistration, feeWei]);
 
   // Cleanup retry timeout on unmount
   useEffect(() => {

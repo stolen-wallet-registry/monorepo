@@ -69,6 +69,10 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
     event FeeRecipientSet(address indexed feeRecipient);
 
     /// @notice Emitted when an operator batch is submitted to a registry
+    /// @param operator The operator address that submitted the batch
+    /// @param registry The registry contract the batch was submitted to
+    /// @param batchId The ID assigned to this batch
+    /// @param entryCount The number of entries in the batch
     event BatchSubmitted(address indexed operator, address indexed registry, uint256 batchId, uint32 entryCount);
 
     // ═══════════════════════════════════════════════════════════════════════════

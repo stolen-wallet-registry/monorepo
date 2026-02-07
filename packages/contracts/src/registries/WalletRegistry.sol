@@ -367,6 +367,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline, // EIP-712 signature expiry (timestamp, compared to block.timestamp)
+        uint256 nonce,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -385,7 +386,8 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
             revert WalletRegistry__AlreadyAcknowledged();
         }
 
-        uint256 nonce = nonces[registeree];
+        // Validate nonce matches expected value (fail-fast before signature verification)
+        if (nonce != nonces[registeree]) revert WalletRegistry__InvalidNonce();
 
         // Verify EIP-712 signature from registeree (includes reportedChainId + incidentTimestamp)
         _verifyAckSignature(registeree, forwarder, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
@@ -422,9 +424,11 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     ///      `ack.deadline` is a BLOCK NUMBER (grace period window, compared to block.number).
     function register(
         address registeree,
-        uint256 deadline, // EIP-712 signature expiry (timestamp, compared to block.timestamp)
+        address forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
+        uint256 deadline, // EIP-712 signature expiry (timestamp, compared to block.timestamp)
+        uint256 nonce,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -444,10 +448,11 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
             revert WalletRegistry__InvalidSignature();
         }
 
-        uint256 nonce = nonces[registeree];
+        // Validate nonce matches expected value (fail-fast before signature verification)
+        if (nonce != nonces[registeree]) revert WalletRegistry__InvalidNonce();
 
-        // Verify EIP-712 signature (uses real reportedChainId + incidentTimestamp)
-        _verifyRegSignature(registeree, msg.sender, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
+        // Verify EIP-712 signature (uses forwarder param — must match msg.sender for sig to be valid)
+        _verifyRegSignature(registeree, forwarder, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
 
         // === EFFECTS ===
         nonces[registeree]++;

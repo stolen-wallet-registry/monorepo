@@ -120,8 +120,9 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc ISpokeRegistry
-    function acknowledgeLocal(
+    function acknowledge(
         address wallet,
+        address forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -132,6 +133,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     ) external {
         // Fail fast: reject zero address
         if (wallet == address(0)) revert SpokeRegistry__InvalidOwner();
+        if (forwarder == address(0)) revert SpokeRegistry__ZeroAddress();
 
         // Validate signature deadline hasn't passed
         if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
@@ -140,7 +142,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         if (nonce != nonces[wallet]) revert SpokeRegistry__InvalidNonce();
 
         // Compute isSponsored early to reduce stack pressure at emit
-        bool isSponsored = wallet != msg.sender;
+        bool isSponsored = wallet != forwarder;
 
         // Verify EIP-712 signature (scoped to free stack slots)
         {
@@ -150,7 +152,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
                         EIP712Constants.WALLET_ACK_TYPEHASH,
                         EIP712Constants.ACK_STATEMENT_HASH,
                         wallet,
-                        msg.sender,
+                        forwarder,
                         reportedChainId,
                         incidentTimestamp,
                         nonce,
@@ -170,19 +172,20 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
 
         // Store acknowledgement with randomized grace period
         pendingAcknowledgements[wallet] = AcknowledgementData({
-            trustedForwarder: msg.sender,
+            trustedForwarder: forwarder,
             incidentTimestamp: incidentTimestamp,
             reportedChainId: reportedChainIdHash,
             startBlock: TimingConfig.getGracePeriodEndBlock(graceBlocks),
             expiryBlock: TimingConfig.getDeadlineBlock(deadlineBlocks)
         });
 
-        emit WalletAcknowledged(wallet, msg.sender, reportedChainIdHash, incidentTimestamp, isSponsored);
+        emit WalletAcknowledged(wallet, forwarder, reportedChainIdHash, incidentTimestamp, isSponsored);
     }
 
     /// @inheritdoc ISpokeRegistry
-    function registerLocal(
+    function register(
         address wallet,
+        address forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -193,10 +196,10 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     ) external payable {
         // Validate inputs and signature, get data needed for payload
         (bytes32 digest, bytes32 reportedChainIdHash) =
-            _validateWalletRegistration(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+            _validateWalletRegistration(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
         // Determine sponsorship
-        bool isSponsored = wallet != msg.sender;
+        bool isSponsored = wallet != forwarder;
 
         // Build and send cross-chain message
         _executeWalletRegistration(wallet, reportedChainIdHash, incidentTimestamp, nonce, isSponsored, digest);
@@ -205,6 +208,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     /// @dev Validate wallet registration inputs and signature (reduces stack pressure in main function)
     function _validateWalletRegistration(
         address wallet,
+        address forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -225,14 +229,14 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         // Validate nonce matches expected value
         if (nonce != nonces[wallet]) revert SpokeRegistry__InvalidNonce();
 
-        // Compute digest and verify signature
+        // Compute digest and verify signature (uses forwarder param)
         digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
                     EIP712Constants.WALLET_REG_TYPEHASH,
                     EIP712Constants.REG_STATEMENT_HASH,
                     wallet,
-                    msg.sender,
+                    forwarder,
                     reportedChainId,
                     incidentTimestamp,
                     nonce,
@@ -243,7 +247,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         address signer = ECDSA.recover(digest, v, r, s);
         if (signer == address(0) || signer != wallet) revert SpokeRegistry__InvalidSigner();
 
-        // Load and validate acknowledgement
+        // Load and validate acknowledgement (msg.sender must be the authorized forwarder)
         AcknowledgementData memory ack = pendingAcknowledgements[wallet];
         if (ack.trustedForwarder != msg.sender) revert SpokeRegistry__InvalidForwarder();
         if (block.number < ack.startBlock) revert SpokeRegistry__GracePeriodNotStarted();
@@ -509,6 +513,49 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
                     forwarder,
                     reportedChainId,
                     incidentTimestamp,
+                    nonces[msg.sender],
+                    deadline
+                )
+            );
+        }
+    }
+
+    /// @inheritdoc ISpokeRegistry
+    function generateTransactionHashStruct(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        address forwarder,
+        uint8 step
+    ) external view returns (uint256 deadline, bytes32 hashStruct) {
+        if (step != 1 && step != 2) revert SpokeRegistry__InvalidStep();
+        deadline = TimingConfig.getSignatureDeadline();
+        if (step == 1) {
+            // Acknowledgement — matches acknowledgeTransactionBatch signature verification
+            hashStruct = keccak256(
+                abi.encode(
+                    EIP712Constants.TX_BATCH_ACK_TYPEHASH,
+                    EIP712Constants.TX_ACK_STATEMENT_HASH,
+                    msg.sender, // reporter
+                    forwarder,
+                    dataHash,
+                    reportedChainId,
+                    transactionCount,
+                    nonces[msg.sender],
+                    deadline
+                )
+            );
+        } else {
+            // Registration — matches _computeTxBatchRegStructHash
+            hashStruct = keccak256(
+                abi.encode(
+                    EIP712Constants.TX_BATCH_REG_TYPEHASH,
+                    EIP712Constants.TX_REG_STATEMENT_HASH,
+                    msg.sender,
+                    forwarder,
+                    dataHash,
+                    reportedChainId,
+                    transactionCount,
                     nonces[msg.sender],
                     deadline
                 )

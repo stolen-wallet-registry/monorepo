@@ -58,10 +58,15 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
-    name: 'acknowledgeLocal',
+    name: 'acknowledge',
     inputs: [
       {
         name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'forwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -265,6 +270,50 @@ export const SpokeRegistryABI = [
         name: 'incidentTimestamp',
         type: 'uint64',
         internalType: 'uint64',
+      },
+      {
+        name: 'forwarder',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'step',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
+    outputs: [
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'hashStruct',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'generateTransactionHashStruct',
+    inputs: [
+      {
+        name: 'dataHash',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'transactionCount',
+        type: 'uint32',
+        internalType: 'uint32',
       },
       {
         name: 'forwarder',
@@ -616,10 +665,15 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
-    name: 'registerLocal',
+    name: 'register',
     inputs: [
       {
         name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'forwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -1095,6 +1149,11 @@ export const SpokeRegistryABI = [
   {
     type: 'error',
     name: 'SpokeRegistry__InvalidSigner',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__InvalidStep',
     inputs: [],
   },
   {

@@ -85,24 +85,30 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // Parse signature once for reuse (avoid calling parseSignature 4 times)
   const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
 
+  // Determine forwarder: for standard registration, it's the connected wallet (msg.sender)
+  // For self-relay, it's the relayer wallet
+  const forwarder = isSelfRelay && relayer ? relayer : registeree;
+
   // Build transaction args for gas estimation (needs to be before early returns)
-  // WalletRegistry.register: (registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
-  // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
+  // Unified: register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
   const transactionArgs: WalletRegistrationArgs | undefined =
     storedSignature &&
     registeree &&
+    forwarder &&
     parsedSig &&
     storedSignature.reportedChainId !== undefined &&
     storedSignature.incidentTimestamp !== undefined
-      ? [
+      ? ([
           registeree,
-          storedSignature.deadline,
+          forwarder,
           storedSignature.reportedChainId,
           storedSignature.incidentTimestamp,
+          storedSignature.deadline,
+          storedSignature.nonce,
           parsedSig.v,
           parsedSig.r,
           parsedSig.s,
-        ]
+        ] as unknown as WalletRegistrationArgs)
       : undefined;
 
   // Get transaction cost estimate (must be called unconditionally - hooks rule)
@@ -295,9 +301,11 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
 
       await submitRegistration({
         registeree,
-        deadline: storedSignature.deadline,
+        forwarder: forwarder!,
         reportedChainId,
         incidentTimestamp,
+        deadline: storedSignature.deadline,
+        nonce: storedSignature.nonce,
         signature: parsedSig,
         feeWei,
       });

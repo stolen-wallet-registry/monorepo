@@ -4,10 +4,10 @@
  * This is Phase 1 of the two-phase registration flow.
  * After acknowledgement, a grace period begins before registration can be completed.
  *
- * WalletRegistry signature:
- *   acknowledge(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
+ * Unified signature (hub and spoke):
+ *   acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
  *
- * isSponsored is derived on-chain as (registeree != forwarder).
+ * isSponsored is derived on-chain as (wallet != forwarder).
  */
 
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
@@ -28,6 +28,8 @@ export interface AcknowledgementParams {
   incidentTimestamp: bigint;
   /** Signature deadline (timestamp) */
   deadline: bigint;
+  /** Nonce for replay protection */
+  nonce: bigint;
   /** EIP-712 signature */
   signature: ParsedSignature;
   /** Protocol fee to send with the acknowledgement transaction */
@@ -94,6 +96,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
       reportedChainId,
       incidentTimestamp,
       deadline,
+      nonce,
       signature,
       feeWei,
     } = params;
@@ -111,25 +114,29 @@ export function useAcknowledgement(): UseAcknowledgementResult {
       reportedChainId: reportedChainId.toString(),
       incidentTimestamp: incidentTimestamp.toString(),
       deadline: deadline.toString(),
+      nonce: nonce.toString(),
       feeWei: feeWei?.toString() ?? '0',
     });
 
     try {
-      // WalletRegistry: acknowledge(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
+      // Unified: acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+      const args = [
+        registeree,
+        forwarder,
+        reportedChainId,
+        incidentTimestamp,
+        deadline,
+        nonce,
+        signature.v,
+        signature.r,
+        signature.s,
+      ];
+
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi,
-        functionName: functionName as 'acknowledge' | 'acknowledgeLocal',
-        args: [
-          registeree,
-          forwarder,
-          reportedChainId,
-          incidentTimestamp,
-          deadline,
-          signature.v,
-          signature.r,
-          signature.s,
-        ],
+        functionName: functionName as 'acknowledge',
+        args,
         value: feeWei ?? 0n,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);

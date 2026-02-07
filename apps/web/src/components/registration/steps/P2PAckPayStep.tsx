@@ -110,13 +110,14 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     // Parse signature to v, r, s components
     const parsedSig = parseSignature(storedSig.signature);
 
-    // P2P relay: relayer is the forwarder (contract derives isSponsored from registeree != forwarder)
+    // P2P relay: relayer is the forwarder (contract derives isSponsored from wallet != forwarder)
     await submitAcknowledgement({
       registeree,
       forwarder: relayerAddress,
       reportedChainId: storedSig.reportedChainId ?? BigInt(chainId),
       incidentTimestamp: storedSig.incidentTimestamp ?? 0n,
       deadline: storedSig.deadline,
+      nonce: storedSig.nonce,
       signature: parsedSig,
       feeWei,
     });

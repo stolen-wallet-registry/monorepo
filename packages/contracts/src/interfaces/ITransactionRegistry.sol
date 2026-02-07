@@ -140,9 +140,13 @@ interface ITransactionRegistry {
     event TransactionBatchCreated(uint256 indexed batchId, bytes32 indexed operatorId, uint32 transactionCount);
 
     /// @notice Emitted when hub address is updated
+    /// @param oldHub The previous hub address
+    /// @param newHub The new hub address
     event HubUpdated(address oldHub, address newHub);
 
     /// @notice Emitted when operator submitter address is updated
+    /// @param oldOperatorSubmitter The previous operator submitter address
+    /// @param newOperatorSubmitter The new operator submitter address
     event OperatorSubmitterUpdated(address oldOperatorSubmitter, address newOperatorSubmitter);
 
     /// @notice Fee breakdown for quoting registration costs

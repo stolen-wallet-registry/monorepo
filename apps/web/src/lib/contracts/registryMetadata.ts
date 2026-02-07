@@ -14,7 +14,7 @@
  * ```ts
  * // Before (duplicated in each hook)
  * const abi = registryType === 'spoke' ? spokeRegistryAbi : walletRegistryAbi;
- * const functionName = registryType === 'spoke' ? 'acknowledgeLocal' : 'acknowledge';
+ * const functionName = registryType === 'spoke' ? 'acknowledge' : 'acknowledge';
  *
  * // After (using metadata)
  * const { abi, functions } = getRegistryMetadata('wallet', registryType);
@@ -110,8 +110,8 @@ const REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, RegistryMe
     spoke: {
       abi: spokeRegistryAbi,
       functions: {
-        acknowledge: 'acknowledgeLocal',
-        register: 'registerLocal',
+        acknowledge: 'acknowledge',
+        register: 'register',
         generateHashStruct: 'generateHashStruct',
         getDeadlines: 'getDeadlines',
         nonces: 'nonces',
@@ -144,20 +144,20 @@ const REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, RegistryMe
     spoke: {
       abi: spokeRegistryAbi,
       functions: {
-        acknowledge: 'acknowledgeTransactions',
-        register: 'registerTransactions',
-        generateHashStruct: 'generateHashStruct',
+        acknowledge: 'acknowledgeTransactionBatch',
+        register: 'registerTransactionBatch',
+        generateHashStruct: 'generateTransactionHashStruct',
         getDeadlines: 'getDeadlines',
         nonces: 'nonces',
         quoteRegistration: 'quoteRegistration',
         quoteFeeBreakdown: 'quoteFeeBreakdown',
-        isPending: 'isPending',
+        isPending: 'isPendingTransactionBatch',
         // Spoke has no local registration state — it only forwards to hub.
-        // We map to isPending so callers get a "not yet registered" signal.
-        isRegistered: 'isPending',
-        getAcknowledgement: 'getAcknowledgement',
+        // We map to isPendingTransactionBatch so callers get a "not yet registered" signal.
+        isRegistered: 'isPendingTransactionBatch',
+        getAcknowledgement: 'getTransactionAcknowledgement',
         // Spoke never stores final registration; return acknowledgement as best-effort data.
-        getRegistration: 'getAcknowledgement',
+        getRegistration: 'getTransactionAcknowledgement',
       },
     },
   },
@@ -188,8 +188,8 @@ const REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, RegistryMe
       // as best-effort fallbacks. Callers should not invoke contract registration on spoke.
       abi: spokeRegistryAbi,
       functions: {
-        acknowledge: 'acknowledgeLocal', // Fallback — no contract ack on spoke
-        register: 'registerLocal', // Fallback — no contract reg on spoke
+        acknowledge: 'acknowledge', // Fallback — no contract ack on spoke
+        register: 'register', // Fallback — no contract reg on spoke
         generateHashStruct: 'generateHashStruct',
         getDeadlines: 'getDeadlines',
         nonces: 'nonces',

@@ -205,7 +205,7 @@ contract SpokeRegistryTest is Test {
             _signAck(walletPrivateKey, wallet, _forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
 
         vm.prank(_forwarder);
-        spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.acknowledge(wallet, _forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     function _skipToRegistrationWindow() internal {
@@ -457,7 +457,7 @@ contract SpokeRegistryTest is Test {
         emit WalletAcknowledged(wallet, wallet, reportedChainIdHash, incidentTimestamp, false);
 
         vm.prank(wallet);
-        spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.acknowledge(wallet, wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
         assertTrue(spoke.isPending(wallet));
     }
@@ -474,7 +474,7 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__SignatureExpired.selector);
-        spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Acknowledgement fails with wrong nonce
@@ -489,7 +489,7 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidNonce.selector);
-        spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, wrongNonce, v, r, s);
+        spoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, wrongNonce, v, r, s);
     }
 
     /// @notice Acknowledgement fails with zero address owner
@@ -500,7 +500,9 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidOwner.selector);
-        spoke.acknowledgeLocal(address(0), reportedChainId, incidentTimestamp, deadline, 0, 27, bytes32(0), bytes32(0));
+        spoke.acknowledge(
+            address(0), forwarder, reportedChainId, incidentTimestamp, deadline, 0, 27, bytes32(0), bytes32(0)
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -528,7 +530,7 @@ contract SpokeRegistryTest is Test {
         emit RegistrationSentToHub(wallet, bytes32(0), HUB_CHAIN_ID); // messageId will be computed
 
         vm.prank(forwarder);
-        spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
         // Verify acknowledgement cleaned up
         assertFalse(spoke.isPending(wallet));
@@ -553,7 +555,7 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__GracePeriodNotStarted.selector);
-        spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Registration fails after expiry
@@ -577,7 +579,7 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__ForwarderExpired.selector);
-        spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Registration fails with wrong forwarder
@@ -601,7 +603,9 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(wrongForwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidForwarder.selector);
-        spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(
+            wallet, wrongForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s
+        );
     }
 
     /// @notice Registration fails with insufficient fee
@@ -620,7 +624,7 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InsufficientFee.selector);
-        spoke.registerLocal{ value: 0 }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: 0 }(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Registration fails when hub not configured
@@ -648,7 +652,7 @@ contract SpokeRegistryTest is Test {
         );
 
         vm.prank(forwarder);
-        unconfiguredSpoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        unconfiguredSpoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
         // Skip to registration window
         ISpokeRegistry.AcknowledgementData memory ack = unconfiguredSpoke.getAcknowledgement(wallet);
@@ -662,8 +666,8 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__HubNotConfigured.selector);
-        unconfiguredSpoke.registerLocal{ value: 1 ether }(
-            wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s
+        unconfiguredSpoke.register{ value: 1 ether }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s
         );
     }
 

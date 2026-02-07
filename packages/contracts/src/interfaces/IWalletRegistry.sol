@@ -72,6 +72,7 @@ interface IWalletRegistry {
     error WalletRegistry__InvalidSigner();
     error WalletRegistry__NotAuthorizedForwarder();
     error WalletRegistry__InsufficientFee();
+    error WalletRegistry__InvalidNonce();
     error WalletRegistry__ZeroAddress();
     error WalletRegistry__OnlyHub();
     error WalletRegistry__OnlyOperatorSubmitter();
@@ -113,9 +114,13 @@ interface IWalletRegistry {
     event BatchCreated(uint256 indexed batchId, bytes32 indexed operatorId, uint32 walletCount);
 
     /// @notice Emitted when hub address is updated
+    /// @param oldHub The previous hub address
+    /// @param newHub The new hub address
     event HubUpdated(address oldHub, address newHub);
 
     /// @notice Emitted when operator submitter address is updated
+    /// @param oldOperatorSubmitter The previous operator submitter address
+    /// @param newOperatorSubmitter The new operator submitter address
     event OperatorSubmitterUpdated(address oldOperatorSubmitter, address newOperatorSubmitter);
 
     /// @notice Fee breakdown for quoting registration costs
@@ -145,6 +150,7 @@ interface IWalletRegistry {
     /// @param reportedChainId Raw EVM chain ID where incident occurred (uint64, converted to CAIP-2 hash internally)
     /// @param incidentTimestamp Unix timestamp when incident occurred (0 if unknown)
     /// @param deadline Timestamp deadline for the signature
+    /// @param nonce Expected nonce for replay protection
     /// @param v ECDSA signature v component
     /// @param r ECDSA signature r component
     /// @param s ECDSA signature s component
@@ -154,6 +160,7 @@ interface IWalletRegistry {
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
+        uint256 nonce,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -163,17 +170,21 @@ interface IWalletRegistry {
     /// @dev Must be called by authorized forwarder within deadline.
     ///      reportedChainId and incidentTimestamp must match values from acknowledge phase.
     /// @param registeree The wallet address being registered
-    /// @param deadline Timestamp deadline for the signature
+    /// @param forwarder The address authorized to complete registration (must match acknowledge phase and msg.sender)
     /// @param reportedChainId Raw EVM chain ID where incident occurred (must match acknowledge phase)
     /// @param incidentTimestamp Unix timestamp when incident occurred (must match acknowledge phase)
+    /// @param deadline Timestamp deadline for the signature
+    /// @param nonce Expected nonce for replay protection
     /// @param v ECDSA signature v component
     /// @param r ECDSA signature r component
     /// @param s ECDSA signature s component
     function register(
         address registeree,
-        uint256 deadline,
+        address forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
+        uint256 deadline,
+        uint256 nonce,
         uint8 v,
         bytes32 r,
         bytes32 s

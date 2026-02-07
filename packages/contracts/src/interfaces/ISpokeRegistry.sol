@@ -130,15 +130,18 @@ interface ISpokeRegistry {
     error SpokeRegistry__EmptyBatch();
     error SpokeRegistry__ArrayLengthMismatch();
     error SpokeRegistry__InvalidDataHash();
+    error SpokeRegistry__InvalidStep();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Phase 1: Record acknowledgement with EIP-712 signature
-    /// @dev Caller becomes trusted forwarder. Signature includes incident details.
-    ///      Function signature aligns with hub for frontend consistency.
+    /// @dev Forwarder is specified explicitly for relay/meta-tx flexibility.
+    ///      Signature includes incident details and forwarder address.
+    ///      Function signature unified with hub WalletRegistry.
     /// @param wallet Wallet address being registered as stolen
+    /// @param forwarder Address authorized to complete registration (can be same as wallet)
     /// @param reportedChainId Chain ID where theft occurred (converted to CAIP-2 hash internally)
     /// @param incidentTimestamp Unix timestamp when theft occurred (user-provided)
     /// @param deadline Signature expiry timestamp
@@ -146,8 +149,9 @@ interface ISpokeRegistry {
     /// @param v Signature v component
     /// @param r Signature r component
     /// @param s Signature s component
-    function acknowledgeLocal(
+    function acknowledge(
         address wallet,
+        address forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -158,9 +162,10 @@ interface ISpokeRegistry {
     ) external;
 
     /// @notice Phase 2: Complete registration and send to hub
-    /// @dev Must be called by trusted forwarder within registration window.
-    ///      Function signature aligns with hub for frontend consistency.
+    /// @dev Must be called by authorized forwarder within registration window.
+    ///      Function signature unified with hub WalletRegistry.
     /// @param wallet Wallet address being registered
+    /// @param forwarder Address authorized to complete registration (must match acknowledge phase, validated against msg.sender)
     /// @param reportedChainId Chain ID (must match acknowledgement, converted to CAIP-2 hash)
     /// @param incidentTimestamp Incident timestamp (must match acknowledgement)
     /// @param deadline Signature expiry timestamp
@@ -168,8 +173,9 @@ interface ISpokeRegistry {
     /// @param v Signature v component
     /// @param r Signature r component
     /// @param s Signature s component
-    function registerLocal(
+    function register(
         address wallet,
+        address forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -269,7 +275,7 @@ interface ISpokeRegistry {
     /// @return The fee breakdown struct
     function quoteFeeBreakdown(address owner) external view returns (FeeBreakdown memory);
 
-    /// @notice Generate hash struct for signing (frontend helper)
+    /// @notice Generate hash struct for wallet signing (frontend helper)
     /// @dev Function signature aligns with hub for frontend consistency.
     /// @param reportedChainId Chain ID where incident occurred
     /// @param incidentTimestamp When theft occurred
@@ -281,6 +287,23 @@ interface ISpokeRegistry {
         external
         view
         returns (uint256 deadline, bytes32 hashStruct);
+
+    /// @notice Generate hash struct for transaction batch signing (frontend helper)
+    /// @dev Function signature aligns with hub TransactionRegistry for frontend consistency.
+    /// @param dataHash Hash of (txHashes, chainIds) — signature commitment
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param forwarder Address that will submit the transaction
+    /// @param step 1 for acknowledgement, 2 for registration
+    /// @return deadline Signature expiry timestamp
+    /// @return hashStruct Hash to sign
+    function generateTransactionHashStruct(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        address forwarder,
+        uint8 step
+    ) external view returns (uint256 deadline, bytes32 hashStruct);
 
     /// @notice Get deadline info for pending registration
     /// @param session The wallet address (session)
