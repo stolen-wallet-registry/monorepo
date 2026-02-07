@@ -105,12 +105,12 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       return;
     }
 
-    logger.p2p.info('Relayer submitting V2 REG transaction');
+    logger.p2p.info('Relayer submitting REG transaction');
 
     // Parse signature to v, r, s components
     const parsedSig = parseSignature(storedSig.signature);
 
-    // V2 fields from stored signature - must be present
+    // Get fields from stored signature - must be present
     // If missing, it means P2P relay didn't transmit them correctly
     // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
     const reportedChainId = storedSig.reportedChainId ?? BigInt(chainId);

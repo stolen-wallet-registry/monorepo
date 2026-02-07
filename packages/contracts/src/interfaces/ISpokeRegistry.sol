@@ -3,32 +3,51 @@ pragma solidity ^0.8.24;
 
 /// @title ISpokeRegistry
 /// @author Stolen Wallet Registry Team
-/// @notice Interface for spoke chain registration contracts
-/// @dev Spoke registries handle local two-phase registration and send results to hub via bridge.
-///      Implements the same EIP-712 signature flow as StolenWalletRegistry but sends
-///      cross-chain messages instead of local storage.
+/// @notice Interface for spoke chain wallet registration
+/// @dev Includes incidentTimestamp and reportedChainId in user signatures.
+///      Works with FraudRegistryHub on hub chain.
 interface ISpokeRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
     // STRUCTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Data stored for a pending acknowledgement
-    /// @dev Renamed from PendingAcknowledgement to match StolenWalletRegistry for frontend compatibility
-    /// @param trustedForwarder Address authorized to complete the registration
+    /// @notice Acknowledgement data for pending wallet registrations
+    /// @param trustedForwarder Address authorized to complete registration
+    /// @param incidentTimestamp User-provided timestamp of when theft occurred
+    /// @param reportedChainId CAIP-2 hash of chain where incident occurred (full bytes32 for cross-chain)
     /// @param startBlock Block number when grace period ends
-    /// @param expiryBlock Block number when registration window closes
+    /// @param expiryBlock Block number when registration window expires
+    /// @dev Storage layout (4 slots):
+    ///      Slot 0: trustedForwarder (20) + incidentTimestamp (8) = 28 bytes
+    ///      Slot 1: reportedChainId (32) - kept as bytes32 for cross-chain message compatibility
+    ///      Slot 2: startBlock (32)
+    ///      Slot 3: expiryBlock (32)
+    ///      Note: Could optimize to 3 slots if startBlock/expiryBlock changed to uint64
     struct AcknowledgementData {
         address trustedForwarder;
+        uint64 incidentTimestamp;
+        bytes32 reportedChainId;
         uint256 startBlock;
         uint256 expiryBlock;
     }
 
-    /// @notice Breakdown of fees for cross-chain registration
-    /// @dev Bridge-agnostic: bridgeName comes from IBridgeAdapter.bridgeName()
-    /// @param bridgeFee Cross-chain message fee from the configured bridge adapter
-    /// @param registrationFee Protocol fee from FeeManager (0 if no fee manager)
-    /// @param total Combined fee required (bridgeFee + registrationFee)
-    /// @param bridgeName Human-readable name of the bridge ("Hyperlane", "CCIP", "Wormhole", etc.)
+    /// @notice Acknowledgement data for pending transaction batch registrations
+    /// @param trustedForwarder Address authorized to complete registration
+    /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param startBlock Block number when grace period ends
+    /// @param expiryBlock Block number when registration window expires
+    struct TransactionAcknowledgementData {
+        address trustedForwarder;
+        bytes32 dataHash;
+        bytes32 reportedChainId;
+        uint32 transactionCount;
+        uint256 startBlock;
+        uint256 expiryBlock;
+    }
+
+    /// @notice Fee breakdown for registration
     struct FeeBreakdown {
         uint256 bridgeFee;
         uint256 registrationFee;
@@ -40,147 +59,237 @@ interface ISpokeRegistry {
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Emitted when acknowledgement is received on spoke
-    /// @dev Renamed from AcknowledgementReceived to match StolenWalletRegistry for frontend compatibility
-    /// @param owner The wallet being registered as stolen
-    /// @param forwarder The address authorized to complete registration
-    /// @param isSponsored True if forwarder is different from owner
-    event WalletAcknowledged(address indexed owner, address indexed forwarder, bool indexed isSponsored);
+    /// @notice Emitted when wallet acknowledgement is recorded
+    /// @param wallet The wallet being registered as stolen
+    /// @param forwarder The authorized forwarder address
+    /// @param reportedChainId CAIP-2 hash of chain where incident occurred
+    /// @param incidentTimestamp When theft occurred
+    /// @param isSponsored True if registration is sponsored by third party
+    event WalletAcknowledged(
+        address indexed wallet,
+        address indexed forwarder,
+        bytes32 reportedChainId,
+        uint64 incidentTimestamp,
+        bool isSponsored
+    );
 
-    /// @notice Emitted when registration is sent to hub via bridge
-    /// @param owner The wallet being registered as stolen
-    /// @param messageId Bridge message identifier for tracking
-    /// @param destinationChain Target chain domain ID (hub)
-    event RegistrationSentToHub(address indexed owner, bytes32 indexed messageId, uint32 destinationChain);
+    /// @notice Emitted when registration message is sent to hub
+    /// @param wallet The wallet being registered
+    /// @param messageId Bridge message ID for tracking
+    /// @param hubChainId Hub chain domain ID
+    event RegistrationSentToHub(address indexed wallet, bytes32 indexed messageId, uint32 hubChainId);
+
+    /// @notice Emitted when hub configuration is updated
+    /// @param hubChainId The hub chain domain ID
+    /// @param hubInbox The hub inbox address (as bytes32)
+    event HubConfigUpdated(uint32 indexed hubChainId, bytes32 hubInbox);
+
+    /// @notice Emitted when transaction batch acknowledgement is recorded
+    /// @param reporter The address reporting the transactions
+    /// @param forwarder The authorized forwarder address
+    /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param isSponsored True if registration is sponsored by third party
+    event TransactionBatchAcknowledged(
+        address indexed reporter,
+        address indexed forwarder,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        bool isSponsored
+    );
+
+    /// @notice Emitted when transaction batch registration message is sent to hub
+    /// @param reporter The address that reported the transactions
+    /// @param messageId Bridge message ID for tracking
+    /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
+    /// @param hubChainId Hub chain domain ID
+    event TransactionBatchSentToHub(
+        address indexed reporter, bytes32 indexed messageId, bytes32 dataHash, uint32 hubChainId
+    );
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Thrown when the provided nonce doesn't match expected
-    error SpokeRegistry__InvalidNonce();
-
-    /// @notice Thrown when signature deadline has passed
-    error SpokeRegistry__SignatureExpired();
-
-    /// @notice Thrown when signature is invalid
-    error SpokeRegistry__InvalidSigner();
-
-    /// @notice Thrown when caller is not the authorized forwarder
-    error SpokeRegistry__InvalidForwarder();
-
-    /// @notice Thrown when registration window has expired
-    error SpokeRegistry__ForwarderExpired();
-
-    /// @notice Thrown when grace period hasn't started yet
-    error SpokeRegistry__GracePeriodNotStarted();
-
-    /// @notice Thrown when owner address is zero
-    error SpokeRegistry__InvalidOwner();
-
-    /// @notice Thrown when insufficient fee is provided
-    error SpokeRegistry__InsufficientFee();
-
-    /// @notice Thrown when bridge message fails
-    error SpokeRegistry__BridgeFailed();
-
-    /// @notice Thrown when timing configuration is invalid (graceBlocks=0, deadlineBlocks=0, or deadline <= grace)
+    error SpokeRegistry__ZeroAddress();
     error SpokeRegistry__InvalidTimingConfig();
+    error SpokeRegistry__InvalidOwner();
+    error SpokeRegistry__SignatureExpired();
+    error SpokeRegistry__InvalidNonce();
+    error SpokeRegistry__InvalidSigner();
+    error SpokeRegistry__InvalidForwarder();
+    error SpokeRegistry__GracePeriodNotStarted();
+    error SpokeRegistry__ForwarderExpired();
+    error SpokeRegistry__HubNotConfigured();
+    error SpokeRegistry__InsufficientFee();
+    error SpokeRegistry__RefundFailed();
+    error SpokeRegistry__WithdrawalFailed();
+    error SpokeRegistry__InvalidHubConfig();
+    error SpokeRegistry__EmptyBatch();
+    error SpokeRegistry__ArrayLengthMismatch();
+    error SpokeRegistry__InvalidDataHash();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Phase 1: Acknowledge registration intent (local validation)
-    /// @dev Creates trusted forwarder relationship and starts grace period.
-    ///      Same EIP-712 flow as StolenWalletRegistry.acknowledge().
-    /// @param deadline Timestamp after which signature is invalid
-    /// @param nonce Owner's current nonce
-    /// @param owner Address of wallet being registered as stolen
-    /// @param v ECDSA signature component
-    /// @param r ECDSA signature component
-    /// @param s ECDSA signature component
-    function acknowledgeLocal(uint256 deadline, uint256 nonce, address owner, uint8 v, bytes32 r, bytes32 s)
-        external
-        payable;
+    /// @notice Phase 1: Record acknowledgement with EIP-712 signature
+    /// @dev Caller becomes trusted forwarder. Signature includes incident details.
+    ///      Function signature aligns with hub for frontend consistency.
+    /// @param wallet Wallet address being registered as stolen
+    /// @param reportedChainId Chain ID where theft occurred (converted to CAIP-2 hash internally)
+    /// @param incidentTimestamp Unix timestamp when theft occurred (user-provided)
+    /// @param deadline Signature expiry timestamp
+    /// @param nonce Expected nonce for replay protection
+    /// @param v Signature v component
+    /// @param r Signature r component
+    /// @param s Signature s component
+    function acknowledgeLocal(
+        address wallet,
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
+        uint256 deadline,
+        uint256 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
 
     /// @notice Phase 2: Complete registration and send to hub
-    /// @dev After grace period, validates signature and sends cross-chain message.
-    ///      Requires payment of registration fee + bridge fee.
-    /// @param deadline Timestamp after which signature is invalid
-    /// @param nonce Owner's current nonce
-    /// @param owner Address of wallet being registered as stolen
-    /// @param v ECDSA signature component
-    /// @param r ECDSA signature component
-    /// @param s ECDSA signature component
-    function registerLocal(uint256 deadline, uint256 nonce, address owner, uint8 v, bytes32 r, bytes32 s)
-        external
-        payable;
+    /// @dev Must be called by trusted forwarder within registration window.
+    ///      Function signature aligns with hub for frontend consistency.
+    /// @param wallet Wallet address being registered
+    /// @param reportedChainId Chain ID (must match acknowledgement, converted to CAIP-2 hash)
+    /// @param incidentTimestamp Incident timestamp (must match acknowledgement)
+    /// @param deadline Signature expiry timestamp
+    /// @param nonce Expected nonce for replay protection
+    /// @param v Signature v component
+    /// @param r Signature r component
+    /// @param s Signature s component
+    function registerLocal(
+        address wallet,
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
+        uint256 deadline,
+        uint256 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external payable;
+
+    /// @notice Phase 1 (Transaction Batch): Record acknowledgement for transaction batch
+    /// @dev Caller becomes trusted forwarder. Reporter signs to prove they intend to report.
+    ///      dataHash = keccak256(abi.encode(txHashes, chainIds))
+    /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param deadline Signature expiry timestamp
+    /// @param nonce Expected nonce for replay protection
+    /// @param reporter Address reporting the transactions (signer)
+    /// @param v Signature v component
+    /// @param r Signature r component
+    /// @param s Signature s component
+    function acknowledgeTransactionBatch(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        uint256 deadline,
+        uint256 nonce,
+        address reporter,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+
+    /// @notice Phase 2 (Transaction Batch): Complete registration and send to hub
+    /// @dev Must be called by trusted forwarder within registration window.
+    ///      Contract recomputes dataHash from arrays and verifies it matches acknowledgement.
+    /// @param reportedChainId CAIP-2 hash (must match acknowledgement)
+    /// @param deadline Signature expiry timestamp
+    /// @param nonce Expected nonce for replay protection
+    /// @param reporter Address that reported (must be signer)
+    /// @param transactionHashes Array of transaction hashes in batch
+    /// @param chainIds Parallel array of CAIP-2 chain IDs per transaction
+    /// @param v Signature v component
+    /// @param r Signature r component
+    /// @param s Signature s component
+    function registerTransactionBatch(
+        bytes32 reportedChainId,
+        uint256 deadline,
+        uint256 nonce,
+        address reporter,
+        bytes32[] calldata transactionHashes,
+        bytes32[] calldata chainIds,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external payable;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Check if wallet has pending acknowledgement
-    /// @param wallet The address to query
-    /// @return True if there is a pending acknowledgement
+    /// @param wallet The wallet address to check
+    /// @return True if the wallet has a pending acknowledgement
     function isPending(address wallet) external view returns (bool);
 
-    /// @notice Get acknowledgement data for a wallet
-    /// @param wallet The address to query
-    /// @return data The acknowledgement data
-    function getAcknowledgement(address wallet) external view returns (AcknowledgementData memory data);
+    /// @notice Get acknowledgement data for wallet
+    /// @param wallet The wallet address
+    /// @return The acknowledgement data struct
+    function getAcknowledgement(address wallet) external view returns (AcknowledgementData memory);
 
-    /// @notice Get current nonce for owner
-    /// @param owner The address to query
+    /// @notice Check if reporter has pending transaction batch acknowledgement
+    /// @param reporter The reporter address to check
+    /// @return True if the reporter has a pending transaction batch acknowledgement
+    function isPendingTransactionBatch(address reporter) external view returns (bool);
+
+    /// @notice Get transaction batch acknowledgement data
+    /// @param reporter The reporter address
+    /// @return The transaction acknowledgement data struct
+    function getTransactionAcknowledgement(address reporter)
+        external
+        view
+        returns (TransactionAcknowledgementData memory);
+
+    /// @notice Get nonce for wallet
+    /// @param wallet The wallet address
     /// @return The current nonce value
-    function nonces(address owner) external view returns (uint256);
+    function nonces(address wallet) external view returns (uint256);
 
-    /// @notice Quote total cost (registration fee + bridge fee)
-    /// @param owner The wallet being registered (for nonce lookup)
-    /// @return Total fee required in native token
+    /// @notice Quote total registration fee
+    /// @param owner The wallet owner address
+    /// @return The total fee in wei
     function quoteRegistration(address owner) external view returns (uint256);
 
-    /// @notice Get detailed fee breakdown for registration
-    /// @dev Returns separate line items for UI display with bridge identification.
-    ///      Bridge-agnostic: works with any adapter implementing IBridgeAdapter.
-    /// @param owner The wallet being registered (for nonce lookup in payload sizing)
-    /// @return breakdown Structured fee data including bridge name
-    function quoteFeeBreakdown(address owner) external view returns (FeeBreakdown memory breakdown);
+    /// @notice Get detailed fee breakdown
+    /// @param owner The wallet owner address
+    /// @return The fee breakdown struct
+    function quoteFeeBreakdown(address owner) external view returns (FeeBreakdown memory);
 
-    /// @notice Get the hub chain domain ID
-    /// @return The Hyperlane domain ID of the hub chain (may differ from EIP-155 chain ID)
-    function hubChainId() external view returns (uint32);
-
-    /// @notice Get the hub inbox address (bytes32 for cross-chain)
-    /// @return The CrossChainInbox address on the hub
-    function hubInbox() external view returns (bytes32);
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // VIEW FUNCTIONS - Frontend Compatibility (matches StolenWalletRegistry)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @notice Generate hash struct for EIP-712 signature
-    /// @dev Matches StolenWalletRegistry.generateHashStruct() for frontend compatibility.
-    ///      SECURITY: Uses msg.sender as the owner in the hash struct.
-    /// @param forwarder The address that will submit the transaction
-    /// @param step 1 for acknowledgement, any other value for registration
-    /// @return deadline The signature expiry timestamp
-    /// @return hashStruct The EIP-712 hash struct to sign
-    function generateHashStruct(address forwarder, uint8 step)
+    /// @notice Generate hash struct for signing (frontend helper)
+    /// @dev Function signature aligns with hub for frontend consistency.
+    /// @param reportedChainId Chain ID where incident occurred
+    /// @param incidentTimestamp When theft occurred
+    /// @param forwarder Address that will submit the transaction
+    /// @param step 1 for acknowledgement, 2 for registration
+    /// @return deadline Signature expiry timestamp
+    /// @return hashStruct Hash to sign
+    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
         external
         view
         returns (uint256 deadline, bytes32 hashStruct);
 
-    /// @notice Get grace period timing information for a pending acknowledgement
-    /// @dev Matches StolenWalletRegistry.getDeadlines() for frontend compatibility
-    /// @param session The wallet address to query
-    /// @return currentBlock Current block number
-    /// @return expiryBlock Block when registration window closes
-    /// @return startBlock Block when grace period ends (registration can begin)
-    /// @return graceStartsAt Blocks remaining until grace period ends (0 if already passed)
-    /// @return timeLeft Blocks remaining until registration expires (0 if expired)
-    /// @return isExpired True if the registration window has closed
+    /// @notice Get deadline info for pending registration
+    /// @param session The wallet address (session)
+    /// @return currentBlock The current block number
+    /// @return expiryBlock The block when registration window closes
+    /// @return startBlock The block when grace period ends
+    /// @return graceStartsAt Blocks until grace period ends
+    /// @return timeLeft Blocks until expiry
+    /// @return isExpired Whether the registration window has closed
     function getDeadlines(address session)
         external
         view

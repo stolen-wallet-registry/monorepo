@@ -71,7 +71,7 @@ export function useContractNonce(
     address: contractAddress,
     abi,
     chainId,
-    functionName: functions.nonces,
+    functionName: functions.nonces as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
       enabled: !!ownerAddress && !!contractAddress,
@@ -131,7 +131,7 @@ export function useTxContractNonce(address: Address | undefined): UseContractNon
   } = useReadContract({
     address: contractAddress,
     abi,
-    functionName: functions.nonces,
+    functionName: functions.nonces as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
     args: address ? [address] : undefined,
     chainId,
     query: {

@@ -2,35 +2,30 @@
 pragma solidity ^0.8.24;
 
 import { Script, console2 } from "forge-std/Script.sol";
-import { FraudulentContractRegistry } from "../src/registries/FraudulentContractRegistry.sol";
-import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
-import { StolenTransactionRegistry } from "../src/registries/StolenTransactionRegistry.sol";
+import { OperatorSubmitter } from "../src/OperatorSubmitter.sol";
+import { IFraudRegistryHub } from "../src/interfaces/IFraudRegistryHub.sol";
 import { OperatorRegistry } from "../src/OperatorRegistry.sol";
 import { FeeManager } from "../src/FeeManager.sol";
-import { MerkleRootComputation } from "../src/libraries/MerkleRootComputation.sol";
 
 /// @title SeedOperatorData
-/// @notice Seeds operator data: batches for all three registries (wallets, transactions, contracts)
+/// @notice Seeds operator data for contracts: wallets, transactions, and contracts
 /// @dev Run after deploying contracts to populate dashboard test data
 ///
 /// Usage:
 /// ```bash
-/// # Local (after deploy:crosschain)
-/// pnpm seed:operators
-///
-/// # Or with custom addresses
-/// OPERATOR_REGISTRY=0x... forge script script/SeedOperatorData.s.sol --rpc-url localhost --broadcast
+/// # Local (after deploy:crosschain:v2)
+/// forge script script/SeedOperatorData.s.sol --rpc-url localhost --broadcast
 /// ```
 contract SeedOperatorData is Script {
     // ═══════════════════════════════════════════════════════════════════════════
-    // CONTRACT ADDRESSES
+    // CONTRACT ADDRESSES (deployed by Deploy.s.sol)
     // ═══════════════════════════════════════════════════════════════════════════
-    // Source of truth: packages/chains/src/networks/anvil-hub.ts
-    // Keep in sync with @swr/chains hubContracts
-    address constant DEFAULT_OPERATOR_REGISTRY = 0x0B306BF915C4d645ff596e518fAf3F9669b97016;
-    address constant DEFAULT_STOLEN_WALLET_REGISTRY = 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9;
-    address constant DEFAULT_STOLEN_TX_REGISTRY = 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9;
-    address constant DEFAULT_FRAUDULENT_CONTRACT_REGISTRY = 0x59b670e9fA9D0A427751Af201D676719a970857b;
+    // These addresses are deterministic based on deployer nonce
+    // Update if deploy order changes
+
+    address constant DEFAULT_OPERATOR_REGISTRY = 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0;
+    address constant DEFAULT_FRAUD_REGISTRY_HUB = 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9;
+    address constant DEFAULT_OPERATOR_SUBMITTER = 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853;
     address constant DEFAULT_FEE_MANAGER = 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -38,8 +33,6 @@ contract SeedOperatorData is Script {
     // ═══════════════════════════════════════════════════════════════════════════
     // SECURITY NOTE: These are well-known Anvil/Hardhat test private keys.
     // They are publicly documented and ONLY used for local development.
-    // See: https://book.getfoundry.sh/reference/anvil/#description
-    // NEVER use these keys on any real network - they have no real funds.
     //
     // Account 3 (Operator A - ALL capabilities: WALLET + TX + CONTRACT)
     uint256 constant OPERATOR_A_PRIVATE_KEY = 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6;
@@ -50,28 +43,14 @@ contract SeedOperatorData is Script {
     address constant OPERATOR_B_ADDRESS = 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CHAIN IDS (keccak256 hashes of CAIP-2 strings)
+    // CHAIN IDs (CAIP-2 hashes for EVM chains)
     // ═══════════════════════════════════════════════════════════════════════════
-    // Pre-computed: keccak256(abi.encodePacked("eip155:1"))
-    // Must match CAIP2_LOOKUP in packages/chains/src/utils/caip.ts
-    bytes32 constant CHAIN_ID_ETH_MAINNET = 0x38b2caf37cccf00b6fbc0feb1e534daf567950e4d48066d0e3669028fe5f83e6;
-    // Pre-computed: keccak256(abi.encodePacked("eip155:8453"))
-    bytes32 constant CHAIN_ID_BASE = 0x43b48883ef7be0f98fe7f98fafb2187e42caab4063697b32816f95e09d69b3ec;
-    // Pre-computed: keccak256(abi.encodePacked("eip155:42161"))
-    bytes32 constant CHAIN_ID_ARBITRUM = 0x1fca116f439fa7af0604ced8c7a6239cdcabb5070838cbc80cdba0089733e472;
-    // Pre-computed: keccak256(abi.encodePacked("eip155:31337"))
-    bytes32 constant CHAIN_ID_LOCAL = 0x318e51c37247d03bad135571413b06a083591bcc680967d80bf587ac928cf369;
+    // Pre-computed: keccak256(abi.encodePacked("eip155:", chainIdString))
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TEST DATA - FRAUDULENT CONTRACTS
-    // ═══════════════════════════════════════════════════════════════════════════
-    address constant SCAM_CONTRACT_1 = 0x1111111111111111111111111111111111111111;
-    address constant SCAM_CONTRACT_2 = 0x2222222222222222222222222222222222222222;
-    address constant SCAM_CONTRACT_3 = 0x3333333333333333333333333333333333333333;
-    address constant SCAM_CONTRACT_4 = 0x4444444444444444444444444444444444444444;
-    address constant SCAM_CONTRACT_5 = 0x5555555555555555555555555555555555555555;
-    address constant SCAM_CONTRACT_6 = 0x6666666666666666666666666666666666666666;
-    address constant SCAM_CONTRACT_7 = 0x7777777777777777777777777777777777777777;
+    bytes32 constant CHAIN_ID_ETH_MAINNET = 0x38b2caf37cccf00b6fbc0feb1e534daf567950e4d48066d0e3669028fe5f83e6; // eip155:1
+    bytes32 constant CHAIN_ID_BASE = 0x43b48883ef7be0f98fe7f98fafb2187e42caab4063697b32816f95e09d69b3ec; // eip155:8453
+    bytes32 constant CHAIN_ID_ARBITRUM = 0x1fca116f439fa7af0604ced8c7a6239cdcabb5070838cbc80cdba0089733e472; // eip155:42161
+    bytes32 constant CHAIN_ID_LOCAL = 0x318e51c37247d03bad135571413b06a083591bcc680967d80bf587ac928cf369; // eip155:31337
 
     // ═══════════════════════════════════════════════════════════════════════════
     // TEST DATA - STOLEN WALLETS
@@ -89,6 +68,17 @@ contract SeedOperatorData is Script {
     bytes32 constant STOLEN_TX_3 = 0xbbbb000000000000000000000000000000000000000000000000000000000003;
     bytes32 constant STOLEN_TX_4 = 0xbbbb000000000000000000000000000000000000000000000000000000000004;
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TEST DATA - FRAUDULENT CONTRACTS
+    // ═══════════════════════════════════════════════════════════════════════════
+    address constant SCAM_CONTRACT_1 = 0x1111111111111111111111111111111111111111;
+    address constant SCAM_CONTRACT_2 = 0x2222222222222222222222222222222222222222;
+    address constant SCAM_CONTRACT_3 = 0x3333333333333333333333333333333333333333;
+    address constant SCAM_CONTRACT_4 = 0x4444444444444444444444444444444444444444;
+    address constant SCAM_CONTRACT_5 = 0x5555555555555555555555555555555555555555;
+    address constant SCAM_CONTRACT_6 = 0x6666666666666666666666666666666666666666;
+    address constant SCAM_CONTRACT_7 = 0x7777777777777777777777777777777777777777;
+
     function run() external {
         // Guard: This script uses hardcoded anvil keys - only run on local chains
         if (block.chainid != 31_337 && block.chainid != 31_338) {
@@ -100,9 +90,9 @@ contract SeedOperatorData is Script {
 
         // Load contract addresses (env vars or defaults)
         address operatorRegistryAddr = vm.envOr("OPERATOR_REGISTRY", DEFAULT_OPERATOR_REGISTRY);
-        address walletRegistryAddr = vm.envOr("STOLEN_WALLET_REGISTRY", DEFAULT_STOLEN_WALLET_REGISTRY);
-        address txRegistryAddr = vm.envOr("STOLEN_TX_REGISTRY", DEFAULT_STOLEN_TX_REGISTRY);
-        address contractRegistryAddr = vm.envOr("FRAUDULENT_CONTRACT_REGISTRY", DEFAULT_FRAUDULENT_CONTRACT_REGISTRY);
+        address fraudRegistryHubAddr = vm.envOr("FRAUD_REGISTRY_HUB", DEFAULT_FRAUD_REGISTRY_HUB);
+        address operatorSubmitterAddr = vm.envOr("OPERATOR_SUBMITTER", DEFAULT_OPERATOR_SUBMITTER);
+        address feeManagerAddr = vm.envOr("FEE_MANAGER", DEFAULT_FEE_MANAGER);
 
         console2.log("");
         console2.log("==========================================");
@@ -111,9 +101,9 @@ contract SeedOperatorData is Script {
         console2.log("");
         console2.log("Contracts:");
         console2.log("  OperatorRegistry:", operatorRegistryAddr);
-        console2.log("  StolenWalletRegistry:", walletRegistryAddr);
-        console2.log("  StolenTransactionRegistry:", txRegistryAddr);
-        console2.log("  FraudulentContractRegistry:", contractRegistryAddr);
+        console2.log("  FraudRegistryHub:", fraudRegistryHubAddr);
+        console2.log("  OperatorSubmitter:", operatorSubmitterAddr);
+        console2.log("  FeeManager:", feeManagerAddr);
         console2.log("");
         console2.log("Operators:");
         console2.log("  Operator A (ALL caps):", OPERATOR_A_ADDRESS);
@@ -122,9 +112,13 @@ contract SeedOperatorData is Script {
 
         // Instantiate contracts
         OperatorRegistry opRegistry = OperatorRegistry(operatorRegistryAddr);
-        StolenWalletRegistry walletRegistry = StolenWalletRegistry(walletRegistryAddr);
-        StolenTransactionRegistry txRegistry = StolenTransactionRegistry(txRegistryAddr);
-        FraudulentContractRegistry contractRegistry = FraudulentContractRegistry(contractRegistryAddr);
+        IFraudRegistryHub hub = IFraudRegistryHub(payable(fraudRegistryHubAddr));
+        OperatorSubmitter operatorSubmitter = OperatorSubmitter(operatorSubmitterAddr);
+        FeeManager feeManager = FeeManager(feeManagerAddr);
+
+        // Get batch fee (same for all batch types)
+        uint256 batchFee = feeManager.operatorBatchFeeWei();
+        console2.log("  Batch Fee:", batchFee, "wei");
 
         // Verify operators are approved
         console2.log("--- VERIFYING OPERATORS ---");
@@ -135,45 +129,41 @@ contract SeedOperatorData is Script {
 
         if (!opAApproved || !opBApproved) {
             console2.log("");
-            console2.log("ERROR: Operators not approved. Run deploy:crosschain first.");
+            console2.log("ERROR: Operators not approved. Run deploy:crosschain:v2 first.");
             return;
         }
 
-        // Check if already seeded (contract batch 1 would exist)
-        // Uses registry's computeBatchId to stay in sync with any formula changes
-        bytes32 checkBatchId = _computeContractBatchId(
-            contractRegistry, OPERATOR_A_ADDRESS, CHAIN_ID_ETH_MAINNET, SCAM_CONTRACT_1, SCAM_CONTRACT_2
-        );
-        if (contractRegistry.isBatchRegistered(checkBatchId)) {
+        // Check if already seeded (wallet 1 would be registered)
+        if (hub.isWalletRegistered(STOLEN_WALLET_1)) {
             console2.log("");
             console2.log("Operator data already seeded, skipping...");
             return;
         }
 
         // ═══════════════════════════════════════════════════════════════════════
-        // SUBMIT STOLEN WALLET BATCHES (Operator A only - has WALLET permission)
+        // SUBMIT STOLEN WALLET BATCH (Operator A)
         // ═══════════════════════════════════════════════════════════════════════
         console2.log("");
-        console2.log("--- STOLEN WALLET BATCHES (Operator A) ---");
-        _submitWalletBatches(walletRegistry);
+        console2.log("--- STOLEN WALLET BATCH (Operator A) ---");
+        _submitWalletBatch(operatorSubmitter, batchFee);
 
         // ═══════════════════════════════════════════════════════════════════════
-        // SUBMIT STOLEN TRANSACTION BATCHES (Operator A only - has TX permission)
+        // SUBMIT STOLEN TRANSACTION BATCH (Operator A)
         // ═══════════════════════════════════════════════════════════════════════
         console2.log("");
-        console2.log("--- STOLEN TRANSACTION BATCHES (Operator A) ---");
-        _submitTransactionBatches(txRegistry);
+        console2.log("--- STOLEN TRANSACTION BATCH (Operator A) ---");
+        _submitTransactionBatch(operatorSubmitter, batchFee);
 
         // ═══════════════════════════════════════════════════════════════════════
         // SUBMIT FRAUDULENT CONTRACT BATCHES (Both operators)
         // ═══════════════════════════════════════════════════════════════════════
         console2.log("");
-        console2.log("--- FRAUDULENT CONTRACT BATCHES (Operator A) ---");
-        _submitOperatorAContractBatches(contractRegistry);
+        console2.log("--- FRAUDULENT CONTRACT BATCH (Operator A) ---");
+        _submitContractBatchA(operatorSubmitter, batchFee);
 
         console2.log("");
-        console2.log("--- FRAUDULENT CONTRACT BATCHES (Operator B) ---");
-        _submitOperatorBContractBatches(contractRegistry);
+        console2.log("--- FRAUDULENT CONTRACT BATCH (Operator B) ---");
+        _submitContractBatchB(operatorSubmitter, batchFee);
 
         // Summary
         console2.log("");
@@ -184,7 +174,7 @@ contract SeedOperatorData is Script {
         console2.log("Summary:");
         console2.log("  Stolen Wallets: 4 wallets in 1 batch");
         console2.log("  Stolen Transactions: 4 txs in 1 batch");
-        console2.log("  Fraudulent Contracts: 7 contracts in 3 batches");
+        console2.log("  Fraudulent Contracts: 7 contracts in 2 batches");
         console2.log("");
         console2.log("Dashboard Test Data:");
         console2.log("  - Search for 0xaaaa...0001 (stolen wallet)");
@@ -195,287 +185,153 @@ contract SeedOperatorData is Script {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // WALLET BATCH SUBMISSION
+    // WALLET BATCH SUBMISSION (Operator A)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _submitWalletBatches(StolenWalletRegistry walletRegistry) internal {
-        // Use operator batch fee, not individual registration fee
-        uint256 fee = walletRegistry.quoteOperatorBatchRegistration();
-        console2.log("  Operator batch fee (wei):", fee);
-        console2.log("");
-
+    function _submitWalletBatch(OperatorSubmitter operatorSubmitter, uint256 batchFee) internal {
         vm.startBroadcast(OPERATOR_A_PRIVATE_KEY);
 
-        // Batch: 4 stolen wallets across different chains
-        {
-            address[] memory wallets = new address[](4);
-            bytes32[] memory chainIds = new bytes32[](4);
+        // Build batch arrays - OperatorSubmitter takes (identifiers, reportedChainIds, incidentTimestamps)
+        bytes32[] memory identifiers = new bytes32[](4);
+        bytes32[] memory reportedChainIds = new bytes32[](4);
+        uint64[] memory incidentTimestamps = new uint64[](4);
 
-            wallets[0] = STOLEN_WALLET_1;
-            wallets[1] = STOLEN_WALLET_2;
-            wallets[2] = STOLEN_WALLET_3;
-            wallets[3] = STOLEN_WALLET_4;
-            chainIds[0] = CHAIN_ID_ETH_MAINNET;
-            chainIds[1] = CHAIN_ID_BASE;
-            chainIds[2] = CHAIN_ID_ARBITRUM;
-            chainIds[3] = CHAIN_ID_LOCAL;
+        // Wallet 1: Ethereum Mainnet
+        identifiers[0] = bytes32(uint256(uint160(STOLEN_WALLET_1)));
+        reportedChainIds[0] = CHAIN_ID_ETH_MAINNET;
+        incidentTimestamps[0] = uint64(block.timestamp - 1 days);
 
-            bytes32 merkleRoot = _computeAddressMerkleRoot(wallets, chainIds);
+        // Wallet 2: Base
+        identifiers[1] = bytes32(uint256(uint160(STOLEN_WALLET_2)));
+        reportedChainIds[1] = CHAIN_ID_BASE;
+        incidentTimestamps[1] = uint64(block.timestamp - 2 days);
 
-            console2.log("  Batch: Stolen Wallets");
-            console2.log("    Wallets: 4");
-            console2.log("      - ", STOLEN_WALLET_1, " (Ethereum)");
-            console2.log("      - ", STOLEN_WALLET_2, " (Base)");
-            console2.log("      - ", STOLEN_WALLET_3, " (Arbitrum)");
-            console2.log("      - ", STOLEN_WALLET_4, " (Local)");
-            console2.log("    MerkleRoot:", vm.toString(merkleRoot));
+        // Wallet 3: Arbitrum
+        identifiers[2] = bytes32(uint256(uint160(STOLEN_WALLET_3)));
+        reportedChainIds[2] = CHAIN_ID_ARBITRUM;
+        incidentTimestamps[2] = uint64(block.timestamp - 3 days);
 
-            walletRegistry.registerBatchAsOperator{ value: fee }(merkleRoot, CHAIN_ID_ETH_MAINNET, wallets, chainIds);
-            console2.log("    Status: REGISTERED");
-        }
+        // Wallet 4: Local (same as hub for testing)
+        identifiers[3] = bytes32(uint256(uint160(STOLEN_WALLET_4)));
+        reportedChainIds[3] = CHAIN_ID_LOCAL;
+        incidentTimestamps[3] = uint64(block.timestamp - 4 days);
+
+        console2.log("  Wallets: 4");
+        console2.log("    - ", STOLEN_WALLET_1, " (Ethereum)");
+        console2.log("    - ", STOLEN_WALLET_2, " (Base)");
+        console2.log("    - ", STOLEN_WALLET_3, " (Arbitrum)");
+        console2.log("    - ", STOLEN_WALLET_4, " (Local)");
+
+        // Submit batch with fee
+        operatorSubmitter.registerWalletsAsOperator{ value: batchFee }(
+            identifiers, reportedChainIds, incidentTimestamps
+        );
+
+        console2.log("  Status: REGISTERED");
 
         vm.stopBroadcast();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // TRANSACTION BATCH SUBMISSION
+    // TRANSACTION BATCH SUBMISSION (Operator A)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _submitTransactionBatches(StolenTransactionRegistry txRegistry) internal {
-        // Use operator batch fee from FeeManager (StolenTransactionRegistry doesn't have dedicated method)
-        address feeManagerAddr = vm.envOr("FEE_MANAGER", DEFAULT_FEE_MANAGER);
-        FeeManager feeManager = FeeManager(feeManagerAddr);
-        uint256 fee = feeManager.operatorBatchFeeWei();
-        console2.log("  Operator batch fee (wei):", fee);
-        console2.log("");
-
+    function _submitTransactionBatch(OperatorSubmitter operatorSubmitter, uint256 batchFee) internal {
         vm.startBroadcast(OPERATOR_A_PRIVATE_KEY);
 
-        // Batch: 4 stolen transactions across different chains
-        {
-            bytes32[] memory txHashes = new bytes32[](4);
-            bytes32[] memory chainIds = new bytes32[](4);
+        // Build batch arrays - OperatorSubmitter takes (transactionHashes, chainIds)
+        bytes32[] memory txHashes = new bytes32[](4);
+        bytes32[] memory chainIds = new bytes32[](4);
 
-            txHashes[0] = STOLEN_TX_1;
-            txHashes[1] = STOLEN_TX_2;
-            txHashes[2] = STOLEN_TX_3;
-            txHashes[3] = STOLEN_TX_4;
-            chainIds[0] = CHAIN_ID_ETH_MAINNET;
-            chainIds[1] = CHAIN_ID_BASE;
-            chainIds[2] = CHAIN_ID_ARBITRUM;
-            chainIds[3] = CHAIN_ID_LOCAL;
+        txHashes[0] = STOLEN_TX_1;
+        txHashes[1] = STOLEN_TX_2;
+        txHashes[2] = STOLEN_TX_3;
+        txHashes[3] = STOLEN_TX_4;
 
-            bytes32 merkleRoot = _computeTxMerkleRoot(txHashes, chainIds);
+        // All transactions on the same chain for simplicity
+        chainIds[0] = CHAIN_ID_ETH_MAINNET;
+        chainIds[1] = CHAIN_ID_ETH_MAINNET;
+        chainIds[2] = CHAIN_ID_BASE;
+        chainIds[3] = CHAIN_ID_ARBITRUM;
 
-            console2.log("  Batch: Stolen Transactions");
-            console2.log("    Transactions: 4");
-            console2.log("    MerkleRoot:", vm.toString(merkleRoot));
+        console2.log("  Transactions: 4");
+        console2.log("    - ", vm.toString(STOLEN_TX_1));
+        console2.log("    - ", vm.toString(STOLEN_TX_2));
+        console2.log("    - ", vm.toString(STOLEN_TX_3));
+        console2.log("    - ", vm.toString(STOLEN_TX_4));
 
-            txRegistry.registerBatchAsOperator{ value: fee }(merkleRoot, CHAIN_ID_ETH_MAINNET, txHashes, chainIds);
-            console2.log("    Status: REGISTERED");
-        }
+        // Submit batch with fee
+        operatorSubmitter.registerTransactionsAsOperator{ value: batchFee }(txHashes, chainIds);
+
+        console2.log("  Status: REGISTERED");
 
         vm.stopBroadcast();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CONTRACT BATCH SUBMISSION
+    // CONTRACT BATCH SUBMISSION (Operator A)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function _submitOperatorAContractBatches(FraudulentContractRegistry contractRegistry) internal {
-        uint256 fee = contractRegistry.quoteRegistration();
-        console2.log("  Operator batch fee (wei):", fee);
-        console2.log("");
-
+    function _submitContractBatchA(OperatorSubmitter operatorSubmitter, uint256 batchFee) internal {
         vm.startBroadcast(OPERATOR_A_PRIVATE_KEY);
 
-        // Batch 1: Ethereum mainnet scam contracts (2 contracts)
-        {
-            address[] memory contracts = new address[](2);
-            bytes32[] memory chainIds = new bytes32[](2);
+        // Build batch arrays - OperatorSubmitter takes (identifiers, reportedChainIds)
+        bytes32[] memory contractIds = new bytes32[](5);
+        bytes32[] memory reportedChainIds = new bytes32[](5);
 
-            contracts[0] = SCAM_CONTRACT_1;
-            contracts[1] = SCAM_CONTRACT_2;
-            chainIds[0] = CHAIN_ID_ETH_MAINNET;
-            chainIds[1] = CHAIN_ID_ETH_MAINNET;
+        contractIds[0] = bytes32(uint256(uint160(SCAM_CONTRACT_1)));
+        contractIds[1] = bytes32(uint256(uint160(SCAM_CONTRACT_2)));
+        contractIds[2] = bytes32(uint256(uint160(SCAM_CONTRACT_3)));
+        contractIds[3] = bytes32(uint256(uint160(SCAM_CONTRACT_4)));
+        contractIds[4] = bytes32(uint256(uint160(SCAM_CONTRACT_5)));
 
-            bytes32 merkleRoot = _computeAddressMerkleRoot(contracts, chainIds);
-            bytes32 batchId = contractRegistry.computeBatchId(merkleRoot, OPERATOR_A_ADDRESS, CHAIN_ID_ETH_MAINNET);
+        reportedChainIds[0] = CHAIN_ID_ETH_MAINNET;
+        reportedChainIds[1] = CHAIN_ID_ETH_MAINNET;
+        reportedChainIds[2] = CHAIN_ID_BASE;
+        reportedChainIds[3] = CHAIN_ID_BASE;
+        reportedChainIds[4] = CHAIN_ID_ARBITRUM;
 
-            console2.log("  Batch 1: Ethereum Mainnet Scams");
-            console2.log("    Chain: eip155:1 (Ethereum)");
-            console2.log("    Contracts: 2");
-            console2.log("      - ", SCAM_CONTRACT_1);
-            console2.log("      - ", SCAM_CONTRACT_2);
-            console2.log("    MerkleRoot:", vm.toString(merkleRoot));
-            console2.log("    BatchId:", vm.toString(batchId));
+        console2.log("  Contracts: 5");
+        console2.log("    - ", SCAM_CONTRACT_1);
+        console2.log("    - ", SCAM_CONTRACT_2);
+        console2.log("    - ", SCAM_CONTRACT_3);
+        console2.log("    - ", SCAM_CONTRACT_4);
+        console2.log("    - ", SCAM_CONTRACT_5);
 
-            contractRegistry.registerBatch{ value: fee }(merkleRoot, CHAIN_ID_ETH_MAINNET, contracts, chainIds);
-            console2.log("    Status: REGISTERED");
-            console2.log("");
-        }
+        // Submit batch with fee
+        operatorSubmitter.registerContractsAsOperator{ value: batchFee }(contractIds, reportedChainIds);
 
-        // Batch 2: Multi-chain scam contracts (3 contracts across different chains)
-        {
-            address[] memory contracts = new address[](3);
-            bytes32[] memory chainIds = new bytes32[](3);
-
-            contracts[0] = SCAM_CONTRACT_3;
-            contracts[1] = SCAM_CONTRACT_4;
-            contracts[2] = SCAM_CONTRACT_5;
-            chainIds[0] = CHAIN_ID_BASE;
-            chainIds[1] = CHAIN_ID_LOCAL;
-            chainIds[2] = CHAIN_ID_ARBITRUM;
-
-            bytes32 merkleRoot = _computeAddressMerkleRoot(contracts, chainIds);
-            bytes32 batchId = contractRegistry.computeBatchId(merkleRoot, OPERATOR_A_ADDRESS, CHAIN_ID_BASE);
-
-            console2.log("  Batch 2: Multi-Chain Scams");
-            console2.log("    Primary Chain: eip155:8453 (Base)");
-            console2.log("    Contracts: 3");
-            console2.log("      - ", SCAM_CONTRACT_3, " (Base)");
-            console2.log("      - ", SCAM_CONTRACT_4, " (Local)");
-            console2.log("      - ", SCAM_CONTRACT_5, " (Arbitrum)");
-            console2.log("    MerkleRoot:", vm.toString(merkleRoot));
-            console2.log("    BatchId:", vm.toString(batchId));
-
-            contractRegistry.registerBatch{ value: fee }(merkleRoot, CHAIN_ID_BASE, contracts, chainIds);
-            console2.log("    Status: REGISTERED");
-        }
+        console2.log("  Status: REGISTERED");
 
         vm.stopBroadcast();
     }
 
-    function _submitOperatorBContractBatches(FraudulentContractRegistry contractRegistry) internal {
-        uint256 fee = contractRegistry.quoteRegistration();
-        console2.log("  Operator batch fee (wei):", fee);
-        console2.log("");
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CONTRACT BATCH SUBMISSION (Operator B)
+    // ═══════════════════════════════════════════════════════════════════════════
 
+    function _submitContractBatchB(OperatorSubmitter operatorSubmitter, uint256 batchFee) internal {
         vm.startBroadcast(OPERATOR_B_PRIVATE_KEY);
 
-        // Batch 1: Arbitrum honeypot contracts (2 contracts)
-        {
-            address[] memory contracts = new address[](2);
-            bytes32[] memory chainIds = new bytes32[](2);
+        // Build batch arrays (2 contracts)
+        bytes32[] memory contractIds = new bytes32[](2);
+        bytes32[] memory reportedChainIds = new bytes32[](2);
 
-            contracts[0] = SCAM_CONTRACT_6;
-            contracts[1] = SCAM_CONTRACT_7;
-            chainIds[0] = CHAIN_ID_ARBITRUM;
-            chainIds[1] = CHAIN_ID_ARBITRUM;
+        contractIds[0] = bytes32(uint256(uint160(SCAM_CONTRACT_6)));
+        contractIds[1] = bytes32(uint256(uint160(SCAM_CONTRACT_7)));
 
-            bytes32 merkleRoot = _computeAddressMerkleRoot(contracts, chainIds);
-            bytes32 batchId = contractRegistry.computeBatchId(merkleRoot, OPERATOR_B_ADDRESS, CHAIN_ID_ARBITRUM);
+        reportedChainIds[0] = CHAIN_ID_LOCAL;
+        reportedChainIds[1] = CHAIN_ID_LOCAL;
 
-            console2.log("  Batch 1: Arbitrum Honeypots");
-            console2.log("    Chain: eip155:42161 (Arbitrum)");
-            console2.log("    Contracts: 2");
-            console2.log("      - ", SCAM_CONTRACT_6);
-            console2.log("      - ", SCAM_CONTRACT_7);
-            console2.log("    MerkleRoot:", vm.toString(merkleRoot));
-            console2.log("    BatchId:", vm.toString(batchId));
+        console2.log("  Contracts: 2");
+        console2.log("    - ", SCAM_CONTRACT_6);
+        console2.log("    - ", SCAM_CONTRACT_7);
 
-            contractRegistry.registerBatch{ value: fee }(merkleRoot, CHAIN_ID_ARBITRUM, contracts, chainIds);
-            console2.log("    Status: REGISTERED");
-        }
+        // Submit batch with fee
+        operatorSubmitter.registerContractsAsOperator{ value: batchFee }(contractIds, reportedChainIds);
+
+        console2.log("  Status: REGISTERED");
 
         vm.stopBroadcast();
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // MERKLE ROOT COMPUTATION HELPERS
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @notice Compute merkle root for address-based entries (wallets, contracts)
-    /// @dev Sorts leaves in-place for computeRootFromSorted
-    function _computeAddressMerkleRoot(address[] memory addresses, bytes32[] memory chainIds)
-        internal
-        pure
-        returns (bytes32)
-    {
-        uint256 length = addresses.length;
-        require(length == chainIds.length, "SeedOperatorData: addresses and chainIds length mismatch");
-        if (length == 0) return bytes32(0);
-        if (length == 1) return MerkleRootComputation.hashLeaf(addresses[0], chainIds[0]);
-
-        bytes32[] memory leaves = new bytes32[](length);
-        for (uint256 i = 0; i < length; i++) {
-            leaves[i] = MerkleRootComputation.hashLeaf(addresses[i], chainIds[i]);
-        }
-
-        // Sort leaves AND addresses/chainIds together (insertion sort)
-        for (uint256 i = 1; i < length; i++) {
-            bytes32 keyLeaf = leaves[i];
-            address keyAddr = addresses[i];
-            bytes32 keyChainId = chainIds[i];
-            uint256 j = i;
-            while (j > 0 && leaves[j - 1] > keyLeaf) {
-                leaves[j] = leaves[j - 1];
-                addresses[j] = addresses[j - 1];
-                chainIds[j] = chainIds[j - 1];
-                j--;
-            }
-            leaves[j] = keyLeaf;
-            addresses[j] = keyAddr;
-            chainIds[j] = keyChainId;
-        }
-
-        return MerkleRootComputation.computeRootFromSorted(leaves);
-    }
-
-    /// @notice Compute merkle root for transaction hash entries
-    /// @dev Sorts leaves in-place for computeRootFromSorted
-    function _computeTxMerkleRoot(bytes32[] memory txHashes, bytes32[] memory chainIds)
-        internal
-        pure
-        returns (bytes32)
-    {
-        uint256 length = txHashes.length;
-        require(length == chainIds.length, "SeedOperatorData: txHashes and chainIds length mismatch");
-        if (length == 0) return bytes32(0);
-        if (length == 1) return MerkleRootComputation.hashLeaf(txHashes[0], chainIds[0]);
-
-        bytes32[] memory leaves = new bytes32[](length);
-        for (uint256 i = 0; i < length; i++) {
-            leaves[i] = MerkleRootComputation.hashLeaf(txHashes[i], chainIds[i]);
-        }
-
-        // Sort leaves AND txHashes/chainIds together (insertion sort)
-        for (uint256 i = 1; i < length; i++) {
-            bytes32 keyLeaf = leaves[i];
-            bytes32 keyTxHash = txHashes[i];
-            bytes32 keyChainId = chainIds[i];
-            uint256 j = i;
-            while (j > 0 && leaves[j - 1] > keyLeaf) {
-                leaves[j] = leaves[j - 1];
-                txHashes[j] = txHashes[j - 1];
-                chainIds[j] = chainIds[j - 1];
-                j--;
-            }
-            leaves[j] = keyLeaf;
-            txHashes[j] = keyTxHash;
-            chainIds[j] = keyChainId;
-        }
-
-        return MerkleRootComputation.computeRootFromSorted(leaves);
-    }
-
-    /// @notice Compute batch ID for contract registry (for seeding check)
-    /// @dev Uses registry's computeBatchId to stay in sync with any formula changes
-    function _computeContractBatchId(
-        FraudulentContractRegistry contractRegistry,
-        address operator,
-        bytes32 reportedChainId,
-        address contract1,
-        address contract2
-    ) internal view returns (bytes32) {
-        address[] memory contracts = new address[](2);
-        bytes32[] memory chainIds = new bytes32[](2);
-        contracts[0] = contract1;
-        contracts[1] = contract2;
-        chainIds[0] = reportedChainId;
-        chainIds[1] = reportedChainId;
-
-        bytes32 merkleRoot = _computeAddressMerkleRoot(contracts, chainIds);
-        return contractRegistry.computeBatchId(merkleRoot, operator, reportedChainId);
     }
 }

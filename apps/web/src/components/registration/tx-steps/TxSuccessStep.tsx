@@ -34,7 +34,7 @@ import {
 } from '@/lib/explorer';
 import { isSpokeChain, getHubChainId } from '@/lib/chains/config';
 import { chainIdToBytes32, toCAIP2 } from '@swr/chains';
-import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
+import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { CheckCircle2, Home, RefreshCw, Heart, ArrowRight } from 'lucide-react';
 
@@ -51,15 +51,20 @@ export function TxSuccessStep() {
     bridgeMessageId,
     reset: resetRegistration,
   } = useTransactionRegistrationStore();
-  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
-    useTransactionSelection();
+  const {
+    selectedTxHashes,
+    selectedTxDetails,
+    reportedChainId,
+    txHashesForContract,
+    chainIdsForContract,
+  } = useTransactionSelection();
 
-  // V2: Compute dataHash from sorted arrays (replaces merkle root for display)
+  // Compute dataHash from sorted arrays for display
   const dataHash: Hash | undefined =
-    sortedTxHashes.length > 0 &&
-    sortedChainIds.length > 0 &&
-    sortedTxHashes.length === sortedChainIds.length
-      ? computeTransactionDataHash(sortedTxHashes, sortedChainIds)
+    txHashesForContract.length > 0 &&
+    chainIdsForContract.length > 0 &&
+    txHashesForContract.length === chainIdsForContract.length
+      ? computeTransactionDataHash(txHashesForContract, chainIdsForContract)
       : undefined;
   const formStore = useTransactionFormStore();
   // Guard against invalid chain IDs (must be positive safe integer)
@@ -199,7 +204,7 @@ export function TxSuccessStep() {
               <div className="flex items-start gap-2">
                 <span className="text-muted-foreground flex items-center gap-1 shrink-0">
                   Data Hash:
-                  <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
+                  <InfoTooltip content={DATA_HASH_TOOLTIP} side="right" />
                 </span>
                 <Tooltip>
                   <TooltipTrigger asChild>

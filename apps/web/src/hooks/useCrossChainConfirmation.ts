@@ -15,9 +15,17 @@
  */
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { parseAbi } from 'viem';
 import { useReadContract } from 'wagmi';
-import { walletRegistryV2Abi } from '@/lib/contracts/abis';
-import { getWalletRegistryV2Address } from '@/lib/contracts/addresses';
+import { getWalletRegistryAddress } from '@/lib/contracts/addresses';
+
+/**
+ * Minimal ABI for isWalletRegistered(address) to avoid viem ambiguity
+ * with the string overload isWalletRegistered(string).
+ */
+const isWalletRegisteredAbi = parseAbi([
+  'function isWalletRegistered(address wallet) view returns (bool)',
+]);
 import { getHubChainId, isSpokeChain } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
@@ -79,7 +87,7 @@ export function useCrossChainConfirmation({
   let hubRegistryAddress: Address | undefined;
   try {
     if (hubChainId) {
-      hubRegistryAddress = getWalletRegistryV2Address(hubChainId);
+      hubRegistryAddress = getWalletRegistryAddress(hubChainId);
     }
   } catch (err) {
     logger.registration.warn('Failed to get hub registry address', {
@@ -93,15 +101,14 @@ export function useCrossChainConfirmation({
   const shouldPoll = enabled && elapsedTime >= INITIAL_DELAY;
 
   // Query hub chain for registration status
-  // Note: WalletRegistryV2 has overloaded isWalletRegistered(address) and isWalletRegistered(string caip10)
-  // We use the address version here
+  // Uses minimal ABI to avoid viem ambiguity between address and string overloads
   const {
     data: isRegisteredOnHubRaw,
     refetch,
     isError: isQueryError,
   } = useReadContract({
     address: hubRegistryAddress,
-    abi: walletRegistryV2Abi,
+    abi: isWalletRegisteredAbi,
     functionName: 'isWalletRegistered',
     args: wallet ? [wallet] : undefined,
     chainId: hubChainId,

@@ -4,7 +4,7 @@
  * This is Phase 1 of the two-phase registration flow.
  * After acknowledgement, a grace period begins before registration can be completed.
  *
- * WalletRegistryV2 signature:
+ * WalletRegistry signature:
  *   acknowledge(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
  *
  * isSponsored is derived on-chain as (registeree != forwarder).
@@ -115,7 +115,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
     });
 
     try {
-      // WalletRegistryV2: acknowledge(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
+      // WalletRegistry: acknowledge(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi,

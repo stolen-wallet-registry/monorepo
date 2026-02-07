@@ -10,7 +10,7 @@ import { IERC5192 } from "../../src/soulbound/interfaces/IERC5192.sol";
 import { SVGRenderer } from "../../src/soulbound/libraries/SVGRenderer.sol";
 
 /// @notice Mock registry for testing WalletSoulbound
-/// @dev Implements the IWalletRegistryV2 view methods that WalletSoulbound calls
+/// @dev Implements the IWalletRegistry view methods that WalletSoulbound calls
 contract MockStolenWalletRegistry {
     mapping(address => bool) public registered;
     mapping(address => bool) public pending;

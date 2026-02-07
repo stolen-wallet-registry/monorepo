@@ -26,7 +26,7 @@ import {
   computeTransactionDataHash,
 } from '@/lib/signatures/transactions';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
-import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
+import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import type { Hash, Hex } from '@/lib/types/ethereum';
@@ -43,8 +43,13 @@ export interface TxRegisterSignStepProps {
 export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
-  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
-    useTransactionSelection();
+  const {
+    selectedTxHashes,
+    selectedTxDetails,
+    reportedChainId,
+    txHashesForContract,
+    chainIdsForContract,
+  } = useTransactionSelection();
   const { registrationType } = useTransactionRegistrationStore();
   const storedReporter = useTransactionFormStore((s) => s.reporter);
   const storedForwarder = useTransactionFormStore((s) => s.forwarder);
@@ -80,10 +85,10 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
 
-  // V2: Compute dataHash from sorted arrays (replaces merkle root for signing/contract calls)
+  // Compute dataHash from sorted arrays for signing/contract calls
   const dataHash: Hash | undefined =
-    sortedTxHashes.length > 0 && sortedChainIds.length > 0
-      ? computeTransactionDataHash(sortedTxHashes, sortedChainIds)
+    txHashesForContract.length > 0 && chainIdsForContract.length > 0
+      ? computeTransactionDataHash(txHashesForContract, chainIdsForContract)
       : undefined;
 
   // Contract hooks - use reporter address for nonce since they're the signer
@@ -362,7 +367,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
           <div className="flex items-start gap-2">
             <span className="text-muted-foreground flex items-center gap-1 shrink-0">
               Data Hash:
-              <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
+              <InfoTooltip content={DATA_HASH_TOOLTIP} side="right" />
             </span>
             <Tooltip>
               <TooltipTrigger asChild>

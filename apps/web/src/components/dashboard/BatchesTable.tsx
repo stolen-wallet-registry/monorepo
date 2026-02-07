@@ -7,7 +7,6 @@
 import { useMemo } from 'react';
 import { Link, useLocation, useSearch } from 'wouter';
 import {
-  Badge,
   Button,
   Card,
   CardContent,
@@ -25,16 +24,12 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
   ExplorerLink,
   getExplorerTxUrl,
 } from '@swr/ui';
-import { Wallet, FileText, Code, ChevronLeft, ChevronRight, Copy, Check } from 'lucide-react';
+import { Wallet, FileText, Code, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatRelativeTime, truncateHash } from '@swr/search';
 import { useBatches, useOperators, type BatchSummary, type BatchType } from '@/hooks/dashboard';
-import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { cn } from '@/lib/utils';
 
@@ -67,12 +62,12 @@ interface BatchRowProps {
 function BatchRow({ batch, operatorNames, detailHref }: BatchRowProps) {
   const config = TYPE_CONFIG[batch.type];
   const TypeIcon = config.icon;
-  const { copy, copied } = useCopyToClipboard({ resetMs: 2000 });
 
   const submitterKey = batch.submitter.toLowerCase();
   const operatorLabel = operatorNames.get(submitterKey);
+  // Wallet and contract batches are always from operators; transaction batches check isOperator flag
   const isOperator =
-    batch.type !== 'transaction' || (batch.type === 'transaction' && batch.isOperatorVerified);
+    batch.type !== 'transaction' || (batch.type === 'transaction' && batch.isOperator === true);
   const submitterLabel = isOperator
     ? (operatorLabel ?? truncateHash(submitterKey, 6, 4))
     : 'Individual';
@@ -88,45 +83,10 @@ function BatchRow({ batch, operatorNames, detailHref }: BatchRowProps) {
             <TypeIcon className="h-3 w-3" />
           </div>
           <span className="text-xs text-muted-foreground">{config.label}</span>
-          {batch.type === 'contract' && batch.invalidated && (
-            <Badge variant="destructive" className="text-[10px]">
-              Invalidated
-            </Badge>
-          )}
         </div>
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link href={detailHref} className="font-mono text-sm hover:underline">
-                {truncateHash(batch.id, 10, 6)}
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p className="text-xs font-mono break-all">{batch.id}</p>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="text-muted-foreground/60 hover:text-foreground transition-colors"
-                onClick={() => copy(batch.id)}
-                aria-label={copied ? 'Copied!' : 'Copy batch ID'}
-              >
-                {copied ? (
-                  <Check className="h-3.5 w-3.5 text-green-500" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p className="text-xs">{copied ? 'Copied!' : 'Copy batch ID'}</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+        <span className="font-mono text-sm">{batch.id}</span>
       </TableCell>
       <TableCell>
         <span className="text-sm">{submitterLabel}</span>
@@ -146,6 +106,11 @@ function BatchRow({ batch, operatorNames, detailHref }: BatchRowProps) {
           href={txHref}
           showDisabledIcon={false}
         />
+      </TableCell>
+      <TableCell>
+        <Button asChild variant="outline" size="sm">
+          <Link href={detailHref}>View</Link>
+        </Button>
       </TableCell>
     </TableRow>
   );
@@ -187,8 +152,8 @@ export function BatchesTable({ className }: BatchesTableProps) {
       if (batch.type !== 'transaction') {
         return submitterFilter === 'operator';
       }
-      const isOperator = batch.isOperatorVerified === true;
-      return submitterFilter === 'operator' ? isOperator : !isOperator;
+      const isOp = batch.isOperator === true;
+      return submitterFilter === 'operator' ? isOp : !isOp;
     });
   }, [batches, submitterFilter]);
 
@@ -281,12 +246,13 @@ export function BatchesTable({ className }: BatchesTableProps) {
                   <TableHead>Count</TableHead>
                   <TableHead>Registered</TableHead>
                   <TableHead>Tx</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginated.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
                       No batches found for this filter.
                     </TableCell>
                   </TableRow>

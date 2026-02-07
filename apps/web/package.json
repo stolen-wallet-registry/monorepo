@@ -43,7 +43,6 @@
     "@swr/chains": "workspace:*",
     "@swr/errors": "workspace:*",
     "@swr/formatting": "workspace:*",
-    "@swr/merkle": "workspace:*",
     "@swr/p2p": "workspace:*",
     "@swr/search": "workspace:*",
     "@swr/signatures": "workspace:*",

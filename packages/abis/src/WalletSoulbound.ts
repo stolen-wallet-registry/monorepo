@@ -317,7 +317,7 @@ export const WalletSoulboundABI = [
       {
         name: '',
         type: 'address',
-        internalType: 'contract IWalletRegistryV2',
+        internalType: 'contract IWalletRegistry',
       },
     ],
     stateMutability: 'view',

@@ -1,15 +1,15 @@
 /**
  * Hook to read deadline and hash struct from the transaction registry contract.
- * Currently hub-only (TransactionRegistryV2). Spoke (SpokeRegistryV2) support is not yet implemented —
+ * Currently hub-only (TransactionRegistry). Spoke (SpokeRegistry) support is not yet implemented —
  * spoke transaction batches use different function signatures for acknowledgement/registration.
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  */
 
 import { useReadContract, useChainId } from 'wagmi';
-import { transactionRegistryV2Abi } from '@/lib/contracts/abis';
-import { getTransactionRegistryV2Address } from '@/lib/contracts/addresses';
-import { getSpokeV2Address } from '@/lib/contracts/crosschain-addresses';
+import { transactionRegistryAbi } from '@/lib/contracts/abis';
+import { getTransactionRegistryAddress } from '@/lib/contracts/addresses';
+import { getSpokeContractAddress } from '@/lib/contracts/crosschain-addresses';
 import { isHubChain, isSpokeChain } from '@swr/chains';
 import { TX_SIGNATURE_STEP, type TxSignatureStep } from '@/lib/signatures/transactions';
 import type { Address, Hash } from '@/lib/types/ethereum';
@@ -59,9 +59,9 @@ export function useTransactionHashStruct(
   // Get contract address
   let contractAddress: Address | undefined;
   if (isSpoke) {
-    contractAddress = getSpokeV2Address('spokeRegistryV2', chainId);
+    contractAddress = getSpokeContractAddress('spokeRegistry', chainId);
   } else if (isHub) {
-    contractAddress = getTransactionRegistryV2Address(chainId);
+    contractAddress = getTransactionRegistryAddress(chainId);
   }
 
   const enabled =
@@ -72,10 +72,10 @@ export function useTransactionHashStruct(
     !!forwarderAddress &&
     !!contractAddress;
 
-  // Hub chain: TransactionRegistryV2.generateTransactionHashStruct
+  // Hub chain: TransactionRegistry.generateTransactionHashStruct
   const hubResult = useReadContract({
     address: contractAddress,
-    abi: transactionRegistryV2Abi,
+    abi: transactionRegistryAbi,
     chainId,
     functionName: 'generateTransactionHashStruct',
     args: enabled
@@ -87,7 +87,7 @@ export function useTransactionHashStruct(
     },
   });
 
-  // Note: SpokeRegistryV2 uses different functions for transaction batches
+  // Note: SpokeRegistry uses different functions for transaction batches
   // (acknowledgeTransactionBatch/registerTransactionBatch) with different signature generation.
   // Transaction hash struct generation is currently only implemented for hub chains.
   // Spoke transaction registration may need separate handling.

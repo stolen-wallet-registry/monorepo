@@ -243,7 +243,7 @@ function BatchDetailContent({
     const address = 'operator' in data.batch ? data.batch.operator : data.batch.reporter;
     const name = operatorNames.get(address.toLowerCase());
     if (data.type === 'transaction' && !name) {
-      return data.batch.isOperatorVerified ? 'Operator' : 'Individual';
+      return data.batch.isOperator ? 'Operator' : 'Individual';
     }
     return name ?? truncateHash(address, 6, 4);
   }, [data, operatorNames]);
@@ -346,10 +346,18 @@ function BatchDetailContent({
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               <SummaryItem label="Batch ID" value={<CopyableHash value={data.batch.id} />} />
-              <SummaryItem
-                label="Merkle Root"
-                value={<CopyableHash value={data.batch.merkleRoot} />}
-              />
+              {'dataHash' in data.batch && data.batch.dataHash && (
+                <SummaryItem
+                  label="Data Hash"
+                  value={<CopyableHash value={data.batch.dataHash} />}
+                />
+              )}
+              {'operatorId' in data.batch && data.batch.operatorId && (
+                <SummaryItem
+                  label="Operator ID"
+                  value={<CopyableHash value={data.batch.operatorId} />}
+                />
+              )}
               <SummaryItem
                 label={data.type === 'transaction' ? 'Reporter' : 'Operator'}
                 value={
@@ -392,13 +400,7 @@ function BatchDetailContent({
               {data.type === 'contract' && (
                 <SummaryItem
                   label="Batch Status"
-                  value={
-                    data.batch.invalidated ? (
-                      <Badge variant="destructive">Invalidated</Badge>
-                    ) : (
-                      <Badge variant="secondary">Active</Badge>
-                    )
-                  }
+                  value={<Badge variant="secondary">Active</Badge>}
                 />
               )}
             </div>
@@ -577,15 +579,8 @@ function BatchDetailContent({
                       const contractHref = chainIdForExplorer
                         ? getExplorerAddressUrl(chainIdForExplorer, entry.contractAddress)
                         : null;
-                      const statusLabel = data.batch.invalidated
-                        ? 'Batch invalidated'
-                        : entry.invalidated
-                          ? 'Invalidated'
-                          : 'Active';
-                      const statusVariant =
-                        data.batch.invalidated || entry.invalidated ? 'destructive' : 'secondary';
                       return (
-                        <TableRow key={entry.entryHash}>
+                        <TableRow key={`${entry.contractAddress}-${entry.caip2ChainId}`}>
                           <TableCell>
                             <Caip10Entry
                               identifier={entry.contractAddress}
@@ -601,11 +596,8 @@ function BatchDetailContent({
                             </span>
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant={statusVariant as 'secondary' | 'destructive'}
-                              className="text-xs"
-                            >
-                              {statusLabel}
+                            <Badge variant="secondary" className="text-xs">
+                              Active
                             </Badge>
                           </TableCell>
                         </TableRow>

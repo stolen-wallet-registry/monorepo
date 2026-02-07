@@ -61,12 +61,11 @@ export function useContractDeadlines(
   // Get the correct ABI and function names for hub/spoke
   const { abi, functions } = getRegistryMetadata('wallet', registryType);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
   const result = useReadContract({
     address: contractAddress,
     abi,
     chainId,
-    functionName: functions.getDeadlines as any,
+    functionName: functions.getDeadlines as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
     args: registereeAddress ? [registereeAddress] : undefined,
     query: {
       enabled: !!registereeAddress && !!contractAddress,
@@ -76,7 +75,7 @@ export function useContractDeadlines(
   });
 
   // Transform the raw result into a typed object
-  // V2 unified format: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
+  // Unified format: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
   let transformedData: DeadlineData | undefined;
   if (result.data) {
     const rawData = result.data as unknown as readonly [
@@ -175,7 +174,6 @@ export function useTxContractDeadlines(
   const enabled = !!reporter && !!contractAddress;
 
   // Read deadlines from contract (hub: getTransactionDeadlines, spoke: getDeadlines)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
   const {
     data: contractData,
     isLoading,
@@ -185,7 +183,7 @@ export function useTxContractDeadlines(
   } = useReadContract({
     address: contractAddress,
     abi,
-    functionName: functions.getDeadlines as any,
+    functionName: functions.getDeadlines as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
     args: reporter ? [reporter] : undefined,
     chainId,
     query: {

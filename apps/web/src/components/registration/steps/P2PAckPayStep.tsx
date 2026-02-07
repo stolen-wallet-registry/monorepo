@@ -88,8 +88,8 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     return 'idle';
   };
 
-  // Check if stored signature has required V2 fields
-  const hasV2Fields = Boolean(
+  // Check if stored signature has required fields
+  const hasRequiredFields = Boolean(
     storedSig?.reportedChainId !== undefined && storedSig?.incidentTimestamp !== undefined
   );
 
@@ -277,8 +277,8 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
             status={getStatus()}
             hash={hash}
             error={
-              !hasV2Fields && storedSig
-                ? 'Signature is missing V2 data. Registeree may need to sign again.'
+              !hasRequiredFields && storedSig
+                ? 'Signature is missing required data. Registeree may need to sign again.'
                 : error
                   ? sanitizeErrorMessage(error)
                   : null
@@ -286,7 +286,7 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
             chainId={chainId}
             onSubmit={handleSubmit}
             onRetry={reset}
-            disabled={!storedSig || !hasV2Fields}
+            disabled={!storedSig || !hasRequiredFields}
           />
           {sendError && isConfirmed && !hasSentHash && (
             <Alert variant="destructive" className="mt-4">

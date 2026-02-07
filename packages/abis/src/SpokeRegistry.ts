@@ -37,6 +37,11 @@ export const SpokeRegistryABI = [
         type: 'uint256',
         internalType: 'uint256',
       },
+      {
+        name: '_bridgeId',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
     ],
     stateMutability: 'nonpayable',
   },
@@ -56,6 +61,21 @@ export const SpokeRegistryABI = [
     name: 'acknowledgeLocal',
     inputs: [
       {
+        name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: 'incidentTimestamp',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
         name: 'deadline',
         type: 'uint256',
         internalType: 'uint256',
@@ -66,7 +86,55 @@ export const SpokeRegistryABI = [
         internalType: 'uint256',
       },
       {
-        name: 'owner',
+        name: 'v',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+      {
+        name: 'r',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 's',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'acknowledgeTransactionBatch',
+    inputs: [
+      {
+        name: 'dataHash',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'transactionCount',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'nonce',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'reporter',
         type: 'address',
         internalType: 'address',
       },
@@ -87,7 +155,7 @@ export const SpokeRegistryABI = [
       },
     ],
     outputs: [],
-    stateMutability: 'payable',
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -98,6 +166,19 @@ export const SpokeRegistryABI = [
         name: '',
         type: 'address',
         internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'bridgeId',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint8',
+        internalType: 'uint8',
       },
     ],
     stateMutability: 'view',
@@ -176,6 +257,16 @@ export const SpokeRegistryABI = [
     name: 'generateHashStruct',
     inputs: [
       {
+        name: 'reportedChainId',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: 'incidentTimestamp',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
         name: 'forwarder',
         type: 'address',
         internalType: 'address',
@@ -212,7 +303,7 @@ export const SpokeRegistryABI = [
     ],
     outputs: [
       {
-        name: 'data',
+        name: '',
         type: 'tuple',
         internalType: 'struct ISpokeRegistry.AcknowledgementData',
         components: [
@@ -220,6 +311,16 @@ export const SpokeRegistryABI = [
             name: 'trustedForwarder',
             type: 'address',
             internalType: 'address',
+          },
+          {
+            name: 'incidentTimestamp',
+            type: 'uint64',
+            internalType: 'uint64',
+          },
+          {
+            name: 'reportedChainId',
+            type: 'bytes32',
+            internalType: 'bytes32',
           },
           {
             name: 'startBlock',
@@ -282,6 +383,57 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'getTransactionAcknowledgement',
+    inputs: [
+      {
+        name: 'reporter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        internalType: 'struct ISpokeRegistry.TransactionAcknowledgementData',
+        components: [
+          {
+            name: 'trustedForwarder',
+            type: 'address',
+            internalType: 'address',
+          },
+          {
+            name: 'dataHash',
+            type: 'bytes32',
+            internalType: 'bytes32',
+          },
+          {
+            name: 'reportedChainId',
+            type: 'bytes32',
+            internalType: 'bytes32',
+          },
+          {
+            name: 'transactionCount',
+            type: 'uint32',
+            internalType: 'uint32',
+          },
+          {
+            name: 'startBlock',
+            type: 'uint256',
+            internalType: 'uint256',
+          },
+          {
+            name: 'expiryBlock',
+            type: 'uint256',
+            internalType: 'uint256',
+          },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'graceBlocks',
     inputs: [],
     outputs: [
@@ -325,6 +477,25 @@ export const SpokeRegistryABI = [
     inputs: [
       {
         name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isPendingTransactionBatch',
+    inputs: [
+      {
+        name: 'reporter',
         type: 'address',
         internalType: 'address',
       },
@@ -448,6 +619,21 @@ export const SpokeRegistryABI = [
     name: 'registerLocal',
     inputs: [
       {
+        name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: 'incidentTimestamp',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
         name: 'deadline',
         type: 'uint256',
         internalType: 'uint256',
@@ -458,9 +644,57 @@ export const SpokeRegistryABI = [
         internalType: 'uint256',
       },
       {
-        name: 'owner',
+        name: 'v',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+      {
+        name: 'r',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 's',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'registerTransactionBatch',
+    inputs: [
+      {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'nonce',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'reporter',
         type: 'address',
         internalType: 'address',
+      },
+      {
+        name: 'transactionHashes',
+        type: 'bytes32[]',
+        internalType: 'bytes32[]',
+      },
+      {
+        name: 'chainIds',
+        type: 'bytes32[]',
+        internalType: 'bytes32[]',
       },
       {
         name: 'v',
@@ -508,13 +742,13 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
-    name: 'spokeChainId',
+    name: 'sourceChainId',
     inputs: [],
     outputs: [
       {
         name: '',
-        type: 'uint32',
-        internalType: 'uint32',
+        type: 'bytes32',
+        internalType: 'bytes32',
       },
     ],
     stateMutability: 'view',
@@ -618,7 +852,7 @@ export const SpokeRegistryABI = [
     name: 'RegistrationSentToHub',
     inputs: [
       {
-        name: 'owner',
+        name: 'wallet',
         type: 'address',
         indexed: true,
         internalType: 'address',
@@ -630,7 +864,81 @@ export const SpokeRegistryABI = [
         internalType: 'bytes32',
       },
       {
-        name: 'destinationChain',
+        name: 'hubChainId',
+        type: 'uint32',
+        indexed: false,
+        internalType: 'uint32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'TransactionBatchAcknowledged',
+    inputs: [
+      {
+        name: 'reporter',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'forwarder',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'dataHash',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'transactionCount',
+        type: 'uint32',
+        indexed: false,
+        internalType: 'uint32',
+      },
+      {
+        name: 'isSponsored',
+        type: 'bool',
+        indexed: false,
+        internalType: 'bool',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'TransactionBatchSentToHub',
+    inputs: [
+      {
+        name: 'reporter',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'messageId',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'dataHash',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'hubChainId',
         type: 'uint32',
         indexed: false,
         internalType: 'uint32',
@@ -643,7 +951,7 @@ export const SpokeRegistryABI = [
     name: 'WalletAcknowledged',
     inputs: [
       {
-        name: 'owner',
+        name: 'wallet',
         type: 'address',
         indexed: true,
         internalType: 'address',
@@ -655,9 +963,21 @@ export const SpokeRegistryABI = [
         internalType: 'address',
       },
       {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'incidentTimestamp',
+        type: 'uint64',
+        indexed: false,
+        internalType: 'uint64',
+      },
+      {
         name: 'isSponsored',
         type: 'bool',
-        indexed: true,
+        indexed: false,
         internalType: 'bool',
       },
     ],
@@ -719,7 +1039,12 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'error',
-    name: 'SpokeRegistry__BridgeFailed',
+    name: 'SpokeRegistry__ArrayLengthMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__EmptyBatch',
     inputs: [],
   },
   {
@@ -740,6 +1065,11 @@ export const SpokeRegistryABI = [
   {
     type: 'error',
     name: 'SpokeRegistry__InsufficientFee',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__InvalidDataHash',
     inputs: [],
   },
   {

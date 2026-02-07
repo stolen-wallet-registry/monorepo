@@ -20,8 +20,6 @@ export const stolenWallet = onchainTable(
     transactionHash: t.hex().notNull(),
     /** Was gas sponsored (relay)? */
     isSponsored: t.boolean().notNull(),
-    /** If from operator batch, the batch ID */
-    batchId: t.hex(),
     /** If from operator batch, the operator address */
     operator: t.hex(),
     /** If cross-chain, source chain ID (numeric) */
@@ -30,29 +28,39 @@ export const stolenWallet = onchainTable(
     sourceChainCAIP2: t.text(),
     /** If cross-chain, Hyperlane message ID */
     messageId: t.hex(),
+    /** bytes32 CAIP-2 hash where incident occurred */
+    reportedChainId: t.hex(),
+    /** Resolved CAIP-2 string (e.g. "eip155:1") from reportedChainId hash */
+    reportedChainCAIP2: t.text(),
+    /** uint64 when theft happened */
+    incidentTimestamp: t.bigint(),
+    /** 0=local, 1=Hyperlane */
+    bridgeId: t.integer(),
+    /** If from operator batch, the batch ID (uint256 as string) */
+    batchId: t.text(),
   }),
   (table) => ({
     caip10Idx: index().on(table.caip10),
     registeredAtIdx: index().on(table.registeredAt),
     batchIdIdx: index().on(table.batchId),
+    reportedChainIdIdx: index().on(table.reportedChainId),
+    txHashIdx: index().on(table.transactionHash),
   })
 );
 
-/** Operator-submitted wallet batches */
+/** Operator-submitted wallet batches (BatchCreated event) */
 export const walletBatch = onchainTable(
   'wallet_batch',
   (t) => ({
-    /** batchId (bytes32 as hex string) */
-    id: t.hex().primaryKey(),
-    /** Merkle root of wallet addresses */
-    merkleRoot: t.hex().notNull(),
-    /** Operator who submitted */
+    /** uint256 batchId as string */
+    id: t.text().primaryKey(),
+    /** Operator ID (bytes32 hash of operator name) */
+    operatorId: t.hex().notNull(),
+    /** Operator address (from event.transaction.from) */
     operator: t.hex().notNull(),
-    /** Reported chain ID (bytes32 hash) */
-    reportedChainIdHash: t.hex().notNull(),
-    /** CAIP-2 chain ID (resolved) */
+    /** Reported chain CAIP-2 (resolved from first wallet in batch) */
     reportedChainCAIP2: t.text(),
-    /** Number of wallets in batch */
+    /** Actual wallet count (excludes skipped zeros and already-registered) */
     walletCount: t.integer().notNull(),
     /** Block timestamp when registered */
     registeredAt: t.bigint().notNull(),
@@ -99,28 +107,28 @@ export const walletAcknowledgement = onchainTable(
 // TRANSACTION REGISTRY
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Transaction batch (Merkle root + metadata) */
+/** Transaction batch (unified batchId across individual and operator) */
 export const transactionBatch = onchainTable(
   'transaction_batch',
   (t) => ({
-    /** batchId (bytes32 as hex string) */
-    id: t.hex().primaryKey(),
-    /** Merkle root of tx hashes */
-    merkleRoot: t.hex().notNull(),
+    /** uint256 batchId as string — unified across individual and operator */
+    id: t.text().primaryKey(),
+    /** dataHash = hash of (txHashes, chainIds). bytes32(0) for operator batches */
+    dataHash: t.hex().notNull(),
     /** Address that reported */
     reporter: t.hex().notNull(),
-    /** Chain where txs occurred (bytes32 hash) */
-    reportedChainIdHash: t.hex().notNull(),
+    /** Reported chain ID hash (from first TransactionRegistered in same tx) */
+    reportedChainIdHash: t.hex(),
     /** CAIP-2 chain ID (resolved) */
     reportedChainCAIP2: t.text(),
     /** Number of txs in batch */
     transactionCount: t.integer().notNull(),
     /** Was gas sponsored? */
     isSponsored: t.boolean().notNull(),
-    /** Has an operator verified? */
-    isOperatorVerified: t.boolean().notNull(),
-    /** Verifying operator address (if verified) */
-    verifyingOperator: t.hex(),
+    /** Is from operator batch (TransactionBatchCreated vs TransactionBatchRegistered) */
+    isOperator: t.boolean().notNull(),
+    /** Operator ID (bytes32, only for operator batches) */
+    operatorId: t.hex(),
     /** Block timestamp when registered */
     registeredAt: t.bigint().notNull(),
     /** Block number when registered */
@@ -135,17 +143,19 @@ export const transactionBatch = onchainTable(
   (table) => ({
     reporterIdx: index().on(table.reporter),
     registeredAtIdx: index().on(table.registeredAt),
+    isOperatorIdx: index().on(table.isOperator),
+    txHashIdx: index().on(table.transactionHash),
   })
 );
 
 /**
  * Individual transactions in a batch (for querying "is this tx reported?")
- * CRITICAL: These are extracted from event data, not from contract storage
+ * Entries link to parent batch via transactionHash join (no batchId on per-entry events)
  */
 export const transactionInBatch = onchainTable(
   'transaction_in_batch',
   (t) => ({
-    /** txHash-caip2ChainId composite key */
+    /** txHash-chainIdHash composite key */
     id: t.text().primaryKey(),
     /** Transaction hash (bytes32) */
     txHash: t.hex().notNull(),
@@ -155,17 +165,20 @@ export const transactionInBatch = onchainTable(
     caip2ChainId: t.text().notNull(),
     /** Numeric chain ID (EVM only, null for non-EVM) */
     numericChainId: t.integer(),
-    /** Reference to parent batch */
-    batchId: t.hex().notNull(),
+    /** Registration transaction hash (join key to parent batch) */
+    transactionHash: t.hex().notNull(),
     /** Reporter address */
     reporter: t.hex().notNull(),
     /** When batch was registered */
     reportedAt: t.bigint().notNull(),
+    /** Reference to parent batch (populated by batch summary handler or at query time) */
+    batchId: t.text(),
   }),
   (table) => ({
     txHashIdx: index().on(table.txHash),
     caip2ChainIdIdx: index().on(table.caip2ChainId),
     batchIdIdx: index().on(table.batchId),
+    txnHashIdx: index().on(table.transactionHash),
   })
 );
 
@@ -173,18 +186,14 @@ export const transactionInBatch = onchainTable(
 export const transactionBatchAcknowledgement = onchainTable(
   'transaction_batch_acknowledgement',
   (t) => ({
-    /** Computed batchId: keccak256(merkleRoot, reporter, reportedChainId) */
+    /** reporter address as primary key (only one pending ack per reporter) */
     id: t.hex().primaryKey(),
-    /** Merkle root of tx hashes */
-    merkleRoot: t.hex().notNull(),
+    /** dataHash = hash of (txHashes, chainIds) committed in acknowledgement */
+    dataHash: t.hex().notNull(),
     /** Reporter address */
     reporter: t.hex().notNull(),
     /** Trusted forwarder address */
     forwarder: t.hex().notNull(),
-    /** Chain where txs occurred (bytes32 hash) */
-    reportedChainIdHash: t.hex().notNull(),
-    /** Number of txs in batch */
-    transactionCount: t.integer().notNull(),
     /** Was gas sponsored? */
     isSponsored: t.boolean().notNull(),
     /** Block timestamp when acknowledged */
@@ -235,6 +244,8 @@ export const crossChainMessage = onchainTable(
     receivedAt: t.bigint(),
     /** When registration completed */
     registeredAt: t.bigint(),
+    /** Bridge protocol ID */
+    bridgeId: t.integer(),
   }),
   (table) => ({
     statusIdx: index().on(table.status),
@@ -352,21 +363,19 @@ export const operatorCapabilityChange = onchainTable(
 // FRAUDULENT CONTRACT REGISTRY
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Batches of fraudulent contracts submitted by operators */
+/** Batches of fraudulent contracts submitted by operators (ContractBatchCreated) */
 export const fraudulentContractBatch = onchainTable(
   'fraudulent_contract_batch',
   (t) => ({
-    /** batchId (bytes32 as hex) */
-    id: t.hex().primaryKey(),
-    /** Merkle root of contracts */
-    merkleRoot: t.hex().notNull(),
-    /** Operator who submitted */
+    /** uint256 batchId as string */
+    id: t.text().primaryKey(),
+    /** Operator ID (bytes32 hash of operator name) */
+    operatorId: t.hex().notNull(),
+    /** Operator address (from event.transaction.from) */
     operator: t.hex().notNull(),
-    /** Primary chain for batch (CAIP-2 bytes32 hash) */
-    reportedChainIdHash: t.hex().notNull(),
-    /** CAIP-2 chain ID (resolved) */
+    /** Reported chain CAIP-2 (resolved from first contract in batch) */
     reportedChainCAIP2: t.text(),
-    /** Number of contracts in batch */
+    /** Actual contract count */
     contractCount: t.integer().notNull(),
     /** Block timestamp when registered */
     registeredAt: t.bigint().notNull(),
@@ -374,29 +383,19 @@ export const fraudulentContractBatch = onchainTable(
     registeredAtBlock: t.bigint().notNull(),
     /** Registration transaction hash */
     transactionHash: t.hex().notNull(),
-    /** Has batch been invalidated */
-    invalidated: t.boolean().notNull(),
-    /** Block when invalidated (null if valid) */
-    invalidatedAt: t.bigint(),
   }),
   (table) => ({
     operatorIdx: index().on(table.operator),
     registeredAtIdx: index().on(table.registeredAt),
-    invalidatedIdx: index().on(table.invalidated),
   })
 );
 
-/** Individual fraudulent contracts (extracted from batch events) */
+/** Individual fraudulent contracts (extracted from ContractRegistered events) */
 export const fraudulentContract = onchainTable(
   'fraudulent_contract',
   (t) => ({
     /** contractAddress-chainIdHash composite */
     id: t.text().primaryKey(),
-    /**
-     * Entry hash for joining with invalidatedEntry table (keccak256(address, chainId)).
-     * To check invalidation status, join: fraudulentContract.entryHash = invalidatedEntry.id
-     */
-    entryHash: t.hex().notNull(),
     /** Contract address */
     contractAddress: t.hex().notNull(),
     /** Chain ID hash (bytes32) */
@@ -405,37 +404,20 @@ export const fraudulentContract = onchainTable(
     caip2ChainId: t.text().notNull(),
     /** Numeric chain ID (EVM only) */
     numericChainId: t.integer(),
-    /** Parent batch ID */
-    batchId: t.hex().notNull(),
+    /** Parent batch ID (uint256 as string) */
+    batchId: t.text().notNull(),
     /** Operator who submitted */
     operator: t.hex().notNull(),
     /** When batch was registered */
     reportedAt: t.bigint().notNull(),
   }),
   (table) => ({
-    entryHashIdx: index().on(table.entryHash),
     contractAddressIdx: index().on(table.contractAddress),
     caip2ChainIdIdx: index().on(table.caip2ChainId),
     batchIdIdx: index().on(table.batchId),
     operatorIdx: index().on(table.operator),
   })
 );
-
-/** Invalidated entries (individual contract+chain combinations) */
-export const invalidatedEntry = onchainTable('invalidated_entry', (t) => ({
-  /** entryHash (keccak256(contract, chainId)) */
-  id: t.hex().primaryKey(),
-  /** When invalidated */
-  invalidatedAt: t.bigint().notNull(),
-  /** Who invalidated */
-  invalidatedBy: t.hex().notNull(),
-  /** Transaction hash */
-  transactionHash: t.hex().notNull(),
-  /** Has been reinstated */
-  reinstated: t.boolean().notNull(),
-  /** When reinstated (null if still invalid) */
-  reinstatedAt: t.bigint(),
-}));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATISTICS
@@ -475,8 +457,6 @@ export const registryStats = onchainTable('registry_stats', (t) => ({
   totalContractBatches: t.integer().notNull(),
   /** Total individual fraudulent contracts reported */
   totalFraudulentContracts: t.integer().notNull(),
-  /** Invalidated contract batches */
-  invalidatedContractBatches: t.integer().notNull(),
   /** Last update timestamp */
   lastUpdated: t.bigint().notNull(),
 }));

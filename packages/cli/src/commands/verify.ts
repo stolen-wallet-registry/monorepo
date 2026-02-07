@@ -3,7 +3,7 @@ import ora from 'ora';
 import { createPublicClient, http, isAddress, zeroAddress, type Address } from 'viem';
 import { getConfig } from '../lib/config.js';
 import { chainIdToBytes32 } from '../lib/caip.js';
-import { WalletRegistryV2ABI, ContractRegistryV2ABI } from '@swr/abis';
+import { WalletRegistryABI, ContractRegistryABI } from '@swr/abis';
 
 export interface VerifyOptions {
   address: string;
@@ -47,7 +47,7 @@ export async function verify(options: VerifyOptions): Promise<void> {
         // Check if wallet is registered
         const isRegistered = await publicClient.readContract({
           address: config.contracts.stolenWalletRegistry,
-          abi: WalletRegistryV2ABI,
+          abi: WalletRegistryABI,
           functionName: 'isWalletRegistered',
           args: [options.address as Address],
         });
@@ -55,7 +55,7 @@ export async function verify(options: VerifyOptions): Promise<void> {
         // Check if wallet is pending (acknowledged but not yet registered)
         const isPending = await publicClient.readContract({
           address: config.contracts.stolenWalletRegistry,
-          abi: WalletRegistryV2ABI,
+          abi: WalletRegistryABI,
           functionName: 'isWalletPending',
           args: [options.address as Address],
         });
@@ -82,7 +82,7 @@ export async function verify(options: VerifyOptions): Promise<void> {
 
         const isRegistered = await publicClient.readContract({
           address: config.contracts.fraudulentContractRegistry,
-          abi: ContractRegistryV2ABI,
+          abi: ContractRegistryABI,
           functionName: 'isContractRegistered',
           args: [options.address as Address, chainIdBytes],
         });

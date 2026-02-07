@@ -33,7 +33,7 @@ export interface TxGracePeriodStepProps {
  */
 export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepProps) {
   const chainId = useChainId();
-  const { sortedTxHashes } = useTransactionSelection();
+  const { txHashesForContract } = useTransactionSelection();
   // Use reporter from form store - this is the address deadlines are stored under in the contract
   // In self-relay, the connected wallet may be the gas wallet (forwarder), not the reporter
   const reporter = useTransactionFormStore((s) => s.reporter);
@@ -75,7 +75,7 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
     if (deadlines && !hasLoggedStartForDeadlines.current) {
       hasLoggedStartForDeadlines.current = true;
       logger.registration.info('Transaction batch grace period started', {
-        transactionCount: sortedTxHashes.length,
+        transactionCount: txHashesForContract.length,
         currentBlock: deadlines.currentBlock.toString(),
         windowOpensAtBlock: deadlines.start.toString(),
         windowClosesAtBlock: deadlines.expiry.toString(),
@@ -83,7 +83,7 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
         chainId,
       });
     }
-  }, [deadlines, sortedTxHashes.length, chainId]);
+  }, [deadlines, txHashesForContract.length, chainId]);
 
   // Custom onExpire handler with theme switch
   const handleExpire = useCallback(() => {
@@ -134,7 +134,7 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
   }, [totalMs, blocksLeft, initialTotalMs]);
 
   // Missing transaction data or reporter
-  if (sortedTxHashes.length === 0 || !reporter) {
+  if (txHashesForContract.length === 0 || !reporter) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />

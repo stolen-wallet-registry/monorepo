@@ -100,12 +100,12 @@ export const HUB_CROSSCHAIN_ADDRESSES = {
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════
-// V2 SPOKE CHAIN CONTRACTS (SpokeRegistryV2)
+// SPOKE CHAIN CONTRACTS (SpokeRegistry)
 // ═══════════════════════════════════════════════════════════════════════════
-// From `pnpm deploy:crosschain:v2` output
+// From `pnpm deploy:crosschain` output
 
-export const V2_SPOKE_ADDRESSES = {
-  spokeRegistryV2: {
+export const SPOKE_CONTRACT_ADDRESSES = {
+  spokeRegistry: {
     [anvilSpoke.chainId]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
     [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address, // TBD
   },
@@ -123,23 +123,23 @@ export const V2_SPOKE_ADDRESSES = {
   },
 } as const;
 
-export type V2SpokeContractName = keyof typeof V2_SPOKE_ADDRESSES;
+export type SpokeContractName = keyof typeof SPOKE_CONTRACT_ADDRESSES;
 
-/** Get V2 spoke contract address */
-export function getSpokeV2Address(contract: V2SpokeContractName, chainId: number): Address {
-  const addresses = V2_SPOKE_ADDRESSES[contract];
+/** Get spoke contract address */
+export function getSpokeContractAddress(contract: SpokeContractName, chainId: number): Address {
+  const addresses = SPOKE_CONTRACT_ADDRESSES[contract];
   const address = addresses[chainId as keyof typeof addresses];
   if (!address || address === zeroAddress) {
     throw new Error(
-      `No ${contract} address configured for spoke chain ID ${chainId}. Deploy V2 contracts first.`
+      `No ${contract} address configured for spoke chain ID ${chainId}. Deploy contracts first.`
     );
   }
   return address as Address;
 }
 
-/** Get SpokeRegistryV2 address */
-export function getSpokeRegistryV2Address(chainId: number): Address {
-  return getSpokeV2Address('spokeRegistryV2', chainId);
+/** Get SpokeRegistry address */
+export function getSpokeRegistryContractAddress(chainId: number): Address {
+  return getSpokeContractAddress('spokeRegistry', chainId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -147,7 +147,7 @@ export function getSpokeRegistryV2Address(chainId: number): Address {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * @deprecated Use V2_SPOKE_ADDRESSES for new integrations.
+ * @deprecated Use SPOKE_CONTRACT_ADDRESSES for new integrations.
  * Spoke chain contracts.
  *
  * NOTE: These are deployment-specific addresses. For runtime access, prefer

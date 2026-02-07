@@ -2,7 +2,7 @@
  * Store for transaction registration form state.
  *
  * Stores selected transaction hashes and chain ID.
- * Merkle tree is NOT persisted - rebuilt from hashes on demand.
+ * Data hash and contract arrays are NOT persisted - derived from selections on demand.
  */
 
 import { create } from 'zustand';
@@ -36,12 +36,12 @@ export interface TransactionFormState {
   selectedTxDetails: StoredTransactionDetail[];
   /** Chain ID where transactions occurred (EIP-155 number) */
   reportedChainId: number | null;
-  /** Computed Merkle root (transient - not persisted) */
-  merkleRoot: Hash | null;
-  /** Sorted transaction hashes from merkle tree (transient - for contract calls) */
-  sortedTxHashes: Hash[];
-  /** Sorted CAIP-2 chain IDs from merkle tree (transient - for contract calls) */
-  sortedChainIds: Hash[];
+  /** Computed data hash for EIP-712 signing (transient - not persisted) */
+  dataHash: Hash | null;
+  /** Transaction hashes for contract calls (transient) */
+  txHashesForContract: Hash[];
+  /** CAIP-2 chain ID hashes for contract calls (transient) */
+  chainIdsForContract: Hash[];
 }
 
 export interface TransactionFormActions {
@@ -54,9 +54,8 @@ export interface TransactionFormActions {
   addTxHash: (hash: Hash) => void;
   removeTxHash: (hash: Hash) => void;
   setReportedChainId: (chainId: number) => void;
-  setMerkleRoot: (root: Hash | null) => void;
-  /** Set merkle tree data including sorted hashes for contract calls */
-  setMerkleTreeData: (root: Hash | null, sortedTxHashes: Hash[], sortedChainIds: Hash[]) => void;
+  /** Set transaction data for contract calls and signing */
+  setTransactionData: (dataHash: Hash | null, txHashes: Hash[], chainIds: Hash[]) => void;
   reset: () => void;
 }
 
@@ -66,9 +65,9 @@ const initialState: TransactionFormState = {
   selectedTxHashes: [],
   selectedTxDetails: [],
   reportedChainId: null,
-  merkleRoot: null,
-  sortedTxHashes: [],
-  sortedChainIds: [],
+  dataHash: null,
+  txHashesForContract: [],
+  chainIdsForContract: [],
 };
 
 export const useTransactionFormStore = create<TransactionFormState & TransactionFormActions>()(
@@ -95,10 +94,10 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
             const unique = Array.from(new Set(hashes));
             logger.store.debug('Transaction form hashes updated', { count: unique.length });
             state.selectedTxHashes = unique;
-            // Clear merkle data when hashes change - it needs to be recomputed
-            state.merkleRoot = null;
-            state.sortedTxHashes = [];
-            state.sortedChainIds = [];
+            // Clear derived data when hashes change - needs recomputation
+            state.dataHash = null;
+            state.txHashesForContract = [];
+            state.chainIdsForContract = [];
             // Note: details not updated here - use setSelectedTransactions for full update
           }),
 
@@ -125,9 +124,9 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
             });
             state.selectedTxHashes = hashes;
             state.selectedTxDetails = details;
-            state.merkleRoot = null;
-            state.sortedTxHashes = [];
-            state.sortedChainIds = [];
+            state.dataHash = null;
+            state.txHashesForContract = [];
+            state.chainIdsForContract = [];
           }),
 
         addTxHash: (hash) =>
@@ -135,10 +134,10 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
             if (!state.selectedTxHashes.includes(hash)) {
               logger.store.debug('Transaction hash added', { hash });
               state.selectedTxHashes.push(hash);
-              // Clear derived merkle data - needs recomputation
-              state.merkleRoot = null;
-              state.sortedTxHashes = [];
-              state.sortedChainIds = [];
+              // Clear derived data - needs recomputation
+              state.dataHash = null;
+              state.txHashesForContract = [];
+              state.chainIdsForContract = [];
             }
           }),
 
@@ -150,9 +149,9 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
               state.selectedTxHashes.splice(index, 1);
               // Also remove from details
               state.selectedTxDetails = state.selectedTxDetails.filter((d) => d.hash !== hash);
-              state.merkleRoot = null;
-              state.sortedTxHashes = [];
-              state.sortedChainIds = [];
+              state.dataHash = null;
+              state.txHashesForContract = [];
+              state.chainIdsForContract = [];
             }
           }),
 
@@ -160,37 +159,23 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
           set((state) => {
             logger.store.debug('Transaction form chain ID updated', { chainId });
             state.reportedChainId = chainId;
-            // Clear merkle data when chain changes - it needs to be recomputed
-            state.merkleRoot = null;
-            state.sortedTxHashes = [];
-            state.sortedChainIds = [];
+            // Clear derived data when chain changes - needs recomputation
+            state.dataHash = null;
+            state.txHashesForContract = [];
+            state.chainIdsForContract = [];
           }),
 
-        /**
-         * @deprecated Prefer setMerkleTreeData() which sets root and sorted arrays together.
-         * This setter always clears sortedTxHashes/sortedChainIds to prevent stale data.
-         */
-        setMerkleRoot: (root) =>
+        setTransactionData: (dataHash, txHashes, chainIds) =>
           set((state) => {
-            logger.store.debug('Transaction form merkle root updated', { root });
-            state.merkleRoot = root;
-            // Always clear sorted data - callers should use setMerkleTreeData to set
-            // root along with sorted arrays to ensure consistency
-            state.sortedTxHashes = [];
-            state.sortedChainIds = [];
-          }),
-
-        setMerkleTreeData: (root, sortedTxHashes, sortedChainIds) =>
-          set((state) => {
-            logger.store.debug('Transaction form merkle tree data updated', {
-              root,
-              sortedTxHashesCount: sortedTxHashes.length,
-              sortedChainIdsCount: sortedChainIds.length,
+            logger.store.debug('Transaction form data updated', {
+              dataHash,
+              txHashesCount: txHashes.length,
+              chainIdsCount: chainIds.length,
             });
-            state.merkleRoot = root;
+            state.dataHash = dataHash;
             // Defensive copy to avoid external mutation of stored arrays
-            state.sortedTxHashes = [...sortedTxHashes];
-            state.sortedChainIds = [...sortedChainIds];
+            state.txHashesForContract = [...txHashes];
+            state.chainIdsForContract = [...chainIds];
           }),
 
         reset: () => {
@@ -200,8 +185,8 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
       })),
       {
         name: 'swr-transaction-form-state',
-        version: 2, // Bumped for selectedTxDetails addition
-        // Don't persist merkleRoot - it's computed
+        version: 3, // Bumped for merkle→dataHash rename
+        // Don't persist derived data - it's computed
         partialize: (state) => ({
           reporter: state.reporter,
           forwarder: state.forwarder,
@@ -216,17 +201,20 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
 
           const state = persisted as Partial<TransactionFormState>;
 
-          // Migrate from v1: add selectedTxDetails
-          if (version === 1) {
+          if (version < 3) {
             return {
               reporter: state.reporter ?? initialState.reporter,
               forwarder: state.forwarder ?? initialState.forwarder,
               selectedTxHashes: Array.isArray(state.selectedTxHashes)
                 ? state.selectedTxHashes
                 : initialState.selectedTxHashes,
-              selectedTxDetails: [], // New field - start empty
+              selectedTxDetails: Array.isArray(state.selectedTxDetails)
+                ? state.selectedTxDetails
+                : initialState.selectedTxDetails,
               reportedChainId: state.reportedChainId ?? initialState.reportedChainId,
-              merkleRoot: null,
+              dataHash: null,
+              txHashesForContract: [],
+              chainIdsForContract: [],
             };
           }
 
@@ -240,9 +228,9 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
               ? state.selectedTxDetails
               : initialState.selectedTxDetails,
             reportedChainId: state.reportedChainId ?? initialState.reportedChainId,
-            // Transient fields (merkleRoot, sortedTxHashes, sortedChainIds) are not persisted.
-            // They initialize from initialState during hydration and are recomputed on use.
-            merkleRoot: null,
+            dataHash: null,
+            txHashesForContract: [],
+            chainIdsForContract: [],
           };
         },
       }
@@ -277,17 +265,16 @@ export const useTransactionSelection = () =>
       selectedTxHashes: s.selectedTxHashes,
       selectedTxDetails: s.selectedTxDetails,
       reportedChainId: s.reportedChainId,
-      merkleRoot: s.merkleRoot,
-      sortedTxHashes: s.sortedTxHashes,
-      sortedChainIds: s.sortedChainIds,
+      dataHash: s.dataHash,
+      txHashesForContract: s.txHashesForContract,
+      chainIdsForContract: s.chainIdsForContract,
       setSelectedTxHashes: s.setSelectedTxHashes,
       setSelectedTxDetails: s.setSelectedTxDetails,
       setSelectedTransactions: s.setSelectedTransactions,
       addTxHash: s.addTxHash,
       removeTxHash: s.removeTxHash,
       setReportedChainId: s.setReportedChainId,
-      setMerkleRoot: s.setMerkleRoot,
-      setMerkleTreeData: s.setMerkleTreeData,
+      setTransactionData: s.setTransactionData,
     }))
   );
 
@@ -298,9 +285,9 @@ export const useSelectedTransactionDetails = () =>
   useTransactionFormStore((s) => s.selectedTxDetails);
 
 /**
- * Select just the merkle root (read-only).
+ * Select just the data hash (read-only).
  */
-export const useTransactionMerkleRoot = () => useTransactionFormStore((s) => s.merkleRoot);
+export const useTransactionDataHash = () => useTransactionFormStore((s) => s.dataHash);
 
 /**
  * Select transaction count (read-only).

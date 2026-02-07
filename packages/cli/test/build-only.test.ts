@@ -2,12 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { encodeFunctionData, pad } from 'viem';
-import { OperatorSubmitterV2ABI } from '@swr/abis';
-import {
-  buildWalletMerkleTree,
-  buildContractMerkleTree,
-  buildTransactionMerkleTree,
-} from '../src/lib/merkle.js';
+import { OperatorSubmitterABI } from '@swr/abis';
 import { parseWalletFile, parseContractFile, parseTransactionFile } from '../src/lib/files.js';
 import { chainIdToBytes32 } from '../src/lib/caip.js';
 
@@ -21,14 +16,13 @@ describe('--build-only mode', () => {
   describe('MultisigTransaction format', () => {
     it('generates correct wallet batch calldata', async () => {
       const entries = await parseWalletFile(walletsFixture, 8453n);
-      const { root } = buildWalletMerkleTree(entries);
 
       const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
       const reportedChainIds = entries.map((e) => e.chainId);
       const incidentTimestamps = entries.map(() => 0n);
 
       const calldata = encodeFunctionData({
-        abi: OperatorSubmitterV2ABI,
+        abi: OperatorSubmitterABI,
         functionName: 'registerWalletsAsOperator',
         args: [identifiers, reportedChainIds, incidentTimestamps],
       });
@@ -37,24 +31,21 @@ describe('--build-only mode', () => {
       // registerWalletsAsOperator selector should be at start
       expect(calldata.slice(0, 10)).toBe(
         encodeFunctionData({
-          abi: OperatorSubmitterV2ABI,
+          abi: OperatorSubmitterABI,
           functionName: 'registerWalletsAsOperator',
           args: [[], [], []],
         }).slice(0, 10)
       );
-      // Merkle root still built locally for reference
-      expect(root).toMatch(/^0x[a-f0-9]{64}$/);
     });
 
     it('generates correct contract batch calldata', async () => {
       const entries = await parseContractFile(contractsFixture, 8453n);
-      const { root } = buildContractMerkleTree(entries);
 
       const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
       const reportedChainIds = entries.map((e) => e.chainId);
 
       const calldata = encodeFunctionData({
-        abi: OperatorSubmitterV2ABI,
+        abi: OperatorSubmitterABI,
         functionName: 'registerContractsAsOperator',
         args: [identifiers, reportedChainIds],
       });
@@ -63,24 +54,21 @@ describe('--build-only mode', () => {
       // registerContractsAsOperator selector
       expect(calldata.slice(0, 10)).toBe(
         encodeFunctionData({
-          abi: OperatorSubmitterV2ABI,
+          abi: OperatorSubmitterABI,
           functionName: 'registerContractsAsOperator',
           args: [[], []],
         }).slice(0, 10)
       );
-      // Merkle root still built locally for reference
-      expect(root).toMatch(/^0x[a-f0-9]{64}$/);
     });
 
     it('generates correct transaction batch calldata', async () => {
       const entries = await parseTransactionFile(transactionsFixture, 8453n);
-      const { root } = buildTransactionMerkleTree(entries);
 
       const transactionHashes = entries.map((e) => e.txHash);
       const chainIds = entries.map((e) => e.chainId);
 
       const calldata = encodeFunctionData({
-        abi: OperatorSubmitterV2ABI,
+        abi: OperatorSubmitterABI,
         functionName: 'registerTransactionsAsOperator',
         args: [transactionHashes, chainIds],
       });
@@ -89,20 +77,17 @@ describe('--build-only mode', () => {
       // registerTransactionsAsOperator selector
       expect(calldata.slice(0, 10)).toBe(
         encodeFunctionData({
-          abi: OperatorSubmitterV2ABI,
+          abi: OperatorSubmitterABI,
           functionName: 'registerTransactionsAsOperator',
           args: [[], []],
         }).slice(0, 10)
       );
-      // Merkle root still built locally for reference
-      expect(root).toMatch(/^0x[a-f0-9]{64}$/);
     });
   });
 
   describe('MultisigTransaction structure', () => {
     it('wallet batch creates correct structure', async () => {
       const entries = await parseWalletFile(walletsFixture, 8453n);
-      const { root } = buildWalletMerkleTree(entries);
 
       const fee = 1000000000000000n; // 0.001 ETH mock
       const targetContract = '0x1234567890123456789012345678901234567890';
@@ -112,7 +97,7 @@ describe('--build-only mode', () => {
       const incidentTimestamps = entries.map(() => 0n);
 
       const calldata = encodeFunctionData({
-        abi: OperatorSubmitterV2ABI,
+        abi: OperatorSubmitterABI,
         functionName: 'registerWalletsAsOperator',
         args: [identifiers, reportedChainIds, incidentTimestamps],
       });
@@ -122,8 +107,7 @@ describe('--build-only mode', () => {
         value: fee.toString(),
         data: calldata,
         operation: 0 as const,
-        description: `Register ${entries.length} stolen wallets (Merkle root: ${root.slice(0, 10)}...)`,
-        merkleRoot: root,
+        description: `Register ${entries.length} stolen wallets`,
         entryCount: entries.length,
       };
 
@@ -132,13 +116,11 @@ describe('--build-only mode', () => {
       expect(txData.data).toMatch(/^0x[a-fA-F0-9]+$/);
       expect(txData.operation).toBe(0);
       expect(txData.description).toContain(`${entries.length} stolen wallets`);
-      expect(txData.merkleRoot).toBe(root);
       expect(txData.entryCount).toBe(entries.length);
     });
 
     it('contract batch creates correct structure', async () => {
       const entries = await parseContractFile(contractsFixture, 8453n);
-      const { root } = buildContractMerkleTree(entries);
 
       const fee = 2000000000000000n; // 0.002 ETH mock
       const targetContract = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd';
@@ -147,7 +129,7 @@ describe('--build-only mode', () => {
       const reportedChainIds = entries.map((e) => e.chainId);
 
       const calldata = encodeFunctionData({
-        abi: OperatorSubmitterV2ABI,
+        abi: OperatorSubmitterABI,
         functionName: 'registerContractsAsOperator',
         args: [identifiers, reportedChainIds],
       });
@@ -157,8 +139,7 @@ describe('--build-only mode', () => {
         value: fee.toString(),
         data: calldata,
         operation: 0 as const,
-        description: `Register ${entries.length} fraudulent contracts (Merkle root: ${root.slice(0, 10)}...)`,
-        merkleRoot: root,
+        description: `Register ${entries.length} fraudulent contracts`,
         entryCount: entries.length,
       };
 

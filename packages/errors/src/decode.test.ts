@@ -3,7 +3,7 @@ import { decodeContractError, getContractErrorInfo, sanitizeErrorMessage } from 
 
 describe('decodeContractError', () => {
   it('decodes known error selector to user-friendly message', () => {
-    const result = decodeContractError('Execution reverted: custom error 0xec5c97a6');
+    const result = decodeContractError('Execution reverted: custom error 0x9525dee7');
     expect(result).toContain('registration window has expired');
   });
 
@@ -12,16 +12,16 @@ describe('decodeContractError', () => {
   });
 
   it('handles case insensitive selector', () => {
-    const lower = decodeContractError('custom error 0xec5c97a6');
-    const upper = decodeContractError('custom error 0xEC5C97A6');
+    const lower = decodeContractError('custom error 0x9525dee7');
+    const upper = decodeContractError('custom error 0x9525DEE7');
     expect(lower).toBe(upper);
   });
 });
 
 describe('getContractErrorInfo', () => {
   it('returns error info for known selector', () => {
-    const info = getContractErrorInfo('0xec5c97a6');
-    expect(info?.name).toBe('Registration__ForwarderExpired');
+    const info = getContractErrorInfo('0x9525dee7');
+    expect(info?.name).toBe('SpokeRegistry__ForwarderExpired');
   });
 
   it('returns undefined for unknown selector', () => {
@@ -31,7 +31,7 @@ describe('getContractErrorInfo', () => {
 
 describe('sanitizeErrorMessage', () => {
   it('decodes contract custom errors', () => {
-    const result = sanitizeErrorMessage(new Error('custom error 0xec5c97a6'));
+    const result = sanitizeErrorMessage(new Error('custom error 0x9525dee7'));
     expect(result).toContain('registration window has expired');
   });
 
@@ -68,7 +68,7 @@ describe('sanitizeErrorMessage', () => {
 
   it('handles multiple error patterns in one message', () => {
     const result = sanitizeErrorMessage(
-      new Error('custom error 0xec5c97a6 Version: viem@2.41.2 Details: something')
+      new Error('custom error 0x9525dee7 Version: viem@2.41.2 Details: something')
     );
     expect(result).toContain('registration window has expired');
     expect(result).not.toContain('Version:');

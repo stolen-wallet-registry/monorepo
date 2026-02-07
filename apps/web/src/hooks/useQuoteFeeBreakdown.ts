@@ -57,12 +57,11 @@ export function useQuoteFeeBreakdown(
   const normalizedAddress = ownerAddress ?? undefined;
 
   // Unified call: quoteFeeBreakdown(address) on both hub and spoke
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
   const result = useReadContract({
     address: contractAddress,
     abi,
     chainId,
-    functionName: functions.quoteFeeBreakdown as any,
+    functionName: functions.quoteFeeBreakdown as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
     args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {
       enabled: !!normalizedAddress && !!contractAddress,
@@ -78,7 +77,8 @@ export function useQuoteFeeBreakdown(
     const isCrossChain = registryType === 'spoke';
 
     // Both hub and spoke return the same FeeBreakdown struct
-    const breakdown = result.data as {
+    // wagmi infers return type as a tuple union due to dynamic functionName; cast through unknown
+    const breakdown = result.data as unknown as {
       bridgeFee: bigint;
       registrationFee: bigint;
       total: bigint;
@@ -143,11 +143,11 @@ export interface UseTxQuoteFeeBreakdownResult {
  * Get detailed fee breakdown for transaction batch registration.
  *
  * @param reporter - The reporter address (used by spoke for bridge quote, ignored on hub)
- * @param _transactionCount - Deprecated: V2 uses flat fees, count is no longer needed
+ * @param _transactionCount - Deprecated: uses flat fees, count is no longer needed
  */
 export function useTxQuoteFeeBreakdown(
   reporter: Address | null | undefined,
-  _transactionCount?: number // eslint-disable-line @typescript-eslint/no-unused-vars
+  _transactionCount?: number
 ): UseTxQuoteFeeBreakdownResult {
   const chainId = useChainId();
   const { data: ethPrice } = useEthPrice();
@@ -163,12 +163,11 @@ export function useTxQuoteFeeBreakdown(
   const { abi, functions } = getRegistryMetadata('transaction', registryType);
 
   // Unified call: quoteFeeBreakdown(address) on both hub and spoke
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
   const result = useReadContract({
     address: contractAddress,
     abi,
     chainId,
-    functionName: functions.quoteFeeBreakdown as any,
+    functionName: functions.quoteFeeBreakdown as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
     args: reporter ? [reporter] : undefined,
     query: {
       enabled: !!reporter && !!contractAddress,
@@ -185,7 +184,8 @@ export function useTxQuoteFeeBreakdown(
     const isCrossChain = registryType === 'spoke';
 
     // Both hub and spoke return the same FeeBreakdown struct
-    const breakdown = result.data as {
+    // wagmi infers return type as a tuple union due to dynamic functionName; cast through unknown
+    const breakdown = result.data as unknown as {
       bridgeFee: bigint;
       registrationFee: bigint;
       total: bigint;

@@ -4,92 +4,87 @@ pragma solidity ^0.8.24;
 /// @title CrossChainMessage
 /// @author Stolen Wallet Registry Team
 /// @notice Library for encoding/decoding cross-chain registration messages
-/// @dev Uses simple chainId + address for EVM chains. Full CAIP-10 support deferred.
-///      Message format is versioned for future compatibility.
+/// @dev Uses full CAIP-10 compatible format with bytes32 identifiers for cross-blockchain support.
+///      Designed to work with FraudRegistryHub.registerFromHub interface.
 library CrossChainMessage {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Message type identifier for wallet registration messages
-    /// @dev Future message types can use 0x02, 0x03, etc.
-    bytes1 public constant MSG_TYPE_REGISTRATION = 0x01;
+    bytes1 public constant MSG_TYPE_WALLET = 0x01;
 
     /// @notice Message type identifier for transaction batch messages
     bytes1 public constant MSG_TYPE_TRANSACTION_BATCH = 0x02;
 
     /// @notice Current message format version
-    uint8 public constant MESSAGE_VERSION = 1;
+    uint8 public constant MESSAGE_VERSION = 2;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // STRUCTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Cross-chain registration payload sent from spoke to hub
-    /// @dev Sent via bridge after successful two-phase registration on spoke.
-    ///      Note: registrationMethod removed for privacy (would reveal multi-wallet ownership).
-    struct RegistrationPayload {
-        // === Identity ===
-        address wallet; // The wallet being registered as stolen
-        uint32 sourceChainId; // EIP-155 chain ID where registration originated
+    /// @notice Cross-chain wallet registration payload
+    /// @dev Matches FraudRegistryHub.registerFromHub parameters for direct forwarding.
+    ///      Uses bytes32 identifiers for cross-blockchain compatibility.
+    struct WalletRegistrationPayload {
+        // === CAIP-10 Identity (cross-blockchain) ===
+        bytes32 namespaceHash; // keccak256("eip155"), keccak256("solana"), etc.
+        bytes32 chainRef; // Chain reference hash (ignored for EVM wallets due to wildcard)
+        bytes32 identifier; // Wallet identifier (address padded to bytes32 for EVM)
         // === Registration context ===
+        bytes32 reportedChainId; // Full CAIP-2 hash where incident reported
+        uint64 incidentTimestamp; // When theft occurred (user-provided)
+        bytes32 sourceChainId; // Full CAIP-2 hash where registration submitted
         bool isSponsored; // True if third party paid gas
         // === Verification ===
         uint256 nonce; // Registration nonce (for replay protection)
         uint64 timestamp; // Block timestamp on spoke
-        bytes32 registrationHash; // Hash of signed EIP-712 data for verification
+        bytes32 registrationHash; // Hash of signed EIP-712 data
     }
 
-    /// @notice Cross-chain transaction batch payload sent from spoke to hub
-    /// @dev Includes full transaction hashes and chain IDs for hub-side event emission.
-    ///      All batch data is forwarded to enable single-indexer architecture on hub.
-    ///      Struct is packed for gas efficiency: address (20) + uint32 (4) + uint64 (8) = 32 bytes
+    /// @notice Cross-chain transaction batch payload
+    /// @dev Includes full transaction hashes for hub-side direct storage.
+    ///      dataHash = keccak256(abi.encode(transactionHashes, chainIds))
+    ///      Used for signature verification - binds signature to exact data.
     struct TransactionBatchPayload {
-        // Slot 1-4: 32-byte values grouped together
-        bytes32 merkleRoot; // Root of the Merkle tree (leaf = keccak256(txHash || chainId))
-        bytes32 reportedChainId; // CAIP-2 chain ID where transactions occurred
-        bytes32 sourceChainId; // CAIP-2 chain ID where registration was submitted
-        uint256 nonce; // Registration nonce (for replay protection)
-        // Slot 5: address (20) + uint32 (4) + uint64 (8) = 32 bytes exactly
+        bytes32 dataHash; // Hash of (txHashes, chainIds) - signature commitment
         address reporter; // Address that submitted the registration
-        uint32 transactionCount; // Number of transactions in the batch
-        uint64 timestamp; // Block timestamp on spoke
-        // Slot 6: bool (1 byte)
+        bytes32 reportedChainId; // CAIP-2 chain ID where transactions occurred
+        bytes32 sourceChainId; // CAIP-2 chain ID where registration submitted
+        uint32 transactionCount; // Number of transactions in batch
         bool isSponsored; // True if third party paid gas
-        // Slots 7-8: dynamic array pointers
+        uint256 nonce; // Registration nonce
+        uint64 timestamp; // Block timestamp on spoke
         bytes32[] transactionHashes; // Full list of transaction hashes
-        bytes32[] chainIds; // Parallel array of CAIP-2 chain IDs per transaction
+        bytes32[] chainIds; // Parallel array of CAIP-2 chain IDs per tx
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Thrown when message type is not MSG_TYPE_REGISTRATION
     error CrossChainMessage__InvalidMessageType();
-
-    /// @notice Thrown when message version is not supported
     error CrossChainMessage__UnsupportedVersion();
-
-    /// @notice Thrown when message data is too short (must be at least 256 bytes)
     error CrossChainMessage__InvalidMessageLength();
-
-    /// @notice Thrown when transactionCount doesn't match array lengths
     error CrossChainMessage__BatchSizeMismatch();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ENCODING
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Encode registration payload for cross-chain transport
-    /// @dev Prepends version and message type for forward compatibility
+    /// @notice Encode wallet registration payload for cross-chain transport
     /// @param payload The registration data to encode
     /// @return Encoded bytes suitable for bridge transmission
-    function encodeRegistration(RegistrationPayload memory payload) internal pure returns (bytes memory) {
+    function encodeWalletRegistration(WalletRegistrationPayload memory payload) internal pure returns (bytes memory) {
         return abi.encode(
             MESSAGE_VERSION,
-            MSG_TYPE_REGISTRATION,
-            payload.wallet,
+            MSG_TYPE_WALLET,
+            payload.namespaceHash,
+            payload.chainRef,
+            payload.identifier,
+            payload.reportedChainId,
+            payload.incidentTimestamp,
             payload.sourceChainId,
             payload.isSponsored,
             payload.nonce,
@@ -99,15 +94,13 @@ library CrossChainMessage {
     }
 
     /// @notice Encode transaction batch payload for cross-chain transport
-    /// @dev Includes full transaction data for hub-side event emission.
-    ///      Uses abi.encode which handles dynamic arrays automatically.
     /// @param payload The transaction batch data to encode
     /// @return Encoded bytes suitable for bridge transmission
     function encodeTransactionBatch(TransactionBatchPayload memory payload) internal pure returns (bytes memory) {
         return abi.encode(
             MESSAGE_VERSION,
             MSG_TYPE_TRANSACTION_BATCH,
-            payload.merkleRoot,
+            payload.dataHash,
             payload.reporter,
             payload.reportedChainId,
             payload.sourceChainId,
@@ -124,34 +117,38 @@ library CrossChainMessage {
     // DECODING
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Decode registration payload from cross-chain message
-    /// @dev Validates length, version, and message type before decoding.
-    ///      Decodes directly from calldata slices to avoid stack-too-deep.
+    /// @notice Decode wallet registration payload from cross-chain message
     /// @param data Encoded message bytes from bridge
     /// @return payload The decoded registration data
-    function decodeRegistration(bytes calldata data) internal pure returns (RegistrationPayload memory payload) {
-        // Validate minimum length (8 fields × 32 bytes = 256 bytes)
-        if (data.length < 256) revert CrossChainMessage__InvalidMessageLength();
+    function decodeWalletRegistration(bytes calldata data)
+        internal
+        pure
+        returns (WalletRegistrationPayload memory payload)
+    {
+        // Validate minimum length (12 fields × 32 bytes = 384 bytes)
+        if (data.length < 384) revert CrossChainMessage__InvalidMessageLength();
 
-        // Validate header first (each abi.encode slot is 32 bytes)
+        // Validate header
         uint8 version = abi.decode(data[0:32], (uint8));
         if (version != MESSAGE_VERSION) revert CrossChainMessage__UnsupportedVersion();
 
         bytes1 msgType = abi.decode(data[32:64], (bytes1));
-        if (msgType != MSG_TYPE_REGISTRATION) revert CrossChainMessage__InvalidMessageType();
+        if (msgType != MSG_TYPE_WALLET) revert CrossChainMessage__InvalidMessageType();
 
         // Decode payload fields from their respective slots
-        payload.wallet = abi.decode(data[64:96], (address));
-        payload.sourceChainId = abi.decode(data[96:128], (uint32));
-        payload.isSponsored = abi.decode(data[128:160], (bool));
-        payload.nonce = abi.decode(data[160:192], (uint256));
-        payload.timestamp = abi.decode(data[192:224], (uint64));
-        payload.registrationHash = abi.decode(data[224:256], (bytes32));
+        payload.namespaceHash = abi.decode(data[64:96], (bytes32));
+        payload.chainRef = abi.decode(data[96:128], (bytes32));
+        payload.identifier = abi.decode(data[128:160], (bytes32));
+        payload.reportedChainId = abi.decode(data[160:192], (bytes32));
+        payload.incidentTimestamp = abi.decode(data[192:224], (uint64));
+        payload.sourceChainId = abi.decode(data[224:256], (bytes32));
+        payload.isSponsored = abi.decode(data[256:288], (bool));
+        payload.nonce = abi.decode(data[288:320], (uint256));
+        payload.timestamp = abi.decode(data[320:352], (uint64));
+        payload.registrationHash = abi.decode(data[352:384], (bytes32));
     }
 
     /// @notice Decode transaction batch payload from cross-chain message
-    /// @dev Validates version and message type. Uses full decode since dynamic arrays
-    ///      have relative offsets that must be preserved.
     /// @param data Encoded message bytes from bridge
     /// @return payload The decoded transaction batch data
     function decodeTransactionBatch(bytes calldata data)
@@ -159,16 +156,14 @@ library CrossChainMessage {
         pure
         returns (TransactionBatchPayload memory payload)
     {
-        // Minimum length check (header + fixed fields + array offset pointers)
-        // Version (32) + Type (32) + 8 fixed fields (256) + 2 array offsets (64) = 384 bytes minimum
+        // Minimum length check
         if (data.length < 384) revert CrossChainMessage__InvalidMessageLength();
 
-        // Decode the full structure including header
-        // We must decode everything together because dynamic arrays have relative offsets
+        // Decode everything together (dynamic arrays need relative offsets)
         (
             uint8 version,
             bytes1 msgType,
-            bytes32 merkleRoot,
+            bytes32 dataHash,
             address reporter,
             bytes32 reportedChainId,
             bytes32 sourceChainId,
@@ -187,14 +182,13 @@ library CrossChainMessage {
         if (version != MESSAGE_VERSION) revert CrossChainMessage__UnsupportedVersion();
         if (msgType != MSG_TYPE_TRANSACTION_BATCH) revert CrossChainMessage__InvalidMessageType();
 
-        // Validate batch size consistency to prevent corrupted state/events
+        // Validate batch size consistency
         if (transactionCount != transactionHashes.length || transactionCount != chainIds.length) {
             revert CrossChainMessage__BatchSizeMismatch();
         }
 
-        // Build payload struct
         payload = TransactionBatchPayload({
-            merkleRoot: merkleRoot,
+            dataHash: dataHash,
             reporter: reporter,
             reportedChainId: reportedChainId,
             sourceChainId: sourceChainId,
@@ -208,7 +202,6 @@ library CrossChainMessage {
     }
 
     /// @notice Extract message type from encoded message without full decoding
-    /// @dev Useful for routing messages to appropriate handlers
     /// @param data Encoded message bytes
     /// @return The message type byte
     function getMessageType(bytes calldata data) internal pure returns (bytes1) {
@@ -221,17 +214,15 @@ library CrossChainMessage {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Convert an address to bytes32 (for cross-chain addressing)
-    /// @dev Pads address with zeros on the left
     /// @param addr The address to convert
-    /// @return The address as bytes32
+    /// @return The address as bytes32 (right-padded)
     function addressToBytes32(address addr) internal pure returns (bytes32) {
         return bytes32(uint256(uint160(addr)));
     }
 
     /// @notice Convert bytes32 to an address
-    /// @dev Takes the last 20 bytes of the bytes32
-    /// @param b The bytes32 to convert
-    /// @return The address (last 20 bytes)
+    /// @param b The bytes32 value to convert
+    /// @return The address extracted from the lower 160 bits
     function bytes32ToAddress(bytes32 b) internal pure returns (address) {
         return address(uint160(uint256(b)));
     }

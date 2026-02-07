@@ -1,7 +1,5 @@
 // Transaction hooks barrel export
 
-export { useMerkleTree, type TransactionLeaf, type MerkleTreeData } from './useMerkleTree';
-
 export {
   useTransactionAcknowledgement,
   type TxAcknowledgementParams,

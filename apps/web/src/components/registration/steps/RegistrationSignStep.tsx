@@ -47,9 +47,9 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
   // Forwarder is either relayer (self-relay) or registeree (standard)
   const forwarder = isSelfRelay ? relayer : registeree;
 
-  // Stabilize V2 fields for this signing session - computed once per mount
+  // Stabilize fields for this signing session - computed once per mount
   // This ensures the same values are used for both signing and storage
-  const stableV2Fields = useMemo(
+  const stableFields = useMemo(
     () => ({
       reportedChainId: BigInt(chainId),
       incidentTimestamp: 0n, // TODO: Add incident timestamp selection UI
@@ -151,10 +151,10 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
     setSignatureError(null);
 
     try {
-      // Use stabilized V2 fields - computed once per mount, not fresh on each sign
-      const { reportedChainId, incidentTimestamp } = stableV2Fields;
+      // Use stabilized fields - computed once per mount, not fresh on each sign
+      const { reportedChainId, incidentTimestamp } = stableFields;
 
-      logger.signature.info('Requesting V2 EIP-712 registration signature', {
+      logger.signature.info('Requesting EIP-712 registration signature', {
         wallet: registeree,
         forwarder,
         reportedChainId: reportedChainId.toString(),
@@ -177,7 +177,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
       });
 
-      // Store signature with stabilized V2 fields (same values used for signing)
+      // Store signature with stabilized fields (same values used for signing)
       storeSignature({
         signature: sig,
         deadline: freshDeadline,
@@ -189,7 +189,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         reportedChainId,
         incidentTimestamp,
       });
-      logger.signature.debug('V2 registration signature stored in sessionStorage');
+      logger.signature.debug('Registration signature stored in sessionStorage');
 
       setSignature(sig);
       setSignatureStatus('success');

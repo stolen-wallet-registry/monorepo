@@ -14,7 +14,6 @@ import {
   operatorCapabilityChange,
   fraudulentContractBatch,
   fraudulentContract,
-  invalidatedEntry,
 } from 'ponder:schema';
 import {
   toCAIP10,
@@ -26,7 +25,7 @@ import {
   base,
   type Environment,
 } from '@swr/chains';
-import { keccak256, encodePacked, encodeAbiParameters, concat, type Address, type Hex } from 'viem';
+import { type Address, type Hex } from 'viem';
 
 // Hub chain configuration - determined by environment
 const PONDER_ENV = (process.env.PONDER_ENV ?? 'development') as Environment;
@@ -43,67 +42,14 @@ const HUB_CHAIN_ID = HUB_CHAIN_IDS[PONDER_ENV];
 const toLowerAddress = (addr: Address): Address => addr.toLowerCase() as Address;
 
 /**
- * Compute deterministic batch acknowledgement ID.
- * Matches on-chain batchId computation: keccak256(abi.encodePacked(merkleRoot, reporter, reportedChainId))
+ * Extract EVM address from bytes32 identifier.
+ * Addresses are stored as bytes32(uint256(uint160(address))).
+ * The address is in the rightmost 20 bytes.
  */
-function computeBatchAcknowledgementId(
-  merkleRoot: Hex,
-  reporter: Address,
-  reportedChainId: Hex
-): Hex {
-  return keccak256(
-    encodePacked(['bytes32', 'address', 'bytes32'], [merkleRoot, reporter, reportedChainId])
-  );
-}
-
-async function indexTransactions(
-  db: any,
-  transactionHashes: readonly Hex[],
-  chainIds: readonly Hex[],
-  batchId: Hex,
-  reporter: Address,
-  reportedAt: bigint
-) {
-  // Guard: Check array length mismatch
-  if (transactionHashes.length !== chainIds.length) {
-    console.error(
-      `[indexTransactions] Array length mismatch for batch ${batchId}: ` +
-        `transactionHashes=${transactionHashes.length}, chainIds=${chainIds.length}. ` +
-        `Processing only matching pairs.`
-    );
-  }
-
-  const len = Math.min(transactionHashes.length, chainIds.length);
-
-  for (let i = 0; i < len; i++) {
-    const txHash = transactionHashes[i];
-    const chainIdHash = chainIds[i];
-
-    // Skip if array values are missing
-    if (!txHash || !chainIdHash) continue;
-
-    // Resolve chain ID hash to CAIP-2, normalize fallback for consistency
-    const resolved = resolveChainIdHash(chainIdHash);
-    const resolvedCaip2 = resolved ?? `unknown:${chainIdHash}`;
-    const numericChainId = resolved ? caip2ToNumericChainId(resolved) : null;
-
-    // Composite key: txHash + resolved CAIP-2 (must match caip2ChainId column)
-    const compositeId = `${txHash}-${resolvedCaip2}`;
-
-    await db
-      .insert(transactionInBatch)
-      .values({
-        id: compositeId,
-        txHash,
-        chainIdHash,
-        caip2ChainId: resolvedCaip2,
-        numericChainId,
-        batchId,
-        reporter,
-        reportedAt,
-      })
-      .onConflictDoNothing();
-  }
+function identifierToAddress(identifier: Hex): Address {
+  // bytes32 = 66 chars (0x + 64 hex). Address = last 40 hex chars.
+  const hex = identifier.slice(26); // skip 0x + 24 leading zero chars
+  return `0x${hex}`.toLowerCase() as Address;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -127,7 +73,6 @@ type StatsDelta = {
   totalOperatorTransactionBatches?: number;
   totalContractBatches?: number;
   totalFraudulentContracts?: number;
-  invalidatedContractBatches?: number;
 };
 
 async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) {
@@ -162,8 +107,6 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
       totalContractBatches: existing.totalContractBatches + (delta.totalContractBatches ?? 0),
       totalFraudulentContracts:
         existing.totalFraudulentContracts + (delta.totalFraudulentContracts ?? 0),
-      invalidatedContractBatches:
-        existing.invalidatedContractBatches + (delta.invalidatedContractBatches ?? 0),
       lastUpdated: timestamp,
     });
   } else {
@@ -190,30 +133,27 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
       totalOperatorTransactionBatches: delta.totalOperatorTransactionBatches ?? 0,
       totalContractBatches: delta.totalContractBatches ?? 0,
       totalFraudulentContracts: delta.totalFraudulentContracts ?? 0,
-      invalidatedContractBatches: delta.invalidatedContractBatches ?? 0,
       lastUpdated: timestamp,
     });
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// STOLEN WALLET REGISTRY
+// WALLET REGISTRY
 // ═══════════════════════════════════════════════════════════════════════════
 
-// WalletAcknowledged event
-ponder.on('StolenWalletRegistry:WalletAcknowledged', async ({ event, context }) => {
-  const { owner, forwarder, isSponsored } = event.args;
+// WalletAcknowledged — tracks pending acknowledgements in grace period
+ponder.on('WalletRegistry:WalletAcknowledged', async ({ event, context }) => {
+  const { registeree, forwarder, isSponsored } = event.args;
   const { db } = context;
 
-  // Calculate grace period timing (mirror contract logic)
-  // START_TIME_BLOCKS = 5, DEADLINE_BLOCKS = 20 (from contract)
   const gracePeriodStart = event.block.number + 5n;
   const gracePeriodEnd = gracePeriodStart + 20n;
 
   await db
     .insert(walletAcknowledgement)
     .values({
-      id: owner.toLowerCase() as Address,
+      id: registeree.toLowerCase() as Address,
       forwarder: forwarder.toLowerCase() as Address,
       acknowledgedAt: event.block.timestamp,
       acknowledgedAtBlock: event.block.number,
@@ -235,14 +175,17 @@ ponder.on('StolenWalletRegistry:WalletAcknowledged', async ({ event, context }) 
     });
 });
 
-// WalletRegistered event
-ponder.on('StolenWalletRegistry:WalletRegistered', async ({ event, context }) => {
-  const { owner, isSponsored } = event.args;
+// WalletRegistered — fires for individual, operator, AND cross-chain registrations
+// NOTE: This event does NOT carry a batchId (zero per-entry gas impact).
+// For operator batches, the BatchCreated handler fires in the same tx and shares transactionHash.
+// Wallet batch detail queries join stolenWallet ↔ walletBatch on transactionHash.
+ponder.on('WalletRegistry:WalletRegistered', async ({ event, context }) => {
+  const { identifier, reportedChainId, incidentTimestamp, isSponsored } = event.args;
   const { db } = context;
 
-  const walletAddress = owner.toLowerCase() as Address;
+  const walletAddress = identifierToAddress(identifier);
+  const reportedChainCAIP2 = resolveChainIdHash(reportedChainId);
 
-  // Create stolen wallet record
   await db
     .insert(stolenWallet)
     .values({
@@ -252,6 +195,9 @@ ponder.on('StolenWalletRegistry:WalletRegistered', async ({ event, context }) =>
       registeredAtBlock: event.block.number,
       transactionHash: event.transaction.hash,
       isSponsored,
+      reportedChainId,
+      reportedChainCAIP2,
+      incidentTimestamp: BigInt(incidentTimestamp),
     })
     .onConflictDoNothing();
 
@@ -261,7 +207,6 @@ ponder.on('StolenWalletRegistry:WalletRegistered', async ({ event, context }) =>
     await db.update(walletAcknowledgement, { id: walletAddress }).set({ status: 'registered' });
   }
 
-  // Update stats
   await updateGlobalStats(
     db,
     {
@@ -272,31 +217,54 @@ ponder.on('StolenWalletRegistry:WalletRegistered', async ({ event, context }) =>
   );
 });
 
-// WalletBatchRegistered event - operator batch submission
-ponder.on('StolenWalletRegistry:WalletBatchRegistered', async ({ event, context }) => {
-  const {
-    batchId,
-    merkleRoot,
-    operator: operatorAddress,
-    reportedChainId,
-    walletCount,
-    walletAddresses,
-    chainIds,
-  } = event.args;
+// CrossChainWalletRegistered — fires alongside WalletRegistered for cross-chain
+// Use this to UPDATE the wallet record with cross-chain metadata
+ponder.on('WalletRegistry:CrossChainWalletRegistered', async ({ event, context }) => {
+  const { identifier, sourceChainId, bridgeId, messageId } = event.args;
   const { db } = context;
 
-  // Resolve the reported chain ID
-  const reportedChainCAIP2 = resolveChainIdHash(reportedChainId);
+  const walletAddress = identifierToAddress(identifier);
+  const sourceCAIP2 = resolveChainIdHash(sourceChainId);
+  const sourceNumeric = sourceCAIP2 ? caip2ToNumericChainId(sourceCAIP2) : null;
+
+  // Update the wallet record that WalletRegistered already inserted
+  await db.update(stolenWallet, { id: walletAddress }).set({
+    sourceChainId: sourceNumeric,
+    sourceChainCAIP2: sourceCAIP2,
+    bridgeId,
+    messageId,
+  });
+
+  // Update cross-chain message tracking
+  const existing = await db.find(crossChainMessage, { id: messageId });
+  if (existing) {
+    await db.update(crossChainMessage, { id: messageId }).set({
+      status: 'registered',
+      registeredAt: event.block.timestamp,
+      hubTxHash: event.transaction.hash,
+    });
+  }
+
+  await updateGlobalStats(db, { crossChain: 1 }, event.block.timestamp);
+});
+
+// BatchCreated — operator wallet batch
+// Fires AFTER all WalletRegistered events in the same tx.
+// Use transactionHash to correlate wallets to this batch.
+ponder.on('WalletRegistry:BatchCreated', async ({ event, context }) => {
+  const { batchId, operatorId, walletCount } = event.args;
+  const { db } = context;
+
+  const batchIdStr = batchId.toString();
+  const operatorAddress = toLowerAddress(event.transaction.from);
 
   // Insert batch record
   await db
     .insert(walletBatch)
     .values({
-      id: batchId,
-      merkleRoot,
-      operator: operatorAddress.toLowerCase() as Address,
-      reportedChainIdHash: reportedChainId,
-      reportedChainCAIP2,
+      id: batchIdStr,
+      operatorId,
+      operator: operatorAddress,
       walletCount: Number(walletCount),
       registeredAt: event.block.timestamp,
       registeredAtBlock: event.block.number,
@@ -304,75 +272,28 @@ ponder.on('StolenWalletRegistry:WalletBatchRegistered', async ({ event, context 
     })
     .onConflictDoNothing();
 
-  // Insert individual wallets from event data
-  for (let i = 0; i < walletAddresses.length; i++) {
-    const walletAddr = walletAddresses[i];
-    const chainIdHash = chainIds[i];
-
-    // Skip if array values are missing
-    if (!walletAddr || !chainIdHash) continue;
-
-    // Resolve chain ID hash to CAIP-2
-    const caip2ChainId = resolveChainIdHash(chainIdHash);
-    const numericChainId = caip2ChainId ? caip2ToNumericChainId(caip2ChainId) : null;
-
-    const walletAddress = walletAddr.toLowerCase() as Address;
-
-    // Create stolen wallet record with batch reference
-    await db
-      .insert(stolenWallet)
-      .values({
-        id: walletAddress,
-        caip10: numericChainId
-          ? toCAIP10(walletAddress, numericChainId)
-          : `unknown:${chainIdHash}:${walletAddress}`,
-        registeredAt: event.block.timestamp,
-        registeredAtBlock: event.block.number,
-        transactionHash: event.transaction.hash,
-        isSponsored: false, // Operator batches are not "sponsored" in the relay sense
-        batchId,
-        operator: operatorAddress.toLowerCase() as Address,
-      })
-      .onConflictDoNothing();
-  }
-
-  // Update stats
-  await updateGlobalStats(
-    db,
-    {
-      walletRegistrations: Number(walletCount),
-      totalWalletBatches: 1,
-    },
-    event.block.timestamp
-  );
+  await updateGlobalStats(db, { totalWalletBatches: 1 }, event.block.timestamp);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// STOLEN TRANSACTION REGISTRY
+// TRANSACTION REGISTRY
 // ═══════════════════════════════════════════════════════════════════════════
 
-// TransactionBatchAcknowledged event
-// Compute the same deterministic batchId used on-chain for consistent lookups
-ponder.on('StolenTransactionRegistry:TransactionBatchAcknowledged', async ({ event, context }) => {
-  const { merkleRoot, reporter, forwarder, reportedChainId, transactionCount, isSponsored } =
-    event.args;
+// TransactionBatchAcknowledged
+ponder.on('TransactionRegistry:TransactionBatchAcknowledged', async ({ event, context }) => {
+  const { reporter, forwarder, dataHash, isSponsored } = event.args;
   const { db } = context;
 
   const gracePeriodStart = event.block.number + 5n;
   const gracePeriodEnd = gracePeriodStart + 20n;
 
-  // Compute deterministic batch ID matching on-chain computation
-  const batchId = computeBatchAcknowledgementId(merkleRoot, reporter, reportedChainId);
-
   await db
     .insert(transactionBatchAcknowledgement)
     .values({
-      id: batchId,
-      merkleRoot,
+      id: reporter.toLowerCase() as Address,
+      dataHash,
       reporter: reporter.toLowerCase() as Address,
       forwarder: forwarder.toLowerCase() as Address,
-      reportedChainIdHash: reportedChainId,
-      transactionCount: Number(transactionCount),
       isSponsored,
       acknowledgedAt: event.block.timestamp,
       acknowledgedAtBlock: event.block.number,
@@ -382,290 +303,247 @@ ponder.on('StolenTransactionRegistry:TransactionBatchAcknowledged', async ({ eve
       status: 'pending',
     })
     .onConflictDoUpdate({
+      dataHash,
       forwarder: forwarder.toLowerCase() as Address,
+      isSponsored,
       acknowledgedAt: event.block.timestamp,
+      acknowledgedAtBlock: event.block.number,
+      transactionHash: event.transaction.hash,
+      gracePeriodStart,
+      gracePeriodEnd,
       status: 'pending',
     });
 });
 
-// TransactionBatchRegistered event - CRITICAL: extract tx hashes from event
-ponder.on('StolenTransactionRegistry:TransactionBatchRegistered', async ({ event, context }) => {
-  const {
-    batchId,
-    merkleRoot,
-    reporter,
-    reportedChainId,
-    transactionCount,
-    isSponsored,
-    transactionHashes,
-    chainIds,
-  } = event.args;
+// TransactionRegistered — fires per tx for individual, operator, AND cross-chain
+// NOTE: This event does NOT carry a batchId (zero per-entry gas impact).
+// Entries link to their parent batch via transactionHash — the batch summary event
+// (TransactionBatchRegistered or TransactionBatchCreated) fires in the same tx.
+// Batch detail queries join on transactionHash.
+ponder.on('TransactionRegistry:TransactionRegistered', async ({ event, context }) => {
+  const { identifier, reportedChainId, reporter, isSponsored } = event.args;
   const { db } = context;
 
-  // Resolve the reported chain ID
-  const reportedChainCAIP2 = resolveChainIdHash(reportedChainId);
+  const txHash = identifier; // bytes32 tx hash
+  const chainIdHash = reportedChainId;
+  const caip2ChainId = resolveChainIdHash(chainIdHash) ?? `unknown:${chainIdHash.slice(0, 10)}`;
+  const numericChainId = caip2ToNumericChainId(caip2ChainId);
 
-  // Create batch record - use onConflictDoNothing for idempotency (batch may be reported multiple times)
+  await db
+    .insert(transactionInBatch)
+    .values({
+      id: `${txHash}-${chainIdHash}`,
+      txHash,
+      chainIdHash,
+      caip2ChainId,
+      numericChainId,
+      transactionHash: event.transaction.hash,
+      reporter: reporter.toLowerCase() as Address,
+      reportedAt: event.block.timestamp,
+    })
+    .onConflictDoNothing();
+});
+
+// TransactionBatchRegistered — individual + cross-chain batch summary
+// Updated for Phase 0: event now includes uint256 indexed batchId as first param
+ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, context }) => {
+  const { batchId, reporter, dataHash, transactionCount, isSponsored } = event.args;
+  const { db } = context;
+
   await db
     .insert(transactionBatch)
     .values({
-      id: batchId,
-      merkleRoot,
+      id: batchId.toString(),
+      dataHash,
       reporter: reporter.toLowerCase() as Address,
-      reportedChainIdHash: reportedChainId,
-      reportedChainCAIP2,
       transactionCount: Number(transactionCount),
       isSponsored,
-      isOperatorVerified: false,
+      isOperator: false,
       registeredAt: event.block.timestamp,
       registeredAtBlock: event.block.number,
       transactionHash: event.transaction.hash,
     })
     .onConflictDoNothing();
 
-  await indexTransactions(
-    db,
-    transactionHashes,
-    chainIds,
-    batchId,
-    reporter.toLowerCase() as Address,
-    event.block.timestamp
-  );
-
-  // Update acknowledgement status - lookup by the deterministic batchId
-  const pending = await db.find(transactionBatchAcknowledgement, {
-    id: batchId,
-  });
+  // Mark pending ack as registered
+  const reporterAddr = reporter.toLowerCase() as Address;
+  const pending = await db.find(transactionBatchAcknowledgement, { id: reporterAddr });
   if (pending) {
-    await db.update(transactionBatchAcknowledgement, { id: batchId }).set({ status: 'registered' });
+    await db.update(transactionBatchAcknowledgement, { id: reporterAddr }).set({
+      status: 'registered',
+    });
   }
 
-  // Update stats
   await updateGlobalStats(
     db,
     {
       transactionBatches: 1,
+      transactionsReported: Number(transactionCount),
+      sponsored: isSponsored ? 1 : 0,
+    },
+    event.block.timestamp
+  );
+});
+
+// CrossChainTransactionRegistered — fires per tx alongside TransactionRegistered for cross-chain
+ponder.on('TransactionRegistry:CrossChainTransactionRegistered', async ({ event, context }) => {
+  const { identifier, sourceChainId, bridgeId, messageId } = event.args;
+  const { db } = context;
+
+  // Cross-chain message tracking
+  const existing = await db.find(crossChainMessage, { id: messageId });
+  if (existing) {
+    await db.update(crossChainMessage, { id: messageId }).set({
+      status: 'registered',
+      registeredAt: event.block.timestamp,
+      hubTxHash: event.transaction.hash,
+    });
+  }
+});
+
+// TransactionBatchCreated — operator batch summary
+ponder.on('TransactionRegistry:TransactionBatchCreated', async ({ event, context }) => {
+  const { batchId, operatorId, transactionCount } = event.args;
+  const { db } = context;
+
+  const batchIdStr = batchId.toString();
+  const operatorAddress = toLowerAddress(event.transaction.from);
+
+  await db
+    .insert(transactionBatch)
+    .values({
+      id: batchIdStr,
+      dataHash: ('0x' + '0'.repeat(64)) as Hex, // No dataHash for operator batches
+      reporter: operatorAddress,
+      transactionCount: Number(transactionCount),
+      isSponsored: false,
+      isOperator: true,
+      operatorId,
+      registeredAt: event.block.timestamp,
+      registeredAtBlock: event.block.number,
+      transactionHash: event.transaction.hash,
+    })
+    .onConflictDoNothing();
+
+  await updateGlobalStats(
+    db,
+    {
+      totalOperatorTransactionBatches: 1,
       transactionsReported: Number(transactionCount),
     },
     event.block.timestamp
   );
 });
 
-// OperatorVerified event
-ponder.on('StolenTransactionRegistry:OperatorVerified', async ({ event, context }) => {
-  const { batchId, operator } = event.args;
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTRACT REGISTRY
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ContractRegistered — fires per contract (operator batches only)
+ponder.on('ContractRegistry:ContractRegistered', async ({ event, context }) => {
+  const { identifier, reportedChainId, operatorId, batchId } = event.args;
   const { db } = context;
 
-  const existing = await db.find(transactionBatch, { id: batchId });
-  if (!existing) {
-    console.warn(`[OperatorVerified] Missing transaction batch ${batchId}. Skipping update.`);
-    return;
-  }
+  const contractAddress = identifierToAddress(identifier);
+  const caip2ChainId =
+    resolveChainIdHash(reportedChainId) ?? `unknown:${reportedChainId.slice(0, 10)}`;
+  const numericChainId = caip2ToNumericChainId(caip2ChainId);
 
-  await db.update(transactionBatch, { id: batchId }).set({
-    isOperatorVerified: true,
-    verifyingOperator: operator.toLowerCase() as Address,
-  });
+  await db
+    .insert(fraudulentContract)
+    .values({
+      id: `${contractAddress}-${reportedChainId}`,
+      contractAddress,
+      chainIdHash: reportedChainId,
+      caip2ChainId,
+      numericChainId,
+      batchId: batchId.toString(),
+      operator: toLowerAddress(event.transaction.from),
+      reportedAt: event.block.timestamp,
+    })
+    .onConflictDoNothing();
+
+  await updateGlobalStats(db, { totalFraudulentContracts: 1 }, event.block.timestamp);
 });
 
-// TransactionBatchRegisteredByOperator event - operator direct batch submission
-ponder.on(
-  'StolenTransactionRegistry:TransactionBatchRegisteredByOperator',
-  async ({ event, context }) => {
-    const {
-      batchId,
-      merkleRoot,
-      operator: operatorAddress,
-      reportedChainId,
-      transactionCount,
-      transactionHashes,
-      chainIds,
-    } = event.args;
-    const { db } = context;
-
-    // Resolve the reported chain ID
-    const reportedChainCAIP2 = resolveChainIdHash(reportedChainId);
-
-    // Create batch record - operator batches are automatically operator-verified
-    await db
-      .insert(transactionBatch)
-      .values({
-        id: batchId,
-        merkleRoot,
-        reporter: operatorAddress.toLowerCase() as Address,
-        reportedChainIdHash: reportedChainId,
-        reportedChainCAIP2,
-        transactionCount: Number(transactionCount),
-        isSponsored: false, // Operator batches skip the sponsor flow
-        isOperatorVerified: true, // Operator submissions are auto-verified
-        verifyingOperator: operatorAddress.toLowerCase() as Address,
-        registeredAt: event.block.timestamp,
-        registeredAtBlock: event.block.number,
-        transactionHash: event.transaction.hash,
-      })
-      .onConflictDoNothing();
-
-    await indexTransactions(
-      db,
-      transactionHashes,
-      chainIds,
-      batchId,
-      operatorAddress.toLowerCase() as Address,
-      event.block.timestamp
-    );
-
-    // Update stats - operator batches count toward both operator-specific AND global batch counts
-    await updateGlobalStats(
-      db,
-      {
-        transactionBatches: 1, // Counts toward totalTransactionBatches
-        totalOperatorTransactionBatches: 1, // Operator-specific count
-        transactionsReported: Number(transactionCount),
-      },
-      event.block.timestamp
-    );
-  }
-);
-
-// ═══════════════════════════════════════════════════════════════════════════
-// REGISTRY HUB (Cross-Chain Registrations)
-// ═══════════════════════════════════════════════════════════════════════════
-
-// CrossChainRegistration event (wallet from spoke)
-ponder.on('RegistryHub:CrossChainRegistration', async ({ event, context }) => {
-  const { wallet, sourceChainId, messageId } = event.args;
+// ContractBatchCreated — operator batch summary
+ponder.on('ContractRegistry:ContractBatchCreated', async ({ event, context }) => {
+  const { batchId, operatorId, contractCount } = event.args;
   const { db } = context;
 
-  const walletAddress = wallet.toLowerCase() as Address;
-  const sourceCAIP2 = hyperlaneDomainToCAIP2(sourceChainId);
+  const batchIdStr = batchId.toString();
+  const operatorAddress = toLowerAddress(event.transaction.from);
 
-  // Create/update stolen wallet with cross-chain metadata
   await db
-    .insert(stolenWallet)
+    .insert(fraudulentContractBatch)
     .values({
-      id: walletAddress,
-      caip10: toCAIP10(walletAddress, HUB_CHAIN_ID),
+      id: batchIdStr,
+      operatorId,
+      operator: operatorAddress,
+      contractCount: Number(contractCount),
       registeredAt: event.block.timestamp,
       registeredAtBlock: event.block.number,
       transactionHash: event.transaction.hash,
-      isSponsored: true, // Cross-chain is always sponsored
-      sourceChainId,
-      sourceChainCAIP2: sourceCAIP2,
-      messageId,
     })
-    .onConflictDoUpdate({
-      sourceChainId,
-      sourceChainCAIP2: sourceCAIP2,
-      messageId,
-    });
+    .onConflictDoNothing();
 
-  // Update cross-chain message status
-  const existingMsg = await db.find(crossChainMessage, { id: messageId });
-  if (existingMsg) {
-    await db.update(crossChainMessage, { id: messageId }).set({
-      status: 'registered',
-      registeredAt: event.block.timestamp,
-      hubTxHash: event.transaction.hash,
-    });
-  }
-
-  // Update stats
-  await updateGlobalStats(
-    db,
-    {
-      walletRegistrations: 1,
-      crossChain: 1,
-      sponsored: 1,
-    },
-    event.block.timestamp
-  );
-});
-
-// CrossChainBatchRegistration event (transaction batch from spoke)
-// Note: This event does NOT include batchId - it has reporter, sourceChainId (bytes32), reportedChainId (bytes32), messageId
-// The actual batch record is created by TransactionBatchRegistered event from StolenTransactionRegistry
-ponder.on('RegistryHub:CrossChainBatchRegistration', async ({ event, context }) => {
-  const { reporter, sourceChainId, reportedChainId, messageId } = event.args;
-  const { db } = context;
-
-  // Update cross-chain message status
-  // Note: We don't have batchId here, so we can't link directly to the batch
-  // The batch will be created when StolenTransactionRegistry emits TransactionBatchRegistered
-  const existingMsg = await db.find(crossChainMessage, { id: messageId });
-  if (existingMsg) {
-    await db.update(crossChainMessage, { id: messageId }).set({
-      status: 'registered',
-      registeredAt: event.block.timestamp,
-      hubTxHash: event.transaction.hash,
-    });
-  } else {
-    // Create a new cross-chain message record if one doesn't exist
-    // This can happen if the inbox event wasn't indexed (late message or indexer started after inbox event)
-    // Try to resolve the bytes32 sourceChainId to a numeric chain ID
-    const sourceCAIP2 = resolveChainIdHash(sourceChainId);
-    const sourceNumeric = sourceCAIP2 ? caip2ToNumericChainId(sourceCAIP2) : null;
-
-    console.warn(
-      `[CrossChainBatchRegistration] Creating message record for ${messageId} without prior inbox event. ` +
-        `This may indicate the indexer started after the TransactionBatchReceived event was emitted.`
-    );
-    await db.insert(crossChainMessage).values({
-      id: messageId,
-      sourceChainId: sourceNumeric ?? 0, // fallback to 0 only if unresolved
-      targetChainId: HUB_CHAIN_ID,
-      status: 'registered',
-      registeredAt: event.block.timestamp,
-      hubTxHash: event.transaction.hash,
-    });
-  }
+  await updateGlobalStats(db, { totalContractBatches: 1 }, event.block.timestamp);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CROSS-CHAIN INBOX
 // ═══════════════════════════════════════════════════════════════════════════
 
-// RegistrationReceived event (first event when cross-chain message arrives)
-ponder.on('CrossChainInbox:RegistrationReceived', async ({ event, context }) => {
-  const { sourceChain, wallet, messageId } = event.args;
+// WalletRegistrationReceived — message received from spoke chain
+ponder.on('CrossChainInbox:WalletRegistrationReceived', async ({ event, context }) => {
+  const { origin, identifier, messageId } = event.args;
   const { db } = context;
+
+  const walletAddress = identifierToAddress(identifier);
+  const sourceCAIP2 = hyperlaneDomainToCAIP2(origin);
+  const sourceNumeric = sourceCAIP2 ? caip2ToNumericChainId(sourceCAIP2) : null;
 
   await db
     .insert(crossChainMessage)
     .values({
       id: messageId,
-      sourceChainId: sourceChain,
+      sourceChainId: sourceNumeric ?? origin,
       targetChainId: HUB_CHAIN_ID,
-      wallet: wallet.toLowerCase() as Address,
+      wallet: walletAddress,
+      spokeTxHash: event.transaction.hash,
       status: 'received',
       receivedAt: event.block.timestamp,
-      hubTxHash: event.transaction.hash,
     })
     .onConflictDoUpdate({
       status: 'received',
       receivedAt: event.block.timestamp,
-      hubTxHash: event.transaction.hash,
+      spokeTxHash: event.transaction.hash,
     });
 });
 
-// TransactionBatchReceived event
+// TransactionBatchReceived — message received from spoke chain
 ponder.on('CrossChainInbox:TransactionBatchReceived', async ({ event, context }) => {
-  const { sourceChain, reporter, merkleRoot, messageId } = event.args;
+  const { origin, reporter, dataHash, messageId } = event.args;
   const { db } = context;
+
+  const sourceCAIP2 = hyperlaneDomainToCAIP2(origin);
+  const sourceNumeric = sourceCAIP2 ? caip2ToNumericChainId(sourceCAIP2) : null;
 
   await db
     .insert(crossChainMessage)
     .values({
       id: messageId,
-      sourceChainId: sourceChain,
+      sourceChainId: sourceNumeric ?? origin,
       targetChainId: HUB_CHAIN_ID,
+      batchId: dataHash,
+      spokeTxHash: event.transaction.hash,
       status: 'received',
       receivedAt: event.block.timestamp,
-      hubTxHash: event.transaction.hash,
     })
     .onConflictDoUpdate({
       status: 'received',
       receivedAt: event.block.timestamp,
-      hubTxHash: event.transaction.hash,
+      spokeTxHash: event.transaction.hash,
     });
 });
 
@@ -678,7 +556,6 @@ ponder.on('WalletSoulbound:WalletSoulboundMinted', async ({ event, context }) =>
   const { tokenId, wallet, minter } = event.args;
   const { db } = context;
 
-  // Use onConflictDoNothing for idempotency - same event may be replayed during reorg
   await db
     .insert(walletSoulboundToken)
     .values({
@@ -699,7 +576,6 @@ ponder.on('SupportSoulbound:SupportSoulboundMinted', async ({ event, context }) 
   const { tokenId, supporter, amount } = event.args;
   const { db } = context;
 
-  // Use onConflictDoNothing for idempotency - same event may be replayed during reorg
   await db
     .insert(supportSoulboundToken)
     .values({
@@ -749,7 +625,6 @@ ponder.on('OperatorRegistry:OperatorApproved', async ({ event, context }) => {
     // Previously revoked operator being re-approved: only increment active
     activeOperatorsDelta = 1;
   }
-  // If already approved, no stats change needed
 
   await db
     .insert(operator)
@@ -777,7 +652,6 @@ ponder.on('OperatorRegistry:OperatorApproved', async ({ event, context }) => {
       canSubmitContract: (capabilitiesNum & 0x04) !== 0,
     });
 
-  // Update stats with computed deltas
   if (totalOperatorsDelta !== 0 || activeOperatorsDelta !== 0) {
     await updateGlobalStats(
       db,
@@ -806,7 +680,6 @@ ponder.on('OperatorRegistry:OperatorRevoked', async ({ event, context }) => {
     revokedAt: BigInt(revokedAt),
   });
 
-  // Only decrement active operators if they were actually approved
   if (wasApproved) {
     await updateGlobalStats(
       db,
@@ -825,7 +698,6 @@ ponder.on('OperatorRegistry:OperatorCapabilitiesUpdated', async ({ event, contex
 
   const newCapsNum = Number(newCapabilities);
 
-  // Update operator capabilities
   await db.update(operator, { id: operatorAddress.toLowerCase() as Address }).set({
     capabilities: newCapsNum,
     canSubmitWallet: (newCapsNum & 0x01) !== 0,
@@ -833,7 +705,6 @@ ponder.on('OperatorRegistry:OperatorCapabilitiesUpdated', async ({ event, contex
     canSubmitContract: (newCapsNum & 0x04) !== 0,
   });
 
-  // Record change history
   await db
     .insert(operatorCapabilityChange)
     .values({
@@ -845,143 +716,4 @@ ponder.on('OperatorRegistry:OperatorCapabilitiesUpdated', async ({ event, contex
       transactionHash: event.transaction.hash,
     })
     .onConflictDoNothing();
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// FRAUDULENT CONTRACT REGISTRY
-// ═══════════════════════════════════════════════════════════════════════════
-
-// ContractBatchRegistered event
-ponder.on('FraudulentContractRegistry:ContractBatchRegistered', async ({ event, context }) => {
-  const {
-    batchId,
-    merkleRoot,
-    operator: operatorAddress,
-    reportedChainId,
-    contractCount,
-    contractAddresses,
-    chainIds,
-  } = event.args;
-  const { db } = context;
-
-  // Resolve the reported chain ID
-  const reportedChainCAIP2 = resolveChainIdHash(reportedChainId);
-
-  // Insert batch record
-  await db
-    .insert(fraudulentContractBatch)
-    .values({
-      id: batchId,
-      merkleRoot,
-      operator: operatorAddress.toLowerCase() as Address,
-      reportedChainIdHash: reportedChainId,
-      reportedChainCAIP2,
-      contractCount: Number(contractCount),
-      registeredAt: event.block.timestamp,
-      registeredAtBlock: event.block.number,
-      transactionHash: event.transaction.hash,
-      invalidated: false,
-      invalidatedAt: null,
-    })
-    .onConflictDoNothing();
-
-  // Insert individual contracts
-  for (let i = 0; i < contractAddresses.length; i++) {
-    const contractAddr = contractAddresses[i];
-    const chainIdHash = chainIds[i];
-
-    // Skip if array values are missing
-    if (!contractAddr || !chainIdHash) continue;
-
-    // Resolve chain ID hash to CAIP-2
-    const caip2ChainId = resolveChainIdHash(chainIdHash);
-    const numericChainId = caip2ChainId ? caip2ToNumericChainId(caip2ChainId) : null;
-
-    // Composite key: contractAddress-chainIdHash
-    const compositeId = `${contractAddr.toLowerCase()}-${chainIdHash}`;
-
-    // Compute entryHash for linking with invalidation events
-    // Matches contract's MerkleRootComputation.hashLeaf (OpenZeppelin v1.0.8+ standard):
-    // keccak256(abi.encodePacked(keccak256(abi.encode(address, bytes32))))
-    const innerHash = keccak256(
-      encodeAbiParameters([{ type: 'address' }, { type: 'bytes32' }], [contractAddr, chainIdHash])
-    );
-    const entryHash = keccak256(innerHash);
-
-    await db
-      .insert(fraudulentContract)
-      .values({
-        id: compositeId,
-        entryHash,
-        contractAddress: contractAddr.toLowerCase() as Address,
-        chainIdHash,
-        caip2ChainId: caip2ChainId ?? `unknown:${chainIdHash}`,
-        numericChainId,
-        batchId,
-        operator: operatorAddress.toLowerCase() as Address,
-        reportedAt: event.block.timestamp,
-      })
-      .onConflictDoNothing();
-  }
-
-  // Update stats
-  await updateGlobalStats(
-    db,
-    {
-      totalContractBatches: 1,
-      totalFraudulentContracts: Number(contractCount),
-    },
-    event.block.timestamp
-  );
-});
-
-// BatchInvalidated event
-ponder.on('FraudulentContractRegistry:BatchInvalidated', async ({ event, context }) => {
-  const { batchId } = event.args;
-  const { db } = context;
-
-  await db.update(fraudulentContractBatch, { id: batchId }).set({
-    invalidated: true,
-    invalidatedAt: event.block.timestamp,
-  });
-
-  // Update stats
-  await updateGlobalStats(
-    db,
-    {
-      invalidatedContractBatches: 1,
-    },
-    event.block.timestamp
-  );
-});
-
-// EntryInvalidated event
-// Note: fraudulentContract.entryHash can be used to join with this table
-// to determine invalidation status. The invalidatedEntry table is the source of truth.
-ponder.on('FraudulentContractRegistry:EntryInvalidated', async ({ event, context }) => {
-  const { entryHash, invalidatedBy } = event.args;
-  const { db } = context;
-
-  await db
-    .insert(invalidatedEntry)
-    .values({
-      id: entryHash,
-      invalidatedAt: event.block.timestamp,
-      invalidatedBy: invalidatedBy.toLowerCase() as Address,
-      transactionHash: event.transaction.hash,
-      reinstated: false,
-      reinstatedAt: null,
-    })
-    .onConflictDoNothing();
-});
-
-// EntryReinstated event
-ponder.on('FraudulentContractRegistry:EntryReinstated', async ({ event, context }) => {
-  const { entryHash } = event.args;
-  const { db } = context;
-
-  await db.update(invalidatedEntry, { id: entryHash }).set({
-    reinstated: true,
-    reinstatedAt: event.block.timestamp,
-  });
 });

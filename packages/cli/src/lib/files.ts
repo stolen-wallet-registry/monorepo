@@ -2,7 +2,21 @@ import { readFile } from 'fs/promises';
 import { parse as parseCSV } from 'csv-parse/sync';
 import { isAddress, isHash, type Address, type Hex } from 'viem';
 import { chainIdToBytes32, caip2ToBytes32 } from './caip.js';
-import type { WalletEntry, TransactionEntry, ContractEntry } from './merkle.js';
+
+export interface WalletEntry {
+  address: Address;
+  chainId: Hex;
+}
+
+export interface TransactionEntry {
+  txHash: Hex;
+  chainId: Hex;
+}
+
+export interface ContractEntry {
+  address: Address;
+  chainId: Hex;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FILE FORMATS

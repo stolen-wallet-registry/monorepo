@@ -1,13 +1,13 @@
 // Generated ABI exports - populated by `pnpm --filter @swr/contracts export-abi`
 // Run `forge build` in packages/contracts first, then export-abi
 
-export { FraudRegistryHubV2ABI } from './FraudRegistryHubV2';
-export { WalletRegistryV2ABI } from './WalletRegistryV2';
-export { TransactionRegistryV2ABI } from './TransactionRegistryV2';
-export { ContractRegistryV2ABI } from './ContractRegistryV2';
-export { OperatorSubmitterV2ABI } from './OperatorSubmitterV2';
-export { SpokeRegistryV2ABI } from './SpokeRegistryV2';
-export { CrossChainInboxV2ABI } from './CrossChainInboxV2';
+export { FraudRegistryHubABI } from './FraudRegistryHub';
+export { WalletRegistryABI } from './WalletRegistry';
+export { TransactionRegistryABI } from './TransactionRegistry';
+export { ContractRegistryABI } from './ContractRegistry';
+export { OperatorSubmitterABI } from './OperatorSubmitter';
+export { SpokeRegistryABI } from './SpokeRegistry';
+export { CrossChainInboxABI } from './CrossChainInbox';
 export { FeeManagerABI } from './FeeManager';
 export { OperatorRegistryABI } from './OperatorRegistry';
 export { HyperlaneAdapterABI } from './HyperlaneAdapter';

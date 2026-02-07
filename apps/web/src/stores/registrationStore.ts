@@ -42,8 +42,6 @@ export interface RegistrationState {
   registrationChainId: number | null;
   /** Cross-chain bridge message ID (e.g., Hyperlane messageId) */
   bridgeMessageId: Hash | null;
-
-  // V2 additions
   /** Raw EVM chain ID where incident occurred (e.g., 1 for mainnet, 8453 for Base) */
   reportedChainId: bigint | null;
   /** Unix timestamp when incident occurred (user-provided) */
@@ -56,11 +54,10 @@ export interface RegistrationActions {
   setAcknowledgementHash: (hash: Hash, chainId: number) => void;
   setRegistrationHash: (hash: Hash, chainId: number) => void;
   setBridgeMessageId: (messageId: Hash) => void;
-  // V2 actions
   setReportedChainId: (chainId: bigint) => void;
   setIncidentTimestamp: (timestamp: bigint) => void;
-  /** Initialize V2 fields with defaults based on current chain */
-  initializeV2Fields: (chainId: number, timestamp?: bigint) => void;
+  /** Initialize incident fields with defaults based on current chain */
+  initializeFields: (chainId: number, timestamp?: bigint) => void;
   reset: () => void;
 }
 
@@ -72,7 +69,6 @@ const initialState: RegistrationState = {
   registrationHash: null,
   registrationChainId: null,
   bridgeMessageId: null,
-  // V2 additions
   reportedChainId: null,
   incidentTimestamp: null,
 };
@@ -119,30 +115,29 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
             state.bridgeMessageId = messageId;
           }),
 
-        // V2 actions
         setReportedChainId: (chainId) =>
           set((state) => {
-            logger.registration.info('V2: Reported chain ID set', { chainId });
+            logger.registration.info('Reported chain ID set', { chainId });
             state.reportedChainId = chainId;
           }),
 
         setIncidentTimestamp: (timestamp) =>
           set((state) => {
-            logger.registration.info('V2: Incident timestamp set', {
+            logger.registration.info('Incident timestamp set', {
               timestamp: timestamp.toString(),
             });
             state.incidentTimestamp = timestamp;
           }),
 
-        initializeV2Fields: (chainId, timestamp) =>
+        initializeFields: (chainId, timestamp) =>
           set((state) => {
-            // Store raw numeric chain ID - V2 contracts accept uint64
+            // Store raw numeric chain ID - contracts accept uint64
             // The contract converts to CAIP-2 bytes32 hash internally
             const reportedChainId = BigInt(chainId);
             // Default incidentTimestamp to now if not provided
             const incidentTimestamp = timestamp ?? 0n; // TODO: Add incident timestamp selection UI
 
-            logger.registration.info('V2: Fields initialized', {
+            logger.registration.info('Fields initialized', {
               chainId,
               reportedChainId: reportedChainId.toString(),
               incidentTimestamp: incidentTimestamp.toString(),
@@ -160,7 +155,7 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
       {
         name: 'swr-registration-state',
         storage: bigintStorage, // BigInt-safe serialization for incidentTimestamp
-        version: 2, // Bumped for V2 fields
+        version: 2, // Bumped for incident fields
         migrate: (persisted, version) => {
           // Validate basic shape
           if (!persisted || typeof persisted !== 'object') {
@@ -169,7 +164,7 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
 
           const state = persisted as Partial<RegistrationState>;
 
-          // Migration from v1 to v2: add V2 fields
+          // Migration from v1 to v2: add incident fields
           if (version < 2) {
             logger.registration.info('Migrating registration state from v1 to v2');
           }
@@ -184,7 +179,7 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
             registrationHash: state.registrationHash ?? initialState.registrationHash,
             registrationChainId: state.registrationChainId ?? initialState.registrationChainId,
             bridgeMessageId: state.bridgeMessageId ?? initialState.bridgeMessageId,
-            // V2 fields (null if migrating from v1)
+            // Incident fields (null if migrating from v1)
             reportedChainId: state.reportedChainId ?? initialState.reportedChainId,
             incidentTimestamp: state.incidentTimestamp ?? initialState.incidentTimestamp,
           };
@@ -321,16 +316,16 @@ export const useRegistrationFlow = () =>
   );
 
 /**
- * Select V2 registration fields and setters.
+ * Select registration incident fields and setters.
  * Use when component needs incident chain and timestamp info.
  */
-export const useRegistrationV2Fields = () =>
+export const useRegistrationFields = () =>
   useRegistrationStore(
     useShallow((s) => ({
       reportedChainId: s.reportedChainId,
       incidentTimestamp: s.incidentTimestamp,
       setReportedChainId: s.setReportedChainId,
       setIncidentTimestamp: s.setIncidentTimestamp,
-      initializeV2Fields: s.initializeV2Fields,
+      initializeFields: s.initializeFields,
     }))
   );

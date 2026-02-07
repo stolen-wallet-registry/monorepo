@@ -42,7 +42,7 @@ export {
   useTransactionFormAddresses,
   useTransactionSelection,
   useSelectedTransactionDetails,
-  useTransactionMerkleRoot,
+  useTransactionDataHash,
   useTransactionCount,
 } from './transactionFormStore';
 

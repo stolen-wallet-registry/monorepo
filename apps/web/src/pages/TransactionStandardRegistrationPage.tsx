@@ -5,7 +5,7 @@
  * Includes transaction selection as the first step.
  */
 
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount, useChainId } from 'wagmi';
 import { ArrowLeft, Info } from 'lucide-react';
@@ -36,9 +36,10 @@ import {
   TxRegisterPayStep,
   TxSuccessStep,
 } from '@/components/registration/tx-steps';
-import { useUserTransactions, useMerkleTree, type TransactionLeaf } from '@/hooks/transactions';
+import { useUserTransactions } from '@/hooks/transactions';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
-import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
+import { computeTransactionDataHash } from '@/lib/signatures/transactions';
+import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import {
   useTransactionRegistrationFlow,
@@ -103,7 +104,7 @@ export function TransactionStandardRegistrationPage() {
     setSelectedTxHashes,
     setSelectedTxDetails,
     setReportedChainId,
-    setMerkleTreeData,
+    setTransactionData,
   } = useTransactionSelection();
   // Use stable selectors for form actions to avoid unnecessary re-renders
   const resetForm = useTransactionFormStore((s) => s.reset);
@@ -122,16 +123,6 @@ export function TransactionStandardRegistrationPage() {
     lowestBlockScanned,
   } = useUserTransactions(address);
 
-  // Build Merkle tree from selected transactions
-  const transactionLeaves: TransactionLeaf[] = useMemo(() => {
-    return selectedTxHashes.map((hash) => ({
-      txHash: hash,
-      chainId: chainId,
-    }));
-  }, [selectedTxHashes, chainId]);
-
-  const merkleTree = useMerkleTree(transactionLeaves);
-
   // Initialize registration type
   useEffect(() => {
     if (registrationType !== 'standard') {
@@ -146,14 +137,17 @@ export function TransactionStandardRegistrationPage() {
     }
   }, [step, setStep]);
 
-  // Update form state when merkle tree changes (clear when selections cleared)
+  // Compute data hash and chain ID arrays when selections change
   useEffect(() => {
-    if (merkleTree) {
-      setMerkleTreeData(merkleTree.root, merkleTree.txHashes, merkleTree.chainIds);
+    if (selectedTxHashes.length > 0 && chainId) {
+      const chainIdHash = chainIdToBytes32(chainId);
+      const chainIds = selectedTxHashes.map(() => chainIdHash);
+      const dataHash = computeTransactionDataHash(selectedTxHashes, chainIds);
+      setTransactionData(dataHash, selectedTxHashes, chainIds);
     } else {
-      setMerkleTreeData(null, [], []);
+      setTransactionData(null, [], []);
     }
-  }, [merkleTree, setMerkleTreeData]);
+  }, [selectedTxHashes, chainId, setTransactionData]);
 
   // Set reported chain ID when chain changes
   useEffect(() => {
@@ -161,9 +155,9 @@ export function TransactionStandardRegistrationPage() {
       setReportedChainId(chainId);
       setSelectedTxHashes([]);
       setSelectedTxDetails([]);
-      setMerkleTreeData(null, [], []);
+      setTransactionData(null, [], []);
     }
-  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setMerkleTreeData]);
+  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setTransactionData]);
 
   // Set reporter address when connected
   useEffect(() => {
@@ -172,7 +166,7 @@ export function TransactionStandardRegistrationPage() {
       setForwarder(address); // Standard registration: same address pays
       setSelectedTxHashes([]);
       setSelectedTxDetails([]);
-      setMerkleTreeData(null, [], []);
+      setTransactionData(null, [], []);
     }
   }, [
     address,
@@ -180,7 +174,7 @@ export function TransactionStandardRegistrationPage() {
     setForwarder,
     setSelectedTxHashes,
     setSelectedTxDetails,
-    setMerkleTreeData,
+    setTransactionData,
   ]);
 
   // Redirect if not connected
@@ -216,10 +210,19 @@ export function TransactionStandardRegistrationPage() {
   };
 
   const handleContinue = () => {
-    if (selectedTxHashes.length > 0 && merkleTree) {
+    if (selectedTxHashes.length > 0) {
       setStep('acknowledge-sign');
     }
   };
+
+  // Compute data hash for display in selection summary
+  const displayDataHash =
+    selectedTxHashes.length > 0 && chainId
+      ? computeTransactionDataHash(
+          selectedTxHashes,
+          selectedTxHashes.map(() => chainIdToBytes32(chainId))
+        )
+      : null;
 
   const currentTitle = step ? (STEP_TITLES[step] ?? 'Unknown Step') : 'Getting Started';
   const currentDescription = step
@@ -281,7 +284,7 @@ export function TransactionStandardRegistrationPage() {
             />
 
             {/* Transaction Batch Summary */}
-            {selectedTxHashes.length > 0 && merkleTree && (
+            {selectedTxHashes.length > 0 && (
               <div className="space-y-4">
                 {/* Summary Card */}
                 <div className="rounded-lg border p-4 bg-muted/30">
@@ -345,16 +348,16 @@ export function TransactionStandardRegistrationPage() {
                     <div className="flex items-start gap-2">
                       <span className="text-muted-foreground flex items-center gap-1 shrink-0">
                         Data Hash:
-                        <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
+                        <InfoTooltip content={DATA_HASH_TOOLTIP} side="right" />
                       </span>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <code className="font-mono text-xs break-all cursor-default">
-                            {merkleTree.root}
+                            {displayDataHash}
                           </code>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-md">
-                          <p className="text-xs font-mono break-all">{merkleTree.root}</p>
+                          <p className="text-xs font-mono break-all">{displayDataHash}</p>
                         </TooltipContent>
                       </Tooltip>
                     </div>

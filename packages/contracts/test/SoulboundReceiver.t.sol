@@ -9,9 +9,9 @@ import { SupportSoulbound } from "../src/soulbound/SupportSoulbound.sol";
 import { TranslationRegistry } from "../src/soulbound/TranslationRegistry.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
 
-/// @notice Mock V2 wallet registry for SoulboundReceiver tests
-/// @dev WalletSoulbound now uses IWalletRegistryV2 interface (isWalletRegistered/isWalletPending)
-contract MockWalletRegistryV2 {
+/// @notice Mock wallet registry for SoulboundReceiver tests
+/// @dev WalletSoulbound now uses IWalletRegistry interface (isWalletRegistered/isWalletPending)
+contract MockWalletRegistry {
     mapping(address => bool) public registered;
     mapping(address => bool) public pending;
 
@@ -36,7 +36,7 @@ contract SoulboundReceiverTest is Test {
     SoulboundReceiver receiver;
     WalletSoulbound walletSoulbound;
     SupportSoulbound supportSoulbound;
-    MockWalletRegistryV2 mockRegistry;
+    MockWalletRegistry mockRegistry;
     TranslationRegistry translations;
     MockMailbox mailbox;
 
@@ -63,8 +63,8 @@ contract SoulboundReceiverTest is Test {
         // Deploy translation registry (has built-in English)
         translations = new TranslationRegistry();
 
-        // Deploy mock V2 wallet registry
-        mockRegistry = new MockWalletRegistryV2();
+        // Deploy mock wallet registry
+        mockRegistry = new MockWalletRegistry();
 
         // Deploy soulbound contracts
         walletSoulbound = new WalletSoulbound(address(mockRegistry), address(translations), owner, "stolenwallet.xyz");

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { BaseSoulbound } from "./BaseSoulbound.sol";
-import { IWalletRegistryV2 } from "../v2/interfaces/IWalletRegistryV2.sol";
+import { IWalletRegistry } from "../interfaces/IWalletRegistry.sol";
 import { SVGRenderer } from "./libraries/SVGRenderer.sol";
 import { Base64 } from "@openzeppelin/contracts/utils/Base64.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
@@ -26,8 +26,8 @@ contract WalletSoulbound is BaseSoulbound {
     // STATE
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Reference to the Wallet Registry V2
-    IWalletRegistryV2 public immutable registry;
+    /// @notice Reference to the Wallet Registry
+    IWalletRegistry public immutable registry;
 
     /// @notice Tracks which wallet each token represents
     mapping(uint256 tokenId => address wallet) public tokenWallet;
@@ -74,7 +74,7 @@ contract WalletSoulbound is BaseSoulbound {
         BaseSoulbound("SWR Wallet Soulbound", "SWRW", _translations, _feeCollector, _domain)
     {
         if (_registry == address(0)) revert InvalidRegistry();
-        registry = IWalletRegistryV2(_registry);
+        registry = IWalletRegistry(_registry);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -75,7 +75,7 @@ export function caip2ToBytes32(caip2: string): Hex {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// V2 TRUNCATED CHAIN ID HASHES (for Hub contract storage efficiency)
+// TRUNCATED CHAIN ID HASHES (for Hub contract storage efficiency)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**

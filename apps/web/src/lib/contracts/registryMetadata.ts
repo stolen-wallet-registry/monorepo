@@ -4,16 +4,16 @@
  * Consolidates the ABI selection and function name mapping logic that was
  * previously duplicated across 15+ hooks. Use this instead of inline ternaries.
  *
- * V2 Architecture: Hub + Separate Registries
- * - WalletRegistryV2: Wallet-specific registration
- * - TransactionRegistryV2: Transaction batch registration
- * - ContractRegistryV2: Contract address registration (operator-only)
- * - SpokeRegistryV2: Cross-chain spoke contracts (all variants)
+ * Architecture: Hub + Separate Registries
+ * - WalletRegistry: Wallet-specific registration
+ * - TransactionRegistry: Transaction batch registration
+ * - ContractRegistry: Contract address registration (operator-only)
+ * - SpokeRegistry: Cross-chain spoke contracts (all variants)
  *
  * @example
  * ```ts
  * // Before (duplicated in each hook)
- * const abi = registryType === 'spoke' ? spokeRegistryV2Abi : walletRegistryV2Abi;
+ * const abi = registryType === 'spoke' ? spokeRegistryAbi : walletRegistryAbi;
  * const functionName = registryType === 'spoke' ? 'acknowledgeLocal' : 'acknowledge';
  *
  * // After (using metadata)
@@ -23,10 +23,10 @@
  */
 
 import {
-  walletRegistryV2Abi,
-  transactionRegistryV2Abi,
-  contractRegistryV2Abi,
-  spokeRegistryV2Abi,
+  walletRegistryAbi,
+  transactionRegistryAbi,
+  contractRegistryAbi,
+  spokeRegistryAbi,
 } from './abis';
 import type { RegistryType, RegistryVariant } from './addresses';
 
@@ -67,32 +67,32 @@ export interface RegistryFunctions {
 export interface RegistryMetadata {
   /** The ABI for this registry */
   abi:
-    | typeof walletRegistryV2Abi
-    | typeof transactionRegistryV2Abi
-    | typeof contractRegistryV2Abi
-    | typeof spokeRegistryV2Abi;
+    | typeof walletRegistryAbi
+    | typeof transactionRegistryAbi
+    | typeof contractRegistryAbi
+    | typeof spokeRegistryAbi;
   /** Function name mappings */
   functions: RegistryFunctions;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// V2 REGISTRY METADATA (HUB + SEPARATE REGISTRIES)
+// REGISTRY METADATA (HUB + SEPARATE REGISTRIES)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * V2 Registry metadata organized by variant (wallet/transaction/contract) and chain role (hub/spoke).
+ * Registry metadata organized by variant (wallet/transaction/contract) and chain role (hub/spoke).
  *
- * V2 changes:
+ * Architecture:
  * - Hub: Separate registries for wallet, transaction, and contract
- * - Wallet registration: WalletRegistryV2 with `acknowledge` / `register`
- * - Transaction registration: TransactionRegistryV2 with `acknowledgeTransactions` / `registerTransactions`
- * - Contract registration: ContractRegistryV2 with operator-only `registerContracts`
- * - Spoke: SpokeRegistryV2 handles all variants with cross-chain messaging
+ * - Wallet registration: WalletRegistry with `acknowledge` / `register`
+ * - Transaction registration: TransactionRegistry with `acknowledgeTransactions` / `registerTransactions`
+ * - Contract registration: ContractRegistry with operator-only `registerContracts`
+ * - Spoke: SpokeRegistry handles all variants with cross-chain messaging
  */
-const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, RegistryMetadata>> = {
+const REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, RegistryMetadata>> = {
   wallet: {
     hub: {
-      abi: walletRegistryV2Abi,
+      abi: walletRegistryAbi,
       functions: {
         acknowledge: 'acknowledge',
         register: 'register',
@@ -108,7 +108,7 @@ const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
       },
     },
     spoke: {
-      abi: spokeRegistryV2Abi,
+      abi: spokeRegistryAbi,
       functions: {
         acknowledge: 'acknowledgeLocal',
         register: 'registerLocal',
@@ -126,7 +126,7 @@ const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
   },
   transaction: {
     hub: {
-      abi: transactionRegistryV2Abi,
+      abi: transactionRegistryAbi,
       functions: {
         acknowledge: 'acknowledgeTransactions',
         register: 'registerTransactions',
@@ -142,7 +142,7 @@ const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
       },
     },
     spoke: {
-      abi: spokeRegistryV2Abi,
+      abi: spokeRegistryAbi,
       functions: {
         acknowledge: 'acknowledgeTransactions',
         register: 'registerTransactions',
@@ -167,7 +167,7 @@ const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
     // don't need special-case logic — they'll hit the contract and get a revert or no-op
     // rather than a missing function name at compile time.
     hub: {
-      abi: contractRegistryV2Abi,
+      abi: contractRegistryAbi,
       functions: {
         acknowledge: 'registerContracts', // No acknowledgement phase — maps to register
         register: 'registerContracts',
@@ -175,7 +175,7 @@ const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
         getDeadlines: 'getDeadlines', // Not used — placeholder for interface
         nonces: 'nonces', // Not used — placeholder for interface
         quoteRegistration: 'quoteRegistration',
-        quoteFeeBreakdown: 'quoteRegistration', // ContractRegistryV2 has no separate breakdown
+        quoteFeeBreakdown: 'quoteRegistration', // ContractRegistry has no separate breakdown
         isPending: 'isContractRegistered', // No pending state — always returns registered or not
         isRegistered: 'isContractRegistered',
         getAcknowledgement: 'getContractEntry',
@@ -183,10 +183,10 @@ const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
       },
     },
     spoke: {
-      // Contract registration is NOT supported on spoke chains — SpokeRegistryV2
+      // Contract registration is NOT supported on spoke chains — SpokeRegistry
       // has no contract-specific functions. These mappings use generic spoke functions
       // as best-effort fallbacks. Callers should not invoke contract registration on spoke.
-      abi: spokeRegistryV2Abi,
+      abi: spokeRegistryAbi,
       functions: {
         acknowledge: 'acknowledgeLocal', // Fallback — no contract ack on spoke
         register: 'registerLocal', // Fallback — no contract reg on spoke
@@ -205,7 +205,7 @@ const V2_REGISTRY_METADATA: Record<RegistryVariant, Record<RegistryType, Registr
 };
 
 /**
- * Get V2 registry metadata for a specific variant and chain role.
+ * Get registry metadata for a specific variant and chain role.
  * This is the primary function to use for all integrations.
  *
  * @param variant - 'wallet', 'transaction', or 'contract'
@@ -216,5 +216,5 @@ export function getRegistryMetadata(
   variant: RegistryVariant,
   chainRole: RegistryType
 ): RegistryMetadata {
-  return V2_REGISTRY_METADATA[variant][chainRole];
+  return REGISTRY_METADATA[variant][chainRole];
 }

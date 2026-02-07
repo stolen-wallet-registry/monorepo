@@ -37,7 +37,7 @@ import {
 import type { Hash } from '@/lib/types/ethereum';
 import { parseSignature } from '@/lib/signatures';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
-import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
+import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
@@ -55,17 +55,22 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   const { address } = useAccount();
   const chainId = useChainId();
   const { registrationType, setAcknowledgementHash } = useTransactionRegistrationStore();
-  const { selectedTxHashes, selectedTxDetails, reportedChainId, sortedTxHashes, sortedChainIds } =
-    useTransactionSelection();
+  const {
+    selectedTxHashes,
+    selectedTxDetails,
+    reportedChainId,
+    txHashesForContract,
+    chainIdsForContract,
+  } = useTransactionSelection();
 
   const isSelfRelay = registrationType === 'selfRelay';
 
-  // V2: Compute dataHash from sorted arrays (replaces merkle root)
+  // Compute dataHash from sorted arrays for signing/contract calls
   const dataHash: Hash | undefined =
-    sortedTxHashes.length > 0 &&
-    sortedChainIds.length > 0 &&
-    sortedTxHashes.length === sortedChainIds.length
-      ? computeTransactionDataHash(sortedTxHashes, sortedChainIds)
+    txHashesForContract.length > 0 &&
+    chainIdsForContract.length > 0 &&
+    txHashesForContract.length === chainIdsForContract.length
+      ? computeTransactionDataHash(txHashesForContract, chainIdsForContract)
       : undefined;
 
   // Contract hook
@@ -127,13 +132,13 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
       ? chainIdToBytes32(reportedChainId)
       : undefined;
 
-  // Use sorted hashes and chain IDs from merkle tree for contract calls
-  // These must match the order used to compute the merkle root
+  // Use sorted hashes and chain IDs for contract calls
+  // These must match the order used to compute the data hash
   // Guard against undefined during store hydration
-  const txHashesForContract =
-    sortedTxHashes && sortedTxHashes.length > 0 ? sortedTxHashes : undefined;
-  const chainIdsForContract =
-    sortedChainIds && sortedChainIds.length > 0 ? sortedChainIds : undefined;
+  const txHashesForContractGuarded =
+    txHashesForContract && txHashesForContract.length > 0 ? txHashesForContract : undefined;
+  const chainIdsForContractGuarded =
+    chainIdsForContract && chainIdsForContract.length > 0 ? chainIdsForContract : undefined;
 
   // Parse signature for gas estimation
   const parsedSigForEstimate = storedSignature
@@ -241,11 +246,11 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     try {
       const parsedSig = parseSignature(storedSignature.signature);
 
-      // Validate sorted data is available
-      if (!txHashesForContract || !chainIdsForContract) {
-        logger.contract.error('Missing sorted transaction data for acknowledgement', {
-          hasSortedTxHashes: !!txHashesForContract,
-          hasSortedChainIds: !!chainIdsForContract,
+      // Validate transaction data is available
+      if (!txHashesForContractGuarded || !chainIdsForContractGuarded) {
+        logger.contract.error('Missing transaction data for acknowledgement', {
+          hasTxHashes: !!txHashesForContractGuarded,
+          hasChainIds: !!chainIdsForContractGuarded,
         });
         setLocalError('Transaction data not ready. Please go back and try again.');
         return;
@@ -257,10 +262,10 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         transactionCount: selectedTxHashes.length,
         deadline: storedSignature.deadline.toString(),
         chainId,
-        sortedTxHashesCount: txHashesForContract?.length,
-        firstSortedTxHash: txHashesForContract?.[0],
-        lastSortedTxHash: txHashesForContract?.[txHashesForContract?.length - 1],
-        firstSortedChainId: chainIdsForContract?.[0],
+        txHashesCount: txHashesForContractGuarded?.length,
+        firstTxHash: txHashesForContractGuarded?.[0],
+        lastTxHash: txHashesForContractGuarded?.[txHashesForContractGuarded?.length - 1],
+        firstChainId: chainIdsForContractGuarded?.[0],
       });
 
       // Build params based on chain type (hub vs spoke have different signatures)
@@ -299,8 +304,8 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         transactionCount: selectedTxHashes.length,
         isHub,
         isSpoke,
-        transactionHashesSample: txHashesForContract?.slice(0, 10),
-        chainIds: chainIdsForContract?.slice(0, 2),
+        transactionHashesSample: txHashesForContractGuarded?.slice(0, 10),
+        chainIds: chainIdsForContractGuarded?.slice(0, 2),
       });
 
       await submitAcknowledgement(params);
@@ -327,14 +332,16 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     dataHash,
     reportedChainIdHash,
     selectedTxHashes,
-    txHashesForContract,
-    chainIdsForContract,
+    txHashesForContractGuarded,
+    chainIdsForContractGuarded,
     address,
     chainId,
     submitAcknowledgement,
     registrationType,
     expectedWallet,
     isCorrectWallet,
+    isHub,
+    isSpoke,
   ]);
 
   /**
@@ -472,7 +479,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
           <div className="flex items-start gap-2">
             <span className="text-muted-foreground flex items-center gap-1 shrink-0">
               Data Hash:
-              <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
+              <InfoTooltip content={DATA_HASH_TOOLTIP} side="right" />
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
