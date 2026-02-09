@@ -46,22 +46,23 @@ abstract contract EIP712TestHelper is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     bytes32 internal constant WALLET_ACK_TYPEHASH = keccak256(
-        "AcknowledgementOfRegistry(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)"
+        "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
 
-    bytes32 internal constant WALLET_REG_TYPEHASH =
-        keccak256("Registration(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)");
+    bytes32 internal constant WALLET_REG_TYPEHASH = keccak256(
+        "Registration(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+    );
 
     // ═══════════════════════════════════════════════════════════════════════════
     // TRANSACTION REGISTRY TYPE HASHES
     // ═══════════════════════════════════════════════════════════════════════════
 
     bytes32 internal constant TX_ACK_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(string statement,bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
+        "TransactionBatchAcknowledgement(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
     );
 
     bytes32 internal constant TX_REG_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(string statement,bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)"
+        "TransactionBatchRegistration(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
     );
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -116,13 +117,24 @@ abstract contract EIP712TestHelper is Test {
     function _signWalletAck(
         uint256 privateKey,
         address registry,
-        address owner,
+        address _wallet,
         address forwarder,
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
         bytes32 structHash = keccak256(
-            abi.encode(WALLET_ACK_TYPEHASH, keccak256(bytes(WALLET_ACK_STATEMENT)), owner, forwarder, nonce, deadline)
+            abi.encode(
+                WALLET_ACK_TYPEHASH,
+                keccak256(bytes(WALLET_ACK_STATEMENT)),
+                _wallet,
+                forwarder,
+                reportedChainId,
+                incidentTimestamp,
+                nonce,
+                deadline
+            )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _walletDomainSeparator(registry), structHash));
         (v, r, s) = vm.sign(privateKey, digest);
@@ -132,13 +144,24 @@ abstract contract EIP712TestHelper is Test {
     function _signWalletReg(
         uint256 privateKey,
         address registry,
-        address owner,
+        address _wallet,
         address forwarder,
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
         bytes32 structHash = keccak256(
-            abi.encode(WALLET_REG_TYPEHASH, keccak256(bytes(WALLET_REG_STATEMENT)), owner, forwarder, nonce, deadline)
+            abi.encode(
+                WALLET_REG_TYPEHASH,
+                keccak256(bytes(WALLET_REG_STATEMENT)),
+                _wallet,
+                forwarder,
+                reportedChainId,
+                incidentTimestamp,
+                nonce,
+                deadline
+            )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _walletDomainSeparator(registry), structHash));
         (v, r, s) = vm.sign(privateKey, digest);
@@ -152,10 +175,11 @@ abstract contract EIP712TestHelper is Test {
     function _signTxAck(
         uint256 privateKey,
         address registry,
-        bytes32 merkleRoot,
+        address reporter,
+        address forwarder,
+        bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,
-        address forwarder,
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
@@ -163,10 +187,11 @@ abstract contract EIP712TestHelper is Test {
             abi.encode(
                 TX_ACK_TYPEHASH,
                 keccak256(bytes(TX_ACK_STATEMENT)),
-                merkleRoot,
+                reporter,
+                forwarder,
+                dataHash,
                 reportedChainId,
                 transactionCount,
-                forwarder,
                 nonce,
                 deadline
             )
@@ -179,9 +204,11 @@ abstract contract EIP712TestHelper is Test {
     function _signTxReg(
         uint256 privateKey,
         address registry,
-        bytes32 merkleRoot,
-        bytes32 reportedChainId,
+        address reporter,
         address forwarder,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
@@ -189,9 +216,11 @@ abstract contract EIP712TestHelper is Test {
             abi.encode(
                 TX_REG_TYPEHASH,
                 keccak256(bytes(TX_REG_STATEMENT)),
-                merkleRoot,
-                reportedChainId,
+                reporter,
                 forwarder,
+                dataHash,
+                reportedChainId,
+                transactionCount,
                 nonce,
                 deadline
             )
