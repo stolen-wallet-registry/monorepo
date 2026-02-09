@@ -19,6 +19,10 @@ export interface ContractErrorInfo {
  * 2. Compute selector: `cast sig 'MyContract__ErrorName()'`
  * 3. Add entry to this map
  * 4. Write clear, actionable message for users
+ *
+ * Notes:
+ * - Prefer mapping errors that are actually reverted by current implementations.
+ * - Errors declared in interfaces but never reverted are intentionally excluded.
  */
 export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
   // ═══════════════════════════════════════════════════════════════════════════
@@ -38,12 +42,7 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
   '0xf6c88e35': {
     name: 'FraudRegistryHub__InvalidIdentifierLength',
     message: 'Invalid identifier length.',
-    action: 'Please check the identifier and try again.',
-  },
-  '0x00472d32': {
-    name: 'FraudRegistryHub__UnknownRegistryType',
-    message: 'Unknown registry type.',
-    action: 'Please contact support.',
+    action: 'Ensure the identifier is a 0x-prefixed 32-byte hex string (66 characters).',
   },
   '0x7fa366d3': {
     name: 'FraudRegistryHub__WithdrawFailed',
@@ -65,11 +64,6 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'This wallet already has a pending acknowledgement.',
     action: 'Complete the registration or wait for it to expire.',
   },
-  '0x4da4c90e': {
-    name: 'WalletRegistry__NotAcknowledged',
-    message: 'No pending acknowledgement found.',
-    action: 'Please complete the acknowledgement step first.',
-  },
   '0x5915fdb8': {
     name: 'WalletRegistry__DeadlineExpired',
     message: 'Your signature has expired.',
@@ -90,11 +84,6 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Signature verification failed.',
     action: 'Please sign again with the correct wallet.',
   },
-  '0x4cd2cf7c': {
-    name: 'WalletRegistry__InvalidSigner',
-    message: 'Signer does not match the wallet being registered.',
-    action: 'Sign with the registeree wallet.',
-  },
   '0x6bd7e909': {
     name: 'WalletRegistry__NotAuthorizedForwarder',
     message: 'Wrong wallet connected for this registration.',
@@ -104,6 +93,16 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     name: 'WalletRegistry__InsufficientFee',
     message: 'Insufficient registration fee.',
     action: 'Please include the required fee.',
+  },
+  '0x0a17bc56': {
+    name: 'WalletRegistry__FeeTransferFailed',
+    message: 'Failed to transfer registration fee.',
+    action: 'Please try again or contact support.',
+  },
+  '0x4e71ab39': {
+    name: 'WalletRegistry__RefundFailed',
+    message: 'Failed to refund excess fee.',
+    action: 'Please try again or contact support.',
   },
   '0xa6565bcd': {
     name: 'WalletRegistry__ZeroAddress',
@@ -140,20 +139,10 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
   // TransactionRegistry Errors
   // ═══════════════════════════════════════════════════════════════════════════
 
-  '0xd37e23c3': {
-    name: 'TransactionRegistry__AlreadyRegistered',
-    message: 'This transaction batch is already registered.',
-    action: 'Search the registry to view its status.',
-  },
   '0x378855ef': {
     name: 'TransactionRegistry__AlreadyAcknowledged',
     message: 'This transaction batch already has a pending acknowledgement.',
     action: 'Complete the registration or wait for it to expire.',
-  },
-  '0xe72eb6fd': {
-    name: 'TransactionRegistry__NotAcknowledged',
-    message: 'No pending acknowledgement found.',
-    action: 'Please complete the acknowledgement step first.',
   },
   '0x2015cf13': {
     name: 'TransactionRegistry__DeadlineExpired',
@@ -174,11 +163,6 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     name: 'TransactionRegistry__InvalidSignature',
     message: 'Signature verification failed.',
     action: 'Please sign again with the correct wallet.',
-  },
-  '0x2f6ed989': {
-    name: 'TransactionRegistry__InvalidSigner',
-    message: 'Signer does not match the reporting wallet.',
-    action: 'Sign with the reporting wallet.',
   },
   '0x9e63d130': {
     name: 'TransactionRegistry__NotAuthorizedForwarder',
@@ -240,11 +224,6 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
   // ContractRegistry Errors
   // ═══════════════════════════════════════════════════════════════════════════
 
-  '0x5b6ca878': {
-    name: 'ContractRegistry__AlreadyRegistered',
-    message: 'This contract is already registered.',
-    action: 'Search the registry to view its status.',
-  },
   '0x047c1f80': {
     name: 'ContractRegistry__ZeroAddress',
     message: 'Invalid contract address provided.',
@@ -455,12 +434,17 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Data hash mismatch.',
     action: 'Your data may have changed. Please start over.',
   },
+  '0x9de3b4a9': {
+    name: 'SpokeRegistry__DataMismatch',
+    message: 'Registration data does not match acknowledgement.',
+    action: 'Please restart the registration flow.',
+  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CAIP10 Library Errors
   // ═══════════════════════════════════════════════════════════════════════════
 
-  '0xfd0a5b5c': {
+  '0xfd0a5b1e': {
     name: 'CAIP10__InvalidFormat',
     message: 'Invalid CAIP-10 identifier format.',
     action: 'Use namespace:chainId:address (eip155:8453:0x...).',
@@ -523,11 +507,6 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Invalid capability configuration.',
     action: 'Capabilities must be between 0x01 and 0x07.',
   },
-  '0x0790c247': {
-    name: 'OperatorRegistry__NotAuthorizedForRegistry',
-    message: 'Operator not authorized for this registry type.',
-    action: 'Contact DAO to request additional capabilities.',
-  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Soulbound Token Errors
@@ -542,7 +521,7 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Fee withdrawal failed.',
     action: 'Please try again.',
   },
-  '0xbb119f75': {
+  '0xbb0bac99': {
     name: 'InvalidFeeCollector',
     message: 'Invalid fee collector address.',
     action: 'Please contact support.',

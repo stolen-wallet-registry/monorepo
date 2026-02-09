@@ -98,6 +98,24 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       return;
     }
 
+    if (!relayerAddress) {
+      logger.p2p.error('Cannot submit REG - relayer wallet not connected');
+      return;
+    }
+
+    if (
+      storedSig.reportedChainId === undefined ||
+      storedSig.incidentTimestamp === undefined ||
+      storedSig.nonce === undefined
+    ) {
+      logger.p2p.error('Cannot submit REG - missing required signature fields', {
+        hasReportedChainId: storedSig.reportedChainId !== undefined,
+        hasIncidentTimestamp: storedSig.incidentTimestamp !== undefined,
+        hasNonce: storedSig.nonce !== undefined,
+      });
+      return;
+    }
+
     if (feeWei === undefined) {
       logger.p2p.error('Cannot submit registration - fee quote unavailable', {
         registeree,
@@ -110,15 +128,13 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     // Parse signature to v, r, s components
     const parsedSig = parseSignature(storedSig.signature);
 
-    // Get fields from stored signature - must be present
-    // If missing, it means P2P relay didn't transmit them correctly
     // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
-    const reportedChainId = storedSig.reportedChainId ?? BigInt(chainId);
-    const incidentTimestamp = storedSig.incidentTimestamp ?? 0n;
+    const reportedChainId = storedSig.reportedChainId;
+    const incidentTimestamp = storedSig.incidentTimestamp;
 
     await submitRegistration({
       registeree,
-      forwarder: relayerAddress!,
+      forwarder: relayerAddress,
       reportedChainId,
       incidentTimestamp,
       deadline: storedSig.deadline,

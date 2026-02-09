@@ -130,6 +130,7 @@ interface ISpokeRegistry {
     error SpokeRegistry__EmptyBatch();
     error SpokeRegistry__ArrayLengthMismatch();
     error SpokeRegistry__InvalidDataHash();
+    error SpokeRegistry__DataMismatch();
     error SpokeRegistry__InvalidStep();
 
     // ═══════════════════════════════════════════════════════════════════════════

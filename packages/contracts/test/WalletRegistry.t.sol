@@ -7,6 +7,8 @@ import { FraudRegistryHub } from "../src/FraudRegistryHub.sol";
 import { CAIP10 } from "../src/libraries/CAIP10.sol";
 import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
 import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
+import { FeeManager } from "../src/FeeManager.sol";
+import { MockAggregator } from "./mocks/MockAggregator.sol";
 
 /// @title WalletRegistryTest
 /// @notice Comprehensive tests for the WalletRegistry contract (hub-side wallet registry)
@@ -15,6 +17,9 @@ import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
 contract WalletRegistryTest is EIP712TestHelper {
     WalletRegistry public walletRegistry;
     FraudRegistryHub public hub;
+
+    // Allow test contract to receive ETH (needed for withdrawCollectedFees tests)
+    receive() external payable { }
 
     // Test accounts
     uint256 internal walletPrivateKey;
@@ -960,5 +965,59 @@ contract WalletRegistryTest is EIP712TestHelper {
         vm.prank(nonOwner);
         vm.expectRevert(); // OwnableUnauthorizedAccount
         walletRegistry.setOperatorSubmitter(makeAddr("newSubmitter"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FEE RECOVERY (Hub Not Configured)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice When feeManager is set but hub is not configured yet, required fee is held in the registry
+    ///         and can be recovered via withdrawCollectedFees().
+    function test_FeesHeldWhenHubUnset_CanWithdraw() public {
+        // Deploy fee infra
+        MockAggregator oracle = new MockAggregator(300_000_000_000); // $3000 (8 decimals)
+        FeeManager fm = new FeeManager(owner, address(oracle));
+
+        // Deploy a fresh wallet registry with feeManager and NO hub set
+        WalletRegistry feeRegistry = new WalletRegistry(owner, address(fm), GRACE_BLOCKS, DEADLINE_BLOCKS);
+
+        uint64 ts = uint64(block.timestamp - 1 days);
+
+        // Ack + advance past grace
+        {
+            uint256 deadline0 = block.timestamp + 1 hours;
+            uint256 nonce0 = feeRegistry.nonces(wallet);
+            (uint8 v0, bytes32 r0, bytes32 s0) = _signWalletAck(
+                walletPrivateKey, address(feeRegistry), wallet, forwarder, REPORTED_CHAIN_ID, ts, nonce0, deadline0
+            );
+            vm.prank(forwarder);
+            feeRegistry.acknowledge(wallet, forwarder, REPORTED_CHAIN_ID, ts, deadline0, nonce0, v0, r0, s0);
+        }
+
+        IWalletRegistry.AcknowledgementData memory ack = feeRegistry.getAcknowledgementData(wallet);
+        vm.roll(ack.gracePeriodStart);
+
+        // Register with exact required fee
+        uint256 fee = fm.currentFeeWei();
+        {
+            uint256 deadline1 = block.timestamp + 1 hours;
+            uint256 nonce1 = feeRegistry.nonces(wallet);
+            (uint8 v1, bytes32 r1, bytes32 s1) = _signWalletReg(
+                walletPrivateKey, address(feeRegistry), wallet, forwarder, REPORTED_CHAIN_ID, ts, nonce1, deadline1
+            );
+
+            vm.deal(forwarder, fee);
+            vm.prank(forwarder);
+            feeRegistry.register{ value: fee }(wallet, forwarder, REPORTED_CHAIN_ID, ts, deadline1, nonce1, v1, r1, s1);
+        }
+
+        // Fee should be held by the registry since hub is unset
+        assertEq(address(feeRegistry).balance, fee);
+
+        // Owner can withdraw
+        uint256 ownerBefore = owner.balance;
+        feeRegistry.withdrawCollectedFees();
+        assertEq(address(feeRegistry).balance, 0);
+        assertEq(owner.balance - ownerBefore, fee);
     }
 }

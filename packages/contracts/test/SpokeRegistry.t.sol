@@ -1120,7 +1120,7 @@ contract SpokeRegistryTest is Test {
         uint256 fee = spoke.quoteRegistration(wallet);
 
         vm.prank(forwarder);
-        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidForwarder.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__DataMismatch.selector);
         spoke.register{ value: fee }(wallet, forwarder, regChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
@@ -1144,7 +1144,7 @@ contract SpokeRegistryTest is Test {
         uint256 fee = spoke.quoteRegistration(wallet);
 
         vm.prank(forwarder);
-        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidForwarder.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__DataMismatch.selector);
         spoke.register{ value: fee }(wallet, forwarder, reportedChainId, regTimestamp, deadline, nonce, v, r, s);
     }
 

@@ -72,6 +72,8 @@ interface IWalletRegistry {
     error WalletRegistry__InvalidSigner();
     error WalletRegistry__NotAuthorizedForwarder();
     error WalletRegistry__InsufficientFee();
+    error WalletRegistry__FeeTransferFailed();
+    error WalletRegistry__RefundFailed();
     error WalletRegistry__InvalidNonce();
     error WalletRegistry__ZeroAddress();
     error WalletRegistry__OnlyHub();
@@ -234,6 +236,14 @@ interface IWalletRegistry {
         bytes32[] calldata reportedChainIds,
         uint64[] calldata incidentTimestamps
     ) external returns (uint256 batchId);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FEE RECOVERY (Safety Hatch)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Withdraw fees held when hub was not configured
+    /// @dev Only callable by owner. Sends entire contract balance to owner.
+    function withdrawCollectedFees() external;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - CAIP-10 String Interface

@@ -98,7 +98,7 @@ export function StandardRegistrationPage() {
   // Redirect if connected wallet is already registered (can't register same wallet twice)
   useEffect(() => {
     if (!isCheckingRegistration && connectedWalletRegistered) {
-      setLocation('/register/wallets');
+      setLocation('/register/wallet');
     }
   }, [isCheckingRegistration, connectedWalletRegistered, setLocation]);
 

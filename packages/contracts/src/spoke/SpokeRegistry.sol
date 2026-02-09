@@ -87,7 +87,6 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         uint256 _deadlineBlocks,
         uint8 _bridgeId
     ) EIP712("StolenWalletRegistry", "4") Ownable(_owner) {
-        if (_owner == address(0)) revert SpokeRegistry__ZeroAddress();
         if (_bridgeAdapter == address(0)) revert SpokeRegistry__ZeroAddress();
 
         // Validate timing: deadline must be >= 2*grace to ensure window always exists
@@ -217,8 +216,9 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         bytes32 r,
         bytes32 s
     ) internal view returns (bytes32 digest, bytes32 reportedChainIdHash) {
-        // Fail fast: reject zero address
+        // Fail fast: reject zero address and forwarder mismatch
         if (wallet == address(0)) revert SpokeRegistry__InvalidOwner();
+        if (forwarder != msg.sender) revert SpokeRegistry__InvalidForwarder();
 
         // Validate hub is configured
         if (hubInbox == bytes32(0)) revert SpokeRegistry__HubNotConfigured();
@@ -256,7 +256,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         // Convert uint64 to bytes32 hash for comparison and return
         reportedChainIdHash = CAIP10Evm.caip2Hash(reportedChainId);
         if (ack.reportedChainId != reportedChainIdHash || ack.incidentTimestamp != incidentTimestamp) {
-            revert SpokeRegistry__InvalidForwarder(); // Reuse error for data mismatch
+            revert SpokeRegistry__DataMismatch();
         }
     }
 
@@ -311,6 +311,9 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     }
 
     /// @inheritdoc ISpokeRegistry
+    /// @dev Unlike wallet acknowledge (which takes an explicit `forwarder` param for self-relay/P2P relay),
+    ///      transaction batches hardcode msg.sender as forwarder. This is intentional: transaction batch
+    ///      registration doesn't support third-party forwarding — the reporter submits directly.
     function acknowledgeTransactionBatch(
         bytes32 dataHash,
         bytes32 reportedChainId,

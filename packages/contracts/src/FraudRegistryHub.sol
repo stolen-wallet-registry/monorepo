@@ -136,7 +136,10 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
 
         // Determine type based on identifier length
         // 42 chars (0x + 40 hex) = EVM address (20 bytes)
-        // 64 chars (no 0x) or 66 chars (0x + 64 hex) = transaction hash (32 bytes)
+        // 66 chars (0x + 64 hex) = transaction hash (32 bytes)
+        //
+        // NOTE: We intentionally do NOT accept 64-char (no 0x) transaction hashes.
+        // Enforcing a single canonical format avoids ambiguous client behavior.
 
         if (addrLen == 42) {
             // Could be wallet or contract - check both
@@ -151,7 +154,7 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
                 }
             }
             return false;
-        } else if (addrLen == 64 || addrLen == 66) {
+        } else if (addrLen == 66) {
             // Transaction hash
             if (transactionRegistry != address(0)) {
                 return ITransactionRegistry(transactionRegistry).isTransactionRegistered(caip10);
@@ -159,7 +162,7 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
             return false;
         }
 
-        return false;
+        revert FraudRegistryHub__InvalidIdentifierLength();
     }
 
     /// @inheritdoc IFraudRegistryHub
@@ -181,7 +184,7 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
                 isContract = true;
                 count++;
             }
-        } else if (addrLen == 64 || addrLen == 66) {
+        } else if (addrLen == 66) {
             if (
                 transactionRegistry != address(0)
                     && ITransactionRegistry(transactionRegistry).isTransactionRegistered(caip10)
@@ -189,6 +192,8 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
                 isTransaction = true;
                 count++;
             }
+        } else {
+            revert FraudRegistryHub__InvalidIdentifierLength();
         }
 
         registeredIn = new RegistryType[](count);

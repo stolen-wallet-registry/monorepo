@@ -86,11 +86,7 @@ contract FraudRegistryHubTest is Test {
         return string(buffer);
     }
 
-    function _buildWalletCaip10(address addr, uint64 chainId) internal pure returns (string memory) {
-        return string(abi.encodePacked("eip155:", uint256(chainId).toString(), ":", _addressToLowerHex(addr)));
-    }
-
-    function _buildContractCaip10(address addr, uint64 chainId) internal pure returns (string memory) {
+    function _buildCaip10(address addr, uint64 chainId) internal pure returns (string memory) {
         return string(abi.encodePacked("eip155:", uint256(chainId).toString(), ":", _addressToLowerHex(addr)));
     }
 
@@ -287,7 +283,7 @@ contract FraudRegistryHubTest is Test {
         _registerWalletViaOperator(wallet);
 
         // Query with CAIP-10 string (42-char address identifier)
-        string memory caip10 = _buildWalletCaip10(wallet, CHAIN_ID);
+        string memory caip10 = _buildCaip10(wallet, CHAIN_ID);
         assertTrue(hub.isRegistered(caip10), "Hub should find wallet via CAIP-10 string");
     }
 
@@ -307,15 +303,46 @@ contract FraudRegistryHubTest is Test {
         _registerContractViaOperator(malicious);
 
         // Query with CAIP-10 string (42-char address identifier)
-        string memory caip10 = _buildContractCaip10(malicious, CHAIN_ID);
+        string memory caip10 = _buildCaip10(malicious, CHAIN_ID);
         assertTrue(hub.isRegistered(caip10), "Hub should find contract via CAIP-10 string");
     }
 
     /// @notice isRegistered returns false for unknown identifiers
     function test_IsRegistered_ReturnsFalseForUnknown() public {
         address unknown = makeAddr("unknown");
-        string memory caip10 = _buildWalletCaip10(unknown, CHAIN_ID);
+        string memory caip10 = _buildCaip10(unknown, CHAIN_ID);
         assertFalse(hub.isRegistered(caip10), "Hub should return false for unregistered identifier");
+    }
+
+    /// @notice isRegistered reverts for non-canonical tx refs (missing 0x prefix, 64 hex chars)
+    function test_IsRegistered_RevertsForTxRefMissing0x() public {
+        // 64 hex chars, no 0x prefix
+        string memory no0x = string(
+            abi.encodePacked(
+                "eip155:",
+                uint256(CHAIN_ID).toString(),
+                ":",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            )
+        );
+
+        vm.expectRevert(IFraudRegistryHub.FraudRegistryHub__InvalidIdentifierLength.selector);
+        hub.isRegistered(no0x);
+    }
+
+    /// @notice getRegisteredTypes reverts for non-canonical tx refs (missing 0x prefix)
+    function test_GetRegisteredTypes_RevertsForTxRefMissing0x() public {
+        string memory no0x = string(
+            abi.encodePacked(
+                "eip155:",
+                uint256(CHAIN_ID).toString(),
+                ":",
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            )
+        );
+
+        vm.expectRevert(IFraudRegistryHub.FraudRegistryHub__InvalidIdentifierLength.selector);
+        hub.getRegisteredTypes(no0x);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -636,7 +663,7 @@ contract FraudRegistryHubTest is Test {
         address wallet = makeAddr("typesWallet");
         _registerWalletViaOperator(wallet);
 
-        string memory caip10 = _buildWalletCaip10(wallet, CHAIN_ID);
+        string memory caip10 = _buildCaip10(wallet, CHAIN_ID);
         IFraudRegistryHub.RegistryType[] memory types = hub.getRegisteredTypes(caip10);
 
         assertEq(types.length, 1, "Should have exactly 1 type");
@@ -658,7 +685,7 @@ contract FraudRegistryHubTest is Test {
     /// @notice getRegisteredTypes returns empty array for unknown identifier
     function test_GetRegisteredTypes_Empty() public {
         address unknown = makeAddr("typesUnknown");
-        string memory caip10 = _buildWalletCaip10(unknown, CHAIN_ID);
+        string memory caip10 = _buildCaip10(unknown, CHAIN_ID);
 
         IFraudRegistryHub.RegistryType[] memory types = hub.getRegisteredTypes(caip10);
         assertEq(types.length, 0, "Should return empty array for unregistered identifier");

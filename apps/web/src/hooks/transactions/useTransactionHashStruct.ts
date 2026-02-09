@@ -120,27 +120,29 @@ export function useTransactionHashStruct(
     });
   }
 
-  // Transform result to standard format
-  let transformedData: TxHashStructData | undefined;
-  if (result.data && Array.isArray(result.data) && result.data.length >= 2) {
-    const [deadline, hashStruct] = result.data as [bigint, Hash];
-    transformedData = { deadline, hashStruct };
+  // Transform raw contract result to typed format
+  const transformResult = (raw: unknown): TxHashStructData | undefined => {
+    if (raw && Array.isArray(raw) && raw.length >= 2) {
+      const [deadline, hashStruct] = raw as [bigint, Hash];
+      return { deadline, hashStruct };
+    }
+    return undefined;
+  };
+
+  const transformedData = transformResult(result.data);
+  if (transformedData) {
     logger.contract.debug('generateTransactionHashStruct call succeeded', {
       chainId,
       contractAddress,
       isSpoke,
-      deadline: deadline.toString(),
+      deadline: transformedData.deadline.toString(),
     });
   }
 
   // Wrap refetch to return properly typed result
   const refetch = async (): Promise<TxHashStructRefetchResult> => {
     const refetchResult = await result.refetch();
-    let refetchedData: TxHashStructData | undefined;
-    if (refetchResult.data && Array.isArray(refetchResult.data) && refetchResult.data.length >= 2) {
-      const [deadline, hashStruct] = refetchResult.data as [bigint, Hash];
-      refetchedData = { deadline, hashStruct };
-    }
+    const refetchedData = transformResult(refetchResult.data);
     return {
       data: refetchedData,
       status: refetchResult.status === 'success' ? 'success' : 'error',

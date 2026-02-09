@@ -118,11 +118,13 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
             revert WalletRegistry__InsufficientFee();
         }
 
-        // Forward to hub (which collects all fees)
+        // Forward to hub (which aggregates fees). If hub is not configured yet,
+        // the required fee remains in this contract and can be recovered via
+        // withdrawCollectedFees().
         if (hub != address(0)) {
             (bool success,) = hub.call{ value: requiredFee }("");
             if (!success) {
-                revert WalletRegistry__InsufficientFee();
+                revert WalletRegistry__FeeTransferFailed();
             }
         }
 
@@ -131,9 +133,18 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         if (excess > 0) {
             (bool refundSuccess,) = msg.sender.call{ value: excess }("");
             if (!refundSuccess) {
-                revert WalletRegistry__InsufficientFee();
+                revert WalletRegistry__RefundFailed();
             }
         }
+    }
+
+    /// @notice Withdraw fees held when hub was not configured
+    /// @dev Only callable by owner. Sends entire contract balance to owner.
+    function withdrawCollectedFees() external onlyOwner {
+        uint256 balance = address(this).balance;
+        if (balance == 0) return;
+        (bool success,) = msg.sender.call{ value: balance }("");
+        if (!success) revert WalletRegistry__FeeTransferFailed();
     }
 
     /// @dev Internal helper to verify acknowledgement signature (reduces stack depth)
@@ -438,7 +449,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
 
         // Load and validate acknowledgement (ack.deadline and ack.gracePeriodStart are BLOCK NUMBERS)
         AcknowledgementData memory ack = _pendingAcknowledgements[registeree];
-        if (ack.forwarder != msg.sender) revert WalletRegistry__NotAuthorizedForwarder();
+        if (ack.forwarder != msg.sender || forwarder != msg.sender) revert WalletRegistry__NotAuthorizedForwarder();
         if (block.number < ack.gracePeriodStart) revert WalletRegistry__GracePeriodNotStarted();
         if (block.number >= ack.deadline) revert WalletRegistry__DeadlineExpired();
 

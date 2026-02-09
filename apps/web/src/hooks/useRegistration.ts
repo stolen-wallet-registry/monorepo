@@ -119,7 +119,7 @@ export function useRegistration(): UseRegistrationResult {
       functionName,
       registeree,
       forwarder,
-      reportedChainId,
+      reportedChainId: reportedChainId.toString(),
       incidentTimestamp: incidentTimestamp.toString(),
       deadline: deadline.toString(),
       nonce: nonce.toString(),

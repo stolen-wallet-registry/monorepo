@@ -17,7 +17,10 @@ abstract contract EIP712TestHelper is Test {
 
     string internal constant DOMAIN_VERSION = "4";
 
-    // Domain names must match the production contracts
+    // Domain names must match the production contracts.
+    // WALLET_DOMAIN_NAME is used by WalletRegistry, TransactionRegistry, and SpokeRegistry (wallet flow).
+    // TX_DOMAIN_NAME is used by SpokeRegistry's transaction batch flow only.
+    // Note: Hub-side TransactionRegistry uses WALLET_DOMAIN_NAME ("StolenWalletRegistry") as its domain.
     string internal constant WALLET_DOMAIN_NAME = "StolenWalletRegistry";
     string internal constant TX_DOMAIN_NAME = "StolenTransactionRegistry";
 

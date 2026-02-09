@@ -104,6 +104,14 @@ export function useAcknowledgement(): UseAcknowledgementResult {
     // Use metadata for correct function name based on chain type
     const functionName = functions.acknowledge;
 
+    if (!functionName) {
+      logger.contract.error('useAcknowledgement: Missing acknowledge function in metadata', {
+        chainId,
+        registryType,
+      });
+      throw new Error('Acknowledgement function not configured for this registry type');
+    }
+
     logger.registration.info('Submitting acknowledgement transaction', {
       chainId,
       registryType,

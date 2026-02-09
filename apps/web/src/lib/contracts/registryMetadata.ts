@@ -13,11 +13,11 @@
  * @example
  * ```ts
  * // Before (duplicated in each hook)
- * const abi = registryType === 'spoke' ? spokeRegistryAbi : walletRegistryAbi;
- * const functionName = registryType === 'spoke' ? 'acknowledge' : 'acknowledge';
+ * const abi = registryType === 'spoke' ? spokeRegistryAbi : transactionRegistryAbi;
+ * const functionName = registryType === 'spoke' ? 'acknowledgeTransactionBatch' : 'acknowledgeTransactions';
  *
  * // After (using metadata)
- * const { abi, functions } = getRegistryMetadata('wallet', registryType);
+ * const { abi, functions } = getRegistryMetadata('transaction', registryType);
  * const functionName = functions.acknowledge;
  * ```
  */
