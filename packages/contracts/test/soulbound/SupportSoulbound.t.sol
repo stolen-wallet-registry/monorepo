@@ -33,14 +33,15 @@ contract SupportSoulboundTest is Test {
         vm.deal(supporter2, 10 ether);
 
         // Deploy dependencies
-        translations = new TranslationRegistry();
+        translations = new TranslationRegistry(address(this));
         // Add Spanish for multilingual testing
         translations.addLanguage(
             "es", "CARTERA ROBADA", "Firmado como robado", "Gracias por tu apoyo", "No envie fondos", "Registro"
         );
 
         // Deploy soulbound contract
-        soulbound = new SupportSoulbound(MIN_WEI, address(translations), feeCollector, "stolenwallet.xyz");
+        soulbound =
+            new SupportSoulbound(MIN_WEI, address(translations), feeCollector, "stolenwallet.xyz", address(this));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

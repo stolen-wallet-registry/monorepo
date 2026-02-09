@@ -82,13 +82,15 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
     /// @param _translations Address of the TranslationRegistry contract
     /// @param _feeCollector Address to receive withdrawn fees
     /// @param _domain Domain to display in SVG (e.g., "stolenwallet.xyz")
+    /// @param _initialOwner Address that will own this contract
     constructor(
         string memory name_,
         string memory symbol_,
         address _translations,
         address _feeCollector,
-        string memory _domain
-    ) ERC721(name_, symbol_) Ownable(msg.sender) {
+        string memory _domain,
+        address _initialOwner
+    ) ERC721(name_, symbol_) Ownable(_initialOwner) {
         if (_translations == address(0)) revert InvalidTranslations();
         if (_feeCollector == address(0)) revert InvalidFeeCollector();
 

@@ -68,9 +68,14 @@ contract SupportSoulbound is BaseSoulbound {
     /// @param _translations Address of the TranslationRegistry contract
     /// @param _feeCollector Address to receive fees
     /// @param _domain Domain to display in SVG (e.g., "stolenwallet.xyz")
-    constructor(uint256 _minWei, address _translations, address _feeCollector, string memory _domain)
-        BaseSoulbound("SWR Support Soulbound", "SWRS", _translations, _feeCollector, _domain)
-    {
+    /// @param _initialOwner Address that will own this contract
+    constructor(
+        uint256 _minWei,
+        address _translations,
+        address _feeCollector,
+        string memory _domain,
+        address _initialOwner
+    ) BaseSoulbound("SWR Support Soulbound", "SWRS", _translations, _feeCollector, _domain, _initialOwner) {
         if (_minWei == 0) revert InvalidMinWei();
         minWei = _minWei;
     }

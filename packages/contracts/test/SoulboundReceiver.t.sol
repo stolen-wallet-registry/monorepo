@@ -61,15 +61,16 @@ contract SoulboundReceiverTest is Test {
         mailbox = new MockMailbox(HUB_CHAIN_ID);
 
         // Deploy translation registry (has built-in English)
-        translations = new TranslationRegistry();
+        translations = new TranslationRegistry(owner);
 
         // Deploy mock wallet registry
         mockRegistry = new MockWalletRegistry();
 
         // Deploy soulbound contracts
-        walletSoulbound = new WalletSoulbound(address(mockRegistry), address(translations), owner, "stolenwallet.xyz");
+        walletSoulbound =
+            new WalletSoulbound(address(mockRegistry), address(translations), owner, "stolenwallet.xyz", owner);
 
-        supportSoulbound = new SupportSoulbound(MIN_WEI, address(translations), owner, "stolenwallet.xyz");
+        supportSoulbound = new SupportSoulbound(MIN_WEI, address(translations), owner, "stolenwallet.xyz", owner);
 
         // Deploy receiver
         receiver = new SoulboundReceiver(owner, address(mailbox), address(walletSoulbound), address(supportSoulbound));

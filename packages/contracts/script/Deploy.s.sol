@@ -29,6 +29,10 @@ import { SpokeSoulboundForwarder } from "../src/spoke/SpokeSoulboundForwarder.so
 import { MockInterchainGasPaymaster } from "../test/mocks/MockInterchainGasPaymaster.sol";
 import { MockAggregator, Multicall3 } from "./DeployBase.s.sol";
 
+// CREATE2 deterministic deployment
+import { Create2Deployer } from "./Create2Deployer.sol";
+import { Salts } from "./Salts.sol";
+
 /// @title Deploy
 /// @notice Deployment script for FraudRegistryHub hub and spoke contracts
 /// @dev Run with: forge script script/Deploy.s.sol --tc Deploy --broadcast
@@ -184,6 +188,7 @@ contract Deploy is Script {
         console2.log("--- HUB CHAIN (31337) - Core Contracts ---");
 
         vm.selectFork(hubForkId);
+        _ensureCreate2Factory();
         vm.startBroadcast(deployerPrivateKey);
 
         // Get timing config for hub chain
@@ -192,119 +197,161 @@ contract Deploy is Script {
         console2.log("Timing - Deadline Blocks:", hubDeadlineBlocks);
 
         // 1. Deploy MockAggregator (price feed for FeeManager)
-        MockAggregator mockAggregator = new MockAggregator(350_000_000_000); // $3500 ETH
-        hubMockAggregatorAddr = address(mockAggregator);
+        hubMockAggregatorAddr = Create2Deployer.deploy(
+            Salts.MOCK_AGGREGATOR,
+            abi.encodePacked(type(MockAggregator).creationCode, abi.encode(int256(350_000_000_000)))
+        );
         console2.log("1. MockAggregator:", hubMockAggregatorAddr);
 
         // 2. Deploy FeeManager
-        FeeManager feeManager = new FeeManager(deployer, hubMockAggregatorAddr);
-        hubFeeManagerAddr = address(feeManager);
+        hubFeeManagerAddr = Create2Deployer.deploy(
+            Salts.FEE_MANAGER,
+            abi.encodePacked(type(FeeManager).creationCode, abi.encode(deployer, hubMockAggregatorAddr))
+        );
         console2.log("2. FeeManager:", hubFeeManagerAddr);
 
         // 3. Deploy OperatorRegistry
-        OperatorRegistry operatorRegistry = new OperatorRegistry(deployer);
-        hubOperatorRegistryAddr = address(operatorRegistry);
+        hubOperatorRegistryAddr = Create2Deployer.deploy(
+            Salts.OPERATOR_REGISTRY, abi.encodePacked(type(OperatorRegistry).creationCode, abi.encode(deployer))
+        );
         console2.log("3. OperatorRegistry:", hubOperatorRegistryAddr);
 
         // 4. Deploy FraudRegistryHub (entry point and fee aggregator)
-        FraudRegistryHub hub = new FraudRegistryHub(deployer, deployer);
-        hubAddr = address(hub);
+        hubAddr = Create2Deployer.deploy(
+            Salts.FRAUD_REGISTRY_HUB,
+            abi.encodePacked(type(FraudRegistryHub).creationCode, abi.encode(deployer, deployer))
+        );
         console2.log("4. FraudRegistryHub:", hubAddr);
 
         // 5. Deploy WalletRegistry
-        WalletRegistry walletRegistry =
-            new WalletRegistry(deployer, hubFeeManagerAddr, hubGraceBlocks, hubDeadlineBlocks);
-        walletRegistryAddr = address(walletRegistry);
+        walletRegistryAddr = Create2Deployer.deploy(
+            Salts.WALLET_REGISTRY,
+            abi.encodePacked(
+                type(WalletRegistry).creationCode,
+                abi.encode(deployer, hubFeeManagerAddr, hubGraceBlocks, hubDeadlineBlocks)
+            )
+        );
         console2.log("5. WalletRegistry:", walletRegistryAddr);
 
         // 6. Deploy TransactionRegistry
-        TransactionRegistry transactionRegistry =
-            new TransactionRegistry(deployer, hubFeeManagerAddr, hubGraceBlocks, hubDeadlineBlocks);
-        transactionRegistryAddr = address(transactionRegistry);
+        transactionRegistryAddr = Create2Deployer.deploy(
+            Salts.TX_REGISTRY,
+            abi.encodePacked(
+                type(TransactionRegistry).creationCode,
+                abi.encode(deployer, hubFeeManagerAddr, hubGraceBlocks, hubDeadlineBlocks)
+            )
+        );
         console2.log("6. TransactionRegistry:", transactionRegistryAddr);
 
         // 7. Deploy ContractRegistry
-        ContractRegistry contractRegistry = new ContractRegistry(deployer);
-        contractRegistryAddr = address(contractRegistry);
+        contractRegistryAddr = Create2Deployer.deploy(
+            Salts.CONTRACT_REGISTRY, abi.encodePacked(type(ContractRegistry).creationCode, abi.encode(deployer))
+        );
         console2.log("7. ContractRegistry:", contractRegistryAddr);
 
         // 8. Deploy OperatorSubmitter (references all 3 registries)
-        OperatorSubmitter operatorSubmitter = new OperatorSubmitter(
-            deployer,
-            walletRegistryAddr,
-            transactionRegistryAddr,
-            contractRegistryAddr,
-            hubOperatorRegistryAddr,
-            hubFeeManagerAddr,
-            deployer
+        operatorSubmitterAddr = Create2Deployer.deploy(
+            Salts.OPERATOR_SUBMITTER,
+            abi.encodePacked(
+                type(OperatorSubmitter).creationCode,
+                abi.encode(
+                    deployer,
+                    walletRegistryAddr,
+                    transactionRegistryAddr,
+                    contractRegistryAddr,
+                    hubOperatorRegistryAddr,
+                    hubFeeManagerAddr,
+                    deployer
+                )
+            )
         );
-        operatorSubmitterAddr = address(operatorSubmitter);
         console2.log("8. OperatorSubmitter:", operatorSubmitterAddr);
 
         // 9. Deploy CrossChainInbox
-        CrossChainInbox inbox = new CrossChainInbox(hubMailbox, hubAddr, deployer);
-        crossChainInboxAddr = address(inbox);
+        crossChainInboxAddr = Create2Deployer.deploy(
+            Salts.CROSS_CHAIN_INBOX,
+            abi.encodePacked(type(CrossChainInbox).creationCode, abi.encode(hubMailbox, hubAddr, deployer))
+        );
         console2.log("9. CrossChainInbox:", crossChainInboxAddr);
 
         // 10. Wire Hub to registries
-        hub.setWalletRegistry(walletRegistryAddr);
-        hub.setTransactionRegistry(transactionRegistryAddr);
-        hub.setContractRegistry(contractRegistryAddr);
-        hub.setInbox(crossChainInboxAddr);
+        FraudRegistryHub(payable(hubAddr)).setWalletRegistry(walletRegistryAddr);
+        FraudRegistryHub(payable(hubAddr)).setTransactionRegistry(transactionRegistryAddr);
+        FraudRegistryHub(payable(hubAddr)).setContractRegistry(contractRegistryAddr);
+        FraudRegistryHub(payable(hubAddr)).setInbox(crossChainInboxAddr);
         console2.log("   -> Hub wired to registries and inbox");
 
         // 11. Wire registries to Hub and OperatorSubmitter
-        walletRegistry.setHub(hubAddr);
-        walletRegistry.setOperatorSubmitter(operatorSubmitterAddr);
-        transactionRegistry.setHub(hubAddr);
-        transactionRegistry.setOperatorSubmitter(operatorSubmitterAddr);
-        contractRegistry.setOperatorSubmitter(operatorSubmitterAddr);
+        WalletRegistry(walletRegistryAddr).setHub(hubAddr);
+        WalletRegistry(walletRegistryAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        TransactionRegistry(transactionRegistryAddr).setHub(hubAddr);
+        TransactionRegistry(transactionRegistryAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        ContractRegistry(contractRegistryAddr).setOperatorSubmitter(operatorSubmitterAddr);
         console2.log("   -> Registries wired to Hub and OperatorSubmitter");
 
         // 12. Deploy Multicall3 (for local chains only)
-        hubMulticall3Addr = _deployMulticall3();
+        hubMulticall3Addr = _deployMulticall3(Salts.MULTICALL3);
         console2.log("10. Multicall3:", hubMulticall3Addr);
 
         console2.log("");
         console2.log("--- HUB CHAIN (31337) - Soulbound Contracts ---");
 
         // 13. Deploy TranslationRegistry
-        TranslationRegistry translationRegistry = new TranslationRegistry();
-        translationRegistryAddr = address(translationRegistry);
+        translationRegistryAddr = Create2Deployer.deploy(
+            Salts.TRANSLATION_REGISTRY, abi.encodePacked(type(TranslationRegistry).creationCode, abi.encode(deployer))
+        );
         console2.log("11. TranslationRegistry:", translationRegistryAddr);
 
         // 14. Deploy WalletSoulbound (gated by WalletRegistry)
-        WalletSoulbound walletSoulbound =
-            new WalletSoulbound(walletRegistryAddr, translationRegistryAddr, deployer, DEFAULT_DOMAIN);
-        walletSoulboundAddr = address(walletSoulbound);
+        walletSoulboundAddr = Create2Deployer.deploy(
+            Salts.WALLET_SOULBOUND,
+            abi.encodePacked(
+                type(WalletSoulbound).creationCode,
+                abi.encode(walletRegistryAddr, translationRegistryAddr, deployer, DEFAULT_DOMAIN, deployer)
+            )
+        );
         console2.log("12. WalletSoulbound:", walletSoulboundAddr);
 
         // 15. Deploy SupportSoulbound
-        SupportSoulbound supportSoulbound =
-            new SupportSoulbound(MIN_DONATION, translationRegistryAddr, deployer, DEFAULT_DOMAIN);
-        supportSoulboundAddr = address(supportSoulbound);
+        supportSoulboundAddr = Create2Deployer.deploy(
+            Salts.SUPPORT_SOULBOUND,
+            abi.encodePacked(
+                type(SupportSoulbound).creationCode,
+                abi.encode(MIN_DONATION, translationRegistryAddr, deployer, DEFAULT_DOMAIN, deployer)
+            )
+        );
         console2.log("13. SupportSoulbound:", supportSoulboundAddr);
 
         // 16. Deploy SoulboundReceiver
-        SoulboundReceiver soulboundReceiver =
-            new SoulboundReceiver(deployer, hubMailbox, walletSoulboundAddr, supportSoulboundAddr);
-        soulboundReceiverAddr = address(soulboundReceiver);
+        soulboundReceiverAddr = Create2Deployer.deploy(
+            Salts.SOULBOUND_RECEIVER,
+            abi.encodePacked(
+                type(SoulboundReceiver).creationCode,
+                abi.encode(deployer, hubMailbox, walletSoulboundAddr, supportSoulboundAddr)
+            )
+        );
         console2.log("14. SoulboundReceiver:", soulboundReceiverAddr);
 
         // 17. Authorize SoulboundReceiver to mint on SupportSoulbound
-        supportSoulbound.setAuthorizedMinter(soulboundReceiverAddr, true);
+        SupportSoulbound(supportSoulboundAddr).setAuthorizedMinter(soulboundReceiverAddr, true);
         console2.log("    -> SoulboundReceiver authorized to mint SupportSoulbound");
 
         console2.log("");
         console2.log("--- HUB CHAIN (31337) - Operator Seeding ---");
 
         // 18. Approve test operators (Anvil accounts 3 and 4)
-        operatorRegistry.approveOperator(OPERATOR_A, operatorRegistry.ALL_REGISTRIES(), "TestOperatorA-ALL");
+        OperatorRegistry(hubOperatorRegistryAddr)
+            .approveOperator(
+                OPERATOR_A, OperatorRegistry(hubOperatorRegistryAddr).ALL_REGISTRIES(), "TestOperatorA-ALL"
+            );
         console2.log("15. Operator A (ALL):", OPERATOR_A);
 
-        operatorRegistry.approveOperator(OPERATOR_B, operatorRegistry.CONTRACT_REGISTRY(), "TestOperatorB-CONTRACT");
+        OperatorRegistry(hubOperatorRegistryAddr)
+            .approveOperator(
+                OPERATOR_B, OperatorRegistry(hubOperatorRegistryAddr).CONTRACT_REGISTRY(), "TestOperatorB-CONTRACT"
+            );
         console2.log("16. Operator B (CONTRACT):", OPERATOR_B);
-        console2.log("    Approved operator count:", operatorRegistry.approvedOperatorCount());
+        console2.log("    Approved operator count:", OperatorRegistry(hubOperatorRegistryAddr).approvedOperatorCount());
 
         vm.stopBroadcast();
         console2.log("");
@@ -316,6 +363,7 @@ contract Deploy is Script {
         console2.log("--- SPOKE CHAIN (31338) - Core Contracts ---");
 
         vm.selectFork(spokeForkId);
+        _ensureCreate2Factory();
         vm.startBroadcast(deployerPrivateKey);
 
         // Get timing config for spoke chain
@@ -324,53 +372,68 @@ contract Deploy is Script {
         console2.log("Timing - Deadline Blocks:", spokeDeadlineBlocks);
 
         // 1. Deploy MockInterchainGasPaymaster
-        spokeGasPaymaster = address(new MockInterchainGasPaymaster());
+        spokeGasPaymaster =
+            Create2Deployer.deploy(Salts.MOCK_GAS_PAYMASTER, type(MockInterchainGasPaymaster).creationCode);
         console2.log("1. MockInterchainGasPaymaster:", spokeGasPaymaster);
 
         // 2. Deploy HyperlaneAdapter
-        HyperlaneAdapter adapter = new HyperlaneAdapter(deployer, spokeMailbox, spokeGasPaymaster);
-        hyperlaneAdapterAddr = address(adapter);
+        hyperlaneAdapterAddr = Create2Deployer.deploy(
+            Salts.HYPERLANE_ADAPTER,
+            abi.encodePacked(type(HyperlaneAdapter).creationCode, abi.encode(deployer, spokeMailbox, spokeGasPaymaster))
+        );
         console2.log("2. HyperlaneAdapter:", hyperlaneAdapterAddr);
 
         // 3. Enable hub chain as destination
-        adapter.setDomainSupport(HUB_CHAIN_ID, true);
+        HyperlaneAdapter(hyperlaneAdapterAddr).setDomainSupport(HUB_CHAIN_ID, true);
         console2.log("   -> Hub chain", HUB_CHAIN_ID, "enabled as destination");
 
         // 4. Deploy MockAggregator for spoke (price feed)
-        MockAggregator spokeMockAggregator = new MockAggregator(350_000_000_000); // $3500 ETH
-        spokeMockAggregatorAddr = address(spokeMockAggregator);
+        spokeMockAggregatorAddr = Create2Deployer.deploy(
+            Salts.MOCK_AGGREGATOR_SPOKE,
+            abi.encodePacked(type(MockAggregator).creationCode, abi.encode(int256(350_000_000_000)))
+        );
         console2.log("3. MockAggregator (Spoke):", spokeMockAggregatorAddr);
 
         // 5. Deploy FeeManager for spoke
-        FeeManager spokeFeeManager = new FeeManager(deployer, spokeMockAggregatorAddr);
-        spokeFeeManagerAddr = address(spokeFeeManager);
+        spokeFeeManagerAddr = Create2Deployer.deploy(
+            Salts.SPOKE_FEE_MANAGER,
+            abi.encodePacked(type(FeeManager).creationCode, abi.encode(deployer, spokeMockAggregatorAddr))
+        );
         console2.log("4. FeeManager (Spoke):", spokeFeeManagerAddr);
 
         // 6. Deploy SpokeRegistry (with feeManager)
         bytes32 inboxBytes = _addressToBytes32(crossChainInboxAddr);
-        SpokeRegistry spoke = new SpokeRegistry(
-            deployer,
-            hyperlaneAdapterAddr,
-            spokeFeeManagerAddr,
-            HUB_CHAIN_ID,
-            inboxBytes,
-            spokeGraceBlocks,
-            spokeDeadlineBlocks,
-            BRIDGE_ID_HYPERLANE
+        spokeRegistryAddr = Create2Deployer.deploy(
+            Salts.SPOKE_REGISTRY,
+            abi.encodePacked(
+                type(SpokeRegistry).creationCode,
+                abi.encode(
+                    deployer,
+                    hyperlaneAdapterAddr,
+                    spokeFeeManagerAddr,
+                    HUB_CHAIN_ID,
+                    inboxBytes,
+                    spokeGraceBlocks,
+                    spokeDeadlineBlocks,
+                    BRIDGE_ID_HYPERLANE
+                )
+            )
         );
-        spokeRegistryAddr = address(spoke);
         console2.log("5. SpokeRegistry:", spokeRegistryAddr);
 
         // 7. Deploy SpokeSoulboundForwarder
         bytes32 soulboundReceiverBytes = _addressToBytes32(soulboundReceiverAddr);
-        SpokeSoulboundForwarder spokeSoulboundForwarder = new SpokeSoulboundForwarder(
-            deployer, hyperlaneAdapterAddr, HUB_CHAIN_ID, soulboundReceiverBytes, MIN_DONATION
+        spokeSoulboundForwarderAddr = Create2Deployer.deploy(
+            Salts.SPOKE_SOULBOUND_FWD,
+            abi.encodePacked(
+                type(SpokeSoulboundForwarder).creationCode,
+                abi.encode(deployer, hyperlaneAdapterAddr, HUB_CHAIN_ID, soulboundReceiverBytes, MIN_DONATION)
+            )
         );
-        spokeSoulboundForwarderAddr = address(spokeSoulboundForwarder);
         console2.log("6. SpokeSoulboundForwarder:", spokeSoulboundForwarderAddr);
 
         // 8. Deploy Multicall3 (for local chains only)
-        spokeMulticall3Addr = _deployMulticall3();
+        spokeMulticall3Addr = _deployMulticall3(Salts.MULTICALL3_SPOKE);
         console2.log("7. Multicall3 (Spoke):", spokeMulticall3Addr);
 
         vm.stopBroadcast();
@@ -488,46 +551,71 @@ contract Deploy is Script {
         console2.log("Deadline Blocks:", _tempDeadlineBlocks);
         console2.log("");
 
+        _ensureCreate2Factory();
         vm.startBroadcast(privKey);
 
         // 1. Deploy OperatorRegistry
-        address operatorRegAddr = address(new OperatorRegistry(_deployer));
+        address operatorRegAddr = Create2Deployer.deploy(
+            Salts.OPERATOR_REGISTRY, abi.encodePacked(type(OperatorRegistry).creationCode, abi.encode(_deployer))
+        );
         console2.log("1. OperatorRegistry:", operatorRegAddr);
 
         // 2. Deploy FraudRegistryHub
-        address hubDeployedAddr = address(new FraudRegistryHub(_deployer, _tempFeeRecipient));
+        address hubDeployedAddr = Create2Deployer.deploy(
+            Salts.FRAUD_REGISTRY_HUB,
+            abi.encodePacked(type(FraudRegistryHub).creationCode, abi.encode(_deployer, _tempFeeRecipient))
+        );
         console2.log("2. FraudRegistryHub:", hubDeployedAddr);
 
         // 3. Deploy WalletRegistry
-        address walletRegAddr =
-            address(new WalletRegistry(_deployer, _tempFeeManager, _tempGraceBlocks, _tempDeadlineBlocks));
+        address walletRegAddr = Create2Deployer.deploy(
+            Salts.WALLET_REGISTRY,
+            abi.encodePacked(
+                type(WalletRegistry).creationCode,
+                abi.encode(_deployer, _tempFeeManager, _tempGraceBlocks, _tempDeadlineBlocks)
+            )
+        );
         console2.log("3. WalletRegistry:", walletRegAddr);
 
         // 4. Deploy TransactionRegistry
-        address txRegAddr =
-            address(new TransactionRegistry(_deployer, _tempFeeManager, _tempGraceBlocks, _tempDeadlineBlocks));
+        address txRegAddr = Create2Deployer.deploy(
+            Salts.TX_REGISTRY,
+            abi.encodePacked(
+                type(TransactionRegistry).creationCode,
+                abi.encode(_deployer, _tempFeeManager, _tempGraceBlocks, _tempDeadlineBlocks)
+            )
+        );
         console2.log("4. TransactionRegistry:", txRegAddr);
 
         // 5. Deploy ContractRegistry
-        address contractRegAddr = address(new ContractRegistry(_deployer));
+        address contractRegAddr = Create2Deployer.deploy(
+            Salts.CONTRACT_REGISTRY, abi.encodePacked(type(ContractRegistry).creationCode, abi.encode(_deployer))
+        );
         console2.log("5. ContractRegistry:", contractRegAddr);
 
         // 6. Deploy OperatorSubmitter
-        address operatorSubmitterAddr = address(
-            new OperatorSubmitter(
-                _deployer,
-                walletRegAddr,
-                txRegAddr,
-                contractRegAddr,
-                operatorRegAddr,
-                _tempFeeManager,
-                _tempFeeRecipient
+        address operatorSubmitterAddr = Create2Deployer.deploy(
+            Salts.OPERATOR_SUBMITTER,
+            abi.encodePacked(
+                type(OperatorSubmitter).creationCode,
+                abi.encode(
+                    _deployer,
+                    walletRegAddr,
+                    txRegAddr,
+                    contractRegAddr,
+                    operatorRegAddr,
+                    _tempFeeManager,
+                    _tempFeeRecipient
+                )
             )
         );
         console2.log("6. OperatorSubmitter:", operatorSubmitterAddr);
 
         // 7. Deploy CrossChainInbox
-        address inboxAddr = address(new CrossChainInbox(_tempMailbox, hubDeployedAddr, _deployer));
+        address inboxAddr = Create2Deployer.deploy(
+            Salts.CROSS_CHAIN_INBOX,
+            abi.encodePacked(type(CrossChainInbox).creationCode, abi.encode(_tempMailbox, hubDeployedAddr, _deployer))
+        );
         console2.log("7. CrossChainInbox:", inboxAddr);
 
         // 8. Wire Hub to registries and inbox
@@ -604,35 +692,45 @@ contract Deploy is Script {
         console2.log("Deadline Blocks:", deadlineBlocks);
         console2.log("");
 
+        _ensureCreate2Factory();
         vm.startBroadcast(privKey);
 
         // 1. Deploy HyperlaneAdapter
-        HyperlaneAdapter adapter = new HyperlaneAdapter(_deployer, mailbox, gasPaymaster);
-        console2.log("1. HyperlaneAdapter:", address(adapter));
+        address adapterAddr = Create2Deployer.deploy(
+            Salts.HYPERLANE_ADAPTER,
+            abi.encodePacked(type(HyperlaneAdapter).creationCode, abi.encode(_deployer, mailbox, gasPaymaster))
+        );
+        console2.log("1. HyperlaneAdapter:", adapterAddr);
 
         // 2. Enable hub chain as destination
-        adapter.setDomainSupport(hubChainId, true);
+        HyperlaneAdapter(adapterAddr).setDomainSupport(hubChainId, true);
         console2.log("   -> Hub chain", hubChainId, "enabled");
 
         // 3. Deploy SpokeRegistry
-        SpokeRegistry spoke = new SpokeRegistry(
-            _deployer,
-            address(adapter),
-            feeManagerAddr,
-            hubChainId,
-            hubInboxAddress,
-            graceBlocks,
-            deadlineBlocks,
-            BRIDGE_ID_HYPERLANE
+        address spokeAddr = Create2Deployer.deploy(
+            Salts.SPOKE_REGISTRY,
+            abi.encodePacked(
+                type(SpokeRegistry).creationCode,
+                abi.encode(
+                    _deployer,
+                    adapterAddr,
+                    feeManagerAddr,
+                    hubChainId,
+                    hubInboxAddress,
+                    graceBlocks,
+                    deadlineBlocks,
+                    BRIDGE_ID_HYPERLANE
+                )
+            )
         );
-        console2.log("2. SpokeRegistry:", address(spoke));
+        console2.log("2. SpokeRegistry:", spokeAddr);
 
         vm.stopBroadcast();
 
         // Output for frontend config
         console2.log("");
         console2.log("=== Frontend Config ===");
-        _logSpokeConfig(address(spoke), address(adapter), hubChainId);
+        _logSpokeConfig(spokeAddr, adapterAddr, hubChainId);
 
         // Reminder about hub trust configuration
         console2.log("");
@@ -640,7 +738,7 @@ contract Deploy is Script {
         console2.log("On hub chain, call:");
         console2.log("  inbox.setTrustedSource(", block.chainid, ", adapterBytes32, true)");
         console2.log("  adapterBytes32:");
-        console2.logBytes32(_addressToBytes32(address(adapter)));
+        console2.logBytes32(_addressToBytes32(adapterAddr));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -663,40 +761,62 @@ contract Deploy is Script {
         console2.log("Deployer:", _deployer);
         console2.log("");
 
+        _ensureCreate2Factory();
         vm.startBroadcast(privKey);
 
         // 1. Deploy OperatorRegistry
-        address operatorRegAddr = address(new OperatorRegistry(_deployer));
+        address operatorRegAddr = Create2Deployer.deploy(
+            Salts.OPERATOR_REGISTRY, abi.encodePacked(type(OperatorRegistry).creationCode, abi.encode(_deployer))
+        );
         console2.log("OperatorRegistry:", operatorRegAddr);
 
         // 2. Deploy FraudRegistryHub
-        address hubDeployedAddr = address(new FraudRegistryHub(_deployer, _tempFeeRecipient));
+        address hubDeployedAddr = Create2Deployer.deploy(
+            Salts.FRAUD_REGISTRY_HUB,
+            abi.encodePacked(type(FraudRegistryHub).creationCode, abi.encode(_deployer, _tempFeeRecipient))
+        );
         console2.log("FraudRegistryHub:", hubDeployedAddr);
 
         // 3. Deploy WalletRegistry
-        address walletRegAddr =
-            address(new WalletRegistry(_deployer, _tempFeeManager, _tempGraceBlocks, _tempDeadlineBlocks));
+        address walletRegAddr = Create2Deployer.deploy(
+            Salts.WALLET_REGISTRY,
+            abi.encodePacked(
+                type(WalletRegistry).creationCode,
+                abi.encode(_deployer, _tempFeeManager, _tempGraceBlocks, _tempDeadlineBlocks)
+            )
+        );
         console2.log("WalletRegistry:", walletRegAddr);
 
         // 4. Deploy TransactionRegistry
-        address txRegAddr =
-            address(new TransactionRegistry(_deployer, _tempFeeManager, _tempGraceBlocks, _tempDeadlineBlocks));
+        address txRegAddr = Create2Deployer.deploy(
+            Salts.TX_REGISTRY,
+            abi.encodePacked(
+                type(TransactionRegistry).creationCode,
+                abi.encode(_deployer, _tempFeeManager, _tempGraceBlocks, _tempDeadlineBlocks)
+            )
+        );
         console2.log("TransactionRegistry:", txRegAddr);
 
         // 5. Deploy ContractRegistry
-        address contractRegAddr = address(new ContractRegistry(_deployer));
+        address contractRegAddr = Create2Deployer.deploy(
+            Salts.CONTRACT_REGISTRY, abi.encodePacked(type(ContractRegistry).creationCode, abi.encode(_deployer))
+        );
         console2.log("ContractRegistry:", contractRegAddr);
 
         // 6. Deploy OperatorSubmitter
-        address operatorSubmitterAddr = address(
-            new OperatorSubmitter(
-                _deployer,
-                walletRegAddr,
-                txRegAddr,
-                contractRegAddr,
-                operatorRegAddr,
-                _tempFeeManager,
-                _tempFeeRecipient
+        address operatorSubmitterAddr = Create2Deployer.deploy(
+            Salts.OPERATOR_SUBMITTER,
+            abi.encodePacked(
+                type(OperatorSubmitter).creationCode,
+                abi.encode(
+                    _deployer,
+                    walletRegAddr,
+                    txRegAddr,
+                    contractRegAddr,
+                    operatorRegAddr,
+                    _tempFeeManager,
+                    _tempFeeRecipient
+                )
             )
         );
         console2.log("OperatorSubmitter:", operatorSubmitterAddr);
@@ -724,6 +844,15 @@ contract Deploy is Script {
     // ═══════════════════════════════════════════════════════════════════════════
     // INTERNAL HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Ensure the canonical CREATE2 factory exists (fresh Anvil instances lack it)
+    function _ensureCreate2Factory() internal {
+        if (Create2Deployer.FACTORY.code.length > 0) return;
+        // Nick Johnson's keyless-deployment factory runtime bytecode
+        bytes memory factoryCode =
+            hex"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3";
+        vm.etch(Create2Deployer.FACTORY, factoryCode);
+    }
 
     function _getDeployerKey() internal view returns (uint256) {
         uint256 privKey = vm.envOr("PRIVATE_KEY", uint256(0));
@@ -768,12 +897,13 @@ contract Deploy is Script {
     }
 
     /// @notice Deploy Multicall3 for local chains (mainnet/testnets have it pre-deployed)
+    /// @param salt CREATE2 salt (use Salts.MULTICALL3 for hub, Salts.MULTICALL3_SPOKE for spoke)
     /// @return multicall3 The deployed Multicall3 address
-    function _deployMulticall3() internal returns (address multicall3) {
+    function _deployMulticall3(bytes32 salt) internal returns (address multicall3) {
         // On mainnet/testnets, Multicall3 is deployed at canonical address
         // Only deploy for local chains
         if (block.chainid == 31_337 || block.chainid == 31_338) {
-            multicall3 = address(new Multicall3());
+            multicall3 = Create2Deployer.deploy(salt, type(Multicall3).creationCode);
         } else {
             multicall3 = CANONICAL_MULTICALL3;
         }

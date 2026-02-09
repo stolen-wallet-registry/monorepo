@@ -55,7 +55,7 @@ contract WalletSoulboundTest is Test {
         minter = makeAddr("minter");
 
         // Deploy dependencies
-        translations = new TranslationRegistry();
+        translations = new TranslationRegistry(address(this));
         // Add Spanish for multilingual testing
         translations.addLanguage(
             "es", "CARTERA ROBADA", "Firmado como robado", "Gracias por tu apoyo", "No envie fondos", "Registro"
@@ -67,7 +67,9 @@ contract WalletSoulboundTest is Test {
         mockRegistry.setPending(pendingWallet, true);
 
         // Deploy soulbound contract
-        soulbound = new WalletSoulbound(address(mockRegistry), address(translations), feeCollector, "stolenwallet.xyz");
+        soulbound = new WalletSoulbound(
+            address(mockRegistry), address(translations), feeCollector, "stolenwallet.xyz", address(this)
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -88,13 +90,13 @@ contract WalletSoulboundTest is Test {
 
     function test_constructor_revert_zeroRegistry() public {
         vm.expectRevert(WalletSoulbound.InvalidRegistry.selector);
-        new WalletSoulbound(address(0), address(translations), feeCollector, "stolenwallet.xyz");
+        new WalletSoulbound(address(0), address(translations), feeCollector, "stolenwallet.xyz", address(this));
     }
 
     /// @notice Constructor reverts with zero translations address
     function test_constructor_revert_zeroTranslations() public {
         vm.expectRevert(BaseSoulbound.InvalidTranslations.selector);
-        new WalletSoulbound(address(mockRegistry), address(0), feeCollector, "stolenwallet.xyz");
+        new WalletSoulbound(address(mockRegistry), address(0), feeCollector, "stolenwallet.xyz", address(this));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

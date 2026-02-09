@@ -4,7 +4,7 @@
  * Local addresses come from `pnpm deploy:crosschain`.
  * Testnet/mainnet addresses added after deployment.
  *
- * IMPORTANT: These are deterministic addresses based on Account 0 nonces.
+ * IMPORTANT: These are CREATE2 deterministic addresses from Deploy.s.sol.
  * Hyperlane infrastructure is deployed by Account 9 (separate nonce space).
  */
 
@@ -59,45 +59,23 @@ export const HYPERLANE_ADDRESSES = {
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// HUB CHAIN CONTRACTS (31337) - Account 0 nonces
+// HUB CHAIN CONTRACTS (31337) - CREATE2 deterministic addresses
 // ═══════════════════════════════════════════════════════════════════════════
-// Deployed via `pnpm deploy:crosschain` using Account 0
-//
-// Nonce order:
-//   0: MockAggregator       → 0x5FbDB2315678afecb367f032d93F642f64180aa3
-//   1: FeeManager           → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-//   2: RegistryHub          → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
-//   3: StolenWalletRegistry → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
-//   4: (setRegistry tx)
-//   5: CrossChainInbox      → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
-//   6: (setCrossChainInbox tx)
-// ═══════════════════════════════════════════════════════════════════════════
+// Deployed via `pnpm deploy:crosschain` using Account 0 + CREATE2 factory
 
 /** Hub chain cross-chain contracts */
 export const HUB_CROSSCHAIN_ADDRESSES = {
   crossChainInbox: {
-    [anvilHub.chainId]: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853' as Address,
+    [anvilHub.chainId]: '0x2F3EA898e8d179dC21Bb6835428207335Cc3F72d' as Address,
     // Base Sepolia (testnet hub) - fill after deployment
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SPOKE CHAIN CONTRACTS (31338) - Account 0 nonces
+// SPOKE CHAIN CONTRACTS (31338) - CREATE2 deterministic addresses
 // ═══════════════════════════════════════════════════════════════════════════
-// Deployed via `pnpm deploy:crosschain` using Account 0
-//
-// Nonce order:
-//   0: MockGasPaymaster           → 0x5FbDB2315678afecb367f032d93F642f64180aa3
-//   1: HyperlaneAdapter           → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-//   2: (setDomainSupport tx)
-//   3: MockAggregator             → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
-//   4: FeeManager                 → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
-//   5: SpokeRegistry              → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
-//   6: SpokeTransactionRegistry   → 0x0165878A594ca255338adfa4d48449f69242Eb8F
-//   7: SpokeSoulboundForwarder    → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
-//   8: Multicall3                 → 0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6
-// ═══════════════════════════════════════════════════════════════════════════
+// Deployed via `pnpm deploy:crosschain` using Account 0 + CREATE2 factory
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SPOKE CHAIN CONTRACTS (SpokeRegistry)
@@ -106,19 +84,19 @@ export const HUB_CROSSCHAIN_ADDRESSES = {
 
 export const SPOKE_CONTRACT_ADDRESSES = {
   spokeRegistry: {
-    [anvilSpoke.chainId]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
+    [anvilSpoke.chainId]: '0xED040e67447bE891200Ea1C12e5FA8DA083770A0' as Address,
     [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address, // TBD
   },
   hyperlaneAdapter: {
-    [anvilSpoke.chainId]: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address,
+    [anvilSpoke.chainId]: '0x85881002c84e036E83a5094E1b789a00858B0063' as Address,
     [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   spokeFeeManager: {
-    [anvilSpoke.chainId]: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9' as Address,
+    [anvilSpoke.chainId]: '0xC399A0a346b1c4f17cd719C73A09F48469ccd199' as Address,
     [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   spokeSoulboundForwarder: {
-    [anvilSpoke.chainId]: '0x0165878A594ca255338adfa4d48449f69242Eb8F' as Address,
+    [anvilSpoke.chainId]: '0x274C3C4994857f70047b16879aa363a7B6b0f626' as Address,
     [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;
@@ -155,32 +133,32 @@ export function getSpokeRegistryContractAddress(chainId: number): Address {
  */
 export const SPOKE_ADDRESSES = {
   mockGasPaymaster: {
-    [anvilSpoke.chainId]: '0x5FbDB2315678afecb367f032d93F642f64180aa3' as Address,
+    [anvilSpoke.chainId]: '0x6CE9C3F9Aa3F7064417aF37AA1487F5795D606c4' as Address,
     // Optimism Sepolia uses real Hyperlane IGP, not mock
   },
   bridgeAdapters: {
     [anvilSpoke.chainId]: {
-      hyperlane: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address,
+      hyperlane: '0x85881002c84e036E83a5094E1b789a00858B0063' as Address,
     },
     [optimismSepolia.chainId]: {
       hyperlane: '0x0000000000000000000000000000000000000000' as Address, // Fill after deployment
     },
   },
   feeManager: {
-    [anvilSpoke.chainId]: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9' as Address,
+    [anvilSpoke.chainId]: '0xC399A0a346b1c4f17cd719C73A09F48469ccd199' as Address,
     [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   spokeRegistry: {
-    [anvilSpoke.chainId]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
+    [anvilSpoke.chainId]: '0xED040e67447bE891200Ea1C12e5FA8DA083770A0' as Address,
     [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   spokeTransactionRegistry: {
-    [anvilSpoke.chainId]: '0x0165878A594ca255338adfa4d48449f69242Eb8F' as Address,
+    [anvilSpoke.chainId]: '0xED040e67447bE891200Ea1C12e5FA8DA083770A0' as Address, // SpokeRegistry handles both wallet + tx
     [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   /** SpokeSoulboundForwarder for cross-chain soulbound minting */
   spokeSoulboundForwarder: {
-    [anvilSpoke.chainId]: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853' as Address,
+    [anvilSpoke.chainId]: '0x274C3C4994857f70047b16879aa363a7B6b0f626' as Address,
     [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;
@@ -191,7 +169,7 @@ export const SPOKE_ADDRESSES = {
 
 /** SoulboundReceiver on hub chain for cross-chain minting */
 export const HUB_SOULBOUND_RECEIVER = {
-  [anvilHub.chainId]: '0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82' as Address,
+  [anvilHub.chainId]: '0xC0422EaC6F09C7eCa4e8076EE8329E0586F4C31C' as Address,
   [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
 } as const;
 

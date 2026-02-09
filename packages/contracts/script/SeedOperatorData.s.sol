@@ -20,13 +20,13 @@ contract SeedOperatorData is Script {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONTRACT ADDRESSES (deployed by Deploy.s.sol)
     // ═══════════════════════════════════════════════════════════════════════════
-    // These addresses are deterministic based on deployer nonce
-    // Update if deploy order changes
+    // These addresses are deterministic via CREATE2 (salt + initcode + factory)
+    // They remain stable across redeploys as long as constructor args don't change
 
-    address constant DEFAULT_OPERATOR_REGISTRY = 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0;
-    address constant DEFAULT_FRAUD_REGISTRY_HUB = 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9;
-    address constant DEFAULT_OPERATOR_SUBMITTER = 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853;
-    address constant DEFAULT_FEE_MANAGER = 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512;
+    address constant DEFAULT_OPERATOR_REGISTRY = 0xB4F23F67DBbFa190415F3584A8fE8c1fF9BAeA35;
+    address constant DEFAULT_FRAUD_REGISTRY_HUB = 0x396c850B9eC24a28e7556B7eb9C962F7bA836400;
+    address constant DEFAULT_OPERATOR_SUBMITTER = 0xc94f95C6b90BE297cbC27B32439c56a42097ca22;
+    address constant DEFAULT_FEE_MANAGER = 0xE14aa15D8d9a3f3FEb78563166E931284510d96C;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // OPERATOR ACCOUNTS (Anvil Default Test Accounts)

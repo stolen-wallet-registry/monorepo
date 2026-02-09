@@ -35,14 +35,14 @@ export const anvilHub: HubNetworkConfig = {
   bridges: undefined,
 
   hubContracts: {
-    // Deterministic addresses from DeployCrossChain.s.sol (Anvil Account 0 deployer)
-    stolenWalletRegistry: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9',
-    stolenTransactionRegistry: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707',
-    fraudulentContractRegistry: '0x0165878A594ca255338adfa4d48449f69242Eb8F',
-    feeManager: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512',
-    registryHub: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
-    crossChainInbox: '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6',
-    operatorRegistry: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
+    // CREATE2 deterministic addresses from Deploy.s.sol
+    stolenWalletRegistry: '0x80C139C37468DbffB2109cc337467c2887F7EA40',
+    stolenTransactionRegistry: '0xbd41310C6CFe0Aec2Ddd017681417F0614618fC3',
+    fraudulentContractRegistry: '0xDc89d5d4Fec4159fC9EEA7d471cdafEe88cDec0D',
+    feeManager: '0xE14aa15D8d9a3f3FEb78563166E931284510d96C',
+    registryHub: '0x396c850B9eC24a28e7556B7eb9C962F7bA836400',
+    crossChainInbox: '0x2F3EA898e8d179dC21Bb6835428207335Cc3F72d',
+    operatorRegistry: '0xB4F23F67DBbFa190415F3584A8fE8c1fF9BAeA35',
   },
 
   priceFeed: {

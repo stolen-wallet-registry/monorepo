@@ -22,6 +22,11 @@ export const SupportSoulboundABI = [
         type: 'string',
         internalType: 'string',
       },
+      {
+        name: '_initialOwner',
+        type: 'address',
+        internalType: 'address',
+      },
     ],
     stateMutability: 'nonpayable',
   },

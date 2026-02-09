@@ -15,7 +15,7 @@ contract TranslationRegistryTest is Test {
     function setUp() public {
         owner = address(this);
         nonOwner = makeAddr("nonOwner");
-        registry = new TranslationRegistry();
+        registry = new TranslationRegistry(address(this));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

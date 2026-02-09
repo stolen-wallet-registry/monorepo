@@ -72,7 +72,7 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
 
-    constructor() Ownable(msg.sender) {
+    constructor(address _initialOwner) Ownable(_initialOwner) {
         // Initialize with English as default
         _addLanguageInternal(
             "en",
