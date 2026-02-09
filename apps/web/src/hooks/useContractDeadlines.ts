@@ -13,6 +13,9 @@ import { walletRegistryAbi, transactionRegistryAbi, spokeRegistryAbi } from '@/l
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
 
+/** Return type from getDeadlines — identical shape on hub and spoke contracts */
+type DeadlinesTuple = readonly [bigint, bigint, bigint, bigint, bigint, boolean];
+
 // ============================================================================
 // Wallet Registry Deadlines
 // ============================================================================
@@ -95,7 +98,7 @@ export function useContractDeadlines(
   // Unified format: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
   let transformedData: DeadlineData | undefined;
   if (result.data) {
-    const rawData = result.data as readonly [bigint, bigint, bigint, bigint, bigint, boolean];
+    const rawData = result.data as DeadlinesTuple;
     if (rawData.length >= 6) {
       transformedData = {
         currentBlock: BigInt(rawData[0]),
@@ -208,13 +211,12 @@ export function useTxContractDeadlines(
     },
   });
 
-  const {
-    data: contractData,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = isSpoke ? spokeResult : hubResult;
+  const { isLoading, isError, error, refetch } = isSpoke ? spokeResult : hubResult;
+
+  // Extract typed data from the active hook (avoids union-type complications)
+  const hubDeadlines = hubResult.data as DeadlinesTuple | undefined;
+  const spokeDeadlines = spokeResult.data as DeadlinesTuple | undefined;
+  const rawDeadlines = isSpoke ? spokeDeadlines : hubDeadlines;
 
   // Track previous log key to avoid duplicate logs
   const prevLogKeyRef = useRef<string | null>(null);
@@ -228,45 +230,29 @@ export function useTxContractDeadlines(
         reporter,
         error: error?.message,
       });
-    } else if (contractData) {
-      // Cast to typed tuple for safe indexing
-      const raw = contractData as unknown as readonly [
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        boolean,
-      ];
-      const logKey = `${reporter}-${raw[0]?.toString()}`;
+    } else if (rawDeadlines) {
+      const logKey = `${reporter}-${rawDeadlines[0]?.toString()}`;
       if (logKey !== prevLogKeyRef.current) {
         prevLogKeyRef.current = logKey;
         logger.contract.debug('Transaction registry deadlines read', {
           reporter,
-          currentBlock: raw[0]?.toString(),
-          expiryBlock: raw[1]?.toString(),
-          startBlock: raw[2]?.toString(),
-          graceStartsAt: raw[3]?.toString(),
-          timeLeft: raw[4]?.toString(),
-          isExpired: raw[5],
+          currentBlock: rawDeadlines[0]?.toString(),
+          expiryBlock: rawDeadlines[1]?.toString(),
+          startBlock: rawDeadlines[2]?.toString(),
+          graceStartsAt: rawDeadlines[3]?.toString(),
+          timeLeft: rawDeadlines[4]?.toString(),
+          isExpired: rawDeadlines[5],
         });
       }
     }
-  }, [isError, contractData, chainId, contractAddress, reporter, error?.message]);
+  }, [isError, rawDeadlines, chainId, contractAddress, reporter, error?.message]);
 
   // Map contract result to TxDeadlineData
   // Returns: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
   let data: TxDeadlineData | undefined;
 
-  if (contractData) {
-    const raw = contractData as unknown as readonly [
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      boolean,
-    ];
+  if (rawDeadlines) {
+    const raw = rawDeadlines;
     if (raw.length >= 6 && raw[0] !== undefined) {
       data = {
         currentBlock: BigInt(raw[0]),
@@ -278,7 +264,7 @@ export function useTxContractDeadlines(
       };
     } else {
       logger.contract.error('useTxContractDeadlines: Invalid contractData shape', {
-        contractData: contractData as unknown,
+        dataLength: rawDeadlines.length,
         reporter,
         chainId,
       });

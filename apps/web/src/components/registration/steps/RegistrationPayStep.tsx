@@ -395,7 +395,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   const signedMessageData: SignedMessageData | null = storedSignature
     ? {
         registeree,
-        forwarder: forwarder ?? expectedWallet,
+        forwarder: forwarder!,
         nonce: storedSignature.nonce,
         deadline: storedSignature.deadline,
         signature: storedSignature.signature,

@@ -257,6 +257,8 @@ contract CrossChainInboxTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Message with unknown type byte (0x03) reverts
+    /// @dev This encoding must stay aligned with CrossChainMessage.sol's format.
+    ///      If the message layout changes, update this test accordingly.
     function test_Handle_RejectsUnknownMessageType() public {
         // Manually craft a message with type 0x03
         bytes memory encoded = abi.encode(

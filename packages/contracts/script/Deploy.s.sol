@@ -594,7 +594,7 @@ contract Deploy is Script {
         console2.log("5. ContractRegistry:", contractRegAddr);
 
         // 6. Deploy OperatorSubmitter
-        address operatorSubmitterAddr = Create2Deployer.deploy(
+        address opSubmitterAddr = Create2Deployer.deploy(
             Salts.OPERATOR_SUBMITTER,
             abi.encodePacked(
                 type(OperatorSubmitter).creationCode,
@@ -609,7 +609,7 @@ contract Deploy is Script {
                 )
             )
         );
-        console2.log("6. OperatorSubmitter:", operatorSubmitterAddr);
+        console2.log("6. OperatorSubmitter:", opSubmitterAddr);
 
         // 7. Deploy CrossChainInbox
         address inboxAddr = Create2Deployer.deploy(
@@ -627,10 +627,10 @@ contract Deploy is Script {
 
         // 9. Wire registries to Hub and OperatorSubmitter
         WalletRegistry(walletRegAddr).setHub(hubDeployedAddr);
-        WalletRegistry(walletRegAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        WalletRegistry(walletRegAddr).setOperatorSubmitter(opSubmitterAddr);
         TransactionRegistry(txRegAddr).setHub(hubDeployedAddr);
-        TransactionRegistry(txRegAddr).setOperatorSubmitter(operatorSubmitterAddr);
-        ContractRegistry(contractRegAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        TransactionRegistry(txRegAddr).setOperatorSubmitter(opSubmitterAddr);
+        ContractRegistry(contractRegAddr).setOperatorSubmitter(opSubmitterAddr);
         console2.log("   -> Registries wired to Hub and OperatorSubmitter");
 
         vm.stopBroadcast();
@@ -639,13 +639,7 @@ contract Deploy is Script {
         console2.log("");
         console2.log("=== Frontend Config ===");
         _logHubConfig(
-            hubDeployedAddr,
-            walletRegAddr,
-            txRegAddr,
-            contractRegAddr,
-            operatorRegAddr,
-            operatorSubmitterAddr,
-            inboxAddr
+            hubDeployedAddr, walletRegAddr, txRegAddr, contractRegAddr, operatorRegAddr, opSubmitterAddr, inboxAddr
         );
     }
 
@@ -804,7 +798,7 @@ contract Deploy is Script {
         console2.log("ContractRegistry:", contractRegAddr);
 
         // 6. Deploy OperatorSubmitter
-        address operatorSubmitterAddr = Create2Deployer.deploy(
+        address opSubmitterAddr = Create2Deployer.deploy(
             Salts.OPERATOR_SUBMITTER,
             abi.encodePacked(
                 type(OperatorSubmitter).creationCode,
@@ -819,7 +813,7 @@ contract Deploy is Script {
                 )
             )
         );
-        console2.log("OperatorSubmitter:", operatorSubmitterAddr);
+        console2.log("OperatorSubmitter:", opSubmitterAddr);
 
         // 7. Wire Hub to registries
         FraudRegistryHub(payable(hubDeployedAddr)).setWalletRegistry(walletRegAddr);
@@ -828,17 +822,15 @@ contract Deploy is Script {
 
         // 8. Wire registries to Hub and OperatorSubmitter
         WalletRegistry(walletRegAddr).setHub(hubDeployedAddr);
-        WalletRegistry(walletRegAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        WalletRegistry(walletRegAddr).setOperatorSubmitter(opSubmitterAddr);
         TransactionRegistry(txRegAddr).setHub(hubDeployedAddr);
-        TransactionRegistry(txRegAddr).setOperatorSubmitter(operatorSubmitterAddr);
-        ContractRegistry(contractRegAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        TransactionRegistry(txRegAddr).setOperatorSubmitter(opSubmitterAddr);
+        ContractRegistry(contractRegAddr).setOperatorSubmitter(opSubmitterAddr);
 
         vm.stopBroadcast();
 
         console2.log("");
-        _logFrontendConfig(
-            hubDeployedAddr, walletRegAddr, txRegAddr, contractRegAddr, operatorRegAddr, operatorSubmitterAddr
-        );
+        _logFrontendConfig(hubDeployedAddr, walletRegAddr, txRegAddr, contractRegAddr, operatorRegAddr, opSubmitterAddr);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

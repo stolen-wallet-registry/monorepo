@@ -492,6 +492,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         view
         returns (uint256 deadline, bytes32 hashStruct)
     {
+        if (step != 1 && step != 2) revert SpokeRegistry__InvalidStep();
         deadline = TimingConfig.getSignatureDeadline();
 
         if (step == 1) {

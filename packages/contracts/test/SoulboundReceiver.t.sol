@@ -219,8 +219,9 @@ contract SoulboundReceiverTest is Test {
     }
 
     function test_SetTrustedForwarder_OnlyOwner() public {
-        vm.prank(makeAddr("attacker"));
-        vm.expectRevert();
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", attacker));
         receiver.setTrustedForwarder(SPOKE_DOMAIN, makeAddr("malicious"));
     }
 

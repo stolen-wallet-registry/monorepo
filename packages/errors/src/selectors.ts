@@ -134,6 +134,11 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Data arrays have mismatched lengths.',
     action: 'Please verify the inputs and try again.',
   },
+  '0x48193183': {
+    name: 'WalletRegistry__InvalidStep',
+    message: 'Invalid signing step.',
+    action: 'Please restart the registration flow.',
+  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TransactionRegistry Errors

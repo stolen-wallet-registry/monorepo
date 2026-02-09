@@ -60,6 +60,10 @@ contract OperatorSubmitterTest is Test {
         nonOwner = makeAddr("nonOwner");
         feeRecipientAddr = makeAddr("feeRecipient");
 
+        // Warp to realistic timestamp so incidentTimestamp calculations don't hit the
+        // block.timestamp < 1 hours fallback (Forge default timestamp is 1)
+        vm.warp(block.timestamp + 2 hours);
+
         vm.startPrank(owner);
 
         // Deploy registries (no FeeManager for base setup — free registrations)

@@ -83,20 +83,19 @@ export function useQuoteFeeBreakdown(
 
   const result = isSpoke ? spokeResult : hubResult;
 
+  // Extract typed data from the active hook (avoids union-type complications)
+  const hubBreakdown = hubResult.data as RawFeeBreakdown | undefined;
+  const spokeBreakdown = spokeResult.data as RawFeeBreakdown | undefined;
+  const activeBreakdown = isSpoke ? spokeBreakdown : hubBreakdown;
+
   // Normalize data from contract response
   const { data, raw } = useMemo(() => {
-    if (!result.data) return { data: null, raw: null };
+    if (!activeBreakdown) return { data: null, raw: null };
 
     const ethPriceUsd = ethPrice?.usd;
     const isCrossChain = isSpoke;
 
-    // Both hub and spoke return the same FeeBreakdown struct
-    const breakdown = result.data as unknown as {
-      bridgeFee: bigint;
-      registrationFee: bigint;
-      total: bigint;
-      bridgeName: string;
-    };
+    const breakdown = activeBreakdown;
 
     logger.contract.debug('useQuoteFeeBreakdown: Breakdown received', {
       registryType,
@@ -123,7 +122,7 @@ export function useQuoteFeeBreakdown(
     };
 
     return { data: formatted, raw: rawBreakdown };
-  }, [result.data, ethPrice?.usd, registryType, isSpoke]);
+  }, [activeBreakdown, ethPrice?.usd, isSpoke, registryType]);
 
   return {
     data,
@@ -204,20 +203,19 @@ export function useTxQuoteFeeBreakdown(
 
   const result = isSpoke ? spokeResult : hubResult;
 
+  // Extract typed data from the active hook (avoids union-type complications)
+  const txHubBreakdown = hubResult.data as RawFeeBreakdown | undefined;
+  const txSpokeBreakdown = spokeResult.data as RawFeeBreakdown | undefined;
+  const txActiveBreakdown = isSpoke ? txSpokeBreakdown : txHubBreakdown;
+
   // Normalize data from contract response
   const { data, raw, totalWei } = useMemo(() => {
-    if (!result.data) return { data: null, raw: null, totalWei: undefined };
+    if (!txActiveBreakdown) return { data: null, raw: null, totalWei: undefined };
 
     const ethPriceUsd = ethPrice?.usd;
     const isCrossChain = isSpoke;
 
-    // Both hub and spoke return the same FeeBreakdown struct
-    const breakdown = result.data as unknown as {
-      bridgeFee: bigint;
-      registrationFee: bigint;
-      total: bigint;
-      bridgeName: string;
-    };
+    const breakdown = txActiveBreakdown;
 
     logger.contract.debug('useTxQuoteFeeBreakdown: Breakdown received', {
       registryType,
@@ -244,7 +242,7 @@ export function useTxQuoteFeeBreakdown(
     };
 
     return { data: formatted, raw: rawBreakdown, totalWei: breakdown.total };
-  }, [result.data, ethPrice?.usd, registryType, isSpoke]);
+  }, [txActiveBreakdown, ethPrice?.usd, isSpoke, registryType]);
 
   return {
     data,

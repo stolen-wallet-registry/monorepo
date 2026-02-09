@@ -79,6 +79,15 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
 
         setStep: (step) =>
           set((state) => {
+            const allowedSteps = STEP_SEQUENCES[state.registrationType];
+            if (!allowedSteps.includes(step)) {
+              logger.registration.warn('Attempted to set invalid step for registration type', {
+                registrationType: state.registrationType,
+                attemptedStep: step,
+                allowedSteps,
+              });
+              return;
+            }
             logger.registration.info('Step transition', { from: state.step, to: step });
             state.step = step;
           }),
@@ -137,7 +146,9 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
 
         reset: () => {
           logger.registration.info('Registration state reset');
-          set(initialState);
+          set((state) => {
+            Object.assign(state, initialState);
+          });
         },
       })),
       {

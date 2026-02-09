@@ -40,8 +40,8 @@ export interface UseGasEstimateParams {
   step: 'acknowledgement' | 'registration';
   /**
    * Contract function arguments:
-   * - acknowledge: [registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s]
-   * - register: [registeree, deadline, reportedChainId, incidentTimestamp, v, r, s]
+   * - acknowledge: [registeree, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s]
+   * - register: [registeree, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s]
    */
   args: WalletContractArgs | undefined;
   /** Value to send with the transaction (for registration) */

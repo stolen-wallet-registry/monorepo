@@ -369,7 +369,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external payable {
+    ) external {
         if (reporter == address(0)) revert TransactionRegistry__ZeroAddress();
         if (forwarder == address(0)) revert TransactionRegistry__ZeroAddress();
         if (dataHash == bytes32(0)) revert TransactionRegistry__DataHashMismatch();

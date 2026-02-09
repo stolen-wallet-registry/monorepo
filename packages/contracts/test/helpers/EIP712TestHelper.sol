@@ -19,12 +19,10 @@ abstract contract EIP712TestHelper is Test {
 
     string internal constant DOMAIN_VERSION = "4";
 
-    // Domain names must match the production contracts.
-    // WALLET_DOMAIN_NAME is used by WalletRegistry, TransactionRegistry, and SpokeRegistry (wallet flow).
-    // TX_DOMAIN_NAME is used by SpokeRegistry's transaction batch flow only.
-    // Note: Hub-side TransactionRegistry uses WALLET_DOMAIN_NAME ("StolenWalletRegistry") as its domain.
+    // All production contracts (WalletRegistry, TransactionRegistry, SpokeRegistry)
+    // use the same EIP-712 domain name. Cross-contract replay is prevented by
+    // distinct typehashes, not by domain separation.
     string internal constant WALLET_DOMAIN_NAME = "StolenWalletRegistry";
-    string internal constant TX_DOMAIN_NAME = "StolenTransactionRegistry";
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WALLET REGISTRY STATEMENTS (imported from production)
@@ -68,19 +66,6 @@ abstract contract EIP712TestHelper is Test {
             abi.encode(
                 EIP712_TYPE_HASH,
                 keccak256(bytes(WALLET_DOMAIN_NAME)),
-                keccak256(bytes(DOMAIN_VERSION)),
-                block.chainid,
-                registry
-            )
-        );
-    }
-
-    /// @notice Compute domain separator for StolenTransactionRegistry
-    function _txDomainSeparator(address registry) internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                EIP712_TYPE_HASH,
-                keccak256(bytes(TX_DOMAIN_NAME)),
                 keccak256(bytes(DOMAIN_VERSION)),
                 block.chainid,
                 registry
@@ -157,68 +142,6 @@ abstract contract EIP712TestHelper is Test {
             )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _walletDomainSeparator(registry), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TRANSACTION REGISTRY SIGNING HELPERS
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @notice Sign a transaction batch acknowledgement message
-    function _signTxAck(
-        uint256 privateKey,
-        address registry,
-        address reporter,
-        address forwarder,
-        bytes32 dataHash,
-        bytes32 reportedChainId,
-        uint32 transactionCount,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(
-            abi.encode(
-                TX_ACK_TYPEHASH,
-                keccak256(bytes(TX_ACK_STATEMENT)),
-                reporter,
-                forwarder,
-                dataHash,
-                reportedChainId,
-                transactionCount,
-                nonce,
-                deadline
-            )
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _txDomainSeparator(registry), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
-    /// @notice Sign a transaction batch registration message
-    function _signTxReg(
-        uint256 privateKey,
-        address registry,
-        address reporter,
-        address forwarder,
-        bytes32 dataHash,
-        bytes32 reportedChainId,
-        uint32 transactionCount,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(
-            abi.encode(
-                TX_REG_TYPEHASH,
-                keccak256(bytes(TX_REG_STATEMENT)),
-                reporter,
-                forwarder,
-                dataHash,
-                reportedChainId,
-                transactionCount,
-                nonce,
-                deadline
-            )
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _txDomainSeparator(registry), structHash));
         (v, r, s) = vm.sign(privateKey, digest);
     }
 }

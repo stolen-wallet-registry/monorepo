@@ -795,6 +795,20 @@ contract SpokeRegistryTest is Test {
         assertTrue(hashStruct != bytes32(0));
     }
 
+    /// @notice generateHashStruct reverts on invalid step values
+    function test_GenerateHashStruct_RevertIf_InvalidStep() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        vm.prank(wallet);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidStep.selector);
+        spoke.generateHashStruct(reportedChainId, incidentTimestamp, forwarder, 0);
+
+        vm.prank(wallet);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidStep.selector);
+        spoke.generateHashStruct(reportedChainId, incidentTimestamp, forwarder, 3);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ADMIN TESTS
     // ═══════════════════════════════════════════════════════════════════════════

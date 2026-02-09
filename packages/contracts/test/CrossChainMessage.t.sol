@@ -84,6 +84,22 @@ contract CrossChainMessageTest is Test {
         caller.decodeWallet(tooShort);
     }
 
+    /// @notice Exactly 384 bytes does not revert with InvalidMessageLength (boundary check)
+    function test_WalletRegistration_AcceptsMinimumLength() public {
+        bytes memory exactMinimum = new bytes(384);
+        // 384 bytes passes the length check; may revert for other reasons (zero fields)
+        // but must NOT revert with InvalidMessageLength
+        try caller.decodeWallet(exactMinimum) { }
+        catch (bytes memory reason) {
+            // Ensure revert is NOT InvalidMessageLength
+            bytes4 selector = bytes4(reason);
+            assertTrue(
+                selector != CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector,
+                "384-byte message should not fail length check"
+            );
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // TRANSACTION BATCH ENCODE/DECODE
     // ═══════════════════════════════════════════════════════════════════════════
@@ -140,6 +156,19 @@ contract CrossChainMessageTest is Test {
 
         vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector);
         caller.decodeTxBatch(tooShort);
+    }
+
+    /// @notice Exactly 384 bytes does not revert with InvalidMessageLength for tx batch (boundary check)
+    function test_TransactionBatch_AcceptsMinimumLength() public {
+        bytes memory exactMinimum = new bytes(384);
+        try caller.decodeTxBatch(exactMinimum) { }
+        catch (bytes memory reason) {
+            bytes4 selector = bytes4(reason);
+            assertTrue(
+                selector != CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector,
+                "384-byte tx batch should not fail length check"
+            );
+        }
     }
 
     /// @notice Decoding when transactionCount does not match array lengths reverts

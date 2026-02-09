@@ -57,6 +57,8 @@ export function useTxQuoteFee(reporterAddress: Address | null | undefined): UseT
   const normalizedAddress = reporterAddress ?? undefined;
   const enabled = !!normalizedAddress && !!contractAddress;
 
+  const sharedQuery = { staleTime: 30_000, refetchInterval: 60_000 };
+
   // Split-call: one hook per ABI, only one fires based on registryType
   const hubResult = useReadContract({
     address: contractAddress,
@@ -66,8 +68,7 @@ export function useTxQuoteFee(reporterAddress: Address | null | undefined): UseT
     args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {
       enabled: !isSpoke && enabled,
-      staleTime: 30_000,
-      refetchInterval: 60_000,
+      ...sharedQuery,
     },
   });
 
@@ -79,8 +80,7 @@ export function useTxQuoteFee(reporterAddress: Address | null | undefined): UseT
     args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {
       enabled: isSpoke && enabled,
-      staleTime: 30_000,
-      refetchInterval: 60_000,
+      ...sharedQuery,
     },
   });
 
@@ -90,7 +90,7 @@ export function useTxQuoteFee(reporterAddress: Address | null | undefined): UseT
   const data = useMemo(() => {
     if (rawFee === undefined) return null;
 
-    const feeWei = rawFee as bigint;
+    const feeWei = typeof rawFee === 'bigint' ? rawFee : BigInt(0);
     const feeEth = formatEthConsistent(feeWei);
     const ethPriceUsd = ethPrice?.usd;
 

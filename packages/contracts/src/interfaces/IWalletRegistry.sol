@@ -80,6 +80,7 @@ interface IWalletRegistry {
     error WalletRegistry__OnlyOperatorSubmitter();
     error WalletRegistry__EmptyBatch();
     error WalletRegistry__ArrayLengthMismatch();
+    error WalletRegistry__InvalidStep();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS

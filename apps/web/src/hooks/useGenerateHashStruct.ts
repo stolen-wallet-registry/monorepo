@@ -30,17 +30,6 @@ export interface UseGenerateHashStructResult {
   refetch: UseReadContractReturnType['refetch'];
 }
 
-export interface UseGenerateHashStructParams {
-  /** The trusted forwarder address (who can submit the tx) */
-  forwarderAddress: Address | undefined;
-  /** The signature step (1 = Acknowledgement, 2 = Registration) */
-  step: SignatureStep;
-  /** Raw EVM chain ID where incident occurred (defaults to current chain) */
-  reportedChainId?: bigint;
-  /** Unix timestamp when incident occurred (defaults to now) */
-  incidentTimestamp?: bigint;
-}
-
 /**
  * Reads the deadline and hash struct for signing from the contract.
  *
