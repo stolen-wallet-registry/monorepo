@@ -51,7 +51,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     mapping(address => TransactionAcknowledgementData) private _pendingAcknowledgements;
 
     /// @notice Nonces for replay protection (keyed to reporter address)
-    mapping(address => uint256) public transactionNonces;
+    mapping(address => uint256) public nonces;
 
     /// @notice Hub address for cross-chain registrations
     address public hub;
@@ -211,7 +211,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     }
 
     /// @inheritdoc ITransactionRegistry
-    function getTransactionDeadlines(address reporter)
+    function getDeadlines(address reporter)
         external
         view
         returns (
@@ -260,7 +260,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
                     dataHash,
                     reportedChainId,
                     transactionCount,
-                    transactionNonces[msg.sender],
+                    nonces[msg.sender],
                     deadline
                 )
             );
@@ -275,7 +275,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
                     dataHash,
                     reportedChainId,
                     transactionCount,
-                    transactionNonces[msg.sender],
+                    nonces[msg.sender],
                     deadline
                 )
             );
@@ -384,13 +384,13 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
             }
         }
 
-        uint256 nonce = transactionNonces[reporter];
+        uint256 nonce = nonces[reporter];
 
         // Verify EIP-712 signature (includes real reportedChainId + transactionCount)
         _verifyAckSignature(reporter, forwarder, dataHash, reportedChainId, transactionCount, nonce, deadline, v, r, s);
 
         // Increment nonce
-        transactionNonces[reporter]++;
+        nonces[reporter]++;
 
         // Derive isSponsored: if forwarder != reporter, someone else is paying
         bool isSponsored = reporter != forwarder;
@@ -499,7 +499,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         bytes32 s
     ) internal view {
         bytes32 structHash = _buildTxBatchRegStructHash(
-            dataHash, reportedChainId, deadline, transactionNonces[reporter], reporter, txCount
+            dataHash, reportedChainId, deadline, nonces[reporter], reporter, txCount
         );
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = ECDSA.recover(digest, v, r, s);
@@ -544,7 +544,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         );
 
         // === EFFECTS ===
-        transactionNonces[reporter]++;
+        nonces[reporter]++;
         delete _pendingAcknowledgements[reporter];
 
         _executeTxBatchRegistration(reporter, dataHash, ack.isSponsored, transactionHashes, chainIds);

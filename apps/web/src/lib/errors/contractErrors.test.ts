@@ -244,7 +244,7 @@ Version: viem@2.41.2`;
       (errorName, expectedSelector) => {
         const info = CONTRACT_ERROR_MAP[expectedSelector];
         expect(info).toBeDefined();
-        expect(info.name).toBe(errorName);
+        expect(info!.name).toBe(errorName);
       }
     );
 

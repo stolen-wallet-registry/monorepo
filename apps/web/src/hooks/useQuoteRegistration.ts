@@ -9,7 +9,7 @@
 import { useReadContract, useChainId } from 'wagmi';
 import { formatEther } from 'viem';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import type { Address } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
@@ -41,22 +41,35 @@ export function useQuoteRegistration(
     'useQuoteRegistration'
   );
 
-  // Get the correct ABI and function name (unified: quoteRegistration on both hub and spoke)
-  const { abi, functions } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
+  const enabled = !!contractAddress && !!ownerAddress;
 
-  const result = useReadContract({
+  // Split-call: one hook per ABI, only one fires based on registryType
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
+    abi: walletRegistryAbi,
     chainId,
-    // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
-    // wagmi's literal-type inference. See registryMetadata.ts for the mapping.
-    functionName: functions.quoteRegistration as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    functionName: 'quoteRegistration',
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
-      enabled: !!contractAddress && !!ownerAddress,
-      staleTime: 30_000, // 30 seconds
+      enabled: !isSpoke && enabled,
+      staleTime: 30_000,
     },
   });
+
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'quoteRegistration',
+    args: ownerAddress ? [ownerAddress] : undefined,
+    query: {
+      enabled: isSpoke && enabled,
+      staleTime: 30_000,
+    },
+  });
+
+  const result = isSpoke ? spokeResult : hubResult;
 
   // Log quote result for debugging
   if (result.isError) {

@@ -132,7 +132,7 @@ export function useRecentRegistrations(
           let chainId: string;
           let walletAddress: string;
 
-          if (caip10Parts.length >= 3) {
+          if (caip10Parts.length >= 3 && caip10Parts[0] && caip10Parts[1] && caip10Parts[2]) {
             chainId = `${caip10Parts[0]}:${caip10Parts[1]}`;
             walletAddress = caip10Parts[2];
           } else if (caip10Parts.length >= 2) {

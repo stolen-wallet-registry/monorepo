@@ -36,8 +36,8 @@ import { useRegistrationStore, type RegistrationStep } from '@/stores/registrati
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
-import { useP2PKeepAlive } from '@/hooks/useP2PKeepAlive';
-import { useP2PConnectionHealth } from '@/hooks/useP2PConnectionHealth';
+import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
+import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
 import { setup, PROTOCOLS, readStreamData, type ProtocolHandler } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 import { isHash } from '@/lib/types/ethereum';

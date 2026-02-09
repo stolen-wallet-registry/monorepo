@@ -159,17 +159,21 @@ export function DevTools() {
               if (e.key === 'ArrowRight') {
                 e.preventDefault();
                 const nextIndex = (currentIndex + 1) % tabs.length;
-                setActiveTab(tabs[nextIndex]);
+                const next = tabs[nextIndex];
+                if (next) setActiveTab(next);
               } else if (e.key === 'ArrowLeft') {
                 e.preventDefault();
                 const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-                setActiveTab(tabs[prevIndex]);
+                const prev = tabs[prevIndex];
+                if (prev) setActiveTab(prev);
               } else if (e.key === 'Home') {
                 e.preventDefault();
-                setActiveTab(tabs[0]);
+                const first = tabs[0];
+                if (first) setActiveTab(first);
               } else if (e.key === 'End') {
                 e.preventDefault();
-                setActiveTab(tabs[tabs.length - 1]);
+                const last = tabs[tabs.length - 1];
+                if (last) setActiveTab(last);
               }
             }}
           >

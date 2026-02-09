@@ -9,5 +9,6 @@
 export function getBrowserLanguage(): string {
   if (typeof navigator === 'undefined') return 'en';
   const lang = navigator.language || (navigator as { userLanguage?: string }).userLanguage;
-  return lang?.split('-')[0].toLowerCase() ?? 'en';
+  const primary = lang?.split('-')[0];
+  return primary ? primary.toLowerCase() : 'en';
 }

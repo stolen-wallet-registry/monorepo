@@ -13,8 +13,8 @@ import type { Libp2p } from '@libp2p/interface';
 import { logger } from '@/lib/logger';
 import { getRelayServers, extractPeerIdFromMultiaddr } from '@/lib/p2p/types';
 import { useP2PStore } from '@/stores/p2pStore';
-import { checkRelayConnection, checkPeerConnection } from '@/hooks/p2pConnectionHealthChecks';
-import { computeHealthUpdate } from '@/hooks/p2pConnectionHealthState';
+import { checkRelayConnection, checkPeerConnection } from './p2pConnectionHealthChecks';
+import { computeHealthUpdate } from './p2pConnectionHealthState';
 
 /** Health check interval in milliseconds (30 seconds) */
 const HEALTH_CHECK_INTERVAL_MS = 30_000;

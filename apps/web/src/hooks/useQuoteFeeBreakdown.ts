@@ -10,7 +10,7 @@
 import { useMemo } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { formatFeeLineItem } from '@/lib/utils';
 import { useEthPrice } from './useEthPrice';
 import type { Address } from '@/lib/types/ethereum';
@@ -50,36 +50,47 @@ export function useQuoteFeeBreakdown(
     'useQuoteFeeBreakdown'
   );
 
-  // Get the correct ABI and function name (unified: quoteFeeBreakdown on both hub and spoke)
-  const { abi, functions } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
 
   // Convert null to undefined for wagmi compatibility
   const normalizedAddress = ownerAddress ?? undefined;
+  const enabled = !!normalizedAddress && !!contractAddress;
 
-  // Unified call: quoteFeeBreakdown(address) on both hub and spoke
-  const result = useReadContract({
+  // Split-call: one hook per ABI, only one fires based on registryType
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
+    abi: walletRegistryAbi,
     chainId,
-    // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
-    // wagmi's literal-type inference. See registryMetadata.ts for the mapping.
-    functionName: functions.quoteFeeBreakdown as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    functionName: 'quoteFeeBreakdown',
     args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {
-      enabled: !!normalizedAddress && !!contractAddress,
+      enabled: !isSpoke && enabled,
       staleTime: 30_000,
     },
   });
+
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'quoteFeeBreakdown',
+    args: normalizedAddress ? [normalizedAddress] : undefined,
+    query: {
+      enabled: isSpoke && enabled,
+      staleTime: 30_000,
+    },
+  });
+
+  const result = isSpoke ? spokeResult : hubResult;
 
   // Normalize data from contract response
   const { data, raw } = useMemo(() => {
     if (!result.data) return { data: null, raw: null };
 
     const ethPriceUsd = ethPrice?.usd;
-    const isCrossChain = registryType === 'spoke';
+    const isCrossChain = isSpoke;
 
     // Both hub and spoke return the same FeeBreakdown struct
-    // wagmi infers return type as a tuple union due to dynamic functionName; cast through unknown
     const breakdown = result.data as unknown as {
       bridgeFee: bigint;
       registrationFee: bigint;
@@ -112,7 +123,7 @@ export function useQuoteFeeBreakdown(
     };
 
     return { data: formatted, raw: rawBreakdown };
-  }, [result.data, ethPrice?.usd, registryType]);
+  }, [result.data, ethPrice?.usd, registryType, isSpoke]);
 
   return {
     data,
@@ -161,34 +172,46 @@ export function useTxQuoteFeeBreakdown(
     'useTxQuoteFeeBreakdown'
   );
 
-  // Get the correct ABI and function name (unified: quoteFeeBreakdown on both hub and spoke)
-  const { abi, functions } = getRegistryMetadata('transaction', registryType);
+  const isSpoke = registryType === 'spoke';
+  const enabled = !!reporter && !!contractAddress;
 
-  // Unified call: quoteFeeBreakdown(address) on both hub and spoke
-  const result = useReadContract({
+  // Split-call: one hook per ABI, only one fires based on registryType
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
+    abi: transactionRegistryAbi,
     chainId,
-    // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
-    // wagmi's literal-type inference. See registryMetadata.ts for the mapping.
-    functionName: functions.quoteFeeBreakdown as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    functionName: 'quoteFeeBreakdown',
     args: reporter ? [reporter] : undefined,
     query: {
-      enabled: !!reporter && !!contractAddress,
+      enabled: !isSpoke && enabled,
       staleTime: 30_000,
       refetchInterval: 60_000,
     },
   });
+
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'quoteFeeBreakdown',
+    args: reporter ? [reporter] : undefined,
+    query: {
+      enabled: isSpoke && enabled,
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+    },
+  });
+
+  const result = isSpoke ? spokeResult : hubResult;
 
   // Normalize data from contract response
   const { data, raw, totalWei } = useMemo(() => {
     if (!result.data) return { data: null, raw: null, totalWei: undefined };
 
     const ethPriceUsd = ethPrice?.usd;
-    const isCrossChain = registryType === 'spoke';
+    const isCrossChain = isSpoke;
 
     // Both hub and spoke return the same FeeBreakdown struct
-    // wagmi infers return type as a tuple union due to dynamic functionName; cast through unknown
     const breakdown = result.data as unknown as {
       bridgeFee: bigint;
       registrationFee: bigint;
@@ -221,7 +244,7 @@ export function useTxQuoteFeeBreakdown(
     };
 
     return { data: formatted, raw: rawBreakdown, totalWei: breakdown.total };
-  }, [result.data, ethPrice?.usd, registryType]);
+  }, [result.data, ethPrice?.usd, registryType, isSpoke]);
 
   return {
     data,

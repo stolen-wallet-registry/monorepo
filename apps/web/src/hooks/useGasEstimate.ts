@@ -11,7 +11,7 @@
 import { useEstimateGas, useGasPrice, useChainId } from 'wagmi';
 import { formatEther, formatGwei, encodeFunctionData } from 'viem';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { useEthPrice } from './useEthPrice';
 import { logger } from '@/lib/logger';
 import { formatCentsToUsd, formatEthConsistent } from '@/lib/utils';
@@ -106,25 +106,45 @@ export function useGasEstimate({
     'useGasEstimate'
   );
 
-  // Get the correct ABI and function names for hub/spoke
-  const { abi, functions } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
 
-  // Map step to correct function name using metadata
-  const functionName = step === 'acknowledgement' ? functions.acknowledge : functions.register;
+  // Map step to correct function name (identical on both hub and spoke)
+  const functionName = step === 'acknowledgement' ? 'acknowledge' : 'register';
 
-  // Build call data for gas estimation
-  //
-  // wagmi/viem boundary: dynamic ABI + function name from registryMetadata breaks
-  // viem's literal-type inference for encodeFunctionData. Both functionName and
-  // args need casts because their types depend on ABI inference.
-  // See registryMetadata.ts for the hub/spoke function name mapping.
-  const callData = args
-    ? encodeFunctionData({
-        abi,
-        functionName: functionName as 'acknowledge' | 'register',
-        args: args as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-      })
-    : undefined;
+  // Build call data for gas estimation — branch on ABI for type safety
+  // encodeFunctionData requires args to match the ABI's tuple type exactly.
+  // Since args is a union (WalletAcknowledgeArgs | WalletRegistrationArgs),
+  // we encode via the concrete ABI branch to satisfy viem's inference.
+  let callData: `0x${string}` | undefined;
+  if (args) {
+    if (isSpoke) {
+      callData =
+        functionName === 'acknowledge'
+          ? encodeFunctionData({
+              abi: spokeRegistryAbi,
+              functionName: 'acknowledge',
+              args: args as WalletAcknowledgeArgs,
+            })
+          : encodeFunctionData({
+              abi: spokeRegistryAbi,
+              functionName: 'register',
+              args: args as WalletRegistrationArgs,
+            });
+    } else {
+      callData =
+        functionName === 'acknowledge'
+          ? encodeFunctionData({
+              abi: walletRegistryAbi,
+              functionName: 'acknowledge',
+              args: args as WalletAcknowledgeArgs,
+            })
+          : encodeFunctionData({
+              abi: walletRegistryAbi,
+              functionName: 'register',
+              args: args as WalletRegistrationArgs,
+            });
+    }
+  }
 
   const estimateEnabled = enabled && !!contractAddress && !!args;
 

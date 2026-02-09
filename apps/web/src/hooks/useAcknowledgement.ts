@@ -12,7 +12,7 @@
 
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import type { ParsedSignature } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -63,8 +63,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
     'useAcknowledgement'
   );
 
-  // Get the correct ABI and function names for hub/spoke
-  const { abi, functions } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
 
   const {
     writeContractAsync,
@@ -98,32 +97,19 @@ export function useAcknowledgement(): UseAcknowledgementResult {
       deadline,
       nonce,
       signature,
-      feeWei,
     } = params;
-
-    // Use metadata for correct function name based on chain type
-    const functionName = functions.acknowledge;
-
-    if (!functionName) {
-      logger.contract.error('useAcknowledgement: Missing acknowledge function in metadata', {
-        chainId,
-        registryType,
-      });
-      throw new Error('Acknowledgement function not configured for this registry type');
-    }
 
     logger.registration.info('Submitting acknowledgement transaction', {
       chainId,
       registryType,
       contractAddress,
-      functionName,
+      functionName: 'acknowledge',
       registeree,
       forwarder,
       reportedChainId: reportedChainId.toString(),
       incidentTimestamp: incidentTimestamp.toString(),
       deadline: deadline.toString(),
       nonce: nonce.toString(),
-      feeWei: feeWei?.toString() ?? '0',
     });
 
     try {
@@ -138,19 +124,23 @@ export function useAcknowledgement(): UseAcknowledgementResult {
         signature.v,
         signature.r,
         signature.s,
-      ];
+      ] as const;
 
-      // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
-      // wagmi's literal-type inference — the entire config object needs the cast
-      // because both functionName and args types depend on ABI inference.
-      // See registryMetadata.ts for the hub/spoke function name mapping.
-      const txHash = await writeContractAsync({
-        address: contractAddress,
-        abi,
-        functionName: functionName as 'acknowledge',
-        args,
-        value: feeWei ?? 0n,
-      } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+      // Branch on ABI for full type inference — function name is identical on both
+      // Both hub and spoke acknowledge are nonpayable (fees collected at register)
+      const txHash = isSpoke
+        ? await writeContractAsync({
+            address: contractAddress,
+            abi: spokeRegistryAbi,
+            functionName: 'acknowledge',
+            args,
+          })
+        : await writeContractAsync({
+            address: contractAddress,
+            abi: walletRegistryAbi,
+            functionName: 'acknowledge',
+            args,
+          });
 
       logger.registration.info('Acknowledgement transaction submitted', {
         txHash,

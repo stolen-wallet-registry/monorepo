@@ -67,5 +67,5 @@ export function getLanguageTranslation(
   type: 'wallet' | 'support' = 'wallet'
 ): string {
   const translations = type === 'wallet' ? WALLET_TRANSLATIONS : SUPPORT_TRANSLATIONS;
-  return translations[code] ?? translations.en;
+  return translations[code] ?? translations['en'] ?? 'Signed as stolen';
 }

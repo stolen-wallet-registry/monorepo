@@ -129,8 +129,11 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
     // UNIFIED QUERY INTERFACE - CAIP-10 String
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @inheritdoc IFraudRegistryHub
     // TODO: Phase 10 — replace length-based routing with namespace-based routing for non-EVM CAIP-10 support
+    /// @inheritdoc IFraudRegistryHub
+    /// @notice Check if any identifier is registered across all registries
+    /// @param caip10 The CAIP-10 identifier (e.g., "eip155:8453:0x742d35...")
+    /// @return True if registered in any registry
     function isRegistered(string calldata caip10) external view returns (bool) {
         // Parse CAIP-10 to determine identifier length
         (,,, uint256 addrLen) = CAIP10.parse(caip10);
@@ -166,8 +169,11 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
         revert FraudRegistryHub__InvalidIdentifierLength();
     }
 
-    /// @inheritdoc IFraudRegistryHub
     // TODO: Phase 10 — replace length-based routing with namespace-based routing for non-EVM CAIP-10 support
+    /// @inheritdoc IFraudRegistryHub
+    /// @notice Get the registry type(s) where an identifier is registered
+    /// @param caip10 The CAIP-10 identifier
+    /// @return registeredIn Array of registry types where identifier is registered
     function getRegisteredTypes(string calldata caip10) external view returns (RegistryType[] memory registeredIn) {
         (,,, uint256 addrLen) = CAIP10.parse(caip10);
 

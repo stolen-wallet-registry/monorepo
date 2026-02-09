@@ -13,3 +13,10 @@ export type { FeeLineItem, FeeBreakdown, RawFeeBreakdown } from './fees';
  * - 'transaction': Stolen Transaction Registry - reporter is the wallet reporting stolen transactions
  */
 export type RegistryType = 'wallet' | 'transaction';
+
+export type {
+  RegistrationType,
+  RegistrationStep,
+  TransactionRegistrationType,
+  TransactionRegistrationStep,
+} from './registration';

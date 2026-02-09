@@ -121,7 +121,7 @@ export function useSupportTokens({
 
   const tokenIds = data ?? [];
   // Latest token is the last one in the array (highest ID)
-  const latestTokenId = tokenIds.length > 0 ? tokenIds[tokenIds.length - 1] : null;
+  const latestTokenId = tokenIds.length > 0 ? (tokenIds[tokenIds.length - 1] ?? null) : null;
 
   return {
     tokenIds,

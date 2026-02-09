@@ -204,7 +204,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
     function _doAcknowledge(address _forwarder, bytes32[] memory txHashes, bytes32[] memory chainIds) internal {
         bytes32 dataHash = _computeDataHash(txHashes, chainIds);
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
-        uint256 nonce = txRegistry.transactionNonces(reporter);
+        uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
 
         (uint8 v, bytes32 r, bytes32 s) = _signProdTxAck(
@@ -229,7 +229,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
     function _doRegister(address _forwarder, bytes32[] memory txHashes, bytes32[] memory chainIds) internal {
         bytes32 dataHash = _computeDataHash(txHashes, chainIds);
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
-        uint256 nonce = txRegistry.transactionNonces(reporter);
+        uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
 
         // Advance past grace period
@@ -275,7 +275,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
 
         // Verify pending state
         assertTrue(txRegistry.isTransactionPending(reporter));
-        assertEq(txRegistry.transactionNonces(reporter), 1, "Nonce should increment after ack");
+        assertEq(txRegistry.nonces(reporter), 1, "Nonce should increment after ack");
 
         // Verify stored ack data
         ITransactionRegistry.TransactionAcknowledgementData memory ack =
@@ -385,7 +385,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         // Try to acknowledge again while still pending
         bytes32 dataHash = _computeDataHash(txHashes, chainIds);
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
-        uint256 nonce = txRegistry.transactionNonces(reporter);
+        uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
 
         (uint8 v, bytes32 r, bytes32 s) =
@@ -433,7 +433,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         vm.roll(ack.gracePeriodStart + 1);
 
         // Prepare registration signature
-        uint256 nonce = txRegistry.transactionNonces(reporter);
+        uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
         (uint8 v, bytes32 r, bytes32 s) =
             _signProdTxReg(reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 3, nonce, deadline);
@@ -461,7 +461,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         assertFalse(txRegistry.isTransactionPending(reporter), "Pending should be cleared after registration");
 
         // Verify nonce incremented (ack used nonce 0, reg used nonce 1)
-        assertEq(txRegistry.transactionNonces(reporter), 2, "Nonce should be 2 after ack + reg");
+        assertEq(txRegistry.nonces(reporter), 2, "Nonce should be 2 after ack + reg");
 
         // Verify batch metadata
         ITransactionRegistry.TransactionBatch memory batch = txRegistry.getTransactionBatch(1);
@@ -481,7 +481,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         _doAcknowledge(forwarder, txHashes, chainIds);
 
         // Do NOT advance blocks — still in grace period
-        uint256 nonce = txRegistry.transactionNonces(reporter);
+        uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
         (uint8 v, bytes32 r, bytes32 s) =
             _signProdTxReg(reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 3, nonce, deadline);
@@ -504,7 +504,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
             txRegistry.getTransactionAcknowledgementData(reporter);
         vm.roll(ack.deadline + 1);
 
-        uint256 nonce = txRegistry.transactionNonces(reporter);
+        uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
         (uint8 v, bytes32 r, bytes32 s) =
             _signProdTxReg(reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 3, nonce, deadline);
@@ -528,7 +528,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         vm.roll(ack.gracePeriodStart + 1);
 
         address wrongForwarder = makeAddr("wrongForwarder");
-        uint256 nonce = txRegistry.transactionNonces(reporter);
+        uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
 
         // Sign with wrongForwarder as the forwarder in the sig (matching msg.sender)
@@ -560,7 +560,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         differentTxHashes[2] = keccak256("tampered3");
 
         bytes32 differentDataHash = _computeDataHash(differentTxHashes, chainIds);
-        uint256 nonce = txRegistry.transactionNonces(reporter);
+        uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
 
         (uint8 v, bytes32 r, bytes32 s) = _signProdTxReg(
@@ -598,7 +598,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
 
         bytes32 dataHash = _computeDataHash(fewerTxHashes, fewerChainIds);
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
-        uint256 nonce = txRegistry.transactionNonces(reporter);
+        uint256 nonce = txRegistry.nonces(reporter);
         uint256 deadline = block.timestamp + 3600;
 
         (uint8 v, bytes32 r, bytes32 s) =
@@ -950,9 +950,8 @@ contract TransactionRegistryTest is EIP712TestHelper {
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint32 txCount = uint32(txHashes.length);
         uint256 deadline0 = block.timestamp + 3600;
-        (uint8 v0, bytes32 r0, bytes32 s0) = _signProdTxAckFor(
-            address(reg), dataHash, reportedChainId, txCount, reg.transactionNonces(reporter), deadline0
-        );
+        (uint8 v0, bytes32 r0, bytes32 s0) =
+            _signProdTxAckFor(address(reg), dataHash, reportedChainId, txCount, reg.nonces(reporter), deadline0);
         vm.prank(forwarder);
         reg.acknowledgeTransactions(reporter, forwarder, deadline0, dataHash, reportedChainId, txCount, v0, r0, s0);
     }
@@ -967,9 +966,8 @@ contract TransactionRegistryTest is EIP712TestHelper {
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint32 txCount = uint32(txHashes.length);
         uint256 deadline1 = block.timestamp + 3600;
-        (uint8 v1, bytes32 r1, bytes32 s1) = _signProdTxRegFor(
-            address(reg), dataHash, reportedChainId, txCount, reg.transactionNonces(reporter), deadline1
-        );
+        (uint8 v1, bytes32 r1, bytes32 s1) =
+            _signProdTxRegFor(address(reg), dataHash, reportedChainId, txCount, reg.nonces(reporter), deadline1);
         vm.deal(forwarder, sendValue);
         vm.prank(forwarder);
         reg.registerTransactions{ value: sendValue }(reporter, deadline1, txHashes, chainIds, v1, r1, s1);
@@ -1009,7 +1007,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         uint32 txCount = uint32(txHashes.length);
         uint256 deadline1 = block.timestamp + 3600;
         (uint8 v1, bytes32 r1, bytes32 s1) = _signProdTxRegFor(
-            address(feeRegistry), dataHash, reportedChainId, txCount, feeRegistry.transactionNonces(reporter), deadline1
+            address(feeRegistry), dataHash, reportedChainId, txCount, feeRegistry.nonces(reporter), deadline1
         );
 
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__InsufficientFee.selector);

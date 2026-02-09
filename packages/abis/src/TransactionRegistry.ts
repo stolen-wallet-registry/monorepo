@@ -200,6 +200,50 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'function',
+    name: 'getDeadlines',
+    inputs: [
+      {
+        name: 'reporter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: 'currentBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'expiryBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'startBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'graceStartsAt',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'timeLeft',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'isExpired',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'getTransactionAcknowledgementData',
     inputs: [
       {
@@ -301,50 +345,6 @@ export const TransactionRegistryABI = [
             internalType: 'uint32',
           },
         ],
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'getTransactionDeadlines',
-    inputs: [
-      {
-        name: 'reporter',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
-    outputs: [
-      {
-        name: 'currentBlock',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'expiryBlock',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'startBlock',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'graceStartsAt',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'timeLeft',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'isExpired',
-        type: 'bool',
-        internalType: 'bool',
       },
     ],
     stateMutability: 'view',
@@ -550,6 +550,25 @@ export const TransactionRegistryABI = [
         name: '',
         type: 'bool',
         internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'nonces',
+    inputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
     stateMutability: 'view',
@@ -815,25 +834,6 @@ export const TransactionRegistryABI = [
     type: 'function',
     name: 'transactionBatchCount',
     inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'transactionNonces',
-    inputs: [
-      {
-        name: '',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
     outputs: [
       {
         name: '',

@@ -83,7 +83,7 @@ export const WalletRegistryABI = [
       },
     ],
     outputs: [],
-    stateMutability: 'payable',
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -842,6 +842,13 @@ export const WalletRegistryABI = [
     stateMutability: 'nonpayable',
   },
   {
+    type: 'function',
+    name: 'withdrawCollectedFees',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
     type: 'event',
     name: 'BatchCreated',
     inputs: [
@@ -1147,6 +1154,11 @@ export const WalletRegistryABI = [
   },
   {
     type: 'error',
+    name: 'WalletRegistry__FeeTransferFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'WalletRegistry__GracePeriodNotStarted',
     inputs: [],
   },
@@ -1188,6 +1200,11 @@ export const WalletRegistryABI = [
   {
     type: 'error',
     name: 'WalletRegistry__OnlyOperatorSubmitter',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'WalletRegistry__RefundFailed',
     inputs: [],
   },
   {

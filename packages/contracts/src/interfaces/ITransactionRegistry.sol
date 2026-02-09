@@ -306,7 +306,7 @@ interface ITransactionRegistry {
     /// @return graceStartsAt Blocks remaining until registration window opens (0 if open)
     /// @return timeLeft Blocks remaining until expiry (0 if expired)
     /// @return isExpired True if the registration window has expired
-    function getTransactionDeadlines(address reporter)
+    function getDeadlines(address reporter)
         external
         view
         returns (
@@ -338,7 +338,7 @@ interface ITransactionRegistry {
     /// @notice Get nonce for a reporter
     /// @param reporter The reporter address
     /// @return The current nonce
-    function transactionNonces(address reporter) external view returns (uint256);
+    function nonces(address reporter) external view returns (uint256);
 
     /// @notice Get batch data
     /// @param batchId The batch ID

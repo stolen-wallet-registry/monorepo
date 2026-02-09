@@ -9,7 +9,7 @@ import { useEffect, useRef } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
 import { getBlockTime } from '@/lib/blocks';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
 
@@ -58,36 +58,44 @@ export function useContractDeadlines(
     'useContractDeadlines'
   );
 
-  // Get the correct ABI and function names for hub/spoke
-  const { abi, functions } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
+  const addr = registereeAddress;
+  const enabled = !!addr && !!contractAddress;
 
-  const result = useReadContract({
+  // Split-call: one hook per ABI, only one fires based on registryType
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
+    abi: walletRegistryAbi,
     chainId,
-    // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
-    // wagmi's literal-type inference. See registryMetadata.ts for the mapping.
-    functionName: functions.getDeadlines as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-    args: registereeAddress ? [registereeAddress] : undefined,
+    functionName: 'getDeadlines',
+    args: addr ? [addr] : undefined,
     query: {
-      enabled: !!registereeAddress && !!contractAddress,
+      enabled: !isSpoke && enabled,
       refetchInterval,
       staleTime: refetchInterval / 2,
     },
   });
 
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'getDeadlines',
+    args: addr ? [addr] : undefined,
+    query: {
+      enabled: isSpoke && enabled,
+      refetchInterval,
+      staleTime: refetchInterval / 2,
+    },
+  });
+
+  const result = isSpoke ? spokeResult : hubResult;
+
   // Transform the raw result into a typed object
   // Unified format: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
   let transformedData: DeadlineData | undefined;
   if (result.data) {
-    const rawData = result.data as unknown as readonly [
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      boolean,
-    ];
+    const rawData = result.data as readonly [bigint, bigint, bigint, bigint, bigint, boolean];
     if (rawData.length >= 6) {
       transformedData = {
         currentBlock: BigInt(rawData[0]),
@@ -170,32 +178,43 @@ export function useTxContractDeadlines(
     'useTxContractDeadlines'
   );
 
-  // Get the correct ABI and function names for hub/spoke
-  const { abi, functions } = getRegistryMetadata('transaction', registryType);
-
+  const isSpoke = registryType === 'spoke';
   const enabled = !!reporter && !!contractAddress;
 
-  // Read deadlines from contract (hub: getTransactionDeadlines, spoke: getDeadlines)
+  // Split-call: one hook per ABI, only one fires based on registryType
+  const hubResult = useReadContract({
+    address: contractAddress,
+    abi: transactionRegistryAbi,
+    functionName: 'getDeadlines',
+    args: reporter ? [reporter] : undefined,
+    chainId,
+    query: {
+      enabled: !isSpoke && enabled,
+      staleTime: 3_000,
+      refetchInterval: 3_000,
+    },
+  });
+
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    functionName: 'getDeadlines',
+    args: reporter ? [reporter] : undefined,
+    chainId,
+    query: {
+      enabled: isSpoke && enabled,
+      staleTime: 3_000,
+      refetchInterval: 3_000,
+    },
+  });
+
   const {
     data: contractData,
     isLoading,
     isError,
     error,
     refetch,
-  } = useReadContract({
-    address: contractAddress,
-    abi,
-    // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
-    // wagmi's literal-type inference. See registryMetadata.ts for the mapping.
-    functionName: functions.getDeadlines as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-    args: reporter ? [reporter] : undefined,
-    chainId,
-    query: {
-      enabled,
-      staleTime: 3_000,
-      refetchInterval: 3_000, // Poll every 3 seconds for countdown
-    },
-  });
+  } = isSpoke ? spokeResult : hubResult;
 
   // Track previous log key to avoid duplicate logs
   const prevLogKeyRef = useRef<string | null>(null);

@@ -12,7 +12,7 @@
 
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import type { ParsedSignature } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -63,8 +63,7 @@ export function useRegistration(): UseRegistrationResult {
     'useRegistration'
   );
 
-  // Get the correct ABI and function names for hub/spoke
-  const { abi, functions } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
 
   const {
     writeContractAsync,
@@ -101,22 +100,11 @@ export function useRegistration(): UseRegistrationResult {
       feeWei,
     } = params;
 
-    // Use metadata for correct function name based on chain type
-    const functionName = functions.register;
-
-    if (!functionName) {
-      logger.contract.error('useRegistration: Missing register function in metadata', {
-        chainId,
-        registryType,
-      });
-      throw new Error('Registration function not configured for this registry type');
-    }
-
     logger.registration.info('Submitting registration transaction', {
       chainId,
       registryType,
       contractAddress,
-      functionName,
+      functionName: 'register',
       registeree,
       forwarder,
       reportedChainId: reportedChainId.toString(),
@@ -128,28 +116,34 @@ export function useRegistration(): UseRegistrationResult {
 
     try {
       // Unified: register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
-      //
-      // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
-      // wagmi's literal-type inference — the entire config object needs the cast
-      // because both functionName and args types depend on ABI inference.
-      // See registryMetadata.ts for the hub/spoke function name mapping.
-      const txHash = await writeContractAsync({
-        address: contractAddress,
-        abi,
-        functionName: functionName as 'register',
-        args: [
-          registeree,
-          forwarder,
-          reportedChainId,
-          incidentTimestamp,
-          deadline,
-          nonce,
-          signature.v,
-          signature.r,
-          signature.s,
-        ],
-        value: feeWei ?? 0n,
-      } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+      const args = [
+        registeree,
+        forwarder,
+        reportedChainId,
+        incidentTimestamp,
+        deadline,
+        nonce,
+        signature.v,
+        signature.r,
+        signature.s,
+      ] as const;
+
+      // Branch on ABI for full type inference — function name is identical on both
+      const txHash = isSpoke
+        ? await writeContractAsync({
+            address: contractAddress,
+            abi: spokeRegistryAbi,
+            functionName: 'register',
+            args,
+            value: feeWei ?? 0n,
+          })
+        : await writeContractAsync({
+            address: contractAddress,
+            abi: walletRegistryAbi,
+            functionName: 'register',
+            args,
+            value: feeWei ?? 0n,
+          });
 
       logger.registration.info('Registration transaction submitted', {
         txHash,

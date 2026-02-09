@@ -12,7 +12,7 @@
 import { useMemo } from 'react';
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import type { SignatureStep } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -74,8 +74,8 @@ export function useGenerateHashStruct(
     'useGenerateHashStruct'
   );
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
+  const abi = isSpoke ? spokeRegistryAbi : walletRegistryAbi;
 
   const result = useReadContract({
     address: contractAddress,

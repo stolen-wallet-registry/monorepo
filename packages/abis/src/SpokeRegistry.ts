@@ -1098,6 +1098,11 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'error',
+    name: 'SpokeRegistry__DataMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'SpokeRegistry__EmptyBatch',
     inputs: [],
   },

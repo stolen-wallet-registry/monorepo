@@ -166,7 +166,7 @@ interface IWalletRegistry {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external payable;
+    ) external;
 
     /// @notice Phase 2: Complete wallet registration after grace period
     /// @dev Must be called by authorized forwarder within deadline.
