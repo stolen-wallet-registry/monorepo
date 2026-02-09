@@ -130,6 +130,7 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IFraudRegistryHub
+    // TODO: Phase 10 — replace length-based routing with namespace-based routing for non-EVM CAIP-10 support
     function isRegistered(string calldata caip10) external view returns (bool) {
         // Parse CAIP-10 to determine identifier length
         (,,, uint256 addrLen) = CAIP10.parse(caip10);
@@ -166,6 +167,7 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
     }
 
     /// @inheritdoc IFraudRegistryHub
+    // TODO: Phase 10 — replace length-based routing with namespace-based routing for non-EVM CAIP-10 support
     function getRegisteredTypes(string calldata caip10) external view returns (RegistryType[] memory registeredIn) {
         (,,, uint256 addrLen) = CAIP10.parse(caip10);
 

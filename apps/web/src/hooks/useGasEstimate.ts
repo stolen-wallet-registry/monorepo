@@ -113,13 +113,16 @@ export function useGasEstimate({
   const functionName = step === 'acknowledgement' ? functions.acknowledge : functions.register;
 
   // Build call data for gas estimation
-  // Cast functionName and args since viem expects specific literal types from ABI
+  //
+  // wagmi/viem boundary: dynamic ABI + function name from registryMetadata breaks
+  // viem's literal-type inference for encodeFunctionData. Both functionName and
+  // args need casts because their types depend on ABI inference.
+  // See registryMetadata.ts for the hub/spoke function name mapping.
   const callData = args
     ? encodeFunctionData({
         abi,
         functionName: functionName as 'acknowledge' | 'register',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        args: args as any,
+        args: args as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       })
     : undefined;
 

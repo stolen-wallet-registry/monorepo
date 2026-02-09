@@ -132,8 +132,8 @@ function getRecentSearches(): RecentSearch[] {
     }
 
     // Parse and normalize/filter entries
-    const parsed = JSON.parse(stored) as unknown[];
-    cachedRecentSearches = parsed
+    const parsed: unknown = JSON.parse(stored);
+    cachedRecentSearches = (Array.isArray(parsed) ? parsed : [])
       .map(normalizeRecentSearch)
       .filter((entry): entry is RecentSearch => entry !== null);
     return cachedRecentSearches;

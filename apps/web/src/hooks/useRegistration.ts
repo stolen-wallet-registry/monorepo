@@ -128,6 +128,11 @@ export function useRegistration(): UseRegistrationResult {
 
     try {
       // Unified: register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+      //
+      // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
+      // wagmi's literal-type inference — the entire config object needs the cast
+      // because both functionName and args types depend on ABI inference.
+      // See registryMetadata.ts for the hub/spoke function name mapping.
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi,
@@ -144,8 +149,7 @@ export function useRegistration(): UseRegistrationResult {
           signature.s,
         ],
         value: feeWei ?? 0n,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
+      } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
 
       logger.registration.info('Registration transaction submitted', {
         txHash,

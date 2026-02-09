@@ -142,7 +142,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       signature: parsedSig,
       feeWei,
     });
-  }, [storedSig, registeree, relayerAddress, chainId, submitRegistration, feeWei]);
+  }, [storedSig, registeree, relayerAddress, submitRegistration, feeWei]);
 
   // Cleanup retry timeout on unmount
   useEffect(() => {

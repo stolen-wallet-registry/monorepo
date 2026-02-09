@@ -35,6 +35,7 @@ export {
 } from './useRecentRegistrations';
 export {
   useBatches,
+  formatBatchId,
   type BatchSummary,
   type BatchType,
   type UseBatchesOptions,

@@ -61,7 +61,9 @@ export function useQuoteFeeBreakdown(
     address: contractAddress,
     abi,
     chainId,
-    functionName: functions.quoteFeeBreakdown as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
+    // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
+    // wagmi's literal-type inference. See registryMetadata.ts for the mapping.
+    functionName: functions.quoteFeeBreakdown as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {
       enabled: !!normalizedAddress && !!contractAddress,
@@ -167,7 +169,9 @@ export function useTxQuoteFeeBreakdown(
     address: contractAddress,
     abi,
     chainId,
-    functionName: functions.quoteFeeBreakdown as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
+    // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
+    // wagmi's literal-type inference. See registryMetadata.ts for the mapping.
+    functionName: functions.quoteFeeBreakdown as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     args: reporter ? [reporter] : undefined,
     query: {
       enabled: !!reporter && !!contractAddress,

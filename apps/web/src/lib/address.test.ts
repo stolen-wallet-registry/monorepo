@@ -61,8 +61,10 @@ describe('address utilities', () => {
     });
 
     it('returns false for null-like values', () => {
-      expect(isValidEthereumAddress(null as unknown as string)).toBe(false);
-      expect(isValidEthereumAddress(undefined as unknown as string)).toBe(false);
+      // @ts-expect-error - testing invalid input
+      expect(isValidEthereumAddress(null)).toBe(false);
+      // @ts-expect-error - testing invalid input
+      expect(isValidEthereumAddress(undefined)).toBe(false);
     });
   });
 

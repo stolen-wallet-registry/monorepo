@@ -48,7 +48,9 @@ export function useQuoteRegistration(
     address: contractAddress,
     abi,
     chainId,
-    functionName: functions.quoteRegistration as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
+    // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
+    // wagmi's literal-type inference. See registryMetadata.ts for the mapping.
+    functionName: functions.quoteRegistration as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
       enabled: !!contractAddress && !!ownerAddress,

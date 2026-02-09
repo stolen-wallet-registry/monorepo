@@ -2,11 +2,13 @@
 pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
+import { EIP712Constants } from "../../src/libraries/EIP712Constants.sol";
 
 /// @title EIP712TestHelper
 /// @notice Shared EIP-712 constants and signing utilities for tests
 /// @dev Inherit from this contract to get access to statement constants and signing helpers.
-///      Statements and type hashes must match the production contracts exactly.
+///      All statement strings and typehashes are imported from EIP712Constants.sol
+///      to guarantee they stay in sync with production.
 abstract contract EIP712TestHelper is Test {
     // ═══════════════════════════════════════════════════════════════════════════
     // EIP-712 DOMAIN CONSTANTS
@@ -25,48 +27,36 @@ abstract contract EIP712TestHelper is Test {
     string internal constant TX_DOMAIN_NAME = "StolenTransactionRegistry";
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // WALLET REGISTRY STATEMENTS
+    // WALLET REGISTRY STATEMENTS (imported from production)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    string internal constant WALLET_ACK_STATEMENT =
-        "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry.";
+    string internal constant WALLET_ACK_STATEMENT = EIP712Constants.ACK_STATEMENT;
 
-    string internal constant WALLET_REG_STATEMENT =
-        "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry. This action is irreversible.";
+    string internal constant WALLET_REG_STATEMENT = EIP712Constants.REG_STATEMENT;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // TRANSACTION REGISTRY STATEMENTS
+    // TRANSACTION REGISTRY STATEMENTS (imported from production)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    string internal constant TX_ACK_STATEMENT =
-        "This signature acknowledges that the specified transactions are being reported as fraudulent to the Stolen Transaction Registry.";
+    string internal constant TX_ACK_STATEMENT = EIP712Constants.TX_ACK_STATEMENT;
 
-    string internal constant TX_REG_STATEMENT =
-        "This signature confirms permanent registration of the specified transactions as fraudulent. This action is irreversible.";
+    string internal constant TX_REG_STATEMENT = EIP712Constants.TX_REG_STATEMENT;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // WALLET REGISTRY TYPE HASHES
+    // WALLET REGISTRY TYPE HASHES (imported from production)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    bytes32 internal constant WALLET_ACK_TYPEHASH = keccak256(
-        "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
-    );
+    bytes32 internal constant WALLET_ACK_TYPEHASH = EIP712Constants.WALLET_ACK_TYPEHASH;
 
-    bytes32 internal constant WALLET_REG_TYPEHASH = keccak256(
-        "Registration(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
-    );
+    bytes32 internal constant WALLET_REG_TYPEHASH = EIP712Constants.WALLET_REG_TYPEHASH;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // TRANSACTION REGISTRY TYPE HASHES
+    // TRANSACTION REGISTRY TYPE HASHES (imported from production)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    bytes32 internal constant TX_ACK_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
-    );
+    bytes32 internal constant TX_ACK_TYPEHASH = EIP712Constants.TX_BATCH_ACK_TYPEHASH;
 
-    bytes32 internal constant TX_REG_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
-    );
+    bytes32 internal constant TX_REG_TYPEHASH = EIP712Constants.TX_BATCH_REG_TYPEHASH;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // DOMAIN SEPARATOR HELPERS

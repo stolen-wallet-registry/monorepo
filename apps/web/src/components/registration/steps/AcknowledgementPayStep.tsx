@@ -98,7 +98,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
           parsedSig.v,
           parsedSig.r,
           parsedSig.s,
-        ] as unknown as WalletAcknowledgeArgs)
+        ] as const satisfies WalletAcknowledgeArgs)
       : undefined;
 
   // Get transaction cost estimate (must be called unconditionally - hooks rule)

@@ -19,9 +19,8 @@ export function getEnvironment(): Environment {
     return 'test';
   }
 
-  // Check Vite environment variables
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const viteEnv = (import.meta as any).env;
+  // Check Vite environment variables (typed via vite/client in tsconfig)
+  const viteEnv = import.meta.env;
   if (viteEnv) {
     const env = viteEnv.VITE_APP_ENV || viteEnv.MODE;
     if (env === 'staging') return 'staging';

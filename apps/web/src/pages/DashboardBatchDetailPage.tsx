@@ -42,7 +42,7 @@ import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { getChainDisplayFromCaip2 } from '@/lib/chains';
 import { extractAddressFromCAIP10, extractCAIP2FromCAIP10 } from '@swr/chains';
-import type { BatchType } from '@/hooks/dashboard';
+import { formatBatchId, type BatchType } from '@/hooks/dashboard';
 
 interface DashboardBatchDetailPageProps {
   params: {
@@ -345,7 +345,10 @@ function BatchDetailContent({
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              <SummaryItem label="Batch ID" value={<CopyableHash value={data.batch.id} />} />
+              <SummaryItem
+                label="Batch ID"
+                value={<CopyableHash value={formatBatchId(batchType, data.batch.id)} />}
+              />
               {'dataHash' in data.batch && data.batch.dataHash && (
                 <SummaryItem
                   label="Data Hash"

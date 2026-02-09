@@ -65,7 +65,9 @@ export function useContractDeadlines(
     address: contractAddress,
     abi,
     chainId,
-    functionName: functions.getDeadlines as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
+    // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
+    // wagmi's literal-type inference. See registryMetadata.ts for the mapping.
+    functionName: functions.getDeadlines as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     args: registereeAddress ? [registereeAddress] : undefined,
     query: {
       enabled: !!registereeAddress && !!contractAddress,
@@ -105,8 +107,8 @@ export function useContractDeadlines(
       });
     } else {
       logger.contract.error('Unexpected getDeadlines result structure', {
-        dataLength: (rawData as unknown as unknown[]).length,
-        data: rawData as unknown,
+        dataLength: Array.isArray(rawData) ? rawData.length : 'unknown',
+        data: rawData,
       });
     }
   }
@@ -183,7 +185,9 @@ export function useTxContractDeadlines(
   } = useReadContract({
     address: contractAddress,
     abi,
-    functionName: functions.getDeadlines as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
+    // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
+    // wagmi's literal-type inference. See registryMetadata.ts for the mapping.
+    functionName: functions.getDeadlines as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     args: reporter ? [reporter] : undefined,
     chainId,
     query: {

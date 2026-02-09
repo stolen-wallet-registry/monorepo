@@ -109,7 +109,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
           parsedSig.v,
           parsedSig.r,
           parsedSig.s,
-        ] as unknown as WalletRegistrationArgs)
+        ] as const satisfies WalletRegistrationArgs)
       : undefined;
 
   // Get transaction cost estimate (must be called unconditionally - hooks rule)

@@ -10,6 +10,18 @@
  * - ContractRegistry: Contract address registration (operator-only)
  * - SpokeRegistry: Cross-chain spoke contracts (all variants)
  *
+ * ## Why downstream hooks use `as any` at wagmi calls
+ *
+ * wagmi's `useReadContract` / `useWriteContract` infer arg and return types from
+ * a **literal** function name + a **single** ABI type. This module returns:
+ * - `abi` as a **union** of 4 ABI types (wallet | transaction | contract | spoke)
+ * - `functions.*` as **string** (not string literals like `'nonces'`)
+ *
+ * Both break wagmi's inference. The alternative — splitting every hook into
+ * separate hub/spoke variants — would triple hook count (~24 hooks) for no
+ * runtime benefit. Instead, hooks cast at the wagmi call boundary and validate
+ * return values with runtime checks (typeof, Array.isArray, tuple length guards).
+ *
  * @example
  * ```ts
  * // Before (duplicated in each hook)

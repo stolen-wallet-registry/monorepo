@@ -140,14 +140,17 @@ export function useAcknowledgement(): UseAcknowledgementResult {
         signature.s,
       ];
 
+      // wagmi boundary: dynamic ABI + function name from registryMetadata breaks
+      // wagmi's literal-type inference — the entire config object needs the cast
+      // because both functionName and args types depend on ABI inference.
+      // See registryMetadata.ts for the hub/spoke function name mapping.
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi,
         functionName: functionName as 'acknowledge',
         args,
         value: feeWei ?? 0n,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
+      } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
 
       logger.registration.info('Acknowledgement transaction submitted', {
         txHash,

@@ -29,7 +29,13 @@ import {
 } from '@swr/ui';
 import { Wallet, FileText, Code, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatRelativeTime, truncateHash } from '@swr/search';
-import { useBatches, useOperators, type BatchSummary, type BatchType } from '@/hooks/dashboard';
+import {
+  useBatches,
+  useOperators,
+  formatBatchId,
+  type BatchSummary,
+  type BatchType,
+} from '@/hooks/dashboard';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { cn } from '@/lib/utils';
 
@@ -86,7 +92,7 @@ function BatchRow({ batch, operatorNames, detailHref }: BatchRowProps) {
         </div>
       </TableCell>
       <TableCell>
-        <span className="font-mono text-sm">{batch.id}</span>
+        <span className="font-mono text-sm">{formatBatchId(batch.type, batch.id)}</span>
       </TableCell>
       <TableCell>
         <span className="text-sm">{submitterLabel}</span>
