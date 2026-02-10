@@ -52,9 +52,9 @@ abstract contract EIP712TestHelper is Test {
     // TRANSACTION REGISTRY TYPE HASHES (imported from production)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    bytes32 internal constant TX_ACK_TYPEHASH = EIP712Constants.TX_BATCH_ACK_TYPEHASH;
+    bytes32 internal constant TX_BATCH_ACK_TYPEHASH = EIP712Constants.TX_BATCH_ACK_TYPEHASH;
 
-    bytes32 internal constant TX_REG_TYPEHASH = EIP712Constants.TX_BATCH_REG_TYPEHASH;
+    bytes32 internal constant TX_BATCH_REG_TYPEHASH = EIP712Constants.TX_BATCH_REG_TYPEHASH;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // DOMAIN SEPARATOR HELPERS

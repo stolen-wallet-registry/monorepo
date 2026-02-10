@@ -17,6 +17,7 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
     bytes32 private constant KEY_TITLE = keccak256("title");
     bytes32 private constant KEY_SUBTITLE = keccak256("subtitle");
     bytes32 private constant KEY_WARNING = keccak256("warning");
+    bytes32 private constant KEY_SUPPORT_SUBTITLE = keccak256("supportSubtitle");
     bytes32 private constant KEY_FOOTER = keccak256("footer");
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -163,6 +164,7 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
         bytes32 keyHash = keccak256(bytes(key));
         if (keyHash == KEY_TITLE) return pack.title;
         if (keyHash == KEY_SUBTITLE) return pack.subtitle;
+        if (keyHash == KEY_SUPPORT_SUBTITLE) return pack.supportSubtitle;
         if (keyHash == KEY_WARNING) return pack.warning;
         if (keyHash == KEY_FOOTER) return pack.footer;
 

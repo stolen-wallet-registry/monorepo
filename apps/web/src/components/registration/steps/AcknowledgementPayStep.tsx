@@ -268,15 +268,16 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   const errorMessage = localError || (error ? sanitizeErrorMessage(error) : null);
 
   // Build signed message data for display
-  const signedMessageData: SignedMessageData | null = storedSignature
-    ? {
-        registeree,
-        forwarder: forwarder!,
-        nonce: storedSignature.nonce,
-        deadline: storedSignature.deadline,
-        signature: storedSignature.signature,
-      }
-    : null;
+  const signedMessageData: SignedMessageData | null =
+    storedSignature && forwarder
+      ? {
+          registeree,
+          forwarder,
+          nonce: storedSignature.nonce,
+          deadline: storedSignature.deadline,
+          signature: storedSignature.signature,
+        }
+      : null;
 
   return (
     <div className="space-y-4">

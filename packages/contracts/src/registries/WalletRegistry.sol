@@ -466,28 +466,28 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         // Verify EIP-712 signature (uses forwarder param — must match msg.sender for sig to be valid)
         _verifyRegSignature(registeree, forwarder, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
 
+        // Revert if wallet was registered by another path (cross-chain/operator) during grace period
+        bytes32 key = CAIP10Evm.evmWalletKey(registeree);
+        if (_wallets[key].registeredAt > 0) revert WalletRegistry__AlreadyRegistered();
+
         // === EFFECTS ===
         nonces[registeree]++;
         delete _pendingAcknowledgements[registeree];
 
         // Store wallet entry
-        bytes32 key = CAIP10Evm.evmWalletKey(registeree);
+        _wallets[key] = WalletEntry({
+            reportedChainId: reportedChainIdHash,
+            sourceChainId: CAIP10Evm.caip2Hash(uint64(block.chainid)),
+            messageId: bytes32(0),
+            registeredAt: uint64(block.timestamp),
+            incidentTimestamp: incidentTimestamp,
+            bridgeId: 0,
+            isSponsored: ack.isSponsored
+        });
 
-        if (_wallets[key].registeredAt == 0) {
-            _wallets[key] = WalletEntry({
-                reportedChainId: reportedChainIdHash,
-                sourceChainId: CAIP10Evm.caip2Hash(uint64(block.chainid)),
-                messageId: bytes32(0),
-                registeredAt: uint64(block.timestamp),
-                incidentTimestamp: incidentTimestamp,
-                bridgeId: 0,
-                isSponsored: ack.isSponsored
-            });
-
-            emit WalletRegistered(
-                bytes32(uint256(uint160(registeree))), reportedChainIdHash, incidentTimestamp, ack.isSponsored
-            );
-        }
+        emit WalletRegistered(
+            bytes32(uint256(uint160(registeree))), reportedChainIdHash, incidentTimestamp, ack.isSponsored
+        );
 
         // === INTERACTIONS ===
         _collectFee();

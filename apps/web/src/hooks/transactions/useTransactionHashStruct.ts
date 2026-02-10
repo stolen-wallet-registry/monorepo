@@ -8,6 +8,7 @@
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  */
 
+import { useEffect } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
 import { transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { getTransactionRegistryAddress } from '@/lib/contracts/addresses';
@@ -34,6 +35,15 @@ export interface UseTxHashStructResult {
   isError: boolean;
   error: Error | null;
   refetch: () => Promise<TxHashStructRefetchResult>;
+}
+
+/** Transform raw contract result to typed format */
+function transformResult(raw: unknown): TxHashStructData | undefined {
+  if (raw && Array.isArray(raw) && raw.length >= 2) {
+    const [deadline, hashStruct] = raw as [bigint, Hash];
+    return { deadline, hashStruct };
+  }
+  return undefined;
 }
 
 /**
@@ -106,38 +116,44 @@ export function useTransactionHashStruct(
 
   // Select result based on chain role
   const result = isSpoke ? spokeResult : hubResult;
-
-  if (result.isError) {
-    logger.contract.error('generateTransactionHashStruct call failed', {
-      chainId,
-      contractAddress,
-      isSpoke,
-      dataHash,
-      transactionCount,
-      forwarderAddress,
-      step,
-      error: result.error?.message,
-    });
-  }
-
-  // Transform raw contract result to typed format
-  const transformResult = (raw: unknown): TxHashStructData | undefined => {
-    if (raw && Array.isArray(raw) && raw.length >= 2) {
-      const [deadline, hashStruct] = raw as [bigint, Hash];
-      return { deadline, hashStruct };
-    }
-    return undefined;
-  };
-
   const transformedData = transformResult(result.data);
-  if (transformedData) {
-    logger.contract.debug('generateTransactionHashStruct call succeeded', {
-      chainId,
-      contractAddress,
-      isSpoke,
-      deadline: transformedData.deadline.toString(),
-    });
-  }
+
+  // Log in useEffect to avoid render-time side effects
+  useEffect(() => {
+    if (result.isError) {
+      logger.contract.error('generateTransactionHashStruct call failed', {
+        chainId,
+        contractAddress,
+        isSpoke,
+        dataHash,
+        transactionCount,
+        forwarderAddress,
+        step,
+        error: result.error?.message,
+      });
+    }
+  }, [
+    result.isError,
+    result.error,
+    chainId,
+    contractAddress,
+    isSpoke,
+    dataHash,
+    transactionCount,
+    forwarderAddress,
+    step,
+  ]);
+
+  useEffect(() => {
+    if (transformedData) {
+      logger.contract.debug('generateTransactionHashStruct call succeeded', {
+        chainId,
+        contractAddress,
+        isSpoke,
+        deadline: transformedData.deadline.toString(),
+      });
+    }
+  }, [transformedData, chainId, contractAddress, isSpoke]);
 
   // Wrap refetch to return properly typed result
   const refetch = async (): Promise<TxHashStructRefetchResult> => {

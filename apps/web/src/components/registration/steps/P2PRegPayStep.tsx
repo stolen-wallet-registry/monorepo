@@ -310,17 +310,20 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       ) : (
         <>
           {/* Show signature details for relayer to review */}
-          {registeree && relayerAddress && (
-            <SignatureDetails
-              data={{
-                registeree,
-                forwarder: relayerAddress,
-                nonce: storedSig.nonce,
-                deadline: storedSig.deadline,
-                chainId: storedSig.chainId,
-              }}
-            />
-          )}
+          {registeree &&
+            relayerAddress &&
+            storedSig.nonce !== undefined &&
+            storedSig.deadline !== undefined && (
+              <SignatureDetails
+                data={{
+                  registeree,
+                  forwarder: relayerAddress,
+                  nonce: storedSig.nonce,
+                  deadline: storedSig.deadline,
+                  chainId: storedSig.chainId,
+                }}
+              />
+            )}
 
           <TransactionCard
             type="registration"

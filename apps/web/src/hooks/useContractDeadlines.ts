@@ -211,12 +211,10 @@ export function useTxContractDeadlines(
     },
   });
 
-  const { isLoading, isError, error, refetch } = isSpoke ? spokeResult : hubResult;
+  const result = isSpoke ? spokeResult : hubResult;
+  const { isLoading, isError, error, refetch } = result;
 
-  // Extract typed data from the active hook (avoids union-type complications)
-  const hubDeadlines = hubResult.data as DeadlinesTuple | undefined;
-  const spokeDeadlines = spokeResult.data as DeadlinesTuple | undefined;
-  const rawDeadlines = isSpoke ? spokeDeadlines : hubDeadlines;
+  const rawDeadlines = result.data as DeadlinesTuple | undefined;
 
   // Track previous log key to avoid duplicate logs
   const prevLogKeyRef = useRef<string | null>(null);

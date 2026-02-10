@@ -152,19 +152,19 @@ contract EIP712ConstantsTest is EIP712TestHelper {
         );
     }
 
-    function test_testHelper_txAckTypehash() public pure {
+    function test_testHelper_txBatchAckTypehash() public pure {
         assertEq(
-            TX_ACK_TYPEHASH,
+            TX_BATCH_ACK_TYPEHASH,
             EIP712Constants.TX_BATCH_ACK_TYPEHASH,
-            "EIP712TestHelper TX_ACK_TYPEHASH desynced from production"
+            "EIP712TestHelper TX_BATCH_ACK_TYPEHASH desynced from production"
         );
     }
 
-    function test_testHelper_txRegTypehash() public pure {
+    function test_testHelper_txBatchRegTypehash() public pure {
         assertEq(
-            TX_REG_TYPEHASH,
+            TX_BATCH_REG_TYPEHASH,
             EIP712Constants.TX_BATCH_REG_TYPEHASH,
-            "EIP712TestHelper TX_REG_TYPEHASH desynced from production"
+            "EIP712TestHelper TX_BATCH_REG_TYPEHASH desynced from production"
         );
     }
 }

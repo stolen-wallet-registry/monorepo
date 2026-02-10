@@ -81,7 +81,7 @@ const GAS_BUFFER_DENOMINATOR = 100n;
  * ```tsx
  * const { data, isLoading } = useGasEstimate({
  *   step: 'registration',
- *   args: [deadline, nonce, owner, v, r, s],
+ *   args: [registeree, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s],
  *   value: feeWei,
  * });
  *
@@ -111,39 +111,22 @@ export function useGasEstimate({
   // Map step to correct function name (identical on both hub and spoke)
   const functionName = step === 'acknowledgement' ? 'acknowledge' : 'register';
 
-  // Build call data for gas estimation — branch on ABI for type safety
-  // encodeFunctionData requires args to match the ABI's tuple type exactly.
-  // Since args is a union (WalletAcknowledgeArgs | WalletRegistrationArgs),
-  // we encode via the concrete ABI branch to satisfy viem's inference.
+  // Build call data for gas estimation
   let callData: `0x${string}` | undefined;
   if (args) {
-    if (isSpoke) {
-      callData =
-        functionName === 'acknowledge'
-          ? encodeFunctionData({
-              abi: spokeRegistryAbi,
-              functionName: 'acknowledge',
-              args: args as WalletAcknowledgeArgs,
-            })
-          : encodeFunctionData({
-              abi: spokeRegistryAbi,
-              functionName: 'register',
-              args: args as WalletRegistrationArgs,
-            });
-    } else {
-      callData =
-        functionName === 'acknowledge'
-          ? encodeFunctionData({
-              abi: walletRegistryAbi,
-              functionName: 'acknowledge',
-              args: args as WalletAcknowledgeArgs,
-            })
-          : encodeFunctionData({
-              abi: walletRegistryAbi,
-              functionName: 'register',
-              args: args as WalletRegistrationArgs,
-            });
-    }
+    const abi = isSpoke ? spokeRegistryAbi : walletRegistryAbi;
+    callData =
+      functionName === 'acknowledge'
+        ? encodeFunctionData({
+            abi,
+            functionName: 'acknowledge',
+            args: args as WalletAcknowledgeArgs,
+          })
+        : encodeFunctionData({
+            abi,
+            functionName: 'register',
+            args: args as WalletRegistrationArgs,
+          });
   }
 
   const estimateEnabled = enabled && !!contractAddress && !!args;

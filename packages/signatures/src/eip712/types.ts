@@ -158,9 +158,9 @@ export type TxSignatureStep = (typeof TX_SIGNATURE_STEP)[keyof typeof TX_SIGNATU
 
 /**
  * Wallet Acknowledgement contract arguments (unified hub and spoke).
- * acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ * acknowledge(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
  *
- * isSponsored is derived on-chain as (wallet != forwarder).
+ * isSponsored is derived on-chain as (registeree != forwarder).
  */
 export type WalletAcknowledgeArgs = readonly [
   registeree: Address,
@@ -176,7 +176,7 @@ export type WalletAcknowledgeArgs = readonly [
 
 /**
  * Wallet Registration contract arguments (unified hub and spoke).
- * register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ * register(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
  *
  * @note reportedChainId is uint64 raw EVM chain ID. Contract converts to CAIP-2 hash internally.
  */

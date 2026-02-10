@@ -32,8 +32,6 @@ export interface AcknowledgementParams {
   nonce: bigint;
   /** EIP-712 signature */
   signature: ParsedSignature;
-  /** Protocol fee to send with the acknowledgement transaction */
-  feeWei?: bigint;
 }
 
 export interface UseAcknowledgementResult {
@@ -126,21 +124,14 @@ export function useAcknowledgement(): UseAcknowledgementResult {
         signature.s,
       ] as const;
 
-      // Branch on ABI for full type inference — function name is identical on both
       // Both hub and spoke acknowledge are nonpayable (fees collected at register)
-      const txHash = isSpoke
-        ? await writeContractAsync({
-            address: contractAddress,
-            abi: spokeRegistryAbi,
-            functionName: 'acknowledge',
-            args,
-          })
-        : await writeContractAsync({
-            address: contractAddress,
-            abi: walletRegistryAbi,
-            functionName: 'acknowledge',
-            args,
-          });
+      const abi = isSpoke ? spokeRegistryAbi : walletRegistryAbi;
+      const txHash = await writeContractAsync({
+        address: contractAddress,
+        abi,
+        functionName: 'acknowledge',
+        args,
+      });
 
       logger.registration.info('Acknowledgement transaction submitted', {
         txHash,

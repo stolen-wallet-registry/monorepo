@@ -121,49 +121,6 @@ export function getSpokeRegistryContractAddress(chainId: number): Address {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// V1 SPOKE CHAIN CONTRACTS (DEPRECATED - kept for transition)
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * @deprecated Use SPOKE_CONTRACT_ADDRESSES for new integrations.
- * Spoke chain contracts.
- *
- * NOTE: These are deployment-specific addresses. For runtime access, prefer
- * using the network configs from @swr/chains (e.g., anvilSpoke.spokeContracts).
- */
-export const SPOKE_ADDRESSES = {
-  mockGasPaymaster: {
-    [anvilSpoke.chainId]: '0x6CE9C3F9Aa3F7064417aF37AA1487F5795D606c4' as Address,
-    // Optimism Sepolia uses real Hyperlane IGP, not mock
-  },
-  bridgeAdapters: {
-    [anvilSpoke.chainId]: {
-      hyperlane: '0x85881002c84e036E83a5094E1b789a00858B0063' as Address,
-    },
-    [optimismSepolia.chainId]: {
-      hyperlane: '0x0000000000000000000000000000000000000000' as Address, // Fill after deployment
-    },
-  },
-  feeManager: {
-    [anvilSpoke.chainId]: '0xC399A0a346b1c4f17cd719C73A09F48469ccd199' as Address,
-    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
-  },
-  spokeRegistry: {
-    [anvilSpoke.chainId]: '0xED040e67447bE891200Ea1C12e5FA8DA083770A0' as Address,
-    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
-  },
-  spokeTransactionRegistry: {
-    [anvilSpoke.chainId]: '0xED040e67447bE891200Ea1C12e5FA8DA083770A0' as Address, // SpokeRegistry handles both wallet + tx
-    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
-  },
-  /** SpokeSoulboundForwarder for cross-chain soulbound minting */
-  spokeSoulboundForwarder: {
-    [anvilSpoke.chainId]: '0x274C3C4994857f70047b16879aa363a7B6b0f626' as Address,
-    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
-  },
-} as const;
-
-// ═══════════════════════════════════════════════════════════════════════════
 // HUB SOULBOUND RECEIVER
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -177,56 +134,17 @@ export const HUB_SOULBOUND_RECEIVER = {
 // HELPER FUNCTIONS
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Simple spoke address contracts (excludes bridgeAdapters which has different structure) */
-type SimpleSpokeContract = Exclude<keyof typeof SPOKE_ADDRESSES, 'bridgeAdapters'>;
-
-export function getSpokeAddress(contract: SimpleSpokeContract, chainId: number): Address {
-  const addresses = SPOKE_ADDRESSES[contract];
-  const address = addresses[chainId as keyof typeof addresses];
-  if (!address || address === zeroAddress) {
-    throw new Error(
-      `No ${contract} address configured for spoke chain ID ${chainId}. Deploy contracts first.`
-    );
-  }
-  return address as Address;
-}
-
-/** Get bridge adapter address for a specific provider on a spoke chain */
-export function getBridgeAdapterAddress(
-  chainId: number,
-  provider: 'hyperlane' | 'wormhole' | 'ccip' = 'hyperlane'
-): Address {
-  const chainAdapters =
-    SPOKE_ADDRESSES.bridgeAdapters[chainId as keyof typeof SPOKE_ADDRESSES.bridgeAdapters];
-  if (!chainAdapters) {
-    throw new Error(`No bridge adapters configured for chain ID ${chainId}.`);
-  }
-  const address = chainAdapters[provider as keyof typeof chainAdapters];
-  if (!address || address === zeroAddress) {
-    throw new Error(
-      `No ${provider} adapter configured for chain ID ${chainId}. Deploy adapter first.`
-    );
-  }
-  return address as Address;
-}
-
-export function getSpokeRegistryAddress(chainId: number): Address | null {
-  if (!isSpokeChain(chainId)) return null;
-  return getSpokeAddress('spokeRegistry', chainId);
-}
-
-export function getSpokeTransactionRegistryAddress(chainId: number): Address | null {
-  if (!isSpokeChain(chainId)) return null;
-  return getSpokeAddress('spokeTransactionRegistry', chainId);
-}
-
 export function getSpokeSoulboundForwarderAddress(chainId: number): Address | null {
   if (!isSpokeChain(chainId)) return null;
   try {
-    return getSpokeAddress('spokeSoulboundForwarder', chainId);
+    return getSpokeContractAddress('spokeSoulboundForwarder', chainId);
   } catch {
     return null;
   }
+}
+
+export function getBridgeAdapterAddress(chainId: number): Address {
+  return getSpokeContractAddress('hyperlaneAdapter', chainId);
 }
 
 export function getSoulboundReceiverAddress(chainId: number): Address | null {

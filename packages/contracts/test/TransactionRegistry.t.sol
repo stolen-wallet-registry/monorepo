@@ -942,6 +942,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         vm.roll(ack.gracePeriodStart + 1);
 
         fee = reg.quoteRegistration(reporter);
+        vm.deal(forwarder, fee);
         _doFullFlowReg(reg, txHashes, chainIds, fee);
     }
 
@@ -968,7 +969,6 @@ contract TransactionRegistryTest is EIP712TestHelper {
         uint256 deadline1 = block.timestamp + 3600;
         (uint8 v1, bytes32 r1, bytes32 s1) =
             _signProdTxRegFor(address(reg), dataHash, reportedChainId, txCount, reg.nonces(reporter), deadline1);
-        vm.deal(forwarder, sendValue);
         vm.prank(forwarder);
         reg.registerTransactions{ value: sendValue }(reporter, deadline1, txHashes, chainIds, v1, r1, s1);
     }

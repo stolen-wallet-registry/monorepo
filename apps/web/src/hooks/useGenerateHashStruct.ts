@@ -4,7 +4,7 @@
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  * The hash struct returned can be used for verification but is typically not needed client-side.
  *
- * Chain-aware: Works with both hub registries (WalletRegistry/TransactionRegistry) and SpokeRegistry (spoke).
+ * Chain-aware: Works with WalletRegistry (hub) and SpokeRegistry (spoke).
  *
  * Contract signature: generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
  */

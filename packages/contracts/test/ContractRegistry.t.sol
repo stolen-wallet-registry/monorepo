@@ -176,16 +176,16 @@ contract ContractRegistryTest is Test {
         chainIds[1] = chainId;
         chainIds[2] = chainId;
 
-        // ContractBatchCreated emits before per-entry events in the contract
-        vm.expectEmit(true, true, false, true);
-        emit IContractRegistry.ContractBatchCreated(1, operatorId, 3);
-
+        // Per-entry events fire during loop, batch event fires after
         vm.expectEmit(true, true, true, true);
         emit IContractRegistry.ContractRegistered(identifiers[0], chainId, operatorId, 1);
         vm.expectEmit(true, true, true, true);
         emit IContractRegistry.ContractRegistered(identifiers[1], chainId, operatorId, 1);
         vm.expectEmit(true, true, true, true);
         emit IContractRegistry.ContractRegistered(identifiers[2], chainId, operatorId, 1);
+
+        vm.expectEmit(true, true, false, true);
+        emit IContractRegistry.ContractBatchCreated(1, operatorId, 3);
 
         vm.prank(operatorSubmitter);
         uint256 batchId = registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
@@ -242,7 +242,7 @@ contract ContractRegistryTest is Test {
     // OPERATOR BATCH REGISTRATION — SKIP LOGIC
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Zero identifiers are silently skipped; batch event still reports array length as contractCount
+    /// @notice Zero identifiers are silently skipped; batch event reports actual registration count
     function test_RegisterContracts_SkipsZeroIdentifiers() public {
         address c1 = makeAddr("contract1");
 
@@ -256,13 +256,13 @@ contract ContractRegistryTest is Test {
         chainIds[1] = chainId;
         chainIds[2] = chainId;
 
-        // Batch event reports contractCount = 3 (array length, not filtered)
-        vm.expectEmit(true, true, false, true);
-        emit IContractRegistry.ContractBatchCreated(1, operatorId, 3);
-
-        // Only one per-entry event for c1
+        // Per-entry event fires before batch event (loop runs first)
         vm.expectEmit(true, true, true, true);
         emit IContractRegistry.ContractRegistered(identifiers[0], chainId, operatorId, 1);
+
+        // Batch event reports actualCount = 1 (only non-zero, non-duplicate entries)
+        vm.expectEmit(true, true, false, true);
+        emit IContractRegistry.ContractBatchCreated(1, operatorId, 1);
 
         vm.prank(operatorSubmitter);
         registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
@@ -288,8 +288,9 @@ contract ContractRegistryTest is Test {
         bytes32[] memory chainIds = new bytes32[](1);
         chainIds[0] = chainId;
 
+        // Duplicate is skipped so actualCount = 0
         vm.expectEmit(true, true, false, true);
-        emit IContractRegistry.ContractBatchCreated(2, operatorId, 1);
+        emit IContractRegistry.ContractBatchCreated(2, operatorId, 0);
 
         vm.prank(operatorSubmitter);
         registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
@@ -323,13 +324,13 @@ contract ContractRegistryTest is Test {
             chainIds[i] = chainId;
         }
 
-        // Two per-entry events (newC1 and newC2 only)
-        vm.expectEmit(true, true, false, true);
-        emit IContractRegistry.ContractBatchCreated(2, operatorId, 5);
+        // Per-entry events fire before batch event (newC1 and newC2 only)
         vm.expectEmit(true, true, true, true);
         emit IContractRegistry.ContractRegistered(_toIdentifier(newC1), chainId, operatorId, 2);
         vm.expectEmit(true, true, true, true);
         emit IContractRegistry.ContractRegistered(_toIdentifier(newC2), chainId, operatorId, 2);
+        vm.expectEmit(true, true, false, true);
+        emit IContractRegistry.ContractBatchCreated(2, operatorId, 2);
 
         vm.prank(operatorSubmitter);
         registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
@@ -337,9 +338,9 @@ contract ContractRegistryTest is Test {
         assertTrue(registry.isContractRegistered(newC1, chainId));
         assertTrue(registry.isContractRegistered(newC2, chainId));
 
-        // Batch reports array length (5), not filtered count
+        // Batch reports actual registrations (2), not array length (5)
         IContractRegistry.ContractBatch memory batch = registry.getContractBatch(2);
-        assertEq(batch.contractCount, 5);
+        assertEq(batch.contractCount, 2);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -26,6 +26,10 @@ describe('contractErrors', () => {
     WalletRegistry__OnlyOperatorSubmitter: '0x637b467b',
     WalletRegistry__EmptyBatch: '0x39f0ba50',
     WalletRegistry__ArrayLengthMismatch: '0x545fd576',
+    WalletRegistry__FeeTransferFailed: '0x0a17bc56',
+    WalletRegistry__RefundFailed: '0x4e71ab39',
+    WalletRegistry__InvalidNonce: '0x5934e5e0',
+    WalletRegistry__InvalidStep: '0x48193183',
     // TransactionRegistry Errors
     TransactionRegistry__AlreadyAcknowledged: '0x378855ef',
     TransactionRegistry__DeadlineExpired: '0x2015cf13',
@@ -89,6 +93,8 @@ describe('contractErrors', () => {
     SpokeRegistry__EmptyBatch: '0xe3e9689e',
     SpokeRegistry__ArrayLengthMismatch: '0x81a72855',
     SpokeRegistry__InvalidDataHash: '0xba8873e4',
+    SpokeRegistry__InvalidStep: '0xbefa3abb',
+    SpokeRegistry__DataMismatch: '0x9de3b4a9',
   };
 
   describe('CONTRACT_ERROR_MAP', () => {

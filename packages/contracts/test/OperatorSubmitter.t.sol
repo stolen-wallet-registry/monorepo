@@ -149,6 +149,23 @@ contract OperatorSubmitterTest is Test {
         }
     }
 
+    /// @dev Deploy a FeeManager + OperatorSubmitter with fee config, wiring a given registry
+    function _deployFeeSubmitter() internal returns (OperatorSubmitter feeSubmitter, FeeManager fm) {
+        MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
+        vm.startPrank(owner);
+        fm = new FeeManager(owner, address(oracle));
+        feeSubmitter = new OperatorSubmitter(
+            owner,
+            address(walletRegistry),
+            address(transactionRegistry),
+            address(contractRegistry),
+            address(operatorRegistry),
+            address(fm),
+            feeRecipientAddr
+        );
+        vm.stopPrank();
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // WALLET BATCH REGISTRATION
     // ═══════════════════════════════════════════════════════════════════════════
@@ -317,6 +334,30 @@ contract OperatorSubmitterTest is Test {
         submitter.unpause();
     }
 
+    /// @notice Paused contract rejects transaction registrations with EnforcedPause.
+    function test_RegisterTransactions_RejectsWhenPaused() public {
+        vm.prank(owner);
+        submitter.pause();
+
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _buildTxBatch(1);
+
+        vm.prank(approvedOperator);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        submitter.registerTransactionsAsOperator(txHashes, chainIds);
+    }
+
+    /// @notice Paused contract rejects contract registrations with EnforcedPause.
+    function test_RegisterContracts_RejectsWhenPaused() public {
+        vm.prank(owner);
+        submitter.pause();
+
+        (bytes32[] memory ids, bytes32[] memory chainIds) = _buildContractBatch(1);
+
+        vm.prank(approvedOperator);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        submitter.registerContractsAsOperator(ids, chainIds);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // FEE COLLECTION
     // ═══════════════════════════════════════════════════════════════════════════
@@ -324,25 +365,9 @@ contract OperatorSubmitterTest is Test {
     /// @notice When FeeManager is configured, operator must send required fee which is forwarded
     /// to the feeRecipient.
     function test_RegisterWallets_WithFees() public {
-        // Deploy fee infrastructure
-        MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
-        vm.startPrank(owner);
-        FeeManager fm = new FeeManager(owner, address(oracle));
-
-        // Deploy a new OperatorSubmitter with fee config
-        OperatorSubmitter feeSubmitter = new OperatorSubmitter(
-            owner,
-            address(walletRegistry),
-            address(transactionRegistry),
-            address(contractRegistry),
-            address(operatorRegistry),
-            address(fm),
-            feeRecipientAddr
-        );
-
-        // Wire the fee submitter to registries
+        (OperatorSubmitter feeSubmitter, FeeManager fm) = _deployFeeSubmitter();
+        vm.prank(owner);
         walletRegistry.setOperatorSubmitter(address(feeSubmitter));
-        vm.stopPrank();
 
         // Get required fee
         uint256 requiredFee = fm.operatorBatchFeeWei();
@@ -373,21 +398,9 @@ contract OperatorSubmitterTest is Test {
 
     /// @notice InsufficientFee when msg.value is below required fee.
     function test_RegisterWallets_InsufficientFee() public {
-        MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
-        vm.startPrank(owner);
-        FeeManager fm = new FeeManager(owner, address(oracle));
-
-        OperatorSubmitter feeSubmitter = new OperatorSubmitter(
-            owner,
-            address(walletRegistry),
-            address(transactionRegistry),
-            address(contractRegistry),
-            address(operatorRegistry),
-            address(fm),
-            feeRecipientAddr
-        );
+        (OperatorSubmitter feeSubmitter, FeeManager fm) = _deployFeeSubmitter();
+        vm.prank(owner);
         walletRegistry.setOperatorSubmitter(address(feeSubmitter));
-        vm.stopPrank();
 
         uint256 requiredFee = fm.operatorBatchFeeWei();
         vm.deal(approvedOperator, 10 ether);
@@ -608,19 +621,7 @@ contract OperatorSubmitterTest is Test {
 
     /// @notice quoteBatchFee returns the FeeManager's operatorBatchFeeWei when configured.
     function test_QuoteBatchFee_ReturnsCorrectFee() public {
-        MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
-        vm.startPrank(owner);
-        FeeManager fm = new FeeManager(owner, address(oracle));
-        OperatorSubmitter feeSubmitter = new OperatorSubmitter(
-            owner,
-            address(walletRegistry),
-            address(transactionRegistry),
-            address(contractRegistry),
-            address(operatorRegistry),
-            address(fm),
-            feeRecipientAddr
-        );
-        vm.stopPrank();
+        (OperatorSubmitter feeSubmitter, FeeManager fm) = _deployFeeSubmitter();
 
         uint256 expectedFee = fm.operatorBatchFeeWei();
         assertEq(feeSubmitter.quoteBatchFee(), expectedFee);
@@ -699,21 +700,9 @@ contract OperatorSubmitterTest is Test {
 
     /// @notice InsufficientFee for transaction batch when msg.value < required.
     function test_RegisterTransactions_InsufficientFee() public {
-        MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
-        vm.startPrank(owner);
-        FeeManager fm = new FeeManager(owner, address(oracle));
-
-        OperatorSubmitter feeSubmitter = new OperatorSubmitter(
-            owner,
-            address(walletRegistry),
-            address(transactionRegistry),
-            address(contractRegistry),
-            address(operatorRegistry),
-            address(fm),
-            feeRecipientAddr
-        );
+        (OperatorSubmitter feeSubmitter, FeeManager fm) = _deployFeeSubmitter();
+        vm.prank(owner);
         transactionRegistry.setOperatorSubmitter(address(feeSubmitter));
-        vm.stopPrank();
 
         uint256 requiredFee = fm.operatorBatchFeeWei();
         vm.deal(approvedOperator, 10 ether);
@@ -727,21 +716,9 @@ contract OperatorSubmitterTest is Test {
 
     /// @notice InsufficientFee for contract batch when msg.value < required.
     function test_RegisterContracts_InsufficientFee() public {
-        MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
-        vm.startPrank(owner);
-        FeeManager fm = new FeeManager(owner, address(oracle));
-
-        OperatorSubmitter feeSubmitter = new OperatorSubmitter(
-            owner,
-            address(walletRegistry),
-            address(transactionRegistry),
-            address(contractRegistry),
-            address(operatorRegistry),
-            address(fm),
-            feeRecipientAddr
-        );
+        (OperatorSubmitter feeSubmitter, FeeManager fm) = _deployFeeSubmitter();
+        vm.prank(owner);
         contractRegistry.setOperatorSubmitter(address(feeSubmitter));
-        vm.stopPrank();
 
         uint256 requiredFee = fm.operatorBatchFeeWei();
         vm.deal(approvedOperator, 10 ether);
@@ -760,13 +737,11 @@ contract OperatorSubmitterTest is Test {
     /// @notice FeeForwardFailed when feeRecipient.call{value} reverts.
     /// Uses a helper contract whose receive() always reverts.
     function test_RegisterWallets_FeeForwardFailed() public {
-        // Deploy a receiver that always reverts
         RevertingReceiver badReceiver = new RevertingReceiver();
 
         MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
         vm.startPrank(owner);
         FeeManager fm = new FeeManager(owner, address(oracle));
-
         OperatorSubmitter feeSubmitter = new OperatorSubmitter(
             owner,
             address(walletRegistry),

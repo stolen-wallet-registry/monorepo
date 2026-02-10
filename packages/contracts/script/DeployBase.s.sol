@@ -158,6 +158,7 @@ abstract contract DeployBase is Script {
     ) internal returns (address translations, address walletSoulbound, address supportSoulbound) {
         require(registry != address(0), "DeployBase: registry is zero address");
         require(feeCollector != address(0), "DeployBase: feeCollector is zero address");
+        require(initialOwner != address(0), "DeployBase: initialOwner is zero address");
 
         console2.log("");
         console2.log("=== SOULBOUND DEPLOYMENT ===");

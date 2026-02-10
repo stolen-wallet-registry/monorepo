@@ -179,6 +179,16 @@ pnpm typecheck        # TypeScript check
 pnpm format           # Prettier
 ```
 
+### ABI Regeneration (MANDATORY)
+
+After ANY Solidity contract change, regenerate the TypeScript ABI exports:
+
+```bash
+cd packages/contracts && forge build && pnpm export-abi
+```
+
+This runs `scripts/export-abi.js` which reads Forge artifacts from `out/` and writes typed ABI constants to `packages/abis/src/`. The frontend (`@swr/abis`) consumes these — stale ABIs cause silent runtime failures.
+
 ---
 
 ## Logger Usage & Guidelines
