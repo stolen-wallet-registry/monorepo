@@ -66,7 +66,7 @@ contract SoulboundReceiverTest is Test {
         // Deploy mock wallet registry
         mockRegistry = new MockWalletRegistry();
 
-        // Deploy soulbound contracts
+        // Deploy soulbound contracts (owner serves as both feeCollector and initialOwner for test simplicity)
         walletSoulbound =
             new WalletSoulbound(address(mockRegistry), address(translations), owner, "stolenwallet.xyz", owner);
 

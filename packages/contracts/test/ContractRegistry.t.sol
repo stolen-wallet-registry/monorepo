@@ -271,7 +271,7 @@ contract ContractRegistryTest is Test {
         assertFalse(registry.isContractRegistered(address(0), chainId));
     }
 
-    /// @notice Already-registered contracts are silently skipped; original entry data preserved
+    /// @notice Batch of all-duplicates reverts with EmptyBatch (no wasted batch IDs)
     function test_RegisterContracts_SkipsDuplicates() public {
         address c1 = makeAddr("dupContract");
 
@@ -282,20 +282,17 @@ contract ContractRegistryTest is Test {
         // Capture original entry
         IContractRegistry.ContractEntry memory original = registry.getContractEntry(c1, chainId);
 
-        // Second registration (same contract, different batch) — no per-entry event for the duplicate
+        // Second registration (same contract) — all entries are duplicates, reverts
         bytes32[] memory identifiers = new bytes32[](1);
         identifiers[0] = _toIdentifier(c1);
         bytes32[] memory chainIds = new bytes32[](1);
         chainIds[0] = chainId;
 
-        // Duplicate is skipped so actualCount = 0
-        vm.expectEmit(true, true, false, true);
-        emit IContractRegistry.ContractBatchCreated(2, operatorId, 0);
-
+        vm.expectRevert(IContractRegistry.ContractRegistry__EmptyBatch.selector);
         vm.prank(operatorSubmitter);
         registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
 
-        // Entry should retain original data (batchId = 1, not overwritten)
+        // Entry should retain original data (not overwritten)
         IContractRegistry.ContractEntry memory after_ = registry.getContractEntry(c1, chainId);
         assertEq(after_.batchId, original.batchId, "Entry should retain original batchId");
         assertEq(after_.operatorId, original.operatorId);

@@ -59,14 +59,16 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
 
   // Calculate initial values
   const calculateInitialMs = useCallback((): number => {
-    if (!targetBlock || !currentBlock) return 0;
+    if (targetBlock === null || targetBlock === 0n || currentBlock === null || currentBlock === 0n)
+      return 0;
     const blocks = blocksRemaining(currentBlock, targetBlock);
     if (blocks <= 0n) return 0;
     return estimateTimeFromBlocks(blocks, chainId);
   }, [targetBlock, currentBlock, chainId]);
 
   const calculateBlocksLeft = useCallback((): bigint => {
-    if (!targetBlock || !currentBlock) return 0n;
+    if (targetBlock === null || targetBlock === 0n || currentBlock === null || currentBlock === 0n)
+      return 0n;
     // blocksRemaining already returns 0n when targetBlock <= currentBlock
     return blocksRemaining(currentBlock, targetBlock);
   }, [targetBlock, currentBlock]);
@@ -86,14 +88,14 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
 
   // Check if actual block target has been reached
   const isBlockTargetReached = useCallback((): boolean => {
-    if (targetBlock === null || currentBlock === null) return false;
+    if (targetBlock === null || targetBlock === 0n || currentBlock === null) return false;
     return currentBlock >= targetBlock;
   }, [targetBlock, currentBlock]);
 
   // Reset when target/current block changes
   useEffect(() => {
     // Don't process if we don't have valid block data yet
-    if (targetBlock === null || currentBlock === null) {
+    if (targetBlock === null || targetBlock === 0n || currentBlock === null) {
       logger.registration.debug('Countdown timer waiting for block data', {
         targetBlock: targetBlock?.toString() ?? 'null',
         currentBlock: currentBlock?.toString() ?? 'null',

@@ -187,18 +187,13 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   });
 
   // Cross-chain confirmation - polls hub chain after spoke tx confirms
-  // Must pass reporter and reportedChainId to compute the correct batchId
+  // Uses the first tx hash from the batch as a sentinel for registration lookup
+  const sampleTxHash = txHashesForContract.length > 0 ? txHashesForContract[0] : undefined;
   const crossChainConfirmation = useTxCrossChainConfirmation({
-    dataHash,
-    reporter: storedSignatureState?.reporter,
+    sampleTxHash,
     reportedChainId: reportedChainIdHash,
     spokeChainId: chainId,
-    enabled:
-      isCrossChain &&
-      isConfirmed &&
-      !!dataHash &&
-      !!storedSignatureState?.reporter &&
-      !!reportedChainIdHash,
+    enabled: isCrossChain && isConfirmed && !!sampleTxHash && !!reportedChainIdHash,
     pollInterval: 3000,
     maxPollingTime: 120000, // 2 minutes
   });

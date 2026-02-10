@@ -38,6 +38,7 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
     error OperatorSubmitter__ArrayLengthMismatch();
     error OperatorSubmitter__InsufficientFee();
     error OperatorSubmitter__FeeForwardFailed();
+    error OperatorSubmitter__RefundFailed();
     error OperatorSubmitter__InvalidFeeConfig();
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -166,10 +167,19 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
             revert OperatorSubmitter__InsufficientFee();
         }
 
-        if (feeRecipient != address(0) && msg.value > 0) {
-            (bool success,) = feeRecipient.call{ value: msg.value }("");
+        if (feeRecipient != address(0) && requiredFee > 0) {
+            (bool success,) = feeRecipient.call{ value: requiredFee }("");
             if (!success) {
                 revert OperatorSubmitter__FeeForwardFailed();
+            }
+        }
+
+        // Refund excess ETH to caller (consistent with WalletRegistry, TransactionRegistry, SpokeRegistry)
+        uint256 excess = msg.value - requiredFee;
+        if (excess > 0) {
+            (bool refundSuccess,) = msg.sender.call{ value: excess }("");
+            if (!refundSuccess) {
+                revert OperatorSubmitter__RefundFailed();
             }
         }
     }

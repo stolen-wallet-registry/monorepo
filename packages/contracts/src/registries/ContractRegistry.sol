@@ -172,6 +172,8 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
             emit ContractRegistered(identifier, chainId, operatorId, batchId);
         }
 
+        if (actualCount == 0) revert ContractRegistry__EmptyBatch();
+
         _batches[batchId] =
             ContractBatch({ operatorId: operatorId, timestamp: uint64(block.timestamp), contractCount: actualCount });
 

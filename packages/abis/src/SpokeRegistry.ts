@@ -483,6 +483,50 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'getTransactionDeadlines',
+    inputs: [
+      {
+        name: 'reporter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: 'currentBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'expiryBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'startBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'graceStartsAt',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'timeLeft',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'isExpired',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'graceBlocks',
     inputs: [],
     outputs: [

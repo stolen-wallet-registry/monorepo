@@ -249,10 +249,12 @@ export function useP2PConnectionHealth({
         return update.next;
       });
 
-      // Execute side effects after setState completes
+      // Execute store update after setState completes.
+      // pendingStoreUpdateRef is set inside the setState updater (synchronous), so by
+      // the time we reach here the flag reliably reflects whether a disconnect was detected.
+      // We update the external Zustand store outside the updater to avoid side-effects
+      // during React's state computation phase.
       if (pendingStoreUpdateRef.current) {
-        // Reset store to false - ping failures have proven the connection is lost
-        // This makes the store symmetric: true on success, false on proven disconnect
         useP2PStore.getState().setConnectedToPeer(false);
       }
 

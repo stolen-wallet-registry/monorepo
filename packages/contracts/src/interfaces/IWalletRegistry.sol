@@ -307,7 +307,8 @@ interface IWalletRegistry {
         );
 
     /// @notice Generate hash struct for EIP-712 signature generation
-    /// @dev Returns the hashStruct needed for constructing EIP-712 typed data
+    /// @dev Uses msg.sender as the wallet address in the hash. Must be called by the actual
+    ///      wallet owner so the resulting signature is valid for acknowledge/register.
     /// @param reportedChainId The chain ID where incident occurred (uint64 for gas efficiency)
     /// @param incidentTimestamp Unix timestamp of incident (0 if unknown)
     /// @param forwarder The forwarder address authorized to complete registration

@@ -131,6 +131,7 @@ describe('CONTRACT_ERROR_SELECTORS coverage', () => {
     '0x15c1e4ff': 'OperatorSubmitter__ArrayLengthMismatch',
     '0x030ff595': 'OperatorSubmitter__InsufficientFee',
     '0x58614d91': 'OperatorSubmitter__FeeForwardFailed',
+    '0xb951fb83': 'OperatorSubmitter__RefundFailed',
     '0x0079d758': 'OperatorSubmitter__InvalidFeeConfig',
     // CrossChainMessage
     '0xd5fd8f7a': 'CrossChainMessage__InvalidMessageType',

@@ -8,7 +8,7 @@
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
 import { transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { getTransactionRegistryAddress } from '@/lib/contracts/addresses';
@@ -116,7 +116,7 @@ export function useTransactionHashStruct(
 
   // Select result based on chain role
   const result = isSpoke ? spokeResult : hubResult;
-  const transformedData = transformResult(result.data);
+  const transformedData = useMemo(() => transformResult(result.data), [result.data]);
 
   // Log in useEffect to avoid render-time side effects
   useEffect(() => {

@@ -596,6 +596,35 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         }
     }
 
+    /// @inheritdoc ISpokeRegistry
+    function getTransactionDeadlines(address reporter)
+        external
+        view
+        returns (
+            uint256 currentBlock,
+            uint256 expiryBlock,
+            uint256 startBlock,
+            uint256 graceStartsAt,
+            uint256 timeLeft,
+            bool isExpired
+        )
+    {
+        TransactionAcknowledgementData memory ack = pendingTxAcknowledgements[reporter];
+        currentBlock = block.number;
+        expiryBlock = ack.expiryBlock;
+        startBlock = ack.startBlock;
+
+        if (ack.expiryBlock <= block.number) {
+            isExpired = true;
+            timeLeft = 0;
+            graceStartsAt = 0;
+        } else {
+            isExpired = false;
+            timeLeft = ack.expiryBlock - block.number;
+            graceStartsAt = ack.startBlock > block.number ? ack.startBlock - block.number : 0;
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════

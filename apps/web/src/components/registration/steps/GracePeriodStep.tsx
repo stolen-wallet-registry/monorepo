@@ -71,6 +71,20 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
     isError: deadlinesError,
   } = useContractDeadlines(normalizedRegisteree);
 
+  // Detect zeroed deadline data — indicates no pending acknowledgement in the contract
+  const hasNoPendingAck =
+    deadlines !== undefined && deadlines.start === 0n && deadlines.expiry === 0n;
+
+  useEffect(() => {
+    if (hasNoPendingAck) {
+      logger.registration.warn('GracePeriodStep: No pending acknowledgement detected', {
+        registeree,
+        start: deadlines?.start.toString(),
+        expiry: deadlines?.expiry.toString(),
+      });
+    }
+  }, [hasNoPendingAck, registeree, deadlines]);
+
   // Log when deadlines are loaded
   useEffect(() => {
     if (deadlines && !hasLoggedStart.current) {
@@ -115,10 +129,14 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   // The hook is designed to handle null values gracefully (returns 0 time remaining),
   // and this pattern follows React's rules of hooks (always call hooks in the same order).
   // The early return for loading state above prevents invalid UI while data loads.
+  // Pass null when no pending ack to prevent timer from firing immediately on zeroed data
+  const timerTargetBlock = hasNoPendingAck ? null : (deadlines?.start ?? null);
+  const timerCurrentBlock = hasNoPendingAck ? null : (deadlines?.currentBlock ?? null);
+
   const { timeRemaining, totalMs, blocksLeft, isExpired, isRunning, isWaitingForBlock } =
     useCountdownTimer({
-      targetBlock: deadlines?.start ?? null,
-      currentBlock: deadlines?.currentBlock ?? null,
+      targetBlock: timerTargetBlock,
+      currentBlock: timerCurrentBlock,
       chainId,
       onExpire: handleExpire,
       autoStart: true,
@@ -130,7 +148,6 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
     if (totalMs > 0) {
       // Capture initial value for progress bar (runs only once)
       if (initialTotalMs === undefined) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional guarded one-time capture
         setInitialTotalMs(totalMs);
       }
       // Log once
@@ -177,6 +194,19 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           Failed to load deadline information. Please refresh the page and try again.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  // No pending acknowledgement — contract returned zeroed deadline data
+  if (hasNoPendingAck) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          No pending acknowledgement found. The registration window may have expired. Please go back
+          and submit the acknowledgement again.
         </AlertDescription>
       </Alert>
     );

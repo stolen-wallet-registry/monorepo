@@ -90,7 +90,16 @@ export function useTxQuoteFee(reporterAddress: Address | null | undefined): UseT
   const data = useMemo(() => {
     if (rawFee === undefined) return null;
 
-    const feeWei = typeof rawFee === 'bigint' ? rawFee : BigInt(0);
+    const feeWei =
+      typeof rawFee === 'bigint'
+        ? rawFee
+        : (() => {
+            logger.contract.warn('useTxQuoteFee: unexpected rawFee type', {
+              rawFee: String(rawFee),
+              type: typeof rawFee,
+            });
+            return BigInt(0);
+          })();
     const feeEth = formatEthConsistent(feeWei);
     const ethPriceUsd = ethPrice?.usd;
 

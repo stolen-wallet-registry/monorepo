@@ -319,7 +319,8 @@ interface ITransactionRegistry {
         );
 
     /// @notice Generate hash struct for EIP-712 transaction batch signature
-    /// @dev Returns the hashStruct needed for constructing EIP-712 typed data
+    /// @dev Uses msg.sender as the reporter address. Must be called by the actual reporter
+    ///      so the resulting signature is valid for acknowledgeTransactionBatch/registerTransactionBatch.
     /// @param dataHash Hash of (txHashes, chainIds) being committed
     /// @param reportedChainId CAIP-2 chain ID hash where transactions occurred
     /// @param transactionCount Number of transactions in batch

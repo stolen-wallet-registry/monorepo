@@ -267,9 +267,12 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   // Get error message - sanitize both local errors and hook errors
   const errorMessage = localError || (error ? sanitizeErrorMessage(error) : null);
 
-  // Build signed message data for display
+  // Build signed message data for display (guard all required fields to prevent .toString() crash)
   const signedMessageData: SignedMessageData | null =
-    storedSignature && forwarder
+    storedSignature &&
+    forwarder &&
+    storedSignature.nonce !== undefined &&
+    storedSignature.deadline !== undefined
       ? {
           registeree,
           forwarder,

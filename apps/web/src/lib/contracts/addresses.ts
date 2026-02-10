@@ -21,27 +21,27 @@ import { getSpokeContractAddress } from './crosschain-addresses';
 export const CONTRACT_ADDRESSES = {
   // Hub + Separate Registries (core architecture)
   fraudRegistryHub: {
-    [anvilHub.chainId]: '0x396c850B9eC24a28e7556B7eb9C962F7bA836400' as Address,
+    [anvilHub.chainId]: '0xf6FcdE2a63E1B9208eB5947a9Ab1dcb6E9e174d5' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address, // TBD
   },
   walletRegistry: {
-    [anvilHub.chainId]: '0x80C139C37468DbffB2109cc337467c2887F7EA40' as Address,
+    [anvilHub.chainId]: '0x62C4B01F3a7f0c239fcE6FE7d63e1c39526820A5' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   transactionRegistry: {
-    [anvilHub.chainId]: '0xbd41310C6CFe0Aec2Ddd017681417F0614618fC3' as Address,
+    [anvilHub.chainId]: '0x1D1C79d846B6411a6fb37a4D709C481a3390eAa7' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   contractRegistry: {
-    [anvilHub.chainId]: '0xDc89d5d4Fec4159fC9EEA7d471cdafEe88cDec0D' as Address,
+    [anvilHub.chainId]: '0x93264320fa69Bacc011ce517C31719D0bB94C18c' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   operatorSubmitter: {
-    [anvilHub.chainId]: '0xc94f95C6b90BE297cbC27B32439c56a42097ca22' as Address,
+    [anvilHub.chainId]: '0x4e86dDDd8b9ebbbec3b7ebD85012E9e94c632EB4' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   crossChainInbox: {
-    [anvilHub.chainId]: '0x2F3EA898e8d179dC21Bb6835428207335Cc3F72d' as Address,
+    [anvilHub.chainId]: '0x44F3A2cDa6251B4189d516D6876F4cDdBec1299a' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   // Infrastructure
@@ -55,19 +55,19 @@ export const CONTRACT_ADDRESSES = {
   },
   // Soulbound contracts
   translationRegistry: {
-    [anvilHub.chainId]: '0x3c010A2B6b943512e8710997EE6E07a42746062f' as Address,
+    [anvilHub.chainId]: '0x237284b2A866bf4dcFC53D28B170dfb302f0E039' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   walletSoulbound: {
-    [anvilHub.chainId]: '0x3A8ca11Ae18877bdAa8cF447861d98b26C50CC90' as Address,
+    [anvilHub.chainId]: '0x71eC4505C934ea79B48e96d9e4973aAe0BF63831' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   supportSoulbound: {
-    [anvilHub.chainId]: '0xbeB9D0Be51B997FB5092E4b2D518F0A0AeeDeD04' as Address,
+    [anvilHub.chainId]: '0x68235223A3CeDBEE832A0147d7bE94673b61689F' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
   soulboundReceiver: {
-    [anvilHub.chainId]: '0xC0422EaC6F09C7eCa4e8076EE8329E0586F4C31C' as Address,
+    [anvilHub.chainId]: '0xa55c9cB501a4F8c4aD8AAd2Ca7C9bFa47e17dFEb' as Address,
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;

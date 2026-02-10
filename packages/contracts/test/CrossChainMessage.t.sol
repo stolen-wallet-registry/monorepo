@@ -180,7 +180,8 @@ contract CrossChainMessageTest is Test {
         chainIds[0] = CAIP10Evm.caip2Hash(uint64(8453));
 
         // Manually build mismatched payload by encoding with wrong count.
-        // WARNING: This encoding mirrors CrossChainMessage's internal wire format.
+        // WARNING: This encoding mirrors CrossChainMessage's internal wire format
+        // (see src/libraries/CrossChainMessage.sol — encodeTxBatchMessage).
         // If field order or version byte position changes, update this encoding to match.
         bytes memory encoded = abi.encode(
             uint8(2), // version

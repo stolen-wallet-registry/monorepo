@@ -277,7 +277,8 @@ interface ISpokeRegistry {
     function quoteFeeBreakdown(address owner) external view returns (FeeBreakdown memory);
 
     /// @notice Generate hash struct for wallet signing (frontend helper)
-    /// @dev Function signature aligns with hub for frontend consistency.
+    /// @dev Uses msg.sender as the wallet address. Must be called by the actual wallet owner.
+    ///      Function signature aligns with hub for frontend consistency.
     /// @param reportedChainId Chain ID where incident occurred
     /// @param incidentTimestamp When theft occurred
     /// @param forwarder Address that will submit the transaction
@@ -290,7 +291,8 @@ interface ISpokeRegistry {
         returns (uint256 deadline, bytes32 hashStruct);
 
     /// @notice Generate hash struct for transaction batch signing (frontend helper)
-    /// @dev Function signature aligns with hub TransactionRegistry for frontend consistency.
+    /// @dev Uses msg.sender as the reporter address. Must be called by the actual reporter.
+    ///      Function signature aligns with hub TransactionRegistry for frontend consistency.
     /// @param dataHash Hash of (txHashes, chainIds) — signature commitment
     /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
     /// @param transactionCount Number of transactions in batch
@@ -306,7 +308,7 @@ interface ISpokeRegistry {
         uint8 step
     ) external view returns (uint256 deadline, bytes32 hashStruct);
 
-    /// @notice Get deadline info for pending registration
+    /// @notice Get deadline info for pending wallet registration
     /// @param session The wallet address (session)
     /// @return currentBlock The current block number
     /// @return expiryBlock The block when registration window closes
@@ -315,6 +317,26 @@ interface ISpokeRegistry {
     /// @return timeLeft Blocks until expiry
     /// @return isExpired Whether the registration window has closed
     function getDeadlines(address session)
+        external
+        view
+        returns (
+            uint256 currentBlock,
+            uint256 expiryBlock,
+            uint256 startBlock,
+            uint256 graceStartsAt,
+            uint256 timeLeft,
+            bool isExpired
+        );
+
+    /// @notice Get deadline info for pending transaction batch registration
+    /// @param reporter The reporter address
+    /// @return currentBlock The current block number
+    /// @return expiryBlock The block when registration window closes
+    /// @return startBlock The block when grace period ends
+    /// @return graceStartsAt Blocks until grace period ends
+    /// @return timeLeft Blocks until expiry
+    /// @return isExpired Whether the registration window has closed
+    function getTransactionDeadlines(address reporter)
         external
         view
         returns (

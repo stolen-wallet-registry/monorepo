@@ -146,8 +146,9 @@ export async function searchTransaction(
   });
 
   const transactions = result.transactionInBatchs?.items ?? [];
+  const firstTx = transactions[0];
 
-  if (transactions.length === 0) {
+  if (!firstTx) {
     return { type: 'transaction', found: false, data: null };
   }
 
@@ -155,7 +156,7 @@ export async function searchTransaction(
     type: 'transaction',
     found: true,
     data: {
-      txHash: transactions[0].txHash as Hash,
+      txHash: firstTx.txHash as Hash,
       chains: transactions.map((t) => ({
         caip2ChainId: t.caip2ChainId,
         chainName: getCAIP2ChainName(t.caip2ChainId),
@@ -188,13 +189,14 @@ export async function searchContract(
   });
 
   const contracts = result.fraudulentContracts?.items ?? [];
+  const firstContract = contracts[0];
 
-  if (contracts.length === 0) {
+  if (!firstContract) {
     return null;
   }
 
   return {
-    contractAddress: contracts[0].contractAddress as Address,
+    contractAddress: firstContract.contractAddress as Address,
     chains: contracts.map((c) => ({
       caip2ChainId: c.caip2ChainId,
       chainName: getCAIP2ChainName(c.caip2ChainId),

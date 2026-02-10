@@ -514,6 +514,377 @@ contract Deploy is Script {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // SPLIT LOCAL DEPLOYMENT (Single-chain mode, avoids multi-chain broadcast bug)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Usage: pnpm deploy:crosschain (runs hub → spoke → trust → seed sequentially)
+    //
+    // Why split? Forge's multi-chain broadcast (vm.createFork + vm.selectFork)
+    // drops transactions from anvil's mempool when used with --block-time.
+    // Single-chain mode (--rpc-url) sends all txs to one chain reliably.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Deploy hub contracts only (single-chain mode)
+    /// @dev Run with: forge script Deploy --sig 'deployHubLocal()' --rpc-url http://localhost:8545 --broadcast
+    function deployHubLocal() external {
+        deployerPrivateKey =
+            vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
+        deployer = vm.addr(deployerPrivateKey);
+        hubMailbox = vm.envAddress("HUB_MAILBOX");
+        require(hubMailbox != address(0), "HUB_MAILBOX env var must be set");
+
+        console2.log("=== HUB LOCAL DEPLOYMENT (Single-Chain) ===");
+        console2.log("Deployer:", deployer);
+        console2.log("Hub Mailbox:", hubMailbox);
+
+        _ensureCreate2Factory();
+        vm.startBroadcast(deployerPrivateKey);
+
+        (uint256 graceBlocks, uint256 deadlineBlocks) = _getTimingConfig(block.chainid);
+        console2.log("Timing - Grace Blocks:", graceBlocks);
+        console2.log("Timing - Deadline Blocks:", deadlineBlocks);
+
+        // Core contracts
+        hubMockAggregatorAddr = Create2Deployer.deploy(
+            Salts.MOCK_AGGREGATOR,
+            abi.encodePacked(type(MockAggregator).creationCode, abi.encode(int256(350_000_000_000)))
+        );
+        console2.log("1. MockAggregator:", hubMockAggregatorAddr);
+
+        hubFeeManagerAddr = Create2Deployer.deploy(
+            Salts.FEE_MANAGER,
+            abi.encodePacked(type(FeeManager).creationCode, abi.encode(deployer, hubMockAggregatorAddr))
+        );
+        console2.log("2. FeeManager:", hubFeeManagerAddr);
+
+        hubOperatorRegistryAddr = Create2Deployer.deploy(
+            Salts.OPERATOR_REGISTRY, abi.encodePacked(type(OperatorRegistry).creationCode, abi.encode(deployer))
+        );
+        console2.log("3. OperatorRegistry:", hubOperatorRegistryAddr);
+
+        hubAddr = Create2Deployer.deploy(
+            Salts.FRAUD_REGISTRY_HUB,
+            abi.encodePacked(type(FraudRegistryHub).creationCode, abi.encode(deployer, deployer))
+        );
+        console2.log("4. FraudRegistryHub:", hubAddr);
+
+        walletRegistryAddr = Create2Deployer.deploy(
+            Salts.WALLET_REGISTRY,
+            abi.encodePacked(
+                type(WalletRegistry).creationCode, abi.encode(deployer, hubFeeManagerAddr, graceBlocks, deadlineBlocks)
+            )
+        );
+        console2.log("5. WalletRegistry:", walletRegistryAddr);
+
+        transactionRegistryAddr = Create2Deployer.deploy(
+            Salts.TX_REGISTRY,
+            abi.encodePacked(
+                type(TransactionRegistry).creationCode,
+                abi.encode(deployer, hubFeeManagerAddr, graceBlocks, deadlineBlocks)
+            )
+        );
+        console2.log("6. TransactionRegistry:", transactionRegistryAddr);
+
+        contractRegistryAddr = Create2Deployer.deploy(
+            Salts.CONTRACT_REGISTRY, abi.encodePacked(type(ContractRegistry).creationCode, abi.encode(deployer))
+        );
+        console2.log("7. ContractRegistry:", contractRegistryAddr);
+
+        operatorSubmitterAddr = Create2Deployer.deploy(
+            Salts.OPERATOR_SUBMITTER,
+            abi.encodePacked(
+                type(OperatorSubmitter).creationCode,
+                abi.encode(
+                    deployer,
+                    walletRegistryAddr,
+                    transactionRegistryAddr,
+                    contractRegistryAddr,
+                    hubOperatorRegistryAddr,
+                    hubFeeManagerAddr,
+                    deployer
+                )
+            )
+        );
+        console2.log("8. OperatorSubmitter:", operatorSubmitterAddr);
+
+        crossChainInboxAddr = Create2Deployer.deploy(
+            Salts.CROSS_CHAIN_INBOX,
+            abi.encodePacked(type(CrossChainInbox).creationCode, abi.encode(hubMailbox, hubAddr, deployer))
+        );
+        console2.log("9. CrossChainInbox:", crossChainInboxAddr);
+
+        // Wire hub to registries
+        FraudRegistryHub(payable(hubAddr)).setWalletRegistry(walletRegistryAddr);
+        FraudRegistryHub(payable(hubAddr)).setTransactionRegistry(transactionRegistryAddr);
+        FraudRegistryHub(payable(hubAddr)).setContractRegistry(contractRegistryAddr);
+        FraudRegistryHub(payable(hubAddr)).setInbox(crossChainInboxAddr);
+        console2.log("   -> Hub wired to registries and inbox");
+
+        WalletRegistry(walletRegistryAddr).setHub(hubAddr);
+        WalletRegistry(walletRegistryAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        TransactionRegistry(transactionRegistryAddr).setHub(hubAddr);
+        TransactionRegistry(transactionRegistryAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        ContractRegistry(contractRegistryAddr).setOperatorSubmitter(operatorSubmitterAddr);
+        console2.log("   -> Registries wired to Hub and OperatorSubmitter");
+
+        hubMulticall3Addr = _deployMulticall3(Salts.MULTICALL3);
+        console2.log("10. Multicall3:", hubMulticall3Addr);
+
+        // Soulbound contracts
+        translationRegistryAddr = Create2Deployer.deploy(
+            Salts.TRANSLATION_REGISTRY, abi.encodePacked(type(TranslationRegistry).creationCode, abi.encode(deployer))
+        );
+        console2.log("11. TranslationRegistry:", translationRegistryAddr);
+
+        walletSoulboundAddr = Create2Deployer.deploy(
+            Salts.WALLET_SOULBOUND,
+            abi.encodePacked(
+                type(WalletSoulbound).creationCode,
+                abi.encode(walletRegistryAddr, translationRegistryAddr, deployer, DEFAULT_DOMAIN, deployer)
+            )
+        );
+        console2.log("12. WalletSoulbound:", walletSoulboundAddr);
+
+        supportSoulboundAddr = Create2Deployer.deploy(
+            Salts.SUPPORT_SOULBOUND,
+            abi.encodePacked(
+                type(SupportSoulbound).creationCode,
+                abi.encode(MIN_DONATION, translationRegistryAddr, deployer, DEFAULT_DOMAIN, deployer)
+            )
+        );
+        console2.log("13. SupportSoulbound:", supportSoulboundAddr);
+
+        soulboundReceiverAddr = Create2Deployer.deploy(
+            Salts.SOULBOUND_RECEIVER,
+            abi.encodePacked(
+                type(SoulboundReceiver).creationCode,
+                abi.encode(deployer, hubMailbox, walletSoulboundAddr, supportSoulboundAddr)
+            )
+        );
+        console2.log("14. SoulboundReceiver:", soulboundReceiverAddr);
+
+        SupportSoulbound(supportSoulboundAddr).setAuthorizedMinter(soulboundReceiverAddr, true);
+        console2.log("    -> SoulboundReceiver authorized to mint SupportSoulbound");
+
+        // Operators
+        OperatorRegistry(hubOperatorRegistryAddr)
+            .approveOperator(
+                OPERATOR_A, OperatorRegistry(hubOperatorRegistryAddr).ALL_REGISTRIES(), "TestOperatorA-ALL"
+            );
+        console2.log("15. Operator A (ALL):", OPERATOR_A);
+
+        OperatorRegistry(hubOperatorRegistryAddr)
+            .approveOperator(
+                OPERATOR_B, OperatorRegistry(hubOperatorRegistryAddr).CONTRACT_REGISTRY(), "TestOperatorB-CONTRACT"
+            );
+        console2.log("16. Operator B (CONTRACT):", OPERATOR_B);
+
+        vm.stopBroadcast();
+
+        console2.log("");
+        console2.log("=== HUB DEPLOYMENT COMPLETE ===");
+        console2.log("CrossChainInbox:", crossChainInboxAddr);
+        console2.log("SoulboundReceiver:", soulboundReceiverAddr);
+        console2.log("Next: pnpm deploy:crosschain:spoke");
+    }
+
+    /// @notice Deploy spoke contracts only (single-chain mode)
+    /// @dev Run with: forge script Deploy --sig 'deploySpokeLocal()' --rpc-url http://localhost:8546 --broadcast
+    function deploySpokeLocal() external {
+        deployerPrivateKey =
+            vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
+        deployer = vm.addr(deployerPrivateKey);
+        hubMailbox = vm.envAddress("HUB_MAILBOX");
+        spokeMailbox = vm.envAddress("SPOKE_MAILBOX");
+
+        console2.log("=== SPOKE LOCAL DEPLOYMENT (Single-Chain) ===");
+        console2.log("Deployer:", deployer);
+
+        // Predict hub addresses via CREATE2 (same factory + salt + initcode = same address)
+        crossChainInboxAddr = _predictCrossChainInbox();
+        soulboundReceiverAddr = _predictSoulboundReceiver();
+        console2.log("Predicted CrossChainInbox (hub):", crossChainInboxAddr);
+        console2.log("Predicted SoulboundReceiver (hub):", soulboundReceiverAddr);
+
+        _ensureCreate2Factory();
+        vm.startBroadcast(deployerPrivateKey);
+
+        (uint256 graceBlocks, uint256 deadlineBlocks) = _getTimingConfig(block.chainid);
+        console2.log("Timing - Grace Blocks:", graceBlocks);
+        console2.log("Timing - Deadline Blocks:", deadlineBlocks);
+
+        spokeGasPaymaster =
+            Create2Deployer.deploy(Salts.MOCK_GAS_PAYMASTER, type(MockInterchainGasPaymaster).creationCode);
+        console2.log("1. MockInterchainGasPaymaster:", spokeGasPaymaster);
+
+        hyperlaneAdapterAddr = Create2Deployer.deploy(
+            Salts.HYPERLANE_ADAPTER,
+            abi.encodePacked(type(HyperlaneAdapter).creationCode, abi.encode(deployer, spokeMailbox, spokeGasPaymaster))
+        );
+        console2.log("2. HyperlaneAdapter:", hyperlaneAdapterAddr);
+
+        HyperlaneAdapter(hyperlaneAdapterAddr).setDomainSupport(HUB_CHAIN_ID, true);
+        console2.log("   -> Hub chain", HUB_CHAIN_ID, "enabled as destination");
+
+        spokeMockAggregatorAddr = Create2Deployer.deploy(
+            Salts.MOCK_AGGREGATOR_SPOKE,
+            abi.encodePacked(type(MockAggregator).creationCode, abi.encode(int256(350_000_000_000)))
+        );
+        console2.log("3. MockAggregator (Spoke):", spokeMockAggregatorAddr);
+
+        spokeFeeManagerAddr = Create2Deployer.deploy(
+            Salts.SPOKE_FEE_MANAGER,
+            abi.encodePacked(type(FeeManager).creationCode, abi.encode(deployer, spokeMockAggregatorAddr))
+        );
+        console2.log("4. FeeManager (Spoke):", spokeFeeManagerAddr);
+
+        bytes32 inboxBytes = _addressToBytes32(crossChainInboxAddr);
+        spokeRegistryAddr = Create2Deployer.deploy(
+            Salts.SPOKE_REGISTRY,
+            abi.encodePacked(
+                type(SpokeRegistry).creationCode,
+                abi.encode(
+                    deployer,
+                    hyperlaneAdapterAddr,
+                    spokeFeeManagerAddr,
+                    HUB_CHAIN_ID,
+                    inboxBytes,
+                    graceBlocks,
+                    deadlineBlocks,
+                    BRIDGE_ID_HYPERLANE
+                )
+            )
+        );
+        console2.log("5. SpokeRegistry:", spokeRegistryAddr);
+
+        bytes32 soulboundReceiverBytes = _addressToBytes32(soulboundReceiverAddr);
+        spokeSoulboundForwarderAddr = Create2Deployer.deploy(
+            Salts.SPOKE_SOULBOUND_FWD,
+            abi.encodePacked(
+                type(SpokeSoulboundForwarder).creationCode,
+                abi.encode(deployer, hyperlaneAdapterAddr, HUB_CHAIN_ID, soulboundReceiverBytes, MIN_DONATION)
+            )
+        );
+        console2.log("6. SpokeSoulboundForwarder:", spokeSoulboundForwarderAddr);
+
+        spokeMulticall3Addr = _deployMulticall3(Salts.MULTICALL3_SPOKE);
+        console2.log("7. Multicall3 (Spoke):", spokeMulticall3Addr);
+
+        vm.stopBroadcast();
+
+        console2.log("");
+        console2.log("=== SPOKE DEPLOYMENT COMPLETE ===");
+        console2.log("HyperlaneAdapter:", hyperlaneAdapterAddr);
+        console2.log("Next: pnpm deploy:crosschain:trust");
+    }
+
+    /// @notice Configure trust relationships on hub (single-chain mode)
+    /// @dev Run with: forge script Deploy --sig 'configureTrustLocal()' --rpc-url http://localhost:8545 --broadcast
+    function configureTrustLocal() external {
+        deployerPrivateKey =
+            vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
+        deployer = vm.addr(deployerPrivateKey);
+        hubMailbox = vm.envAddress("HUB_MAILBOX");
+        spokeMailbox = vm.envAddress("SPOKE_MAILBOX");
+
+        // Predict addresses via CREATE2
+        crossChainInboxAddr = _predictCrossChainInbox();
+        soulboundReceiverAddr = _predictSoulboundReceiver();
+        hyperlaneAdapterAddr = _predictHyperlaneAdapter();
+
+        console2.log("=== TRUST CONFIGURATION (Single-Chain) ===");
+        console2.log("CrossChainInbox:", crossChainInboxAddr);
+        console2.log("SoulboundReceiver:", soulboundReceiverAddr);
+        console2.log("HyperlaneAdapter (spoke):", hyperlaneAdapterAddr);
+
+        vm.startBroadcast(deployerPrivateKey);
+
+        bytes32 adapterBytes = _addressToBytes32(hyperlaneAdapterAddr);
+        CrossChainInbox(crossChainInboxAddr).setTrustedSource(SPOKE_CHAIN_ID, adapterBytes, true);
+        console2.log("CrossChainInbox trusts HyperlaneAdapter on chain", SPOKE_CHAIN_ID);
+
+        SoulboundReceiver(soulboundReceiverAddr).setTrustedForwarder(SPOKE_CHAIN_ID, hyperlaneAdapterAddr);
+        console2.log("SoulboundReceiver trusts HyperlaneAdapter on chain", SPOKE_CHAIN_ID);
+
+        vm.stopBroadcast();
+
+        console2.log("");
+        console2.log("=== TRUST CONFIGURATION COMPLETE ===");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CREATE2 ADDRESS PREDICTION HELPERS (for split deployment)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function _predictCrossChainInbox() internal view returns (address) {
+        address predictedHub = Create2Deployer.predict(
+            Salts.FRAUD_REGISTRY_HUB,
+            abi.encodePacked(type(FraudRegistryHub).creationCode, abi.encode(deployer, deployer))
+        );
+        return Create2Deployer.predict(
+            Salts.CROSS_CHAIN_INBOX,
+            abi.encodePacked(type(CrossChainInbox).creationCode, abi.encode(hubMailbox, predictedHub, deployer))
+        );
+    }
+
+    function _predictSoulboundReceiver() internal view returns (address) {
+        address predictedWalletRegistry = _predictWalletRegistry();
+        address predictedTranslationRegistry = Create2Deployer.predict(
+            Salts.TRANSLATION_REGISTRY, abi.encodePacked(type(TranslationRegistry).creationCode, abi.encode(deployer))
+        );
+        address predictedWalletSoulbound = Create2Deployer.predict(
+            Salts.WALLET_SOULBOUND,
+            abi.encodePacked(
+                type(WalletSoulbound).creationCode,
+                abi.encode(predictedWalletRegistry, predictedTranslationRegistry, deployer, DEFAULT_DOMAIN, deployer)
+            )
+        );
+        address predictedSupportSoulbound = Create2Deployer.predict(
+            Salts.SUPPORT_SOULBOUND,
+            abi.encodePacked(
+                type(SupportSoulbound).creationCode,
+                abi.encode(MIN_DONATION, predictedTranslationRegistry, deployer, DEFAULT_DOMAIN, deployer)
+            )
+        );
+        return Create2Deployer.predict(
+            Salts.SOULBOUND_RECEIVER,
+            abi.encodePacked(
+                type(SoulboundReceiver).creationCode,
+                abi.encode(deployer, hubMailbox, predictedWalletSoulbound, predictedSupportSoulbound)
+            )
+        );
+    }
+
+    function _predictWalletRegistry() internal pure returns (address) {
+        address predictedMockAggregator = Create2Deployer.predict(
+            Salts.MOCK_AGGREGATOR,
+            abi.encodePacked(type(MockAggregator).creationCode, abi.encode(int256(350_000_000_000)))
+        );
+        address predictedDeployer = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266; // Anvil account 0
+        address predictedFeeManager = Create2Deployer.predict(
+            Salts.FEE_MANAGER,
+            abi.encodePacked(type(FeeManager).creationCode, abi.encode(predictedDeployer, predictedMockAggregator))
+        );
+        return Create2Deployer.predict(
+            Salts.WALLET_REGISTRY,
+            abi.encodePacked(
+                type(WalletRegistry).creationCode,
+                abi.encode(predictedDeployer, predictedFeeManager, ANVIL_GRACE_BLOCKS, ANVIL_DEADLINE_BLOCKS)
+            )
+        );
+    }
+
+    function _predictHyperlaneAdapter() internal view returns (address) {
+        address predictedGasPaymaster =
+            Create2Deployer.predict(Salts.MOCK_GAS_PAYMASTER, type(MockInterchainGasPaymaster).creationCode);
+        return Create2Deployer.predict(
+            Salts.HYPERLANE_ADAPTER,
+            abi.encodePacked(
+                type(HyperlaneAdapter).creationCode, abi.encode(deployer, spokeMailbox, predictedGasPaymaster)
+            )
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // SINGLE-CHAIN HUB DEPLOYMENT (Testnet/Mainnet)
     // ═══════════════════════════════════════════════════════════════════════════
 

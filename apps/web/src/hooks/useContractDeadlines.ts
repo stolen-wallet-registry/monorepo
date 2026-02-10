@@ -24,9 +24,9 @@ export interface DeadlineData {
   currentBlock: bigint;
   expiry: bigint;
   start: bigint;
-  /** Block number when grace period started (rawData[3]) */
+  /** Blocks remaining until grace period starts; 0 if already open or expired (rawData[3]) */
   graceStartsAt: bigint;
-  /** Blocks remaining until window opens (rawData[4]) */
+  /** Blocks remaining until registration window closes (rawData[4]) */
   timeLeft: bigint;
   isExpired: boolean;
 }
@@ -101,11 +101,11 @@ export function useContractDeadlines(
     const rawData = result.data as DeadlinesTuple;
     if (rawData.length >= 6) {
       transformedData = {
-        currentBlock: BigInt(rawData[0]),
-        expiry: BigInt(rawData[1]),
-        start: BigInt(rawData[2]),
-        graceStartsAt: BigInt(rawData[3]),
-        timeLeft: BigInt(rawData[4]),
+        currentBlock: rawData[0],
+        expiry: rawData[1],
+        start: rawData[2],
+        graceStartsAt: rawData[3],
+        timeLeft: rawData[4],
         isExpired: Boolean(rawData[5]),
       };
 
@@ -144,9 +144,9 @@ export interface TxDeadlineData {
   expiry: bigint;
   /** Current block number */
   currentBlock: bigint;
-  /** Block number when grace period started */
+  /** Blocks remaining until grace period starts; 0 if already open or expired */
   graceStartsAt: bigint;
-  /** Blocks remaining until window opens */
+  /** Blocks remaining until registration window closes */
   timeLeft: bigint;
   /** Whether the registration window has expired */
   isExpired: boolean;
@@ -201,7 +201,7 @@ export function useTxContractDeadlines(
   const spokeResult = useReadContract({
     address: contractAddress,
     abi: spokeRegistryAbi,
-    functionName: 'getDeadlines',
+    functionName: 'getTransactionDeadlines',
     args: reporter ? [reporter] : undefined,
     chainId,
     query: {
@@ -253,11 +253,11 @@ export function useTxContractDeadlines(
     const raw = rawDeadlines;
     if (raw.length >= 6 && raw[0] !== undefined) {
       data = {
-        currentBlock: BigInt(raw[0]),
-        expiry: BigInt(raw[1]),
-        start: BigInt(raw[2]),
-        graceStartsAt: BigInt(raw[3]),
-        timeLeft: BigInt(raw[4]),
+        currentBlock: raw[0],
+        expiry: raw[1],
+        start: raw[2],
+        graceStartsAt: raw[3],
+        timeLeft: raw[4],
         isExpired: Boolean(raw[5]),
       };
     } else {

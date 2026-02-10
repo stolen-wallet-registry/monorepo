@@ -31,12 +31,13 @@ export function detectSearchType(input: string): SearchType {
   // CAIP-10 format: eip155:<chainId>:<address>
   // Must have 3 parts, start with 'eip155', and have valid address
   if (trimmed.includes(':')) {
-    const parts = trimmed.split(':');
+    const [namespace, chainId, address] = trimmed.split(':');
     if (
-      parts.length === 3 &&
-      parts[0] === 'eip155' &&
-      /^\d+$/.test(parts[1]) &&
-      /^0x[0-9a-f]{40}$/.test(parts[2])
+      namespace === 'eip155' &&
+      chainId !== undefined &&
+      address !== undefined &&
+      /^\d+$/.test(chainId) &&
+      /^0x[0-9a-f]{40}$/.test(address)
     ) {
       return 'caip10';
     }
@@ -74,12 +75,13 @@ export function isTransactionHash(value: string): boolean {
  * Check if a string is a valid CAIP-10 identifier.
  */
 export function isCAIP10(value: string): boolean {
-  const parts = value.toLowerCase().split(':');
+  const [namespace, chainId, address] = value.toLowerCase().split(':');
   return (
-    parts.length === 3 &&
-    parts[0] === 'eip155' &&
-    /^\d+$/.test(parts[1]) &&
-    /^0x[0-9a-f]{40}$/.test(parts[2])
+    namespace === 'eip155' &&
+    chainId !== undefined &&
+    address !== undefined &&
+    /^\d+$/.test(chainId) &&
+    /^0x[0-9a-f]{40}$/.test(address)
   );
 }
 

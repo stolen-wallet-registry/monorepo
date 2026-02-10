@@ -42,7 +42,7 @@ export const anvilSpoke: SpokeNetworkConfig = {
 
   spokeContracts: {
     // CREATE2 deterministic addresses from Deploy.s.sol
-    spokeRegistry: '0xED040e67447bE891200Ea1C12e5FA8DA083770A0',
+    spokeRegistry: '0x944e00ce4aC11125BFDd2286A3B9425C19E9CFaF',
     feeManager: '0xC399A0a346b1c4f17cd719C73A09F48469ccd199',
     bridgeAdapters: {
       hyperlane: '0x85881002c84e036E83a5094E1b789a00858B0063',

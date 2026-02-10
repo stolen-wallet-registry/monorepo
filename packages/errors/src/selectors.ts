@@ -284,6 +284,11 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Failed to forward fee.',
     action: 'Please try again.',
   },
+  '0xb951fb83': {
+    name: 'OperatorSubmitter__RefundFailed',
+    message: 'Failed to refund excess fee.',
+    action: 'Please try again.',
+  },
   '0x0079d758': {
     name: 'OperatorSubmitter__InvalidFeeConfig',
     message: 'Invalid fee configuration.',

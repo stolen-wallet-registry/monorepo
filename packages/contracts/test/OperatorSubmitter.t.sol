@@ -149,7 +149,9 @@ contract OperatorSubmitterTest is Test {
         }
     }
 
-    /// @dev Deploy a FeeManager + OperatorSubmitter with fee config, wiring a given registry
+    /// @dev Deploy a FeeManager + OperatorSubmitter with fee config.
+    /// NOTE: Does NOT wire the submitter to registries — each test must separately call
+    /// registry.setOperatorSubmitter(address(feeSubmitter)) for the relevant registry.
     function _deployFeeSubmitter() internal returns (OperatorSubmitter feeSubmitter, FeeManager fm) {
         MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
         vm.startPrank(owner);

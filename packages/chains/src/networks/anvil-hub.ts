@@ -36,12 +36,12 @@ export const anvilHub: HubNetworkConfig = {
 
   hubContracts: {
     // CREATE2 deterministic addresses from Deploy.s.sol
-    stolenWalletRegistry: '0x80C139C37468DbffB2109cc337467c2887F7EA40',
-    stolenTransactionRegistry: '0xbd41310C6CFe0Aec2Ddd017681417F0614618fC3',
-    fraudulentContractRegistry: '0xDc89d5d4Fec4159fC9EEA7d471cdafEe88cDec0D',
+    stolenWalletRegistry: '0x62C4B01F3a7f0c239fcE6FE7d63e1c39526820A5',
+    stolenTransactionRegistry: '0x1D1C79d846B6411a6fb37a4D709C481a3390eAa7',
+    fraudulentContractRegistry: '0x93264320fa69Bacc011ce517C31719D0bB94C18c',
     feeManager: '0xE14aa15D8d9a3f3FEb78563166E931284510d96C',
-    registryHub: '0x396c850B9eC24a28e7556B7eb9C962F7bA836400',
-    crossChainInbox: '0x2F3EA898e8d179dC21Bb6835428207335Cc3F72d',
+    registryHub: '0xf6FcdE2a63E1B9208eB5947a9Ab1dcb6E9e174d5',
+    crossChainInbox: '0x44F3A2cDa6251B4189d516D6876F4cDdBec1299a',
     operatorRegistry: '0xB4F23F67DBbFa190415F3584A8fE8c1fF9BAeA35',
   },
 

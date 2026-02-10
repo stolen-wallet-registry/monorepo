@@ -106,12 +106,14 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     if (
       storedSig.reportedChainId === undefined ||
       storedSig.incidentTimestamp === undefined ||
-      storedSig.nonce === undefined
+      storedSig.nonce === undefined ||
+      storedSig.deadline === undefined
     ) {
       logger.p2p.error('Cannot submit REG - missing required signature fields', {
         hasReportedChainId: storedSig.reportedChainId !== undefined,
         hasIncidentTimestamp: storedSig.incidentTimestamp !== undefined,
         hasNonce: storedSig.nonce !== undefined,
+        hasDeadline: storedSig.deadline !== undefined,
       });
       return;
     }

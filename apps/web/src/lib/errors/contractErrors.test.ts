@@ -59,6 +59,7 @@ describe('contractErrors', () => {
     OperatorSubmitter__ArrayLengthMismatch: '0x15c1e4ff',
     OperatorSubmitter__InsufficientFee: '0x030ff595',
     OperatorSubmitter__FeeForwardFailed: '0x58614d91',
+    OperatorSubmitter__RefundFailed: '0xb951fb83',
     OperatorSubmitter__InvalidFeeConfig: '0x0079d758',
     // CAIP-10 parsing errors
     CAIP10__InvalidFormat: '0xfd0a5b1e',
