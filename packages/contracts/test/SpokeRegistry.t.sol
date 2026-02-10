@@ -52,7 +52,9 @@ contract SpokeRegistryTest is Test {
     uint256 internal _sDeadline;
     uint256 internal _sNonce;
 
-    // EIP-712 constants (uses uint64 reportedChainId for storage efficiency)
+    // EIP-712 constants — duplicated here (not imported from EIP712Constants) because
+    // spoke uses uint64 reportedChainId/incidentTimestamp while hub uses bytes32.
+    // If these drift from the SpokeRegistry contract, signing tests will fail.
     bytes32 internal constant ACK_TYPEHASH = keccak256(
         "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
@@ -1105,6 +1107,7 @@ contract SpokeRegistryTest is Test {
         (uint8 v, bytes32 r, bytes32 s) =
             _signAck(walletPrivateKey, wallet, address(0), reportedChainId, incidentTimestamp, nonce, deadline);
 
+        // Intentionally prank from address(0) so msg.sender matches the zero forwarder argument
         vm.prank(address(0));
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__ZeroAddress.selector);
         spoke.acknowledge(wallet, address(0), reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);

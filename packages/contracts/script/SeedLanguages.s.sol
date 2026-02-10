@@ -17,8 +17,8 @@ import { TranslationRegistry } from "../src/soulbound/TranslationRegistry.sol";
 /// TRANSLATION_REGISTRY=0x... forge script script/SeedLanguages.s.sol --rpc-url localhost --broadcast
 /// ```
 contract SeedLanguages is Script {
-    // Default local anvil address (from DeployCrossChain nonce 10)
-    address constant DEFAULT_TRANSLATION_REGISTRY = 0x610178dA211FEF7D417bC0e6FeD39F05609AD788;
+    // Default local anvil address (regular CREATE, nonce-based from Deploy.s.sol)
+    address constant DEFAULT_TRANSLATION_REGISTRY = 0x3Aa5ebB10DC797CAC828524e59A333d0A371443c;
 
     function run() external {
         // Use same deployer key as DeployCrossChain (Anvil account 0)

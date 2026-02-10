@@ -51,7 +51,7 @@ export function useEnsResolve(name: string | undefined): EnsResolveResult {
     error,
   } = useEnsAddress({
     name: normalizedName,
-    config: ensConfig!,
+    ...(ensConfig ? { config: ensConfig } : {}),
     query: {
       ...ENS_QUERY_OPTIONS,
       enabled: isEnsEnabled && !!normalizedName,

@@ -52,7 +52,7 @@ export function useEnsDisplay(
     isError: isNameError,
   } = useEnsName({
     address,
-    config: ensConfig!,
+    ...(ensConfig ? { config: ensConfig } : {}),
     query: {
       ...ENS_QUERY_OPTIONS,
       enabled: isEnsEnabled && !!address,
@@ -73,7 +73,7 @@ export function useEnsDisplay(
   // Resolve ENS name -> avatar (only if name exists and includeAvatar is true)
   const { data: avatar, isLoading: isAvatarLoading } = useEnsAvatar({
     name: normalizedName,
-    config: ensConfig!,
+    ...(ensConfig ? { config: ensConfig } : {}),
     query: {
       ...ENS_QUERY_OPTIONS,
       enabled: isEnsEnabled && includeAvatar && !!normalizedName,

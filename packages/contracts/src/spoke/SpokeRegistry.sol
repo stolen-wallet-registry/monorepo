@@ -567,6 +567,20 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         }
     }
 
+    /// @dev Compute deadline fields from acknowledgement timing data
+    function _computeDeadlineFields(uint256 startBlock_, uint256 expiryBlock_)
+        internal
+        view
+        returns (uint256 graceStartsAt, uint256 timeLeft, bool isExpired)
+    {
+        if (expiryBlock_ <= block.number) {
+            isExpired = true;
+        } else {
+            timeLeft = expiryBlock_ - block.number;
+            graceStartsAt = startBlock_ > block.number ? startBlock_ - block.number : 0;
+        }
+    }
+
     /// @inheritdoc ISpokeRegistry
     function getDeadlines(address session)
         external
@@ -584,16 +598,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         currentBlock = block.number;
         expiryBlock = ack.expiryBlock;
         startBlock = ack.startBlock;
-
-        if (ack.expiryBlock <= block.number) {
-            isExpired = true;
-            timeLeft = 0;
-            graceStartsAt = 0;
-        } else {
-            isExpired = false;
-            timeLeft = ack.expiryBlock - block.number;
-            graceStartsAt = ack.startBlock > block.number ? ack.startBlock - block.number : 0;
-        }
+        (graceStartsAt, timeLeft, isExpired) = _computeDeadlineFields(ack.startBlock, ack.expiryBlock);
     }
 
     /// @inheritdoc ISpokeRegistry
@@ -613,16 +618,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         currentBlock = block.number;
         expiryBlock = ack.expiryBlock;
         startBlock = ack.startBlock;
-
-        if (ack.expiryBlock <= block.number) {
-            isExpired = true;
-            timeLeft = 0;
-            graceStartsAt = 0;
-        } else {
-            isExpired = false;
-            timeLeft = ack.expiryBlock - block.number;
-            graceStartsAt = ack.startBlock > block.number ? ack.startBlock - block.number : 0;
-        }
+        (graceStartsAt, timeLeft, isExpired) = _computeDeadlineFields(ack.startBlock, ack.expiryBlock);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -31,14 +31,7 @@ export function detectSearchType(input: string): SearchType {
   // CAIP-10 format: eip155:<chainId>:<address>
   // Must have 3 parts, start with 'eip155', and have valid address
   if (trimmed.includes(':')) {
-    const [namespace, chainId, address] = trimmed.split(':');
-    if (
-      namespace === 'eip155' &&
-      chainId !== undefined &&
-      address !== undefined &&
-      /^\d+$/.test(chainId) &&
-      /^0x[0-9a-f]{40}$/.test(address)
-    ) {
+    if (isCAIP10(trimmed)) {
       return 'caip10';
     }
   }

@@ -101,17 +101,20 @@ if (import.meta.env.DEV) {
   });
 }
 
+// Build transports once (same for both config branches)
+const transports = getTransports();
+
 // Create config with conditional WalletConnect
 export const config = walletConnectProjectId
   ? createConfig({
       chains,
       connectors: [injected(), walletConnect({ projectId: walletConnectProjectId })],
-      transports: getTransports(),
+      transports,
     })
   : createConfig({
       chains,
       connectors: [injected()],
-      transports: getTransports(),
+      transports,
     });
 
 // Type augmentation for wagmi

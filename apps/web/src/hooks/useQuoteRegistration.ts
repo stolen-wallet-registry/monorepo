@@ -80,11 +80,12 @@ export function useQuoteRegistration(
       error: result.error?.message,
     });
   } else if (result.data !== undefined) {
+    const rawFee = typeof result.data === 'bigint' ? result.data : undefined;
     logger.contract.debug('useQuoteRegistration: Quote received', {
       chainId,
       registryType,
-      feeWei: (result.data as bigint).toString(),
-      feeEth: formatEther(result.data as bigint),
+      feeWei: rawFee?.toString(),
+      feeEth: rawFee ? formatEther(rawFee) : undefined,
     });
   }
 

@@ -76,6 +76,11 @@ export function useTransactionHashStruct(
     contractAddress = getTransactionRegistryAddress(chainId);
   }
 
+  // Log unsupported chain to help catch configuration issues
+  if (!isSpoke && !isHub && import.meta.env.DEV) {
+    logger.contract.debug('useTransactionHashStruct: chain is neither hub nor spoke', { chainId });
+  }
+
   const enabled =
     !!dataHash &&
     !!reportedChainId &&

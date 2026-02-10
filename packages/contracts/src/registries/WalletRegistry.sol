@@ -145,6 +145,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         if (balance == 0) return;
         (bool success,) = msg.sender.call{ value: balance }("");
         if (!success) revert WalletRegistry__FeeTransferFailed();
+        emit FeesWithdrawn(msg.sender, balance);
     }
 
     /// @dev Internal helper to verify acknowledgement signature (reduces stack depth)

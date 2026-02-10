@@ -450,14 +450,14 @@ contract FraudRegistryHubTest is Test {
 
         hub.unpause();
 
-        // After unpause, registration should proceed (may revert for other reasons, but not pause)
-        // Just confirm it no longer reverts with EnforcedPause
-        // The call may revert with AlreadyRegistered or succeed — either proves unpause worked
+        // After unpause, registration should succeed (no revert = implicit assertion).
+        // Positive assertion via isRegistered confirms the state change actually persisted.
+        bytes32 identifier = bytes32(uint256(uint160(makeAddr("unpauseWallet"))));
         vm.prank(inbox);
         hub.registerWalletFromSpoke(
             keccak256("eip155"),
             bytes32(0),
-            bytes32(uint256(1)),
+            identifier,
             CAIP10Evm.caip2Hash(CHAIN_ID),
             0,
             CAIP10Evm.caip2Hash(CHAIN_ID),
@@ -465,6 +465,10 @@ contract FraudRegistryHubTest is Test {
             1,
             keccak256("unpauseTest")
         );
+
+        // Verify the wallet was actually registered (not just that it didn't revert)
+        address walletAddr = address(uint160(uint256(identifier)));
+        assertTrue(hub.isWalletRegistered(walletAddr), "Wallet should be registered after unpause");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

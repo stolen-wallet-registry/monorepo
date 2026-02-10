@@ -181,6 +181,7 @@ export function useTxContractNonce(address: Address | undefined): UseContractNon
     try {
       const result = await refetch();
       return {
+        // wagmi's refetch can also return 'pending'; we treat non-success as error
         status: result.status === 'success' ? 'success' : 'error',
         data: result.data as bigint | undefined,
         error: result.error as Error | null,

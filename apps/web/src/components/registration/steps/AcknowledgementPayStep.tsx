@@ -169,12 +169,14 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
     if (
       storedSignature.reportedChainId === undefined ||
       storedSignature.incidentTimestamp === undefined ||
-      storedSignature.nonce === undefined
+      storedSignature.nonce === undefined ||
+      storedSignature.deadline === undefined
     ) {
       logger.contract.error('Cannot submit acknowledgement - missing required fields', {
         hasReportedChainId: storedSignature.reportedChainId !== undefined,
         hasIncidentTimestamp: storedSignature.incidentTimestamp !== undefined,
         hasNonce: storedSignature.nonce !== undefined,
+        hasDeadline: storedSignature.deadline !== undefined,
       });
       setLocalError('Signature is missing required data. Please go back and sign again.');
       return;

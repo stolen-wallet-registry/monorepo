@@ -99,6 +99,12 @@ contract WalletSoulboundTest is Test {
         new WalletSoulbound(address(mockRegistry), address(0), feeCollector, "stolenwallet.xyz", address(this));
     }
 
+    /// @notice Constructor reverts with zero owner address (OZ Ownable guard)
+    function test_constructor_revert_zeroOwner() public {
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
+        new WalletSoulbound(address(mockRegistry), address(translations), feeCollector, "stolenwallet.xyz", address(0));
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MINT TO TESTS
     // ═══════════════════════════════════════════════════════════════════════════

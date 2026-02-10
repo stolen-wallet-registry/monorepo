@@ -91,7 +91,8 @@ contract CrossChainMessageTest is Test {
         // but must NOT revert with InvalidMessageLength
         try caller.decodeWallet(exactMinimum) { }
         catch (bytes memory reason) {
-            // Ensure revert is NOT InvalidMessageLength
+            // Ensure revert data is long enough to extract a selector
+            assertTrue(reason.length >= 4, "Revert reason too short to extract selector");
             bytes4 selector = bytes4(reason);
             assertTrue(
                 selector != CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector,
@@ -163,6 +164,8 @@ contract CrossChainMessageTest is Test {
         bytes memory exactMinimum = new bytes(384);
         try caller.decodeTxBatch(exactMinimum) { }
         catch (bytes memory reason) {
+            // Ensure revert data is long enough to extract a selector
+            assertTrue(reason.length >= 4, "Revert reason too short to extract selector");
             bytes4 selector = bytes4(reason);
             assertTrue(
                 selector != CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector,

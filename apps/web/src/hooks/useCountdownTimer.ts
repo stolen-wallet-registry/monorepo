@@ -88,14 +88,20 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
 
   // Check if actual block target has been reached
   const isBlockTargetReached = useCallback((): boolean => {
-    if (targetBlock === null || targetBlock === 0n || currentBlock === null) return false;
+    if (targetBlock === null || targetBlock === 0n || currentBlock === null || currentBlock === 0n)
+      return false;
     return currentBlock >= targetBlock;
   }, [targetBlock, currentBlock]);
 
   // Reset when target/current block changes
   useEffect(() => {
     // Don't process if we don't have valid block data yet
-    if (targetBlock === null || targetBlock === 0n || currentBlock === null) {
+    if (
+      targetBlock === null ||
+      targetBlock === 0n ||
+      currentBlock === null ||
+      currentBlock === 0n
+    ) {
       logger.registration.debug('Countdown timer waiting for block data', {
         targetBlock: targetBlock?.toString() ?? 'null',
         currentBlock: currentBlock?.toString() ?? 'null',
@@ -154,7 +160,8 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isRunning, totalMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning]); // totalMs intentionally excluded — setTotalMs uses functional updater
 
   // Block verification effect - determines actual expiration from chain data
   // This runs whenever currentBlock updates from contract polling

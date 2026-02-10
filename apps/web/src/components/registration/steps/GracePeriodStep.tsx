@@ -57,6 +57,7 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
 
   // Track logging state
   const hasLoggedStart = useRef(false);
+  const hasLoggedNoPendingAck = useRef(false);
   // Store initial totalMs for progress bar calculation (captured once from first valid totalMs)
   const [initialTotalMs, setInitialTotalMs] = useState<number | undefined>(undefined);
 
@@ -76,7 +77,8 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
     deadlines !== undefined && deadlines.start === 0n && deadlines.expiry === 0n;
 
   useEffect(() => {
-    if (hasNoPendingAck) {
+    if (hasNoPendingAck && !hasLoggedNoPendingAck.current) {
+      hasLoggedNoPendingAck.current = true;
       logger.registration.warn('GracePeriodStep: No pending acknowledgement detected', {
         registeree,
         start: deadlines?.start.toString(),
@@ -85,9 +87,9 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
     }
   }, [hasNoPendingAck, registeree, deadlines]);
 
-  // Log when deadlines are loaded
+  // Log when deadlines are loaded (skip when no pending ack — zeroed data would produce bogus values)
   useEffect(() => {
-    if (deadlines && !hasLoggedStart.current) {
+    if (deadlines && !hasNoPendingAck && !hasLoggedStart.current) {
       hasLoggedStart.current = true;
       logger.registration.info('Grace period started', {
         registeree,
@@ -98,7 +100,7 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
         chainId,
       });
     }
-  }, [deadlines, registeree, chainId]);
+  }, [deadlines, hasNoPendingAck, registeree, chainId]);
 
   // Custom onExpire handler with theme switch.
   // Uses refs to access latest theme values, avoiding stale closure issues.

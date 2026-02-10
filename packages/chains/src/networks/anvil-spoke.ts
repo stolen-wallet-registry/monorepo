@@ -41,11 +41,11 @@ export const anvilSpoke: SpokeNetworkConfig = {
   },
 
   spokeContracts: {
-    // CREATE2 deterministic addresses from Deploy.s.sol
-    spokeRegistry: '0x944e00ce4aC11125BFDd2286A3B9425C19E9CFaF',
-    feeManager: '0xC399A0a346b1c4f17cd719C73A09F48469ccd199',
+    // Regular CREATE (deployer + nonce) addresses from Deploy.s.sol
+    spokeRegistry: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707',
+    feeManager: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9',
     bridgeAdapters: {
-      hyperlane: '0x85881002c84e036E83a5094E1b789a00858B0063',
+      hyperlane: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512',
     },
   },
 

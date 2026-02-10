@@ -116,6 +116,11 @@ interface IWalletRegistry {
     /// @param walletCount Number of wallets in the batch
     event BatchCreated(uint256 indexed batchId, bytes32 indexed operatorId, uint32 walletCount);
 
+    /// @notice Emitted when collected fees are withdrawn by the owner
+    /// @param recipient The address that received the fees
+    /// @param amount The amount of ETH withdrawn
+    event FeesWithdrawn(address indexed recipient, uint256 amount);
+
     /// @notice Emitted when hub address is updated
     /// @param oldHub The previous hub address
     /// @param newHub The new hub address

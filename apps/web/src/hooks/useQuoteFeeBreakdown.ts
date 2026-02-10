@@ -7,7 +7,7 @@
  * - Spoke: returns { bridgeFee, registrationFee, total, bridgeName: "Hyperlane" }
  */
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import { walletRegistryAbi, transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
@@ -88,6 +88,19 @@ export function useQuoteFeeBreakdown(
   const spokeBreakdown = spokeResult.data as RawFeeBreakdown | undefined;
   const activeBreakdown = isSpoke ? spokeBreakdown : hubBreakdown;
 
+  // Log breakdown data outside useMemo to avoid side effects during render
+  useEffect(() => {
+    if (activeBreakdown) {
+      logger.contract.debug('useQuoteFeeBreakdown: Breakdown received', {
+        registryType,
+        bridgeFee: activeBreakdown.bridgeFee.toString(),
+        registrationFee: activeBreakdown.registrationFee.toString(),
+        total: activeBreakdown.total.toString(),
+        bridgeName: activeBreakdown.bridgeName,
+      });
+    }
+  }, [activeBreakdown, registryType]);
+
   // Normalize data from contract response
   const { data, raw } = useMemo(() => {
     if (!activeBreakdown) return { data: null, raw: null };
@@ -96,14 +109,6 @@ export function useQuoteFeeBreakdown(
     const isCrossChain = isSpoke;
 
     const breakdown = activeBreakdown;
-
-    logger.contract.debug('useQuoteFeeBreakdown: Breakdown received', {
-      registryType,
-      bridgeFee: breakdown.bridgeFee.toString(),
-      registrationFee: breakdown.registrationFee.toString(),
-      total: breakdown.total.toString(),
-      bridgeName: breakdown.bridgeName,
-    });
 
     const rawBreakdown: RawFeeBreakdown = {
       bridgeFee: breakdown.bridgeFee,
@@ -122,7 +127,7 @@ export function useQuoteFeeBreakdown(
     };
 
     return { data: formatted, raw: rawBreakdown };
-  }, [activeBreakdown, ethPrice?.usd, isSpoke, registryType]);
+  }, [activeBreakdown, ethPrice?.usd, isSpoke]);
 
   return {
     data,
@@ -208,6 +213,19 @@ export function useTxQuoteFeeBreakdown(
   const txSpokeBreakdown = spokeResult.data as RawFeeBreakdown | undefined;
   const txActiveBreakdown = isSpoke ? txSpokeBreakdown : txHubBreakdown;
 
+  // Log breakdown data outside useMemo to avoid side effects during render
+  useEffect(() => {
+    if (txActiveBreakdown) {
+      logger.contract.debug('useTxQuoteFeeBreakdown: Breakdown received', {
+        registryType,
+        bridgeFee: txActiveBreakdown.bridgeFee.toString(),
+        registrationFee: txActiveBreakdown.registrationFee.toString(),
+        total: txActiveBreakdown.total.toString(),
+        bridgeName: txActiveBreakdown.bridgeName,
+      });
+    }
+  }, [txActiveBreakdown, registryType]);
+
   // Normalize data from contract response
   const { data, raw, totalWei } = useMemo(() => {
     if (!txActiveBreakdown) return { data: null, raw: null, totalWei: undefined };
@@ -216,14 +234,6 @@ export function useTxQuoteFeeBreakdown(
     const isCrossChain = isSpoke;
 
     const breakdown = txActiveBreakdown;
-
-    logger.contract.debug('useTxQuoteFeeBreakdown: Breakdown received', {
-      registryType,
-      bridgeFee: breakdown.bridgeFee.toString(),
-      registrationFee: breakdown.registrationFee.toString(),
-      total: breakdown.total.toString(),
-      bridgeName: breakdown.bridgeName,
-    });
 
     const rawBreakdown: RawFeeBreakdown = {
       bridgeFee: breakdown.bridgeFee,
@@ -242,7 +252,7 @@ export function useTxQuoteFeeBreakdown(
     };
 
     return { data: formatted, raw: rawBreakdown, totalWei: breakdown.total };
-  }, [txActiveBreakdown, ethPrice?.usd, isSpoke, registryType]);
+  }, [txActiveBreakdown, ethPrice?.usd, isSpoke]);
 
   return {
     data,

@@ -273,6 +273,10 @@ export function useTxCrossChainConfirmation({
     refetch();
   }, [refetch]);
 
+  /**
+   * Reset the hook state. Polling stops and status returns to 'waiting'.
+   * To restart polling, toggle `enabled` to false then back to true.
+   */
   const reset = useCallback(() => {
     startTimeRef.current = null;
     if (intervalRef.current) {
@@ -285,7 +289,7 @@ export function useTxCrossChainConfirmation({
 
   return {
     status,
-    isRegisteredOnHub: isRegisteredOnHub ?? false,
+    isRegisteredOnHub,
     elapsedTime,
     refresh,
     reset,

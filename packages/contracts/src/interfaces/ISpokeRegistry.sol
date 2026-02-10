@@ -141,8 +141,8 @@ interface ISpokeRegistry {
     /// @dev Forwarder is specified explicitly for relay/meta-tx flexibility.
     ///      Signature includes incident details and forwarder address.
     ///      Function signature unified with hub WalletRegistry.
-    /// @param wallet Wallet address being registered as stolen
-    /// @param forwarder Address authorized to complete registration (can be same as wallet)
+    /// @param registeree Wallet address being registered as stolen
+    /// @param forwarder Address authorized to complete registration (can be same as registeree)
     /// @param reportedChainId Chain ID where theft occurred (converted to CAIP-2 hash internally)
     /// @param incidentTimestamp Unix timestamp when theft occurred (user-provided)
     /// @param deadline Signature expiry timestamp
@@ -151,7 +151,7 @@ interface ISpokeRegistry {
     /// @param r Signature r component
     /// @param s Signature s component
     function acknowledge(
-        address wallet,
+        address registeree,
         address forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
@@ -165,7 +165,7 @@ interface ISpokeRegistry {
     /// @notice Phase 2: Complete registration and send to hub
     /// @dev Must be called by authorized forwarder within registration window.
     ///      Function signature unified with hub WalletRegistry.
-    /// @param wallet Wallet address being registered
+    /// @param registeree Wallet address being registered
     /// @param forwarder Address authorized to complete registration (must match acknowledge phase, validated against msg.sender)
     /// @param reportedChainId Chain ID (must match acknowledgement, converted to CAIP-2 hash)
     /// @param incidentTimestamp Incident timestamp (must match acknowledgement)
@@ -175,7 +175,7 @@ interface ISpokeRegistry {
     /// @param r Signature r component
     /// @param s Signature s component
     function register(
-        address wallet,
+        address registeree,
         address forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
