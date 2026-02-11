@@ -15,14 +15,14 @@ import { buildAcknowledgementTypedData, buildRegistrationTypedData } from '@swr/
 
 const typedAck = buildAcknowledgementTypedData(chainId, contractAddress, {
   owner: '0x...',
-  forwarder: '0x...',
+  trustedForwarder: '0x...',
   nonce: 0n,
   deadline: 0n,
 });
 
 const typedReg = buildRegistrationTypedData(chainId, contractAddress, {
   owner: '0x...',
-  forwarder: '0x...',
+  trustedForwarder: '0x...',
   nonce: 1n,
   deadline: 0n,
 });
@@ -37,7 +37,7 @@ const typedAck = buildTxAcknowledgementTypedData(chainId, contractAddress, {
   merkleRoot: '0x...',
   reportedChainId: '0x...',
   transactionCount: 10,
-  forwarder: '0x...',
+  trustedForwarder: '0x...',
   nonce: 0n,
   deadline: 0n,
 });
@@ -45,7 +45,7 @@ const typedAck = buildTxAcknowledgementTypedData(chainId, contractAddress, {
 const typedReg = buildTxRegistrationTypedData(chainId, contractAddress, {
   merkleRoot: '0x...',
   reportedChainId: '0x...',
-  forwarder: '0x...',
+  trustedForwarder: '0x...',
   nonce: 1n,
   deadline: 0n,
 });

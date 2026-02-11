@@ -79,24 +79,26 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   const forwarder = isSelfRelay && relayer ? relayer : registeree;
 
   // Build transaction args for gas estimation (needs to be before early returns)
-  // WalletRegistry.acknowledge: (registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s)
+  // Unified: acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
   const transactionArgs: WalletAcknowledgeArgs | undefined =
     storedSignature &&
     registeree &&
     forwarder &&
     parsedSig &&
     storedSignature.reportedChainId !== undefined &&
-    storedSignature.incidentTimestamp !== undefined
+    storedSignature.incidentTimestamp !== undefined &&
+    storedSignature.nonce !== undefined
       ? ([
           registeree,
           forwarder,
           storedSignature.reportedChainId,
           storedSignature.incidentTimestamp,
           storedSignature.deadline,
+          storedSignature.nonce,
           parsedSig.v,
           parsedSig.r,
           parsedSig.s,
-        ] as unknown as WalletAcknowledgeArgs)
+        ] as const satisfies WalletAcknowledgeArgs)
       : undefined;
 
   // Get transaction cost estimate (must be called unconditionally - hooks rule)
@@ -166,11 +168,15 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
     // Required fields guard - guard against missing data instead of silent fallback
     if (
       storedSignature.reportedChainId === undefined ||
-      storedSignature.incidentTimestamp === undefined
+      storedSignature.incidentTimestamp === undefined ||
+      storedSignature.nonce === undefined ||
+      storedSignature.deadline === undefined
     ) {
       logger.contract.error('Cannot submit acknowledgement - missing required fields', {
         hasReportedChainId: storedSignature.reportedChainId !== undefined,
         hasIncidentTimestamp: storedSignature.incidentTimestamp !== undefined,
+        hasNonce: storedSignature.nonce !== undefined,
+        hasDeadline: storedSignature.deadline !== undefined,
       });
       setLocalError('Signature is missing required data. Please go back and sign again.');
       return;
@@ -195,6 +201,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         reportedChainId: storedSignature.reportedChainId,
         incidentTimestamp: storedSignature.incidentTimestamp,
         deadline: storedSignature.deadline,
+        nonce: storedSignature.nonce,
         signature: parsedSig,
       });
 
@@ -262,16 +269,20 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   // Get error message - sanitize both local errors and hook errors
   const errorMessage = localError || (error ? sanitizeErrorMessage(error) : null);
 
-  // Build signed message data for display
-  const signedMessageData: SignedMessageData | null = storedSignature
-    ? {
-        registeree,
-        forwarder: expectedWallet,
-        nonce: storedSignature.nonce,
-        deadline: storedSignature.deadline,
-        signature: storedSignature.signature,
-      }
-    : null;
+  // Build signed message data for display (guard all required fields to prevent .toString() crash)
+  const signedMessageData: SignedMessageData | null =
+    storedSignature &&
+    forwarder &&
+    storedSignature.nonce !== undefined &&
+    storedSignature.deadline !== undefined
+      ? {
+          registeree,
+          forwarder,
+          nonce: storedSignature.nonce,
+          deadline: storedSignature.deadline,
+          signature: storedSignature.signature,
+        }
+      : null;
 
   return (
     <div className="space-y-4">

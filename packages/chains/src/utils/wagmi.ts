@@ -15,13 +15,10 @@ import { getNetworkOrUndefined, allNetworks } from '../networks';
  * (CREATE2-based, deployed by Multicall3 team)
  *
  * Local Anvil chains use deterministic addresses from our cross-chain deployment
- * script (DeployCrossChain.s.sol). These are CREATE (nonce-dependent) addresses
- * that remain fixed due to our deployment process always using the same nonces.
+ * script (Deploy.s.sol). These are CREATE2 deterministic addresses.
  */
 const MULTICALL3_ADDRESSES: Record<number, `0x${string}`> = {
-  // Local Anvil chains - deployment addresses (Deploy.s.sol)
-  // These are nonce-dependent CREATE addresses. Multicall3 deploys AFTER
-  // all core contracts + wiring calls, so its nonce is higher than you'd expect.
+  // Local Anvil chains - regular CREATE addresses (Deploy.s.sol, Account 0)
   // Run `pnpm deploy:crosschain` and check "Multicall3:" output to verify.
   31337: '0x68B1D87F95878fE05B998F19b66F4baba5De1aed', // Hub chain
   31338: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853', // Spoke chain

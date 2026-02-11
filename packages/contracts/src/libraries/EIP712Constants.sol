@@ -52,12 +52,12 @@ library EIP712Constants {
     ///      Using uint64 reportedChainId supports EVM chain IDs up to 18 quintillion.
     ///      Both hub and spoke use identical typehashes for signature portability.
     bytes32 internal constant WALLET_ACK_TYPEHASH = keccak256(
-        "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+        "AcknowledgementOfRegistry(string statement,address wallet,address trustedForwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
 
     /// @notice EIP-712 typehash for wallet registration phase
     bytes32 internal constant WALLET_REG_TYPEHASH = keccak256(
-        "Registration(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+        "Registration(string statement,address wallet,address trustedForwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -67,11 +67,11 @@ library EIP712Constants {
     /// @notice EIP-712 typehash for transaction batch acknowledgement
     /// @dev dataHash = keccak256(abi.encode(txHashes, chainIds))
     bytes32 internal constant TX_BATCH_ACK_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+        "TransactionBatchAcknowledgement(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
     );
 
     /// @notice EIP-712 typehash for transaction batch registration
     bytes32 internal constant TX_BATCH_REG_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+        "TransactionBatchRegistration(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
     );
 }

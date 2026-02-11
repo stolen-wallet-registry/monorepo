@@ -3,40 +3,40 @@ import { describe, it, expect } from 'vitest';
 import { decodeContractError, getContractErrorInfo, CONTRACT_ERROR_MAP } from './contractErrors';
 
 describe('contractErrors', () => {
-  // Expected selectors from contract interfaces - used for coverage validation
+  // Expected selectors for curated runtime errors - used for coverage validation.
+  // Note: Some errors are declared in interfaces but never reverted by current implementations,
+  // so they are intentionally excluded from this list and from CONTRACT_ERROR_MAP.
   const expectedSelectors: Record<string, string> = {
     // FraudRegistryHub Errors
     FraudRegistryHub__ZeroAddress: '0x92788ffd',
     FraudRegistryHub__OnlyInbox: '0x25da34a1',
     FraudRegistryHub__InvalidIdentifierLength: '0xf6c88e35',
-    FraudRegistryHub__UnknownRegistryType: '0x00472d32',
     FraudRegistryHub__WithdrawFailed: '0x7fa366d3',
     // WalletRegistry Errors
     WalletRegistry__AlreadyRegistered: '0xa74e7b8b',
     WalletRegistry__AlreadyAcknowledged: '0x133ee0d6',
-    WalletRegistry__NotAcknowledged: '0x4da4c90e',
     WalletRegistry__DeadlineExpired: '0x5915fdb8',
     WalletRegistry__DeadlineInPast: '0x5bc89f7d',
     WalletRegistry__GracePeriodNotStarted: '0x3214c145',
     WalletRegistry__InvalidSignature: '0xbf69e113',
-    WalletRegistry__InvalidSigner: '0x4cd2cf7c',
-    WalletRegistry__NotAuthorizedForwarder: '0x6bd7e909',
+    WalletRegistry__InvalidForwarder: '0x30866145',
     WalletRegistry__InsufficientFee: '0x747dde89',
     WalletRegistry__ZeroAddress: '0xa6565bcd',
     WalletRegistry__OnlyHub: '0x31a0af95',
     WalletRegistry__OnlyOperatorSubmitter: '0x637b467b',
     WalletRegistry__EmptyBatch: '0x39f0ba50',
     WalletRegistry__ArrayLengthMismatch: '0x545fd576',
+    WalletRegistry__FeeTransferFailed: '0x0a17bc56',
+    WalletRegistry__RefundFailed: '0x4e71ab39',
+    WalletRegistry__InvalidNonce: '0x5934e5e0',
+    WalletRegistry__InvalidStep: '0x48193183',
     // TransactionRegistry Errors
-    TransactionRegistry__AlreadyRegistered: '0xd37e23c3',
     TransactionRegistry__AlreadyAcknowledged: '0x378855ef',
-    TransactionRegistry__NotAcknowledged: '0xe72eb6fd',
     TransactionRegistry__DeadlineExpired: '0x2015cf13',
     TransactionRegistry__DeadlineInPast: '0x98de1e59',
     TransactionRegistry__GracePeriodNotStarted: '0xe4fcb386',
     TransactionRegistry__InvalidSignature: '0x6376fd7d',
-    TransactionRegistry__InvalidSigner: '0x2f6ed989',
-    TransactionRegistry__NotAuthorizedForwarder: '0x9e63d130',
+    TransactionRegistry__InvalidForwarder: '0x11780b54',
     TransactionRegistry__InsufficientFee: '0xe0ff51d7',
     TransactionRegistry__ZeroAddress: '0xd6a30fe5',
     TransactionRegistry__OnlyHub: '0x6b588216',
@@ -48,7 +48,6 @@ describe('contractErrors', () => {
     TransactionRegistry__HubTransferFailed: '0xc6eb8cd2',
     TransactionRegistry__RefundFailed: '0xef7a7943',
     // ContractRegistry Errors
-    ContractRegistry__AlreadyRegistered: '0x5b6ca878',
     ContractRegistry__ZeroAddress: '0x047c1f80',
     ContractRegistry__OnlyOperatorSubmitter: '0xc00e0835',
     ContractRegistry__EmptyBatch: '0xcd74ea8c',
@@ -60,9 +59,10 @@ describe('contractErrors', () => {
     OperatorSubmitter__ArrayLengthMismatch: '0x15c1e4ff',
     OperatorSubmitter__InsufficientFee: '0x030ff595',
     OperatorSubmitter__FeeForwardFailed: '0x58614d91',
+    OperatorSubmitter__RefundFailed: '0xb951fb83',
     OperatorSubmitter__InvalidFeeConfig: '0x0079d758',
     // CAIP-10 parsing errors
-    CAIP10__InvalidFormat: '0xfd0a5b5c',
+    CAIP10__InvalidFormat: '0xfd0a5b1e',
     CAIP10__UnsupportedNamespace: '0x96c95b05',
     CAIP10Evm__InvalidAddress: '0x31d8ad42',
     // CrossChainMessage Library Errors
@@ -94,6 +94,8 @@ describe('contractErrors', () => {
     SpokeRegistry__EmptyBatch: '0xe3e9689e',
     SpokeRegistry__ArrayLengthMismatch: '0x81a72855',
     SpokeRegistry__InvalidDataHash: '0xba8873e4',
+    SpokeRegistry__InvalidStep: '0xbefa3abb',
+    SpokeRegistry__DataMismatch: '0x9de3b4a9',
   };
 
   describe('CONTRACT_ERROR_MAP', () => {
@@ -249,7 +251,7 @@ Version: viem@2.41.2`;
       (errorName, expectedSelector) => {
         const info = CONTRACT_ERROR_MAP[expectedSelector];
         expect(info).toBeDefined();
-        expect(info.name).toBe(errorName);
+        expect(info!.name).toBe(errorName);
       }
     );
 

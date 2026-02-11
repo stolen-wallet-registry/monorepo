@@ -61,15 +61,16 @@ contract SoulboundReceiverTest is Test {
         mailbox = new MockMailbox(HUB_CHAIN_ID);
 
         // Deploy translation registry (has built-in English)
-        translations = new TranslationRegistry();
+        translations = new TranslationRegistry(owner);
 
         // Deploy mock wallet registry
         mockRegistry = new MockWalletRegistry();
 
-        // Deploy soulbound contracts
-        walletSoulbound = new WalletSoulbound(address(mockRegistry), address(translations), owner, "stolenwallet.xyz");
+        // Deploy soulbound contracts (owner serves as both feeCollector and initialOwner for test simplicity)
+        walletSoulbound =
+            new WalletSoulbound(address(mockRegistry), address(translations), owner, "stolenwallet.xyz", owner);
 
-        supportSoulbound = new SupportSoulbound(MIN_WEI, address(translations), owner, "stolenwallet.xyz");
+        supportSoulbound = new SupportSoulbound(MIN_WEI, address(translations), owner, "stolenwallet.xyz", owner);
 
         // Deploy receiver
         receiver = new SoulboundReceiver(owner, address(mailbox), address(walletSoulbound), address(supportSoulbound));
@@ -218,8 +219,9 @@ contract SoulboundReceiverTest is Test {
     }
 
     function test_SetTrustedForwarder_OnlyOwner() public {
-        vm.prank(makeAddr("attacker"));
-        vm.expectRevert();
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", attacker));
         receiver.setTrustedForwarder(SPOKE_DOMAIN, makeAddr("malicious"));
     }
 

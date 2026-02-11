@@ -3,9 +3,9 @@
  */
 
 import { useEnsName, useEnsAvatar } from 'wagmi';
-import { mainnet } from 'wagmi/chains';
 import { normalize } from 'viem/ens';
 import type { Address } from '@/lib/types/ethereum';
+import { ensConfig, isEnsEnabled } from '@/lib/ens-config';
 import { ENS_QUERY_OPTIONS } from './constants';
 
 export interface EnsDisplayData {
@@ -45,17 +45,17 @@ export function useEnsDisplay(
 ): EnsDisplayData {
   const { includeAvatar = false } = options;
 
-  // Resolve address -> ENS name (always uses mainnet)
+  // Resolve address -> ENS name (uses dedicated mainnet-only config)
   const {
     data: name,
     isLoading: isNameLoading,
     isError: isNameError,
   } = useEnsName({
     address,
-    chainId: mainnet.id,
+    ...(ensConfig ? { config: ensConfig } : {}),
     query: {
       ...ENS_QUERY_OPTIONS,
-      enabled: !!address,
+      enabled: isEnsEnabled && !!address,
     },
   });
 
@@ -73,10 +73,10 @@ export function useEnsDisplay(
   // Resolve ENS name -> avatar (only if name exists and includeAvatar is true)
   const { data: avatar, isLoading: isAvatarLoading } = useEnsAvatar({
     name: normalizedName,
-    chainId: mainnet.id,
+    ...(ensConfig ? { config: ensConfig } : {}),
     query: {
       ...ENS_QUERY_OPTIONS,
-      enabled: includeAvatar && !!normalizedName,
+      enabled: isEnsEnabled && includeAvatar && !!normalizedName,
     },
   });
 

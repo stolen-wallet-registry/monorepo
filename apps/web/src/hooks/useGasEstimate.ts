@@ -11,7 +11,7 @@
 import { useEstimateGas, useGasPrice, useChainId } from 'wagmi';
 import { formatEther, formatGwei, encodeFunctionData } from 'viem';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { useEthPrice } from './useEthPrice';
 import { logger } from '@/lib/logger';
 import { formatCentsToUsd, formatEthConsistent } from '@/lib/utils';
@@ -40,8 +40,8 @@ export interface UseGasEstimateParams {
   step: 'acknowledgement' | 'registration';
   /**
    * Contract function arguments:
-   * - acknowledge: [registeree, forwarder, reportedChainId, incidentTimestamp, deadline, v, r, s]
-   * - register: [registeree, deadline, reportedChainId, incidentTimestamp, v, r, s]
+   * - acknowledge: [registeree, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s]
+   * - register: [registeree, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s]
    */
   args: WalletContractArgs | undefined;
   /** Value to send with the transaction (for registration) */
@@ -81,7 +81,7 @@ const GAS_BUFFER_DENOMINATOR = 100n;
  * ```tsx
  * const { data, isLoading } = useGasEstimate({
  *   step: 'registration',
- *   args: [deadline, nonce, owner, v, r, s],
+ *   args: [registeree, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s],
  *   value: feeWei,
  * });
  *
@@ -106,22 +106,28 @@ export function useGasEstimate({
     'useGasEstimate'
   );
 
-  // Get the correct ABI and function names for hub/spoke
-  const { abi, functions } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
 
-  // Map step to correct function name using metadata
-  const functionName = step === 'acknowledgement' ? functions.acknowledge : functions.register;
+  // Map step to correct function name (identical on both hub and spoke)
+  const functionName = step === 'acknowledgement' ? 'acknowledge' : 'register';
 
   // Build call data for gas estimation
-  // Cast functionName and args since viem expects specific literal types from ABI
-  const callData = args
-    ? encodeFunctionData({
-        abi,
-        functionName: functionName as 'acknowledge' | 'register',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        args: args as any,
-      })
-    : undefined;
+  let callData: `0x${string}` | undefined;
+  if (args) {
+    const abi = isSpoke ? spokeRegistryAbi : walletRegistryAbi;
+    callData =
+      functionName === 'acknowledge'
+        ? encodeFunctionData({
+            abi,
+            functionName: 'acknowledge',
+            args: args as WalletAcknowledgeArgs,
+          })
+        : encodeFunctionData({
+            abi,
+            functionName: 'register',
+            args: args as WalletRegistrationArgs,
+          });
+  }
 
   const estimateEnabled = enabled && !!contractAddress && !!args;
 

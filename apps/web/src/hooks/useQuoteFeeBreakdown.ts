@@ -7,15 +7,27 @@
  * - Spoke: returns { bridgeFee, registrationFee, total, bridgeName: "Hyperlane" }
  */
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { formatFeeLineItem } from '@/lib/utils';
 import { useEthPrice } from './useEthPrice';
 import type { Address } from '@/lib/types/ethereum';
 import type { FeeBreakdown, RawFeeBreakdown } from '@/lib/types/fees';
 import { logger } from '@/lib/logger';
+
+/** Runtime guard: verify data matches RawFeeBreakdown shape before accessing fields */
+function isRawFeeBreakdown(data: unknown): data is RawFeeBreakdown {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+  return (
+    typeof d.bridgeFee === 'bigint' &&
+    typeof d.registrationFee === 'bigint' &&
+    typeof d.total === 'bigint' &&
+    typeof d.bridgeName === 'string'
+  );
+}
 
 // ============================================================================
 // Wallet Registry Fee Breakdown
@@ -50,48 +62,64 @@ export function useQuoteFeeBreakdown(
     'useQuoteFeeBreakdown'
   );
 
-  // Get the correct ABI and function name (unified: quoteFeeBreakdown on both hub and spoke)
-  const { abi, functions } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
 
   // Convert null to undefined for wagmi compatibility
   const normalizedAddress = ownerAddress ?? undefined;
+  const enabled = !!normalizedAddress && !!contractAddress;
 
-  // Unified call: quoteFeeBreakdown(address) on both hub and spoke
-  const result = useReadContract({
+  // Split-call: one hook per ABI, only one fires based on registryType
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
+    abi: walletRegistryAbi,
     chainId,
-    functionName: functions.quoteFeeBreakdown as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
+    functionName: 'quoteFeeBreakdown',
     args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {
-      enabled: !!normalizedAddress && !!contractAddress,
+      enabled: !isSpoke && enabled,
       staleTime: 30_000,
     },
   });
 
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'quoteFeeBreakdown',
+    args: normalizedAddress ? [normalizedAddress] : undefined,
+    query: {
+      enabled: isSpoke && enabled,
+      staleTime: 30_000,
+    },
+  });
+
+  const result = isSpoke ? spokeResult : hubResult;
+
+  // Validate data shape before accessing fields (guards against ABI drift)
+  const rawData = isSpoke ? spokeResult.data : hubResult.data;
+  const activeBreakdown = isRawFeeBreakdown(rawData) ? rawData : undefined;
+
+  // Log breakdown data outside useMemo to avoid side effects during render
+  useEffect(() => {
+    if (activeBreakdown) {
+      logger.contract.debug('useQuoteFeeBreakdown: Breakdown received', {
+        registryType,
+        bridgeFee: activeBreakdown.bridgeFee.toString(),
+        registrationFee: activeBreakdown.registrationFee.toString(),
+        total: activeBreakdown.total.toString(),
+        bridgeName: activeBreakdown.bridgeName,
+      });
+    }
+  }, [activeBreakdown, registryType]);
+
   // Normalize data from contract response
   const { data, raw } = useMemo(() => {
-    if (!result.data) return { data: null, raw: null };
+    if (!activeBreakdown) return { data: null, raw: null };
 
     const ethPriceUsd = ethPrice?.usd;
-    const isCrossChain = registryType === 'spoke';
+    const isCrossChain = isSpoke;
 
-    // Both hub and spoke return the same FeeBreakdown struct
-    // wagmi infers return type as a tuple union due to dynamic functionName; cast through unknown
-    const breakdown = result.data as unknown as {
-      bridgeFee: bigint;
-      registrationFee: bigint;
-      total: bigint;
-      bridgeName: string;
-    };
-
-    logger.contract.debug('useQuoteFeeBreakdown: Breakdown received', {
-      registryType,
-      bridgeFee: breakdown.bridgeFee.toString(),
-      registrationFee: breakdown.registrationFee.toString(),
-      total: breakdown.total.toString(),
-      bridgeName: breakdown.bridgeName,
-    });
+    const breakdown = activeBreakdown;
 
     const rawBreakdown: RawFeeBreakdown = {
       bridgeFee: breakdown.bridgeFee,
@@ -110,7 +138,7 @@ export function useQuoteFeeBreakdown(
     };
 
     return { data: formatted, raw: rawBreakdown };
-  }, [result.data, ethPrice?.usd, registryType]);
+  }, [activeBreakdown, ethPrice?.usd, isSpoke]);
 
   return {
     data,
@@ -159,46 +187,63 @@ export function useTxQuoteFeeBreakdown(
     'useTxQuoteFeeBreakdown'
   );
 
-  // Get the correct ABI and function name (unified: quoteFeeBreakdown on both hub and spoke)
-  const { abi, functions } = getRegistryMetadata('transaction', registryType);
+  const isSpoke = registryType === 'spoke';
+  const enabled = !!reporter && !!contractAddress;
 
-  // Unified call: quoteFeeBreakdown(address) on both hub and spoke
-  const result = useReadContract({
+  // Split-call: one hook per ABI, only one fires based on registryType
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
+    abi: transactionRegistryAbi,
     chainId,
-    functionName: functions.quoteFeeBreakdown as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
+    functionName: 'quoteFeeBreakdown',
     args: reporter ? [reporter] : undefined,
     query: {
-      enabled: !!reporter && !!contractAddress,
+      enabled: !isSpoke && enabled,
       staleTime: 30_000,
       refetchInterval: 60_000,
     },
   });
 
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'quoteFeeBreakdown',
+    args: reporter ? [reporter] : undefined,
+    query: {
+      enabled: isSpoke && enabled,
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+    },
+  });
+
+  const result = isSpoke ? spokeResult : hubResult;
+
+  // Validate data shape before accessing fields (guards against ABI drift)
+  const txRawData = isSpoke ? spokeResult.data : hubResult.data;
+  const txActiveBreakdown = isRawFeeBreakdown(txRawData) ? txRawData : undefined;
+
+  // Log breakdown data outside useMemo to avoid side effects during render
+  useEffect(() => {
+    if (txActiveBreakdown) {
+      logger.contract.debug('useTxQuoteFeeBreakdown: Breakdown received', {
+        registryType,
+        bridgeFee: txActiveBreakdown.bridgeFee.toString(),
+        registrationFee: txActiveBreakdown.registrationFee.toString(),
+        total: txActiveBreakdown.total.toString(),
+        bridgeName: txActiveBreakdown.bridgeName,
+      });
+    }
+  }, [txActiveBreakdown, registryType]);
+
   // Normalize data from contract response
   const { data, raw, totalWei } = useMemo(() => {
-    if (!result.data) return { data: null, raw: null, totalWei: undefined };
+    if (!txActiveBreakdown) return { data: null, raw: null, totalWei: undefined };
 
     const ethPriceUsd = ethPrice?.usd;
-    const isCrossChain = registryType === 'spoke';
+    const isCrossChain = isSpoke;
 
-    // Both hub and spoke return the same FeeBreakdown struct
-    // wagmi infers return type as a tuple union due to dynamic functionName; cast through unknown
-    const breakdown = result.data as unknown as {
-      bridgeFee: bigint;
-      registrationFee: bigint;
-      total: bigint;
-      bridgeName: string;
-    };
-
-    logger.contract.debug('useTxQuoteFeeBreakdown: Breakdown received', {
-      registryType,
-      bridgeFee: breakdown.bridgeFee.toString(),
-      registrationFee: breakdown.registrationFee.toString(),
-      total: breakdown.total.toString(),
-      bridgeName: breakdown.bridgeName,
-    });
+    const breakdown = txActiveBreakdown;
 
     const rawBreakdown: RawFeeBreakdown = {
       bridgeFee: breakdown.bridgeFee,
@@ -217,7 +262,7 @@ export function useTxQuoteFeeBreakdown(
     };
 
     return { data: formatted, raw: rawBreakdown, totalWei: breakdown.total };
-  }, [result.data, ethPrice?.usd, registryType]);
+  }, [txActiveBreakdown, ethPrice?.usd, isSpoke]);
 
   return {
     data,

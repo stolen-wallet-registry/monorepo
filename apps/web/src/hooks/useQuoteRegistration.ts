@@ -9,7 +9,7 @@
 import { useReadContract, useChainId } from 'wagmi';
 import { formatEther } from 'viem';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import type { Address } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
@@ -41,20 +41,38 @@ export function useQuoteRegistration(
     'useQuoteRegistration'
   );
 
-  // Get the correct ABI and function name (unified: quoteRegistration on both hub and spoke)
-  const { abi, functions } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
+  const enabled = !!contractAddress && !!ownerAddress;
 
-  const result = useReadContract({
+  // Split-call: one hook per ABI, only one fires based on registryType
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
+    abi: walletRegistryAbi,
     chainId,
-    functionName: functions.quoteRegistration as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
+    functionName: 'quoteRegistration',
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
-      enabled: !!contractAddress && !!ownerAddress,
-      staleTime: 30_000, // 30 seconds
+      enabled: !isSpoke && enabled,
+      staleTime: 30_000,
     },
   });
+
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'quoteRegistration',
+    args: ownerAddress ? [ownerAddress] : undefined,
+    query: {
+      enabled: isSpoke && enabled,
+      staleTime: 30_000,
+    },
+  });
+
+  const result = isSpoke ? spokeResult : hubResult;
+
+  // Runtime validation - contract may return unexpected types
+  const feeWei = typeof result.data === 'bigint' ? result.data : undefined;
 
   // Log quote result for debugging
   if (result.isError) {
@@ -68,13 +86,10 @@ export function useQuoteRegistration(
     logger.contract.debug('useQuoteRegistration: Quote received', {
       chainId,
       registryType,
-      feeWei: (result.data as bigint).toString(),
-      feeEth: formatEther(result.data as bigint),
+      feeWei: feeWei?.toString(),
+      feeEth: feeWei ? formatEther(feeWei) : undefined,
     });
   }
-
-  // Runtime validation - contract may return unexpected types
-  const feeWei = typeof result.data === 'bigint' ? result.data : undefined;
 
   return {
     feeWei,

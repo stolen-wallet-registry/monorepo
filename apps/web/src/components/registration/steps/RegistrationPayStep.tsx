@@ -85,24 +85,34 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // Parse signature once for reuse (avoid calling parseSignature 4 times)
   const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
 
+  // Determine forwarder based on registration type:
+  // - Standard: registeree pays and forwards (registeree == forwarder)
+  // - Self-relay: relayer wallet is forwarder (undefined if relayer not set yet)
+  // - P2P relay: handled by P2PRegPayStep (not this component)
+  // - Future meta-tx: trusted 3rd party would be set as relayer
+  const forwarder = isSelfRelay ? relayer : registeree;
+
   // Build transaction args for gas estimation (needs to be before early returns)
-  // WalletRegistry.register: (registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
-  // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
+  // Unified: register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
   const transactionArgs: WalletRegistrationArgs | undefined =
     storedSignature &&
     registeree &&
+    forwarder &&
     parsedSig &&
     storedSignature.reportedChainId !== undefined &&
-    storedSignature.incidentTimestamp !== undefined
-      ? [
+    storedSignature.incidentTimestamp !== undefined &&
+    storedSignature.nonce !== undefined
+      ? ([
           registeree,
-          storedSignature.deadline,
+          forwarder,
           storedSignature.reportedChainId,
           storedSignature.incidentTimestamp,
+          storedSignature.deadline,
+          storedSignature.nonce,
           parsedSig.v,
           parsedSig.r,
           parsedSig.s,
-        ]
+        ] as const satisfies WalletRegistrationArgs)
       : undefined;
 
   // Get transaction cost estimate (must be called unconditionally - hooks rule)
@@ -258,13 +268,29 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
       isCorrectWallet,
     });
 
-    if (!storedSignature || !registeree || !parsedSig) {
+    if (!storedSignature || !registeree || !forwarder || !parsedSig) {
       logger.contract.error('Cannot submit registration - missing data', {
         hasStoredSignature: !!storedSignature,
         hasParsedSig: !!parsedSig,
         registeree,
+        forwarder,
       });
       setLocalError('Missing signature data. Please go back and sign again.');
+      return;
+    }
+
+    // Required fields guard - guard against missing data instead of silent fallback
+    if (
+      storedSignature.reportedChainId === undefined ||
+      storedSignature.incidentTimestamp === undefined ||
+      storedSignature.nonce === undefined
+    ) {
+      logger.contract.error('Cannot submit registration - missing required fields', {
+        hasReportedChainId: storedSignature.reportedChainId !== undefined,
+        hasIncidentTimestamp: storedSignature.incidentTimestamp !== undefined,
+        hasNonce: storedSignature.nonce !== undefined,
+      });
+      setLocalError('Signature is missing required data. Please go back and sign again.');
       return;
     }
 
@@ -290,14 +316,16 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
       });
 
       // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
-      const reportedChainId = storedSignature.reportedChainId ?? BigInt(chainId);
-      const incidentTimestamp = storedSignature.incidentTimestamp ?? 0n;
+      const reportedChainId = storedSignature.reportedChainId;
+      const incidentTimestamp = storedSignature.incidentTimestamp;
 
       await submitRegistration({
         registeree,
-        deadline: storedSignature.deadline,
+        forwarder,
         reportedChainId,
         incidentTimestamp,
+        deadline: storedSignature.deadline,
+        nonce: storedSignature.nonce,
         signature: parsedSig,
         feeWei,
       });
@@ -367,15 +395,16 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   const errorMessage = localError || (error ? sanitizeErrorMessage(error) : null);
 
   // Build signed message data for display
-  const signedMessageData: SignedMessageData | null = storedSignature
-    ? {
-        registeree,
-        forwarder: expectedWallet,
-        nonce: storedSignature.nonce,
-        deadline: storedSignature.deadline,
-        signature: storedSignature.signature,
-      }
-    : null;
+  const signedMessageData: SignedMessageData | null =
+    storedSignature && forwarder
+      ? {
+          registeree,
+          forwarder,
+          nonce: storedSignature.nonce,
+          deadline: storedSignature.deadline,
+          signature: storedSignature.signature,
+        }
+      : null;
 
   return (
     <div className="space-y-4">

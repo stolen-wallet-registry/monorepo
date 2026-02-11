@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { ConnectionStatusBadge } from './ConnectionStatusBadge';
-import type { ConnectionHealth } from '@/hooks/useP2PConnectionHealth';
+import type { ConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
 
 const meta = {
   title: 'P2P/ConnectionStatusBadge',

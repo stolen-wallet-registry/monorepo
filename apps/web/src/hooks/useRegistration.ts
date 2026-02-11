@@ -4,15 +4,15 @@
  * This is Phase 2 of the two-phase registration flow.
  * Must be called after the grace period has elapsed following acknowledgement.
  *
- * WalletRegistry signature:
- *   register(registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
+ * Unified signature (hub and spoke):
+ *   register(wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
  *
  * @note reportedChainId is uint64 raw EVM chain ID. Contract converts to CAIP-2 hash internally.
  */
 
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import type { ParsedSignature } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -20,12 +20,16 @@ import { logger } from '@/lib/logger';
 export interface RegistrationParams {
   /** The wallet address being registered as stolen */
   registeree: Address;
-  /** Signature deadline (timestamp) */
-  deadline: bigint;
+  /** The address authorized to complete registration (must match acknowledge phase) */
+  trustedForwarder: Address;
   /** Raw EVM chain ID where incident occurred (uint64) — must match acknowledge phase */
   reportedChainId: bigint;
   /** Unix timestamp when incident occurred — must match acknowledge phase */
   incidentTimestamp: bigint;
+  /** Signature deadline (timestamp) */
+  deadline: bigint;
+  /** Nonce for replay protection */
+  nonce: bigint;
   /** EIP-712 signature */
   signature: ParsedSignature;
   /** Protocol fee to send with the registration transaction */
@@ -59,8 +63,7 @@ export function useRegistration(): UseRegistrationResult {
     'useRegistration'
   );
 
-  // Get the correct ABI and function names for hub/spoke
-  const { abi, functions } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
 
   const {
     writeContractAsync,
@@ -86,49 +89,61 @@ export function useRegistration(): UseRegistrationResult {
       throw new Error('Contract not configured for this chain');
     }
 
-    const { registeree, deadline, reportedChainId, incidentTimestamp, signature, feeWei } = params;
-
-    // Use metadata for correct function name based on chain type
-    const functionName = functions.register;
-
-    if (!functionName) {
-      logger.contract.error('useRegistration: Missing register function in metadata', {
-        chainId,
-        registryType,
-      });
-      throw new Error('Registration function not configured for this registry type');
-    }
+    const {
+      registeree,
+      trustedForwarder,
+      reportedChainId,
+      incidentTimestamp,
+      deadline,
+      nonce,
+      signature,
+      feeWei,
+    } = params;
 
     logger.registration.info('Submitting registration transaction', {
       chainId,
       registryType,
       contractAddress,
-      functionName,
+      functionName: 'register',
       registeree,
-      reportedChainId,
+      trustedForwarder,
+      reportedChainId: reportedChainId.toString(),
       incidentTimestamp: incidentTimestamp.toString(),
       deadline: deadline.toString(),
+      nonce: nonce.toString(),
       feeWei: feeWei?.toString() ?? '0',
     });
 
     try {
-      // WalletRegistry: register(registeree, deadline, reportedChainId, incidentTimestamp, v, r, s)
-      const txHash = await writeContractAsync({
-        address: contractAddress,
-        abi,
-        functionName: functionName as 'register' | 'registerLocal',
-        args: [
-          registeree,
-          deadline,
-          reportedChainId,
-          incidentTimestamp,
-          signature.v,
-          signature.r,
-          signature.s,
-        ],
-        value: feeWei ?? 0n,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
+      // Unified: register(wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+      const args = [
+        registeree,
+        trustedForwarder,
+        reportedChainId,
+        incidentTimestamp,
+        deadline,
+        nonce,
+        signature.v,
+        signature.r,
+        signature.s,
+      ] as const;
+
+      // Branch on ABI for full type inference — function name is identical on both
+      const txHash = isSpoke
+        ? await writeContractAsync({
+            address: contractAddress,
+            abi: spokeRegistryAbi,
+            functionName: 'register',
+            args,
+            value: feeWei ?? 0n,
+          })
+        : await writeContractAsync({
+            address: contractAddress,
+            abi: walletRegistryAbi,
+            functionName: 'register',
+            args,
+            value: feeWei ?? 0n,
+          });
 
       logger.registration.info('Registration transaction submitted', {
         txHash,

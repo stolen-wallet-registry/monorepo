@@ -6,6 +6,8 @@ import { IMulticall3 } from "forge-std/interfaces/IMulticall3.sol";
 import { TranslationRegistry } from "../src/soulbound/TranslationRegistry.sol";
 import { WalletSoulbound } from "../src/soulbound/WalletSoulbound.sol";
 import { SupportSoulbound } from "../src/soulbound/SupportSoulbound.sol";
+import { Create2Deployer } from "./Create2Deployer.sol";
+import { Salts } from "./Salts.sol";
 
 /// @title DeployBase
 /// @notice Shared deployment utilities (timing config, Chainlink feeds, Multicall3, soulbound)
@@ -86,13 +88,13 @@ abstract contract DeployBase is Script {
     address internal constant CANONICAL_MULTICALL3 = 0xcA11bde05977b3631167028862bE2a173976CA11;
 
     /// @notice Deploy Multicall3 for local chains (mainnet/testnets have it pre-deployed)
+    /// @param salt CREATE2 salt (use Salts.MULTICALL3 for hub, Salts.MULTICALL3_SPOKE for spoke)
     /// @return multicall3 The deployed Multicall3 address
-    function deployMulticall3() internal returns (address multicall3) {
+    function deployMulticall3(bytes32 salt) internal returns (address multicall3) {
         // On mainnet/testnets, Multicall3 is deployed at canonical address
         // Only deploy for local chains
         if (block.chainid == 31_337 || block.chainid == 31_338) {
-            // Deploy Multicall3 (nonce depends on what was deployed before)
-            multicall3 = address(new Multicall3());
+            multicall3 = Create2Deployer.deploy(salt, type(Multicall3).creationCode);
             console2.log("Multicall3:", multicall3);
         } else {
             // Use canonical Multicall3 address on all other chains
@@ -112,32 +114,51 @@ abstract contract DeployBase is Script {
     /// @notice Default domain for soulbound SVG display
     string internal constant DEFAULT_DOMAIN = "stolenwallet.xyz";
 
-    /// @notice Deploy soulbound token contracts with default domain
+    /// @notice Deploy soulbound token contracts with default domain and default salts
     /// @param registry The StolenWalletRegistry address (for WalletSoulbound gate)
     /// @param feeCollector The address to receive withdrawn fees (typically RegistryHub)
+    /// @param initialOwner The address that will own the deployed contracts
     /// @return translations The TranslationRegistry address
     /// @return walletSoulbound The WalletSoulbound address
     /// @return supportSoulbound The SupportSoulbound address
-    function deploySoulbound(address registry, address feeCollector)
+    function deploySoulbound(address registry, address feeCollector, address initialOwner)
         internal
         returns (address translations, address walletSoulbound, address supportSoulbound)
     {
-        return deploySoulbound(registry, feeCollector, DEFAULT_DOMAIN);
+        return deploySoulbound(
+            registry,
+            feeCollector,
+            initialOwner,
+            DEFAULT_DOMAIN,
+            Salts.TRANSLATION_REGISTRY,
+            Salts.WALLET_SOULBOUND,
+            Salts.SUPPORT_SOULBOUND
+        );
     }
 
-    /// @notice Deploy soulbound token contracts with custom domain
+    /// @notice Deploy soulbound token contracts with custom domain via CREATE2
     /// @param registry The StolenWalletRegistry address (for WalletSoulbound gate)
     /// @param feeCollector The address to receive withdrawn fees (typically RegistryHub)
+    /// @param initialOwner The address that will own the deployed contracts
     /// @param domain The domain to display in SVG (e.g., "stolenwallet.xyz")
+    /// @param translationSalt CREATE2 salt for TranslationRegistry
+    /// @param walletSbSalt CREATE2 salt for WalletSoulbound
+    /// @param supportSbSalt CREATE2 salt for SupportSoulbound
     /// @return translations The TranslationRegistry address
     /// @return walletSoulbound The WalletSoulbound address
     /// @return supportSoulbound The SupportSoulbound address
-    function deploySoulbound(address registry, address feeCollector, string memory domain)
-        internal
-        returns (address translations, address walletSoulbound, address supportSoulbound)
-    {
+    function deploySoulbound(
+        address registry,
+        address feeCollector,
+        address initialOwner,
+        string memory domain,
+        bytes32 translationSalt,
+        bytes32 walletSbSalt,
+        bytes32 supportSbSalt
+    ) internal returns (address translations, address walletSoulbound, address supportSoulbound) {
         require(registry != address(0), "DeployBase: registry is zero address");
         require(feeCollector != address(0), "DeployBase: feeCollector is zero address");
+        require(initialOwner != address(0), "DeployBase: initialOwner is zero address");
 
         console2.log("");
         console2.log("=== SOULBOUND DEPLOYMENT ===");
@@ -145,15 +166,29 @@ abstract contract DeployBase is Script {
 
         // Deploy TranslationRegistry (no dependencies)
         // Note: Languages are seeded separately via SeedLanguages.s.sol to keep addresses deterministic
-        translations = address(new TranslationRegistry());
+        translations = Create2Deployer.deploy(
+            translationSalt, abi.encodePacked(type(TranslationRegistry).creationCode, abi.encode(initialOwner))
+        );
         console2.log("TranslationRegistry:", translations);
 
         // Deploy WalletSoulbound (gated by registry)
-        walletSoulbound = address(new WalletSoulbound(registry, translations, feeCollector, domain));
+        walletSoulbound = Create2Deployer.deploy(
+            walletSbSalt,
+            abi.encodePacked(
+                type(WalletSoulbound).creationCode,
+                abi.encode(registry, translations, feeCollector, domain, initialOwner)
+            )
+        );
         console2.log("WalletSoulbound:", walletSoulbound);
 
         // Deploy SupportSoulbound (donation-based, no gate)
-        supportSoulbound = address(new SupportSoulbound(MIN_DONATION, translations, feeCollector, domain));
+        supportSoulbound = Create2Deployer.deploy(
+            supportSbSalt,
+            abi.encodePacked(
+                type(SupportSoulbound).creationCode,
+                abi.encode(MIN_DONATION, translations, feeCollector, domain, initialOwner)
+            )
+        );
         console2.log("SupportSoulbound:", supportSoulbound);
     }
 }

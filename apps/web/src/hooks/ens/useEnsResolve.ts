@@ -3,9 +3,9 @@
  */
 
 import { useEnsAddress } from 'wagmi';
-import { mainnet } from 'wagmi/chains';
 import { normalize } from 'viem/ens';
 import type { Address } from '@/lib/types/ethereum';
+import { ensConfig, isEnsEnabled } from '@/lib/ens-config';
 import { ENS_QUERY_OPTIONS } from './constants';
 
 export interface EnsResolveResult {
@@ -51,10 +51,10 @@ export function useEnsResolve(name: string | undefined): EnsResolveResult {
     error,
   } = useEnsAddress({
     name: normalizedName,
-    chainId: mainnet.id,
+    ...(ensConfig ? { config: ensConfig } : {}),
     query: {
       ...ENS_QUERY_OPTIONS,
-      enabled: !!normalizedName,
+      enabled: isEnsEnabled && !!normalizedName,
     },
   });
 

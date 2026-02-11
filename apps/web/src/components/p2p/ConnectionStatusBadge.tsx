@@ -6,7 +6,7 @@
 
 import { Wifi, WifiOff, WifiLow } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Badge } from '@swr/ui';
-import type { ConnectionStatus, ConnectionHealth } from '@/hooks/useP2PConnectionHealth';
+import type { ConnectionStatus, ConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
 
 export interface ConnectionStatusBadgeProps {
   /** Current connection status */

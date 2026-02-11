@@ -58,10 +58,15 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
-    name: 'acknowledgeLocal',
+    name: 'acknowledge',
     inputs: [
       {
         name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'forwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -293,6 +298,50 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'generateTransactionHashStruct',
+    inputs: [
+      {
+        name: 'dataHash',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'reportedChainId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'transactionCount',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'forwarder',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'step',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
+    outputs: [
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'hashStruct',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'getAcknowledgement',
     inputs: [
       {
@@ -428,6 +477,50 @@ export const SpokeRegistryABI = [
             internalType: 'uint256',
           },
         ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getTransactionDeadlines',
+    inputs: [
+      {
+        name: 'reporter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: 'currentBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'expiryBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'startBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'graceStartsAt',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'timeLeft',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'isExpired',
+        type: 'bool',
+        internalType: 'bool',
       },
     ],
     stateMutability: 'view',
@@ -616,10 +709,15 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
-    name: 'registerLocal',
+    name: 'register',
     inputs: [
       {
         name: 'wallet',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'forwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -1044,6 +1142,11 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'error',
+    name: 'SpokeRegistry__DataMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'SpokeRegistry__EmptyBatch',
     inputs: [],
   },
@@ -1095,6 +1198,11 @@ export const SpokeRegistryABI = [
   {
     type: 'error',
     name: 'SpokeRegistry__InvalidSigner',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__InvalidStep',
     inputs: [],
   },
   {

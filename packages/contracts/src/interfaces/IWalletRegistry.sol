@@ -35,7 +35,7 @@ interface IWalletRegistry {
     /// @param nonce Nonce used for this acknowledgement
     /// @param gracePeriodStart Block number when grace period begins
     /// @param reportedChainId CAIP-2 chain ID hash where incident occurred (stored for register-phase validation)
-    /// @param forwarder Address authorized to submit registration
+    /// @param trustedForwarder Address authorized to submit registration
     /// @param incidentTimestamp Unix timestamp when incident occurred (stored for register-phase validation)
     /// @param isSponsored Whether this is a sponsored registration
     struct AcknowledgementData {
@@ -43,7 +43,7 @@ interface IWalletRegistry {
         uint256 nonce;
         uint256 gracePeriodStart;
         bytes32 reportedChainId;
-        address forwarder;
+        address trustedForwarder;
         uint64 incidentTimestamp;
         bool isSponsored;
     }
@@ -70,13 +70,17 @@ interface IWalletRegistry {
     error WalletRegistry__GracePeriodNotStarted();
     error WalletRegistry__InvalidSignature();
     error WalletRegistry__InvalidSigner();
-    error WalletRegistry__NotAuthorizedForwarder();
+    error WalletRegistry__InvalidForwarder();
     error WalletRegistry__InsufficientFee();
+    error WalletRegistry__FeeTransferFailed();
+    error WalletRegistry__RefundFailed();
+    error WalletRegistry__InvalidNonce();
     error WalletRegistry__ZeroAddress();
     error WalletRegistry__OnlyHub();
     error WalletRegistry__OnlyOperatorSubmitter();
     error WalletRegistry__EmptyBatch();
     error WalletRegistry__ArrayLengthMismatch();
+    error WalletRegistry__InvalidStep();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -84,9 +88,9 @@ interface IWalletRegistry {
 
     /// @notice Emitted when a wallet acknowledgement is submitted
     /// @param registeree The wallet being registered
-    /// @param forwarder The address authorized to complete registration
+    /// @param trustedForwarder The address authorized to complete registration
     /// @param isSponsored Whether this is a sponsored registration
-    event WalletAcknowledged(address indexed registeree, address indexed forwarder, bool isSponsored);
+    event WalletAcknowledged(address indexed registeree, address indexed trustedForwarder, bool isSponsored);
 
     /// @notice Emitted when a wallet registration is completed
     /// @param identifier The wallet identifier (bytes32 for CAIP-10 compatibility)
@@ -112,10 +116,19 @@ interface IWalletRegistry {
     /// @param walletCount Number of wallets in the batch
     event BatchCreated(uint256 indexed batchId, bytes32 indexed operatorId, uint32 walletCount);
 
+    /// @notice Emitted when collected fees are withdrawn by the owner
+    /// @param recipient The address that received the fees
+    /// @param amount The amount of ETH withdrawn
+    event FeesWithdrawn(address indexed recipient, uint256 amount);
+
     /// @notice Emitted when hub address is updated
+    /// @param oldHub The previous hub address
+    /// @param newHub The new hub address
     event HubUpdated(address oldHub, address newHub);
 
     /// @notice Emitted when operator submitter address is updated
+    /// @param oldOperatorSubmitter The previous operator submitter address
+    /// @param newOperatorSubmitter The new operator submitter address
     event OperatorSubmitterUpdated(address oldOperatorSubmitter, address newOperatorSubmitter);
 
     /// @notice Fee breakdown for quoting registration costs
@@ -139,41 +152,47 @@ interface IWalletRegistry {
     /// @dev Creates a pending acknowledgement with grace period.
     ///      reportedChainId and incidentTimestamp are included in the EIP-712 signature
     ///      and stored in AcknowledgementData for validation during register().
-    ///      isSponsored is derived as (registeree != forwarder).
+    ///      isSponsored is derived as (registeree != trustedForwarder).
     /// @param registeree The wallet address being registered
-    /// @param forwarder The address authorized to complete registration (can be same as registeree)
+    /// @param trustedForwarder The address authorized to complete registration (can be same as registeree)
     /// @param reportedChainId Raw EVM chain ID where incident occurred (uint64, converted to CAIP-2 hash internally)
     /// @param incidentTimestamp Unix timestamp when incident occurred (0 if unknown)
     /// @param deadline Timestamp deadline for the signature
+    /// @param nonce Expected nonce for replay protection
     /// @param v ECDSA signature v component
     /// @param r ECDSA signature r component
     /// @param s ECDSA signature s component
     function acknowledge(
         address registeree,
-        address forwarder,
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
+        uint256 nonce,
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external payable;
+    ) external;
 
     /// @notice Phase 2: Complete wallet registration after grace period
-    /// @dev Must be called by authorized forwarder within deadline.
+    /// @dev Must be called by trusted forwarder within deadline.
     ///      reportedChainId and incidentTimestamp must match values from acknowledge phase.
     /// @param registeree The wallet address being registered
-    /// @param deadline Timestamp deadline for the signature
+    /// @param trustedForwarder The address authorized to complete registration (must match acknowledge phase and msg.sender)
     /// @param reportedChainId Raw EVM chain ID where incident occurred (must match acknowledge phase)
     /// @param incidentTimestamp Unix timestamp when incident occurred (must match acknowledge phase)
+    /// @param deadline Timestamp deadline for the signature
+    /// @param nonce Expected nonce for replay protection
     /// @param v ECDSA signature v component
     /// @param r ECDSA signature r component
     /// @param s ECDSA signature s component
     function register(
         address registeree,
-        uint256 deadline,
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
+        uint256 deadline,
+        uint256 nonce,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -223,6 +242,14 @@ interface IWalletRegistry {
         bytes32[] calldata reportedChainIds,
         uint64[] calldata incidentTimestamps
     ) external returns (uint256 batchId);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FEE RECOVERY (Safety Hatch)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Withdraw fees held when hub was not configured
+    /// @dev Only callable by owner. Sends entire contract balance to owner.
+    function withdrawCollectedFees() external;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - CAIP-10 String Interface
@@ -285,14 +312,15 @@ interface IWalletRegistry {
         );
 
     /// @notice Generate hash struct for EIP-712 signature generation
-    /// @dev Returns the hashStruct needed for constructing EIP-712 typed data
+    /// @dev Uses msg.sender as the wallet address in the hash. Must be called by the actual
+    ///      wallet owner so the resulting signature is valid for acknowledge/register.
     /// @param reportedChainId The chain ID where incident occurred (uint64 for gas efficiency)
     /// @param incidentTimestamp Unix timestamp of incident (0 if unknown)
-    /// @param forwarder The forwarder address authorized to complete registration
+    /// @param trustedForwarder The forwarder address authorized to complete registration
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline The deadline block number
     /// @return hashStruct The EIP-712 hash struct for signing
-    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
         external
         view
         returns (uint256 deadline, bytes32 hashStruct);

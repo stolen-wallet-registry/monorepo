@@ -35,7 +35,7 @@ export const anvilHub: HubNetworkConfig = {
   bridges: undefined,
 
   hubContracts: {
-    // Deterministic addresses from DeployCrossChain.s.sol (Anvil Account 0 deployer)
+    // Regular CREATE (deployer + nonce) addresses from Deploy.s.sol
     stolenWalletRegistry: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9',
     stolenTransactionRegistry: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707',
     fraudulentContractRegistry: '0x0165878A594ca255338adfa4d48449f69242Eb8F',
@@ -43,6 +43,10 @@ export const anvilHub: HubNetworkConfig = {
     registryHub: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
     crossChainInbox: '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6',
     operatorRegistry: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
+    translationRegistry: '0x3Aa5ebB10DC797CAC828524e59A333d0A371443c',
+    walletSoulbound: '0xc6e7DF5E7b4f2A278906862b61205850344D4e7d',
+    supportSoulbound: '0x59b670e9fA9D0A427751Af201D676719a970857b',
+    soulboundReceiver: '0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1',
   },
 
   priceFeed: {

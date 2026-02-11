@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import { computeConnectionStatus, computeHealthUpdate } from '@/hooks/p2pConnectionHealthState';
-import type { ConnectionHealth } from '@/hooks/useP2PConnectionHealth';
+import { computeConnectionStatus, computeHealthUpdate } from './p2pConnectionHealthState';
+import type { ConnectionHealth } from './useP2PConnectionHealth';
 
 const baseHealth: ConnectionHealth = {
   relayConnected: false,

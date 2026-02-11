@@ -42,7 +42,7 @@ export const WalletRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -58,6 +58,11 @@ export const WalletRegistryABI = [
       },
       {
         name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'nonce',
         type: 'uint256',
         internalType: 'uint256',
       },
@@ -78,7 +83,7 @@ export const WalletRegistryABI = [
       },
     ],
     outputs: [],
-    stateMutability: 'payable',
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -177,7 +182,7 @@ export const WalletRegistryABI = [
         internalType: 'uint64',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -238,7 +243,7 @@ export const WalletRegistryABI = [
             internalType: 'bytes32',
           },
           {
-            name: 'forwarder',
+            name: 'trustedForwarder',
             type: 'address',
             internalType: 'address',
           },
@@ -660,9 +665,9 @@ export const WalletRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'deadline',
-        type: 'uint256',
-        internalType: 'uint256',
+        name: 'trustedForwarder',
+        type: 'address',
+        internalType: 'address',
       },
       {
         name: 'reportedChainId',
@@ -673,6 +678,16 @@ export const WalletRegistryABI = [
         name: 'incidentTimestamp',
         type: 'uint64',
         internalType: 'uint64',
+      },
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'nonce',
+        type: 'uint256',
+        internalType: 'uint256',
       },
       {
         name: 'v',
@@ -827,6 +842,13 @@ export const WalletRegistryABI = [
     stateMutability: 'nonpayable',
   },
   {
+    type: 'function',
+    name: 'withdrawCollectedFees',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
     type: 'event',
     name: 'BatchCreated',
     inputs: [
@@ -886,6 +908,25 @@ export const WalletRegistryABI = [
     type: 'event',
     name: 'EIP712DomainChanged',
     inputs: [],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'FeesWithdrawn',
+    inputs: [
+      {
+        name: 'recipient',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'amount',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
     anonymous: false,
   },
   {
@@ -975,7 +1016,7 @@ export const WalletRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         indexed: true,
         internalType: 'address',
@@ -1132,12 +1173,27 @@ export const WalletRegistryABI = [
   },
   {
     type: 'error',
+    name: 'WalletRegistry__FeeTransferFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'WalletRegistry__GracePeriodNotStarted',
     inputs: [],
   },
   {
     type: 'error',
     name: 'WalletRegistry__InsufficientFee',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'WalletRegistry__InvalidForwarder',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'WalletRegistry__InvalidNonce',
     inputs: [],
   },
   {
@@ -1152,12 +1208,12 @@ export const WalletRegistryABI = [
   },
   {
     type: 'error',
-    name: 'WalletRegistry__NotAcknowledged',
+    name: 'WalletRegistry__InvalidStep',
     inputs: [],
   },
   {
     type: 'error',
-    name: 'WalletRegistry__NotAuthorizedForwarder',
+    name: 'WalletRegistry__NotAcknowledged',
     inputs: [],
   },
   {
@@ -1168,6 +1224,11 @@ export const WalletRegistryABI = [
   {
     type: 'error',
     name: 'WalletRegistry__OnlyOperatorSubmitter',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'WalletRegistry__RefundFailed',
     inputs: [],
   },
   {

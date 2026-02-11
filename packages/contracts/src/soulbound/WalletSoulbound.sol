@@ -70,9 +70,14 @@ contract WalletSoulbound is BaseSoulbound {
     /// @param _translations Address of the TranslationRegistry contract
     /// @param _feeCollector Address to receive fees
     /// @param _domain Domain to display in SVG (e.g., "stolenwallet.xyz")
-    constructor(address _registry, address _translations, address _feeCollector, string memory _domain)
-        BaseSoulbound("SWR Wallet Soulbound", "SWRW", _translations, _feeCollector, _domain)
-    {
+    /// @param _initialOwner Address that will own this contract
+    constructor(
+        address _registry,
+        address _translations,
+        address _feeCollector,
+        string memory _domain,
+        address _initialOwner
+    ) BaseSoulbound("SWR Wallet Soulbound", "SWRW", _translations, _feeCollector, _domain, _initialOwner) {
         if (_registry == address(0)) revert InvalidRegistry();
         registry = IWalletRegistry(_registry);
     }

@@ -118,11 +118,13 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
             revert WalletRegistry__InsufficientFee();
         }
 
-        // Forward to hub (which collects all fees)
+        // Forward to hub (which aggregates fees). If hub is not configured yet,
+        // the required fee remains in this contract and can be recovered via
+        // withdrawCollectedFees().
         if (hub != address(0)) {
             (bool success,) = hub.call{ value: requiredFee }("");
             if (!success) {
-                revert WalletRegistry__InsufficientFee();
+                revert WalletRegistry__FeeTransferFailed();
             }
         }
 
@@ -131,15 +133,25 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         if (excess > 0) {
             (bool refundSuccess,) = msg.sender.call{ value: excess }("");
             if (!refundSuccess) {
-                revert WalletRegistry__InsufficientFee();
+                revert WalletRegistry__RefundFailed();
             }
         }
+    }
+
+    /// @notice Withdraw fees held when hub was not configured
+    /// @dev Only callable by owner. Sends entire contract balance to owner.
+    function withdrawCollectedFees() external onlyOwner {
+        uint256 balance = address(this).balance;
+        if (balance == 0) return;
+        (bool success,) = msg.sender.call{ value: balance }("");
+        if (!success) revert WalletRegistry__FeeTransferFailed();
+        emit FeesWithdrawn(msg.sender, balance);
     }
 
     /// @dev Internal helper to verify acknowledgement signature (reduces stack depth)
     function _verifyAckSignature(
         address registeree,
-        address forwarder,
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 nonce,
@@ -154,7 +166,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
                     EIP712Constants.WALLET_ACK_TYPEHASH,
                     EIP712Constants.ACK_STATEMENT_HASH,
                     registeree,
-                    forwarder,
+                    trustedForwarder,
                     reportedChainId,
                     incidentTimestamp,
                     nonce,
@@ -172,7 +184,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     /// @dev Internal helper to verify registration signature (reduces stack depth)
     function _verifyRegSignature(
         address registeree,
-        address forwarder,
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 nonce,
@@ -187,7 +199,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
                     EIP712Constants.WALLET_REG_TYPEHASH,
                     EIP712Constants.REG_STATEMENT_HASH,
                     registeree,
-                    forwarder,
+                    trustedForwarder,
                     reportedChainId,
                     incidentTimestamp,
                     nonce,
@@ -239,7 +251,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     /// @inheritdoc IWalletRegistry
     function isWalletPending(address wallet) external view returns (bool) {
         AcknowledgementData memory ack = _pendingAcknowledgements[wallet];
-        return ack.forwarder != address(0) && block.number < ack.deadline;
+        return ack.trustedForwarder != address(0) && block.number < ack.deadline;
     }
 
     /// @inheritdoc IWalletRegistry
@@ -277,11 +289,12 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     }
 
     /// @inheritdoc IWalletRegistry
-    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
         external
         view
         returns (uint256 deadline, bytes32 hashStruct)
     {
+        if (step != 1 && step != 2) revert WalletRegistry__InvalidStep();
         deadline = TimingConfig.getSignatureDeadline();
         if (step == 1) {
             // Acknowledgement
@@ -290,7 +303,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
                     EIP712Constants.WALLET_ACK_TYPEHASH,
                     EIP712Constants.ACK_STATEMENT_HASH,
                     msg.sender, // wallet
-                    forwarder,
+                    trustedForwarder,
                     reportedChainId,
                     incidentTimestamp,
                     nonces[msg.sender],
@@ -304,7 +317,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
                     EIP712Constants.WALLET_REG_TYPEHASH,
                     EIP712Constants.REG_STATEMENT_HASH,
                     msg.sender,
-                    forwarder,
+                    trustedForwarder,
                     reportedChainId,
                     incidentTimestamp,
                     nonces[msg.sender],
@@ -363,16 +376,17 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     ///   These serve different purposes: (1) prevents stale signatures, (2) enforces the registration window.
     function acknowledge(
         address registeree,
-        address forwarder,
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline, // EIP-712 signature expiry (timestamp, compared to block.timestamp)
+        uint256 nonce,
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external payable {
+    ) external {
         if (registeree == address(0)) revert WalletRegistry__ZeroAddress();
-        if (forwarder == address(0)) revert WalletRegistry__ZeroAddress();
+        if (trustedForwarder == address(0)) revert WalletRegistry__ZeroAddress();
         if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
 
         // Check not already registered
@@ -381,20 +395,21 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
 
         // Check not already acknowledged
         AcknowledgementData memory existing = _pendingAcknowledgements[registeree];
-        if (existing.forwarder != address(0) && block.number < existing.deadline) {
+        if (existing.trustedForwarder != address(0) && block.number < existing.deadline) {
             revert WalletRegistry__AlreadyAcknowledged();
         }
 
-        uint256 nonce = nonces[registeree];
+        // Validate nonce matches expected value (fail-fast before signature verification)
+        if (nonce != nonces[registeree]) revert WalletRegistry__InvalidNonce();
 
         // Verify EIP-712 signature from registeree (includes reportedChainId + incidentTimestamp)
-        _verifyAckSignature(registeree, forwarder, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
+        _verifyAckSignature(registeree, trustedForwarder, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
 
         // Increment nonce after validation
         nonces[registeree]++;
 
-        // Derive isSponsored: if forwarder != registeree, someone else is paying
-        bool isSponsored = registeree != forwarder;
+        // Derive isSponsored: if trustedForwarder != registeree, someone else is paying
+        bool isSponsored = registeree != trustedForwarder;
 
         // Convert uint64 reportedChainId to bytes32 CAIP-2 hash for storage
         bytes32 reportedChainIdHash = CAIP10Evm.caip2Hash(reportedChainId);
@@ -405,12 +420,12 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
             nonce: nonce,
             gracePeriodStart: TimingConfig.getGracePeriodEndBlock(graceBlocks),
             reportedChainId: reportedChainIdHash,
-            forwarder: forwarder,
+            trustedForwarder: trustedForwarder,
             incidentTimestamp: incidentTimestamp,
             isSponsored: isSponsored
         });
 
-        emit WalletAcknowledged(registeree, forwarder, isSponsored);
+        emit WalletAcknowledged(registeree, trustedForwarder, isSponsored);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -422,9 +437,11 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     ///      `ack.deadline` is a BLOCK NUMBER (grace period window, compared to block.number).
     function register(
         address registeree,
-        uint256 deadline, // EIP-712 signature expiry (timestamp, compared to block.timestamp)
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
+        uint256 deadline, // EIP-712 signature expiry (timestamp, compared to block.timestamp)
+        uint256 nonce,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -434,7 +451,9 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
 
         // Load and validate acknowledgement (ack.deadline and ack.gracePeriodStart are BLOCK NUMBERS)
         AcknowledgementData memory ack = _pendingAcknowledgements[registeree];
-        if (ack.forwarder != msg.sender) revert WalletRegistry__NotAuthorizedForwarder();
+        if (ack.trustedForwarder != msg.sender || trustedForwarder != msg.sender) {
+            revert WalletRegistry__InvalidForwarder();
+        }
         if (block.number < ack.gracePeriodStart) revert WalletRegistry__GracePeriodNotStarted();
         if (block.number >= ack.deadline) revert WalletRegistry__DeadlineExpired();
 
@@ -444,33 +463,34 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
             revert WalletRegistry__InvalidSignature();
         }
 
-        uint256 nonce = nonces[registeree];
+        // Validate nonce matches expected value (fail-fast before signature verification)
+        if (nonce != nonces[registeree]) revert WalletRegistry__InvalidNonce();
 
-        // Verify EIP-712 signature (uses real reportedChainId + incidentTimestamp)
-        _verifyRegSignature(registeree, msg.sender, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
+        // Verify EIP-712 signature (uses trustedForwarder param — must match msg.sender for sig to be valid)
+        _verifyRegSignature(registeree, trustedForwarder, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
+
+        // Revert if wallet was registered by another path (cross-chain/operator) during grace period
+        bytes32 key = CAIP10Evm.evmWalletKey(registeree);
+        if (_wallets[key].registeredAt > 0) revert WalletRegistry__AlreadyRegistered();
 
         // === EFFECTS ===
         nonces[registeree]++;
         delete _pendingAcknowledgements[registeree];
 
         // Store wallet entry
-        bytes32 key = CAIP10Evm.evmWalletKey(registeree);
+        _wallets[key] = WalletEntry({
+            reportedChainId: reportedChainIdHash,
+            sourceChainId: CAIP10Evm.caip2Hash(uint64(block.chainid)),
+            messageId: bytes32(0),
+            registeredAt: uint64(block.timestamp),
+            incidentTimestamp: incidentTimestamp,
+            bridgeId: 0,
+            isSponsored: ack.isSponsored
+        });
 
-        if (_wallets[key].registeredAt == 0) {
-            _wallets[key] = WalletEntry({
-                reportedChainId: reportedChainIdHash,
-                sourceChainId: CAIP10Evm.caip2Hash(uint64(block.chainid)),
-                messageId: bytes32(0),
-                registeredAt: uint64(block.timestamp),
-                incidentTimestamp: incidentTimestamp,
-                bridgeId: 0,
-                isSponsored: ack.isSponsored
-            });
-
-            emit WalletRegistered(
-                bytes32(uint256(uint160(registeree))), reportedChainIdHash, incidentTimestamp, ack.isSponsored
-            );
-        }
+        emit WalletRegistered(
+            bytes32(uint256(uint160(registeree))), reportedChainIdHash, incidentTimestamp, ack.isSponsored
+        );
 
         // === INTERACTIONS ===
         _collectFee();

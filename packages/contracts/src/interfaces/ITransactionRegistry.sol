@@ -36,7 +36,7 @@ interface ITransactionRegistry {
     /// @param gracePeriodStart Block number when grace period begins
     /// @param dataHash Hash of (txHashes, chainIds) committed in acknowledgement
     /// @param reportedChainId CAIP-2 chain ID hash where transactions were reported (stored for register-phase validation)
-    /// @param forwarder Address authorized to submit registration
+    /// @param trustedForwarder Address authorized to submit registration
     /// @param transactionCount Number of transactions in the batch (stored for register-phase validation)
     /// @param isSponsored Whether this is a sponsored registration
     struct TransactionAcknowledgementData {
@@ -45,7 +45,7 @@ interface ITransactionRegistry {
         uint256 gracePeriodStart;
         bytes32 dataHash;
         bytes32 reportedChainId;
-        address forwarder;
+        address trustedForwarder;
         uint32 transactionCount;
         bool isSponsored;
     }
@@ -76,7 +76,7 @@ interface ITransactionRegistry {
     error TransactionRegistry__GracePeriodNotStarted();
     error TransactionRegistry__InvalidSignature();
     error TransactionRegistry__InvalidSigner();
-    error TransactionRegistry__NotAuthorizedForwarder();
+    error TransactionRegistry__InvalidForwarder();
     error TransactionRegistry__InsufficientFee();
     error TransactionRegistry__ZeroAddress();
     error TransactionRegistry__OnlyHub();
@@ -94,11 +94,11 @@ interface ITransactionRegistry {
 
     /// @notice Emitted when a transaction batch acknowledgement is submitted
     /// @param reporter The address registering the transactions
-    /// @param forwarder The address authorized to complete registration
+    /// @param trustedForwarder The address authorized to complete registration
     /// @param dataHash Hash of (txHashes, chainIds) committed
     /// @param isSponsored Whether this is a sponsored registration
     event TransactionBatchAcknowledged(
-        address indexed reporter, address indexed forwarder, bytes32 dataHash, bool isSponsored
+        address indexed reporter, address indexed trustedForwarder, bytes32 dataHash, bool isSponsored
     );
 
     /// @notice Emitted when a transaction is registered
@@ -140,9 +140,13 @@ interface ITransactionRegistry {
     event TransactionBatchCreated(uint256 indexed batchId, bytes32 indexed operatorId, uint32 transactionCount);
 
     /// @notice Emitted when hub address is updated
+    /// @param oldHub The previous hub address
+    /// @param newHub The new hub address
     event HubUpdated(address oldHub, address newHub);
 
     /// @notice Emitted when operator submitter address is updated
+    /// @param oldOperatorSubmitter The previous operator submitter address
+    /// @param newOperatorSubmitter The new operator submitter address
     event OperatorSubmitterUpdated(address oldOperatorSubmitter, address newOperatorSubmitter);
 
     /// @notice Fee breakdown for quoting registration costs
@@ -166,9 +170,9 @@ interface ITransactionRegistry {
     /// @dev Creates a pending acknowledgement with grace period.
     ///      reportedChainId and transactionCount are included in the EIP-712 signature
     ///      and stored in acknowledgement data for validation during registerTransactions().
-    ///      isSponsored is derived as (reporter != forwarder).
+    ///      isSponsored is derived as (reporter != trustedForwarder).
     /// @param reporter The address registering the transactions
-    /// @param forwarder The address authorized to complete registration
+    /// @param trustedForwarder The address authorized to complete registration
     /// @param deadline Timestamp deadline for the signature
     /// @param dataHash Hash of (txHashes, chainIds) being committed
     /// @param reportedChainId CAIP-2 chain ID hash where transactions were reported
@@ -178,7 +182,7 @@ interface ITransactionRegistry {
     /// @param s EIP-712 signature s component
     function acknowledgeTransactions(
         address reporter,
-        address forwarder,
+        address trustedForwarder,
         uint256 deadline,
         bytes32 dataHash,
         bytes32 reportedChainId,
@@ -186,10 +190,10 @@ interface ITransactionRegistry {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external payable;
+    ) external;
 
     /// @notice Phase 2: Complete transaction batch registration after grace period
-    /// @dev Must be called by authorized forwarder within deadline
+    /// @dev Must be called by trusted forwarder within deadline
     /// @param reporter The address that acknowledged the transactions
     /// @param deadline Block number deadline for the signature
     /// @param transactionHashes Array of transaction hashes to register
@@ -315,11 +319,12 @@ interface ITransactionRegistry {
         );
 
     /// @notice Generate hash struct for EIP-712 transaction batch signature
-    /// @dev Returns the hashStruct needed for constructing EIP-712 typed data
+    /// @dev Uses msg.sender as the reporter address. Must be called by the actual reporter
+    ///      so the resulting signature is valid for acknowledgeTransactionBatch/registerTransactionBatch.
     /// @param dataHash Hash of (txHashes, chainIds) being committed
     /// @param reportedChainId CAIP-2 chain ID hash where transactions occurred
     /// @param transactionCount Number of transactions in batch
-    /// @param forwarder The forwarder address authorized to complete registration
+    /// @param trustedForwarder The forwarder address authorized to complete registration
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline The deadline block number
     /// @return hashStruct The EIP-712 hash struct for signing
@@ -327,14 +332,14 @@ interface ITransactionRegistry {
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,
-        address forwarder,
+        address trustedForwarder,
         uint8 step
     ) external view returns (uint256 deadline, bytes32 hashStruct);
 
     /// @notice Get nonce for a reporter
     /// @param reporter The reporter address
     /// @return The current nonce
-    function transactionNonces(address reporter) external view returns (uint256);
+    function nonces(address reporter) external view returns (uint256);
 
     /// @notice Get batch data
     /// @param batchId The batch ID

@@ -605,6 +605,11 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'error',
+    name: 'OperatorSubmitter__RefundFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'OperatorSubmitter__ZeroAddress',
     inputs: [],
   },

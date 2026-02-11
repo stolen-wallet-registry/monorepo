@@ -144,13 +144,9 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
         if (length == 0) revert ContractRegistry__EmptyBatch();
         if (length != reportedChainIds.length) revert ContractRegistry__ArrayLengthMismatch();
 
-        // Create batch
+        // Create batch (contractCount updated after loop)
         batchId = _nextBatchId++;
-        _batches[batchId] = ContractBatch({
-            operatorId: operatorId, timestamp: uint64(block.timestamp), contractCount: uint32(length)
-        });
-
-        emit ContractBatchCreated(batchId, operatorId, uint32(length));
+        uint32 actualCount;
 
         // Register each contract
         for (uint256 i = 0; i < length; i++) {
@@ -172,8 +168,16 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
                 batchId: batchId
             });
 
+            actualCount++;
             emit ContractRegistered(identifier, chainId, operatorId, batchId);
         }
+
+        if (actualCount == 0) revert ContractRegistry__EmptyBatch();
+
+        _batches[batchId] =
+            ContractBatch({ operatorId: operatorId, timestamp: uint64(block.timestamp), contractCount: actualCount });
+
+        emit ContractBatchCreated(batchId, operatorId, actualCount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

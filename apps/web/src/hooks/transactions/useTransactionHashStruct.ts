@@ -1,13 +1,16 @@
 /**
  * Hook to read deadline and hash struct from the transaction registry contract.
- * Currently hub-only (TransactionRegistry). Spoke (SpokeRegistry) support is not yet implemented —
- * spoke transaction batches use different function signatures for acknowledgement/registration.
+ * Chain-aware: works on both hub (TransactionRegistry) and spoke (SpokeRegistry).
+ *
+ * Both contracts expose `generateTransactionHashStruct` with the same signature:
+ *   (bytes32 dataHash, bytes32 reportedChainId, uint32 transactionCount, address trustedForwarder, uint8 step)
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  */
 
+import { useEffect, useMemo } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
-import { transactionRegistryAbi } from '@/lib/contracts/abis';
+import { transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { getTransactionRegistryAddress } from '@/lib/contracts/addresses';
 import { getSpokeContractAddress } from '@/lib/contracts/crosschain-addresses';
 import { isHubChain, isSpokeChain } from '@swr/chains';
@@ -32,6 +35,15 @@ export interface UseTxHashStructResult {
   isError: boolean;
   error: Error | null;
   refetch: () => Promise<TxHashStructRefetchResult>;
+}
+
+/** Transform raw contract result to typed format */
+function transformResult(raw: unknown): TxHashStructData | undefined {
+  if (raw && Array.isArray(raw) && raw.length >= 2) {
+    const [deadline, hashStruct] = raw as [bigint, Hash];
+    return { deadline, hashStruct };
+  }
+  return undefined;
 }
 
 /**
@@ -64,6 +76,11 @@ export function useTransactionHashStruct(
     contractAddress = getTransactionRegistryAddress(chainId);
   }
 
+  // Log unsupported chain to help catch configuration issues
+  if (!isSpoke && !isHub && import.meta.env.DEV) {
+    logger.contract.debug('useTransactionHashStruct: chain is neither hub nor spoke', { chainId });
+  }
+
   const enabled =
     !!dataHash &&
     !!reportedChainId &&
@@ -87,46 +104,66 @@ export function useTransactionHashStruct(
     },
   });
 
-  // Note: SpokeRegistry uses different functions for transaction batches
-  // (acknowledgeTransactionBatch/registerTransactionBatch) with different signature generation.
-  // Transaction hash struct generation is currently only implemented for hub chains.
-  // Spoke transaction registration may need separate handling.
+  // Spoke chain: SpokeRegistry.generateTransactionHashStruct (same signature)
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'generateTransactionHashStruct',
+    args: enabled
+      ? [dataHash!, reportedChainId!, transactionCount!, forwarderAddress!, step]
+      : undefined,
+    query: {
+      enabled: enabled && isSpoke,
+      staleTime: 10_000,
+    },
+  });
 
-  // Use hub result - spoke not yet supported for transaction hash struct
-  const result = hubResult;
+  // Select result based on chain role
+  const result = isSpoke ? spokeResult : hubResult;
+  const transformedData = useMemo(() => transformResult(result.data), [result.data]);
 
-  if (result.isError) {
-    logger.contract.error('generateHashStruct call failed (transaction registry)', {
-      chainId,
-      contractAddress,
-      dataHash,
-      transactionCount,
-      forwarderAddress,
-      step,
-      error: result.error?.message,
-    });
-  }
+  // Log in useEffect to avoid render-time side effects
+  useEffect(() => {
+    if (result.isError) {
+      logger.contract.error('generateTransactionHashStruct call failed', {
+        chainId,
+        contractAddress,
+        isSpoke,
+        dataHash,
+        transactionCount,
+        forwarderAddress,
+        step,
+        error: result.error?.message,
+      });
+    }
+  }, [
+    result.isError,
+    result.error,
+    chainId,
+    contractAddress,
+    isSpoke,
+    dataHash,
+    transactionCount,
+    forwarderAddress,
+    step,
+  ]);
 
-  // Transform result to standard format
-  let transformedData: TxHashStructData | undefined;
-  if (result.data && Array.isArray(result.data) && result.data.length >= 2) {
-    const [deadline, hashStruct] = result.data as [bigint, Hash];
-    transformedData = { deadline, hashStruct };
-    logger.contract.debug('generateHashStruct call succeeded (transaction registry)', {
-      chainId,
-      contractAddress,
-      deadline: deadline.toString(),
-    });
-  }
+  useEffect(() => {
+    if (transformedData) {
+      logger.contract.debug('generateTransactionHashStruct call succeeded', {
+        chainId,
+        contractAddress,
+        isSpoke,
+        deadline: transformedData.deadline.toString(),
+      });
+    }
+  }, [transformedData, chainId, contractAddress, isSpoke]);
 
   // Wrap refetch to return properly typed result
   const refetch = async (): Promise<TxHashStructRefetchResult> => {
     const refetchResult = await result.refetch();
-    let refetchedData: TxHashStructData | undefined;
-    if (refetchResult.data && Array.isArray(refetchResult.data) && refetchResult.data.length >= 2) {
-      const [deadline, hashStruct] = refetchResult.data as [bigint, Hash];
-      refetchedData = { deadline, hashStruct };
-    }
+    const refetchedData = transformResult(refetchResult.data);
     return {
       data: refetchedData,
       status: refetchResult.status === 'success' ? 'success' : 'error',

@@ -40,7 +40,21 @@ contract SpokeRegistryTest is Test {
     uint32 internal constant SPOKE_CHAIN_ID = 11_155_420; // OP Sepolia
     bytes32 internal constant HUB_INBOX = bytes32(uint256(uint160(0x1234567890123456789012345678901234567890)));
 
-    // EIP-712 constants (uses uint64 reportedChainId for storage efficiency)
+    // ── Stack-pressure workaround ──────────────────────────────────────────
+    // EVM limits functions to 16 stack slots. Functions like registerTransactionBatch
+    // take 9 arguments; combined with local variables for the ack/signing phase,
+    // the Solidity compiler (without via-ir) cannot schedule them all.
+    // Storing signature components in contract storage between the signing and
+    // registration phases frees 5 stack slots and avoids the via-ir requirement.
+    uint8 internal _sv;
+    bytes32 internal _sr;
+    bytes32 internal _ss;
+    uint256 internal _sDeadline;
+    uint256 internal _sNonce;
+
+    // EIP-712 constants — duplicated here (not imported from EIP712Constants) because
+    // spoke uses uint64 reportedChainId/incidentTimestamp while hub uses bytes32.
+    // If these drift from the SpokeRegistry contract, signing tests will fail.
     bytes32 internal constant ACK_TYPEHASH = keccak256(
         "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
@@ -96,9 +110,9 @@ contract SpokeRegistryTest is Test {
         vm.warp(1_704_067_200); // 2024-01-01
 
         // Create test accounts
-        walletPrivateKey = 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef;
+        walletPrivateKey = uint256(keccak256("test wallet")); // deterministic test-only key
         wallet = vm.addr(walletPrivateKey);
-        reporterPrivateKey = 0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890;
+        reporterPrivateKey = uint256(keccak256("test reporter")); // deterministic test-only key
         reporter = vm.addr(reporterPrivateKey);
         forwarder = makeAddr("forwarder");
         owner = address(this);
@@ -205,7 +219,7 @@ contract SpokeRegistryTest is Test {
             _signAck(walletPrivateKey, wallet, _forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
 
         vm.prank(_forwarder);
-        spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.acknowledge(wallet, _forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     function _skipToRegistrationWindow() internal {
@@ -414,6 +428,20 @@ contract SpokeRegistryTest is Test {
         );
     }
 
+    /// @dev Prepare tx batch reg signature and store in _sv/_sr/_ss/_sDeadline/_sNonce.
+    ///      Writes to storage to free stack slots — registerTransactionBatch takes 9 args,
+    ///      which combined with local variables exceeds the EVM's 16-slot stack limit.
+    ///      Reads nonce via external call, so call BEFORE vm.expectRevert.
+    function _prepareTxBatchRegSig(bytes32 dataHash, bytes32 reportedChainId, uint32 txCount, address _forwarder)
+        internal
+    {
+        _sDeadline = block.timestamp + 1 hours;
+        _sNonce = spoke.nonces(reporter);
+        (_sv, _sr, _ss) = _signTxBatchReg(
+            reporterPrivateKey, reporter, _forwarder, dataHash, reportedChainId, txCount, _sNonce, _sDeadline
+        );
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ACKNOWLEDGEMENT TESTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -457,7 +485,7 @@ contract SpokeRegistryTest is Test {
         emit WalletAcknowledged(wallet, wallet, reportedChainIdHash, incidentTimestamp, false);
 
         vm.prank(wallet);
-        spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.acknowledge(wallet, wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
         assertTrue(spoke.isPending(wallet));
     }
@@ -474,7 +502,7 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__SignatureExpired.selector);
-        spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Acknowledgement fails with wrong nonce
@@ -489,7 +517,7 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidNonce.selector);
-        spoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, wrongNonce, v, r, s);
+        spoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, wrongNonce, v, r, s);
     }
 
     /// @notice Acknowledgement fails with zero address owner
@@ -500,7 +528,9 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidOwner.selector);
-        spoke.acknowledgeLocal(address(0), reportedChainId, incidentTimestamp, deadline, 0, 27, bytes32(0), bytes32(0));
+        spoke.acknowledge(
+            address(0), forwarder, reportedChainId, incidentTimestamp, deadline, 0, 27, bytes32(0), bytes32(0)
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -528,7 +558,7 @@ contract SpokeRegistryTest is Test {
         emit RegistrationSentToHub(wallet, bytes32(0), HUB_CHAIN_ID); // messageId will be computed
 
         vm.prank(forwarder);
-        spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
         // Verify acknowledgement cleaned up
         assertFalse(spoke.isPending(wallet));
@@ -553,7 +583,7 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__GracePeriodNotStarted.selector);
-        spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Registration fails after expiry
@@ -577,7 +607,7 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__ForwarderExpired.selector);
-        spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Registration fails with wrong forwarder
@@ -601,7 +631,9 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(wrongForwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidForwarder.selector);
-        spoke.registerLocal{ value: fee }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(
+            wallet, wrongForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s
+        );
     }
 
     /// @notice Registration fails with insufficient fee
@@ -620,7 +652,7 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InsufficientFee.selector);
-        spoke.registerLocal{ value: 0 }(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: 0 }(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
     /// @notice Registration fails when hub not configured
@@ -648,7 +680,7 @@ contract SpokeRegistryTest is Test {
         );
 
         vm.prank(forwarder);
-        unconfiguredSpoke.acknowledgeLocal(wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        unconfiguredSpoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
         // Skip to registration window
         ISpokeRegistry.AcknowledgementData memory ack = unconfiguredSpoke.getAcknowledgement(wallet);
@@ -662,8 +694,8 @@ contract SpokeRegistryTest is Test {
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__HubNotConfigured.selector);
-        unconfiguredSpoke.registerLocal{ value: 1 ether }(
-            wallet, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s
+        unconfiguredSpoke.register{ value: 1 ether }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s
         );
     }
 
@@ -763,6 +795,20 @@ contract SpokeRegistryTest is Test {
 
         assertGt(deadline, block.timestamp);
         assertTrue(hashStruct != bytes32(0));
+    }
+
+    /// @notice generateHashStruct reverts on invalid step values
+    function test_GenerateHashStruct_RevertIf_InvalidStep() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        vm.prank(wallet);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidStep.selector);
+        spoke.generateHashStruct(reportedChainId, incidentTimestamp, forwarder, 0);
+
+        vm.prank(wallet);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidStep.selector);
+        spoke.generateHashStruct(reportedChainId, incidentTimestamp, forwarder, 3);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -957,5 +1003,337 @@ contract SpokeRegistryTest is Test {
         assertEq(ack.transactionCount, transactionCount);
         assertGt(ack.startBlock, block.number);
         assertGt(ack.expiryBlock, ack.startBlock);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CONSTRUCTOR VALIDATION TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Constructor rejects zero owner via OZ OwnableInvalidOwner
+    function test_Constructor_RejectsZeroOwner() public {
+        vm.expectRevert(abi.encodeWithSignature("OwnableInvalidOwner(address)", address(0)));
+        new SpokeRegistry(
+            address(0),
+            address(bridgeAdapter),
+            address(feeManager),
+            HUB_CHAIN_ID,
+            HUB_INBOX,
+            GRACE_BLOCKS,
+            DEADLINE_BLOCKS,
+            1
+        );
+    }
+
+    /// @notice Constructor rejects zero bridge adapter
+    function test_Constructor_RejectsZeroBridgeAdapter() public {
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__ZeroAddress.selector);
+        new SpokeRegistry(
+            owner, address(0), address(feeManager), HUB_CHAIN_ID, HUB_INBOX, GRACE_BLOCKS, DEADLINE_BLOCKS, 1
+        );
+    }
+
+    /// @notice Constructor rejects zero grace blocks
+    function test_Constructor_RejectsInvalidTiming_ZeroGrace() public {
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidTimingConfig.selector);
+        new SpokeRegistry(
+            owner,
+            address(bridgeAdapter),
+            address(feeManager),
+            HUB_CHAIN_ID,
+            HUB_INBOX,
+            0, // zero grace
+            DEADLINE_BLOCKS,
+            1
+        );
+    }
+
+    /// @notice Constructor rejects zero deadline blocks
+    function test_Constructor_RejectsInvalidTiming_ZeroDeadline() public {
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidTimingConfig.selector);
+        new SpokeRegistry(
+            owner,
+            address(bridgeAdapter),
+            address(feeManager),
+            HUB_CHAIN_ID,
+            HUB_INBOX,
+            GRACE_BLOCKS,
+            0, // zero deadline
+            1
+        );
+    }
+
+    /// @notice Constructor rejects deadline < 2*grace (window too small)
+    function test_Constructor_RejectsInvalidTiming_DeadlineTooSmall() public {
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidTimingConfig.selector);
+        new SpokeRegistry(
+            owner,
+            address(bridgeAdapter),
+            address(feeManager),
+            HUB_CHAIN_ID,
+            HUB_INBOX,
+            10, // grace
+            15, // deadline < 2*10=20
+            1
+        );
+    }
+
+    /// @notice Constructor rejects mismatched hub config (chainId set, inbox zero)
+    function test_Constructor_RejectsMismatchedHubConfig() public {
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidHubConfig.selector);
+        new SpokeRegistry(
+            owner,
+            address(bridgeAdapter),
+            address(feeManager),
+            HUB_CHAIN_ID,
+            bytes32(0), // inbox zero with non-zero chainId
+            GRACE_BLOCKS,
+            DEADLINE_BLOCKS,
+            1
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ACKNOWLEDGE EDGE CASES
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Acknowledge rejects zero forwarder address
+    function test_Acknowledge_RejectsZeroForwarder() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(wallet);
+
+        // Sign with zero forwarder
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAck(walletPrivateKey, wallet, address(0), reportedChainId, incidentTimestamp, nonce, deadline);
+
+        // Intentionally prank from address(0) so msg.sender matches the zero forwarder argument
+        vm.prank(address(0));
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__ZeroAddress.selector);
+        spoke.acknowledge(wallet, address(0), reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // REGISTER DATA MISMATCH TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Register rejects mismatched reportedChainId between ack and register
+    function test_Register_RejectsDataMismatch_ChainId() public {
+        uint64 ackChainId = 1; // Acknowledge with chainId 1
+        uint64 regChainId = 10; // Register with chainId 10
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        // Acknowledge with chainId=1
+        _doAck(forwarder, ackChainId, incidentTimestamp);
+        _skipToRegistrationWindow();
+
+        // Try to register with chainId=10
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(wallet);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signReg(walletPrivateKey, wallet, forwarder, regChainId, incidentTimestamp, nonce, deadline);
+
+        uint256 fee = spoke.quoteRegistration(wallet);
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__DataMismatch.selector);
+        spoke.register{ value: fee }(wallet, forwarder, regChainId, incidentTimestamp, deadline, nonce, v, r, s);
+    }
+
+    /// @notice Register rejects mismatched incidentTimestamp between ack and register
+    function test_Register_RejectsDataMismatch_Timestamp() public {
+        uint64 reportedChainId = 1;
+        uint64 ackTimestamp = uint64(block.timestamp - 1 days);
+        uint64 regTimestamp = uint64(block.timestamp - 2 days); // Different timestamp
+
+        // Acknowledge with ackTimestamp
+        _doAck(forwarder, reportedChainId, ackTimestamp);
+        _skipToRegistrationWindow();
+
+        // Try to register with different timestamp
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(wallet);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signReg(walletPrivateKey, wallet, forwarder, reportedChainId, regTimestamp, nonce, deadline);
+
+        uint256 fee = spoke.quoteRegistration(wallet);
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__DataMismatch.selector);
+        spoke.register{ value: fee }(wallet, forwarder, reportedChainId, regTimestamp, deadline, nonce, v, r, s);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TX BATCH REGISTRATION ERROR PATH TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Tx batch registration rejects when submitted by wrong forwarder
+    function test_TxBatchReg_RejectsWrongForwarder() public {
+        _rejectsWrongForwarderImpl();
+    }
+
+    function _rejectsWrongForwarderImpl() internal {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        {
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
+            _skipToTxBatchRegistrationWindow(reporter);
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder);
+        }
+        uint256 fee = spoke.quoteRegistration(reporter);
+        address wrongFwd = makeAddr("wrongForwarder");
+        vm.deal(wrongFwd, 10 ether);
+
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidForwarder.selector);
+        vm.prank(wrongFwd);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sv, _sr, _ss
+        );
+    }
+
+    /// @notice Tx batch registration rejects before grace period
+    function test_TxBatchReg_RejectsBeforeGracePeriod() public {
+        _rejectsBeforeGracePeriodImpl();
+    }
+
+    function _rejectsBeforeGracePeriodImpl() internal {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        {
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
+            // DO NOT skip to registration window
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder);
+        }
+        uint256 fee = spoke.quoteRegistration(reporter);
+
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__GracePeriodNotStarted.selector);
+        vm.prank(forwarder);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sv, _sr, _ss
+        );
+    }
+
+    /// @notice Tx batch registration rejects after expiry
+    function test_TxBatchReg_RejectsAfterExpiry() public {
+        _rejectsAfterExpiryImpl();
+    }
+
+    function _rejectsAfterExpiryImpl() internal {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        {
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
+            ISpokeRegistry.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(reporter);
+            vm.roll(ack.expiryBlock);
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder);
+        }
+        uint256 fee = spoke.quoteRegistration(reporter);
+
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__ForwarderExpired.selector);
+        vm.prank(forwarder);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sv, _sr, _ss
+        );
+    }
+
+    /// @notice Tx batch registration rejects when submitted data differs from acknowledged data
+    function test_TxBatchReg_RejectsDataMismatch() public {
+        _rejectsDataMismatchImpl();
+    }
+
+    function _rejectsDataMismatchImpl() internal {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        {
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
+            _skipToTxBatchRegistrationWindow(reporter);
+        }
+
+        bytes32[] memory wrongTxHashes = new bytes32[](3);
+        wrongTxHashes[0] = keccak256("wrong_tx1");
+        wrongTxHashes[1] = keccak256("wrong_tx2");
+        wrongTxHashes[2] = keccak256("wrong_tx3");
+        {
+            bytes32 wrongDataHash = _computeDataHash(wrongTxHashes, chainIds);
+            _prepareTxBatchRegSig(wrongDataHash, reportedChainId, uint32(wrongTxHashes.length), forwarder);
+        }
+        uint256 fee = spoke.quoteRegistration(reporter);
+
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidDataHash.selector);
+        vm.prank(forwarder);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, _sDeadline, _sNonce, reporter, wrongTxHashes, chainIds, _sv, _sr, _ss
+        );
+    }
+
+    /// @notice Tx batch registration rejects with insufficient fee (0 ETH)
+    function test_TxBatchReg_RejectsInsufficientFee() public {
+        _rejectsInsufficientFeeImpl();
+    }
+
+    function _rejectsInsufficientFeeImpl() internal {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        {
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
+            _skipToTxBatchRegistrationWindow(reporter);
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder);
+        }
+
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InsufficientFee.selector);
+        vm.prank(forwarder);
+        spoke.registerTransactionBatch{ value: 0 }(
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sv, _sr, _ss
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ADMIN ADDITIONAL TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice setHubConfig rejects mismatched config (chainId non-zero, inbox zero)
+    function test_SetHubConfig_RejectsMismatchedConfig() public {
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidHubConfig.selector);
+        spoke.setHubConfig(10, bytes32(0));
+    }
+
+    /// @notice withdrawFees sends ETH to treasury address
+    function test_WithdrawFees_Success() public {
+        address treasury = makeAddr("treasury");
+        uint256 amount = 1 ether;
+
+        // Fund the spoke contract
+        vm.deal(address(spoke), amount);
+
+        // Withdraw as owner
+        spoke.withdrawFees(treasury, amount);
+
+        assertEq(treasury.balance, amount);
+        assertEq(address(spoke).balance, 0);
+    }
+
+    /// @notice withdrawFees rejects zero address
+    function test_WithdrawFees_RejectsZeroAddress() public {
+        vm.deal(address(spoke), 1 ether);
+
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__ZeroAddress.selector);
+        spoke.withdrawFees(address(0), 1 ether);
+    }
+
+    /// @notice withdrawFees rejects non-owner
+    function test_WithdrawFees_RejectsNonOwner() public {
+        address notOwner = makeAddr("notOwner");
+        vm.deal(address(spoke), 1 ether);
+
+        vm.prank(notOwner);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", notOwner));
+        spoke.withdrawFees(makeAddr("treasury"), 1 ether);
     }
 }

@@ -13,8 +13,8 @@ import type { Libp2p } from '@libp2p/interface';
 import { logger } from '@/lib/logger';
 import { getRelayServers, extractPeerIdFromMultiaddr } from '@/lib/p2p/types';
 import { useP2PStore } from '@/stores/p2pStore';
-import { checkRelayConnection, checkPeerConnection } from '@/hooks/p2pConnectionHealthChecks';
-import { computeHealthUpdate } from '@/hooks/p2pConnectionHealthState';
+import { checkRelayConnection, checkPeerConnection } from './p2pConnectionHealthChecks';
+import { computeHealthUpdate } from './p2pConnectionHealthState';
 
 /** Health check interval in milliseconds (30 seconds) */
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
@@ -249,10 +249,12 @@ export function useP2PConnectionHealth({
         return update.next;
       });
 
-      // Execute side effects after setState completes
+      // Execute store update after setState completes.
+      // pendingStoreUpdateRef is set inside the setState updater (synchronous), so by
+      // the time we reach here the flag reliably reflects whether a disconnect was detected.
+      // We update the external Zustand store outside the updater to avoid side-effects
+      // during React's state computation phase.
       if (pendingStoreUpdateRef.current) {
-        // Reset store to false - ping failures have proven the connection is lost
-        // This makes the store symmetric: true on success, false on proven disconnect
         useP2PStore.getState().setConnectedToPeer(false);
       }
 

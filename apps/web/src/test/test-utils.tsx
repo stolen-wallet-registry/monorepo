@@ -1,20 +1,27 @@
 import { render, type RenderOptions } from '@testing-library/react';
 import { type ReactElement, type ReactNode } from 'react';
 import { WagmiProvider, createConfig, http } from 'wagmi';
-import { mainnet } from 'wagmi/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { injected } from 'wagmi/connectors';
+import { defineChain } from 'viem';
 
 interface WrapperProps {
   children: ReactNode;
 }
 
-// Minimal wagmi config for tests - mainnet only for ENS resolution
+// Minimal test chain — avoids importing mainnet or @swr/chains (which needs Multicall3)
+const testChain = defineChain({
+  id: 31337,
+  name: 'Test',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: { default: { http: ['http://127.0.0.1:8545'] } },
+});
+
 const testConfig = createConfig({
-  chains: [mainnet],
+  chains: [testChain],
   connectors: [injected()],
   transports: {
-    [mainnet.id]: http(),
+    [testChain.id]: http(),
   },
 });
 

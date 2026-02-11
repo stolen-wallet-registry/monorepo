@@ -58,7 +58,9 @@ export function detectSearchTypeWithEns(query: string): SearchTypeWithEns {
     if (
       parts.length === 3 &&
       parts[0] === 'eip155' &&
+      parts[1] != null &&
       /^\d+$/.test(parts[1]) &&
+      parts[2] != null &&
       /^0x[0-9a-f]{40}$/.test(parts[2])
     ) {
       return 'caip10';

@@ -66,6 +66,8 @@ interface IContractRegistry {
     event ContractBatchCreated(uint256 indexed batchId, bytes32 indexed operatorId, uint32 contractCount);
 
     /// @notice Emitted when operator submitter address is updated
+    /// @param oldOperatorSubmitter The previous operator submitter address
+    /// @param newOperatorSubmitter The new operator submitter address
     event OperatorSubmitterUpdated(address oldOperatorSubmitter, address newOperatorSubmitter);
 
     // ═══════════════════════════════════════════════════════════════════════════

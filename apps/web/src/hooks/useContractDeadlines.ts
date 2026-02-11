@@ -9,9 +9,12 @@ import { useEffect, useRef } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
 import { getBlockTime } from '@/lib/blocks';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
+
+/** Return type from getDeadlines — identical shape on hub and spoke contracts */
+type DeadlinesTuple = readonly [bigint, bigint, bigint, bigint, bigint, boolean];
 
 // ============================================================================
 // Wallet Registry Deadlines
@@ -21,9 +24,9 @@ export interface DeadlineData {
   currentBlock: bigint;
   expiry: bigint;
   start: bigint;
-  /** Block number when grace period started (rawData[3]) */
+  /** Blocks remaining until grace period starts; 0 if already open or expired (rawData[3]) */
   graceStartsAt: bigint;
-  /** Blocks remaining until window opens (rawData[4]) */
+  /** Blocks remaining until registration window closes (rawData[4]) */
   timeLeft: bigint;
   isExpired: boolean;
 }
@@ -58,41 +61,51 @@ export function useContractDeadlines(
     'useContractDeadlines'
   );
 
-  // Get the correct ABI and function names for hub/spoke
-  const { abi, functions } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
+  const addr = registereeAddress;
+  const enabled = !!addr && !!contractAddress;
 
-  const result = useReadContract({
+  // Split-call: one hook per ABI, only one fires based on registryType
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
+    abi: walletRegistryAbi,
     chainId,
-    functionName: functions.getDeadlines as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
-    args: registereeAddress ? [registereeAddress] : undefined,
+    functionName: 'getDeadlines',
+    args: addr ? [addr] : undefined,
     query: {
-      enabled: !!registereeAddress && !!contractAddress,
+      enabled: !isSpoke && enabled,
       refetchInterval,
       staleTime: refetchInterval / 2,
     },
   });
 
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'getDeadlines',
+    args: addr ? [addr] : undefined,
+    query: {
+      enabled: isSpoke && enabled,
+      refetchInterval,
+      staleTime: refetchInterval / 2,
+    },
+  });
+
+  const result = isSpoke ? spokeResult : hubResult;
+
   // Transform the raw result into a typed object
   // Unified format: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
   let transformedData: DeadlineData | undefined;
   if (result.data) {
-    const rawData = result.data as unknown as readonly [
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      boolean,
-    ];
+    const rawData = result.data as DeadlinesTuple;
     if (rawData.length >= 6) {
       transformedData = {
-        currentBlock: BigInt(rawData[0]),
-        expiry: BigInt(rawData[1]),
-        start: BigInt(rawData[2]),
-        graceStartsAt: BigInt(rawData[3]),
-        timeLeft: BigInt(rawData[4]),
+        currentBlock: rawData[0],
+        expiry: rawData[1],
+        start: rawData[2],
+        graceStartsAt: rawData[3],
+        timeLeft: rawData[4],
         isExpired: Boolean(rawData[5]),
       };
 
@@ -105,8 +118,8 @@ export function useContractDeadlines(
       });
     } else {
       logger.contract.error('Unexpected getDeadlines result structure', {
-        dataLength: (rawData as unknown as unknown[]).length,
-        data: rawData as unknown,
+        dataLength: Array.isArray(rawData) ? rawData.length : 'unknown',
+        data: rawData,
       });
     }
   }
@@ -131,9 +144,9 @@ export interface TxDeadlineData {
   expiry: bigint;
   /** Current block number */
   currentBlock: bigint;
-  /** Block number when grace period started */
+  /** Blocks remaining until grace period starts; 0 if already open or expired */
   graceStartsAt: bigint;
-  /** Blocks remaining until window opens */
+  /** Blocks remaining until registration window closes */
   timeLeft: bigint;
   /** Whether the registration window has expired */
   isExpired: boolean;
@@ -150,7 +163,7 @@ export interface UseTxContractDeadlinesResult {
 /**
  * Hook to read deadline data for a reporter from the transaction registry.
  *
- * Uses the `getDeadlines(reporter)` function which returns all timing info
+ * Uses the `getTransactionDeadlines(reporter)` function which returns all timing info
  * for a pending acknowledgement.
  *
  * @param reporter - The reporter address to get deadlines for
@@ -168,30 +181,40 @@ export function useTxContractDeadlines(
     'useTxContractDeadlines'
   );
 
-  // Get the correct ABI and function names for hub/spoke
-  const { abi, functions } = getRegistryMetadata('transaction', registryType);
-
+  const isSpoke = registryType === 'spoke';
   const enabled = !!reporter && !!contractAddress;
 
-  // Read deadlines from contract (hub: getTransactionDeadlines, spoke: getDeadlines)
-  const {
-    data: contractData,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useReadContract({
+  // Both hub TransactionRegistry and SpokeRegistry now use getTransactionDeadlines
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
-    functionName: functions.getDeadlines as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- dynamic function name from metadata
+    abi: transactionRegistryAbi,
+    functionName: 'getTransactionDeadlines',
     args: reporter ? [reporter] : undefined,
     chainId,
     query: {
-      enabled,
+      enabled: !isSpoke && enabled,
       staleTime: 3_000,
-      refetchInterval: 3_000, // Poll every 3 seconds for countdown
+      refetchInterval: 3_000,
     },
   });
+
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    functionName: 'getTransactionDeadlines',
+    args: reporter ? [reporter] : undefined,
+    chainId,
+    query: {
+      enabled: isSpoke && enabled,
+      staleTime: 3_000,
+      refetchInterval: 3_000,
+    },
+  });
+
+  const result = isSpoke ? spokeResult : hubResult;
+  const { isLoading, isError, error, refetch } = result;
+
+  const rawDeadlines = result.data as DeadlinesTuple | undefined;
 
   // Track previous log key to avoid duplicate logs
   const prevLogKeyRef = useRef<string | null>(null);
@@ -205,57 +228,41 @@ export function useTxContractDeadlines(
         reporter,
         error: error?.message,
       });
-    } else if (contractData) {
-      // Cast to typed tuple for safe indexing
-      const raw = contractData as unknown as readonly [
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        boolean,
-      ];
-      const logKey = `${reporter}-${raw[0]?.toString()}`;
+    } else if (rawDeadlines) {
+      const logKey = `${reporter}-${rawDeadlines[0]?.toString()}`;
       if (logKey !== prevLogKeyRef.current) {
         prevLogKeyRef.current = logKey;
         logger.contract.debug('Transaction registry deadlines read', {
           reporter,
-          currentBlock: raw[0]?.toString(),
-          expiryBlock: raw[1]?.toString(),
-          startBlock: raw[2]?.toString(),
-          graceStartsAt: raw[3]?.toString(),
-          timeLeft: raw[4]?.toString(),
-          isExpired: raw[5],
+          currentBlock: rawDeadlines[0]?.toString(),
+          expiryBlock: rawDeadlines[1]?.toString(),
+          startBlock: rawDeadlines[2]?.toString(),
+          graceStartsAt: rawDeadlines[3]?.toString(),
+          timeLeft: rawDeadlines[4]?.toString(),
+          isExpired: rawDeadlines[5],
         });
       }
     }
-  }, [isError, contractData, chainId, contractAddress, reporter, error?.message]);
+  }, [isError, rawDeadlines, chainId, contractAddress, reporter, error?.message]);
 
   // Map contract result to TxDeadlineData
   // Returns: (currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)
   let data: TxDeadlineData | undefined;
 
-  if (contractData) {
-    const raw = contractData as unknown as readonly [
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      boolean,
-    ];
+  if (rawDeadlines) {
+    const raw = rawDeadlines;
     if (raw.length >= 6 && raw[0] !== undefined) {
       data = {
-        currentBlock: BigInt(raw[0]),
-        expiry: BigInt(raw[1]),
-        start: BigInt(raw[2]),
-        graceStartsAt: BigInt(raw[3]),
-        timeLeft: BigInt(raw[4]),
+        currentBlock: raw[0],
+        expiry: raw[1],
+        start: raw[2],
+        graceStartsAt: raw[3],
+        timeLeft: raw[4],
         isExpired: Boolean(raw[5]),
       };
     } else {
       logger.contract.error('useTxContractDeadlines: Invalid contractData shape', {
-        contractData: contractData as unknown,
+        dataLength: rawDeadlines.length,
         reporter,
         chainId,
       });

@@ -51,7 +51,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     mapping(address => TransactionAcknowledgementData) private _pendingAcknowledgements;
 
     /// @notice Nonces for replay protection (keyed to reporter address)
-    mapping(address => uint256) public transactionNonces;
+    mapping(address => uint256) public nonces;
 
     /// @notice Hub address for cross-chain registrations
     address public hub;
@@ -198,7 +198,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     /// @inheritdoc ITransactionRegistry
     function isTransactionPending(address reporter) external view returns (bool) {
         TransactionAcknowledgementData memory ack = _pendingAcknowledgements[reporter];
-        return ack.forwarder != address(0) && block.number < ack.deadline;
+        return ack.trustedForwarder != address(0) && block.number < ack.deadline;
     }
 
     /// @inheritdoc ITransactionRegistry
@@ -244,7 +244,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,
-        address forwarder,
+        address trustedForwarder,
         uint8 step
     ) external view returns (uint256 deadline, bytes32 hashStruct) {
         if (step != 1 && step != 2) revert TransactionRegistry__InvalidStep();
@@ -256,11 +256,11 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
                     EIP712Constants.TX_BATCH_ACK_TYPEHASH,
                     EIP712Constants.TX_ACK_STATEMENT_HASH,
                     msg.sender, // reporter
-                    forwarder,
+                    trustedForwarder,
                     dataHash,
                     reportedChainId,
                     transactionCount,
-                    transactionNonces[msg.sender],
+                    nonces[msg.sender],
                     deadline
                 )
             );
@@ -271,11 +271,11 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
                     EIP712Constants.TX_BATCH_REG_TYPEHASH,
                     EIP712Constants.TX_REG_STATEMENT_HASH,
                     msg.sender,
-                    forwarder,
+                    trustedForwarder,
                     dataHash,
                     reportedChainId,
                     transactionCount,
-                    transactionNonces[msg.sender],
+                    nonces[msg.sender],
                     deadline
                 )
             );
@@ -327,7 +327,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     /// @dev Verify EIP-712 acknowledgement signature (internal to reduce stack depth in caller)
     function _verifyAckSignature(
         address reporter,
-        address forwarder,
+        address trustedForwarder,
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,
@@ -343,7 +343,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
                     EIP712Constants.TX_BATCH_ACK_TYPEHASH,
                     EIP712Constants.TX_ACK_STATEMENT_HASH,
                     reporter,
-                    forwarder,
+                    trustedForwarder,
                     dataHash,
                     reportedChainId,
                     transactionCount,
@@ -361,7 +361,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     /// @inheritdoc ITransactionRegistry
     function acknowledgeTransactions(
         address reporter,
-        address forwarder,
+        address trustedForwarder,
         uint256 deadline,
         bytes32 dataHash,
         bytes32 reportedChainId,
@@ -369,9 +369,9 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external payable {
+    ) external {
         if (reporter == address(0)) revert TransactionRegistry__ZeroAddress();
-        if (forwarder == address(0)) revert TransactionRegistry__ZeroAddress();
+        if (trustedForwarder == address(0)) revert TransactionRegistry__ZeroAddress();
         if (dataHash == bytes32(0)) revert TransactionRegistry__DataHashMismatch();
         if (transactionCount == 0) revert TransactionRegistry__EmptyBatch();
         if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
@@ -379,21 +379,23 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         // Check not already acknowledged
         {
             TransactionAcknowledgementData memory existing = _pendingAcknowledgements[reporter];
-            if (existing.forwarder != address(0) && block.number < existing.deadline) {
+            if (existing.trustedForwarder != address(0) && block.number < existing.deadline) {
                 revert TransactionRegistry__AlreadyAcknowledged();
             }
         }
 
-        uint256 nonce = transactionNonces[reporter];
+        uint256 nonce = nonces[reporter];
 
         // Verify EIP-712 signature (includes real reportedChainId + transactionCount)
-        _verifyAckSignature(reporter, forwarder, dataHash, reportedChainId, transactionCount, nonce, deadline, v, r, s);
+        _verifyAckSignature(
+            reporter, trustedForwarder, dataHash, reportedChainId, transactionCount, nonce, deadline, v, r, s
+        );
 
         // Increment nonce
-        transactionNonces[reporter]++;
+        nonces[reporter]++;
 
-        // Derive isSponsored: if forwarder != reporter, someone else is paying
-        bool isSponsored = reporter != forwarder;
+        // Derive isSponsored: if trustedForwarder != reporter, someone else is paying
+        bool isSponsored = reporter != trustedForwarder;
 
         // Store acknowledgement (including reportedChainId + transactionCount for register-phase validation)
         _pendingAcknowledgements[reporter] = TransactionAcknowledgementData({
@@ -402,12 +404,12 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
             gracePeriodStart: TimingConfig.getGracePeriodEndBlock(graceBlocks),
             dataHash: dataHash,
             reportedChainId: reportedChainId,
-            forwarder: forwarder,
+            trustedForwarder: trustedForwarder,
             transactionCount: transactionCount,
             isSponsored: isSponsored
         });
 
-        emit TransactionBatchAcknowledged(reporter, forwarder, dataHash, isSponsored);
+        emit TransactionBatchAcknowledged(reporter, trustedForwarder, dataHash, isSponsored);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -499,7 +501,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         bytes32 s
     ) internal view {
         bytes32 structHash = _buildTxBatchRegStructHash(
-            dataHash, reportedChainId, deadline, transactionNonces[reporter], reporter, txCount
+            dataHash, reportedChainId, deadline, nonces[reporter], reporter, txCount
         );
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = ECDSA.recover(digest, v, r, s);
@@ -525,7 +527,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
 
         // Load and validate acknowledgement
         TransactionAcknowledgementData memory ack = _pendingAcknowledgements[reporter];
-        if (ack.forwarder != msg.sender) revert TransactionRegistry__NotAuthorizedForwarder();
+        if (ack.trustedForwarder != msg.sender) revert TransactionRegistry__InvalidForwarder();
         if (block.number < ack.gracePeriodStart) revert TransactionRegistry__GracePeriodNotStarted();
         if (block.number >= ack.deadline) revert TransactionRegistry__DeadlineExpired();
 
@@ -544,7 +546,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         );
 
         // === EFFECTS ===
-        transactionNonces[reporter]++;
+        nonces[reporter]++;
         delete _pendingAcknowledgements[reporter];
 
         _executeTxBatchRegistration(reporter, dataHash, ack.isSponsored, transactionHashes, chainIds);

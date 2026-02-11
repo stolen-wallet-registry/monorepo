@@ -129,14 +129,21 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
     // UNIFIED QUERY INTERFACE - CAIP-10 String
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // TODO: Phase 10 — replace length-based routing with namespace-based routing for non-EVM CAIP-10 support
     /// @inheritdoc IFraudRegistryHub
+    /// @notice Check if any identifier is registered across all registries
+    /// @param caip10 The CAIP-10 identifier (e.g., "eip155:8453:0x742d35...")
+    /// @return True if registered in any registry
     function isRegistered(string calldata caip10) external view returns (bool) {
         // Parse CAIP-10 to determine identifier length
         (,,, uint256 addrLen) = CAIP10.parse(caip10);
 
         // Determine type based on identifier length
         // 42 chars (0x + 40 hex) = EVM address (20 bytes)
-        // 64 chars (no 0x) or 66 chars (0x + 64 hex) = transaction hash (32 bytes)
+        // 66 chars (0x + 64 hex) = transaction hash (32 bytes)
+        //
+        // NOTE: We intentionally do NOT accept 64-char (no 0x) transaction hashes.
+        // Enforcing a single canonical format avoids ambiguous client behavior.
 
         if (addrLen == 42) {
             // Could be wallet or contract - check both
@@ -151,7 +158,7 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
                 }
             }
             return false;
-        } else if (addrLen == 64 || addrLen == 66) {
+        } else if (addrLen == 66) {
             // Transaction hash
             if (transactionRegistry != address(0)) {
                 return ITransactionRegistry(transactionRegistry).isTransactionRegistered(caip10);
@@ -159,10 +166,14 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
             return false;
         }
 
-        return false;
+        revert FraudRegistryHub__InvalidIdentifierLength();
     }
 
+    // TODO: Phase 10 — replace length-based routing with namespace-based routing for non-EVM CAIP-10 support
     /// @inheritdoc IFraudRegistryHub
+    /// @notice Get the registry type(s) where an identifier is registered
+    /// @param caip10 The CAIP-10 identifier
+    /// @return registeredIn Array of registry types where identifier is registered
     function getRegisteredTypes(string calldata caip10) external view returns (RegistryType[] memory registeredIn) {
         (,,, uint256 addrLen) = CAIP10.parse(caip10);
 
@@ -181,7 +192,7 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
                 isContract = true;
                 count++;
             }
-        } else if (addrLen == 64 || addrLen == 66) {
+        } else if (addrLen == 66) {
             if (
                 transactionRegistry != address(0)
                     && ITransactionRegistry(transactionRegistry).isTransactionRegistered(caip10)
@@ -189,6 +200,8 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
                 isTransaction = true;
                 count++;
             }
+        } else {
+            revert FraudRegistryHub__InvalidIdentifierLength();
         }
 
         registeredIn = new RegistryType[](count);

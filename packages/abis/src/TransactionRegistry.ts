@@ -42,7 +42,7 @@ export const TransactionRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -83,7 +83,7 @@ export const TransactionRegistryABI = [
       },
     ],
     outputs: [],
-    stateMutability: 'payable',
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -174,7 +174,7 @@ export const TransactionRegistryABI = [
         internalType: 'uint32',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -240,7 +240,7 @@ export const TransactionRegistryABI = [
             internalType: 'bytes32',
           },
           {
-            name: 'forwarder',
+            name: 'trustedForwarder',
             type: 'address',
             internalType: 'address',
           },
@@ -556,6 +556,25 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'function',
+    name: 'nonces',
+    inputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'operatorSubmitter',
     inputs: [],
     outputs: [
@@ -826,25 +845,6 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'function',
-    name: 'transactionNonces',
-    inputs: [
-      {
-        name: '',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
-    outputs: [
-      {
-        name: '',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
     name: 'transferOwnership',
     inputs: [
       {
@@ -987,7 +987,7 @@ export const TransactionRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         indexed: true,
         internalType: 'address',
@@ -1227,6 +1227,11 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TransactionRegistry__InvalidForwarder',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TransactionRegistry__InvalidSignature',
     inputs: [],
   },
@@ -1243,11 +1248,6 @@ export const TransactionRegistryABI = [
   {
     type: 'error',
     name: 'TransactionRegistry__NotAcknowledged',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'TransactionRegistry__NotAuthorizedForwarder',
     inputs: [],
   },
   {

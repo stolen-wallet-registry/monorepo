@@ -1,0 +1,175 @@
+# Transaction Registry
+
+Registers fraudulent transactions in batches. Unlike the Wallet Registry (which marks an entire wallet), this registry flags specific transaction hashes -- useful for phishing attacks, address poisoning, or fraudulent approvals where the wallet itself may not be compromised.
+
+**Who can submit:** Individuals (with EIP-712 signatures) and DAO-approved operators (batch submissions via OperatorSubmitter).
+
+## Storage
+
+```solidity
+mapping(bytes32 => TransactionEntry) private _transactions;
+```
+
+Storage key is chain-specific:
+
+```solidity
+key = keccak256(abi.encode(txHash, chainId))
+```
+
+The same transaction hash on different chains produces different storage keys. This is correct because unlike wallets, a transaction is inherently bound to one chain.
+
+## TransactionEntry
+
+```solidity
+struct TransactionEntry {
+    bytes32 reportedChainId;   // CAIP-2 hash of chain where tx occurred
+    bytes32 sourceChainId;     // CAIP-2 hash of chain where registration was submitted
+    bytes32 messageId;         // Cross-chain message ID (bytes32(0) for local)
+    address reporter;          // Address that reported this tx
+    uint64  registeredAt;      // Block timestamp of registration
+    uint8   bridgeId;          // 0 = local, 1 = Hyperlane
+    bool    isSponsored;       // True if someone else paid gas
+}
+```
+
+## The dataHash Commitment Pattern
+
+Transaction registration uses a commit-reveal scheme to prevent front-running. During the acknowledge phase, the reporter commits to a hash of the batch without revealing which transactions are being reported.
+
+```mermaid
+sequenceDiagram
+    participant R as Reporter
+    participant C as TransactionRegistry
+
+    Note over R: Compute dataHash =<br/>keccak256(abi.encode(txHashes, chainIds))
+    R->>C: acknowledgeTransactions(..., dataHash, ...)
+    Note over C: Store dataHash commitment<br/>Start grace period
+    Note over R,C: ~1-4 min randomized delay
+    R->>C: registerTransactions(..., txHashes[], chainIds[])
+    Note over C: Recompute dataHash from arrays<br/>Verify it matches commitment<br/>Register each transaction
+```
+
+**Why this matters:** Without the commit-reveal, a front-runner could see the acknowledge transaction in the mempool, extract the transaction hashes, and register them first. The dataHash ensures the contents stay hidden until the registration phase.
+
+## Two-Phase Registration
+
+### Phase 1: Acknowledge
+
+```solidity
+function acknowledgeTransactions(
+    address reporter,
+    address trustedForwarder,
+    uint256 deadline,           // EIP-712 signature expiry (timestamp)
+    bytes32 dataHash,           // keccak256(abi.encode(txHashes, chainIds))
+    bytes32 reportedChainId,    // CAIP-2 hash
+    uint32  transactionCount,   // Number of txs in batch
+    uint8 v, bytes32 r, bytes32 s
+) external;
+```
+
+- Verifies EIP-712 signature from `reporter`
+- `dataHash` must not be `bytes32(0)`
+- `transactionCount` must not be 0
+- Stores `TransactionAcknowledgementData` with the commitment
+- Emits `TransactionBatchAcknowledged(reporter, trustedForwarder, dataHash, isSponsored)`
+
+Both `reportedChainId` and `transactionCount` are included in the EIP-712 signature and stored for validation during Phase 2.
+
+### Phase 2: Register
+
+```solidity
+function registerTransactions(
+    address   reporter,
+    uint256   deadline,
+    bytes32[] transactionHashes,   // The actual tx hashes (revealed)
+    bytes32[] chainIds,            // Per-tx chain IDs
+    uint8 v, bytes32 r, bytes32 s
+) external payable;
+```
+
+- **Only** `trustedForwarder` can call this (`msg.sender` must match stored forwarder)
+- Recomputes `dataHash = keccak256(abi.encode(transactionHashes, chainIds))` and verifies it matches the committed value
+- Validates `transactionHashes.length == transactionCount` from the ack phase
+- Registers each transaction, skipping zeros and already-registered entries
+- Collects fee (if FeeManager configured)
+- Emits `TransactionRegistered` per entry, then `TransactionBatchRegistered` as batch summary
+
+## TransactionBatch
+
+```solidity
+struct TransactionBatch {
+    bytes32 operatorId;        // bytes32(0) for individual/cross-chain
+    bytes32 dataHash;          // Committed hash (bytes32(0) for operator)
+    address reporter;          // address(0) for operator
+    uint64  timestamp;
+    uint32  transactionCount;  // Actual count (excludes skipped)
+}
+```
+
+## Event Ordering and Batch Linking
+
+Per-entry `TransactionRegistered` events fire **before** the `TransactionBatchRegistered` summary event, all in the same transaction.
+
+```
+tx 0xabc...
+  ├── TransactionRegistered(txHash1, chainId1, reporter, isSponsored)
+  ├── TransactionRegistered(txHash2, chainId2, reporter, isSponsored)
+  └── TransactionBatchRegistered(batchId, reporter, dataHash, count, isSponsored)
+```
+
+The indexer joins per-entry events to their batch by matching on `transactionHash` (the on-chain tx hash, not the reported fraud tx hash). All events in the same transaction share this value. This means per-entry events carry **zero extra gas** for batch association -- no batchId field needed on each entry.
+
+## Other Registration Paths
+
+### Cross-Chain (Hub Only)
+
+```solidity
+function registerTransactionsFromHub(
+    address   reporter,
+    bytes32   dataHash,
+    bytes32   reportedChainId,
+    bytes32   sourceChainId,
+    bool      isSponsored,
+    bytes32[] transactionHashes,
+    bytes32[] chainIds,
+    uint8     bridgeId,
+    bytes32   messageId
+) external onlyHub;
+```
+
+Called by `FraudRegistryHub` when a cross-chain message arrives. Emits both `TransactionRegistered` and `CrossChainTransactionRegistered` per entry, then a single `TransactionBatchRegistered`. No duplicate batch event.
+
+### Operator Batch
+
+```solidity
+function registerTransactionsFromOperator(
+    bytes32   operatorId,
+    bytes32[] transactionHashes,
+    bytes32[] chainIds
+) external onlyOperatorSubmitter returns (uint256 batchId);
+```
+
+Single-phase, no signatures. Sets `reporter = address(0)` on entries. Emits `TransactionRegistered` per entry, then `TransactionBatchCreated` as the batch summary.
+
+## Events
+
+| Event                             | When                           | Key fields                                                           |
+| --------------------------------- | ------------------------------ | -------------------------------------------------------------------- |
+| `TransactionBatchAcknowledged`    | Phase 1 complete               | `reporter`, `trustedForwarder`, `dataHash`, `isSponsored`            |
+| `TransactionRegistered`           | Per-entry (all paths)          | `identifier` (txHash), `reportedChainId`, `reporter`, `isSponsored`  |
+| `TransactionBatchRegistered`      | Individual / cross-chain batch | `batchId`, `reporter`, `dataHash`, `transactionCount`, `isSponsored` |
+| `CrossChainTransactionRegistered` | Cross-chain per-entry          | `identifier`, `sourceChainId`, `bridgeId`, `messageId`               |
+| `TransactionBatchCreated`         | Operator batch                 | `batchId`, `operatorId`, `transactionCount`                          |
+
+## View Functions
+
+| Function                                                   | Returns                                                                     |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `isTransactionRegistered(string chainQualifiedRef)`        | Whether tx is registered (string interface, format: `eip155:8453:0xabc...`) |
+| `isTransactionRegistered(bytes32 txHash, bytes32 chainId)` | Whether tx is registered (gas-efficient overload)                           |
+| `getTransactionEntry(...)`                                 | Full `TransactionEntry` struct (both overloads)                             |
+| `isTransactionPending(address reporter)`                   | Whether reporter has active acknowledgement                                 |
+| `getTransactionDeadlines(address reporter)`                | Grace period timing                                                         |
+| `generateTransactionHashStruct(...)`                       | EIP-712 hash struct for frontend signature generation                       |
+| `nonces(address reporter)`                                 | Current nonce for replay protection                                         |
+| `getTransactionBatch(uint256 batchId)`                     | Batch metadata                                                              |

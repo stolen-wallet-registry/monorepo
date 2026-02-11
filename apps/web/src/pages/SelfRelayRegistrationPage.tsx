@@ -82,10 +82,10 @@ export function SelfRelayRegistrationPage() {
 
   // Redirect if registeree is already registered (can't register same wallet twice)
   useEffect(() => {
-    if (!isCheckingRegistration && registereeAlreadyRegistered) {
-      setLocation('/register/wallets');
+    if (!isCheckingRegistration && registereeAlreadyRegistered && step !== 'success') {
+      setLocation('/register/wallet');
     }
-  }, [isCheckingRegistration, registereeAlreadyRegistered, setLocation]);
+  }, [isCheckingRegistration, registereeAlreadyRegistered, step, setLocation]);
 
   if (!isConnected) {
     return null;
@@ -105,7 +105,7 @@ export function SelfRelayRegistrationPage() {
   }
 
   // Block if registeree is already registered (redirect will happen via useEffect)
-  if (registereeAlreadyRegistered) {
+  if (registereeAlreadyRegistered && step !== 'success') {
     return null;
   }
 

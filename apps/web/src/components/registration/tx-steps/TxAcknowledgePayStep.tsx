@@ -167,7 +167,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     nonce: isSpoke ? storedSignature?.nonce : undefined,
     deadline: storedSignature?.deadline,
     signature: parsedSigForEstimate,
-    enabled: !!storedSignature && !!dataHash && !!reportedChainIdHash && isCorrectWallet, // Only estimate gas when correct wallet is connected
+    enabled: !!storedSignature && !!dataHash && !!reportedChainIdHash && isCorrectWallet && !hash, // Stop polling once tx is submitted
   });
 
   // Map hook state to TransactionStatus

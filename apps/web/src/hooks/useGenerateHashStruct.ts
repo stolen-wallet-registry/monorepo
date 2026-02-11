@@ -4,15 +4,15 @@
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  * The hash struct returned can be used for verification but is typically not needed client-side.
  *
- * Chain-aware: Works with both hub registries (WalletRegistry/TransactionRegistry) and SpokeRegistry (spoke).
+ * Chain-aware: Works with WalletRegistry (hub) and SpokeRegistry (spoke).
  *
- * Contract signature: generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+ * Contract signature: generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
  */
 
 import { useMemo } from 'react';
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import type { SignatureStep } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -28,17 +28,6 @@ export interface UseGenerateHashStructResult {
   isError: boolean;
   error: Error | null;
   refetch: UseReadContractReturnType['refetch'];
-}
-
-export interface UseGenerateHashStructParams {
-  /** The trusted forwarder address (who can submit the tx) */
-  forwarderAddress: Address | undefined;
-  /** The signature step (1 = Acknowledgement, 2 = Registration) */
-  step: SignatureStep;
-  /** Raw EVM chain ID where incident occurred (defaults to current chain) */
-  reportedChainId?: bigint;
-  /** Unix timestamp when incident occurred (defaults to now) */
-  incidentTimestamp?: bigint;
 }
 
 /**
@@ -74,15 +63,15 @@ export function useGenerateHashStruct(
     'useGenerateHashStruct'
   );
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
+  const abi = isSpoke ? spokeRegistryAbi : walletRegistryAbi;
 
   const result = useReadContract({
     address: contractAddress,
     abi,
     chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'generateHashStruct',
-    // Contract signature: (uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+    // Contract signature: (uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
     args: forwarderAddress
       ? [effectiveReportedChainId, effectiveIncidentTimestamp, forwarderAddress, step]
       : undefined,

@@ -20,8 +20,9 @@ contract SeedOperatorData is Script {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONTRACT ADDRESSES (deployed by Deploy.s.sol)
     // ═══════════════════════════════════════════════════════════════════════════
-    // These addresses are deterministic based on deployer nonce
-    // Update if deploy order changes
+    // These addresses are deterministic via regular CREATE (deployer + nonce) from Deploy.s.sol.
+    // They remain stable across fresh Anvil redeploys as long as the deploy order doesn't change.
+    // Override via env vars at runtime if needed.
 
     address constant DEFAULT_OPERATOR_REGISTRY = 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0;
     address constant DEFAULT_FRAUD_REGISTRY_HUB = 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9;

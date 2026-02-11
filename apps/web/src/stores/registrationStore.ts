@@ -4,6 +4,9 @@ import { immer } from 'zustand/middleware/immer';
 import { useShallow } from 'zustand/shallow';
 import { logger } from '@/lib/logger';
 import type { Hash } from '@/lib/types/ethereum';
+import type { RegistrationType, RegistrationStep } from '@/lib/types/registration';
+
+export type { RegistrationType, RegistrationStep } from '@/lib/types/registration';
 
 // BigInt-safe JSON storage for Zustand persist middleware
 // JSON.stringify throws on BigInt - this provides custom serialization
@@ -15,21 +18,6 @@ const bigintStorage = createJSONStorage(() => localStorage, {
       ? BigInt(value.slice(BIGINT_PREFIX.length))
       : value,
 });
-
-export type RegistrationType = 'standard' | 'selfRelay' | 'p2pRelay';
-
-export type RegistrationStep =
-  | 'acknowledge-and-sign'
-  | 'acknowledge-and-pay'
-  | 'switch-and-pay-one'
-  | 'wait-for-connection'
-  | 'acknowledgement-payment'
-  | 'grace-period'
-  | 'register-and-sign'
-  | 'register-and-pay'
-  | 'switch-and-pay-two'
-  | 'registration-payment'
-  | 'success';
 
 export interface RegistrationState {
   registrationType: RegistrationType;
@@ -91,6 +79,15 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
 
         setStep: (step) =>
           set((state) => {
+            const allowedSteps = STEP_SEQUENCES[state.registrationType];
+            if (!allowedSteps.includes(step)) {
+              logger.registration.warn('Attempted to set invalid step for registration type', {
+                registrationType: state.registrationType,
+                attemptedStep: step,
+                allowedSteps,
+              });
+              return;
+            }
             logger.registration.info('Step transition', { from: state.step, to: step });
             state.step = step;
           }),
@@ -149,7 +146,9 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
 
         reset: () => {
           logger.registration.info('Registration state reset');
-          set(initialState);
+          set((state) => {
+            Object.assign(state, initialState);
+          });
         },
       })),
       {
@@ -239,7 +238,7 @@ export function getNextStep(
   if (currentIndex === -1 || currentIndex === sequence.length - 1) {
     return null;
   }
-  return sequence[currentIndex + 1];
+  return sequence[currentIndex + 1] ?? null;
 }
 
 // Helper to get previous step
@@ -252,7 +251,7 @@ export function getPreviousStep(
   if (currentIndex <= 0) {
     return null;
   }
-  return sequence[currentIndex - 1];
+  return sequence[currentIndex - 1] ?? null;
 }
 
 // ============================================================================

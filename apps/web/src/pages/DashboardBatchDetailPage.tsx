@@ -37,12 +37,11 @@ import {
   Info,
 } from 'lucide-react';
 import { formatRelativeTime, formatTimestamp, truncateHash } from '@swr/search';
-import { useBatchDetail, useOperators } from '@/hooks/dashboard';
+import { useBatchDetail, useOperators, formatBatchId, type BatchType } from '@/hooks/dashboard';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { getChainDisplayFromCaip2 } from '@/lib/chains';
 import { extractAddressFromCAIP10, extractCAIP2FromCAIP10 } from '@swr/chains';
-import type { BatchType } from '@/hooks/dashboard';
 
 interface DashboardBatchDetailPageProps {
   params: {
@@ -66,13 +65,22 @@ function SummaryItem({ label, value }: { label: string; value: React.ReactNode }
   );
 }
 
-function CopyableHash({ value }: { value: string }) {
+function CopyableHash({
+  value,
+  displayValue,
+}: {
+  /** The value copied to clipboard */
+  value: string;
+  /** Optional display text (defaults to value) */
+  displayValue?: string;
+}) {
   const { copy, copied } = useCopyToClipboard({ resetMs: 2000 });
+  const display = displayValue ?? value;
   return (
     <div className="flex items-center gap-2">
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="font-mono text-sm">{truncateHash(value, 10, 6)}</span>
+          <span className="font-mono text-sm">{truncateHash(display, 10, 6)}</span>
         </TooltipTrigger>
         <TooltipContent side="top">
           <p className="text-xs font-mono break-all">{value}</p>
@@ -345,7 +353,15 @@ function BatchDetailContent({
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              <SummaryItem label="Batch ID" value={<CopyableHash value={data.batch.id} />} />
+              <SummaryItem
+                label="Batch ID"
+                value={
+                  <CopyableHash
+                    value={data.batch.id}
+                    displayValue={formatBatchId(batchType, data.batch.id)}
+                  />
+                }
+              />
               {'dataHash' in data.batch && data.batch.dataHash && (
                 <SummaryItem
                   label="Data Hash"

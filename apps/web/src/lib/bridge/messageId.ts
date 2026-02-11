@@ -55,8 +55,9 @@ async function extractHyperlaneMessageId(logs: Log[]): Promise<Hash | null> {
     const minimalReceipt = { logs } as TransactionReceipt;
     const messages = HyperlaneCore.getDispatchedMessages(minimalReceipt);
 
-    if (messages.length > 0) {
-      const messageId = messages[0].id as Hash;
+    const firstMessage = messages[0];
+    if (messages.length > 0 && firstMessage) {
+      const messageId = firstMessage.id as Hash;
       logger.registration.info('Extracted Hyperlane message ID via SDK', {
         messageId,
         messageCount: messages.length,

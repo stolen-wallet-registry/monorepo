@@ -130,15 +130,19 @@ interface ISpokeRegistry {
     error SpokeRegistry__EmptyBatch();
     error SpokeRegistry__ArrayLengthMismatch();
     error SpokeRegistry__InvalidDataHash();
+    error SpokeRegistry__DataMismatch();
+    error SpokeRegistry__InvalidStep();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Phase 1: Record acknowledgement with EIP-712 signature
-    /// @dev Caller becomes trusted forwarder. Signature includes incident details.
-    ///      Function signature aligns with hub for frontend consistency.
-    /// @param wallet Wallet address being registered as stolen
+    /// @dev Forwarder is specified explicitly for relay/meta-tx flexibility.
+    ///      Signature includes incident details and forwarder address.
+    ///      Function signature unified with hub WalletRegistry.
+    /// @param registeree Wallet address being registered as stolen
+    /// @param forwarder Address authorized to complete registration (can be same as registeree)
     /// @param reportedChainId Chain ID where theft occurred (converted to CAIP-2 hash internally)
     /// @param incidentTimestamp Unix timestamp when theft occurred (user-provided)
     /// @param deadline Signature expiry timestamp
@@ -146,8 +150,9 @@ interface ISpokeRegistry {
     /// @param v Signature v component
     /// @param r Signature r component
     /// @param s Signature s component
-    function acknowledgeLocal(
-        address wallet,
+    function acknowledge(
+        address registeree,
+        address forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -158,9 +163,10 @@ interface ISpokeRegistry {
     ) external;
 
     /// @notice Phase 2: Complete registration and send to hub
-    /// @dev Must be called by trusted forwarder within registration window.
-    ///      Function signature aligns with hub for frontend consistency.
-    /// @param wallet Wallet address being registered
+    /// @dev Must be called by authorized forwarder within registration window.
+    ///      Function signature unified with hub WalletRegistry.
+    /// @param registeree Wallet address being registered
+    /// @param forwarder Address authorized to complete registration (must match acknowledge phase, validated against msg.sender)
     /// @param reportedChainId Chain ID (must match acknowledgement, converted to CAIP-2 hash)
     /// @param incidentTimestamp Incident timestamp (must match acknowledgement)
     /// @param deadline Signature expiry timestamp
@@ -168,8 +174,9 @@ interface ISpokeRegistry {
     /// @param v Signature v component
     /// @param r Signature r component
     /// @param s Signature s component
-    function registerLocal(
-        address wallet,
+    function register(
+        address registeree,
+        address forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -269,8 +276,9 @@ interface ISpokeRegistry {
     /// @return The fee breakdown struct
     function quoteFeeBreakdown(address owner) external view returns (FeeBreakdown memory);
 
-    /// @notice Generate hash struct for signing (frontend helper)
-    /// @dev Function signature aligns with hub for frontend consistency.
+    /// @notice Generate hash struct for wallet signing (frontend helper)
+    /// @dev Uses msg.sender as the wallet address. Must be called by the actual wallet owner.
+    ///      Function signature aligns with hub for frontend consistency.
     /// @param reportedChainId Chain ID where incident occurred
     /// @param incidentTimestamp When theft occurred
     /// @param forwarder Address that will submit the transaction
@@ -282,7 +290,25 @@ interface ISpokeRegistry {
         view
         returns (uint256 deadline, bytes32 hashStruct);
 
-    /// @notice Get deadline info for pending registration
+    /// @notice Generate hash struct for transaction batch signing (frontend helper)
+    /// @dev Uses msg.sender as the reporter address. Must be called by the actual reporter.
+    ///      Function signature aligns with hub TransactionRegistry for frontend consistency.
+    /// @param dataHash Hash of (txHashes, chainIds) — signature commitment
+    /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
+    /// @param transactionCount Number of transactions in batch
+    /// @param forwarder Address that will submit the transaction
+    /// @param step 1 for acknowledgement, 2 for registration
+    /// @return deadline Signature expiry timestamp
+    /// @return hashStruct Hash to sign
+    function generateTransactionHashStruct(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount,
+        address forwarder,
+        uint8 step
+    ) external view returns (uint256 deadline, bytes32 hashStruct);
+
+    /// @notice Get deadline info for pending wallet registration
     /// @param session The wallet address (session)
     /// @return currentBlock The current block number
     /// @return expiryBlock The block when registration window closes
@@ -291,6 +317,26 @@ interface ISpokeRegistry {
     /// @return timeLeft Blocks until expiry
     /// @return isExpired Whether the registration window has closed
     function getDeadlines(address session)
+        external
+        view
+        returns (
+            uint256 currentBlock,
+            uint256 expiryBlock,
+            uint256 startBlock,
+            uint256 graceStartsAt,
+            uint256 timeLeft,
+            bool isExpired
+        );
+
+    /// @notice Get deadline info for pending transaction batch registration
+    /// @param reporter The reporter address
+    /// @return currentBlock The current block number
+    /// @return expiryBlock The block when registration window closes
+    /// @return startBlock The block when grace period ends
+    /// @return graceStartsAt Blocks until grace period ends
+    /// @return timeLeft Blocks until expiry
+    /// @return isExpired Whether the registration window has closed
+    function getTransactionDeadlines(address reporter)
         external
         view
         returns (

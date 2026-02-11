@@ -31,7 +31,7 @@ export interface SignParams {
   /** The wallet address being registered */
   wallet: Address;
   /** The trusted forwarder who can submit the transaction */
-  forwarder: Address;
+  trustedForwarder: Address;
   /** Raw EVM chain ID where incident occurred (e.g., 1 for mainnet, 8453 for Base) */
   reportedChainId: bigint;
   /** Unix timestamp when the incident occurred */
@@ -48,7 +48,7 @@ export interface SignParams {
 function toMessage(params: SignParams) {
   return {
     wallet: params.wallet,
-    forwarder: params.forwarder,
+    trustedForwarder: params.trustedForwarder,
     reportedChainId: params.reportedChainId,
     incidentTimestamp: params.incidentTimestamp,
     nonce: params.nonce,
@@ -120,7 +120,7 @@ export function useSignEIP712(): UseSignEIP712Result {
       contractAddress: validatedAddress,
       isHub,
       wallet: params.wallet,
-      forwarder: params.forwarder,
+      trustedForwarder: params.trustedForwarder,
       reportedChainId: params.reportedChainId.toString(),
       incidentTimestamp: params.incidentTimestamp.toString(),
       nonce: params.nonce.toString(),
@@ -165,7 +165,7 @@ export function useSignEIP712(): UseSignEIP712Result {
       contractAddress: validatedAddress,
       isHub,
       wallet: params.wallet,
-      forwarder: params.forwarder,
+      trustedForwarder: params.trustedForwarder,
       reportedChainId: params.reportedChainId.toString(),
       incidentTimestamp: params.incidentTimestamp.toString(),
       nonce: params.nonce.toString(),

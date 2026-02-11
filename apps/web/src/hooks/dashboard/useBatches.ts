@@ -18,6 +18,17 @@ import type { Address, Hash } from '@/lib/types/ethereum';
 
 export type BatchType = 'wallet' | 'transaction' | 'contract';
 
+const BATCH_PREFIX: Record<BatchType, string> = {
+  wallet: 'W',
+  transaction: 'TX',
+  contract: 'C',
+};
+
+/** Format a batch ID with a registry-type prefix for display (e.g. "W-1", "TX-2", "C-3"). */
+export function formatBatchId(type: BatchType, rawId: string): string {
+  return `${BATCH_PREFIX[type]}-${rawId}`;
+}
+
 export interface BatchSummary {
   /** Batch ID (uint256 as string) */
   id: string;

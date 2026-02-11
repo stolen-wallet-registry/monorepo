@@ -9,22 +9,15 @@ import { immer } from 'zustand/middleware/immer';
 import { useShallow } from 'zustand/shallow';
 import { logger } from '@/lib/logger';
 import type { Hash } from '@/lib/types/ethereum';
+import type {
+  TransactionRegistrationType,
+  TransactionRegistrationStep,
+} from '@/lib/types/registration';
 
-export type TransactionRegistrationType = 'standard' | 'selfRelay' | 'p2pRelay';
-
-export type TransactionRegistrationStep =
-  | 'select-transactions'
-  | 'acknowledge-sign'
-  | 'acknowledge-pay'
-  | 'switch-and-pay-ack'
-  | 'wait-for-connection'
-  | 'acknowledgement-payment'
-  | 'grace-period'
-  | 'register-sign'
-  | 'register-pay'
-  | 'switch-and-pay-reg'
-  | 'registration-payment'
-  | 'success';
+export type {
+  TransactionRegistrationType,
+  TransactionRegistrationStep,
+} from '@/lib/types/registration';
 
 export interface TransactionRegistrationState {
   registrationType: TransactionRegistrationType;
@@ -213,7 +206,7 @@ export function getTxNextStep(
   if (currentIndex === -1 || currentIndex === sequence.length - 1) {
     return null;
   }
-  return sequence[currentIndex + 1];
+  return sequence[currentIndex + 1] ?? null;
 }
 
 export function getTxPreviousStep(
@@ -225,7 +218,7 @@ export function getTxPreviousStep(
   if (currentIndex <= 0) {
     return null;
   }
-  return sequence[currentIndex - 1];
+  return sequence[currentIndex - 1] ?? null;
 }
 
 // Selectors

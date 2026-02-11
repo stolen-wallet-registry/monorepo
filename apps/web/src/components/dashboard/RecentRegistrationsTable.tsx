@@ -129,7 +129,11 @@ function RegistrationRow({ entry, operatorNames }: RegistrationRowProps) {
 
   // Parse chain info from CAIP-2
   const chainParts = entry.chainId.split(':');
-  const { chainId, name: chainName, Icon: ChainIcon } = getChainInfo(chainParts[0], chainParts[1]);
+  const {
+    chainId,
+    name: chainName,
+    Icon: ChainIcon,
+  } = getChainInfo(chainParts[0] ?? '', chainParts[1] ?? '');
 
   // Resolve explorer URLs (returns null for unsupported chains)
   const identifierHref =

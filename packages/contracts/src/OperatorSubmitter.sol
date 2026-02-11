@@ -38,6 +38,7 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
     error OperatorSubmitter__ArrayLengthMismatch();
     error OperatorSubmitter__InsufficientFee();
     error OperatorSubmitter__FeeForwardFailed();
+    error OperatorSubmitter__RefundFailed();
     error OperatorSubmitter__InvalidFeeConfig();
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -69,6 +70,10 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
     event FeeRecipientSet(address indexed feeRecipient);
 
     /// @notice Emitted when an operator batch is submitted to a registry
+    /// @param operator The operator address that submitted the batch
+    /// @param registry The registry contract the batch was submitted to
+    /// @param batchId The ID assigned to this batch
+    /// @param entryCount The number of entries in the batch
     event BatchSubmitted(address indexed operator, address indexed registry, uint256 batchId, uint32 entryCount);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -162,10 +167,19 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
             revert OperatorSubmitter__InsufficientFee();
         }
 
-        if (feeRecipient != address(0) && msg.value > 0) {
-            (bool success,) = feeRecipient.call{ value: msg.value }("");
+        if (feeRecipient != address(0) && requiredFee > 0) {
+            (bool success,) = feeRecipient.call{ value: requiredFee }("");
             if (!success) {
                 revert OperatorSubmitter__FeeForwardFailed();
+            }
+        }
+
+        // Refund excess ETH to caller (consistent with WalletRegistry, TransactionRegistry, SpokeRegistry)
+        uint256 excess = msg.value - requiredFee;
+        if (excess > 0) {
+            (bool refundSuccess,) = msg.sender.call{ value: excess }("");
+            if (!refundSuccess) {
+                revert OperatorSubmitter__RefundFailed();
             }
         }
     }

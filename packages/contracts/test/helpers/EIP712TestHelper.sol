@@ -2,11 +2,13 @@
 pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
+import { EIP712Constants } from "../../src/libraries/EIP712Constants.sol";
 
 /// @title EIP712TestHelper
 /// @notice Shared EIP-712 constants and signing utilities for tests
 /// @dev Inherit from this contract to get access to statement constants and signing helpers.
-///      Statements and type hashes must match the production contracts exactly.
+///      All statement strings and typehashes are imported from EIP712Constants.sol
+///      to guarantee they stay in sync with production.
 abstract contract EIP712TestHelper is Test {
     // ═══════════════════════════════════════════════════════════════════════════
     // EIP-712 DOMAIN CONSTANTS
@@ -17,52 +19,42 @@ abstract contract EIP712TestHelper is Test {
 
     string internal constant DOMAIN_VERSION = "4";
 
-    // Domain names must match the production contracts
+    // All production contracts (WalletRegistry, TransactionRegistry, SpokeRegistry)
+    // use the same EIP-712 domain name. Cross-contract replay is prevented by
+    // distinct typehashes, not by domain separation.
     string internal constant WALLET_DOMAIN_NAME = "StolenWalletRegistry";
-    string internal constant TX_DOMAIN_NAME = "StolenTransactionRegistry";
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // WALLET REGISTRY STATEMENTS
+    // WALLET REGISTRY STATEMENTS (imported from production)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    string internal constant WALLET_ACK_STATEMENT =
-        "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry.";
+    string internal constant WALLET_ACK_STATEMENT = EIP712Constants.ACK_STATEMENT;
 
-    string internal constant WALLET_REG_STATEMENT =
-        "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry. This action is irreversible.";
+    string internal constant WALLET_REG_STATEMENT = EIP712Constants.REG_STATEMENT;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // TRANSACTION REGISTRY STATEMENTS
+    // TRANSACTION REGISTRY STATEMENTS (imported from production)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    string internal constant TX_ACK_STATEMENT =
-        "This signature acknowledges that the specified transactions are being reported as fraudulent to the Stolen Transaction Registry.";
+    string internal constant TX_ACK_STATEMENT = EIP712Constants.TX_ACK_STATEMENT;
 
-    string internal constant TX_REG_STATEMENT =
-        "This signature confirms permanent registration of the specified transactions as fraudulent. This action is irreversible.";
+    string internal constant TX_REG_STATEMENT = EIP712Constants.TX_REG_STATEMENT;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // WALLET REGISTRY TYPE HASHES
+    // WALLET REGISTRY TYPE HASHES (imported from production)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    bytes32 internal constant WALLET_ACK_TYPEHASH = keccak256(
-        "AcknowledgementOfRegistry(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)"
-    );
+    bytes32 internal constant WALLET_ACK_TYPEHASH = EIP712Constants.WALLET_ACK_TYPEHASH;
 
-    bytes32 internal constant WALLET_REG_TYPEHASH =
-        keccak256("Registration(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)");
+    bytes32 internal constant WALLET_REG_TYPEHASH = EIP712Constants.WALLET_REG_TYPEHASH;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // TRANSACTION REGISTRY TYPE HASHES
+    // TRANSACTION REGISTRY TYPE HASHES (imported from production)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    bytes32 internal constant TX_ACK_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(string statement,bytes32 merkleRoot,bytes32 reportedChainId,uint32 transactionCount,address forwarder,uint256 nonce,uint256 deadline)"
-    );
+    bytes32 internal constant TX_BATCH_ACK_TYPEHASH = EIP712Constants.TX_BATCH_ACK_TYPEHASH;
 
-    bytes32 internal constant TX_REG_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(string statement,bytes32 merkleRoot,bytes32 reportedChainId,address forwarder,uint256 nonce,uint256 deadline)"
-    );
+    bytes32 internal constant TX_BATCH_REG_TYPEHASH = EIP712Constants.TX_BATCH_REG_TYPEHASH;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // DOMAIN SEPARATOR HELPERS
@@ -74,19 +66,6 @@ abstract contract EIP712TestHelper is Test {
             abi.encode(
                 EIP712_TYPE_HASH,
                 keccak256(bytes(WALLET_DOMAIN_NAME)),
-                keccak256(bytes(DOMAIN_VERSION)),
-                block.chainid,
-                registry
-            )
-        );
-    }
-
-    /// @notice Compute domain separator for StolenTransactionRegistry
-    function _txDomainSeparator(address registry) internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                EIP712_TYPE_HASH,
-                keccak256(bytes(TX_DOMAIN_NAME)),
                 keccak256(bytes(DOMAIN_VERSION)),
                 block.chainid,
                 registry
@@ -116,13 +95,24 @@ abstract contract EIP712TestHelper is Test {
     function _signWalletAck(
         uint256 privateKey,
         address registry,
-        address owner,
+        address _wallet,
         address forwarder,
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
         bytes32 structHash = keccak256(
-            abi.encode(WALLET_ACK_TYPEHASH, keccak256(bytes(WALLET_ACK_STATEMENT)), owner, forwarder, nonce, deadline)
+            abi.encode(
+                WALLET_ACK_TYPEHASH,
+                keccak256(bytes(WALLET_ACK_STATEMENT)),
+                _wallet,
+                forwarder,
+                reportedChainId,
+                incidentTimestamp,
+                nonce,
+                deadline
+            )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _walletDomainSeparator(registry), structHash));
         (v, r, s) = vm.sign(privateKey, digest);
@@ -132,71 +122,26 @@ abstract contract EIP712TestHelper is Test {
     function _signWalletReg(
         uint256 privateKey,
         address registry,
-        address owner,
+        address _wallet,
         address forwarder,
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
         uint256 nonce,
         uint256 deadline
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
         bytes32 structHash = keccak256(
-            abi.encode(WALLET_REG_TYPEHASH, keccak256(bytes(WALLET_REG_STATEMENT)), owner, forwarder, nonce, deadline)
+            abi.encode(
+                WALLET_REG_TYPEHASH,
+                keccak256(bytes(WALLET_REG_STATEMENT)),
+                _wallet,
+                forwarder,
+                reportedChainId,
+                incidentTimestamp,
+                nonce,
+                deadline
+            )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _walletDomainSeparator(registry), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TRANSACTION REGISTRY SIGNING HELPERS
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @notice Sign a transaction batch acknowledgement message
-    function _signTxAck(
-        uint256 privateKey,
-        address registry,
-        bytes32 merkleRoot,
-        bytes32 reportedChainId,
-        uint32 transactionCount,
-        address forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(
-            abi.encode(
-                TX_ACK_TYPEHASH,
-                keccak256(bytes(TX_ACK_STATEMENT)),
-                merkleRoot,
-                reportedChainId,
-                transactionCount,
-                forwarder,
-                nonce,
-                deadline
-            )
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _txDomainSeparator(registry), structHash));
-        (v, r, s) = vm.sign(privateKey, digest);
-    }
-
-    /// @notice Sign a transaction batch registration message
-    function _signTxReg(
-        uint256 privateKey,
-        address registry,
-        bytes32 merkleRoot,
-        bytes32 reportedChainId,
-        address forwarder,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(
-            abi.encode(
-                TX_REG_TYPEHASH,
-                keccak256(bytes(TX_REG_STATEMENT)),
-                merkleRoot,
-                reportedChainId,
-                forwarder,
-                nonce,
-                deadline
-            )
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _txDomainSeparator(registry), structHash));
         (v, r, s) = vm.sign(privateKey, digest);
     }
 }

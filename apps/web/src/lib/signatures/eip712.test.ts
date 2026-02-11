@@ -38,7 +38,7 @@ describe('EIP-712 typed data', () => {
       expect(EIP712_TYPES.AcknowledgementOfRegistry).toEqual([
         { name: 'statement', type: 'string' },
         { name: 'wallet', type: 'address' },
-        { name: 'forwarder', type: 'address' },
+        { name: 'trustedForwarder', type: 'address' },
         { name: 'reportedChainId', type: 'uint64' },
         { name: 'incidentTimestamp', type: 'uint64' },
         { name: 'nonce', type: 'uint256' },
@@ -48,7 +48,7 @@ describe('EIP-712 typed data', () => {
       expect(EIP712_TYPES.Registration).toEqual([
         { name: 'statement', type: 'string' },
         { name: 'wallet', type: 'address' },
-        { name: 'forwarder', type: 'address' },
+        { name: 'trustedForwarder', type: 'address' },
         { name: 'reportedChainId', type: 'uint64' },
         { name: 'incidentTimestamp', type: 'uint64' },
         { name: 'nonce', type: 'uint256' },
@@ -99,7 +99,7 @@ describe('EIP-712 typed data', () => {
   describe('buildAcknowledgementTypedData', () => {
     const message: Omit<AcknowledgementMessage, 'statement'> = {
       wallet: testWallet,
-      forwarder: testForwarder,
+      trustedForwarder: testForwarder,
       reportedChainId: 1n,
       incidentTimestamp: 0n,
       nonce: 0n,
@@ -133,7 +133,7 @@ describe('EIP-712 typed data', () => {
 
       expect(typedData.message.statement).toBe(STATEMENTS.WALLET_ACK);
       expect(typedData.message.wallet).toBe(testWallet);
-      expect(typedData.message.forwarder).toBe(testForwarder);
+      expect(typedData.message.trustedForwarder).toBe(testForwarder);
       expect(typedData.message.nonce).toBe(0n);
       expect(typedData.message.deadline).toBe(12345678n);
     });
@@ -141,7 +141,7 @@ describe('EIP-712 typed data', () => {
     it('preserves BigInt message values', () => {
       const largeMessage: Omit<AcknowledgementMessage, 'statement'> = {
         wallet: testWallet,
-        forwarder: testForwarder,
+        trustedForwarder: testForwarder,
         reportedChainId: 1n,
         incidentTimestamp: 0n,
         nonce: 999999999999n,
@@ -163,7 +163,7 @@ describe('EIP-712 typed data', () => {
   describe('buildRegistrationTypedData', () => {
     const message: Omit<RegistrationMessage, 'statement'> = {
       wallet: testWallet,
-      forwarder: testForwarder,
+      trustedForwarder: testForwarder,
       reportedChainId: 1n,
       incidentTimestamp: 0n,
       nonce: 1n,
@@ -195,7 +195,7 @@ describe('EIP-712 typed data', () => {
 
       expect(typedData.message.statement).toBe(STATEMENTS.WALLET_REG);
       expect(typedData.message.wallet).toBe(testWallet);
-      expect(typedData.message.forwarder).toBe(testForwarder);
+      expect(typedData.message.trustedForwarder).toBe(testForwarder);
       expect(typedData.message.nonce).toBe(1n);
       expect(typedData.message.deadline).toBe(12345700n);
     });
@@ -205,7 +205,7 @@ describe('EIP-712 typed data', () => {
     it('differ in primaryType and statement', () => {
       const ackMessage: Omit<AcknowledgementMessage, 'statement'> = {
         wallet: testWallet,
-        forwarder: testForwarder,
+        trustedForwarder: testForwarder,
         reportedChainId: 1n,
         incidentTimestamp: 0n,
         nonce: 0n,
@@ -214,7 +214,7 @@ describe('EIP-712 typed data', () => {
 
       const regMessage: Omit<RegistrationMessage, 'statement'> = {
         wallet: testWallet,
-        forwarder: testForwarder,
+        trustedForwarder: testForwarder,
         reportedChainId: 1n,
         incidentTimestamp: 0n,
         nonce: 0n,
@@ -236,7 +236,7 @@ describe('EIP-712 typed data', () => {
 
       // Same other message fields
       expect(ackData.message.wallet).toBe(regData.message.wallet);
-      expect(ackData.message.forwarder).toBe(regData.message.forwarder);
+      expect(ackData.message.trustedForwarder).toBe(regData.message.trustedForwarder);
       expect(ackData.message.nonce).toBe(regData.message.nonce);
       expect(ackData.message.deadline).toBe(regData.message.deadline);
 

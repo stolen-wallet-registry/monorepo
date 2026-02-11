@@ -6,8 +6,8 @@
  *
  * Flow:
  * 1. Spoke tx confirms → enabled becomes true
- * 2. Polls hub chain isTransactionBatchRegistered(dataHash) every N seconds
- * 3. Returns 'confirmed' when hub shows batch as registered
+ * 2. Polls hub chain isTransactionRegistered(sampleTxHash, chainId) every N seconds
+ * 3. Returns 'confirmed' when hub shows the tx as registered (sentinel for batch)
  * 4. Returns 'timeout' if max polling time exceeded
  *
  * Status is DERIVED from inputs, not stored. This avoids cascading renders
@@ -15,13 +15,21 @@
  */
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { parseAbi } from 'viem';
 import { useReadContract } from 'wagmi';
-import { keccak256, encodeAbiParameters, parseAbiParameters } from 'viem';
-import { fraudRegistryHubAbi } from '@/lib/contracts/abis';
 import { getFraudRegistryHubAddress } from '@/lib/contracts/addresses';
 import { getHubChainId, isSpokeChain } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
+
+/**
+ * Minimal ABI for isTransactionRegistered(bytes32,bytes32).
+ * Uses parseAbi to avoid potential resolution issues with the full FraudRegistryHub ABI,
+ * matching the defensive pattern used by useCrossChainConfirmation for wallets.
+ */
+const isTransactionRegisteredAbi = parseAbi([
+  'function isTransactionRegistered(bytes32 txHash, bytes32 chainId) view returns (bool)',
+]);
 
 export type TxCrossChainStatus =
   | 'idle' // Not started
@@ -31,10 +39,8 @@ export type TxCrossChainStatus =
   | 'timeout'; // Max polling time exceeded (transient errors handled via timeout)
 
 export interface UseTxCrossChainConfirmationOptions {
-  /** The data hash of the transaction batch being registered */
-  dataHash: Hash | undefined;
-  /** The reporter address who signed the registration */
-  reporter: Address | undefined;
+  /** A single tx hash from the batch to use as a sentinel for hub registration lookup */
+  sampleTxHash: Hash | undefined;
   /** The reported chain ID hash (CAIP-2 keccak256) */
   reportedChainId: Hex | undefined;
   /** The spoke chain ID where the transaction was submitted */
@@ -65,8 +71,7 @@ const DEFAULT_MAX_POLLING_TIME = 120000; // 2 minutes
 const INITIAL_DELAY = 1000; // 1 second delay before polling starts
 
 export function useTxCrossChainConfirmation({
-  dataHash,
-  reporter,
+  sampleTxHash,
   reportedChainId,
   spokeChainId,
   enabled,
@@ -81,29 +86,6 @@ export function useTxCrossChainConfirmation({
 
   // Get the hub chain ID for this spoke
   const hubChainId = spokeChainId ? getHubChainId(spokeChainId) : undefined;
-
-  // Compute the batchId: keccak256(abi.encode(dataHash, reporter, reportedChainId))
-  // This must match the contract's _computeBatchId function
-  const batchId = useMemo(() => {
-    if (!dataHash || !reporter || !reportedChainId) return undefined;
-    try {
-      return keccak256(
-        encodeAbiParameters(parseAbiParameters('bytes32, address, bytes32'), [
-          dataHash as Hash,
-          reporter as Address,
-          reportedChainId as Hex,
-        ])
-      );
-    } catch (err) {
-      logger.registration.error('Failed to compute batchId', {
-        dataHash,
-        reporter,
-        reportedChainId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return undefined;
-    }
-  }, [dataHash, reporter, reportedChainId]);
 
   // Get hub registry address (RegistryHub, not the subregistry)
   let hubRegistryAddress: Address | undefined;
@@ -120,51 +102,72 @@ export function useTxCrossChainConfirmation({
   }
 
   // Determine if we should be actively auto-polling
-  // Stop auto-polling once max time exceeded to avoid unnecessary network requests
-  // Manual refetch() still works after timeout for user-initiated retries
-  const shouldPoll = enabled && elapsedTime >= INITIAL_DELAY && elapsedTime < maxPollingTime;
+  // Don't stop at timeout — keep polling so late-arriving confirmations are detected.
+  // Status still derives 'timeout' at maxPollingTime, but polling continues and can
+  // transition to 'confirmed' if the hub eventually reflects the registration.
+  // Matches wallet hook (useCrossChainConfirmation) behavior.
+  const shouldPoll = enabled && elapsedTime >= INITIAL_DELAY;
 
-  // Query hub chain for transaction batch registration status using computed batchId
-  // TODO: Update - FraudRegistryHub.isTransactionRegistered takes (txHash, chainId)
-  // The old batch-based architecture no longer applies. For now, we stub this to always return false.
-  // This hook needs to be redesigned for transaction-by-transaction lookup.
+  // Query hub chain for transaction registration using an actual tx hash from the batch.
+  // Uses minimal ABI to avoid potential viem resolution issues with the full FraudRegistryHub ABI.
   const {
     data: isRegisteredOnHubRaw,
     refetch,
     isError: isQueryError,
+    error: queryError,
   } = useReadContract({
     address: hubRegistryAddress,
-    abi: fraudRegistryHubAbi,
+    abi: isTransactionRegisteredAbi,
     functionName: 'isTransactionRegistered',
-    // Signature: isTransactionRegistered(bytes32 txHash, bytes32 chainId)
-    // We pass dataHash as txHash and reportedChainId as chainId for now
-    args: batchId && reportedChainId ? [batchId, reportedChainId] : undefined,
+    args: sampleTxHash && reportedChainId ? [sampleTxHash, reportedChainId] : undefined,
     chainId: hubChainId,
     query: {
       // Keep enabled independent of shouldPoll so manual refetch() works after timeout
-      enabled: enabled && !!batchId && !!reportedChainId && !!hubChainId && !!hubRegistryAddress,
-      // Auto-polling stops after timeout, but manual refresh still works
+      enabled:
+        enabled && !!sampleTxHash && !!reportedChainId && !!hubChainId && !!hubRegistryAddress,
       refetchInterval: shouldPoll ? pollInterval : false,
       staleTime: 1000, // Consider data stale after 1 second
     },
   });
 
-  // Coerce to boolean - wagmi may return unexpected types with overloaded functions
+  // Coerce to boolean
   const isRegisteredOnHub =
     typeof isRegisteredOnHubRaw === 'boolean' ? isRegisteredOnHubRaw : false;
 
-  // Log batchId computation for debugging
+  // Log initialization and diagnostics for debugging
   useEffect(() => {
-    if (enabled && batchId) {
+    if (enabled && sampleTxHash) {
       logger.registration.debug('Cross-chain tx batch confirmation initialized', {
-        dataHash,
-        reporter,
+        sampleTxHash,
         reportedChainId,
-        computedBatchId: batchId,
         hubChainId,
+        hubRegistryAddress,
       });
     }
-  }, [enabled, batchId, dataHash, reporter, reportedChainId, hubChainId]);
+  }, [enabled, sampleTxHash, reportedChainId, hubChainId, hubRegistryAddress]);
+
+  // Log raw query results for diagnosing polling issues
+  useEffect(() => {
+    if (!enabled || !shouldPoll) return;
+    if (isRegisteredOnHubRaw !== undefined || isQueryError) {
+      logger.registration.debug('Cross-chain tx poll result', {
+        rawValue: String(isRegisteredOnHubRaw),
+        rawType: typeof isRegisteredOnHubRaw,
+        isError: isQueryError,
+        errorMsg: queryError?.message?.slice(0, 200),
+        sampleTxHash,
+        reportedChainId,
+      });
+    }
+  }, [
+    enabled,
+    shouldPoll,
+    isRegisteredOnHubRaw,
+    isQueryError,
+    queryError,
+    sampleTxHash,
+    reportedChainId,
+  ]);
 
   // DERIVE status from inputs - no useState for status
   const status: TxCrossChainStatus = useMemo(() => {
@@ -195,10 +198,8 @@ export function useTxCrossChainConfirmation({
     prevStatusRef.current = 'idle';
 
     logger.registration.info('Starting cross-chain tx batch confirmation polling', {
-      dataHash,
-      reporter,
+      sampleTxHash,
       reportedChainId,
-      computedBatchId: batchId,
       spokeChainId,
       hubChainId,
       pollInterval,
@@ -221,10 +222,8 @@ export function useTxCrossChainConfirmation({
     };
   }, [
     enabled,
-    dataHash,
-    reporter,
+    sampleTxHash,
     reportedChainId,
-    batchId,
     spokeChainId,
     hubChainId,
     pollInterval,
@@ -236,44 +235,48 @@ export function useTxCrossChainConfirmation({
     if (status !== prevStatusRef.current) {
       if (status === 'confirmed') {
         logger.registration.info('Cross-chain tx batch confirmation received!', {
-          dataHash,
+          sampleTxHash,
           hubChainId,
           elapsedTime,
         });
       }
       if (status === 'timeout') {
         logger.registration.warn('Cross-chain tx batch confirmation timeout', {
-          dataHash,
+          sampleTxHash,
           elapsedTime,
           maxPollingTime,
         });
       }
       if (status === 'polling' && prevStatusRef.current === 'waiting') {
         logger.registration.debug('Cross-chain tx batch polling started', {
-          dataHash,
+          sampleTxHash,
           hubChainId,
         });
       }
       prevStatusRef.current = status;
     }
-  }, [status, dataHash, hubChainId, elapsedTime, maxPollingTime]);
+  }, [status, sampleTxHash, hubChainId, elapsedTime, maxPollingTime]);
 
   // Log query errors (read-only, no setState)
   useEffect(() => {
     if (status === 'polling' && isQueryError) {
       logger.registration.error('Cross-chain tx batch confirmation query error', {
-        dataHash,
+        sampleTxHash,
         hubChainId,
       });
       // Don't immediately fail - could be transient network issue
       // Let timeout handle persistent failures
     }
-  }, [status, isQueryError, dataHash, hubChainId]);
+  }, [status, isQueryError, sampleTxHash, hubChainId]);
 
   const refresh = useCallback(() => {
     refetch();
   }, [refetch]);
 
+  /**
+   * Reset the hook state. Polling stops and status returns to 'waiting'.
+   * To restart polling, toggle `enabled` to false then back to true.
+   */
   const reset = useCallback(() => {
     startTimeRef.current = null;
     if (intervalRef.current) {
@@ -286,7 +289,7 @@ export function useTxCrossChainConfirmation({
 
   return {
     status,
-    isRegisteredOnHub: isRegisteredOnHub ?? false,
+    isRegisteredOnHub,
     elapsedTime,
     refresh,
     reset,

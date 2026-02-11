@@ -26,8 +26,8 @@ import { logger } from '@/lib/logger';
 export interface TxAcknowledgementParamsHub {
   /** Reporter address (wallet signing the registration) */
   reporter: Address;
-  /** Forwarder address (same as reporter for self-registration, different for relay) */
-  forwarder: Address;
+  /** Trusted forwarder address (same as reporter for self-registration, different for relay) */
+  trustedForwarder: Address;
   /** Signature deadline */
   deadline: bigint;
   /** Data hash (merkle root of transaction batch) */
@@ -78,7 +78,7 @@ export interface UseTxAcknowledgementResult {
 
 /** Type guard for hub params */
 function isHubParams(params: TxAcknowledgementParams): params is TxAcknowledgementParamsHub {
-  return 'forwarder' in params;
+  return 'trustedForwarder' in params;
 }
 
 /**
@@ -159,9 +159,9 @@ export function useTransactionAcknowledgement(): UseTxAcknowledgementResult {
       let txHash: Hash;
 
       if (isHub && isHubParams(params)) {
-        // Hub: acknowledgeTransactions(reporter, forwarder, deadline, dataHash, reportedChainId, transactionCount, v, r, s)
-        // isSponsored is derived on-chain as (reporter != forwarder)
-        const { forwarder, reportedChainId, transactionCount } = params;
+        // Hub: acknowledgeTransactions(reporter, trustedForwarder, deadline, dataHash, reportedChainId, transactionCount, v, r, s)
+        // isSponsored is derived on-chain as (reporter != trustedForwarder)
+        const { trustedForwarder, reportedChainId, transactionCount } = params;
 
         txHash = await writeContractAsync({
           address: contractAddress,
@@ -169,7 +169,7 @@ export function useTransactionAcknowledgement(): UseTxAcknowledgementResult {
           functionName: 'acknowledgeTransactions',
           args: [
             reporter,
-            forwarder,
+            trustedForwarder,
             deadline,
             dataHash,
             reportedChainId,
