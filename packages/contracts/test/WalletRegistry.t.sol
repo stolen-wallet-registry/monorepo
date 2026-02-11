@@ -52,7 +52,7 @@ contract WalletRegistryTest is EIP712TestHelper {
         vm.warp(1_704_067_200); // 2024-01-01
 
         // Create test accounts
-        walletPrivateKey = 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef;
+        walletPrivateKey = uint256(keccak256("test wallet")); // deterministic test-only key
         wallet = vm.addr(walletPrivateKey);
         forwarder = makeAddr("forwarder");
         owner = address(this);
@@ -169,7 +169,7 @@ contract WalletRegistryTest is EIP712TestHelper {
 
         // Verify stored ack data
         IWalletRegistry.AcknowledgementData memory ack = walletRegistry.getAcknowledgementData(wallet);
-        assertEq(ack.forwarder, forwarder);
+        assertEq(ack.trustedForwarder, forwarder);
         assertEq(ack.reportedChainId, CAIP10Evm.caip2Hash(REPORTED_CHAIN_ID));
         assertEq(ack.incidentTimestamp, incidentTimestamp);
         assertTrue(ack.isSponsored);
@@ -465,7 +465,7 @@ contract WalletRegistryTest is EIP712TestHelper {
         );
 
         vm.prank(wrongForwarder);
-        vm.expectRevert(IWalletRegistry.WalletRegistry__NotAuthorizedForwarder.selector);
+        vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidForwarder.selector);
         walletRegistry.register(wallet, wrongForwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
     }
 

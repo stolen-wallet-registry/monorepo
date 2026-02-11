@@ -42,7 +42,7 @@ export const TransactionRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -174,7 +174,7 @@ export const TransactionRegistryABI = [
         internalType: 'uint32',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -194,50 +194,6 @@ export const TransactionRegistryABI = [
         name: 'hashStruct',
         type: 'bytes32',
         internalType: 'bytes32',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'getDeadlines',
-    inputs: [
-      {
-        name: 'reporter',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
-    outputs: [
-      {
-        name: 'currentBlock',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'expiryBlock',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'startBlock',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'graceStartsAt',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'timeLeft',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-      {
-        name: 'isExpired',
-        type: 'bool',
-        internalType: 'bool',
       },
     ],
     stateMutability: 'view',
@@ -284,7 +240,7 @@ export const TransactionRegistryABI = [
             internalType: 'bytes32',
           },
           {
-            name: 'forwarder',
+            name: 'trustedForwarder',
             type: 'address',
             internalType: 'address',
           },
@@ -345,6 +301,50 @@ export const TransactionRegistryABI = [
             internalType: 'uint32',
           },
         ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getTransactionDeadlines',
+    inputs: [
+      {
+        name: 'reporter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: 'currentBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'expiryBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'startBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'graceStartsAt',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'timeLeft',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'isExpired',
+        type: 'bool',
+        internalType: 'bool',
       },
     ],
     stateMutability: 'view',
@@ -987,7 +987,7 @@ export const TransactionRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         indexed: true,
         internalType: 'address',
@@ -1227,6 +1227,11 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TransactionRegistry__InvalidForwarder',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TransactionRegistry__InvalidSignature',
     inputs: [],
   },
@@ -1243,11 +1248,6 @@ export const TransactionRegistryABI = [
   {
     type: 'error',
     name: 'TransactionRegistry__NotAcknowledged',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'TransactionRegistry__NotAuthorizedForwarder',
     inputs: [],
   },
   {

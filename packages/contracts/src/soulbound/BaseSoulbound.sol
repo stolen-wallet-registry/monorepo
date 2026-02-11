@@ -91,6 +91,7 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
         string memory _domain,
         address _initialOwner
     ) ERC721(name_, symbol_) Ownable(_initialOwner) {
+        if (_initialOwner == address(0)) revert ZeroAddress();
         if (_translations == address(0)) revert InvalidTranslations();
         if (_feeCollector == address(0)) revert InvalidFeeCollector();
 

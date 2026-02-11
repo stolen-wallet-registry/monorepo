@@ -85,9 +85,12 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // Parse signature once for reuse (avoid calling parseSignature 4 times)
   const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
 
-  // Determine forwarder: for standard registration, it's the connected wallet (msg.sender)
-  // For self-relay, it's the relayer wallet
-  const forwarder = isSelfRelay && relayer ? relayer : registeree;
+  // Determine forwarder based on registration type:
+  // - Standard: registeree pays and forwards (registeree == forwarder)
+  // - Self-relay: relayer wallet is forwarder (undefined if relayer not set yet)
+  // - P2P relay: handled by P2PRegPayStep (not this component)
+  // - Future meta-tx: trusted 3rd party would be set as relayer
+  const forwarder = isSelfRelay ? relayer : registeree;
 
   // Build transaction args for gas estimation (needs to be before early returns)
   // Unified: register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)

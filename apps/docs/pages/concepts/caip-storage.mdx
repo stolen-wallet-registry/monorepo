@@ -1,0 +1,137 @@
+# CAIP Identifiers & On-Chain Storage
+
+SWR uses [CAIP](https://github.com/ChainAgnostic/CAIPs) standards for cross-chain identifier formatting. Every wallet, transaction, and contract is stored behind a deterministic `bytes32` key derived from its CAIP identifier. Any entry can be verified with a single storage read.
+
+## CAIP Standards Used
+
+### CAIP-2: Chain Identifiers
+
+A chain is identified by `{namespace}:{chainRef}`.
+
+| Chain           | CAIP-2                                    | Namespace |
+| --------------- | ----------------------------------------- | --------- |
+| Ethereum        | `eip155:1`                                | `eip155`  |
+| Base            | `eip155:8453`                             | `eip155`  |
+| Optimism        | `eip155:10`                               | `eip155`  |
+| Arbitrum        | `eip155:42161`                            | `eip155`  |
+| Solana mainnet  | `solana:mainnet`                          | `solana`  |
+| Bitcoin mainnet | `bip122:000000000019d6689c085ae165831e93` | `bip122`  |
+
+### CAIP-10: Account Identifiers
+
+An account is identified by `{namespace}:{chainRef}:{address}`.
+
+```
+eip155:8453:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+```
+
+### CAIP-363: Wildcard Chain References
+
+This is the key insight for wallet registration. An EVM address is the same across all EVM chains -- if a wallet is stolen on Base, it's stolen on Ethereum, Optimism, and everywhere else.
+
+CAIP-363 uses `_` as a wildcard chain reference:
+
+```
+eip155:_:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+```
+
+This means **one registration covers all EVM chains**. Non-EVM chains (Solana, Bitcoin) use chain-specific identifiers since address formats differ.
+
+## Storage Key Derivation
+
+Every identifier maps to a `bytes32` storage key via `keccak256`. This gives O(1) lookup with no merkle trees, linked lists, or complex indexing.
+
+```mermaid
+flowchart LR
+    A[Input] --> B{Entry Type}
+    B -->|EVM Wallet| C["keccak256('eip155:_:', address)"]
+    B -->|Non-EVM Wallet| D["keccak256(namespace, chainRef, identifier)"]
+    B -->|Transaction| E["keccak256(abi.encode(txHash, chainId))"]
+    B -->|Contract| F["keccak256(abi.encode(contractAddr, chainId))"]
+    C --> G[bytes32 key]
+    D --> G
+    E --> G
+    F --> G
+    G --> H["mapping(bytes32 => Entry)"]
+```
+
+### Key Formulas
+
+**EVM Wallets** -- Wildcard key (one key per wallet, all chains):
+
+```solidity
+// CAIP10Evm.sol
+function evmWalletKey(address wallet) internal pure returns (bytes32) {
+    return keccak256(abi.encodePacked("eip155:_:", wallet));
+}
+```
+
+**Non-EVM Wallets** -- Chain-specific key:
+
+```solidity
+// CAIP10.sol
+function walletKey(bytes32 namespaceHash, bytes32 chainRef, bytes32 identifier)
+    internal pure returns (bytes32)
+{
+    return keccak256(abi.encodePacked(namespaceHash, chainRef, identifier));
+}
+```
+
+**Transactions** -- Always chain-specific (a tx hash is only meaningful on its chain):
+
+```solidity
+function txStorageKey(bytes32 txHash, bytes32 chainId) internal pure returns (bytes32) {
+    return keccak256(abi.encode(txHash, chainId));
+}
+```
+
+**Contracts** -- Always chain-specific (bytecode may differ across chains):
+
+```solidity
+function contractStorageKey(address contractAddr, bytes32 chainId) internal pure returns (bytes32) {
+    return keccak256(abi.encode(contractAddr, chainId));
+}
+```
+
+## Storage Key Summary
+
+| Entry Type    | CAIP Format             | Key Formula                              | Chain-Specific? |
+| ------------- | ----------------------- | ---------------------------------------- | --------------- |
+| EVM Wallet    | `eip155:_:0x...`        | `keccak256("eip155:_:", address)`        | No (wildcard)   |
+| Solana Wallet | `solana:mainnet:7Ec...` | `keccak256(namespace, chainRef, id)`     | Yes             |
+| Transaction   | `eip155:8453:0xabc...`  | `keccak256(abi.encode(txHash, chainId))` | Yes             |
+| Contract      | `eip155:8453:0x9fE...`  | `keccak256(abi.encode(addr, chainId))`   | Yes             |
+
+## Namespace Constants
+
+Namespaces are stored as `keccak256` hashes for gas-efficient comparison:
+
+```solidity
+bytes32 constant NAMESPACE_EIP155 = keccak256("eip155");
+bytes32 constant NAMESPACE_SOLANA = keccak256("solana");
+bytes32 constant NAMESPACE_COSMOS = keccak256("cosmos");
+bytes32 constant NAMESPACE_BIP122 = keccak256("bip122");
+bytes32 constant WILDCARD         = keccak256("_");
+```
+
+## Why This Architecture?
+
+**Single-read verification.** To check if a wallet is registered, compute the key and read one storage slot. No iteration, no merkle proofs, no indexer dependency for on-chain checks.
+
+**Cross-chain by default.** The wildcard pattern means an EVM wallet registered on Base is automatically flagged on every other EVM chain -- any contract on any chain can compute the same key and get the same answer.
+
+**Namespace extensibility.** Adding a new blockchain (e.g., Cosmos) requires only a new namespace constant and key derivation function. Existing entries are unaffected.
+
+## Chain ID Hashing
+
+Chain references are stored as `bytes32` CAIP-2 hashes:
+
+```solidity
+// EVM: keccak256("eip155:8453")
+CAIP10Evm.caip2Hash(8453)
+
+// Non-EVM: keccak256("solana:mainnet")
+CAIP10.caip2Hash("solana", "mainnet")
+```
+
+This unifies numeric chain IDs (EVM), string chain refs (Solana, Cosmos), and raw hashes (Bitcoin genesis block) into a single `bytes32` representation.

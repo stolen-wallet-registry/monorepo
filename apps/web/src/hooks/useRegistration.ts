@@ -5,7 +5,7 @@
  * Must be called after the grace period has elapsed following acknowledgement.
  *
  * Unified signature (hub and spoke):
- *   register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ *   register(wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
  *
  * @note reportedChainId is uint64 raw EVM chain ID. Contract converts to CAIP-2 hash internally.
  */
@@ -21,7 +21,7 @@ export interface RegistrationParams {
   /** The wallet address being registered as stolen */
   registeree: Address;
   /** The address authorized to complete registration (must match acknowledge phase) */
-  forwarder: Address;
+  trustedForwarder: Address;
   /** Raw EVM chain ID where incident occurred (uint64) — must match acknowledge phase */
   reportedChainId: bigint;
   /** Unix timestamp when incident occurred — must match acknowledge phase */
@@ -91,7 +91,7 @@ export function useRegistration(): UseRegistrationResult {
 
     const {
       registeree,
-      forwarder,
+      trustedForwarder,
       reportedChainId,
       incidentTimestamp,
       deadline,
@@ -106,7 +106,7 @@ export function useRegistration(): UseRegistrationResult {
       contractAddress,
       functionName: 'register',
       registeree,
-      forwarder,
+      trustedForwarder,
       reportedChainId: reportedChainId.toString(),
       incidentTimestamp: incidentTimestamp.toString(),
       deadline: deadline.toString(),
@@ -115,10 +115,10 @@ export function useRegistration(): UseRegistrationResult {
     });
 
     try {
-      // Unified: register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+      // Unified: register(wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
       const args = [
         registeree,
-        forwarder,
+        trustedForwarder,
         reportedChainId,
         incidentTimestamp,
         deadline,

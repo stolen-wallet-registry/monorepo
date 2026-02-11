@@ -311,9 +311,10 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     }
 
     /// @inheritdoc ISpokeRegistry
-    /// @dev Unlike wallet acknowledge (which takes an explicit `forwarder` param for self-relay/P2P relay),
-    ///      transaction batches hardcode msg.sender as forwarder. This is intentional: transaction batch
-    ///      registration doesn't support third-party forwarding — the reporter submits directly.
+    /// @dev Transaction batches use msg.sender as the implicit forwarder rather than accepting an
+    ///      explicit forwarder parameter. Third-party submission IS supported: if msg.sender != reporter,
+    ///      the tx is marked as sponsored and msg.sender is stored as trustedForwarder. The reporter
+    ///      signs an EIP-712 message that includes msg.sender, so the relayer must be known at sign time.
     function acknowledgeTransactionBatch(
         bytes32 dataHash,
         bytes32 reportedChainId,

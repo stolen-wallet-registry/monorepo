@@ -44,7 +44,7 @@ export const EIP712_TYPES = {
   AcknowledgementOfRegistry: [
     { name: 'statement', type: 'string' },
     { name: 'wallet', type: 'address' },
-    { name: 'forwarder', type: 'address' },
+    { name: 'trustedForwarder', type: 'address' },
     { name: 'reportedChainId', type: 'uint64' },
     { name: 'incidentTimestamp', type: 'uint64' },
     { name: 'nonce', type: 'uint256' },
@@ -53,7 +53,7 @@ export const EIP712_TYPES = {
   Registration: [
     { name: 'statement', type: 'string' },
     { name: 'wallet', type: 'address' },
-    { name: 'forwarder', type: 'address' },
+    { name: 'trustedForwarder', type: 'address' },
     { name: 'reportedChainId', type: 'uint64' },
     { name: 'incidentTimestamp', type: 'uint64' },
     { name: 'nonce', type: 'uint256' },
@@ -65,7 +65,7 @@ export const EIP712_TYPES = {
 export interface AcknowledgementMessage {
   statement: string;
   wallet: Address;
-  forwarder: Address;
+  trustedForwarder: Address;
   reportedChainId: bigint; // Raw EVM chain ID (uint64)
   incidentTimestamp: bigint; // uint64
   nonce: bigint;
@@ -76,7 +76,7 @@ export interface AcknowledgementMessage {
 export interface RegistrationMessage {
   statement: string;
   wallet: Address;
-  forwarder: Address;
+  trustedForwarder: Address;
   reportedChainId: bigint; // Raw EVM chain ID (uint64)
   incidentTimestamp: bigint;
   nonce: bigint;
@@ -105,7 +105,7 @@ export const TX_EIP712_TYPES = {
   TransactionBatchAcknowledgement: [
     { name: 'statement', type: 'string' },
     { name: 'reporter', type: 'address' },
-    { name: 'forwarder', type: 'address' },
+    { name: 'trustedForwarder', type: 'address' },
     { name: 'dataHash', type: 'bytes32' },
     { name: 'reportedChainId', type: 'bytes32' },
     { name: 'transactionCount', type: 'uint32' },
@@ -115,7 +115,7 @@ export const TX_EIP712_TYPES = {
   TransactionBatchRegistration: [
     { name: 'statement', type: 'string' },
     { name: 'reporter', type: 'address' },
-    { name: 'forwarder', type: 'address' },
+    { name: 'trustedForwarder', type: 'address' },
     { name: 'dataHash', type: 'bytes32' },
     { name: 'reportedChainId', type: 'bytes32' },
     { name: 'transactionCount', type: 'uint32' },
@@ -128,7 +128,7 @@ export const TX_EIP712_TYPES = {
 export interface TxAcknowledgementMessage {
   statement: string;
   reporter: Address;
-  forwarder: Address;
+  trustedForwarder: Address;
   dataHash: Hash; // keccak256(abi.encode(txHashes, chainIds))
   reportedChainId: Hash;
   transactionCount: number;
@@ -140,7 +140,7 @@ export interface TxAcknowledgementMessage {
 export interface TxRegistrationMessage {
   statement: string;
   reporter: Address;
-  forwarder: Address;
+  trustedForwarder: Address;
   dataHash: Hash;
   reportedChainId: Hash;
   transactionCount: number;
@@ -158,13 +158,13 @@ export type TxSignatureStep = (typeof TX_SIGNATURE_STEP)[keyof typeof TX_SIGNATU
 
 /**
  * Wallet Acknowledgement contract arguments (unified hub and spoke).
- * acknowledge(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ * acknowledge(registeree, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
  *
- * isSponsored is derived on-chain as (registeree != forwarder).
+ * isSponsored is derived on-chain as (registeree != trustedForwarder).
  */
 export type WalletAcknowledgeArgs = readonly [
   registeree: Address,
-  forwarder: Address,
+  trustedForwarder: Address,
   reportedChainId: bigint, // Raw EVM chain ID (uint64)
   incidentTimestamp: bigint, // Unix timestamp (uint64)
   deadline: bigint, // Signature expiry (uint256)
@@ -176,13 +176,13 @@ export type WalletAcknowledgeArgs = readonly [
 
 /**
  * Wallet Registration contract arguments (unified hub and spoke).
- * register(registeree, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ * register(registeree, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
  *
  * @note reportedChainId is uint64 raw EVM chain ID. Contract converts to CAIP-2 hash internally.
  */
 export type WalletRegistrationArgs = readonly [
   registeree: Address,
-  forwarder: Address, // Must match acknowledge phase and msg.sender
+  trustedForwarder: Address, // Must match acknowledge phase and msg.sender
   reportedChainId: bigint, // Raw EVM chain ID (uint64) — contract converts to CAIP-2 hash
   incidentTimestamp: bigint, // Unix timestamp (uint64)
   deadline: bigint, // Signature expiry (uint256)

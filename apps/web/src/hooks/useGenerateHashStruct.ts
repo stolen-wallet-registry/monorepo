@@ -6,7 +6,7 @@
  *
  * Chain-aware: Works with WalletRegistry (hub) and SpokeRegistry (spoke).
  *
- * Contract signature: generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+ * Contract signature: generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
  */
 
 import { useMemo } from 'react';
@@ -71,7 +71,7 @@ export function useGenerateHashStruct(
     abi,
     chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'generateHashStruct',
-    // Contract signature: (uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+    // Contract signature: (uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
     args: forwarderAddress
       ? [effectiveReportedChainId, effectiveIncidentTimestamp, forwarderAddress, step]
       : undefined,

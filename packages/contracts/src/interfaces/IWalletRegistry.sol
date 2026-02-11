@@ -35,7 +35,7 @@ interface IWalletRegistry {
     /// @param nonce Nonce used for this acknowledgement
     /// @param gracePeriodStart Block number when grace period begins
     /// @param reportedChainId CAIP-2 chain ID hash where incident occurred (stored for register-phase validation)
-    /// @param forwarder Address authorized to submit registration
+    /// @param trustedForwarder Address authorized to submit registration
     /// @param incidentTimestamp Unix timestamp when incident occurred (stored for register-phase validation)
     /// @param isSponsored Whether this is a sponsored registration
     struct AcknowledgementData {
@@ -43,7 +43,7 @@ interface IWalletRegistry {
         uint256 nonce;
         uint256 gracePeriodStart;
         bytes32 reportedChainId;
-        address forwarder;
+        address trustedForwarder;
         uint64 incidentTimestamp;
         bool isSponsored;
     }
@@ -70,7 +70,7 @@ interface IWalletRegistry {
     error WalletRegistry__GracePeriodNotStarted();
     error WalletRegistry__InvalidSignature();
     error WalletRegistry__InvalidSigner();
-    error WalletRegistry__NotAuthorizedForwarder();
+    error WalletRegistry__InvalidForwarder();
     error WalletRegistry__InsufficientFee();
     error WalletRegistry__FeeTransferFailed();
     error WalletRegistry__RefundFailed();
@@ -88,9 +88,9 @@ interface IWalletRegistry {
 
     /// @notice Emitted when a wallet acknowledgement is submitted
     /// @param registeree The wallet being registered
-    /// @param forwarder The address authorized to complete registration
+    /// @param trustedForwarder The address authorized to complete registration
     /// @param isSponsored Whether this is a sponsored registration
-    event WalletAcknowledged(address indexed registeree, address indexed forwarder, bool isSponsored);
+    event WalletAcknowledged(address indexed registeree, address indexed trustedForwarder, bool isSponsored);
 
     /// @notice Emitted when a wallet registration is completed
     /// @param identifier The wallet identifier (bytes32 for CAIP-10 compatibility)
@@ -152,9 +152,9 @@ interface IWalletRegistry {
     /// @dev Creates a pending acknowledgement with grace period.
     ///      reportedChainId and incidentTimestamp are included in the EIP-712 signature
     ///      and stored in AcknowledgementData for validation during register().
-    ///      isSponsored is derived as (registeree != forwarder).
+    ///      isSponsored is derived as (registeree != trustedForwarder).
     /// @param registeree The wallet address being registered
-    /// @param forwarder The address authorized to complete registration (can be same as registeree)
+    /// @param trustedForwarder The address authorized to complete registration (can be same as registeree)
     /// @param reportedChainId Raw EVM chain ID where incident occurred (uint64, converted to CAIP-2 hash internally)
     /// @param incidentTimestamp Unix timestamp when incident occurred (0 if unknown)
     /// @param deadline Timestamp deadline for the signature
@@ -164,7 +164,7 @@ interface IWalletRegistry {
     /// @param s ECDSA signature s component
     function acknowledge(
         address registeree,
-        address forwarder,
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -175,10 +175,10 @@ interface IWalletRegistry {
     ) external;
 
     /// @notice Phase 2: Complete wallet registration after grace period
-    /// @dev Must be called by authorized forwarder within deadline.
+    /// @dev Must be called by trusted forwarder within deadline.
     ///      reportedChainId and incidentTimestamp must match values from acknowledge phase.
     /// @param registeree The wallet address being registered
-    /// @param forwarder The address authorized to complete registration (must match acknowledge phase and msg.sender)
+    /// @param trustedForwarder The address authorized to complete registration (must match acknowledge phase and msg.sender)
     /// @param reportedChainId Raw EVM chain ID where incident occurred (must match acknowledge phase)
     /// @param incidentTimestamp Unix timestamp when incident occurred (must match acknowledge phase)
     /// @param deadline Timestamp deadline for the signature
@@ -188,7 +188,7 @@ interface IWalletRegistry {
     /// @param s ECDSA signature s component
     function register(
         address registeree,
-        address forwarder,
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -316,11 +316,11 @@ interface IWalletRegistry {
     ///      wallet owner so the resulting signature is valid for acknowledge/register.
     /// @param reportedChainId The chain ID where incident occurred (uint64 for gas efficiency)
     /// @param incidentTimestamp Unix timestamp of incident (0 if unknown)
-    /// @param forwarder The forwarder address authorized to complete registration
+    /// @param trustedForwarder The forwarder address authorized to complete registration
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline The deadline block number
     /// @return hashStruct The EIP-712 hash struct for signing
-    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
         external
         view
         returns (uint256 deadline, bytes32 hashStruct);

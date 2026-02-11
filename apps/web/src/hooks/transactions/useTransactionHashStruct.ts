@@ -3,7 +3,7 @@
  * Chain-aware: works on both hub (TransactionRegistry) and spoke (SpokeRegistry).
  *
  * Both contracts expose `generateTransactionHashStruct` with the same signature:
- *   (bytes32 dataHash, bytes32 reportedChainId, uint32 transactionCount, address forwarder, uint8 step)
+ *   (bytes32 dataHash, bytes32 reportedChainId, uint32 transactionCount, address trustedForwarder, uint8 step)
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  */

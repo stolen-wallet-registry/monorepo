@@ -280,7 +280,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         // Verify stored ack data
         ITransactionRegistry.TransactionAcknowledgementData memory ack =
             txRegistry.getTransactionAcknowledgementData(reporter);
-        assertEq(ack.forwarder, forwarder);
+        assertEq(ack.trustedForwarder, forwarder);
         assertEq(ack.dataHash, dataHash);
         assertEq(ack.reportedChainId, reportedChainId);
         assertEq(ack.transactionCount, 3);
@@ -536,7 +536,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
             reporterPrivateKey, reporter, wrongForwarder, dataHash, reportedChainId, 3, nonce, deadline
         );
 
-        vm.expectRevert(ITransactionRegistry.TransactionRegistry__NotAuthorizedForwarder.selector);
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidForwarder.selector);
         vm.prank(wrongForwarder);
         txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, v, r, s);
     }

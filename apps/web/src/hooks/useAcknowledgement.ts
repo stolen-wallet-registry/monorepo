@@ -5,9 +5,9 @@
  * After acknowledgement, a grace period begins before registration can be completed.
  *
  * Unified signature (hub and spoke):
- *   acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ *   acknowledge(wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
  *
- * isSponsored is derived on-chain as (wallet != forwarder).
+ * isSponsored is derived on-chain as (wallet != trustedForwarder).
  */
 
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
@@ -21,7 +21,7 @@ export interface AcknowledgementParams {
   /** The wallet address being registered as stolen */
   registeree: Address;
   /** The address authorized to complete registration (same as registeree for standard) */
-  forwarder: Address;
+  trustedForwarder: Address;
   /** Raw EVM chain ID where incident occurred (uint64) */
   reportedChainId: bigint;
   /** Unix timestamp when incident occurred */
@@ -89,7 +89,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
 
     const {
       registeree,
-      forwarder,
+      trustedForwarder,
       reportedChainId,
       incidentTimestamp,
       deadline,
@@ -103,7 +103,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
       contractAddress,
       functionName: 'acknowledge',
       registeree,
-      forwarder,
+      trustedForwarder,
       reportedChainId: reportedChainId.toString(),
       incidentTimestamp: incidentTimestamp.toString(),
       deadline: deadline.toString(),
@@ -111,10 +111,10 @@ export function useAcknowledgement(): UseAcknowledgementResult {
     });
 
     try {
-      // Unified: acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+      // Unified: acknowledge(wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
       const args = [
         registeree,
-        forwarder,
+        trustedForwarder,
         reportedChainId,
         incidentTimestamp,
         deadline,
@@ -136,7 +136,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
       logger.registration.info('Acknowledgement transaction submitted', {
         txHash,
         registeree,
-        forwarder,
+        trustedForwarder,
         chainId,
         registryType,
       });

@@ -40,8 +40,8 @@ export interface UseGasEstimateParams {
   step: 'acknowledgement' | 'registration';
   /**
    * Contract function arguments:
-   * - acknowledge: [registeree, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s]
-   * - register: [registeree, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s]
+   * - acknowledge: [registeree, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s]
+   * - register: [registeree, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s]
    */
   args: WalletContractArgs | undefined;
   /** Value to send with the transaction (for registration) */
@@ -81,7 +81,7 @@ const GAS_BUFFER_DENOMINATOR = 100n;
  * ```tsx
  * const { data, isLoading } = useGasEstimate({
  *   step: 'registration',
- *   args: [registeree, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s],
+ *   args: [registeree, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s],
  *   value: feeWei,
  * });
  *

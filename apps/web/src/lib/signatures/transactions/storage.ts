@@ -22,7 +22,7 @@ export interface StoredTxSignature {
   reportedChainId: Hash;
   transactionCount: number;
   reporter: Address;
-  forwarder: Address;
+  trustedForwarder: Address;
   chainId: number;
   step: TxSignatureStep;
   storedAt: number; // timestamp
@@ -37,7 +37,7 @@ interface SerializedTxSignature {
   reportedChainId: string;
   transactionCount: number;
   reporter: string;
-  forwarder: string;
+  trustedForwarder: string;
   chainId: number;
   step: number;
   storedAt: number;
@@ -54,7 +54,7 @@ export function storeTxSignature(sig: StoredTxSignature): void {
     reportedChainId: sig.reportedChainId,
     transactionCount: sig.transactionCount,
     reporter: sig.reporter,
-    forwarder: sig.forwarder,
+    trustedForwarder: sig.trustedForwarder,
     chainId: sig.chainId,
     step: sig.step,
     storedAt: sig.storedAt,
@@ -91,7 +91,7 @@ export function getTxSignature(
       !(isHex(parsed.dataHash, { strict: true }) && size(parsed.dataHash) === 32) ||
       !(isHex(parsed.reportedChainId, { strict: true }) && size(parsed.reportedChainId) === 32) ||
       !isAddress(parsed.reporter) ||
-      !isAddress(parsed.forwarder)
+      !isAddress(parsed.trustedForwarder)
     ) {
       sessionStorage.removeItem(key);
       return null;
@@ -111,7 +111,7 @@ export function getTxSignature(
       reportedChainId: parsed.reportedChainId as Hash,
       transactionCount: parsed.transactionCount,
       reporter: parsed.reporter as Address,
-      forwarder: parsed.forwarder as Address,
+      trustedForwarder: parsed.trustedForwarder as Address,
       chainId: parsed.chainId,
       step: parsed.step as TxSignatureStep,
       storedAt: parsed.storedAt,

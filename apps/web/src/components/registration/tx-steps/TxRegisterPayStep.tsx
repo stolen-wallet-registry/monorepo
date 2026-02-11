@@ -183,7 +183,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       !!txHashesForContractGuarded &&
       !!chainIdsForContractGuarded &&
       feeWei !== undefined &&
-      isCorrectWallet, // Only estimate gas when correct wallet is connected
+      isCorrectWallet &&
+      !hash, // Stop polling once tx is submitted
   });
 
   // Cross-chain confirmation - polls hub chain after spoke tx confirms

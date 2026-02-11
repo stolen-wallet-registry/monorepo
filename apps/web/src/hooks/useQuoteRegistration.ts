@@ -71,6 +71,9 @@ export function useQuoteRegistration(
 
   const result = isSpoke ? spokeResult : hubResult;
 
+  // Runtime validation - contract may return unexpected types
+  const feeWei = typeof result.data === 'bigint' ? result.data : undefined;
+
   // Log quote result for debugging
   if (result.isError) {
     logger.contract.error('useQuoteRegistration: quoteRegistration call failed', {
@@ -80,17 +83,13 @@ export function useQuoteRegistration(
       error: result.error?.message,
     });
   } else if (result.data !== undefined) {
-    const rawFee = typeof result.data === 'bigint' ? result.data : undefined;
     logger.contract.debug('useQuoteRegistration: Quote received', {
       chainId,
       registryType,
-      feeWei: rawFee?.toString(),
-      feeEth: rawFee ? formatEther(rawFee) : undefined,
+      feeWei: feeWei?.toString(),
+      feeEth: feeWei ? formatEther(feeWei) : undefined,
     });
   }
-
-  // Runtime validation - contract may return unexpected types
-  const feeWei = typeof result.data === 'bigint' ? result.data : undefined;
 
   return {
     feeWei,

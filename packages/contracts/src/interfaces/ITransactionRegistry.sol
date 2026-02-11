@@ -36,7 +36,7 @@ interface ITransactionRegistry {
     /// @param gracePeriodStart Block number when grace period begins
     /// @param dataHash Hash of (txHashes, chainIds) committed in acknowledgement
     /// @param reportedChainId CAIP-2 chain ID hash where transactions were reported (stored for register-phase validation)
-    /// @param forwarder Address authorized to submit registration
+    /// @param trustedForwarder Address authorized to submit registration
     /// @param transactionCount Number of transactions in the batch (stored for register-phase validation)
     /// @param isSponsored Whether this is a sponsored registration
     struct TransactionAcknowledgementData {
@@ -45,7 +45,7 @@ interface ITransactionRegistry {
         uint256 gracePeriodStart;
         bytes32 dataHash;
         bytes32 reportedChainId;
-        address forwarder;
+        address trustedForwarder;
         uint32 transactionCount;
         bool isSponsored;
     }
@@ -76,7 +76,7 @@ interface ITransactionRegistry {
     error TransactionRegistry__GracePeriodNotStarted();
     error TransactionRegistry__InvalidSignature();
     error TransactionRegistry__InvalidSigner();
-    error TransactionRegistry__NotAuthorizedForwarder();
+    error TransactionRegistry__InvalidForwarder();
     error TransactionRegistry__InsufficientFee();
     error TransactionRegistry__ZeroAddress();
     error TransactionRegistry__OnlyHub();
@@ -94,11 +94,11 @@ interface ITransactionRegistry {
 
     /// @notice Emitted when a transaction batch acknowledgement is submitted
     /// @param reporter The address registering the transactions
-    /// @param forwarder The address authorized to complete registration
+    /// @param trustedForwarder The address authorized to complete registration
     /// @param dataHash Hash of (txHashes, chainIds) committed
     /// @param isSponsored Whether this is a sponsored registration
     event TransactionBatchAcknowledged(
-        address indexed reporter, address indexed forwarder, bytes32 dataHash, bool isSponsored
+        address indexed reporter, address indexed trustedForwarder, bytes32 dataHash, bool isSponsored
     );
 
     /// @notice Emitted when a transaction is registered
@@ -170,9 +170,9 @@ interface ITransactionRegistry {
     /// @dev Creates a pending acknowledgement with grace period.
     ///      reportedChainId and transactionCount are included in the EIP-712 signature
     ///      and stored in acknowledgement data for validation during registerTransactions().
-    ///      isSponsored is derived as (reporter != forwarder).
+    ///      isSponsored is derived as (reporter != trustedForwarder).
     /// @param reporter The address registering the transactions
-    /// @param forwarder The address authorized to complete registration
+    /// @param trustedForwarder The address authorized to complete registration
     /// @param deadline Timestamp deadline for the signature
     /// @param dataHash Hash of (txHashes, chainIds) being committed
     /// @param reportedChainId CAIP-2 chain ID hash where transactions were reported
@@ -182,7 +182,7 @@ interface ITransactionRegistry {
     /// @param s EIP-712 signature s component
     function acknowledgeTransactions(
         address reporter,
-        address forwarder,
+        address trustedForwarder,
         uint256 deadline,
         bytes32 dataHash,
         bytes32 reportedChainId,
@@ -193,7 +193,7 @@ interface ITransactionRegistry {
     ) external;
 
     /// @notice Phase 2: Complete transaction batch registration after grace period
-    /// @dev Must be called by authorized forwarder within deadline
+    /// @dev Must be called by trusted forwarder within deadline
     /// @param reporter The address that acknowledged the transactions
     /// @param deadline Block number deadline for the signature
     /// @param transactionHashes Array of transaction hashes to register
@@ -306,7 +306,7 @@ interface ITransactionRegistry {
     /// @return graceStartsAt Blocks remaining until registration window opens (0 if open)
     /// @return timeLeft Blocks remaining until expiry (0 if expired)
     /// @return isExpired True if the registration window has expired
-    function getDeadlines(address reporter)
+    function getTransactionDeadlines(address reporter)
         external
         view
         returns (
@@ -324,7 +324,7 @@ interface ITransactionRegistry {
     /// @param dataHash Hash of (txHashes, chainIds) being committed
     /// @param reportedChainId CAIP-2 chain ID hash where transactions occurred
     /// @param transactionCount Number of transactions in batch
-    /// @param forwarder The forwarder address authorized to complete registration
+    /// @param trustedForwarder The forwarder address authorized to complete registration
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline The deadline block number
     /// @return hashStruct The EIP-712 hash struct for signing
@@ -332,7 +332,7 @@ interface ITransactionRegistry {
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,
-        address forwarder,
+        address trustedForwarder,
         uint8 step
     ) external view returns (uint256 deadline, bytes32 hashStruct);
 

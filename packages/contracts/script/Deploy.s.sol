@@ -571,7 +571,9 @@ contract Deploy is Script {
 
         // Read hub addresses from env (set by deploy:crosschain script after deployHubLocal)
         crossChainInboxAddr = vm.envAddress("CROSS_CHAIN_INBOX");
+        require(crossChainInboxAddr != address(0), "CROSS_CHAIN_INBOX env var is zero address");
         soulboundReceiverAddr = vm.envAddress("SOULBOUND_RECEIVER");
+        require(soulboundReceiverAddr != address(0), "SOULBOUND_RECEIVER env var is zero address");
         console2.log("CrossChainInbox (hub):", crossChainInboxAddr);
         console2.log("SoulboundReceiver (hub):", soulboundReceiverAddr);
 
@@ -643,8 +645,11 @@ contract Deploy is Script {
 
         // Read deployed addresses from env (set by deploy:crosschain script)
         crossChainInboxAddr = vm.envAddress("CROSS_CHAIN_INBOX");
+        require(crossChainInboxAddr != address(0), "CROSS_CHAIN_INBOX env var is zero address");
         soulboundReceiverAddr = vm.envAddress("SOULBOUND_RECEIVER");
+        require(soulboundReceiverAddr != address(0), "SOULBOUND_RECEIVER env var is zero address");
         hyperlaneAdapterAddr = vm.envAddress("HYPERLANE_ADAPTER");
+        require(hyperlaneAdapterAddr != address(0), "HYPERLANE_ADAPTER env var is zero address");
 
         console2.log("=== TRUST CONFIGURATION (Single-Chain) ===");
         console2.log("CrossChainInbox:", crossChainInboxAddr);

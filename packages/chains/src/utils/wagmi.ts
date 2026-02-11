@@ -18,10 +18,10 @@ import { getNetworkOrUndefined, allNetworks } from '../networks';
  * script (Deploy.s.sol). These are CREATE2 deterministic addresses.
  */
 const MULTICALL3_ADDRESSES: Record<number, `0x${string}`> = {
-  // Local Anvil chains - CREATE2 deterministic addresses (Deploy.s.sol)
+  // Local Anvil chains - regular CREATE addresses (Deploy.s.sol, Account 0)
   // Run `pnpm deploy:crosschain` and check "Multicall3:" output to verify.
-  31337: '0x0A12eCa8418113C0c0c2C7B957aec5A10a38A0aB', // Hub chain
-  31338: '0x4E4a45C57486752Aa194b9Fe31d574092EE0E6aF', // Spoke chain
+  31337: '0x68B1D87F95878fE05B998F19b66F4baba5De1aed', // Hub chain
+  31338: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853', // Spoke chain
   // All other chains use canonical address (pre-deployed)
 };
 

@@ -144,7 +144,7 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
 
 // WalletAcknowledged — tracks pending acknowledgements in grace period
 ponder.on('WalletRegistry:WalletAcknowledged', async ({ event, context }) => {
-  const { registeree, forwarder, isSponsored } = event.args;
+  const { registeree, trustedForwarder, isSponsored } = event.args;
   const { db } = context;
 
   const gracePeriodStart = event.block.number + 5n;
@@ -154,7 +154,7 @@ ponder.on('WalletRegistry:WalletAcknowledged', async ({ event, context }) => {
     .insert(walletAcknowledgement)
     .values({
       id: registeree.toLowerCase() as Address,
-      forwarder: forwarder.toLowerCase() as Address,
+      forwarder: trustedForwarder.toLowerCase() as Address,
       acknowledgedAt: event.block.timestamp,
       acknowledgedAtBlock: event.block.number,
       transactionHash: event.transaction.hash,
@@ -164,7 +164,7 @@ ponder.on('WalletRegistry:WalletAcknowledged', async ({ event, context }) => {
       status: 'pending',
     })
     .onConflictDoUpdate({
-      forwarder: forwarder.toLowerCase() as Address,
+      forwarder: trustedForwarder.toLowerCase() as Address,
       acknowledgedAt: event.block.timestamp,
       acknowledgedAtBlock: event.block.number,
       transactionHash: event.transaction.hash,
@@ -281,7 +281,7 @@ ponder.on('WalletRegistry:BatchCreated', async ({ event, context }) => {
 
 // TransactionBatchAcknowledged
 ponder.on('TransactionRegistry:TransactionBatchAcknowledged', async ({ event, context }) => {
-  const { reporter, forwarder, dataHash, isSponsored } = event.args;
+  const { reporter, trustedForwarder, dataHash, isSponsored } = event.args;
   const { db } = context;
 
   const gracePeriodStart = event.block.number + 5n;
@@ -293,7 +293,7 @@ ponder.on('TransactionRegistry:TransactionBatchAcknowledged', async ({ event, co
       id: reporter.toLowerCase() as Address,
       dataHash,
       reporter: reporter.toLowerCase() as Address,
-      forwarder: forwarder.toLowerCase() as Address,
+      forwarder: trustedForwarder.toLowerCase() as Address,
       isSponsored,
       acknowledgedAt: event.block.timestamp,
       acknowledgedAtBlock: event.block.number,
@@ -304,7 +304,7 @@ ponder.on('TransactionRegistry:TransactionBatchAcknowledged', async ({ event, co
     })
     .onConflictDoUpdate({
       dataHash,
-      forwarder: forwarder.toLowerCase() as Address,
+      forwarder: trustedForwarder.toLowerCase() as Address,
       isSponsored,
       acknowledgedAt: event.block.timestamp,
       acknowledgedAtBlock: event.block.number,

@@ -1,0 +1,181 @@
+# Hub-Spoke Architecture
+
+SWR uses a hub-spoke model for cross-chain fraud registration. Users can register stolen wallets and transactions from any supported chain. All registrations ultimately settle on the hub chain.
+
+## Overview
+
+- **Hub chain:** Base (settlement layer, canonical source of truth)
+- **Spoke chains:** Optimism, Arbitrum, other L2s
+
+Users interact with a SpokeRegistry on their chain. The spoke sends a cross-chain message via Hyperlane to the hub, where the entry is permanently stored.
+
+## Contract Deployment
+
+| Contract            | Hub (Base) | Spoke Chains |
+| ------------------- | ---------- | ------------ |
+| WalletRegistry      | Yes        | --           |
+| TransactionRegistry | Yes        | --           |
+| ContractRegistry    | Yes        | --           |
+| FraudRegistryHub    | Yes        | --           |
+| CrossChainInbox     | Yes        | --           |
+| OperatorRegistry    | Yes        | --           |
+| OperatorSubmitter   | Yes        | --           |
+| SpokeRegistry       | --         | Yes          |
+| HyperlaneAdapter    | --         | Yes          |
+
+The hub has the full registry stack. Each spoke has a single SpokeRegistry that handles both wallet and transaction registrations (no contract registration on spokes -- that's operator-only on the hub).
+
+## Cross-Chain Message Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant S as SpokeRegistry<br/>(Spoke Chain)
+    participant H as Hyperlane
+    participant I as CrossChainInbox<br/>(Hub Chain)
+    participant F as FraudRegistryHub
+    participant R as WalletRegistry
+
+    U->>S: register() + EIP-712 sig
+    S->>S: Verify sig, encode payload
+    S->>H: sendMessage via Adapter
+    H-->>I: Deliver to hub chain
+    I->>I: Validate trusted source
+    I->>F: registerWalletFromSpoke()
+    F->>R: registerFromHub()
+    R->>R: Store entry (bridgeId=1, messageId)
+```
+
+### Step by Step
+
+1. **User calls `SpokeRegistry.register()`** on the spoke chain with their EIP-712 signature
+2. **SpokeRegistry validates** the signature, acknowledgement timing, and nonce
+3. **SpokeRegistry encodes** a `CrossChainMessage` payload with full CAIP-10 data
+4. **HyperlaneAdapter sends** the message via the Hyperlane mailbox
+5. **Hyperlane relayer delivers** the message to the hub chain's `CrossChainInbox`
+6. **CrossChainInbox.handle()** validates the source is trusted and the source chain ID matches
+7. **CrossChainInbox routes** to `FraudRegistryHub` based on message type
+8. **FraudRegistryHub forwards** to the appropriate registry (`WalletRegistry` or `TransactionRegistry`)
+9. **Registry stores** the entry with `bridgeId=1` (Hyperlane) and the `messageId`
+
+## CrossChainMessage Format
+
+Two message types, both using `MESSAGE_VERSION = 2`:
+
+| Type                         | Byte   | Purpose                     |
+| ---------------------------- | ------ | --------------------------- |
+| `MSG_TYPE_WALLET`            | `0x01` | Single wallet registration  |
+| `MSG_TYPE_TRANSACTION_BATCH` | `0x02` | Batch of transaction hashes |
+
+### WalletRegistrationPayload
+
+```solidity
+struct WalletRegistrationPayload {
+    bytes32 namespaceHash;     // keccak256("eip155"), keccak256("solana"), etc.
+    bytes32 chainRef;          // Chain reference hash (ignored for EVM wildcard)
+    bytes32 identifier;        // Wallet address padded to bytes32
+    bytes32 reportedChainId;   // CAIP-2 hash where incident was reported
+    uint64  incidentTimestamp;  // When theft occurred (user-provided)
+    bytes32 sourceChainId;     // CAIP-2 hash of spoke chain
+    bool    isSponsored;       // True if third party paid gas
+    uint256 nonce;             // Replay protection
+    uint64  timestamp;         // Block timestamp on spoke
+    bytes32 registrationHash;  // Hash of signed EIP-712 data
+}
+```
+
+### TransactionBatchPayload
+
+```solidity
+struct TransactionBatchPayload {
+    bytes32   dataHash;           // keccak256(abi.encode(txHashes, chainIds))
+    address   reporter;           // Address that submitted the batch
+    bytes32   reportedChainId;    // CAIP-2 chain ID where txs occurred
+    bytes32   sourceChainId;      // CAIP-2 chain ID of spoke
+    uint32    transactionCount;   // Number of transactions
+    bool      isSponsored;        // Third party paid gas
+    uint256   nonce;              // Replay protection
+    uint64    timestamp;          // Block timestamp on spoke
+    bytes32[] transactionHashes;  // Full list of tx hashes
+    bytes32[] chainIds;           // Parallel array of CAIP-2 chain IDs
+}
+```
+
+## Unified Function Signatures
+
+Hub `WalletRegistry` and `SpokeRegistry` have **identical** `acknowledge()` and `register()` function signatures:
+
+```solidity
+function acknowledge(
+    address registeree,
+    address forwarder,
+    uint64 reportedChainId,
+    uint64 incidentTimestamp,
+    uint256 deadline,
+    uint256 nonce,
+    uint8 v, bytes32 r, bytes32 s
+) external;
+
+function register(
+    address registeree,
+    address forwarder,
+    uint64 reportedChainId,
+    uint64 incidentTimestamp,
+    uint256 deadline,
+    uint256 nonce,
+    uint8 v, bytes32 r, bytes32 s
+) external payable;
+```
+
+This means the frontend uses the **same argument construction** regardless of which chain the user is on. No hub/spoke branching in the UI code.
+
+## FraudRegistryHub Query Routing
+
+The hub provides a unified `isRegistered(string caip10)` query that routes by identifier length:
+
+| Identifier Length        | Interpretation   | Registries Checked                |
+| ------------------------ | ---------------- | --------------------------------- |
+| 42 chars (`0x` + 40 hex) | EVM address      | WalletRegistry + ContractRegistry |
+| 66 chars (`0x` + 64 hex) | Transaction hash | TransactionRegistry               |
+
+```solidity
+function isRegistered(string calldata caip10) external view returns (bool) {
+    (,,, uint256 addrLen) = CAIP10.parse(caip10);
+
+    if (addrLen == 42) {
+        // Check wallet AND contract registries
+        return walletRegistry.isWalletRegistered(caip10)
+            || contractRegistry.isContractRegistered(caip10);
+    } else if (addrLen == 66) {
+        return transactionRegistry.isTransactionRegistered(caip10);
+    }
+    revert FraudRegistryHub__InvalidIdentifierLength();
+}
+```
+
+An address can be registered as **both** a stolen wallet and a fraudulent contract simultaneously.
+
+## Trust Model
+
+The `CrossChainInbox` maintains a mapping of trusted sources per chain:
+
+```
+mapping(uint32 chainId => mapping(bytes32 spokeAddress => bool trusted))
+```
+
+Only messages from trusted spoke registries on trusted chains are processed. The inbox also performs defense-in-depth validation: the `sourceChainId` inside the payload must match the Hyperlane origin domain.
+
+## Hub vs Spoke Feature Comparison
+
+| Feature                                | Hub                   | Spoke                         |
+| -------------------------------------- | --------------------- | ----------------------------- |
+| Wallet registration (two-phase)        | Direct                | Via cross-chain message       |
+| Transaction registration (two-phase)   | Direct                | Via cross-chain message       |
+| Contract registration (operator batch) | Direct                | Not supported                 |
+| Operator batch submissions             | Yes                   | Not supported                 |
+| Unified query (`isRegistered`)         | Yes                   | Not available                 |
+| Cross-chain message receiving          | Yes (CrossChainInbox) | Not applicable                |
+| Fee collection                         | Registration fee only | Bridge fee + registration fee |
+| Data storage                           | Permanent entries     | Ephemeral (ack data only)     |
+
+Spoke chains store only pending acknowledgement data. Once a registration is sent cross-chain, the spoke deletes its local state. All permanent data lives on the hub.

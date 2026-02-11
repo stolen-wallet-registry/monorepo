@@ -17,7 +17,7 @@
  * // Build typed data for wallet registration
  * const typedData = buildAcknowledgementTypedData(8453, contractAddress, true, {
  *   wallet: '0x...',
- *   forwarder: '0x...',
+ *   trustedForwarder: '0x...',
  *   reportedChainId: 8453n,
  *   incidentTimestamp: 1234567890n,
  *   nonce: 0n,

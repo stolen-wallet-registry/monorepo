@@ -43,6 +43,10 @@ importers:
         version: 2.7.3
 
   apps/docs:
+    dependencies:
+      '@swr/chains':
+        specifier: workspace:*
+        version: link:../../packages/chains
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.1

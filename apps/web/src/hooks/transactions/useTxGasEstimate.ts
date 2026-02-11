@@ -43,8 +43,8 @@ export interface UseTxGasEstimateParams {
   step: 'acknowledgement' | 'registration';
   /** Reporter address */
   reporter?: Address;
-  /** Forwarder address (hub only, same as reporter for self-registration) */
-  forwarder?: Address;
+  /** Trusted forwarder address (hub only, same as reporter for self-registration) */
+  trustedForwarder?: Address;
   /** Data hash (merkle root) - for acknowledgement */
   dataHash?: Hash;
   /** Signature deadline */
@@ -97,7 +97,7 @@ const GAS_BUFFER_DENOMINATOR = 100n;
 export function useTxGasEstimate({
   step,
   reporter,
-  forwarder,
+  trustedForwarder,
   dataHash,
   deadline,
   nonce,
@@ -137,7 +137,7 @@ export function useTxGasEstimate({
     isHub &&
     step === 'acknowledgement' &&
     !!reporter &&
-    !!forwarder &&
+    !!trustedForwarder &&
     deadline !== undefined &&
     !!dataHash &&
     !!reportedChainId &&
@@ -187,19 +187,19 @@ export function useTxGasEstimate({
       if (
         hasHubAckParams &&
         reporter &&
-        forwarder &&
+        trustedForwarder &&
         deadline !== undefined &&
         dataHash &&
         reportedChainId &&
         transactionCount !== undefined
       ) {
-        // Hub: acknowledgeTransactions(reporter, forwarder, deadline, dataHash, reportedChainId, transactionCount, v, r, s)
+        // Hub: acknowledgeTransactions(reporter, trustedForwarder, deadline, dataHash, reportedChainId, transactionCount, v, r, s)
         return encodeFunctionData({
           abi: transactionRegistryAbi,
           functionName: 'acknowledgeTransactions',
           args: [
             reporter,
-            forwarder,
+            trustedForwarder,
             deadline,
             dataHash,
             reportedChainId,
@@ -295,7 +295,7 @@ export function useTxGasEstimate({
   }, [
     step,
     reporter,
-    forwarder,
+    trustedForwarder,
     dataHash,
     deadline,
     nonce,

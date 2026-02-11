@@ -163,7 +163,7 @@ export interface UseTxContractDeadlinesResult {
 /**
  * Hook to read deadline data for a reporter from the transaction registry.
  *
- * Uses the `getDeadlines(reporter)` function which returns all timing info
+ * Uses the `getTransactionDeadlines(reporter)` function which returns all timing info
  * for a pending acknowledgement.
  *
  * @param reporter - The reporter address to get deadlines for
@@ -184,11 +184,11 @@ export function useTxContractDeadlines(
   const isSpoke = registryType === 'spoke';
   const enabled = !!reporter && !!contractAddress;
 
-  // Split-call: one hook per ABI, only one fires based on registryType
+  // Both hub TransactionRegistry and SpokeRegistry now use getTransactionDeadlines
   const hubResult = useReadContract({
     address: contractAddress,
     abi: transactionRegistryAbi,
-    functionName: 'getDeadlines',
+    functionName: 'getTransactionDeadlines',
     args: reporter ? [reporter] : undefined,
     chainId,
     query: {

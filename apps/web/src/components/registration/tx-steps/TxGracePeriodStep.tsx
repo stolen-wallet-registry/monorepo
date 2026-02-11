@@ -86,7 +86,7 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
 
   // Log when deadlines are loaded
   useEffect(() => {
-    if (deadlines && !hasLoggedStartForDeadlines.current) {
+    if (deadlines && !hasNoPendingAck && !hasLoggedStartForDeadlines.current) {
       hasLoggedStartForDeadlines.current = true;
       logger.registration.info('Transaction batch grace period started', {
         transactionCount: txHashesForContract.length,
@@ -97,7 +97,7 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
         chainId,
       });
     }
-  }, [deadlines, txHashesForContract.length, chainId]);
+  }, [deadlines, hasNoPendingAck, txHashesForContract.length, chainId]);
 
   // Custom onExpire handler with theme switch
   const handleExpire = useCallback(() => {

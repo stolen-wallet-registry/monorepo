@@ -110,9 +110,9 @@ contract SpokeRegistryTest is Test {
         vm.warp(1_704_067_200); // 2024-01-01
 
         // Create test accounts
-        walletPrivateKey = 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef;
+        walletPrivateKey = uint256(keccak256("test wallet")); // deterministic test-only key
         wallet = vm.addr(walletPrivateKey);
-        reporterPrivateKey = 0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890;
+        reporterPrivateKey = uint256(keccak256("test reporter")); // deterministic test-only key
         reporter = vm.addr(reporterPrivateKey);
         forwarder = makeAddr("forwarder");
         owner = address(this);

@@ -84,8 +84,8 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Signature verification failed.',
     action: 'Please sign again with the correct wallet.',
   },
-  '0x6bd7e909': {
-    name: 'WalletRegistry__NotAuthorizedForwarder',
+  '0x30866145': {
+    name: 'WalletRegistry__InvalidForwarder',
     message: 'Wrong wallet connected for this registration.',
     action: 'Use the wallet that acknowledged the registration.',
   },
@@ -169,8 +169,8 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Signature verification failed.',
     action: 'Please sign again with the correct wallet.',
   },
-  '0x9e63d130': {
-    name: 'TransactionRegistry__NotAuthorizedForwarder',
+  '0x11780b54': {
+    name: 'TransactionRegistry__InvalidForwarder',
     message: 'Wrong wallet connected for this registration.',
     action: 'Use the wallet that acknowledged the registration.',
   },

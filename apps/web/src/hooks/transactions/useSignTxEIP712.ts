@@ -29,7 +29,7 @@ export interface TxSignAckParams {
   /** Number of transactions in the batch */
   transactionCount: number;
   /** Trusted forwarder address */
-  forwarder: Address;
+  trustedForwarder: Address;
   /** Contract nonce for reporter */
   nonce: bigint;
   /** Signature deadline (timestamp) */
@@ -46,7 +46,7 @@ export interface TxSignRegParams {
   /** Number of transactions in the batch */
   transactionCount: number;
   /** Trusted forwarder address */
-  forwarder: Address;
+  trustedForwarder: Address;
   /** Contract nonce for reporter */
   nonce: bigint;
   /** Signature deadline (timestamp) */
@@ -112,7 +112,7 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
       const validatedAddress = validateSigningPreconditions(params.reporter);
       const message = {
         reporter: params.reporter,
-        forwarder: params.forwarder,
+        trustedForwarder: params.trustedForwarder,
         dataHash: params.dataHash,
         reportedChainId: params.reportedChainId,
         transactionCount: params.transactionCount,
@@ -128,7 +128,7 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
         reporter: params.reporter,
         dataHash: params.dataHash,
         transactionCount: params.transactionCount,
-        forwarder: params.forwarder,
+        trustedForwarder: params.trustedForwarder,
         nonce: params.nonce.toString(),
         deadline: params.deadline.toString(),
       });
@@ -167,7 +167,7 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
       const validatedAddress = validateSigningPreconditions(params.reporter);
       const message = {
         reporter: params.reporter,
-        forwarder: params.forwarder,
+        trustedForwarder: params.trustedForwarder,
         dataHash: params.dataHash,
         reportedChainId: params.reportedChainId,
         transactionCount: params.transactionCount,
@@ -182,7 +182,7 @@ export function useSignTxEIP712(): UseSignTxEIP712Result {
         isHub,
         reporter: params.reporter,
         dataHash: params.dataHash,
-        forwarder: params.forwarder,
+        trustedForwarder: params.trustedForwarder,
         nonce: params.nonce.toString(),
         deadline: params.deadline.toString(),
       });

@@ -17,6 +17,18 @@ import type { Address } from '@/lib/types/ethereum';
 import type { FeeBreakdown, RawFeeBreakdown } from '@/lib/types/fees';
 import { logger } from '@/lib/logger';
 
+/** Runtime guard: verify data matches RawFeeBreakdown shape before accessing fields */
+function isRawFeeBreakdown(data: unknown): data is RawFeeBreakdown {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+  return (
+    typeof d.bridgeFee === 'bigint' &&
+    typeof d.registrationFee === 'bigint' &&
+    typeof d.total === 'bigint' &&
+    typeof d.bridgeName === 'string'
+  );
+}
+
 // ============================================================================
 // Wallet Registry Fee Breakdown
 // ============================================================================
@@ -83,10 +95,9 @@ export function useQuoteFeeBreakdown(
 
   const result = isSpoke ? spokeResult : hubResult;
 
-  // Extract typed data from the active hook (avoids union-type complications)
-  const hubBreakdown = hubResult.data as RawFeeBreakdown | undefined;
-  const spokeBreakdown = spokeResult.data as RawFeeBreakdown | undefined;
-  const activeBreakdown = isSpoke ? spokeBreakdown : hubBreakdown;
+  // Validate data shape before accessing fields (guards against ABI drift)
+  const rawData = isSpoke ? spokeResult.data : hubResult.data;
+  const activeBreakdown = isRawFeeBreakdown(rawData) ? rawData : undefined;
 
   // Log breakdown data outside useMemo to avoid side effects during render
   useEffect(() => {
@@ -208,10 +219,9 @@ export function useTxQuoteFeeBreakdown(
 
   const result = isSpoke ? spokeResult : hubResult;
 
-  // Extract typed data from the active hook (avoids union-type complications)
-  const txHubBreakdown = hubResult.data as RawFeeBreakdown | undefined;
-  const txSpokeBreakdown = spokeResult.data as RawFeeBreakdown | undefined;
-  const txActiveBreakdown = isSpoke ? txSpokeBreakdown : txHubBreakdown;
+  // Validate data shape before accessing fields (guards against ABI drift)
+  const txRawData = isSpoke ? spokeResult.data : hubResult.data;
+  const txActiveBreakdown = isRawFeeBreakdown(txRawData) ? txRawData : undefined;
 
   // Log breakdown data outside useMemo to avoid side effects during render
   useEffect(() => {

@@ -42,7 +42,7 @@ export const WalletRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -182,7 +182,7 @@ export const WalletRegistryABI = [
         internalType: 'uint64',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -243,7 +243,7 @@ export const WalletRegistryABI = [
             internalType: 'bytes32',
           },
           {
-            name: 'forwarder',
+            name: 'trustedForwarder',
             type: 'address',
             internalType: 'address',
           },
@@ -665,7 +665,7 @@ export const WalletRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -1016,7 +1016,7 @@ export const WalletRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         indexed: true,
         internalType: 'address',
@@ -1188,6 +1188,11 @@ export const WalletRegistryABI = [
   },
   {
     type: 'error',
+    name: 'WalletRegistry__InvalidForwarder',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'WalletRegistry__InvalidNonce',
     inputs: [],
   },
@@ -1209,11 +1214,6 @@ export const WalletRegistryABI = [
   {
     type: 'error',
     name: 'WalletRegistry__NotAcknowledged',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'WalletRegistry__NotAuthorizedForwarder',
     inputs: [],
   },
   {

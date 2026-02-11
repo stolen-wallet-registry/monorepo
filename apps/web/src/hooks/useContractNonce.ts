@@ -108,7 +108,7 @@ export function useContractNonce(
         nonce: (result.data as bigint).toString(),
       });
     }
-  }, [variant, result.data, ownerAddress]);
+  }, [variant, result.data, ownerAddress, isSpoke]);
 
   return {
     nonce: result.data as bigint | undefined,
@@ -174,7 +174,7 @@ export function useTxContractNonce(address: Address | undefined): UseContractNon
         nonce: (nonce as bigint).toString(),
       });
     }
-  }, [nonce, address]);
+  }, [nonce, address, isSpoke]);
 
   // Type-safe wrapper for refetch that returns a properly typed result
   const wrappedRefetch = useCallback(async (): Promise<RefetchResult<bigint>> => {
