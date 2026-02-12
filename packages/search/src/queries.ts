@@ -158,6 +158,7 @@ export const RECENT_WALLETS_QUERY = gql`
         isSponsored
         operator
         sourceChainCAIP2
+        batchId
       }
     }
   }
@@ -594,6 +595,7 @@ export interface RawRecentWalletsResponse {
       isSponsored: boolean;
       operator?: string;
       sourceChainCAIP2?: string;
+      batchId?: string;
     }>;
   };
 }

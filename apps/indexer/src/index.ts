@@ -154,7 +154,7 @@ ponder.on('WalletRegistry:WalletAcknowledged', async ({ event, context }) => {
     .insert(walletAcknowledgement)
     .values({
       id: registeree.toLowerCase() as Address,
-      forwarder: trustedForwarder.toLowerCase() as Address,
+      trustedForwarder: trustedForwarder.toLowerCase() as Address,
       acknowledgedAt: event.block.timestamp,
       acknowledgedAtBlock: event.block.number,
       transactionHash: event.transaction.hash,
@@ -164,7 +164,7 @@ ponder.on('WalletRegistry:WalletAcknowledged', async ({ event, context }) => {
       status: 'pending',
     })
     .onConflictDoUpdate({
-      forwarder: trustedForwarder.toLowerCase() as Address,
+      trustedForwarder: trustedForwarder.toLowerCase() as Address,
       acknowledgedAt: event.block.timestamp,
       acknowledgedAtBlock: event.block.number,
       transactionHash: event.transaction.hash,
@@ -293,7 +293,7 @@ ponder.on('TransactionRegistry:TransactionBatchAcknowledged', async ({ event, co
       id: reporter.toLowerCase() as Address,
       dataHash,
       reporter: reporter.toLowerCase() as Address,
-      forwarder: trustedForwarder.toLowerCase() as Address,
+      trustedForwarder: trustedForwarder.toLowerCase() as Address,
       isSponsored,
       acknowledgedAt: event.block.timestamp,
       acknowledgedAtBlock: event.block.number,
@@ -304,7 +304,7 @@ ponder.on('TransactionRegistry:TransactionBatchAcknowledged', async ({ event, co
     })
     .onConflictDoUpdate({
       dataHash,
-      forwarder: trustedForwarder.toLowerCase() as Address,
+      trustedForwarder: trustedForwarder.toLowerCase() as Address,
       isSponsored,
       acknowledgedAt: event.block.timestamp,
       acknowledgedAtBlock: event.block.number,

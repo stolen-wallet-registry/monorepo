@@ -47,6 +47,9 @@ importers:
       '@swr/chains':
         specifier: workspace:*
         version: link:../../packages/chains
+      mermaid:
+        specifier: ^11.12.2
+        version: 11.12.2
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.1

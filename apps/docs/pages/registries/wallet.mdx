@@ -1,3 +1,5 @@
+import { Mermaid } from '../../components/Mermaid';
+
 # Wallet Registry
 
 Permanently registers stolen wallet addresses on-chain. Once registered, a wallet is marked as compromised and cannot be removed.
@@ -36,7 +38,8 @@ struct WalletEntry {
 
 Every individual wallet registration goes through two phases separated by a randomized grace period. This prevents single-transaction phishing -- an attacker cannot trick a user into registering a legitimate wallet in one step.
 
-```mermaid
+<Mermaid
+  chart={`
 sequenceDiagram
     participant W as Wallet Owner
     participant C as WalletRegistry
@@ -45,7 +48,8 @@ sequenceDiagram
     Note over W,C: ~1-4 min randomized delay
     W->>C: register(registeree, forwarder, ...)
     Note over C: Verify grace period elapsed<br/>Store WalletEntry permanently
-```
+`}
+/>
 
 ### Phase 1: Acknowledge
 

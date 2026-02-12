@@ -29,7 +29,7 @@ const sampleHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890
 
 const sampleSignedMessage: SignedMessageData = {
   registeree: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address,
-  forwarder: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address,
+  trustedForwarder: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address,
   nonce: 0n,
   deadline: 12345678n,
   signature:

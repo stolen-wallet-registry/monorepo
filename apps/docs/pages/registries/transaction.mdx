@@ -1,6 +1,8 @@
+import { Mermaid } from '../../components/Mermaid';
+
 # Transaction Registry
 
-Registers fraudulent transactions in batches. Unlike the Wallet Registry (which marks an entire wallet), this registry flags specific transaction hashes -- useful for phishing attacks, address poisoning, or fraudulent approvals where the wallet itself may not be compromised.
+Registers fraudulent transactions in batches. Unlike the Wallet Registry (which marks an entire wallet), this registry flags specific transaction hashes - useful for phishing attacks, address poisoning, or fraudulent approvals where the wallet itself may not be compromised.
 
 **Who can submit:** Individuals (with EIP-712 signatures) and DAO-approved operators (batch submissions via OperatorSubmitter).
 
@@ -36,7 +38,7 @@ struct TransactionEntry {
 
 Transaction registration uses a commit-reveal scheme to prevent front-running. During the acknowledge phase, the reporter commits to a hash of the batch without revealing which transactions are being reported.
 
-```mermaid
+<Mermaid chart={`
 sequenceDiagram
     participant R as Reporter
     participant C as TransactionRegistry
@@ -47,7 +49,8 @@ sequenceDiagram
     Note over R,C: ~1-4 min randomized delay
     R->>C: registerTransactions(..., txHashes[], chainIds[])
     Note over C: Recompute dataHash from arrays<br/>Verify it matches commitment<br/>Register each transaction
-```
+
+`} />
 
 **Why this matters:** Without the commit-reveal, a front-runner could see the acknowledge transaction in the mempool, extract the transaction hashes, and register them first. The dataHash ensures the contents stay hidden until the registration phase.
 
@@ -117,7 +120,7 @@ tx 0xabc...
   └── TransactionBatchRegistered(batchId, reporter, dataHash, count, isSponsored)
 ```
 
-The indexer joins per-entry events to their batch by matching on `transactionHash` (the on-chain tx hash, not the reported fraud tx hash). All events in the same transaction share this value. This means per-entry events carry **zero extra gas** for batch association -- no batchId field needed on each entry.
+The indexer joins per-entry events to their batch by matching on `transactionHash` (the on-chain tx hash, not the reported fraud tx hash). All events in the same transaction share this value. This means per-entry events carry **zero extra gas** for batch association - no batchId field needed on each entry.
 
 ## Other Registration Paths
 
@@ -173,3 +176,15 @@ Single-phase, no signatures. Sets `reporter = address(0)` on entries. Emits `Tra
 | `generateTransactionHashStruct(...)`                       | EIP-712 hash struct for frontend signature generation                       |
 | `nonces(address reporter)`                                 | Current nonce for replay protection                                         |
 | `getTransactionBatch(uint256 batchId)`                     | Batch metadata                                                              |
+
+## Future: Transaction Validation
+
+The Transaction Registry does not verify that submitted transaction hashes correspond to real on-chain transactions. A reporter could submit any `bytes32` value as a transaction hash - the registry stores it without checking whether that transaction actually exists on the reported chain.
+
+This is an acknowledged design gap. Potential solutions being evaluated include:
+
+- **Oracle-based verification** - A service that checks transaction existence before or after registration
+- **Optimistic validation** - Accept all submissions with a challenge period for disputes
+- **Attestation stacking** - Weight credibility by reporter reputation and operator endorsement
+
+For now, the trust model relies on the two-phase signature requirement (for individuals) and DAO approval (for operators) as the primary quality gates.

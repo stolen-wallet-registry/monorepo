@@ -2,6 +2,7 @@ node_modules
 dist
 pnpm-lock.yaml
 *.sol
+apps/indexer/ponder-env.d.ts
 
 # Foundry dependencies (installed via forge install)
 **/lib/forge-std

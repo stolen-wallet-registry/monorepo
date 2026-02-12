@@ -1,0 +1,21 @@
+# Deployed Contracts
+
+import { HubContracts, SpokeContracts, NetworkOverview } from '../../components/ContractAddresses';
+
+All contract addresses are pulled live from `@swr/chains`. They update automatically when the package is updated after a new deployment.
+
+## Supported Networks
+
+<NetworkOverview />
+
+## Hub Contracts
+
+The hub chain is the canonical source of truth. All registries (wallet, transaction, contract) live here, along with the FraudRegistryHub entry point, operator infrastructure, and the cross-chain inbox.
+
+<HubContracts />
+
+## Spoke Contracts
+
+Spoke chains accept registrations locally and relay them to the hub via cross-chain bridge adapters. Each spoke deploys a SpokeRegistry, a FeeManager, and a bridge adapter. See [Hub-Spoke Architecture](/concepts/hub-spoke) for details on how cross-chain messaging works.
+
+<SpokeContracts />

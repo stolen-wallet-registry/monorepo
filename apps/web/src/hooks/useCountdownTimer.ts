@@ -95,6 +95,9 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
 
   // Reset when target/current block changes
   useEffect(() => {
+    // Don't recalculate after the timer has already completed
+    if (hasExpired) return;
+
     // Don't process if we don't have valid block data yet
     if (
       targetBlock === null ||
@@ -136,7 +139,7 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
       setIsRunning(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chainId is captured within calculateInitialMs
-  }, [calculateInitialMs, autoStart, targetBlock, currentBlock]);
+  }, [calculateInitialMs, autoStart, targetBlock, currentBlock, hasExpired]);
 
   // Countdown interval - only manages display time, NOT expiration
   useEffect(() => {
@@ -180,29 +183,9 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
       });
       setIsWaitingForBlock(false);
       setHasExpired(true);
-    } else if (isWaitingForBlock && !blockReached) {
-      // Timer estimate hit 0 but blocks haven't caught up - resync
-      const newMs = calculateInitialMs();
-      if (newMs > 0) {
-        logger.registration.info('Resyncing timer - blocks behind estimate', {
-          newMs,
-          targetBlock: targetBlock?.toString() ?? 'null',
-          currentBlock: currentBlock?.toString() ?? 'null',
-        });
-        setTotalMs(newMs);
-        setIsWaitingForBlock(false);
-        setIsRunning(true);
-      }
     }
-  }, [
-    currentBlock,
-    targetBlock,
-    isWaitingForBlock,
-    totalMs,
-    hasExpired,
-    isBlockTargetReached,
-    calculateInitialMs,
-  ]);
+    // No resync — stay in "Waiting for Block" state until block arrives
+  }, [currentBlock, targetBlock, isWaitingForBlock, totalMs, hasExpired, isBlockTargetReached]);
 
   // Fire onExpire callback once
   useEffect(() => {

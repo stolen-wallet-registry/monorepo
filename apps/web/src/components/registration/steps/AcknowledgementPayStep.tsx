@@ -197,7 +197,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
 
       await submitAcknowledgement({
         registeree,
-        forwarder,
+        trustedForwarder: forwarder,
         reportedChainId: storedSignature.reportedChainId,
         incidentTimestamp: storedSignature.incidentTimestamp,
         deadline: storedSignature.deadline,
@@ -277,7 +277,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
     storedSignature.deadline !== undefined
       ? {
           registeree,
-          forwarder,
+          trustedForwarder: forwarder,
           nonce: storedSignature.nonce,
           deadline: storedSignature.deadline,
           signature: storedSignature.signature,

@@ -251,7 +251,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
 
       const sig = await signAcknowledgement({
         wallet: address,
-        forwarder,
+        trustedForwarder: forwarder,
         reportedChainId,
         incidentTimestamp,
         nonce,
@@ -381,7 +381,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
               type="acknowledgement"
               data={{
                 registeree: address,
-                forwarder,
+                trustedForwarder: forwarder,
                 nonce,
                 deadline: hashStructData.deadline,
                 chainId,

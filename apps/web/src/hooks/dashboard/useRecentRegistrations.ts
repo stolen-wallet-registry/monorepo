@@ -153,6 +153,7 @@ export function useRecentRegistrations(
             isSponsored: raw.isSponsored,
             registeredAt: BigInt(raw.registeredAt),
             transactionHash: raw.transactionHash as Hash,
+            batchId: raw.batchId,
           });
         }
       }

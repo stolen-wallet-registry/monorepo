@@ -1,6 +1,6 @@
 # Contract Registry
 
-Catalogs malicious smart contract addresses. Operator-only -- individual users cannot submit to this registry.
+Catalogs malicious smart contract addresses. Operator-only - individual users cannot submit to this registry.
 
 **Who can submit:** DAO-approved operators with `CONTRACT_REGISTRY` capability (`0x04` bit set in OperatorRegistry).
 
@@ -9,6 +9,7 @@ Catalogs malicious smart contract addresses. Operator-only -- individual users c
 Determining whether a contract is malicious requires technical expertise (bytecode analysis, behavior patterns, known scam signatures). The DAO operator approval process is the trust mechanism that substitutes for the two-phase EIP-712 flow used in the other registries.
 
 This means:
+
 - No acknowledgement phase
 - No grace period
 - No EIP-712 signatures
@@ -75,10 +76,10 @@ struct ContractBatch {
 
 ## Events
 
-| Event | When | Key fields |
-|---|---|---|
-| `ContractRegistered` | Per contract registered | `identifier`, `reportedChainId`, `operatorId`, `batchId` |
-| `ContractBatchCreated` | After all entries processed | `batchId`, `operatorId`, `contractCount` |
+| Event                  | When                        | Key fields                                               |
+| ---------------------- | --------------------------- | -------------------------------------------------------- |
+| `ContractRegistered`   | Per contract registered     | `identifier`, `reportedChainId`, `operatorId`, `batchId` |
+| `ContractBatchCreated` | After all entries processed | `batchId`, `operatorId`, `contractCount`                 |
 
 Event ordering in a single transaction:
 
@@ -93,22 +94,22 @@ Per-entry `ContractRegistered` events include the `batchId` directly (unlike the
 
 ## View Functions
 
-| Function | Returns |
-|---|---|
-| `isContractRegistered(string caip10)` | Whether contract is registered (CAIP-10 string, e.g. `eip155:8453:0x9fE4...`) |
-| `isContractRegistered(address, bytes32 chainId)` | Whether contract is registered (gas-efficient EVM overload) |
-| `getContractEntry(...)` | Full `ContractEntry` struct (both overloads) |
-| `getContractBatch(uint256 batchId)` | Batch metadata |
-| `contractBatchCount()` | Total number of batches created |
+| Function                                         | Returns                                                                       |
+| ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `isContractRegistered(string caip10)`            | Whether contract is registered (CAIP-10 string, e.g. `eip155:8453:0x9fE4...`) |
+| `isContractRegistered(address, bytes32 chainId)` | Whether contract is registered (gas-efficient EVM overload)                   |
+| `getContractEntry(...)`                          | Full `ContractEntry` struct (both overloads)                                  |
+| `getContractBatch(uint256 batchId)`              | Batch metadata                                                                |
+| `contractBatchCount()`                           | Total number of batches created                                               |
 
 ## Comparison with Other Registries
 
-| Feature | Wallet | Transaction | Contract |
-|---|---|---|---|
-| Individual submissions | Yes | Yes | No |
-| Operator submissions | Yes | Yes | Yes |
-| Two-phase EIP-712 | Yes | Yes | No |
-| Grace period | Yes | Yes | No |
-| Cross-chain (hub) | Yes | Yes | No |
-| Storage key | Wildcard (all EVM chains) | Chain-specific | Chain-specific |
-| batchId in per-entry event | No | No | Yes |
+| Feature                    | Wallet                    | Transaction    | Contract       |
+| -------------------------- | ------------------------- | -------------- | -------------- |
+| Individual submissions     | Yes                       | Yes            | No             |
+| Operator submissions       | Yes                       | Yes            | Yes            |
+| Two-phase EIP-712          | Yes                       | Yes            | No             |
+| Grace period               | Yes                       | Yes            | No             |
+| Cross-chain (hub)          | Yes                       | Yes            | No             |
+| Storage key                | Wildcard (all EVM chains) | Chain-specific | Chain-specific |
+| batchId in per-entry event | No                        | No             | Yes            |

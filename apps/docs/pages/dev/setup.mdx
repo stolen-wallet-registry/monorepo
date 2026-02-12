@@ -1,0 +1,220 @@
+# Local Setup
+
+Everything you need to run the Stolen Wallet Registry monorepo on your machine.
+
+## Prerequisites
+
+| Tool       | Version        | Install                                                     |
+| ---------- | -------------- | ----------------------------------------------------------- |
+| Node.js    | 22+            | [nodejs.org](https://nodejs.org)                            |
+| pnpm       | 9+             | `npm install -g pnpm`                                       |
+| Foundry    | Latest         | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` |
+| PostgreSQL | 15+ (optional) | Required only if running the indexer                        |
+
+## Install
+
+```bash
+git clone https://github.com/stolen-wallet-registry/monorepo.git
+cd monorepo
+pnpm install
+```
+
+Build contracts and generate TypeScript ABIs:
+
+```bash
+pnpm forge:build
+```
+
+## Environment Files
+
+Copy the example files and fill in values as needed:
+
+```bash
+cp apps/web/.env.example apps/web/.env
+cp apps/indexer/.env.local.example apps/indexer/.env.local
+cp packages/contracts/.env.example packages/contracts/.env
+```
+
+The web app works out of the box with defaults for local development. The indexer and contracts env files need database and RPC URLs respectively.
+
+## Cross-Chain Development (Recommended)
+
+This is the recommended setup. Two Anvil chains with a bridge relayer passing messages between them - the full hub-spoke architecture.
+
+### Terminal 1 - Anvil + Bridge Relayer
+
+```bash
+pnpm anvil:crosschain
+```
+
+Starts three processes:
+
+- **Hub chain** on port 8545 (chain ID 31337, 13s blocks)
+- **Spoke chain** on port 8546 (chain ID 31338, 13s blocks)
+- **Bridge relayer** that auto-relays cross-chain messages
+
+:::info
+The Anvil instances load pre-deployed bridge state from `.anvil-state/`. The relayer starts after a 3-second delay to let the chains initialize.
+:::
+
+### Terminal 2 - Deploy Contracts
+
+```bash
+pnpm deploy:crosschain
+```
+
+Deploys hub contracts to chain 31337, spoke contracts to chain 31338, configures trust relationships, and seeds test operator data. Addresses are printed to the console.
+
+### Terminal 3 - Web App (Cross-Chain Mode)
+
+```bash
+pnpm dev:crosschain
+```
+
+Starts the frontend with cross-chain features enabled (`VITE_CROSSCHAIN=true`) at [http://localhost:5173](http://localhost:5173).
+
+### MetaMask Config
+
+Add both local networks to MetaMask:
+
+**Hub Chain:**
+
+| Field           | Value                   |
+| --------------- | ----------------------- |
+| Network Name    | Anvil Hub               |
+| RPC URL         | `http://127.0.0.1:8545` |
+| Chain ID        | `31337`                 |
+| Currency Symbol | ETH                     |
+
+**Spoke Chain:**
+
+| Field           | Value                   |
+| --------------- | ----------------------- |
+| Network Name    | Anvil Spoke             |
+| RPC URL         | `http://127.0.0.1:8546` |
+| Chain ID        | `31338`                 |
+| Currency Symbol | ETH                     |
+
+Import the default Anvil test account (pre-funded with 10,000 ETH on both chains):
+
+```
+Private Key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+Address:     0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+```
+
+:::warning
+This is a well-known test key. Never use it on a real network.
+:::
+
+Anvil Accounts 3 and 4 are pre-approved as test operators after `deploy:crosschain`:
+
+| Account   | Address                                      | Operator Scope         |
+| --------- | -------------------------------------------- | ---------------------- |
+| Account 3 | `0x90F79bf6EB2c4f870365E785982E1f101E93b906` | All registries         |
+| Account 4 | `0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65` | Contract registry only |
+
+## Single-Chain Development
+
+If you only need hub contracts without cross-chain features:
+
+```bash
+pnpm anvil              # Terminal 1
+pnpm deploy:dev         # Terminal 2
+pnpm dev:web            # Terminal 3
+```
+
+## Running the Indexer
+
+The Ponder indexer watches on-chain events and provides a GraphQL API for the dashboard.
+
+Requires PostgreSQL. Set `DATABASE_URL` in `apps/indexer/.env.local`.
+
+```bash
+# Generate types from the Ponder schema
+pnpm indexer:codegen
+
+# Start the indexer
+pnpm indexer
+```
+
+## Running the Relay Server
+
+The libp2p relay enables P2P registration - victims sign, helpers pay gas.
+
+```bash
+# Generate relay keys (first time only)
+pnpm relay:setup
+
+# Start the relay on port 12312
+pnpm relay
+```
+
+## Testing
+
+### Solidity
+
+```bash
+# Run all 538 contract tests
+pnpm forge:test
+
+# Verbose output
+cd packages/contracts && forge test -vvv
+
+# Gas report
+cd packages/contracts && forge test --gas-report
+```
+
+### Frontend
+
+```bash
+# Vitest (single run)
+pnpm test
+
+# Watch mode
+pnpm --filter web test:watch
+```
+
+### Storybook
+
+```bash
+# Component development on port 6006
+pnpm storybook
+```
+
+## Other Commands
+
+| Command               | What it does                                           |
+| --------------------- | ------------------------------------------------------ |
+| `pnpm lint`           | ESLint across all packages                             |
+| `pnpm typecheck`      | TypeScript type checking                               |
+| `pnpm format`         | Prettier + Forge formatter                             |
+| `pnpm check`          | Lint + typecheck + test + format check (CI equivalent) |
+| `pnpm forge:coverage` | Solidity test coverage                                 |
+
+### ABI Regeneration
+
+After **any** Solidity contract change, regenerate the TypeScript ABI exports:
+
+```bash
+cd packages/contracts && forge build && pnpm export-abi
+```
+
+This reads Forge artifacts from `out/` and writes typed ABI constants to `packages/abis/src/`. Stale ABIs cause silent runtime failures.
+
+## Monorepo Structure
+
+```
+apps/web           — Registry frontend (Vite + React 19)
+apps/docs          — Documentation (Vocs)
+apps/landing       — Marketing site
+apps/indexer       — Ponder indexer
+apps/relay         — libp2p relay server
+packages/contracts — Solidity contracts (Foundry)
+packages/abis      — Generated ABI exports
+packages/chains    — Chain configs + CAIP utilities
+packages/search    — Search/query library
+packages/p2p       — Shared P2P types + protocols
+packages/cli       — Operator CLI tool
+packages/errors    — Contract error selectors + messages
+packages/caip      — CAIP identifier utilities
+```

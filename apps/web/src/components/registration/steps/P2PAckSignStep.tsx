@@ -104,7 +104,7 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
       // Sign the acknowledgement
       const sig = await signAcknowledgement({
         wallet: registeree,
-        forwarder: relayer,
+        trustedForwarder: relayer,
         reportedChainId,
         incidentTimestamp,
         nonce,
@@ -168,7 +168,7 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
     registeree && relayer && hashData && nonce !== undefined
       ? {
           registeree,
-          forwarder: relayer,
+          trustedForwarder: relayer,
           nonce,
           deadline: hashData.deadline,
           chainId,

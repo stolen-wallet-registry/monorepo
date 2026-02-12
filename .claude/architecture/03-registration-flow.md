@@ -1,6 +1,6 @@
 # Registration Flow
 
-Step-based registration system with three methods.
+Step-based registration system with three methods for both wallet and transaction registries.
 
 ---
 
@@ -54,9 +54,9 @@ export const STEP_SEQUENCES: Record<RegistrationType, RegistrationStep[]> = {
 
 ---
 
-## Transaction Registration Flow
+## Step Sequences (Transaction)
 
-Transaction flows mirror wallet flows but add a **Select Transactions** step up front. The flow lives in `apps/web/src/pages/Transaction*RegistrationPage.tsx` and uses `tx-steps` components.
+Transaction flows mirror wallet flows but add a **Select Transactions** step up front.
 
 ```typescript
 // apps/web/src/stores/transactionRegistrationStore.ts
@@ -96,7 +96,7 @@ export const TX_STEP_SEQUENCES: Record<TransactionRegistrationType, TransactionR
 
 ---
 
-## Flow Diagram (Standard)
+## Flow Diagram (Standard Wallet)
 
 ```
 acknowledge-and-sign → acknowledge-and-pay → grace-period
@@ -104,7 +104,7 @@ acknowledge-and-sign → acknowledge-and-pay → grace-period
 success ← register-and-pay ← register-and-sign ←──┘
 ```
 
-## Flow Diagram (Self-Relay)
+## Flow Diagram (Self-Relay Wallet)
 
 ```
           [Stolen Wallet]              [Gas Wallet]
@@ -126,10 +126,13 @@ src/
 │   ├── P2PRegistereeRegistrationPage.tsx
 │   ├── P2PRelayerRegistrationPage.tsx
 │   ├── TransactionStandardRegistrationPage.tsx
-│   └── TransactionSelfRelayRegistrationPage.tsx
+│   ├── TransactionSelfRelayRegistrationPage.tsx
+│   ├── DashboardPage.tsx
+│   ├── SearchPage.tsx
+│   └── SoulboundPage.tsx
 │
 ├── components/registration/
-│   ├── StepRenderer.tsx              # Step → component mapping
+│   ├── StepRenderer.tsx              # Step → component mapping (wallet)
 │   └── steps/
 │       ├── InitialFormStep.tsx       # Form + ACK signing
 │       ├── AcknowledgementPayStep.tsx
@@ -138,13 +141,20 @@ src/
 │       ├── RegistrationPayStep.tsx
 │       ├── SuccessStep.tsx
 │       └── P2P*.tsx                  # P2P-specific steps
-│   └── tx-steps/                      # Transaction flow steps
+│   └── tx-steps/                     # Transaction flow steps
+│       ├── TxSelectStep.tsx          # Transaction selection
+│       ├── TxAcknowledgeSignStep.tsx
+│       ├── TxAcknowledgePayStep.tsx
+│       ├── TxGracePeriodStep.tsx
+│       ├── TxRegisterSignStep.tsx
+│       ├── TxRegisterPayStep.tsx
+│       └── TxSuccessStep.tsx
 │
 ├── stores/
-│   ├── registrationStore.ts          # Step state, tx hashes
-│   └── formStore.ts                  # Form values
-│   ├── transactionRegistrationStore.ts
-│   └── transactionFormStore.ts
+│   ├── registrationStore.ts          # Wallet step state, tx hashes (v2)
+│   ├── formStore.ts                  # Wallet form values (v1)
+│   ├── transactionRegistrationStore.ts # Tx step state (v1)
+│   └── transactionFormStore.ts       # Tx form: selected hashes, dataHash (v3)
 │
 └── hooks/
     └── useStepNavigation.ts          # goToNextStep, resetFlow
@@ -223,8 +233,6 @@ export function useStepNavigation() {
 export const initialFormSchema = z.object({
   registeree: ethereumAddressSchema, // Required
   relayer: optionalEthereumAddressSchema, // Optional (self-relay only)
-  supportNFT: z.boolean(),
-  walletNFT: z.boolean(),
 });
 ```
 
@@ -234,9 +242,9 @@ export const initialFormSchema = z.object({
 
 Both stores persist to localStorage:
 
-- `swr-registration-state` - Current step, tx hashes
-- `swr-form-state` - Form values
-- `swr-transaction-registration-state` - Transaction flow state
-- `swr-transaction-form-state` - Transaction selections + merkle data
+- `swr-registration-state` (v2) - Current step, tx hashes, incident fields
+- `swr-form-state` (v1) - Form values (registeree, relayer)
+- `swr-transaction-registration-state` (v1) - Transaction flow state
+- `swr-transaction-form-state` (v3) - Transaction selections (dataHash is transient, not persisted)
 
 Users can resume interrupted registrations on page refresh.

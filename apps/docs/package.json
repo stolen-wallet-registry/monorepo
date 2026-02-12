@@ -13,7 +13,8 @@
     "format:check": "prettier --check \"**/*.{js,ts,tsx,mdx,json}\""
   },
   "dependencies": {
-    "@swr/chains": "workspace:*"
+    "@swr/chains": "workspace:*",
+    "mermaid": "^11.12.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

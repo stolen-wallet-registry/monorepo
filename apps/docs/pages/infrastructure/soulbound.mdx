@@ -1,0 +1,176 @@
+import { SoulboundPreviews } from '../../components/SoulboundPreview';
+
+# Soulbound Tokens
+
+SWR issues non-transferable soulbound tokens ([ERC-5192](https://eips.ethereum.org/EIPS/eip-5192)) as on-chain attestations. Two token types serve different purposes: one marks stolen wallets, the other recognizes donors.
+
+<SoulboundPreviews />
+
+## Token Types
+
+| Token                 | Contract           | Symbol | Who can mint                  | Limit        | Gate                                 |
+| --------------------- | ------------------ | ------ | ----------------------------- | ------------ | ------------------------------------ |
+| **Wallet Soulbound**  | `WalletSoulbound`  | SWRW   | Anyone (token goes to wallet) | 1 per wallet | Wallet must be registered or pending |
+| **Support Soulbound** | `SupportSoulbound` | SWRS   | Anyone (token goes to sender) | Unlimited    | Minimum donation required            |
+
+### Wallet Soulbound
+
+Proof that a wallet is registered as stolen. Gated by the WalletRegistry - the wallet must be registered or have a pending acknowledgement.
+
+```solidity
+/// Anyone can call this - supports relay scenario where a helper mints for the victim
+function mintTo(address wallet) external payable;
+
+/// Check eligibility before minting
+function canMint(address wallet) external view returns (bool eligible, string memory reason);
+
+/// O(1) reverse lookup
+function getTokenIdForWallet(address wallet) external view returns (uint256 tokenId);
+```
+
+The token is minted **to the wallet address**, not to `msg.sender`. This means a friend or relayer can pay for the mint, but the token lands in the victim's wallet. One token per wallet, enforced on-chain.
+
+### Support Soulbound
+
+Donor recognition token. No registry gate - anyone can mint by sending ETH above the minimum.
+
+```solidity
+/// Donate and receive a soulbound token (msg.value >= minWei)
+function mint() external payable;
+
+/// Cross-chain mint (authorized minters only, e.g., SoulboundReceiver)
+function mintTo(address supporter, uint256 donationAmount) external;
+
+/// Total ETH donated across all tokens
+function totalDonations() external view returns (uint256);
+
+/// All token IDs for a supporter (O(n), off-chain use only)
+function getTokensForSupporter(address supporter) external view returns (uint256[] memory);
+```
+
+Each token records the donation amount. The owner can adjust `minWei` via `setMinWei()` to track ETH price changes.
+
+## BaseSoulbound Contract
+
+Both token types inherit from `BaseSoulbound`, which implements the shared soulbound logic.
+
+### ERC-5192 Compliance
+
+```solidity
+/// Always returns true for valid tokens - all tokens are permanently locked
+function locked(uint256 tokenId) external view returns (bool);
+```
+
+### Transfer Prevention
+
+Uses the OpenZeppelin 5.x `_update()` pattern. A single override blocks all transfer paths (transferFrom, safeTransferFrom, approve + transfer):
+
+```solidity
+function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
+    address from = _ownerOf(tokenId);
+    if (from != address(0)) revert NonTransferrable(); // Only minting allowed
+    return super._update(to, tokenId, auth);
+}
+```
+
+### Authorized Minters
+
+For cross-chain mints, the owner can authorize external contracts (e.g., `SoulboundReceiver`) to call `mintTo()`:
+
+```solidity
+function setAuthorizedMinter(address minter, bool authorized) external onlyOwner;
+```
+
+### Other Admin Functions
+
+| Function                             | Purpose                                             |
+| ------------------------------------ | --------------------------------------------------- |
+| `withdraw()`                         | Send accumulated ETH to `feeCollector` (owner only) |
+| `setDomain(string)`                  | Update domain displayed in SVG artwork              |
+| `setAuthorizedMinter(address, bool)` | Manage cross-chain mint permissions                 |
+
+## On-Chain SVG Rendering
+
+Token metadata is rendered entirely on-chain via `SVGRenderer.sol` - no IPFS, no external dependencies. The `tokenURI()` function returns a base64-encoded JSON with an embedded SVG image.
+
+### Artwork Features
+
+- Black background with rounded inner rectangle
+- Animated text following the rectangular border (Uniswap-style)
+- Full wallet address displayed (no truncation)
+- Token ID, domain, and "Stolen Wallet Registry" footer
+- Monospace font throughout
+
+### Multilingual Support
+
+The SVG uses `<switch>` elements with `systemLanguage` attributes to auto-select the viewer's browser language:
+
+- English text ("STOLEN WALLET" / "Signed as stolen") is always displayed
+- Non-English translations appear below the English text for matching browsers
+- English browsers see only the English content (empty `<g>` fallback)
+
+Translations are pulled from `TranslationRegistry` at render time and embedded directly into the SVG.
+
+### Support Token SVG
+
+Same visual structure, different content:
+
+- Title: "SUPPORTER" / "THANK YOU" on border
+- Donation amount displayed prominently (formatted to 4 decimal places, e.g., "0.05 ETH")
+- Supporter address and token ID
+
+## TranslationRegistry
+
+On-chain i18n for soulbound token SVGs. Stores translations keyed by ISO 639-1 language codes.
+
+### Language Pack
+
+Each language stores five strings:
+
+```solidity
+struct LanguagePack {
+    string title;           // "STOLEN WALLET" / "CARTERA ROBADA"
+    string subtitle;        // "Signed as stolen" (wallet soulbound)
+    string supportSubtitle; // "Thank you for your support" (support soulbound)
+    string warning;         // "Do not send funds to this address"
+    string footer;          // "Stolen Wallet Registry"
+    bool exists;
+}
+```
+
+### Management
+
+```solidity
+/// Add a new language (reverts if already exists)
+function addLanguage(string languageCode, string title, string subtitle,
+    string supportSubtitle, string warning, string footer) external onlyOwner;
+
+/// Update existing language translations
+function updateLanguage(string languageCode, string title, string subtitle,
+    string supportSubtitle, string warning, string footer) external onlyOwner;
+```
+
+English is initialized in the constructor. Additional languages are added by the owner.
+
+### Batch Read Functions
+
+The SVG renderer calls these to embed all translations at once:
+
+```solidity
+/// All (langCode, subtitle) pairs for wallet soulbound SVGs
+function getAllSubtitles() external view returns (string[] memory codes, string[] memory subtitles);
+
+/// All (langCode, supportSubtitle) pairs for support soulbound SVGs
+function getAllSupportSubtitles() external view returns (string[] memory codes, string[] memory supportSubtitles);
+```
+
+### Why On-Chain i18n?
+
+The token metadata must be fully self-contained. If translations lived off-chain, the token's visual representation would depend on an external service. On-chain storage ensures the token renders correctly even if every other SWR service goes offline.
+
+## Why Soulbound?
+
+- **Non-transferable** - Attestations cannot be sold, traded, or moved to another wallet
+- **On-chain proof** - Wallet software can check `balanceOf(wallet)` on the WalletSoulbound contract to warn users before sending funds to a stolen address
+- **Permanent record** - Even if the registry contract is upgraded or replaced, the soulbound tokens persist as independent ERC-721 tokens
+- **Self-contained** - Metadata and artwork are fully on-chain; no dependency on IPFS or external hosting

@@ -121,7 +121,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     /// @inheritdoc ISpokeRegistry
     function acknowledge(
         address wallet,
-        address forwarder,
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -132,7 +132,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     ) external {
         // Fail fast: reject zero address
         if (wallet == address(0)) revert SpokeRegistry__InvalidOwner();
-        if (forwarder == address(0)) revert SpokeRegistry__ZeroAddress();
+        if (trustedForwarder == address(0)) revert SpokeRegistry__ZeroAddress();
 
         // Validate signature deadline hasn't passed
         if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
@@ -141,7 +141,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         if (nonce != nonces[wallet]) revert SpokeRegistry__InvalidNonce();
 
         // Compute isSponsored early to reduce stack pressure at emit
-        bool isSponsored = wallet != forwarder;
+        bool isSponsored = wallet != trustedForwarder;
 
         // Verify EIP-712 signature (scoped to free stack slots)
         {
@@ -151,7 +151,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
                         EIP712Constants.WALLET_ACK_TYPEHASH,
                         EIP712Constants.ACK_STATEMENT_HASH,
                         wallet,
-                        forwarder,
+                        trustedForwarder,
                         reportedChainId,
                         incidentTimestamp,
                         nonce,
@@ -171,20 +171,20 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
 
         // Store acknowledgement with randomized grace period
         pendingAcknowledgements[wallet] = AcknowledgementData({
-            trustedForwarder: forwarder,
+            trustedForwarder: trustedForwarder,
             incidentTimestamp: incidentTimestamp,
             reportedChainId: reportedChainIdHash,
             startBlock: TimingConfig.getGracePeriodEndBlock(graceBlocks),
             expiryBlock: TimingConfig.getDeadlineBlock(deadlineBlocks)
         });
 
-        emit WalletAcknowledged(wallet, forwarder, reportedChainIdHash, incidentTimestamp, isSponsored);
+        emit WalletAcknowledged(wallet, trustedForwarder, reportedChainIdHash, incidentTimestamp, isSponsored);
     }
 
     /// @inheritdoc ISpokeRegistry
     function register(
         address wallet,
-        address forwarder,
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -194,11 +194,12 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         bytes32 s
     ) external payable {
         // Validate inputs and signature, get data needed for payload
-        (bytes32 digest, bytes32 reportedChainIdHash) =
-            _validateWalletRegistration(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        (bytes32 digest, bytes32 reportedChainIdHash) = _validateWalletRegistration(
+            wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s
+        );
 
         // Determine sponsorship
-        bool isSponsored = wallet != forwarder;
+        bool isSponsored = wallet != trustedForwarder;
 
         // Build and send cross-chain message
         _executeWalletRegistration(wallet, reportedChainIdHash, incidentTimestamp, nonce, isSponsored, digest);
@@ -207,7 +208,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     /// @dev Validate wallet registration inputs and signature (reduces stack pressure in main function)
     function _validateWalletRegistration(
         address wallet,
-        address forwarder,
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -216,9 +217,9 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         bytes32 r,
         bytes32 s
     ) internal view returns (bytes32 digest, bytes32 reportedChainIdHash) {
-        // Fail fast: reject zero address and forwarder mismatch
+        // Fail fast: reject zero address and trusted forwarder mismatch
         if (wallet == address(0)) revert SpokeRegistry__InvalidOwner();
-        if (forwarder != msg.sender) revert SpokeRegistry__InvalidForwarder();
+        if (trustedForwarder != msg.sender) revert SpokeRegistry__InvalidForwarder();
 
         // Validate hub is configured
         if (hubInbox == bytes32(0)) revert SpokeRegistry__HubNotConfigured();
@@ -229,14 +230,14 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         // Validate nonce matches expected value
         if (nonce != nonces[wallet]) revert SpokeRegistry__InvalidNonce();
 
-        // Compute digest and verify signature (uses forwarder param)
+        // Compute digest and verify signature (uses trustedForwarder param)
         digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
                     EIP712Constants.WALLET_REG_TYPEHASH,
                     EIP712Constants.REG_STATEMENT_HASH,
                     wallet,
-                    forwarder,
+                    trustedForwarder,
                     reportedChainId,
                     incidentTimestamp,
                     nonce,
@@ -311,8 +312,8 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     }
 
     /// @inheritdoc ISpokeRegistry
-    /// @dev Transaction batches use msg.sender as the implicit forwarder rather than accepting an
-    ///      explicit forwarder parameter. Third-party submission IS supported: if msg.sender != reporter,
+    /// @dev Transaction batches use msg.sender as the implicit trusted forwarder rather than accepting an
+    ///      explicit trustedForwarder parameter. Third-party submission IS supported: if msg.sender != reporter,
     ///      the tx is marked as sponsored and msg.sender is stored as trustedForwarder. The reporter
     ///      signs an EIP-712 message that includes msg.sender, so the relayer must be known at sign time.
     function acknowledgeTransactionBatch(
@@ -488,7 +489,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     }
 
     /// @inheritdoc ISpokeRegistry
-    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
         external
         view
         returns (uint256 deadline, bytes32 hashStruct)
@@ -502,7 +503,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
                     EIP712Constants.WALLET_ACK_TYPEHASH,
                     EIP712Constants.ACK_STATEMENT_HASH,
                     msg.sender,
-                    forwarder,
+                    trustedForwarder,
                     reportedChainId,
                     incidentTimestamp,
                     nonces[msg.sender],
@@ -515,7 +516,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
                     EIP712Constants.WALLET_REG_TYPEHASH,
                     EIP712Constants.REG_STATEMENT_HASH,
                     msg.sender,
-                    forwarder,
+                    trustedForwarder,
                     reportedChainId,
                     incidentTimestamp,
                     nonces[msg.sender],
@@ -530,7 +531,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,
-        address forwarder,
+        address trustedForwarder,
         uint8 step
     ) external view returns (uint256 deadline, bytes32 hashStruct) {
         if (step != 1 && step != 2) revert SpokeRegistry__InvalidStep();
@@ -542,7 +543,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
                     EIP712Constants.TX_BATCH_ACK_TYPEHASH,
                     EIP712Constants.TX_ACK_STATEMENT_HASH,
                     msg.sender, // reporter
-                    forwarder,
+                    trustedForwarder,
                     dataHash,
                     reportedChainId,
                     transactionCount,
@@ -557,7 +558,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
                     EIP712Constants.TX_BATCH_REG_TYPEHASH,
                     EIP712Constants.TX_REG_STATEMENT_HASH,
                     msg.sender,
-                    forwarder,
+                    trustedForwarder,
                     dataHash,
                     reportedChainId,
                     transactionCount,

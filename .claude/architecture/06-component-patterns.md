@@ -7,11 +7,11 @@ UI organization, Storybook workflow, and testing patterns.
 ## Component Hierarchy
 
 ```
-Pages (StandardRegistrationPage, etc.)
+Pages (StandardRegistrationPage, DashboardPage, SearchPage, etc.)
     ↓
-Registration Steps (InitialFormStep, GracePeriodStep, etc.)
+Registration Steps (InitialFormStep, GracePeriodStep, TxSelectStep, etc.)
     ↓
-Composed Components (AddressInput, SignatureCard, TransactionCard)
+Composed Components (AddressInput, SignatureCard, TransactionCard, EnsExplorerLink)
     ↓
 UI Primitives (shadcn/ui: Button, Card, Input, Form)
 ```
@@ -29,10 +29,14 @@ src/components/
 │       ├── ComponentName.stories.tsx
 │       ├── ComponentName.test.tsx  (optional)
 │       └── index.ts
-├── registration/          # Flow-specific components
+├── registration/          # Wallet flow step components
 │   ├── StepRenderer.tsx
 │   └── steps/
+├── tx-steps/              # Transaction flow step components
+├── dashboard/             # Dashboard + search components
 ├── layout/                # Layout, Header
+├── icons/                 # Local icon assets
+├── p2p/                   # P2P flow helpers
 └── dev/                   # DevTools, debug panels
 ```
 
@@ -81,10 +85,10 @@ export function ComponentName({ value, onChange, className }: ComponentNameProps
 For address display, prefer `EnsExplorerLink` over `ExplorerLink` to show human-readable ENS names:
 
 ```typescript
-// Shows "vitalik.eth" instead of "0xd8dA..."
 import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 
 <EnsExplorerLink value={address} />
+// Shows "vitalik.eth" instead of "0xd8dA..."
 ```
 
 ---
@@ -170,8 +174,6 @@ it('calls onSelect when clicking', async () => {
 
 Custom icons not in `@web3icons/react` live in `apps/landing/components/landing/CrossChainVisualization/shared/icons.tsx`.
 
-**Reference:** `ChainalysisLogo`, `SealTeamLogo`, `HyperlaneLogo`
+**Pattern:** Extract icon path from brand SVG, use `fill="currentColor"`, include `role="img"` + `<title>`. ViewBox should match path bounds. Prefer `variant="mono"` for dark mode.
 
-**Pattern:** Extract icon path from brand SVG, use `fill="currentColor"`, include `role="img"` + `<title>`. ViewBox should match path bounds (web3icons uses 24x24, but SVG scaling handles other sizes). Prefer `variant="mono"` for dark mode.
-
-**Multi-color brand icons:** Some brand icons (e.g., `HyperlaneLogo`) use fixed fills for specific brand colors rather than `currentColor`. The Hyperlane logo uses `fill="#D631B9"` for magenta paths and `className="fill-white dark:fill-white"` for white/light paths to maintain brand integrity across themes.
+**Multi-color brand icons:** Some brand icons use fixed fills for specific brand colors rather than `currentColor`.

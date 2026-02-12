@@ -1,0 +1,181 @@
+import { Mermaid } from '../../components/Mermaid';
+
+# Economics & Gas Analysis
+
+SWR stores every registration as a permanent on-chain entry - not just a hash or batch summary, but a full struct with chain ID, reporter, timestamp, and metadata. On Ethereum L1, this would be prohibitively expensive. On Base, it costs fractions of a cent.
+
+## L2 Storage Economics
+
+The fundamental design decision: store every entry on-chain rather than relying on merkle roots, IPFS, or off-chain aggregation. L2 gas economics make per-entry storage practical.
+
+### Base Network Specifications
+
+| Parameter           | Value       | Source                |
+| ------------------- | ----------- | --------------------- |
+| Block gas limit     | 375,000,000 | Base specs            |
+| Block time          | ~2 seconds  | Base specs            |
+| Minimum base fee    | 0.002 gwei  | EIP-1559 floor        |
+| Typical L2 exec fee | ~0.001 gwei | Feb 2026 observed     |
+| L1 data fee         | Variable    | EIP-4844 blob posting |
+
+### Per-Entry Gas Cost
+
+Each entry in a batch writes one storage struct and emits one event:
+
+| Operation                 | Gas         | What it does                                     |
+| ------------------------- | ----------- | ------------------------------------------------ |
+| New storage slot (SSTORE) | ~20,000     | Write WalletEntry/TransactionEntry/ContractEntry |
+| Event emission            | ~1,500      | WalletRegistered / TransactionRegistered / etc.  |
+| **Per-entry total**       | **~21,500** |                                                  |
+
+Batch overhead adds ~50,000 gas for the summary event and metadata storage (one-time per batch).
+
+### Cost at Scale
+
+At Base L2 execution fee of ~0.001 gwei:
+
+| Batch Size    | Entry Gas  | Batch Overhead | Total Gas  | Cost (ETH) | Cost (USD at $3k) |
+| ------------- | ---------- | -------------- | ---------- | ---------- | ----------------- |
+| 100 entries   | 2,150,000  | 50,000         | 2,200,000  | 0.0000022  | $0.007            |
+| 200 entries   | 4,300,000  | 50,000         | 4,350,000  | 0.0000044  | $0.013            |
+| 500 entries   | 10,750,000 | 50,000         | 10,800,000 | 0.0000108  | $0.032            |
+| 1,000 entries | 21,500,000 | 50,000         | 21,550,000 | 0.0000216  | $0.065            |
+
+A 1,000-entry batch uses 21.5M gas - about 5.7% of a single Base block. Gas cost: $0.065. The protocol fee ($25) is 380x the gas cost.
+
+This is why SWR stores full structs per entry instead of compressing data into merkle trees. The storage cost is irrelevant on L2; readability and direct on-chain queryability are worth more.
+
+:::info
+Gas estimates are based on observed Base network conditions as of February 2026. L1 data posting costs (EIP-4844 blobs) are not included as they vary significantly and are a secondary cost component on Base.
+:::
+
+## Why Base?
+
+SWR uses Base as the hub chain for settlement and operator submissions.
+
+| Factor               | Base                           |
+| -------------------- | ------------------------------ |
+| TVL                  | $4B+                           |
+| Monthly transactions | 50M+                           |
+| Block time           | ~2 seconds                     |
+| Transaction cost     | Sub-cent                       |
+| Ecosystem            | Coinbase (key operator target) |
+
+Coinbase ecosystem alignment is strategic. If Coinbase becomes an operator (the ideal scenario), their infrastructure already runs on Base. Minimizing friction for the highest-value potential operator is worth optimizing for.
+
+## Protocol Fee Structure
+
+The `FeeManager` contract defines two fee tiers, denominated in USD and converted to ETH via Chainlink oracle:
+
+| Fee Type                | USD    | Who Pays                                           |
+| ----------------------- | ------ | -------------------------------------------------- |
+| Individual registration | $5.00  | Any user registering a wallet or transaction batch |
+| Operator batch          | $25.00 | DAO-approved operators (flat per batch, any size)  |
+
+The operator batch fee is **flat per batch**, not per entry. An operator submitting 100 wallets pays $25 total. If those 100 wallets were registered individually, the cost would be $500.
+
+### USD-to-ETH Conversion
+
+```solidity
+// Individual fee
+function currentFeeWei() public view returns (uint256) {
+    return (baseFeeUsdCents * 1e18) / ethPriceUsdCents;
+}
+
+// Operator batch fee
+function operatorBatchFeeWei() public view returns (uint256) {
+    return (operatorBatchFeeUsdCents * 1e18) / ethPriceUsdCents;
+}
+```
+
+At ETH = $3,000:
+
+- Individual: `(500 * 1e18) / 300000 = 0.00167 ETH` (~$5.00)
+- Operator batch: `(2500 * 1e18) / 300000 = 0.00833 ETH` (~$25.00)
+
+### Price Oracle
+
+The `FeeManager` uses a Chainlink ETH/USD price feed with a manual fallback:
+
+| Parameter                  | Default           | Purpose                                        |
+| -------------------------- | ----------------- | ---------------------------------------------- |
+| `stalePriceThreshold`      | 14,400s (4 hours) | Max age before falling back to stored price    |
+| `fallbackSyncInterval`     | 86,400s (1 day)   | How often to auto-sync fallback from Chainlink |
+| `fallbackEthPriceUsdCents` | 300,000 ($3,000)  | Manual price used when oracle is unavailable   |
+
+If Chainlink is stale or unreachable, the contract uses the fallback price. The fallback is opportunistically synced from Chainlink during normal operations, so it stays reasonably fresh without extra transactions.
+
+### Cost Comparison
+
+| Scenario                         | Protocol Fee | Gas Cost | Total    |
+| -------------------------------- | ------------ | -------- | -------- |
+| 1 individual registration        | $5.00        | ~$0.001  | ~$5.00   |
+| 100 individual registrations     | $500.00      | ~$0.10   | ~$500.10 |
+| 1 operator batch (100 entries)   | $25.00       | ~$0.007  | ~$25.01  |
+| 1 operator batch (1,000 entries) | $25.00       | ~$0.065  | ~$25.07  |
+
+Operators pay **95% less** than equivalent individual submissions for a 100-entry batch. The economics improve further at scale - a 1,000-entry batch costs the same $25.
+
+## Fee Distribution
+
+Fees collected by the `OperatorSubmitter` are forwarded to a configurable `feeRecipient` address. The planned distribution uses the Splits protocol:
+
+<Mermaid
+  chart={`
+flowchart LR
+    Fees[Protocol Fees] --> Splits[Splits Contract]
+    Splits --> DAO[DAO Treasury]
+    Splits --> PG[Protocol Guild]
+    Splits --> RPG[Optimism RetroPGF]
+`}
+/>
+
+The exact split ratios are governance-controlled. The intent is to fund:
+
+- **DAO Treasury** - Ongoing development, audits, infrastructure
+- **Protocol Guild** - Supporting Ethereum core protocol developers
+- **Optimism RetroPGF** - Public goods funding on the Superchain
+
+## Operator Incentives
+
+Why would an exchange spend $25 per batch to submit data?
+
+**Shared intelligence.** When Coinbase reports a stolen wallet, Kraken and Binance benefit. When Kraken reports one, Coinbase benefits. The cost of NOT sharing - processing withdrawals to known stolen wallets - far exceeds $25 per batch.
+
+**Regulatory signaling.** Demonstrating active fraud prevention to regulators. Submitting to a public, verifiable registry is stronger evidence than internal-only systems.
+
+**Community trust.** Users prefer exchanges that actively contribute to ecosystem security. Operator status is public and verifiable on-chain.
+
+**Low cost.** $25 per batch on an L2. For an exchange processing billions in daily volume, this is functionally free.
+
+## Future: Operator-as-Paymaster
+
+The long-term vision is EIP-4337 Account Abstraction integration where operators act as Paymasters for individual registrations:
+
+<Mermaid chart={`
+sequenceDiagram
+    participant U as User on Coinbase.com
+    participant CB as Coinbase Widget
+    participant PM as Coinbase Paymaster
+    participant SWR as SWR Contracts
+
+    U->>CB: "My wallet was stolen"
+    CB->>U: Present EIP-712 signature request
+    U->>CB: Sign acknowledgement
+    Note over CB: Grace period (~2 min)
+    CB->>U: Present second signature request
+    U->>CB: Sign registration
+    CB->>PM: Bundle with Paymaster sponsorship
+    PM->>SWR: Submit registration (Coinbase pays gas + fee)
+    SWR-->>U: Wallet registered. Zero cost to user.
+
+`} />
+
+In this model:
+
+- Users sign EIP-712 messages on the exchange's site
+- The exchange's Paymaster contract pays gas and protocol fees
+- Registration is **free for the user**
+- The exchange gets the fraud data they want, the user gets free registration
+
+This creates a flywheel: more operators -> more free registrations -> more data -> more operators.

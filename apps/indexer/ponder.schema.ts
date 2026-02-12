@@ -82,7 +82,7 @@ export const walletAcknowledgement = onchainTable(
     /** Registeree address (lowercase) */
     id: t.hex().primaryKey(),
     /** Trusted forwarder address */
-    forwarder: t.hex().notNull(),
+    trustedForwarder: t.hex().notNull(),
     /** Block timestamp when acknowledged */
     acknowledgedAt: t.bigint().notNull(),
     /** Block number when acknowledged */
@@ -193,7 +193,7 @@ export const transactionBatchAcknowledgement = onchainTable(
     /** Reporter address */
     reporter: t.hex().notNull(),
     /** Trusted forwarder address */
-    forwarder: t.hex().notNull(),
+    trustedForwarder: t.hex().notNull(),
     /** Was gas sponsored? */
     isSponsored: t.boolean().notNull(),
     /** Block timestamp when acknowledged */

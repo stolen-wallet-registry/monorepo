@@ -20,7 +20,7 @@
     "resolveJsonModule": true
   },
   "include": [
-    "vocs.config.ts",
+    "vocs.config.tsx",
     "pages/**/*.ts",
     "pages/**/*.tsx",
     "components/**/*.ts",

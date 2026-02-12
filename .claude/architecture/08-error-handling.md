@@ -40,6 +40,33 @@ try {
 
 ---
 
+## Contract Error Decoding
+
+Contract errors are decoded via `@swr/errors` package. Error selectors (4-byte hex) are mapped to human-readable messages.
+
+**Package:** `packages/errors/src/selectors.ts`
+
+```typescript
+// Example selectors (100+ total, organized by contract)
+'0x5934e5e0': { name: 'WalletRegistry__InvalidNonce', message: '...' },
+'0xbf69e113': { name: 'WalletRegistry__InvalidSignature', message: '...' },
+'0x3214c145': { name: 'WalletRegistry__GracePeriodNotStarted', message: '...' },
+'0x30866145': { name: 'WalletRegistry__InvalidForwarder', message: '...' },
+'0x378855ef': { name: 'TransactionRegistry__AlreadyAcknowledged', message: '...' },
+'0x97606fef': { name: 'TransactionRegistry__DataHashMismatch', message: '...' },
+'0xbefa3abb': { name: 'SpokeRegistry__InvalidStep', message: '...' },
+```
+
+Re-exported in `apps/web/src/lib/errors/contractErrors.ts` from `@swr/errors`.
+
+When adding new contract errors:
+
+1. Define error in Solidity: `error MyContract__DescriptiveName();`
+2. Compute selector: `cast sig 'MyContract__DescriptiveName()'`
+3. Add to `packages/errors/src/selectors.ts`
+
+---
+
 ## Custom Error Classes
 
 **RelayConfigurationError** (`@swr/p2p`)
@@ -124,6 +151,15 @@ toast.error('Failed to copy');
 
 ---
 
-## Contract Error Decoding
+## Key Files
 
-Contract error decoding is provided by `@swr/errors` and re-exported in `apps/web/src/lib/errors/contractErrors.ts`.
+```text
+packages/errors/src/
+├── selectors.ts              # 100+ error selector → message mappings
+└── index.ts                  # Re-exports
+apps/web/src/lib/errors/
+├── contractErrors.ts         # Re-export from @swr/errors
+└── index.ts                  # Error handler factories
+apps/web/src/lib/
+└── utils.ts                  # sanitizeErrorMessage()
+```

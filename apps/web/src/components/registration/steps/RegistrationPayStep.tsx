@@ -321,7 +321,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
 
       await submitRegistration({
         registeree,
-        forwarder,
+        trustedForwarder: forwarder,
         reportedChainId,
         incidentTimestamp,
         deadline: storedSignature.deadline,
@@ -399,7 +399,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     storedSignature && forwarder
       ? {
           registeree,
-          forwarder,
+          trustedForwarder: forwarder,
           nonce: storedSignature.nonce,
           deadline: storedSignature.deadline,
           signature: storedSignature.signature,

@@ -34,14 +34,14 @@ contract EIP712ConstantsTest is EIP712TestHelper {
 
     function test_walletAckTypehash() public pure {
         bytes32 expected = keccak256(
-            "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+            "AcknowledgementOfRegistry(string statement,address wallet,address trustedForwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
         );
         assertEq(EIP712Constants.WALLET_ACK_TYPEHASH, expected, "WALLET_ACK_TYPEHASH mismatch");
     }
 
     function test_walletRegTypehash() public pure {
         bytes32 expected = keccak256(
-            "Registration(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+            "Registration(string statement,address wallet,address trustedForwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
         );
         assertEq(EIP712Constants.WALLET_REG_TYPEHASH, expected, "WALLET_REG_TYPEHASH mismatch");
     }
@@ -52,14 +52,14 @@ contract EIP712ConstantsTest is EIP712TestHelper {
 
     function test_txBatchAckTypehash() public pure {
         bytes32 expected = keccak256(
-            "TransactionBatchAcknowledgement(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+            "TransactionBatchAcknowledgement(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
         );
         assertEq(EIP712Constants.TX_BATCH_ACK_TYPEHASH, expected, "TX_BATCH_ACK_TYPEHASH mismatch");
     }
 
     function test_txBatchRegTypehash() public pure {
         bytes32 expected = keccak256(
-            "TransactionBatchRegistration(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+            "TransactionBatchRegistration(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
         );
         assertEq(EIP712Constants.TX_BATCH_REG_TYPEHASH, expected, "TX_BATCH_REG_TYPEHASH mismatch");
     }

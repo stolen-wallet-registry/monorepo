@@ -166,7 +166,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
 
       const sig = await signRegistration({
         wallet: registeree,
-        forwarder,
+        trustedForwarder: forwarder,
         reportedChainId,
         incidentTimestamp,
         nonce,
@@ -275,7 +275,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
           type="registration"
           data={{
             registeree,
-            forwarder,
+            trustedForwarder: forwarder,
             nonce,
             deadline: hashStructData.deadline,
             chainId,

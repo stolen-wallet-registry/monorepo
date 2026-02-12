@@ -112,7 +112,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   // Expected wallet for this step: forwarder (gas wallet) for self-relay, reporter for standard
   const expectedWallet = storedSignature
     ? isSelfRelay
-      ? storedSignature.forwarder
+      ? storedSignature.trustedForwarder
       : storedSignature.reporter
     : undefined;
 
@@ -162,7 +162,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     transactionCount: selectedTxHashes.length,
     reporter: storedSignature?.reporter,
     // Hub-specific params
-    forwarder: isHub ? storedSignature?.forwarder : undefined,
+    trustedForwarder: isHub ? storedSignature?.trustedForwarder : undefined,
     // Spoke-specific params
     nonce: isSpoke ? storedSignature?.nonce : undefined,
     deadline: storedSignature?.deadline,
@@ -272,11 +272,11 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
       let params: TxAcknowledgementParams;
 
       if (isHub) {
-        // Hub: acknowledgeTransactions(reporter, forwarder, deadline, dataHash, reportedChainId, transactionCount, v, r, s)
-        // isSponsored is derived on-chain as (reporter != forwarder)
+        // Hub: acknowledgeTransactions(reporter, trustedForwarder, deadline, dataHash, reportedChainId, transactionCount, v, r, s)
+        // isSponsored is derived on-chain as (reporter != trustedForwarder)
         const hubParams: TxAcknowledgementParamsHub = {
           reporter: storedSignature.reporter,
-          forwarder: storedSignature.forwarder,
+          trustedForwarder: storedSignature.trustedForwarder,
           deadline: storedSignature.deadline,
           dataHash: dataHash!,
           reportedChainId: reportedChainIdHash!,
@@ -404,7 +404,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   // Build signed message data for display (storedSignature guaranteed non-null after early return)
   const signedMessageData: SignedMessageData = {
     registeree: storedSignature.reporter,
-    forwarder: storedSignature.forwarder,
+    trustedForwarder: storedSignature.trustedForwarder,
     nonce: storedSignature.nonce,
     deadline: storedSignature.deadline,
     signature: storedSignature.signature,

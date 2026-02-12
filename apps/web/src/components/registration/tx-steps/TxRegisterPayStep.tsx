@@ -133,7 +133,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   // Expected wallet for this step: forwarder (gas wallet) for self-relay, reporter for standard
   const expectedWallet = storedSignatureState
     ? isSelfRelay
-      ? storedSignatureState.forwarder
+      ? storedSignatureState.trustedForwarder
       : storedSignatureState.reporter
     : undefined;
 
@@ -507,7 +507,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   const signedMessageData: SignedMessageData | null = storedSignatureState
     ? {
         registeree: storedSignatureState.reporter,
-        forwarder: storedSignatureState.forwarder,
+        trustedForwarder: storedSignatureState.trustedForwarder,
         nonce: storedSignatureState.nonce,
         deadline: storedSignatureState.deadline,
         signature: storedSignatureState.signature,

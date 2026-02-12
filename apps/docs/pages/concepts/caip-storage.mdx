@@ -1,10 +1,12 @@
+import { Mermaid } from '../../components/Mermaid';
+
 # CAIP Identifiers & On-Chain Storage
 
 SWR uses [CAIP](https://github.com/ChainAgnostic/CAIPs) standards for cross-chain identifier formatting. Every wallet, transaction, and contract is stored behind a deterministic `bytes32` key derived from its CAIP identifier. Any entry can be verified with a single storage read.
 
 ## CAIP Standards Used
 
-### CAIP-2: Chain Identifiers
+### [CAIP-2](https://standards.chainagnostic.org/CAIPs/caip-2): Chain Identifiers
 
 A chain is identified by `{namespace}:{chainRef}`.
 
@@ -17,7 +19,7 @@ A chain is identified by `{namespace}:{chainRef}`.
 | Solana mainnet  | `solana:mainnet`                          | `solana`  |
 | Bitcoin mainnet | `bip122:000000000019d6689c085ae165831e93` | `bip122`  |
 
-### CAIP-10: Account Identifiers
+### [CAIP-10](https://standards.chainagnostic.org/CAIPs/caip-10): Account Identifiers
 
 An account is identified by `{namespace}:{chainRef}:{address}`.
 
@@ -25,9 +27,9 @@ An account is identified by `{namespace}:{chainRef}:{address}`.
 eip155:8453:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
 ```
 
-### CAIP-363: Wildcard Chain References
+### [CAIP-363](https://namespaces.chainagnostic.org/eip155/caip363): Wildcard Chain References
 
-This is the key insight for wallet registration. An EVM address is the same across all EVM chains -- if a wallet is stolen on Base, it's stolen on Ethereum, Optimism, and everywhere else.
+This is the key insight for wallet registration. An EVM address is the same across all EVM chains - if a wallet is stolen on Base, it's stolen on Ethereum, Optimism, and everywhere else.
 
 CAIP-363 uses `_` as a wildcard chain reference:
 
@@ -37,11 +39,16 @@ eip155:_:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
 
 This means **one registration covers all EVM chains**. Non-EVM chains (Solana, Bitcoin) use chain-specific identifiers since address formats differ.
 
+:::info
+CAIP-363 is a draft proposal within the [ChainAgnostic namespaces](https://namespaces.chainagnostic.org/eip155/caip363), not a finalized standard. SWR adopts the wildcard convention because it solves a real problem for EVM wallet identification across chains. If the spec changes, the on-chain storage key derivation is stable regardless.
+:::
+
 ## Storage Key Derivation
 
 Every identifier maps to a `bytes32` storage key via `keccak256`. This gives O(1) lookup with no merkle trees, linked lists, or complex indexing.
 
-```mermaid
+<Mermaid
+  chart={`
 flowchart LR
     A[Input] --> B{Entry Type}
     B -->|EVM Wallet| C["keccak256('eip155:_:', address)"]
@@ -53,11 +60,12 @@ flowchart LR
     E --> G
     F --> G
     G --> H["mapping(bytes32 => Entry)"]
-```
+`}
+/>
 
 ### Key Formulas
 
-**EVM Wallets** -- Wildcard key (one key per wallet, all chains):
+**EVM Wallets** - Wildcard key (one key per wallet, all chains):
 
 ```solidity
 // CAIP10Evm.sol
@@ -66,7 +74,7 @@ function evmWalletKey(address wallet) internal pure returns (bytes32) {
 }
 ```
 
-**Non-EVM Wallets** -- Chain-specific key:
+**Non-EVM Wallets** - Chain-specific key:
 
 ```solidity
 // CAIP10.sol
@@ -77,7 +85,7 @@ function walletKey(bytes32 namespaceHash, bytes32 chainRef, bytes32 identifier)
 }
 ```
 
-**Transactions** -- Always chain-specific (a tx hash is only meaningful on its chain):
+**Transactions** - Always chain-specific (a tx hash is only meaningful on its chain):
 
 ```solidity
 function txStorageKey(bytes32 txHash, bytes32 chainId) internal pure returns (bytes32) {
@@ -85,7 +93,7 @@ function txStorageKey(bytes32 txHash, bytes32 chainId) internal pure returns (by
 }
 ```
 
-**Contracts** -- Always chain-specific (bytecode may differ across chains):
+**Contracts** - Always chain-specific (bytecode may differ across chains):
 
 ```solidity
 function contractStorageKey(address contractAddr, bytes32 chainId) internal pure returns (bytes32) {
@@ -118,7 +126,7 @@ bytes32 constant WILDCARD         = keccak256("_");
 
 **Single-read verification.** To check if a wallet is registered, compute the key and read one storage slot. No iteration, no merkle proofs, no indexer dependency for on-chain checks.
 
-**Cross-chain by default.** The wildcard pattern means an EVM wallet registered on Base is automatically flagged on every other EVM chain -- any contract on any chain can compute the same key and get the same answer.
+**Cross-chain by default.** The wildcard pattern means an EVM wallet registered on Base is automatically flagged on every other EVM chain - any contract on any chain can compute the same key and get the same answer.
 
 **Namespace extensibility.** Adding a new blockchain (e.g., Cosmos) requires only a new namespace constant and key derivation function. Existing entries are unaffected.
 
