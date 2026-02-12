@@ -164,9 +164,9 @@ Transaction registration uses a commit-reveal scheme to prevent front-running:
 
 ```text
 1. Reporter computes: dataHash = keccak256(abi.encode(txHashes, chainIds))
-2. Phase 1: acknowledgeTransactions(..., dataHash, ...) — hides tx hashes
+2. Phase 1: acknowledgeTransactions() / acknowledgeTransactionBatch() — commits dataHash
 3. Grace period (1-4 min)
-4. Phase 2: registerTransactions(..., txHashes[], chainIds[]) — reveals hashes
+4. Phase 2: registerTransactions() / registerTransactionBatch() — reveals txHashes[] + chainIds[]
 5. Contract recomputes dataHash from arrays, verifies match
 ```
 

@@ -1,16 +1,15 @@
 /**
- * P2P Role Selection page.
+ * P2P Role Selection page for Transaction Registration.
  *
- * Users choose whether they are the registeree (wallet owner) or relayer (gas payer).
+ * Users choose whether they are the reporter (wallet owner) or relayer (gas payer).
  */
 
 import { useEffect, type ReactNode } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
-import { ArrowLeft, User, HandHelping } from 'lucide-react';
+import { ArrowLeft, FileWarning, HandHelping } from 'lucide-react';
 
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
-import { useRegistrySearch } from '@/hooks/indexer';
 
 interface RoleCardProps {
   title: string;
@@ -18,23 +17,11 @@ interface RoleCardProps {
   icon: ReactNode;
   details: string[];
   onClick: () => void;
-  disabled?: boolean;
-  disabledReason?: string;
 }
 
-function RoleCard({
-  title,
-  description,
-  icon,
-  details,
-  onClick,
-  disabled,
-  disabledReason,
-}: RoleCardProps) {
+function RoleCard({ title, description, icon, details, onClick }: RoleCardProps) {
   return (
-    <Card
-      className={`transition-all ${disabled ? 'opacity-50' : 'hover:border-primary hover:shadow-md'}`}
-    >
+    <Card className="transition-all hover:border-primary hover:shadow-md">
       <CardHeader className="text-center">
         <div className="mx-auto mb-4 p-4 rounded-full bg-muted">{icon}</div>
         <CardTitle>{title}</CardTitle>
@@ -49,26 +36,17 @@ function RoleCard({
             </li>
           ))}
         </ul>
-        <Button className="w-full mt-6" onClick={onClick} disabled={disabled}>
+        <Button className="w-full mt-6" onClick={onClick}>
           Select
         </Button>
-        {disabled && disabledReason && (
-          <p className="text-xs text-yellow-600 dark:text-yellow-400 text-center mt-2">
-            {disabledReason}
-          </p>
-        )}
       </CardContent>
     </Card>
   );
 }
 
-export function P2PRoleSelectionPage() {
+export function TransactionP2PRoleSelectionPage() {
   const [, setLocation] = useLocation();
-  const { isConnected, address } = useAccount();
-
-  const { data: searchResult } = useRegistrySearch(address ?? '');
-  const connectedWalletRegistered =
-    searchResult?.type === 'address' && searchResult.foundInWalletRegistry;
+  const { isConnected } = useAccount();
 
   // Redirect if not connected
   useEffect(() => {
@@ -78,51 +56,49 @@ export function P2PRoleSelectionPage() {
   if (!isConnected) return null;
 
   const handleBack = () => {
-    setLocation('/');
+    setLocation('/register/transactions');
   };
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 py-8">
       <Button variant="outline" onClick={handleBack} className="mb-6">
         <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to Home
+        Back to Transaction Registry
       </Button>
 
       <div className="text-center space-y-4 mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">P2P Relay Registration</h1>
+        <h1 className="text-3xl font-bold tracking-tight">P2P Transaction Registration</h1>
         <p className="text-muted-foreground max-w-2xl mx-auto">
-          P2P relay allows someone to register their stolen wallet with help from a friend or
+          P2P relay allows someone to register fraudulent transactions with help from a friend or
           volunteer who pays the gas fees.
         </p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
         <RoleCard
-          title="I'm the Registeree"
-          description="My wallet was stolen and I need help registering it"
-          icon={<User className="h-8 w-8" />}
+          title="I'm the Reporter"
+          description="My transactions were fraudulent and I need help registering them"
+          icon={<FileWarning className="h-8 w-8" />}
           details={[
-            'Sign messages with your stolen wallet',
+            'Select fraudulent transactions from your wallet',
+            'Sign messages with your wallet',
             'Connect to a relayer via peer-to-peer',
             'Your relayer pays all gas fees',
-            'No funds needed in your stolen wallet',
           ]}
-          onClick={() => setLocation('/registration/wallet/p2p-relay/registeree')}
-          disabled={connectedWalletRegistered}
-          disabledReason="Your connected wallet is already registered."
+          onClick={() => setLocation('/registration/transactions/p2p-relay/reporter')}
         />
 
         <RoleCard
           title="I'm the Relayer"
-          description="I want to help someone register their stolen wallet"
+          description="I want to help someone register fraudulent transactions"
           icon={<HandHelping className="h-8 w-8" />}
           details={[
-            'Share your Peer ID with the registeree',
+            'Share your Peer ID with the reporter',
             'Receive their signatures via P2P',
             'Submit transactions and pay gas fees',
             'Help protect on-chain activity',
           ]}
-          onClick={() => setLocation('/registration/wallet/p2p-relay/relayer')}
+          onClick={() => setLocation('/registration/transactions/p2p-relay/relayer')}
         />
       </div>
     </div>

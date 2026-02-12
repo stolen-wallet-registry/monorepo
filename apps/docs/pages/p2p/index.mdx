@@ -26,7 +26,7 @@ flowchart LR
 
 `} />
 
-The relay server facilitates the initial connection between browsers (NAT traversal). Once connected, data flows directly between peers via WebRTC. The relay never sees your signatures.
+The relay server facilitates the initial connection between browsers (NAT traversal). Once connected, data flows directly between peers via WebRTC. The relay carries encrypted packets (including signatures) for some transports such as Safari/mobile WebSockets, but cannot read or verify their contents thanks to Noise encryption.
 
 ## Roles
 

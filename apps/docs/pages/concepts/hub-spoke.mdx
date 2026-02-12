@@ -111,7 +111,7 @@ Hub `WalletRegistry` and `SpokeRegistry` have **identical** `acknowledge()` and 
 ```solidity
 function acknowledge(
     address registeree,
-    address forwarder,
+    address trustedForwarder,
     uint64 reportedChainId,
     uint64 incidentTimestamp,
     uint256 deadline,
@@ -121,7 +121,7 @@ function acknowledge(
 
 function register(
     address registeree,
-    address forwarder,
+    address trustedForwarder,
     uint64 reportedChainId,
     uint64 incidentTimestamp,
     uint256 deadline,

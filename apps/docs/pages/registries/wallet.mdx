@@ -43,10 +43,10 @@ Every individual wallet registration goes through two phases separated by a rand
 sequenceDiagram
     participant W as Wallet Owner
     participant C as WalletRegistry
-    W->>C: acknowledge(registeree, forwarder, ...)
+    W->>C: acknowledge(registeree, trustedForwarder, ...)
     Note over C: Store pending ack<br/>Start grace period
     Note over W,C: ~1-4 min randomized delay
-    W->>C: register(registeree, forwarder, ...)
+    W->>C: register(registeree, trustedForwarder, ...)
     Note over C: Verify grace period elapsed<br/>Store WalletEntry permanently
 `}
 />

@@ -6,17 +6,17 @@ SWR stores every registration as a permanent on-chain entry - not just a hash or
 
 ## L2 Storage Economics
 
-The fundamental design decision: store every entry on-chain rather than relying on merkle roots, IPFS, or off-chain aggregation. L2 gas economics make per-entry storage practical.
+The fundamental design decision: store every entry on-chain as a full struct rather than relying on off-chain aggregation. L2 gas economics make per-entry storage practical.
 
 ### Base Network Specifications
 
-| Parameter           | Value       | Source                |
-| ------------------- | ----------- | --------------------- |
-| Block gas limit     | 375,000,000 | Base specs            |
-| Block time          | ~2 seconds  | Base specs            |
-| Minimum base fee    | 0.002 gwei  | EIP-1559 floor        |
-| Typical L2 exec fee | ~0.001 gwei | Feb 2026 observed     |
-| L1 data fee         | Variable    | EIP-4844 blob posting |
+| Parameter           | Value       | Source                       |
+| ------------------- | ----------- | ---------------------------- |
+| Block gas limit     | 375,000,000 | Base specs                   |
+| Block time          | ~2 seconds  | Base specs                   |
+| Minimum base fee    | 0.002 gwei  | EIP-1559 floor               |
+| Typical L2 exec fee | Variable    | EIP-1559 base + priority fee |
+| L1 data fee         | Variable    | EIP-4844 blob posting        |
 
 ### Per-Entry Gas Cost
 
@@ -32,7 +32,7 @@ Batch overhead adds ~50,000 gas for the summary event and metadata storage (one-
 
 ### Cost at Scale
 
-At Base L2 execution fee of ~0.001 gwei:
+At typical Base L2 execution fees (varies with network conditions):
 
 | Batch Size    | Entry Gas  | Batch Overhead | Total Gas  | Cost (ETH) | Cost (USD at $3k) |
 | ------------- | ---------- | -------------- | ---------- | ---------- | ----------------- |
@@ -41,9 +41,9 @@ At Base L2 execution fee of ~0.001 gwei:
 | 500 entries   | 10,750,000 | 50,000         | 10,800,000 | 0.0000108  | $0.032            |
 | 1,000 entries | 21,500,000 | 50,000         | 21,550,000 | 0.0000216  | $0.065            |
 
-A 1,000-entry batch uses 21.5M gas - about 5.7% of a single Base block. Gas cost: $0.065. The protocol fee ($25) is 380x the gas cost.
+A 1,000-entry batch uses 21.5M gas - about 5.7% of a single Base block. Gas cost: $0.065. The protocol fee ($25) is 380x the gas cost in this example.
 
-This is why SWR stores full structs per entry instead of compressing data into merkle trees. The storage cost is irrelevant on L2; readability and direct on-chain queryability are worth more.
+L2 storage costs are low enough that storing full structs per entry is practical. Direct on-chain queryability and readability are worth the extra storage.
 
 :::info
 Gas estimates are based on observed Base network conditions as of February 2026. L1 data posting costs (EIP-4844 blobs) are not included as they vary significantly and are a secondary cost component on Base.
@@ -53,13 +53,13 @@ Gas estimates are based on observed Base network conditions as of February 2026.
 
 SWR uses Base as the hub chain for settlement and operator submissions.
 
-| Factor               | Base                           |
-| -------------------- | ------------------------------ |
-| TVL                  | $4B+                           |
-| Monthly transactions | 50M+                           |
-| Block time           | ~2 seconds                     |
-| Transaction cost     | Sub-cent                       |
-| Ecosystem            | Coinbase (key operator target) |
+| Factor               | Base                                                                            |
+| -------------------- | ------------------------------------------------------------------------------- |
+| TVL                  | Multi-billion (check [DeFiLlama](https://defillama.com/chain/Base) for current) |
+| Monthly transactions | Tens of millions (check [BaseScan](https://basescan.org/chart) for current)     |
+| Block time           | ~2 seconds                                                                      |
+| Transaction cost     | Sub-cent (varies with L1 blob fees)                                             |
+| Ecosystem            | Coinbase (key operator target)                                                  |
 
 Coinbase ecosystem alignment is strategic. If Coinbase becomes an operator (the ideal scenario), their infrastructure already runs on Base. Minimizing friction for the highest-value potential operator is worth optimizing for.
 

@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useState } from 'react';
 import {
   allNetworks,
@@ -35,10 +36,15 @@ function CopyableAddress({ address, chainId }: { address: string; chainId: numbe
   const url = getExplorerAddressUrl(chainId, address) ?? undefined;
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(address).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    navigator.clipboard.writeText(address).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      () => {
+        // Clipboard API unavailable or denied — silently ignore
+      }
+    );
   };
 
   return (
@@ -127,17 +133,17 @@ function HubTable({ hubs }: { hubs: HubNetworkConfig[] }) {
   );
 }
 
+const spokeContractDefs = [
+  { label: 'Spoke Registry', getter: (s: SpokeNetworkConfig) => s.spokeContracts?.spokeRegistry },
+  { label: 'Fee Manager', getter: (s: SpokeNetworkConfig) => s.spokeContracts?.feeManager },
+  {
+    label: 'Hyperlane Adapter',
+    getter: (s: SpokeNetworkConfig) => s.spokeContracts?.bridgeAdapters?.hyperlane,
+  },
+];
+
 function SpokeTable({ spokes }: { spokes: SpokeNetworkConfig[] }) {
   if (spokes.length === 0) return <p>No spoke deployments found.</p>;
-
-  const spokeContractDefs = [
-    { label: 'Spoke Registry', getter: (s: SpokeNetworkConfig) => s.spokeContracts?.spokeRegistry },
-    { label: 'Fee Manager', getter: (s: SpokeNetworkConfig) => s.spokeContracts?.feeManager },
-    {
-      label: 'Hyperlane Adapter',
-      getter: (s: SpokeNetworkConfig) => s.spokeContracts?.bridgeAdapters?.hyperlane,
-    },
-  ];
 
   return (
     <div style={{ overflowX: 'auto' }}>

@@ -63,7 +63,7 @@ Block counts are configured per chain to maintain consistent ~2 min grace / ~10 
 
 The user signs a second EIP-712 message confirming permanent registration. The contract:
 
-- Validates the stored acknowledgement (forwarder, timing, chain data)
+- Validates the stored acknowledgement (trustedForwarder, timing, chain data)
 - Verifies the second signature
 - Stores the wallet entry permanently
 - Deletes acknowledgement data

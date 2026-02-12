@@ -5,16 +5,18 @@ let initialized = false;
 export function Mermaid({ chart }: { chart: string }) {
   const id = useRef(`m-${Math.random().toString(36).slice(2, 9)}`);
   const [svg, setSvg] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
+    setError('');
 
     import('mermaid').then(async (m) => {
       if (!initialized) {
         m.default.initialize({
           startOnLoad: false,
           theme: 'base',
-          securityLevel: 'loose',
+          securityLevel: 'strict',
           themeVariables: {
             primaryColor: '#f0f0f0',
             primaryTextColor: '#1a1a1a',
@@ -42,6 +44,9 @@ export function Mermaid({ chart }: { chart: string }) {
         }
       } catch (e) {
         console.error('Mermaid render error:', e);
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Failed to render diagram');
+        }
       } finally {
         // Clean up any temporary elements mermaid injects into the DOM
         const tempEl = document.getElementById(id.current);
@@ -62,6 +67,10 @@ export function Mermaid({ chart }: { chart: string }) {
       cancelled = true;
     };
   }, [chart]);
+
+  if (error) {
+    return <pre style={{ color: '#c44', fontStyle: 'italic' }}>Diagram error: {error}</pre>;
+  }
 
   if (svg) {
     return <div dangerouslySetInnerHTML={{ __html: svg }} />;

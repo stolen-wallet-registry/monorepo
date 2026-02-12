@@ -64,6 +64,7 @@ When adding new contract errors:
 1. Define error in Solidity: `error MyContract__DescriptiveName();`
 2. Compute selector: `cast sig 'MyContract__DescriptiveName()'`
 3. Add to `packages/errors/src/selectors.ts`
+4. Verify re-export in `apps/web/src/lib/errors/contractErrors.ts` (re-exports from `@swr/errors`)
 
 ---
 

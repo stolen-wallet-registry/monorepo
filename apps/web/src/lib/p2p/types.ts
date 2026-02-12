@@ -11,12 +11,14 @@ export {
   FormStateOverTheWireSchema,
   RegistrationStateOverTheWireSchema,
   P2PStateOverTheWireSchema,
+  TransactionBatchOverTheWireSchema,
   ParsedStreamDataSchema,
   // TypeScript types
   type SignatureOverTheWire,
   type FormStateOverTheWire,
   type RegistrationStateOverTheWire,
   type P2PStateOverTheWire,
+  type TransactionBatchOverTheWire,
   type ParsedStreamData,
   // Configuration types
   type RelayConfig,

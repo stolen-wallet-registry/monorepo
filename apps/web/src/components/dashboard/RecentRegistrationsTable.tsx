@@ -45,7 +45,6 @@ import {
   type RegistrationEntry,
   type RegistrationType,
   formatBatchId,
-  type BatchType,
 } from '@/hooks/dashboard';
 import { useOperators } from '@/hooks/dashboard';
 import { cn } from '@/lib/utils';
@@ -196,7 +195,7 @@ function RegistrationRow({ entry, operatorNames }: RegistrationRowProps) {
             href={`/dashboard/batches/${entry.batchId}?tab=batches&batchType=${entry.type}`}
             className="text-xs font-mono text-primary hover:underline"
           >
-            {formatBatchId(entry.type as BatchType, entry.batchId)}
+            {formatBatchId(entry.type, entry.batchId)}
           </Link>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>

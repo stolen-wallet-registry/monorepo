@@ -237,7 +237,7 @@ if (nonce != nonces[registeree]) revert WalletRegistry__InvalidNonce();
 nonces[registeree]++;
 
 // WalletRegistry.sol — register()
-if (ack.forwarder != msg.sender) revert WalletRegistry__InvalidForwarder();
+if (ack.trustedForwarder != msg.sender) revert WalletRegistry__InvalidForwarder();
 if (block.number < ack.gracePeriodStart) revert WalletRegistry__GracePeriodNotStarted();
 if (block.number > ack.deadline) revert WalletRegistry__DeadlineExpired();
 ```

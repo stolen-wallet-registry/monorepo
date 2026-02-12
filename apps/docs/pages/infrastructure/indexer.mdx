@@ -12,25 +12,25 @@ On-chain storage gives you O(1) lookups for a single identifier (`isWalletRegist
 
 ## What Gets Indexed
 
-| Contract Event                 | Table                             | Key Fields                                                      |
-| ------------------------------ | --------------------------------- | --------------------------------------------------------------- |
-| `WalletAcknowledged`           | `walletAcknowledgement`           | registeree, forwarder, status, gracePeriodStart, gracePeriodEnd |
-| `WalletRegistered`             | `stolenWallet`                    | address, caip10, registeredAt, isSponsored, reportedChainId     |
-| `BatchCreated`                 | `walletBatch`                     | batchId, operatorId, walletCount, operator                      |
-| `TransactionBatchAcknowledged` | `transactionBatchAcknowledgement` | reporter, forwarder, dataHash, status                           |
-| `TransactionRegistered`        | `transactionInBatch`              | txHash, chainIdHash, caip2ChainId, reporter                     |
-| `TransactionBatchRegistered`   | `transactionBatch`                | batchId, dataHash, transactionCount, isSponsored                |
-| `TransactionBatchCreated`      | `transactionBatch`                | batchId, operatorId, transactionCount (operator path)           |
-| `ContractRegistered`           | `fraudulentContract`              | contractAddress, caip2ChainId, batchId, operator                |
-| `ContractBatchCreated`         | `fraudulentContractBatch`         | batchId, operatorId, contractCount                              |
-| `CrossChainWalletRegistered`   | `crossChainMessage`               | messageId, sourceChainId, bridgeId, status                      |
-| `WalletRegistrationReceived`   | `crossChainMessage`               | messageId, wallet, sourceChainId                                |
-| `TransactionBatchReceived`     | `crossChainMessage`               | messageId, dataHash, sourceChainId                              |
-| `OperatorApproved`             | `operator`                        | identifier, capabilities, approved                              |
-| `OperatorRevoked`              | `operator`                        | approved=false, revokedAt                                       |
-| `OperatorCapabilitiesUpdated`  | `operatorCapabilityChange`        | oldCapabilities, newCapabilities                                |
-| `WalletSoulboundMinted`        | `walletSoulboundToken`            | wallet, minter, tokenId                                         |
-| `SupportSoulboundMinted`       | `supportSoulboundToken`           | supporter, amount, tokenId                                      |
+| Contract Event                 | Table                             | Key Fields                                                             |
+| ------------------------------ | --------------------------------- | ---------------------------------------------------------------------- |
+| `WalletAcknowledged`           | `walletAcknowledgement`           | registeree, trustedForwarder, status, gracePeriodStart, gracePeriodEnd |
+| `WalletRegistered`             | `stolenWallet`                    | address, caip10, registeredAt, isSponsored, reportedChainId            |
+| `BatchCreated`                 | `walletBatch`                     | batchId, operatorId, walletCount, operator                             |
+| `TransactionBatchAcknowledged` | `transactionBatchAcknowledgement` | reporter, trustedForwarder, dataHash, status                           |
+| `TransactionRegistered`        | `transactionInBatch`              | txHash, chainIdHash, caip2ChainId, reporter                            |
+| `TransactionBatchRegistered`   | `transactionBatch`                | batchId, dataHash, transactionCount, isSponsored                       |
+| `TransactionBatchCreated`      | `transactionBatch`                | batchId, operatorId, transactionCount (operator path)                  |
+| `ContractRegistered`           | `fraudulentContract`              | contractAddress, caip2ChainId, batchId, operator                       |
+| `ContractBatchCreated`         | `fraudulentContractBatch`         | batchId, operatorId, contractCount                                     |
+| `CrossChainWalletRegistered`   | `crossChainMessage`               | messageId, sourceChainId, bridgeId, status                             |
+| `WalletRegistrationReceived`   | `crossChainMessage`               | messageId, wallet, sourceChainId                                       |
+| `TransactionBatchReceived`     | `crossChainMessage`               | messageId, dataHash, sourceChainId                                     |
+| `OperatorApproved`             | `operator`                        | identifier, capabilities, approved                                     |
+| `OperatorRevoked`              | `operator`                        | approved=false, revokedAt                                              |
+| `OperatorCapabilitiesUpdated`  | `operatorCapabilityChange`        | oldCapabilities, newCapabilities                                       |
+| `WalletSoulboundMinted`        | `walletSoulboundToken`            | wallet, minter, tokenId                                                |
+| `SupportSoulboundMinted`       | `supportSoulboundToken`           | supporter, amount, tokenId                                             |
 
 A `registryStats` table tracks global aggregates, updated incrementally on every event.
 

@@ -30,7 +30,7 @@ graph TD
 
 ## Packages
 
-```
+```text
 apps/web           Registry frontend (Vite + React 19)
 apps/docs          Documentation site (Vocs)
 apps/landing       Marketing site
@@ -78,20 +78,23 @@ Indexer:   Ponder + Postgres
 - [Operator Protocol](https://stolen-wallet-registry.dev/operator) -- Batch submissions
 - [P2P Relay](https://stolen-wallet-registry.dev/p2p) -- Gasless registration
 
-## Roadmap
+## What's Built
 
-| Phase | Focus                                  | Status      |
-| ----- | -------------------------------------- | ----------- |
-| 1     | Core registries (wallet, tx, contract) | Complete    |
-| 2     | Operator CLI + batch submissions       | Complete    |
-| 3     | Indexer, search, and dashboard         | Complete    |
-| 4     | Cross-chain infrastructure (Hyperlane) | Complete    |
-| 5     | Soulbound attestation tokens           | Complete    |
-| 6     | Testnet deployment (Base/OP Sepolia)   | In Progress |
-| 7     | Transaction history API (Alchemy)      | In Progress |
-| 8     | Mainnet deployment                     | Planned     |
-| 9     | DAO governance + operator approval     | Future      |
-| 10    | Additional chain support               | Future      |
+- Core registries (wallet, transaction, contract)
+- Operator CLI + batch submissions
+- Event indexer, search, and dashboard
+- Cross-chain infrastructure (Hyperlane hub-spoke)
+- Soulbound attestation tokens
+- P2P gasless relay (libp2p)
+
+## Future Development
+
+- Testnet deployment (Base Sepolia / OP Sepolia)
+- DAO governance + operator approval
+- Operator-as-Paymaster (EIP-4337)
+- TypeScript SDK + Solidity on-chain query library
+- Etherscan direct registration guide
+- Additional chain support
 
 ## License
 

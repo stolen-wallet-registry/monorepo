@@ -3,12 +3,16 @@
  * Mirrors the on-chain SVGRenderer.sol output.
  */
 
+import { useId } from 'react';
+
 const DOMAIN = 'stolenwallet.xyz';
 const PREVIEW_ADDRESS = '0x1234567890abcdef1234567890abcdef12345678';
 const PREVIEW_TOKEN_ID = '42';
 const PREVIEW_DONATION = '0.01 ETH';
 
 function WalletSvg({ size = 350 }: { size?: number }) {
+  const id = useId();
+  const pathId = `${id}-wp`;
   const text1 = `${DOMAIN} - ${DOMAIN} - ${DOMAIN}`;
   const text2 = 'STOLEN WALLET - STOLEN WALLET - STOLEN WALLET';
 
@@ -16,7 +20,7 @@ function WalletSvg({ size = 350 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <path
-          id="wp"
+          id={pathId}
           d="M200 12 H372 A16 16 0 0 1 388 28 V372 A16 16 0 0 1 372 388 H28 A16 16 0 0 1 12 372 V28 A16 16 0 0 1 28 12 H200"
         />
       </defs>
@@ -32,7 +36,7 @@ function WalletSvg({ size = 350 }: { size?: number }) {
         strokeWidth="1"
       />
       <text fill="#fff" fontSize="10" fontFamily="monospace">
-        <textPath href="#wp">
+        <textPath href={`#${pathId}`}>
           <animate
             attributeName="startOffset"
             from="0%"
@@ -44,7 +48,7 @@ function WalletSvg({ size = 350 }: { size?: number }) {
         </textPath>
       </text>
       <text fill="#fff" fontSize="10" fontFamily="monospace">
-        <textPath href="#wp" startOffset="50%">
+        <textPath href={`#${pathId}`} startOffset="50%">
           <animate
             attributeName="startOffset"
             from="50%"
@@ -80,6 +84,8 @@ function WalletSvg({ size = 350 }: { size?: number }) {
 }
 
 function SupportSvg({ size = 350 }: { size?: number }) {
+  const id = useId();
+  const pathId = `${id}-sp`;
   const text1 = `${DOMAIN} - ${DOMAIN} - ${DOMAIN}`;
   const text2 = 'THANK YOU - THANK YOU - THANK YOU';
 
@@ -87,7 +93,7 @@ function SupportSvg({ size = 350 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <path
-          id="sp"
+          id={pathId}
           d="M200 12 H372 A16 16 0 0 1 388 28 V372 A16 16 0 0 1 372 388 H28 A16 16 0 0 1 12 372 V28 A16 16 0 0 1 28 12 H200"
         />
       </defs>
@@ -103,7 +109,7 @@ function SupportSvg({ size = 350 }: { size?: number }) {
         strokeWidth="1"
       />
       <text fill="#fff" fontSize="10" fontFamily="monospace">
-        <textPath href="#sp">
+        <textPath href={`#${pathId}`}>
           <animate
             attributeName="startOffset"
             from="0%"
@@ -115,7 +121,7 @@ function SupportSvg({ size = 350 }: { size?: number }) {
         </textPath>
       </text>
       <text fill="#fff" fontSize="10" fontFamily="monospace">
-        <textPath href="#sp" startOffset="50%">
+        <textPath href={`#${pathId}`} startOffset="50%">
           <animate
             attributeName="startOffset"
             from="50%"
@@ -154,6 +160,8 @@ function SupportSvg({ size = 350 }: { size?: number }) {
 }
 
 function WalletSvgI18n({ size = 350 }: { size?: number }) {
+  const id = useId();
+  const pathId = `${id}-ip`;
   const text1 = `${DOMAIN} - ${DOMAIN} - ${DOMAIN}`;
   const text2 = 'CARTERA ROBADA - CARTERA ROBADA - CARTERA ROBADA';
 
@@ -161,7 +169,7 @@ function WalletSvgI18n({ size = 350 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <path
-          id="ip"
+          id={pathId}
           d="M200 12 H372 A16 16 0 0 1 388 28 V372 A16 16 0 0 1 372 388 H28 A16 16 0 0 1 12 372 V28 A16 16 0 0 1 28 12 H200"
         />
       </defs>
@@ -177,7 +185,7 @@ function WalletSvgI18n({ size = 350 }: { size?: number }) {
         strokeWidth="1"
       />
       <text fill="#fff" fontSize="10" fontFamily="monospace">
-        <textPath href="#ip">
+        <textPath href={`#${pathId}`}>
           <animate
             attributeName="startOffset"
             from="0%"
@@ -189,7 +197,7 @@ function WalletSvgI18n({ size = 350 }: { size?: number }) {
         </textPath>
       </text>
       <text fill="#fff" fontSize="10" fontFamily="monospace">
-        <textPath href="#ip" startOffset="50%">
+        <textPath href={`#${pathId}`} startOffset="50%">
           <animate
             attributeName="startOffset"
             from="50%"
@@ -220,7 +228,7 @@ function WalletSvgI18n({ size = 350 }: { size?: number }) {
           WALLET #{PREVIEW_TOKEN_ID}
         </text>
         <text x="200" y="300" textAnchor="middle" fill="#888" fontSize="10">
-          No envie fondos a esta direccion
+          No envíe fondos a esta dirección
         </text>
         <text x="200" y="325" textAnchor="middle" fill="#fff" fontSize="11">
           {DOMAIN}
@@ -234,6 +242,8 @@ function WalletSvgI18n({ size = 350 }: { size?: number }) {
 }
 
 function SupportSvgI18n({ size = 350 }: { size?: number }) {
+  const id = useId();
+  const pathId = `${id}-sip`;
   const text1 = `${DOMAIN} - ${DOMAIN} - ${DOMAIN}`;
   const text2 = 'GRACIAS - GRACIAS - GRACIAS - GRACIAS';
 
@@ -241,7 +251,7 @@ function SupportSvgI18n({ size = 350 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <path
-          id="sip"
+          id={pathId}
           d="M200 12 H372 A16 16 0 0 1 388 28 V372 A16 16 0 0 1 372 388 H28 A16 16 0 0 1 12 372 V28 A16 16 0 0 1 28 12 H200"
         />
       </defs>
@@ -257,7 +267,7 @@ function SupportSvgI18n({ size = 350 }: { size?: number }) {
         strokeWidth="1"
       />
       <text fill="#fff" fontSize="10" fontFamily="monospace">
-        <textPath href="#sip">
+        <textPath href={`#${pathId}`}>
           <animate
             attributeName="startOffset"
             from="0%"
@@ -269,7 +279,7 @@ function SupportSvgI18n({ size = 350 }: { size?: number }) {
         </textPath>
       </text>
       <text fill="#fff" fontSize="10" fontFamily="monospace">
-        <textPath href="#sip" startOffset="50%">
+        <textPath href={`#${pathId}`} startOffset="50%">
           <animate
             attributeName="startOffset"
             from="50%"

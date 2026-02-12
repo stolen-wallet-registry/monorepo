@@ -45,11 +45,11 @@ CAIP-363 is a draft proposal within the [ChainAgnostic namespaces](https://names
 
 ## Storage Key Derivation
 
-Every identifier maps to a `bytes32` storage key via `keccak256`. This gives O(1) lookup with no merkle trees, linked lists, or complex indexing.
+Every identifier maps to a `bytes32` storage key via `keccak256`. This gives O(1) lookup - compute the key, read one storage slot.
 
 <Mermaid
   chart={`
-flowchart LR
+flowchart TB
     A[Input] --> B{Entry Type}
     B -->|EVM Wallet| C["keccak256('eip155:_:', address)"]
     B -->|Non-EVM Wallet| D["keccak256(namespace, chainRef, identifier)"]
@@ -124,7 +124,7 @@ bytes32 constant WILDCARD         = keccak256("_");
 
 ## Why This Architecture?
 
-**Single-read verification.** To check if a wallet is registered, compute the key and read one storage slot. No iteration, no merkle proofs, no indexer dependency for on-chain checks.
+**Single-read verification.** To check if a wallet is registered, compute the key and read one storage slot. No iteration, no indexer dependency for on-chain checks.
 
 **Cross-chain by default.** The wildcard pattern means an EVM wallet registered on Base is automatically flagged on every other EVM chain - any contract on any chain can compute the same key and get the same answer.
 

@@ -98,7 +98,7 @@ export const TX_STEP_SEQUENCES: Record<TransactionRegistrationType, TransactionR
 
 ## Flow Diagram (Standard Wallet)
 
-```
+```text
 acknowledge-and-sign → acknowledge-and-pay → grace-period
                                                    ↓
 success ← register-and-pay ← register-and-sign ←──┘
@@ -106,7 +106,7 @@ success ← register-and-pay ← register-and-sign ←──┘
 
 ## Flow Diagram (Self-Relay Wallet)
 
-```
+```text
           [Stolen Wallet]              [Gas Wallet]
 acknowledge-and-sign ──────→ switch-and-pay-one ──→ grace-period
                                                           ↓
@@ -133,7 +133,7 @@ src/
 │
 ├── components/registration/
 │   ├── StepRenderer.tsx              # Step → component mapping (wallet)
-│   └── steps/
+│   ├── steps/
 │       ├── InitialFormStep.tsx       # Form + ACK signing
 │       ├── AcknowledgementPayStep.tsx
 │       ├── GracePeriodStep.tsx

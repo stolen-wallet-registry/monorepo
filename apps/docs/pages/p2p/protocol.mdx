@@ -39,7 +39,7 @@ sequenceDiagram
     R->>R: Sign ACK (EIP-712 in wallet)
     R->>L: ACK_SIG (signature + chain data)
     L->>R: ACK_REC (confirmation)
-    L->>C: acknowledge(registeree, forwarder, ...)
+    L->>C: acknowledge(registeree, trustedForwarder, ...)
     C-->>L: tx confirmed
     L->>R: ACK_PAY (tx hash)
 
@@ -51,7 +51,7 @@ sequenceDiagram
     R->>R: Sign REG (EIP-712 in wallet)
     R->>L: REG_SIG (signature + chain data)
     L->>R: REG_REC (confirmation)
-    L->>C: register(registeree, forwarder, ...)
+    L->>C: register(registeree, trustedForwarder, ...)
     C-->>L: tx confirmed
     L->>R: REG_PAY (tx hash)
 
@@ -223,7 +223,7 @@ In development, Ed25519 keys are auto-generated and saved to `apps/relay/keys.js
 
 ## Wire Format
 
-Messages are serialized as JSON, then sent over libp2p streams using [length-prefixed framing](https://github.com/libp2p/specs/blob/master/plaintext/README.md):
+Messages are serialized as JSON, then sent over libp2p streams using [length-prefixed framing](https://github.com/multiformats/unsigned-varint):
 
 ```
 [varint: payload length][payload bytes (UTF-8 JSON)]

@@ -91,6 +91,8 @@ async function processSignature(
     chainId: sig.chainId,
     step,
     storedAt: Date.now(),
+    reportedChainId: sig.reportedChainId ? BigInt(sig.reportedChainId) : undefined,
+    incidentTimestamp: sig.incidentTimestamp ? BigInt(sig.incidentTimestamp) : undefined,
   };
   storeSignature(stored);
 

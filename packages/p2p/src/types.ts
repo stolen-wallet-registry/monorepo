@@ -56,6 +56,25 @@ export const P2PStateOverTheWireSchema = z
   })
   .strict();
 
+/** bytes32 hex string (0x + 64 hex chars) */
+const bytes32Schema = z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid bytes32');
+
+/** Transaction batch data transmitted over P2P for transaction registration relay */
+export const TransactionBatchOverTheWireSchema = z
+  .object({
+    /** keccak256(abi.encode(txHashes, chainIds)) */
+    dataHash: txHashSchema,
+    /** CAIP-2 chain ID as bytes32 hash */
+    reportedChainId: bytes32Schema,
+    /** Number of transactions in the batch */
+    transactionCount: z.number().int().positive().max(100),
+    /** Sorted transaction hashes for contract call */
+    transactionHashes: z.array(txHashSchema).max(100),
+    /** Parallel CAIP-2 chain ID hashes (one per tx) */
+    chainIdHashes: z.array(bytes32Schema).max(100),
+  })
+  .strict();
+
 /** Main parsed stream data schema */
 export const ParsedStreamDataSchema = z
   .object({
@@ -70,6 +89,8 @@ export const ParsedStreamDataSchema = z
     messageId: txHashSchema.optional(),
     /** Chain ID where the transaction was submitted (for correct explorer links in cross-chain P2P) */
     txChainId: z.number().int().positive().optional(),
+    /** Transaction batch data for P2P transaction registration relay */
+    transactionBatch: TransactionBatchOverTheWireSchema.optional(),
   })
   .strict(); // Reject unknown keys for security
 
@@ -88,6 +109,9 @@ export type RegistrationStateOverTheWire = z.infer<typeof RegistrationStateOverT
 
 /** P2P state subset transmitted over streams */
 export type P2PStateOverTheWire = z.infer<typeof P2PStateOverTheWireSchema>;
+
+/** Transaction batch data transmitted over P2P streams */
+export type TransactionBatchOverTheWire = z.infer<typeof TransactionBatchOverTheWireSchema>;
 
 /** Data structure for P2P stream messages */
 export type ParsedStreamData = z.infer<typeof ParsedStreamDataSchema>;

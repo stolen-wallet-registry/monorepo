@@ -36,7 +36,7 @@ struct TransactionEntry {
 
 ## The dataHash Commitment Pattern
 
-Transaction registration uses a commit-reveal scheme to prevent front-running. During the acknowledge phase, the reporter commits to a hash of the batch without revealing which transactions are being reported.
+Transaction registration uses a commit-reveal scheme to ensure batch integrity. During the acknowledge phase, the reporter commits to a hash of the batch contents.
 
 <Mermaid chart={`
 sequenceDiagram
@@ -52,7 +52,7 @@ sequenceDiagram
 
 `} />
 
-**Why this matters:** Without the commit-reveal, a front-runner could see the acknowledge transaction in the mempool, extract the transaction hashes, and register them first. The dataHash ensures the contents stay hidden until the registration phase.
+**Why this matters:** The dataHash ensures the reporter registers the exact same set of transactions they acknowledged. Without the commitment, a reporter could acknowledge one batch and then submit a completely different set of transaction hashes during registration.
 
 ## Two-Phase Registration
 

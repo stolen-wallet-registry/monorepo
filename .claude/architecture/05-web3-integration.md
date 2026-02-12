@@ -72,7 +72,12 @@ export const registryKeys = {
   all: ['registry'] as const,
   nonce: (address) => [...registryKeys.all, 'nonce', address],
   deadline: (address) => [...registryKeys.all, 'deadlines', address],
-  hashStruct: (forwarder, step) => [...registryKeys.all, 'hashStruct', forwarder, step],
+  hashStruct: (trustedForwarder, step) => [
+    ...registryKeys.all,
+    'hashStruct',
+    trustedForwarder,
+    step,
+  ],
 };
 
 export const registryStaleTime = {
