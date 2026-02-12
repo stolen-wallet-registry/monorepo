@@ -235,6 +235,7 @@ export const RECENT_TRANSACTION_ENTRIES_QUERY = gql`
         batchId
         reporter
         reportedAt
+        transactionHash
       }
     }
   }
@@ -640,6 +641,7 @@ export interface RawRecentTransactionEntriesResponse {
       batchId: string;
       reporter: string;
       reportedAt: string;
+      transactionHash: string;
     }>;
   };
 }
