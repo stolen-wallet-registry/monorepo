@@ -61,13 +61,13 @@ interface ISpokeRegistry {
 
     /// @notice Emitted when wallet acknowledgement is recorded
     /// @param wallet The wallet being registered as stolen
-    /// @param forwarder The authorized forwarder address
+    /// @param trustedForwarder The authorized forwarder address
     /// @param reportedChainId CAIP-2 hash of chain where incident occurred
     /// @param incidentTimestamp When theft occurred
     /// @param isSponsored True if registration is sponsored by third party
     event WalletAcknowledged(
         address indexed wallet,
-        address indexed forwarder,
+        address indexed trustedForwarder,
         bytes32 reportedChainId,
         uint64 incidentTimestamp,
         bool isSponsored
@@ -86,14 +86,14 @@ interface ISpokeRegistry {
 
     /// @notice Emitted when transaction batch acknowledgement is recorded
     /// @param reporter The address reporting the transactions
-    /// @param forwarder The authorized forwarder address
+    /// @param trustedForwarder The authorized forwarder address
     /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
     /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
     /// @param transactionCount Number of transactions in batch
     /// @param isSponsored True if registration is sponsored by third party
     event TransactionBatchAcknowledged(
         address indexed reporter,
-        address indexed forwarder,
+        address indexed trustedForwarder,
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,
@@ -138,11 +138,11 @@ interface ISpokeRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Phase 1: Record acknowledgement with EIP-712 signature
-    /// @dev Forwarder is specified explicitly for relay/meta-tx flexibility.
-    ///      Signature includes incident details and forwarder address.
+    /// @dev Trusted forwarder is specified explicitly for relay/meta-tx flexibility.
+    ///      Signature includes incident details and trusted forwarder address.
     ///      Function signature unified with hub WalletRegistry.
     /// @param registeree Wallet address being registered as stolen
-    /// @param forwarder Address authorized to complete registration (can be same as registeree)
+    /// @param trustedForwarder Address authorized to complete registration (can be same as registeree)
     /// @param reportedChainId Chain ID where theft occurred (converted to CAIP-2 hash internally)
     /// @param incidentTimestamp Unix timestamp when theft occurred (user-provided)
     /// @param deadline Signature expiry timestamp
@@ -152,7 +152,7 @@ interface ISpokeRegistry {
     /// @param s Signature s component
     function acknowledge(
         address registeree,
-        address forwarder,
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -163,10 +163,10 @@ interface ISpokeRegistry {
     ) external;
 
     /// @notice Phase 2: Complete registration and send to hub
-    /// @dev Must be called by authorized forwarder within registration window.
+    /// @dev Must be called by authorized trusted forwarder within registration window.
     ///      Function signature unified with hub WalletRegistry.
     /// @param registeree Wallet address being registered
-    /// @param forwarder Address authorized to complete registration (must match acknowledge phase, validated against msg.sender)
+    /// @param trustedForwarder Address authorized to complete registration (must match acknowledge phase, validated against msg.sender)
     /// @param reportedChainId Chain ID (must match acknowledgement, converted to CAIP-2 hash)
     /// @param incidentTimestamp Incident timestamp (must match acknowledgement)
     /// @param deadline Signature expiry timestamp
@@ -176,7 +176,7 @@ interface ISpokeRegistry {
     /// @param s Signature s component
     function register(
         address registeree,
-        address forwarder,
+        address trustedForwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 deadline,
@@ -267,25 +267,25 @@ interface ISpokeRegistry {
     function nonces(address wallet) external view returns (uint256);
 
     /// @notice Quote total registration fee
-    /// @param owner The wallet owner address
+    /// @param wallet The wallet address being registered
     /// @return The total fee in wei
-    function quoteRegistration(address owner) external view returns (uint256);
+    function quoteRegistration(address wallet) external view returns (uint256);
 
     /// @notice Get detailed fee breakdown
-    /// @param owner The wallet owner address
+    /// @param wallet The wallet address being registered
     /// @return The fee breakdown struct
-    function quoteFeeBreakdown(address owner) external view returns (FeeBreakdown memory);
+    function quoteFeeBreakdown(address wallet) external view returns (FeeBreakdown memory);
 
     /// @notice Generate hash struct for wallet signing (frontend helper)
     /// @dev Uses msg.sender as the wallet address. Must be called by the actual wallet owner.
     ///      Function signature aligns with hub for frontend consistency.
     /// @param reportedChainId Chain ID where incident occurred
     /// @param incidentTimestamp When theft occurred
-    /// @param forwarder Address that will submit the transaction
+    /// @param trustedForwarder Address that will submit the transaction
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline Signature expiry timestamp
     /// @return hashStruct Hash to sign
-    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address forwarder, uint8 step)
+    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
         external
         view
         returns (uint256 deadline, bytes32 hashStruct);
@@ -296,7 +296,7 @@ interface ISpokeRegistry {
     /// @param dataHash Hash of (txHashes, chainIds) — signature commitment
     /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
     /// @param transactionCount Number of transactions in batch
-    /// @param forwarder Address that will submit the transaction
+    /// @param trustedForwarder Address that will submit the transaction
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline Signature expiry timestamp
     /// @return hashStruct Hash to sign
@@ -304,7 +304,7 @@ interface ISpokeRegistry {
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,
-        address forwarder,
+        address trustedForwarder,
         uint8 step
     ) external view returns (uint256 deadline, bytes32 hashStruct);
 

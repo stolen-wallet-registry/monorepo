@@ -15,7 +15,7 @@
   "dependencies": {
     "@swr/abis": "workspace:*",
     "@swr/chains": "workspace:*",
-    "hono": "^4.5.0",
+    "hono": "^4.11.7",
     "ponder": "^0.16.1",
     "viem": "^2.41.2"
   },

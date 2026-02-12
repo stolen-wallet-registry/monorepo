@@ -1,0 +1,135 @@
+import { Mermaid } from '../../components/Mermaid';
+
+# Fee Manager
+
+SWR charges USD-denominated registration fees converted to ETH at the current market price. The `FeeManager` contract handles price resolution, fee calculation, and admin controls.
+
+## Fee Tiers
+
+| Tier                    | Amount                                     | Use Case                                        |
+| ----------------------- | ------------------------------------------ | ----------------------------------------------- |
+| Individual registration | $5.00 (`baseFeeUsdCents = 500`)            | Single wallet or transaction batch registration |
+| Operator batch          | $25.00 (`operatorBatchFeeUsdCents = 2500`) | Flat fee per batch, regardless of entry count   |
+
+Fees are collected in ETH at the time of registration. Setting a fee to `0` disables it (free registrations).
+
+## Price Resolution
+
+The contract resolves ETH price through a two-layer fallback chain: Chainlink oracle first, stored fallback price second.
+
+<Mermaid
+  chart={`
+flowchart TD
+    A[Fee requested] --> B{Chainlink configured?}
+    B -->|No| C[Use fallback price]
+    B -->|Yes| D[Call latestRoundData]
+    D -->|Reverts| C
+    D -->|Success| E{Price > 0?}
+    E -->|No| C
+    E -->|Yes| F{Stale?<br/>age > stalePriceThreshold}
+    F -->|Yes| C
+    F -->|No| G{Sync interval elapsed?}
+    G -->|Yes| H[Update fallback price<br/>~10k gas one-time]
+    G -->|No| I[Use live price]
+    H --> I
+    C --> J[Calculate feeWei]
+    I --> J
+    J --> K[Return fee in wei]
+`}
+/>
+
+### Staleness Check
+
+If `block.timestamp - updatedAt > stalePriceThreshold` (default: 4 hours / 14,400 seconds), the Chainlink data is considered stale and the contract falls back to the stored price.
+
+### Opportunistic Sync
+
+When Chainlink returns fresh data, `syncAndGetEthPriceUsdCents()` checks if `fallbackSyncInterval` (default: 1 day) has elapsed since the last sync. If so, it writes the live price to `fallbackEthPriceUsdCents` storage. Most callers pay ~100 gas for the read; one caller per interval pays ~10k extra for the write.
+
+### Manual-Only Mode
+
+If the constructor receives `address(0)` for the price feed, the contract operates without an oracle. All price lookups return `fallbackEthPriceUsdCents` directly. The owner manages the price manually via `setFallbackPrice()`.
+
+## Fee Calculation
+
+```solidity
+feeWei = (baseFeeUsdCents * 1e18) / ethPriceUsdCents
+```
+
+At ETH = $3,000 (`ethPriceUsdCents = 300000`):
+
+| Fee Tier       | USD    | Wei                   | ETH      |
+| -------------- | ------ | --------------------- | -------- |
+| Individual     | $5.00  | 1,666,666,666,666,666 | ~0.00167 |
+| Operator batch | $25.00 | 8,333,333,333,333,333 | ~0.00833 |
+
+Chainlink ETH/USD feeds typically use 8 decimals. The `_toCents()` function normalizes to 2-decimal cents, with a minimum return of 1 cent to prevent division by zero.
+
+## Key Functions
+
+### Read Functions
+
+```solidity
+/// User registration fee in wei (view, uses cached price)
+function currentFeeWei() public view returns (uint256);
+
+/// Operator batch fee in wei (view, uses cached price)
+function operatorBatchFeeWei() public view returns (uint256);
+
+/// Read-only price check (no state mutation)
+function getEthPriceUsdCentsView() public view returns (uint256);
+
+/// Validate payment >= required fee (reverts with Fee__Insufficient if not)
+function validateFee(uint256 payment) external view returns (bool);
+```
+
+### Mutating Functions
+
+```solidity
+/// Get price + opportunistically update fallback (NOT a view function)
+function syncAndGetEthPriceUsdCents() public returns (uint256);
+
+/// Anyone can trigger a manual fallback refresh from live Chainlink data
+/// Reverts if oracle unavailable, stale, or price invalid
+function refreshFallbackPrice() external;
+```
+
+`syncAndGetEthPriceUsdCents()` is the primary price function used during registrations. It mutates state when the sync interval elapses. For pure reads (e.g., UI display), use `getEthPriceUsdCentsView()` instead.
+
+`refreshFallbackPrice()` is permissionless - anyone can call it to sync the fallback price from Chainlink. It reverts if the oracle data is stale or invalid, so callers cannot set arbitrary values.
+
+## Owner Controls
+
+All admin functions are restricted to the contract owner (`Ownable2Step`).
+
+| Function                           | What it does                                     |
+| ---------------------------------- | ------------------------------------------------ |
+| `setBaseFee(uint256)`              | Update individual registration fee in USD cents  |
+| `setOperatorBatchFee(uint256)`     | Update operator batch fee in USD cents           |
+| `setFallbackPrice(uint256)`        | Manually set fallback ETH price (must be > 0)    |
+| `setPriceFeed(address)`            | Change or disable the Chainlink price feed       |
+| `setStalePriceThreshold(uint256)`  | Max age of oracle data before fallback (seconds) |
+| `setFallbackSyncInterval(uint256)` | How often to opportunistically sync (seconds)    |
+
+Setting `stalePriceThreshold` to `0` effectively disables the oracle (all prices are considered stale). Setting `fallbackSyncInterval` to `0` syncs on every call (higher gas).
+
+## Fee Distribution
+
+Fees are sent to a `feeRecipient` address at the registry level. Planned integration with [Splits Protocol](https://splits.org/) will distribute revenue across:
+
+- DAO treasury
+- Protocol Guild
+- Optimism RetroPGF allocations
+
+## Events
+
+| Event                                                                    | When                                      |
+| ------------------------------------------------------------------------ | ----------------------------------------- |
+| `FallbackPriceSynced(uint256 newPrice)`                                  | Opportunistic sync updated the fallback   |
+| `FallbackPriceRefreshed(uint256 newPrice)`                               | Manual `refreshFallbackPrice()` succeeded |
+| `BaseFeeUpdated(uint256 oldFee, uint256 newFee)`                         | Owner changed individual fee              |
+| `OperatorBatchFeeUpdated(uint256 oldFee, uint256 newFee)`                | Owner changed operator fee                |
+| `FallbackPriceUpdated(uint256 oldPrice, uint256 newPrice)`               | Owner set fallback price manually         |
+| `PriceFeedConfigured(address priceFeed)`                                 | Owner changed the Chainlink feed address  |
+| `StalePriceThresholdUpdated(uint256 oldThreshold, uint256 newThreshold)` | Owner changed staleness threshold         |
+| `FallbackSyncIntervalUpdated(uint256 oldInterval, uint256 newInterval)`  | Owner changed sync interval               |

@@ -1,3 +1,5 @@
+import { Mermaid } from '../../components/Mermaid';
+
 # Two-Phase Registration
 
 SWR uses a two-phase registration model to prevent phishing attacks. An attacker who tricks a victim into signing one transaction cannot complete registration without a second, separate signature minutes later.
@@ -10,11 +12,15 @@ Two-phase registration breaks this attack:
 
 1. The victim would need to sign **twice**, minutes apart
 2. The randomized grace period makes automation unreliable
-3. The second signature request -- minutes after the first -- is inherently suspicious
+3. The second signature request - minutes after the first - is inherently suspicious
+
+:::warning
+Two-phase registration is an added layer of social engineering protection, not a guarantee. A sufficiently motivated attacker with sustained access to a victim could still complete both phases. The design raises the bar significantly - it does not eliminate all risk.
+:::
 
 ## The Three Phases
 
-```mermaid
+<Mermaid chart={`
 sequenceDiagram
     participant U as User (Wallet)
     participant C as Contract
@@ -28,7 +34,8 @@ sequenceDiagram
     U->>C: Sign REG (EIP-712)
     C->>B: Submit register()
     B-->>C: Wallet permanently registered
-```
+
+`} />
 
 ### Phase 1: Acknowledgement
 
@@ -56,7 +63,7 @@ Block counts are configured per chain to maintain consistent ~2 min grace / ~10 
 
 The user signs a second EIP-712 message confirming permanent registration. The contract:
 
-- Validates the stored acknowledgement (forwarder, timing, chain data)
+- Validates the stored acknowledgement (trustedForwarder, timing, chain data)
 - Verifies the second signature
 - Stores the wallet entry permanently
 - Deletes acknowledgement data
@@ -124,9 +131,9 @@ The `statement` field contains a human-readable message displayed in MetaMask du
 
 ## Nonce & Deadline Mechanics
 
-**Nonce** -- Sequential counter per address. Prevents replay attacks. Each successful acknowledgement or registration increments the nonce. The contract rejects any submission where the nonce doesn't match the expected value.
+**Nonce** - Sequential counter per address. Prevents replay attacks. Each successful acknowledgement or registration increments the nonce. The contract rejects any submission where the nonce doesn't match the expected value.
 
-**Deadline** -- Two distinct deadline concepts are in play:
+**Deadline** - Two distinct deadline concepts are in play:
 
 | Deadline              | Unit              | Purpose                                                                            |
 | --------------------- | ----------------- | ---------------------------------------------------------------------------------- |
@@ -152,4 +159,8 @@ In all cases:
 - Only the `trustedForwarder` can submit the `register()` transaction
 - `isSponsored` is derived from `wallet != trustedForwarder`
 
-For self-relay and P2P relay, the victim signs with their compromised wallet but someone else submits the transaction and pays gas -- critical when the wallet has been drained.
+For self-relay and P2P relay, the victim signs with their compromised wallet but someone else submits the transaction and pays gas - critical when the wallet has been drained.
+
+:::info
+The `trustedForwarder` address **is** emitted as an indexed event parameter in `WalletAcknowledged` and `TransactionBatchAcknowledged` events, so it is publicly queryable on-chain. The `isSponsored` boolean signals whether someone other than the wallet owner paid gas, but the forwarder identity is not hidden.
+:::

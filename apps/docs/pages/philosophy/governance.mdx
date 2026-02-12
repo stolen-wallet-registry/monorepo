@@ -222,28 +222,24 @@ For critical security issues:
 - Timelock on implementation changes
 - Audit required for each upgrade
 
-## Roadmap
+## Future Development
 
-### Now
+The following features are designed but not yet implemented. This is a demonstration project — no timeline is committed.
 
-- Individual submissions only
-- Single owner (founder)
-- No operators
+### Developer Integrations
 
-### Q2 2026
+**TypeScript SDK (`@swr/sdk`)**
 
-- DAO formation
-- Governance token launch
-- Transfer ownership to DAO
+- Unified client for on-chain queries (is this wallet registered?) and indexer queries (search, batch history, stats)
+- Designed for third-party integrators: exchanges, wallets, dApps, compliance tools
+- Powers the Operator-as-Paymaster embeddable registration widget (iframe for operator sites like Coinbase)
 
-### Q3 2026
+**Solidity Integration Library (`@swr/onchain`)**
 
-- Operator approval system
-- First operator onboarding
-- Dispute resolution v1
+- On-chain query library for external smart contracts to check registration status directly (e.g., `SWRReader.isStolen(address)`)
+- Initially hub-chain only (Base), with potential cross-chain read libraries for spoke chains via bridge-backed state proofs
 
-### Q4 2026
+**Etherscan Contract Verification Guide**
 
-- Operator-as-Paymaster
-- Cross-chain governance
-- Full decentralization
+- Step-by-step documentation for registering a stolen wallet directly via Etherscan's "Write Contract" UI (no frontend required)
+- Covers both acknowledge and register phases, including EIP-712 signature generation via cast/ethers

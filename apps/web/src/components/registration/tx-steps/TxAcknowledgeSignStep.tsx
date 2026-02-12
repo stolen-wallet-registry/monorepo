@@ -162,7 +162,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
         dataHash: dataHash!,
         reportedChainId: reportedChainIdHash,
         transactionCount: selectedTxHashes.length,
-        forwarder: forwarderAddress,
+        trustedForwarder: forwarderAddress,
         nonce,
         deadline: freshDeadline,
       });
@@ -185,7 +185,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
           reportedChainId: reportedChainIdHash,
           transactionCount: selectedTxHashes.length,
           reporter: address,
-          forwarder: forwarderAddress,
+          trustedForwarder: forwarderAddress,
           chainId,
           step: TX_SIGNATURE_STEP.ACKNOWLEDGEMENT,
           storedAt: Date.now(),
@@ -391,7 +391,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
             type="acknowledgement"
             data={{
               registeree: address,
-              forwarder: forwarderAddress,
+              trustedForwarder: forwarderAddress,
               nonce,
               deadline: hashStructData.deadline,
               chainId,

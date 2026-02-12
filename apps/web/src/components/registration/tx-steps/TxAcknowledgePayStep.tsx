@@ -63,7 +63,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     chainIdsForContract,
   } = useTransactionSelection();
 
-  const isSelfRelay = registrationType === 'selfRelay';
+  const isRelayed = registrationType === 'selfRelay' || registrationType === 'p2pRelay';
 
   // Compute dataHash from sorted arrays for signing/contract calls
   const dataHash: Hash | undefined =
@@ -109,10 +109,10 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   // Signature is still loading from sessionStorage
   const isSignatureLoading = storedSignature === undefined;
 
-  // Expected wallet for this step: forwarder (gas wallet) for self-relay, reporter for standard
+  // Expected wallet for this step: forwarder (gas wallet) for self-relay/p2p-relay, reporter for standard
   const expectedWallet = storedSignature
-    ? isSelfRelay
-      ? storedSignature.forwarder
+    ? isRelayed
+      ? storedSignature.trustedForwarder
       : storedSignature.reporter
     : undefined;
 
@@ -162,7 +162,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     transactionCount: selectedTxHashes.length,
     reporter: storedSignature?.reporter,
     // Hub-specific params
-    forwarder: isHub ? storedSignature?.forwarder : undefined,
+    trustedForwarder: isHub ? storedSignature?.trustedForwarder : undefined,
     // Spoke-specific params
     nonce: isSpoke ? storedSignature?.nonce : undefined,
     deadline: storedSignature?.deadline,
@@ -272,11 +272,11 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
       let params: TxAcknowledgementParams;
 
       if (isHub) {
-        // Hub: acknowledgeTransactions(reporter, forwarder, deadline, dataHash, reportedChainId, transactionCount, v, r, s)
-        // isSponsored is derived on-chain as (reporter != forwarder)
+        // Hub: acknowledgeTransactions(reporter, trustedForwarder, deadline, dataHash, reportedChainId, transactionCount, v, r, s)
+        // isSponsored is derived on-chain as (reporter != trustedForwarder)
         const hubParams: TxAcknowledgementParamsHub = {
           reporter: storedSignature.reporter,
-          forwarder: storedSignature.forwarder,
+          trustedForwarder: storedSignature.trustedForwarder,
           deadline: storedSignature.deadline,
           dataHash: dataHash!,
           reportedChainId: reportedChainIdHash!,
@@ -404,7 +404,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   // Build signed message data for display (storedSignature guaranteed non-null after early return)
   const signedMessageData: SignedMessageData = {
     registeree: storedSignature.reporter,
-    forwarder: storedSignature.forwarder,
+    trustedForwarder: storedSignature.trustedForwarder,
     nonce: storedSignature.nonce,
     deadline: storedSignature.deadline,
     signature: storedSignature.signature,
@@ -412,8 +412,8 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
 
   return (
     <div className="space-y-4">
-      {/* Wallet switch prompt (self-relay only) */}
-      {isSelfRelay && expectedWallet && (
+      {/* Wallet switch prompt (self-relay and P2P relay) */}
+      {isRelayed && expectedWallet && (
         <WalletSwitchPrompt
           currentAddress={address}
           expectedAddress={expectedWallet}

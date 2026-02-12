@@ -284,7 +284,7 @@ library SVGRenderer {
     }
 
     /// @dev Support content with multilingual subtitle
-    /// @notice English "SUPPORTER" + "Registry Supporter" ALWAYS displayed (no systemLanguage)
+    /// @notice English "SUPPORTER" + "Thank you for your support" ALWAYS displayed (no systemLanguage)
     /// @notice Other language translations shown below via <switch> with systemLanguage
     /// @param supporter The supporter address
     /// @param tokenId The token ID

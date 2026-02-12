@@ -219,7 +219,10 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     logger.contract.debug('Refetching hash struct for fresh deadline');
     const refetchResult = await refetchHashStruct();
     // Refetch returns raw contract data [deadline, hashStruct], transform if present
-    const rawData = refetchResult?.data as [bigint, Hex] | undefined;
+    const rawData =
+      refetchResult?.data && Array.isArray(refetchResult.data) && refetchResult.data.length >= 2
+        ? (refetchResult.data as [bigint, Hex])
+        : undefined;
     const freshDeadline = rawData?.[0] ?? hashStructData?.deadline;
 
     if (freshDeadline === undefined) {
@@ -251,7 +254,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
 
       const sig = await signAcknowledgement({
         wallet: address,
-        forwarder,
+        trustedForwarder: forwarder,
         reportedChainId,
         incidentTimestamp,
         nonce,
@@ -381,7 +384,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
               type="acknowledgement"
               data={{
                 registeree: address,
-                forwarder,
+                trustedForwarder: forwarder,
                 nonce,
                 deadline: hashStructData.deadline,
                 chainId,

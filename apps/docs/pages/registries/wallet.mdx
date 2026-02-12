@@ -1,3 +1,5 @@
+import { Mermaid } from '../../components/Mermaid';
+
 # Wallet Registry
 
 Permanently registers stolen wallet addresses on-chain. Once registered, a wallet is marked as compromised and cannot be removed.
@@ -36,16 +38,18 @@ struct WalletEntry {
 
 Every individual wallet registration goes through two phases separated by a randomized grace period. This prevents single-transaction phishing -- an attacker cannot trick a user into registering a legitimate wallet in one step.
 
-```mermaid
+<Mermaid
+  chart={`
 sequenceDiagram
     participant W as Wallet Owner
     participant C as WalletRegistry
-    W->>C: acknowledge(registeree, forwarder, ...)
+    W->>C: acknowledge(registeree, trustedForwarder, ...)
     Note over C: Store pending ack<br/>Start grace period
     Note over W,C: ~1-4 min randomized delay
-    W->>C: register(registeree, forwarder, ...)
+    W->>C: register(registeree, trustedForwarder, ...)
     Note over C: Verify grace period elapsed<br/>Store WalletEntry permanently
-```
+`}
+/>
 
 ### Phase 1: Acknowledge
 
@@ -68,7 +72,7 @@ function acknowledge(
 - Stores `AcknowledgementData` with randomized grace period timing
 - Emits `WalletAcknowledged(registeree, trustedForwarder, isSponsored)`
 
-Anyone can submit the transaction (the forwarder is named in the signature). This is what enables relay registration methods.
+Anyone can submit the transaction (the trusted forwarder is named in the signature). This is what enables relay registration methods.
 
 ### Phase 2: Register
 

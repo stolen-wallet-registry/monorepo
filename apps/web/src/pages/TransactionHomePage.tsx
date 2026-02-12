@@ -15,12 +15,13 @@ import {
   useTransactionRegistrationStore,
   type TransactionRegistrationType,
 } from '@/stores/transactionRegistrationStore';
+import { isP2PAvailable } from '@/lib/p2p/types';
 
 export function TransactionHomePage() {
   const [, setLocation] = useLocation();
   const { isConnected } = useAccount();
   const { setRegistrationType } = useTransactionRegistrationStore();
-  const p2pAvailable = Boolean(import.meta.env.VITE_RELAY_MULTIADDR);
+  const p2pAvailable = isP2PAvailable();
 
   const handleMethodSelect = (type: TransactionRegistrationType) => {
     setRegistrationType(type);

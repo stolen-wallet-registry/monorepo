@@ -5,6 +5,7 @@
  */
 
 import { useLocation, Link } from 'wouter';
+import { useAccount } from 'wagmi';
 import { isAddress } from 'viem';
 
 import {
@@ -50,7 +51,8 @@ export function SuccessStep() {
     bridgeMessageId,
     reset: resetRegistration,
   } = useRegistrationStore();
-  const { registeree, relayer, reset: resetForm } = useFormStore();
+  const { address: connectedAddress } = useAccount();
+  const { registeree, reset: resetForm } = useFormStore();
 
   // Determine if this was a cross-chain registration
   const isCrossChain = registrationChainId ? isSpokeChain(registrationChainId) : false;
@@ -209,9 +211,9 @@ export function SuccessStep() {
             <div className="rounded-md bg-muted/50 border p-3 space-y-1">
               <p className="text-xs text-muted-foreground">Token will be minted to:</p>
               <p className="text-sm font-mono font-medium text-primary break-all">{registeree}</p>
-              {relayer && relayer.toLowerCase() !== registeree.toLowerCase() && (
+              {connectedAddress && connectedAddress.toLowerCase() !== registeree.toLowerCase() && (
                 <p className="text-xs text-yellow-600 dark:text-yellow-400">
-                  Note: This is your registered (stolen) wallet, not your current connected wallet.
+                  Note: This is the registered (stolen) wallet, not your current connected wallet.
                 </p>
               )}
             </div>

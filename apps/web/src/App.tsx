@@ -19,6 +19,9 @@ import {
   TransactionHomePage,
   TransactionStandardRegistrationPage,
   TransactionSelfRelayRegistrationPage,
+  TransactionP2PRoleSelectionPage,
+  TransactionP2PReporterPage,
+  TransactionP2PRelayerPage,
   FraudulentContractRegistryPage,
   DashboardBatchDetailPage,
   NotFoundPage,
@@ -53,6 +56,18 @@ function App() {
             <Route
               path="/registration/transactions/self-relay"
               component={TransactionSelfRelayRegistrationPage}
+            />
+            <Route
+              path="/registration/transactions/p2p-relay"
+              component={TransactionP2PRoleSelectionPage}
+            />
+            <Route
+              path="/registration/transactions/p2p-relay/reporter"
+              component={TransactionP2PReporterPage}
+            />
+            <Route
+              path="/registration/transactions/p2p-relay/relayer"
+              component={TransactionP2PRelayerPage}
             />
             {/* Other routes */}
             <Route path="/registry/contracts" component={FraudulentContractRegistryPage} />

@@ -1,3 +1,5 @@
+import { Mermaid } from '../../components/Mermaid';
+
 # Hub-Spoke Architecture
 
 SWR uses a hub-spoke model for cross-chain fraud registration. Users can register stolen wallets and transactions from any supported chain. All registrations ultimately settle on the hub chain.
@@ -7,52 +9,53 @@ SWR uses a hub-spoke model for cross-chain fraud registration. Users can registe
 - **Hub chain:** Base (settlement layer, canonical source of truth)
 - **Spoke chains:** Optimism, Arbitrum, other L2s
 
-Users interact with a SpokeRegistry on their chain. The spoke sends a cross-chain message via Hyperlane to the hub, where the entry is permanently stored.
+Users interact with a SpokeRegistry on their chain. The spoke sends a cross-chain message to the hub via a bridge adapter (currently Hyperlane), where the entry is permanently stored.
 
 ## Contract Deployment
 
 | Contract            | Hub (Base) | Spoke Chains |
 | ------------------- | ---------- | ------------ |
-| WalletRegistry      | Yes        | --           |
-| TransactionRegistry | Yes        | --           |
-| ContractRegistry    | Yes        | --           |
-| FraudRegistryHub    | Yes        | --           |
-| CrossChainInbox     | Yes        | --           |
-| OperatorRegistry    | Yes        | --           |
-| OperatorSubmitter   | Yes        | --           |
-| SpokeRegistry       | --         | Yes          |
-| HyperlaneAdapter    | --         | Yes          |
+| WalletRegistry      | Yes        | -            |
+| TransactionRegistry | Yes        | -            |
+| ContractRegistry    | Yes        | -            |
+| FraudRegistryHub    | Yes        | -            |
+| CrossChainInbox     | Yes        | -            |
+| OperatorRegistry    | Yes        | -            |
+| OperatorSubmitter   | Yes        | -            |
+| SpokeRegistry       | -          | Yes          |
+| Bridge Adapter      | -          | Yes          |
 
-The hub has the full registry stack. Each spoke has a single SpokeRegistry that handles both wallet and transaction registrations (no contract registration on spokes -- that's operator-only on the hub).
+The hub has the full registry stack. Each spoke has a single SpokeRegistry that handles both wallet and transaction registrations (no contract registration on spokes - that's operator-only on the hub).
 
 ## Cross-Chain Message Lifecycle
 
-```mermaid
+<Mermaid chart={`
 sequenceDiagram
     participant U as User
     participant S as SpokeRegistry<br/>(Spoke Chain)
-    participant H as Hyperlane
+    participant A as Bridge Adapter
     participant I as CrossChainInbox<br/>(Hub Chain)
     participant F as FraudRegistryHub
     participant R as WalletRegistry
 
     U->>S: register() + EIP-712 sig
     S->>S: Verify sig, encode payload
-    S->>H: sendMessage via Adapter
-    H-->>I: Deliver to hub chain
+    S->>A: sendMessage via adapter
+    A-->>I: Deliver to hub chain
     I->>I: Validate trusted source
     I->>F: registerWalletFromSpoke()
     F->>R: registerFromHub()
     R->>R: Store entry (bridgeId=1, messageId)
-```
+
+`} />
 
 ### Step by Step
 
 1. **User calls `SpokeRegistry.register()`** on the spoke chain with their EIP-712 signature
 2. **SpokeRegistry validates** the signature, acknowledgement timing, and nonce
 3. **SpokeRegistry encodes** a `CrossChainMessage` payload with full CAIP-10 data
-4. **HyperlaneAdapter sends** the message via the Hyperlane mailbox
-5. **Hyperlane relayer delivers** the message to the hub chain's `CrossChainInbox`
+4. **Bridge adapter sends** the message via the bridge's mailbox
+5. **Bridge relayer delivers** the message to the hub chain's `CrossChainInbox`
 6. **CrossChainInbox.handle()** validates the source is trusted and the source chain ID matches
 7. **CrossChainInbox routes** to `FraudRegistryHub` based on message type
 8. **FraudRegistryHub forwards** to the appropriate registry (`WalletRegistry` or `TransactionRegistry`)
@@ -108,7 +111,7 @@ Hub `WalletRegistry` and `SpokeRegistry` have **identical** `acknowledge()` and 
 ```solidity
 function acknowledge(
     address registeree,
-    address forwarder,
+    address trustedForwarder,
     uint64 reportedChainId,
     uint64 incidentTimestamp,
     uint256 deadline,
@@ -118,7 +121,7 @@ function acknowledge(
 
 function register(
     address registeree,
-    address forwarder,
+    address trustedForwarder,
     uint64 reportedChainId,
     uint64 incidentTimestamp,
     uint256 deadline,
@@ -163,7 +166,7 @@ The `CrossChainInbox` maintains a mapping of trusted sources per chain:
 mapping(uint32 chainId => mapping(bytes32 spokeAddress => bool trusted))
 ```
 
-Only messages from trusted spoke registries on trusted chains are processed. The inbox also performs defense-in-depth validation: the `sourceChainId` inside the payload must match the Hyperlane origin domain.
+Only messages from trusted spoke registries on trusted chains are processed. The inbox also performs defense-in-depth validation: the `sourceChainId` inside the payload must match the bridge origin domain.
 
 ## Hub vs Spoke Feature Comparison
 

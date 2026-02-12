@@ -1,7 +1,7 @@
 /**
  * Displays EIP-712 signature data details.
  *
- * Shows registeree, forwarder, nonce, deadline, and chain info.
+ * Shows registeree, trustedForwarder, nonce, deadline, and chain info.
  * Used in SignatureCard and P2P payment steps.
  */
 
@@ -17,7 +17,7 @@ export interface SignatureDetailsData {
   /** Wallet being registered (wallet registry) or reporting (transaction registry) */
   registeree: Address;
   /** Wallet that will submit transaction (pays gas) */
-  forwarder: Address;
+  trustedForwarder: Address;
   /** Signature nonce */
   nonce: bigint;
   /** Block deadline for signature validity */
@@ -82,7 +82,7 @@ export function SignatureDetails({
             size="sm"
           />
         </span>
-        <EnsExplorerLink value={data.forwarder} type="address" showDisabledIcon={false} />
+        <EnsExplorerLink value={data.trustedForwarder} type="address" showDisabledIcon={false} />
       </div>
       <div className="flex justify-between items-center">
         <span className="text-muted-foreground flex items-center gap-1">

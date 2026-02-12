@@ -32,7 +32,7 @@ const createData = (
   }
 ): SignatureDetailsData => ({
   registeree: overrides?.registeree ?? '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1',
-  forwarder: overrides?.forwarder ?? '0x8ba1f109551bD432803012645Ac136ddd64DBA72',
+  trustedForwarder: overrides?.trustedForwarder ?? '0x8ba1f109551bD432803012645Ac136ddd64DBA72',
   nonce: BigInt(overrides?.nonce ?? 0),
   deadline: BigInt(overrides?.deadline ?? 1734567890),
   chainId: overrides?.chainId ?? 1,
@@ -67,12 +67,12 @@ export const Anvil: Story = {
 };
 
 /**
- * Self-relay case where registeree and forwarder are the same address.
+ * Self-relay case where registeree and trusted forwarder are the same address.
  */
 export const SelfRelay: Story = {
   render: () => {
     const registeree = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1';
-    return <SignatureDetails data={createData({ registeree, forwarder: registeree })} />;
+    return <SignatureDetails data={createData({ registeree, trustedForwarder: registeree })} />;
   },
 };
 

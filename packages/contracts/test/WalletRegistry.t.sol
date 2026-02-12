@@ -36,7 +36,7 @@ contract WalletRegistryTest is EIP712TestHelper {
     uint64 internal incidentTimestamp;
 
     // Redeclare events from IWalletRegistry so forge can match them
-    event WalletAcknowledged(address indexed registeree, address indexed forwarder, bool isSponsored);
+    event WalletAcknowledged(address indexed registeree, address indexed trustedForwarder, bool isSponsored);
     event WalletRegistered(
         bytes32 indexed identifier, bytes32 indexed reportedChainId, uint64 incidentTimestamp, bool isSponsored
     );

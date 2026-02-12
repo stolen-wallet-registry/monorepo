@@ -55,13 +55,20 @@ import type { Hex } from '@/lib/types/ethereum';
 function isValidSignatureData(data: ParsedStreamData): data is ParsedStreamData & {
   signature: NonNullable<ParsedStreamData['signature']>;
 } {
-  return !!(
-    data.signature?.value &&
-    data.signature?.deadline &&
-    data.signature?.nonce &&
-    data.signature?.address &&
-    data.signature?.chainId !== undefined
-  );
+  if (
+    !data.signature?.value ||
+    !data.signature?.deadline ||
+    !data.signature?.nonce ||
+    !data.signature?.address ||
+    data.signature?.chainId === undefined
+  ) {
+    return false;
+  }
+  // Validate optional BigInt string fields are coercible if present
+  const sig = data.signature;
+  if (sig.reportedChainId != null && typeof sig.reportedChainId !== 'string') return false;
+  if (sig.incidentTimestamp != null && typeof sig.incidentTimestamp !== 'string') return false;
+  return true;
 }
 
 /**
@@ -83,15 +90,23 @@ async function processSignature(
   }
 
   const sig = data.signature;
-  const stored: StoredSignature = {
-    signature: sig.value as Hex,
-    deadline: BigInt(sig.deadline),
-    nonce: BigInt(sig.nonce),
-    address: sig.address,
-    chainId: sig.chainId,
-    step,
-    storedAt: Date.now(),
-  };
+  let stored: StoredSignature;
+  try {
+    stored = {
+      signature: sig.value as Hex,
+      deadline: BigInt(sig.deadline),
+      nonce: BigInt(sig.nonce),
+      address: sig.address,
+      chainId: sig.chainId,
+      step,
+      storedAt: Date.now(),
+      reportedChainId: sig.reportedChainId != null ? BigInt(sig.reportedChainId) : undefined,
+      incidentTimestamp: sig.incidentTimestamp != null ? BigInt(sig.incidentTimestamp) : undefined,
+    };
+  } catch (e) {
+    logger.p2p.warn('Failed to parse signature fields as BigInt', { error: e, data });
+    return false;
+  }
   storeSignature(stored);
 
   // Confirm receipt

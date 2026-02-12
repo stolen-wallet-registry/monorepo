@@ -205,7 +205,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
         dataHash: dataHash!,
         reportedChainId: reportedChainIdHash,
         transactionCount: selectedTxHashes.length,
-        forwarder: forwarderAddress,
+        trustedForwarder: forwarderAddress,
         nonce: freshNonce,
         deadline: freshDeadline,
       });
@@ -228,7 +228,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
           reportedChainId: reportedChainIdHash,
           transactionCount: selectedTxHashes.length,
           reporter: address,
-          forwarder: forwarderAddress,
+          trustedForwarder: forwarderAddress,
           chainId,
           step: TX_SIGNATURE_STEP.REGISTRATION,
           storedAt: Date.now(),
@@ -422,7 +422,7 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
             type="registration"
             data={{
               registeree: reporterAddress,
-              forwarder: forwarderAddress,
+              trustedForwarder: forwarderAddress,
               nonce,
               deadline: hashStructData.deadline,
               chainId,

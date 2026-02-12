@@ -56,18 +56,18 @@ contract SpokeRegistryTest is Test {
     // spoke uses uint64 reportedChainId/incidentTimestamp while hub uses bytes32.
     // If these drift from the SpokeRegistry contract, signing tests will fail.
     bytes32 internal constant ACK_TYPEHASH = keccak256(
-        "AcknowledgementOfRegistry(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+        "AcknowledgementOfRegistry(string statement,address wallet,address trustedForwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
     bytes32 internal constant REG_TYPEHASH = keccak256(
-        "Registration(string statement,address wallet,address forwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+        "Registration(string statement,address wallet,address trustedForwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
 
     // EIP-712 constants for transaction batch
     bytes32 internal constant TX_BATCH_ACK_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+        "TransactionBatchAcknowledgement(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
     );
     bytes32 internal constant TX_BATCH_REG_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+        "TransactionBatchRegistration(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
     );
 
     string internal constant ACK_STATEMENT =
@@ -82,7 +82,7 @@ contract SpokeRegistryTest is Test {
     // Wallet Events
     event WalletAcknowledged(
         address indexed wallet,
-        address indexed forwarder,
+        address indexed trustedForwarder,
         bytes32 reportedChainId,
         uint64 incidentTimestamp,
         bool isSponsored
@@ -92,7 +92,7 @@ contract SpokeRegistryTest is Test {
     // Transaction Batch Events
     event TransactionBatchAcknowledged(
         address indexed reporter,
-        address indexed forwarder,
+        address indexed trustedForwarder,
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,

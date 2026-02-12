@@ -10,6 +10,7 @@ import { useAccount } from 'wagmi';
 import { ArrowLeft, User, HandHelping } from 'lucide-react';
 
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
+import { useRegistrySearch } from '@/hooks/indexer';
 
 interface RoleCardProps {
   title: string;
@@ -17,11 +18,23 @@ interface RoleCardProps {
   icon: ReactNode;
   details: string[];
   onClick: () => void;
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
-function RoleCard({ title, description, icon, details, onClick }: RoleCardProps) {
+function RoleCard({
+  title,
+  description,
+  icon,
+  details,
+  onClick,
+  disabled,
+  disabledReason,
+}: RoleCardProps) {
   return (
-    <Card className="transition-all hover:border-primary hover:shadow-md">
+    <Card
+      className={`transition-all ${disabled ? 'opacity-50' : 'hover:border-primary hover:shadow-md'}`}
+    >
       <CardHeader className="text-center">
         <div className="mx-auto mb-4 p-4 rounded-full bg-muted">{icon}</div>
         <CardTitle>{title}</CardTitle>
@@ -36,9 +49,14 @@ function RoleCard({ title, description, icon, details, onClick }: RoleCardProps)
             </li>
           ))}
         </ul>
-        <Button className="w-full mt-6" onClick={onClick}>
+        <Button className="w-full mt-6" onClick={onClick} disabled={disabled}>
           Select
         </Button>
+        {disabled && disabledReason && (
+          <p className="text-xs text-yellow-600 dark:text-yellow-400 text-center mt-2">
+            {disabledReason}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -46,7 +64,11 @@ function RoleCard({ title, description, icon, details, onClick }: RoleCardProps)
 
 export function P2PRoleSelectionPage() {
   const [, setLocation] = useLocation();
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
+
+  const { data: searchResult } = useRegistrySearch(address ?? '');
+  const connectedWalletRegistered =
+    searchResult?.type === 'address' && searchResult.foundInWalletRegistry;
 
   // Redirect if not connected
   useEffect(() => {
@@ -85,7 +107,9 @@ export function P2PRoleSelectionPage() {
             'Your relayer pays all gas fees',
             'No funds needed in your stolen wallet',
           ]}
-          onClick={() => setLocation('/registration/p2p-relay/registeree')}
+          onClick={() => setLocation('/registration/wallet/p2p-relay/registeree')}
+          disabled={connectedWalletRegistered}
+          disabledReason="Your connected wallet is already registered."
         />
 
         <RoleCard
@@ -98,7 +122,7 @@ export function P2PRoleSelectionPage() {
             'Submit transactions and pay gas fees',
             'Help protect on-chain activity',
           ]}
-          onClick={() => setLocation('/registration/p2p-relay/relayer')}
+          onClick={() => setLocation('/registration/wallet/p2p-relay/relayer')}
         />
       </div>
     </div>

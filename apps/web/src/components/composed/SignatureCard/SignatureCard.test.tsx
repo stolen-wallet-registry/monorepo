@@ -7,7 +7,7 @@ import type { Hex } from '@/lib/types/ethereum';
 describe('SignatureCard', () => {
   const sampleData: SignatureData = {
     registeree: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
-    forwarder: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
+    trustedForwarder: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
     nonce: 0n,
     deadline: 12345678n,
   };

@@ -11,12 +11,14 @@ export {
   FormStateOverTheWireSchema,
   RegistrationStateOverTheWireSchema,
   P2PStateOverTheWireSchema,
+  TransactionBatchOverTheWireSchema,
   ParsedStreamDataSchema,
   // TypeScript types
   type SignatureOverTheWire,
   type FormStateOverTheWire,
   type RegistrationStateOverTheWire,
   type P2PStateOverTheWire,
+  type TransactionBatchOverTheWire,
   type ParsedStreamData,
   // Configuration types
   type RelayConfig,
@@ -95,4 +97,19 @@ export function getRelayPeerIds(): Set<string> {
   }
 
   return peerIds;
+}
+
+/**
+ * Check if P2P relay is available in the current environment.
+ *
+ * Uses the same relay server resolution as the actual libp2p client —
+ * dev mode has hardcoded servers, staging/production require configuration.
+ */
+export function isP2PAvailable(): boolean {
+  try {
+    const servers = getRelayServers();
+    return servers.length > 0;
+  } catch {
+    return false;
+  }
 }

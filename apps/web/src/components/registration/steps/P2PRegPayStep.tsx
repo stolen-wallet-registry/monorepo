@@ -136,7 +136,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
 
     await submitRegistration({
       registeree,
-      forwarder: relayerAddress,
+      trustedForwarder: relayerAddress,
       reportedChainId,
       incidentTimestamp,
       deadline: storedSig.deadline,
@@ -319,7 +319,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
               <SignatureDetails
                 data={{
                   registeree,
-                  forwarder: relayerAddress,
+                  trustedForwarder: relayerAddress,
                   nonce: storedSig.nonce,
                   deadline: storedSig.deadline,
                   chainId: storedSig.chainId,

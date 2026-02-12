@@ -66,7 +66,7 @@ export const SpokeRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -272,7 +272,7 @@ export const SpokeRegistryABI = [
         internalType: 'uint64',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -316,7 +316,7 @@ export const SpokeRegistryABI = [
         internalType: 'uint32',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -717,7 +717,7 @@ export const SpokeRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         internalType: 'address',
       },
@@ -981,7 +981,7 @@ export const SpokeRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         indexed: true,
         internalType: 'address',
@@ -1055,7 +1055,7 @@ export const SpokeRegistryABI = [
         internalType: 'address',
       },
       {
-        name: 'forwarder',
+        name: 'trustedForwarder',
         type: 'address',
         indexed: true,
         internalType: 'address',

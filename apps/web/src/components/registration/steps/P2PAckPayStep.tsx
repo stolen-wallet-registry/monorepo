@@ -111,7 +111,7 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     // P2P relay: relayer is the forwarder (contract derives isSponsored from wallet != forwarder)
     await submitAcknowledgement({
       registeree,
-      forwarder: relayerAddress,
+      trustedForwarder: relayerAddress,
       reportedChainId: storedSig.reportedChainId ?? BigInt(chainId),
       incidentTimestamp: storedSig.incidentTimestamp ?? 0n,
       deadline: storedSig.deadline,
@@ -262,7 +262,7 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
             <SignatureDetails
               data={{
                 registeree,
-                forwarder: relayerAddress,
+                trustedForwarder: relayerAddress,
                 nonce: storedSig.nonce,
                 deadline: storedSig.deadline,
                 chainId: storedSig.chainId,

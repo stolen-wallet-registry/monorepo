@@ -1,0 +1,154 @@
+import { Mermaid } from '../../components/Mermaid';
+
+# How P2P Relay Works
+
+## The Problem
+
+Your wallet is drained. Zero ETH. Every token gone.
+
+Your private key still works - you can **sign** messages. But you cannot **pay** for transactions. Without gas, you cannot call `acknowledge()` or `register()` on-chain. You are locked out of protecting your own wallet.
+
+## The Solution
+
+Sign EIP-712 messages with your compromised wallet and send those signatures to a trusted helper - a friend, family member, or community volunteer - via a direct peer-to-peer connection. The helper submits the transactions and pays gas on your behalf.
+
+No intermediary server can read your signatures. No centralized service holds your data.
+
+<Mermaid chart={`
+flowchart LR
+    V["Victim<br/>(drained wallet)"]
+    S["Signs EIP-712<br/>messages"]
+    R["Circuit Relay<br/>(NAT traversal only)"]
+    H["Helper<br/>(funded wallet)"]
+    B["Blockchain<br/>(on-chain registration)"]
+
+    V --> S --> R --> H --> B
+
+`} />
+
+The relay server facilitates the initial connection between browsers (NAT traversal). Once connected, data flows directly between peers via WebRTC. The relay carries encrypted packets (including signatures) for some transports such as Safari/mobile WebSockets, but cannot read or verify their contents thanks to Noise encryption.
+
+## Roles
+
+| Role           | Who                         | What they do                                                                |
+| -------------- | --------------------------- | --------------------------------------------------------------------------- |
+| **Registeree** | Victim (compromised wallet) | Signs acknowledgement and registration messages, sends signatures to helper |
+| **Relayer**    | Helper (funded wallet)      | Receives signatures, submits transactions to the contract, pays gas         |
+
+The `trustedForwarder` field in the EIP-712 signature is set to the helper's address. Only that address can submit the `register()` transaction - the signature is useless to anyone else.
+
+## Why Peer-to-Peer?
+
+A centralized relay server would be a single point of failure and a honeypot for signature data. With libp2p circuit relay:
+
+- **No server holds signatures** - The relay server handles NAT traversal (connection setup) only. Actual message data flows browser-to-browser via WebRTC.
+- **Encrypted by default** - All libp2p connections use Noise protocol encryption (ChaCha20-Poly1305).
+- **No accounts or auth** - Connect with a Peer ID derived from your wallet. No sign-ups, no API keys.
+- **Censorship resistant** - If one relay goes down, configure a different one. The protocol is relay-agnostic.
+
+## Technology
+
+Built on **libp2p 3.x** with circuit relay v2:
+
+| Component        | Purpose                                                      |
+| ---------------- | ------------------------------------------------------------ |
+| Circuit Relay v2 | NAT traversal - connects browsers behind firewalls           |
+| WebRTC           | Direct browser-to-browser data channel (~85% of connections) |
+| dcutr            | Upgrades relayed connections to direct WebRTC automatically  |
+| WebSocket        | Fallback transport for Safari and restrictive networks       |
+| Noise Protocol   | Connection encryption (ChaCha20-Poly1305)                    |
+| Yamux            | Stream multiplexer (multiple protocols over one connection)  |
+
+### Browser Compatibility
+
+| Browser         | Transport         | Notes                                 |
+| --------------- | ----------------- | ------------------------------------- |
+| Chrome / Edge   | WebRTC (direct)   | Full support, best performance        |
+| Firefox         | WebRTC (direct)   | Full support                          |
+| Safari          | WebSocket (relay) | No WebRTC - data routes through relay |
+| Mobile browsers | WebSocket (relay) | Limited WebRTC support                |
+
+## Connection Flow
+
+Both peers connect to a circuit relay server. The relay facilitates NAT traversal - punching through firewalls and routers so two browsers can find each other. Once the connection is established, dcutr attempts to upgrade to a direct WebRTC connection, removing the relay from the data path entirely.
+
+<Mermaid chart={`
+sequenceDiagram
+    participant Reg as Registeree
+    participant Relay as Relay Server
+    participant Rel as Relayer
+
+    Note over Reg,Rel: 1. Both connect to relay
+    Reg->>Relay: Connect (WebSocket)
+    Rel->>Relay: Connect (WebSocket)
+
+    Note over Reg,Rel: 2. Registeree dials Relayer via relay
+    Reg->>Relay: Dial Relayer's Peer ID
+    Relay->>Rel: Forward connection
+
+    Note over Reg,Rel: 3. dcutr upgrades to direct
+    Reg-->>Rel: WebRTC negotiation
+    Reg<-->Rel: Direct connection established
+
+    Note over Reg,Rel: 4. All SWR protocol messages flow directly
+    Reg->>Rel: ACK signature, REG signature
+    Rel->>Reg: Confirmations, tx hashes
+
+`} />
+
+## Peer ID
+
+Each wallet gets a persistent Peer ID derived from an Ed25519 keypair stored in `localStorage`. Same wallet address + same browser = same Peer ID across sessions. This means your helper can reconnect to the same ID if the connection drops mid-flow.
+
+Peer IDs look like: `12D3KooWJCJbTjCCnCTGNSENuGK6Pu1aRqjLEJ4P7vEtFofpSXt7`
+
+## Demo: Try It Locally
+
+### Prerequisites
+
+- The monorepo cloned and dependencies installed (`pnpm install`)
+- Two browser windows (or two different browsers)
+- A local Anvil chain running with contracts deployed
+
+### Steps
+
+**Terminal 1** - Start the relay server:
+
+```bash
+pnpm relay:dev
+```
+
+The relay prints its multiaddr and Peer ID on startup.
+
+**Terminal 2** - Start the web app:
+
+```bash
+pnpm dev
+```
+
+**Browser Tab 1** (the helper):
+
+1. Connect a funded wallet
+2. Navigate to P2P Relay registration
+3. Select the **Relayer** role
+4. Copy your displayed Peer ID
+
+**Browser Tab 2** (the victim):
+
+1. Connect the "compromised" wallet (the one you want to register)
+2. Navigate to P2P Relay registration
+3. Select the **Registeree** role
+4. Paste the Relayer's Peer ID and click Connect
+
+**The flow:**
+
+1. Connection established - both tabs show "Connected"
+2. Registeree signs acknowledgement (EIP-712 popup in wallet)
+3. Signature sent to Relayer via P2P
+4. Relayer submits `acknowledge()` transaction, sends tx hash back
+5. Grace period (1-4 minutes on mainnet, shorter on local)
+6. Registeree signs registration
+7. Relayer submits `register()` transaction
+8. Wallet permanently registered as stolen
+
+Both tabs track progress in real-time through the P2P message exchange.

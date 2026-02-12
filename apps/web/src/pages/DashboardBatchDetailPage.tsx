@@ -478,23 +478,23 @@ function BatchDetailContent({
                       <>
                         <TableHead>
                           <span className="inline-flex items-center gap-1">
-                            Transaction
+                            Registry Key
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-3 w-3 cursor-help text-muted-foreground" />
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-xs">
                                 <p className="text-xs">
-                                  Transactions are shown with their <strong>chain context</strong>{' '}
-                                  (CAIP-2 format) to uniquely identify them across blockchains.
-                                </p>
-                                <p className="text-xs mt-1 text-muted-foreground">
-                                  Format: eip155:{'{chainId}'}:{'{txHash}'}
+                                  Chain-qualified reference stored in the registry. Format:{' '}
+                                  <code>
+                                    eip155:{'{chainId}'}:{'{txHash}'}
+                                  </code>
                                 </p>
                               </TooltipContent>
                             </Tooltip>
                           </span>
                         </TableHead>
+                        <TableHead>Transaction</TableHead>
                         <TableHead>Chain</TableHead>
                         <TableHead>Reported</TableHead>
                       </>
@@ -529,7 +529,7 @@ function BatchDetailContent({
                   {data.entries.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={data.type === 'contract' ? 4 : 3}
+                        colSpan={data.type === 'wallet' ? 3 : 4}
                         className="text-center text-sm text-muted-foreground"
                       >
                         No entries found for this batch.
@@ -575,9 +575,18 @@ function BatchDetailContent({
                             <Caip10Entry
                               identifier={entry.txHash}
                               caip2={entry.caip2ChainId}
-                              explorerUrl={txHref}
+                              explorerUrl={null}
                               type="transaction"
                             />
+                          </TableCell>
+                          <TableCell>
+                            {txHref ? (
+                              <ExplorerLink value={entry.txHash} type="transaction" href={txHref} />
+                            ) : (
+                              <code className="font-mono text-xs">
+                                {truncateHash(entry.txHash, 6, 4)}
+                              </code>
+                            )}
                           </TableCell>
                           <TableCell>{renderChainBadge(entry.caip2ChainId)}</TableCell>
                           <TableCell>

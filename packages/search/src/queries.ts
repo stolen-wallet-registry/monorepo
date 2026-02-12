@@ -158,6 +158,7 @@ export const RECENT_WALLETS_QUERY = gql`
         isSponsored
         operator
         sourceChainCAIP2
+        batchId
       }
     }
   }
@@ -234,6 +235,7 @@ export const RECENT_TRANSACTION_ENTRIES_QUERY = gql`
         batchId
         reporter
         reportedAt
+        transactionHash
       }
     }
   }
@@ -594,6 +596,7 @@ export interface RawRecentWalletsResponse {
       isSponsored: boolean;
       operator?: string;
       sourceChainCAIP2?: string;
+      batchId?: string;
     }>;
   };
 }
@@ -635,9 +638,10 @@ export interface RawRecentTransactionEntriesResponse {
       txHash: string;
       caip2ChainId: string;
       numericChainId?: number;
-      batchId: string;
+      batchId?: string;
       reporter: string;
       reportedAt: string;
+      transactionHash: string;
     }>;
   };
 }

@@ -119,7 +119,7 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
       // Sign the registration
       const sig = await signRegistration({
         wallet: registeree,
-        forwarder: relayer,
+        trustedForwarder: relayer,
         reportedChainId,
         incidentTimestamp,
         nonce,
@@ -183,7 +183,7 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
     registeree && relayer && hashData && nonce !== undefined
       ? {
           registeree,
-          forwarder: relayer,
+          trustedForwarder: relayer,
           nonce,
           deadline: hashData.deadline,
           chainId,

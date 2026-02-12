@@ -51,11 +51,11 @@ contract TransactionRegistryTest is EIP712TestHelper {
 
     // Typehashes (matching EIP712Constants.sol)
     bytes32 internal constant PROD_TX_ACK_TYPEHASH = keccak256(
-        "TransactionBatchAcknowledgement(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+        "TransactionBatchAcknowledgement(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
     );
 
     bytes32 internal constant PROD_TX_REG_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(string statement,address reporter,address forwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+        "TransactionBatchRegistration(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
     );
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -63,7 +63,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
     // ═══════════════════════════════════════════════════════════════════════════
 
     event TransactionBatchAcknowledged(
-        address indexed reporter, address indexed forwarder, bytes32 dataHash, bool isSponsored
+        address indexed reporter, address indexed trustedForwarder, bytes32 dataHash, bool isSponsored
     );
     event TransactionRegistered(
         bytes32 indexed txHash, bytes32 indexed chainId, address indexed reporter, bool isSponsored

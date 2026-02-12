@@ -19,35 +19,108 @@ With two phases:
 
 ---
 
-## Type Definitions
+## Shared Domain
+
+**All contracts** (WalletRegistry, TransactionRegistry, SpokeRegistry) use the **same** EIP-712 domain:
 
 ```typescript
-// packages/signatures/src/eip712/types.ts (re-exported in apps/web)
+domain: {
+  name: 'StolenWalletRegistry',
+  version: '4',
+  chainId: <chain>,
+  verifyingContract: <contract address>,
+}
+```
 
-export const EIP712_DOMAIN_NAME = 'StolenWalletRegistry';
-export const EIP712_DOMAIN_VERSION = '4';
+Cross-contract replay is prevented by **distinct typehashes** (different `primaryType` names), NOT by domain separation. The `verifyingContract` field also binds signatures to a specific contract deployment.
 
-export const EIP712_TYPES = {
+---
+
+## Wallet Registry Types
+
+```typescript
+// packages/signatures/src/eip712/types.ts
+
+export const WALLET_EIP712_TYPES = {
   AcknowledgementOfRegistry: [
     { name: 'statement', type: 'string' },
-    { name: 'owner', type: 'address' },
-    { name: 'forwarder', type: 'address' },
+    { name: 'wallet', type: 'address' },
+    { name: 'trustedForwarder', type: 'address' },
+    { name: 'reportedChainId', type: 'uint64' },
+    { name: 'incidentTimestamp', type: 'uint64' },
     { name: 'nonce', type: 'uint256' },
     { name: 'deadline', type: 'uint256' },
   ],
   Registration: [
     { name: 'statement', type: 'string' },
-    { name: 'owner', type: 'address' },
-    { name: 'forwarder', type: 'address' },
+    { name: 'wallet', type: 'address' },
+    { name: 'trustedForwarder', type: 'address' },
+    { name: 'reportedChainId', type: 'uint64' },
+    { name: 'incidentTimestamp', type: 'uint64' },
     { name: 'nonce', type: 'uint256' },
     { name: 'deadline', type: 'uint256' },
   ],
 } as const;
 ```
 
-**Critical:** ACK and REG have identical structure but different `primaryType`, generating distinct hashes.
+**Field mapping:** The EIP-712 field `wallet` maps to the contract parameter `registeree`. Same value, different naming context.
 
-Transaction registries have their own domain and types (see `TX_EIP712_TYPES` in `@swr/signatures`).
+ACK and REG have **identical structure** but different `primaryType`, generating distinct hashes.
+
+### TypeScript Message Interface
+
+```typescript
+export interface AcknowledgementMessage {
+  statement: string;
+  wallet: Address; // The stolen wallet being registered
+  trustedForwarder: Address; // Who can call register()
+  reportedChainId: bigint; // Raw EVM chain ID (uint64)
+  incidentTimestamp: bigint; // Unix timestamp (uint64), 0 if unknown
+  nonce: bigint;
+  deadline: bigint; // Signature expiry (block.timestamp)
+}
+
+// RegistrationMessage has identical shape
+```
+
+---
+
+## Transaction Registry Types
+
+```typescript
+export const TX_EIP712_TYPES = {
+  TransactionBatchAcknowledgement: [
+    { name: 'statement', type: 'string' },
+    { name: 'reporter', type: 'address' },
+    { name: 'trustedForwarder', type: 'address' },
+    { name: 'dataHash', type: 'bytes32' },
+    { name: 'reportedChainId', type: 'bytes32' },
+    { name: 'transactionCount', type: 'uint32' },
+    { name: 'nonce', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+  ],
+  TransactionBatchRegistration: [
+    { name: 'statement', type: 'string' },
+    { name: 'reporter', type: 'address' },
+    { name: 'trustedForwarder', type: 'address' },
+    { name: 'dataHash', type: 'bytes32' },
+    { name: 'reportedChainId', type: 'bytes32' },
+    { name: 'transactionCount', type: 'uint32' },
+    { name: 'nonce', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+  ],
+} as const;
+```
+
+### Key Differences from Wallet Types
+
+| Aspect          | Wallet Registry              | Transaction Registry                              |
+| --------------- | ---------------------------- | ------------------------------------------------- |
+| Primary types   | `AcknowledgementOfRegistry`  | `TransactionBatchAcknowledgement`                 |
+|                 | `Registration`               | `TransactionBatchRegistration`                    |
+| Key field       | `wallet` (address)           | `reporter` (address)                              |
+| Chain ID format | `reportedChainId: uint64`    | `reportedChainId: bytes32` (CAIP hash)            |
+| Extra fields    | `incidentTimestamp` (uint64) | `dataHash` (bytes32), `transactionCount` (uint32) |
 
 ---
 
@@ -58,7 +131,7 @@ Transaction registries have their own domain and types (see `TX_EIP712_TYPES` in
 ```typescript
 const { data } = useReadContract({
   functionName: 'generateHashStruct',
-  args: [forwarderAddress, SIGNATURE_STEP.ACKNOWLEDGEMENT],
+  args: [reportedChainId, incidentTimestamp, trustedForwarder, SIGNATURE_STEP.ACKNOWLEDGEMENT],
 });
 // Returns: [deadline, hashStruct]
 ```
@@ -67,28 +140,32 @@ const { data } = useReadContract({
 
 ```typescript
 const typedData = buildAcknowledgementTypedData(chainId, contractAddress, {
-  owner,
-  forwarder,
+  wallet: registeree,
+  trustedForwarder: forwarder,
+  reportedChainId,
+  incidentTimestamp,
   nonce,
   deadline,
 });
 const signature = await signTypedDataAsync(typedData);
 ```
 
-Builders inject the correct statement string to match contract constants.
+Builders inject the correct statement string to match contract constants from `EIP712Constants.sol`.
 
 ---
 
 ## Signature Storage
 
+### Wallet Signatures
+
 ```typescript
 // apps/web/src/lib/signatures/storage.ts
 
 export interface StoredSignature {
-  signature: `0x${string}`;
+  signature: Hex;
   deadline: bigint;
   nonce: bigint;
-  address: `0x${string}`;
+  address: Address;
   chainId: number;
   step: SignatureStep; // ACK (1) or REG (2)
   storedAt: number; // For 30-min TTL
@@ -97,28 +174,70 @@ export interface StoredSignature {
 // Storage key: swr_sig_${address}_${chainId}_${step}
 ```
 
-Transaction batch signatures use a separate storage file:
+### Transaction Batch Signatures
 
 ```typescript
 // apps/web/src/lib/signatures/transactions/storage.ts
-// Storage key: swr_tx_sig_${merkleRoot}_${chainId}_${step}
+
+// Storage key: swr_tx_sig_${dataHash}_${chainId}_${step}
 ```
+
+Uses `dataHash` (the keccak commitment of txHashes + chainIds), not a merkle root.
 
 ---
 
-## Contract Verification
+## Contract Functions
+
+### Wallet Registry (hub + spoke identical)
+
+```typescript
+// apps/web/src/hooks/useAcknowledgement.ts
+
+writeContractAsync({
+  functionName: 'acknowledge',
+  args: [
+    registeree, // address - wallet being registered
+    trustedForwarder, // address - who can call register()
+    reportedChainId, // uint64 - raw EVM chain ID
+    incidentTimestamp, // uint64 - unix timestamp
+    deadline, // uint256 - signature expiry (timestamp)
+    nonce, // uint256 - must match on-chain nonces[registeree]
+    v,
+    r,
+    s, // signature components
+  ],
+});
+
+// apps/web/src/hooks/useRegistration.ts
+
+writeContractAsync({
+  functionName: 'register',
+  args: [
+    registeree, // address
+    trustedForwarder, // address - must match ack phase AND msg.sender
+    reportedChainId, // uint64
+    incidentTimestamp, // uint64
+    deadline, // uint256
+    nonce, // uint256
+    v,
+    r,
+    s,
+  ],
+});
+```
+
+### Contract Verification (Solidity)
 
 ```solidity
-// Acknowledgement
-bytes32 digest = _hashTypedDataV4(structHash);
-address recoveredWallet = ECDSA.recover(digest, v, r, s);
-if (recoveredWallet != owner) revert InvalidSigner();
-nonces[owner]++;  // Replay prevention
+// WalletRegistry.sol — acknowledge()
+if (nonce != nonces[registeree]) revert WalletRegistry__InvalidNonce();
+_verifyAckSignature(registeree, trustedForwarder, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
+nonces[registeree]++;
 
-// Registration (also checks)
-if (tf.forwarder != msg.sender) revert InvalidForwarder();
-if (block.number < tf.startBlock) revert GracePeriodNotStarted();
-if (block.number > tf.expiryBlock) revert WindowExpired();
+// WalletRegistry.sol — register()
+if (ack.trustedForwarder != msg.sender) revert WalletRegistry__InvalidForwarder();
+if (block.number < ack.gracePeriodStart) revert WalletRegistry__GracePeriodNotStarted();
+if (block.number > ack.deadline) revert WalletRegistry__DeadlineExpired();
 ```
 
 ---
@@ -157,11 +276,24 @@ REG tx: Contract verifies nonce=1 ✓, increments to 2
         Signature with nonce=1 now INVALID forever
 ```
 
+The nonce is passed as an **explicit parameter** to `acknowledge()` and `register()`. If it doesn't match the on-chain value, the contract reverts with `WalletRegistry__InvalidNonce` **before** signature verification (fail-fast pattern).
+
+---
+
+## Dual Deadline System
+
+Two different deadline concepts in the wallet flow:
+
+| Deadline                                                      | Unit                          | Purpose                                               |
+| ------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------- |
+| `deadline` param                                              | Timestamp (`block.timestamp`) | EIP-712 signature expiry -- prevents stale signatures |
+| `AcknowledgementData.deadline` (hub) / `.expiryBlock` (spoke) | Block number (`block.number`) | Grace period window -- enforces registration timing   |
+
 ---
 
 ## Grace Period
 
-Contract uses `block.prevrandao` for randomization. Actual durations depend on chain-specific timing config (see `TimingConfig.sol`).
+Contract uses `block.prevrandao` for randomization. Actual durations depend on chain-specific timing config (see `TimingConfig.sol`). Typically 1-4 minutes.
 
 ---
 
@@ -172,18 +304,38 @@ Contract uses `block.prevrandao` for randomization. Actual durations depend on c
 | Chain-binding     | Domain includes `chainId`                               |
 | Contract-binding  | Domain includes `verifyingContract`                     |
 | Phase separation  | Different `primaryType`                                 |
-| Replay prevention | Nonce increments                                        |
-| Time expiration   | `deadline` checked                                      |
+| Replay prevention | Nonce increments (fail-fast on mismatch)                |
+| Time expiration   | `deadline` checked against `block.timestamp`            |
 | Grace period      | 1-4 min randomized delay                                |
 | Client TTL        | 30-min sessionStorage expiration (cleared on tab close) |
+
+---
+
+## Statements (Displayed to Users)
+
+From `EIP712Constants.sol`:
+
+- **Wallet ACK:** "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry."
+- **Wallet REG:** "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry. This action is irreversible."
+- **Tx ACK:** "This signature acknowledges the intent to report stolen transactions to the Stolen Wallet Registry."
+- **Tx REG:** "This signature confirms permanent registration of stolen transactions in the Stolen Wallet Registry. This action is irreversible."
 
 ---
 
 ## Key Files
 
 ```text
+packages/signatures/src/
+├── eip712/
+│   ├── types.ts          # All EIP-712 type definitions
+│   ├── builders.ts       # buildAcknowledgementTypedData, buildRegistrationTypedData
+│   └── constants.ts      # Domain name, version
 apps/web/src/lib/signatures/
-├── eip712.ts    # Type definitions, builders
-├── storage.ts   # sessionStorage persistence
-└── utils.ts     # Parsing, validation
+├── eip712.ts             # Re-exports from @swr/signatures
+├── storage.ts            # Wallet signature sessionStorage
+├── transactions/
+│   └── storage.ts        # Tx batch signature sessionStorage (key: dataHash)
+└── utils.ts              # Parsing, validation
+packages/contracts/src/libraries/
+└── EIP712Constants.sol   # Solidity statement strings
 ```
