@@ -74,7 +74,9 @@ function CopyableAddress({ address, chainId }: { address: string; chainId: numbe
   );
 }
 
-const hubContractDefs = [
+type HubContractKey = keyof NonNullable<HubNetworkConfig['hubContracts']>;
+
+const hubContractDefs: { label: string; key: HubContractKey }[] = [
   { label: 'Registry Hub', key: 'registryHub' },
   { label: 'Wallet Registry', key: 'stolenWalletRegistry' },
   { label: 'Transaction Registry', key: 'stolenTransactionRegistry' },
@@ -86,7 +88,7 @@ const hubContractDefs = [
   { label: 'Wallet Soulbound', key: 'walletSoulbound' },
   { label: 'Support Soulbound', key: 'supportSoulbound' },
   { label: 'Soulbound Receiver', key: 'soulboundReceiver' },
-] as const;
+];
 
 function HubTable({ hubs }: { hubs: HubNetworkConfig[] }) {
   if (hubs.length === 0) return <p>No hub deployments found.</p>;
@@ -106,16 +108,14 @@ function HubTable({ hubs }: { hubs: HubNetworkConfig[] }) {
         </thead>
         <tbody>
           {hubContractDefs.map(({ label, key }) => {
-            const anyHasContract = hubs.some(
-              (h) => h.hubContracts?.[key as keyof typeof h.hubContracts]
-            );
+            const anyHasContract = hubs.some((h) => h.hubContracts?.[key]);
             if (!anyHasContract) return null;
 
             return (
               <tr key={key}>
                 <td style={tdStyle}>{label}</td>
                 {hubs.map((h) => {
-                  const addr = h.hubContracts?.[key as keyof typeof h.hubContracts];
+                  const addr = h.hubContracts?.[key];
                   return addr ? (
                     <CopyableAddress key={h.chainId} address={addr as string} chainId={h.chainId} />
                   ) : (
@@ -301,7 +301,7 @@ export function NetworkOverview() {
                     <td style={tdStyle}>{n.displayName}</td>
                     <td style={monoTdStyle}>{n.chainId}</td>
                     <td style={tdStyle}>{n.role}</td>
-                    <td style={monoTdStyle}>{n.rpcUrls[0]}</td>
+                    <td style={monoTdStyle}>{n.rpcUrls?.[0] ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

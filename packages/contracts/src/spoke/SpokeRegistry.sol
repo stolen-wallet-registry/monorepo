@@ -435,17 +435,17 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     }
 
     /// @inheritdoc ISpokeRegistry
-    function quoteRegistration(address owner) external view returns (uint256) {
+    function quoteRegistration(address wallet) external view returns (uint256) {
         // Build dummy payload to get accurate quote
         CrossChainMessage.WalletRegistrationPayload memory payload = CrossChainMessage.WalletRegistrationPayload({
             namespaceHash: CAIP10.NAMESPACE_EIP155,
             chainRef: bytes32(0),
-            identifier: bytes32(uint256(uint160(owner))),
+            identifier: bytes32(uint256(uint160(wallet))),
             reportedChainId: bytes32(0),
             incidentTimestamp: 0,
             sourceChainId: sourceChainId,
             isSponsored: false,
-            nonce: nonces[owner],
+            nonce: nonces[wallet],
             timestamp: uint64(block.timestamp),
             registrationHash: bytes32(0)
         });
@@ -459,17 +459,17 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     }
 
     /// @inheritdoc ISpokeRegistry
-    function quoteFeeBreakdown(address owner) external view returns (FeeBreakdown memory) {
+    function quoteFeeBreakdown(address wallet) external view returns (FeeBreakdown memory) {
         // Build payload for accurate quote
         CrossChainMessage.WalletRegistrationPayload memory payload = CrossChainMessage.WalletRegistrationPayload({
             namespaceHash: CAIP10.NAMESPACE_EIP155,
             chainRef: bytes32(0),
-            identifier: bytes32(uint256(uint160(owner))),
+            identifier: bytes32(uint256(uint160(wallet))),
             reportedChainId: bytes32(0),
             incidentTimestamp: 0,
             sourceChainId: sourceChainId,
             isSponsored: false,
-            nonce: nonces[owner],
+            nonce: nonces[wallet],
             timestamp: uint64(block.timestamp),
             registrationHash: bytes32(0)
         });
@@ -756,46 +756,33 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds
     ) internal {
-        // EFFECTS: Update state before external calls (CEI pattern)
-        nonces[reporter]++;
-        delete pendingTxAcknowledgements[reporter];
-
-        // INTERACTIONS: External calls after state changes
-        // NOTE: Pass the validated nonce (nonce parameter was validated against nonces[reporter] before increment)
-        (bytes32 messageId, uint256 totalRequired) =
-            _buildAndSendTxBatchMessage(dataHash, reportedChainId, nonce, reporter, transactionHashes, chainIds);
-
-        emit TransactionBatchSentToHub(reporter, messageId, dataHash, hubChainId);
-
-        // Refund excess
-        if (msg.value > totalRequired) {
-            (bool success,) = msg.sender.call{ value: msg.value - totalRequired }("");
-            if (!success) revert SpokeRegistry__RefundFailed();
-        }
-    }
-
-    /// @dev Build and send the cross-chain transaction batch message
-    function _buildAndSendTxBatchMessage(
-        bytes32 dataHash,
-        bytes32 reportedChainId,
-        uint256 nonce,
-        address reporter,
-        bytes32[] calldata transactionHashes,
-        bytes32[] calldata chainIds
-    ) internal returns (bytes32 messageId, uint256 totalRequired) {
-        // Build cross-chain payload
+        // Build cross-chain payload (view operation, no state changes)
         bytes memory encodedPayload =
             _encodeTxBatchPayload(dataHash, reportedChainId, nonce, reporter, transactionHashes, chainIds);
 
-        // Quote and validate fees
+        // Quote and validate fees BEFORE state changes (matches wallet registration pattern)
         uint256 bridgeFee = IBridgeAdapter(bridgeAdapter).quoteMessage(hubChainId, encodedPayload);
         uint256 registrationFee = feeManager != address(0) ? IFeeManager(feeManager).currentFeeWei() : 0;
-        totalRequired = bridgeFee + registrationFee;
+        uint256 totalRequired = bridgeFee + registrationFee;
 
         if (msg.value < totalRequired) revert SpokeRegistry__InsufficientFee();
 
-        // Send cross-chain message
-        messageId = IBridgeAdapter(bridgeAdapter).sendMessage{ value: bridgeFee }(hubChainId, hubInbox, encodedPayload);
+        // EFFECTS: Update state after fee validation
+        nonces[reporter]++;
+        delete pendingTxAcknowledgements[reporter];
+
+        // INTERACTIONS: Send cross-chain message
+        bytes32 messageId =
+            IBridgeAdapter(bridgeAdapter).sendMessage{ value: bridgeFee }(hubChainId, hubInbox, encodedPayload);
+
+        emit TransactionBatchSentToHub(reporter, messageId, dataHash, hubChainId);
+
+        // Refund excess (registration fee stays on spoke for treasury sweep)
+        uint256 excess = msg.value - totalRequired;
+        if (excess > 0) {
+            (bool success,) = msg.sender.call{ value: excess }("");
+            if (!success) revert SpokeRegistry__RefundFailed();
+        }
     }
 
     /// @dev Encode transaction batch payload for cross-chain transport

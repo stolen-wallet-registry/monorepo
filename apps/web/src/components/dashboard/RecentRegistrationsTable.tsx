@@ -44,6 +44,7 @@ import {
   useRecentRegistrations,
   type RegistrationEntry,
   type RegistrationType,
+  type BatchType,
   formatBatchId,
 } from '@/hooks/dashboard';
 import { useOperators } from '@/hooks/dashboard';
@@ -192,10 +193,10 @@ function RegistrationRow({ entry, operatorNames }: RegistrationRowProps) {
       <TableCell>
         {entry.batchId ? (
           <Link
-            href={`/dashboard/batches/${entry.batchId}?tab=batches&batchType=${entry.type}`}
+            href={`/dashboard/batches/${encodeURIComponent(entry.batchId)}?tab=batches&batchType=${entry.type}`}
             className="text-xs font-mono text-primary hover:underline"
           >
-            {formatBatchId(entry.type, entry.batchId)}
+            {formatBatchId(entry.type as BatchType, entry.batchId)}
           </Link>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>

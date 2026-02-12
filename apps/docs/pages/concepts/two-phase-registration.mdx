@@ -162,5 +162,5 @@ In all cases:
 For self-relay and P2P relay, the victim signs with their compromised wallet but someone else submits the transaction and pays gas - critical when the wallet has been drained.
 
 :::info
-The `trustedForwarder` address is never emitted in on-chain events. This is intentional - it protects the privacy of relay helpers. The only public signal is the `isSponsored` boolean, which indicates that someone other than the wallet owner paid gas without revealing who.
+The `trustedForwarder` address **is** emitted as an indexed event parameter in `WalletAcknowledged` and `TransactionBatchAcknowledged` events, so it is publicly queryable on-chain. The `isSponsored` boolean signals whether someone other than the wallet owner paid gas, but the forwarder identity is not hidden.
 :::

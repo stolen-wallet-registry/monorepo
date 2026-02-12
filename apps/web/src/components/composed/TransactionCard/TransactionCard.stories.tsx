@@ -219,3 +219,24 @@ export const HubConfirmed: Story = {
     onSubmit: () => {},
   },
 };
+
+/**
+ * Cross-chain confirmation timed out - spoke confirmed but hub unconfirmed.
+ */
+export const HubTimeout: Story = {
+  args: {
+    type: 'registration',
+    status: 'hub-timeout',
+    hash: sampleHash,
+    explorerUrl: 'https://optimistic.etherscan.io/tx/' + sampleHash,
+    chainId: 10,
+    crossChainProgress: {
+      elapsedTime: 120000,
+      hubChainName: 'Base',
+      bridgeName: 'Hyperlane',
+      explorerUrl: 'https://explorer.hyperlane.xyz/message/' + sampleHash,
+    },
+    onSubmit: () => {},
+    onContinueAnyway: () => console.log('Continue anyway clicked'),
+  },
+};

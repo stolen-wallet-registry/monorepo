@@ -11,7 +11,10 @@ import { z } from 'zod';
 /** Ethereum address regex - 0x followed by 40 hex characters */
 const ethereumAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address');
 
-/** Transaction hash regex - 0x followed by 64 hex characters */
+/** bytes32 hex string (0x + 64 hex chars) — shared base for tx hashes, data hashes, chain IDs */
+const bytes32Schema = z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid bytes32');
+
+/** Transaction hash — alias for bytes32 with domain-specific error message */
 const txHashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid transaction hash');
 
 /** Signature over the wire schema */
@@ -56,9 +59,6 @@ export const P2PStateOverTheWireSchema = z
   })
   .strict();
 
-/** bytes32 hex string (0x + 64 hex chars) */
-const bytes32Schema = z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid bytes32');
-
 /** Transaction batch data transmitted over P2P for transaction registration relay */
 export const TransactionBatchOverTheWireSchema = z
   .object({
@@ -73,7 +73,13 @@ export const TransactionBatchOverTheWireSchema = z
     /** Parallel CAIP-2 chain ID hashes (one per tx) */
     chainIdHashes: z.array(bytes32Schema).max(100),
   })
-  .strict();
+  .strict()
+  .refine((d) => d.transactionHashes.length === d.transactionCount, {
+    message: 'transactionHashes length must equal transactionCount',
+  })
+  .refine((d) => d.chainIdHashes.length === d.transactionCount, {
+    message: 'chainIdHashes length must equal transactionCount',
+  });
 
 /** Main parsed stream data schema */
 export const ParsedStreamDataSchema = z

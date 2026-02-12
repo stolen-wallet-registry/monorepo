@@ -131,7 +131,7 @@ export const TX_EIP712_TYPES = {
 ```typescript
 const { data } = useReadContract({
   functionName: 'generateHashStruct',
-  args: [forwarderAddress, SIGNATURE_STEP.ACKNOWLEDGEMENT],
+  args: [reportedChainId, incidentTimestamp, trustedForwarder, SIGNATURE_STEP.ACKNOWLEDGEMENT],
 });
 // Returns: [deadline, hashStruct]
 ```
@@ -230,10 +230,8 @@ writeContractAsync({
 
 ```solidity
 // WalletRegistry.sol — acknowledge()
-bytes32 digest = _hashTypedDataV4(structHash);
-address recoveredWallet = ECDSA.recover(digest, v, r, s);
-if (recoveredWallet != registeree) revert WalletRegistry__InvalidSignature();
 if (nonce != nonces[registeree]) revert WalletRegistry__InvalidNonce();
+_verifyAckSignature(registeree, trustedForwarder, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
 nonces[registeree]++;
 
 // WalletRegistry.sol — register()
@@ -286,10 +284,10 @@ The nonce is passed as an **explicit parameter** to `acknowledge()` and `registe
 
 Two different deadline concepts in the wallet flow:
 
-| Deadline                       | Unit                          | Purpose                                               |
-| ------------------------------ | ----------------------------- | ----------------------------------------------------- |
-| `deadline` param               | Timestamp (`block.timestamp`) | EIP-712 signature expiry -- prevents stale signatures |
-| `AcknowledgementData.deadline` | Block number (`block.number`) | Grace period window -- enforces registration timing   |
+| Deadline                                                      | Unit                          | Purpose                                               |
+| ------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------- |
+| `deadline` param                                              | Timestamp (`block.timestamp`) | EIP-712 signature expiry -- prevents stale signatures |
+| `AcknowledgementData.deadline` (hub) / `.expiryBlock` (spoke) | Block number (`block.number`) | Grace period window -- enforces registration timing   |
 
 ---
 

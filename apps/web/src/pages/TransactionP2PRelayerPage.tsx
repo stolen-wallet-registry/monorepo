@@ -179,7 +179,6 @@ export function TransactionP2PRelayerPage() {
 
   // Store libp2p in ref - NEVER pass libp2pRef.current directly as a prop!
   const libp2pRef = useRef<Libp2p | null>(null);
-  const [, setNodeReady] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
@@ -213,19 +212,6 @@ export function TransactionP2PRelayerPage() {
         useTransactionRegistrationStore.getState().setStep(next);
       }
     }
-  });
-
-  // Update refs
-  useEffect(() => {
-    goToNextStepRef.current = () => {
-      const currentStep = useTransactionRegistrationStore.getState().step;
-      if (currentStep) {
-        const next = getTxNextStep('p2pRelay', currentStep);
-        if (next) {
-          useTransactionRegistrationStore.getState().setStep(next);
-        }
-      }
-    };
   });
 
   /**
@@ -359,7 +345,6 @@ export function TransactionP2PRelayerPage() {
 
         node = p2pNode;
         libp2pRef.current = p2pNode;
-        setNodeReady(true);
         setPeerId(p2pNode.peerId.toString());
         setInitialized(true);
         setIsInitializing(false);
@@ -386,7 +371,6 @@ export function TransactionP2PRelayerPage() {
         }
         if (libp2pRef.current === node) {
           libp2pRef.current = null;
-          setNodeReady(false);
         }
       }
     };

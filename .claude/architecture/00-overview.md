@@ -146,7 +146,7 @@ INDEXER (Ponder) → DASHBOARD + SEARCH
 | Step-based flow   | Wallet + transaction flows (standard, self-relay, P2P)            | 03-registration-flow.md  |
 | Two-phase EIP-712 | ACK + REG signatures prevent phishing                             | 02-eip712-signatures.md  |
 | Zustand stores    | immer + persist + devtools middleware                             | 04-state-management.md   |
-| P2P relay         | 7 custom protocols for signature relay                            | 01-libp2p-relay.md       |
+| P2P relay         | Custom protocols for wallet + transaction signature relay         | 01-libp2p-relay.md       |
 | Category logging  | wallet, contract, signature, p2p, etc.                            | 07-logger-system.md      |
 | Contract storage  | Direct mappings with CAIP-derived keys, event-based batch linking | 09-storage-and-events.md |
 
@@ -182,7 +182,7 @@ INDEXER (Ponder) → DASHBOARD + SEARCH
 | State     | Zustand 5.x, TanStack Query 5.x     |
 | P2P       | libp2p 3.x                          |
 | Forms     | React Hook Form 7.x, Zod 4.x        |
-| Contracts | Foundry, Solidity 0.8.28            |
+| Contracts | Foundry, Solidity 0.8.24            |
 | Indexer   | Ponder 0.16.x, PostgreSQL/PGlite    |
 | CLI       | TypeScript, viem, commander         |
 

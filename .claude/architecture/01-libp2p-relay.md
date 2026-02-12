@@ -153,6 +153,7 @@ Without keep-alive, connections drop during grace period (1-4 min).
 // packages/p2p/src/protocols.ts
 
 export const PROTOCOLS = {
+  // ── Wallet Registration ──────────────────────────────────────────────
   CONNECT: '/swr/connected/1.0.0',
   ACK_SIG: '/swr/acknowledgement/signature/1.0.0',
   ACK_REC: '/swr/acknowledgement/signature/1.0.0/received',
@@ -160,6 +161,14 @@ export const PROTOCOLS = {
   REG_SIG: '/swr/register/signature/1.0.0',
   REG_REC: '/swr/register/signature/1.0.0/received',
   REG_PAY: '/swr/register/payment/1.0.0',
+
+  // ── Transaction Registration ─────────────────────────────────────────
+  TX_ACK_SIG: '/swr/tx-acknowledgement/signature/1.0.0',
+  TX_ACK_REC: '/swr/tx-acknowledgement/signature/1.0.0/received',
+  TX_ACK_PAY: '/swr/tx-acknowledgement/payment/1.0.0',
+  TX_REG_SIG: '/swr/tx-register/signature/1.0.0',
+  TX_REG_REC: '/swr/tx-register/signature/1.0.0/received',
+  TX_REG_PAY: '/swr/tx-register/payment/1.0.0',
 } as const;
 ```
 

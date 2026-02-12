@@ -2,11 +2,13 @@ import { Mermaid } from '../../components/Mermaid';
 
 # Protocol Deep-Dive
 
-SWR defines 7 custom protocols on top of libp2p for relaying EIP-712 signatures between a registeree (victim) and a relayer (helper).
+SWR defines custom protocols on top of libp2p for relaying EIP-712 signatures between a registeree (victim) and a relayer (helper), supporting both wallet and transaction registration flows.
 
 ## Custom Protocols
 
 All protocols follow the naming convention `/swr/{action}/{type}/{version}[/received]`.
+
+### Wallet Registration
 
 | Protocol                                        | Constant  | Direction              | Purpose                                                         |
 | ----------------------------------------------- | --------- | ---------------------- | --------------------------------------------------------------- |
@@ -17,6 +19,17 @@ All protocols follow the naming convention `/swr/{action}/{type}/{version}[/rece
 | `/swr/register/signature/1.0.0`                 | `REG_SIG` | Registeree --> Relayer | Send signed registration (EIP-712 signature + metadata)         |
 | `/swr/register/signature/1.0.0/received`        | `REG_REC` | Relayer --> Registeree | Confirm signature received and validated                        |
 | `/swr/register/payment/1.0.0`                   | `REG_PAY` | Relayer --> Registeree | Send `register()` transaction hash - registration complete      |
+
+### Transaction Registration
+
+| Protocol                                           | Constant     | Direction            | Purpose                                                                   |
+| -------------------------------------------------- | ------------ | -------------------- | ------------------------------------------------------------------------- |
+| `/swr/tx-acknowledgement/signature/1.0.0`          | `TX_ACK_SIG` | Reporter --> Relayer | Send signed tx batch acknowledgement (signature + batch data)             |
+| `/swr/tx-acknowledgement/signature/1.0.0/received` | `TX_ACK_REC` | Relayer --> Reporter | Confirm tx acknowledgement signature received                             |
+| `/swr/tx-acknowledgement/payment/1.0.0`            | `TX_ACK_PAY` | Relayer --> Reporter | Send tx `acknowledgeBatch()` transaction hash after on-chain submission   |
+| `/swr/tx-register/signature/1.0.0`                 | `TX_REG_SIG` | Reporter --> Relayer | Send signed tx batch registration (signature + batch data)                |
+| `/swr/tx-register/signature/1.0.0/received`        | `TX_REG_REC` | Relayer --> Reporter | Confirm tx registration signature received                                |
+| `/swr/tx-register/payment/1.0.0`                   | `TX_REG_PAY` | Relayer --> Reporter | Send tx `registerBatch()` transaction hash - transaction batch registered |
 
 Defined in `packages/p2p/src/protocols.ts`.
 

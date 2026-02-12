@@ -57,7 +57,7 @@ pnpm deploy:crosschain             # Terminal 2 — Deploy hub + spoke contracts
 pnpm dev:crosschain                # Terminal 3 — Frontend with cross-chain features
 ```
 
-Open `http://localhost:5173`. See the [Quick Start](https://stolen-wallet-registry.dev/getting-started/quick-start) guide for MetaMask setup, test accounts, and indexer instructions.
+Open `http://localhost:5173`. See the [setup guide](apps/docs/pages/dev/setup.mdx) for MetaMask setup, test accounts, and indexer instructions.
 
 ## Tech Stack
 
@@ -67,16 +67,20 @@ UI:        React 19, Tailwind CSS 4.x, shadcn/ui, Radix UI
 Web3:      wagmi 2.x, viem 2.x, RainbowKit 2.x, TanStack Query 5.x
 State:     Zustand 5.x, React Hook Form 7.x, Zod 4.x
 Testing:   Vitest 4.x, Storybook 10.x, Testing Library
-Contracts: Foundry, Solidity 0.8.28, OpenZeppelin
+Contracts: Foundry, Solidity 0.8.24, OpenZeppelin
 Indexer:   Ponder + Postgres
 ```
 
-## Links
+## Documentation
 
-- [Documentation](https://stolen-wallet-registry.dev) -- Full docs
-- [Hub-Spoke Architecture](https://stolen-wallet-registry.dev/concepts/hub-spoke) -- Cross-chain design
-- [Operator Protocol](https://stolen-wallet-registry.dev/operator) -- Batch submissions
-- [P2P Relay](https://stolen-wallet-registry.dev/p2p) -- Gasless registration
+Documentation lives in `apps/docs/` (Vocs). Run locally with `pnpm --filter docs dev`.
+
+Key sections:
+
+- [Setup Guide](apps/docs/pages/dev/setup.mdx) -- Local development
+- [Hub-Spoke Architecture](apps/docs/pages/concepts/hub-spoke.mdx) -- Cross-chain design
+- [Operator Protocol](apps/docs/pages/operator/) -- Batch submissions
+- [P2P Relay](apps/docs/pages/p2p/) -- Gasless registration
 
 ## What's Built
 

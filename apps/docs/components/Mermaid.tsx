@@ -51,15 +51,20 @@ export function Mermaid({ chart }: { chart: string }) {
         // Clean up any temporary elements mermaid injects into the DOM
         const tempEl = document.getElementById(id.current);
         if (tempEl) tempEl.remove();
-        // Also clean up mermaid's rendering container
-        document.querySelectorAll('[id^="d"][id$="mermaid"]').forEach((el) => {
-          if (
-            el.textContent?.includes('Syntax error') ||
-            el.textContent?.includes('mermaid version')
-          ) {
-            el.remove();
-          }
-        });
+        // Clean up mermaid's temporary rendering containers.
+        // Mermaid injects containers with data-processed or aria-roledescription attributes.
+        // The [id^="d"][id$="mermaid"] selector targets mermaid's internal naming convention
+        // (tested with mermaid 11.x). Re-verify after version upgrades.
+        document
+          .querySelectorAll('[id^="d"][id$="mermaid"], [data-processed="true"].mermaid')
+          .forEach((el) => {
+            if (
+              el.textContent?.includes('Syntax error') ||
+              el.textContent?.includes('mermaid version')
+            ) {
+              el.remove();
+            }
+          });
       }
     });
 

@@ -27,7 +27,7 @@ An account is identified by `{namespace}:{chainRef}:{address}`.
 eip155:8453:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
 ```
 
-### [CAIP-363](https://namespaces.chainagnostic.org/eip155/caip363): Wildcard Chain References
+### [CAIP-363](https://standards.chainagnostic.org/CAIPs/caip-363): Wildcard Chain References
 
 This is the key insight for wallet registration. An EVM address is the same across all EVM chains - if a wallet is stolen on Base, it's stolen on Ethereum, Optimism, and everywhere else.
 
@@ -40,7 +40,7 @@ eip155:_:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
 This means **one registration covers all EVM chains**. Non-EVM chains (Solana, Bitcoin) use chain-specific identifiers since address formats differ.
 
 :::info
-CAIP-363 is a draft proposal within the [ChainAgnostic namespaces](https://namespaces.chainagnostic.org/eip155/caip363), not a finalized standard. SWR adopts the wildcard convention because it solves a real problem for EVM wallet identification across chains. If the spec changes, the on-chain storage key derivation is stable regardless.
+CAIP-363 is a draft proposal within the [ChainAgnostic standards](https://standards.chainagnostic.org/CAIPs/caip-363), not a finalized standard. SWR adopts the wildcard convention because it solves a real problem for EVM wallet identification across chains. If the spec changes, the on-chain storage key derivation is stable regardless.
 :::
 
 ## Storage Key Derivation

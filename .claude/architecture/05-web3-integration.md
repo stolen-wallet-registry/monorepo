@@ -72,12 +72,10 @@ export const registryKeys = {
   all: ['registry'] as const,
   nonce: (address) => [...registryKeys.all, 'nonce', address],
   deadline: (address) => [...registryKeys.all, 'deadlines', address],
-  hashStruct: (trustedForwarder, step) => [
-    ...registryKeys.all,
-    'hashStruct',
-    trustedForwarder,
-    step,
-  ],
+  hashStruct: (forwarder, step) => [...registryKeys.all, 'hashStruct', forwarder, step],
+  // Note: wagmi's useReadContract generates its own cache key from the full
+  // contract call args (reportedChainId, incidentTimestamp, forwarder, step).
+  // This factory is for manual invalidation only.
 };
 
 export const registryStaleTime = {
@@ -161,7 +159,7 @@ export function useContractDeadlines(address) {
     query: {
       enabled: !!address,
       staleTime: registryStaleTime.deadlines,
-      select: (data) => ({ currentBlock: data[0], start: data[1], expiry: data[2] }),
+      select: (data) => ({ currentBlock: data[0], expiry: data[1], start: data[2] }),
     },
   });
 }

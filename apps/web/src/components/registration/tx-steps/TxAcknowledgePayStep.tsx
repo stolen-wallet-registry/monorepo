@@ -412,7 +412,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
 
   return (
     <div className="space-y-4">
-      {/* Wallet switch prompt (self-relay only) */}
+      {/* Wallet switch prompt (self-relay and P2P relay) */}
       {isRelayed && expectedWallet && (
         <WalletSwitchPrompt
           currentAddress={address}

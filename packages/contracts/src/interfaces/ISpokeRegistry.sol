@@ -267,14 +267,14 @@ interface ISpokeRegistry {
     function nonces(address wallet) external view returns (uint256);
 
     /// @notice Quote total registration fee
-    /// @param owner The wallet owner address
+    /// @param wallet The wallet address being registered
     /// @return The total fee in wei
-    function quoteRegistration(address owner) external view returns (uint256);
+    function quoteRegistration(address wallet) external view returns (uint256);
 
     /// @notice Get detailed fee breakdown
-    /// @param owner The wallet owner address
+    /// @param wallet The wallet address being registered
     /// @return The fee breakdown struct
-    function quoteFeeBreakdown(address owner) external view returns (FeeBreakdown memory);
+    function quoteFeeBreakdown(address wallet) external view returns (FeeBreakdown memory);
 
     /// @notice Generate hash struct for wallet signing (frontend helper)
     /// @dev Uses msg.sender as the wallet address. Must be called by the actual wallet owner.

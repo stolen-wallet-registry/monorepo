@@ -209,6 +209,7 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     const newMs = calculateInitialMs();
     setTotalMs(newMs);
     setHasExpired(newMs <= 0);
+    setIsWaitingForBlock(false);
     expiredCallbackFired.current = false;
 
     if (newMs <= 0) {

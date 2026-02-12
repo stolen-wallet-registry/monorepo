@@ -123,13 +123,13 @@ Fees are sent to a `feeRecipient` address at the registry level. Planned integra
 
 ## Events
 
-| Event                                                      | When                                      |
-| ---------------------------------------------------------- | ----------------------------------------- |
-| `FallbackPriceSynced(uint256 newPrice)`                    | Opportunistic sync updated the fallback   |
-| `FallbackPriceRefreshed(uint256 newPrice)`                 | Manual `refreshFallbackPrice()` succeeded |
-| `BaseFeeUpdated(uint256 oldFee, uint256 newFee)`           | Owner changed individual fee              |
-| `OperatorBatchFeeUpdated(uint256 oldFee, uint256 newFee)`  | Owner changed operator fee                |
-| `FallbackPriceUpdated(uint256 oldPrice, uint256 newPrice)` | Owner set fallback price manually         |
-| `PriceFeedConfigured(address priceFeed)`                   | Owner changed the Chainlink feed address  |
-| `StalePriceThresholdUpdated(uint256 old, uint256 new)`     | Owner changed staleness threshold         |
-| `FallbackSyncIntervalUpdated(uint256 old, uint256 new)`    | Owner changed sync interval               |
+| Event                                                                    | When                                      |
+| ------------------------------------------------------------------------ | ----------------------------------------- |
+| `FallbackPriceSynced(uint256 newPrice)`                                  | Opportunistic sync updated the fallback   |
+| `FallbackPriceRefreshed(uint256 newPrice)`                               | Manual `refreshFallbackPrice()` succeeded |
+| `BaseFeeUpdated(uint256 oldFee, uint256 newFee)`                         | Owner changed individual fee              |
+| `OperatorBatchFeeUpdated(uint256 oldFee, uint256 newFee)`                | Owner changed operator fee                |
+| `FallbackPriceUpdated(uint256 oldPrice, uint256 newPrice)`               | Owner set fallback price manually         |
+| `PriceFeedConfigured(address priceFeed)`                                 | Owner changed the Chainlink feed address  |
+| `StalePriceThresholdUpdated(uint256 oldThreshold, uint256 newThreshold)` | Owner changed staleness threshold         |
+| `FallbackSyncIntervalUpdated(uint256 oldInterval, uint256 newInterval)`  | Owner changed sync interval               |

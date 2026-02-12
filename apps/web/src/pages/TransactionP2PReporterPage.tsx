@@ -621,7 +621,6 @@ export function TransactionP2PReporterPage() {
 
   // Store libp2p in ref - NEVER pass libp2pRef.current directly as a prop!
   const libp2pRef = useRef<Libp2p | null>(null);
-  const [, setNodeReady] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [protocolError, setProtocolError] = useState<string | null>(null);
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
@@ -671,18 +670,6 @@ export function TransactionP2PReporterPage() {
 
   // Ref for chainId
   const chainIdRef = useRef(chainId);
-
-  useEffect(() => {
-    goToNextStepRef.current = () => {
-      const currentStep = useTransactionRegistrationStore.getState().step;
-      if (currentStep) {
-        const next = getTxNextStep('p2pRelay', currentStep);
-        if (next) {
-          useTransactionRegistrationStore.getState().setStep(next);
-        }
-      }
-    };
-  });
 
   useEffect(() => {
     chainIdRef.current = chainId;
@@ -801,7 +788,6 @@ export function TransactionP2PReporterPage() {
 
         node = p2pNode;
         libp2pRef.current = p2pNode;
-        setNodeReady(true);
         setPeerId(p2pNode.peerId.toString());
         useTransactionFormStore.getState().setReporter(address);
         setInitialized(true);
@@ -829,7 +815,6 @@ export function TransactionP2PReporterPage() {
         }
         if (libp2pRef.current === node) {
           libp2pRef.current = null;
-          setNodeReady(false);
         }
       }
     };
@@ -893,19 +878,22 @@ export function TransactionP2PReporterPage() {
     setLocation('/registration/transactions/p2p-relay');
   }, [resetTxReg, resetP2P, setLocation]);
 
-  const handleSelectionChange = (hashes: Hash[]) => {
-    setSelectedTxHashes(hashes);
-    const selectedDetails = transactions
-      .filter((tx) => hashes.includes(tx.hash))
-      .map((tx) => ({
-        hash: tx.hash,
-        to: tx.to,
-        value: tx.value.toString(),
-        blockNumber: tx.blockNumber.toString(),
-        timestamp: tx.timestamp,
-      }));
-    setSelectedTxDetails(selectedDetails);
-  };
+  const handleSelectionChange = useCallback(
+    (hashes: Hash[]) => {
+      setSelectedTxHashes(hashes);
+      const selectedDetails = transactions
+        .filter((tx) => hashes.includes(tx.hash))
+        .map((tx) => ({
+          hash: tx.hash,
+          to: tx.to,
+          value: tx.value.toString(),
+          blockNumber: tx.blockNumber.toString(),
+          timestamp: tx.timestamp,
+        }));
+      setSelectedTxDetails(selectedDetails);
+    },
+    [transactions, setSelectedTxHashes, setSelectedTxDetails]
+  );
 
   const handleContinue = () => {
     if (selectedTxHashes.length > 0) {
