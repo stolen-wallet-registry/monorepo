@@ -59,6 +59,8 @@ pnpm dev:crosschain                # Terminal 3 — Frontend with cross-chain fe
 
 Open `http://localhost:5173`. See the [setup guide](https://monorepo-docs-sepia.vercel.app/dev/setup) for MetaMask setup, test accounts, and indexer instructions.
 
+> **Note:** The indexer (`apps/indexer`) is required for the dashboard and search functionality. The relay server (`apps/relay`) is only needed for P2P gasless registration.
+
 ## Tech Stack
 
 ```text

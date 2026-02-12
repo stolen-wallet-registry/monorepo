@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 
 const GAS_PER_ENTRY = 21_500;
 const BATCH_OVERHEAD = 50_000;
+const BLOCK_GAS_LIMIT = 375_000_000;
 const BATCH_SIZES = [50, 100, 200, 500, 1_000, 2_000, 5_000];
 
 const DEFAULTS = {
@@ -38,11 +39,50 @@ interface Row {
   totalGas: number;
   costEth: number;
   costUsd: number;
+  blockPercent: number;
 }
 
+const inputStyle: CSSProperties = {
+  padding: '6px 10px',
+  border: '1px solid var(--vocs-color_border)',
+  borderRadius: '6px',
+  background: 'var(--vocs-color_background)',
+  color: 'var(--vocs-color_text)',
+  fontSize: '14px',
+  width: '140px',
+};
+
+const labelStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '4px',
+  fontSize: '13px',
+  color: 'var(--vocs-color_text2)',
+};
+
+const thStyle: CSSProperties = {
+  padding: '8px 12px',
+  borderBottom: '2px solid var(--vocs-color_border)',
+  fontWeight: 600,
+  fontSize: '13px',
+  color: 'var(--vocs-color_text2)',
+  textAlign: 'right',
+};
+
+const tdStyle: CSSProperties = {
+  padding: '8px 12px',
+  borderBottom: '1px solid var(--vocs-color_border)',
+  fontSize: '14px',
+  fontFamily: 'monospace',
+  textAlign: 'right',
+};
+
 export function GasCalculator() {
-  const [gasPriceGwei, setGasPriceGwei] = useState(DEFAULTS.gasPriceGwei);
-  const [ethPriceUsd, setEthPriceUsd] = useState(DEFAULTS.ethPriceUsd);
+  const [gasPriceStr, setGasPriceStr] = useState(String(DEFAULTS.gasPriceGwei));
+  const [ethPriceStr, setEthPriceStr] = useState(String(DEFAULTS.ethPriceUsd));
+
+  const gasPriceGwei = Number(gasPriceStr) || 0;
+  const ethPriceUsd = Number(ethPriceStr) || 1;
 
   const rows: Row[] = useMemo(
     () =>
@@ -51,45 +91,11 @@ export function GasCalculator() {
         const totalGas = entryGas + BATCH_OVERHEAD;
         const costEth = totalGas * gasPriceGwei * 1e-9;
         const costUsd = costEth * ethPriceUsd;
-        return { batchSize, entryGas, totalGas, costEth, costUsd };
+        const blockPercent = (totalGas / BLOCK_GAS_LIMIT) * 100;
+        return { batchSize, entryGas, totalGas, costEth, costUsd, blockPercent };
       }),
     [gasPriceGwei, ethPriceUsd]
   );
-
-  const inputStyle: CSSProperties = {
-    padding: '6px 10px',
-    border: '1px solid var(--vocs-color_border)',
-    borderRadius: '6px',
-    background: 'var(--vocs-color_background)',
-    color: 'var(--vocs-color_text)',
-    fontSize: '14px',
-    width: '140px',
-  };
-
-  const labelStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-    fontSize: '13px',
-    color: 'var(--vocs-color_text2)',
-  };
-
-  const th: CSSProperties = {
-    padding: '8px 12px',
-    borderBottom: '2px solid var(--vocs-color_border)',
-    fontWeight: 600,
-    fontSize: '13px',
-    color: 'var(--vocs-color_text2)',
-    textAlign: 'right',
-  };
-
-  const td: CSSProperties = {
-    padding: '8px 12px',
-    borderBottom: '1px solid var(--vocs-color_border)',
-    fontSize: '14px',
-    fontFamily: 'monospace',
-    textAlign: 'right',
-  };
 
   return (
     <div
@@ -114,9 +120,13 @@ export function GasCalculator() {
           <input
             type="number"
             min={0}
-            step={0.001}
-            value={gasPriceGwei}
-            onChange={(e) => setGasPriceGwei(Math.max(0, Number(e.target.value)))}
+            step="any"
+            value={gasPriceStr}
+            onChange={(e) => setGasPriceStr(e.target.value)}
+            onBlur={() => {
+              const n = Number(gasPriceStr);
+              if (!gasPriceStr || isNaN(n) || n < 0) setGasPriceStr(String(DEFAULTS.gasPriceGwei));
+            }}
             style={inputStyle}
           />
         </label>
@@ -125,8 +135,13 @@ export function GasCalculator() {
           <input
             type="number"
             min={1}
-            value={ethPriceUsd}
-            onChange={(e) => setEthPriceUsd(Math.max(1, Number(e.target.value)))}
+            step="any"
+            value={ethPriceStr}
+            onChange={(e) => setEthPriceStr(e.target.value)}
+            onBlur={() => {
+              const n = Number(ethPriceStr);
+              if (!ethPriceStr || isNaN(n) || n < 1) setEthPriceStr(String(DEFAULTS.ethPriceUsd));
+            }}
             style={inputStyle}
           />
         </label>
@@ -136,23 +151,25 @@ export function GasCalculator() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ ...th, textAlign: 'left' }}>Batch Size</th>
-              <th style={th}>Entry Gas</th>
-              <th style={th}>Total Gas*</th>
-              <th style={th}>Cost (ETH)</th>
-              <th style={th}>Cost (USD)</th>
+              <th style={{ ...thStyle, textAlign: 'left' }}>Batch Size</th>
+              <th style={thStyle}>Entry Gas</th>
+              <th style={thStyle}>Total Gas*</th>
+              <th style={thStyle}>Cost (ETH)</th>
+              <th style={thStyle}>Cost (USD)</th>
+              <th style={thStyle}>% Block</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.batchSize}>
-                <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>
+                <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600 }}>
                   {row.batchSize.toLocaleString()}
                 </td>
-                <td style={td}>{row.entryGas.toLocaleString()}</td>
-                <td style={td}>{row.totalGas.toLocaleString()}</td>
-                <td style={td}>{fmtEth(row.costEth)}</td>
-                <td style={td}>{fmtUsd(row.costUsd)}</td>
+                <td style={tdStyle}>{row.entryGas.toLocaleString()}</td>
+                <td style={tdStyle}>{row.totalGas.toLocaleString()}</td>
+                <td style={tdStyle}>{fmtEth(row.costEth)}</td>
+                <td style={tdStyle}>{fmtUsd(row.costUsd)}</td>
+                <td style={tdStyle}>{row.blockPercent.toFixed(1)}%</td>
               </tr>
             ))}
           </tbody>
@@ -161,8 +178,9 @@ export function GasCalculator() {
 
       <p style={{ fontSize: '12px', color: 'var(--vocs-color_text3)', marginTop: '12px' }}>
         *Total gas includes ~{BATCH_OVERHEAD.toLocaleString()} batch overhead (summary event +
-        metadata). Gas per entry: ~{GAS_PER_ENTRY.toLocaleString()} (SSTORE + event). Default gas
-        price is Base&apos;s EIP-1559 floor (0.002 gwei). Check{' '}
+        metadata). Gas per entry: ~{GAS_PER_ENTRY.toLocaleString()} (SSTORE + event). % Block based
+        on Base&apos;s {BLOCK_GAS_LIMIT.toLocaleString()} block gas limit. Default gas price is
+        Base&apos;s EIP-1559 floor (0.002 gwei). Check{' '}
         <a
           href="https://basescan.org/gastracker"
           target="_blank"

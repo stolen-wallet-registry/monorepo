@@ -72,7 +72,8 @@ function isValidTxSignatureData(data: ParsedStreamData): boolean {
     data.transactionBatch?.reportedChainId &&
     data.transactionBatch?.transactionCount &&
     data.transactionBatch?.transactionHashes?.length &&
-    data.transactionBatch?.chainIdHashes?.length
+    data.transactionBatch?.chainIdHashes?.length &&
+    data.transactionBatch.transactionHashes.length === data.transactionBatch.chainIdHashes.length
   );
 }
 

@@ -61,7 +61,7 @@ FraudRegistryHub (router)
 ├── WalletRegistry          # Stolen wallet registration
 ├── TransactionRegistry     # Fraudulent transaction batches
 ├── ContractRegistry        # Malicious contract addresses
-├── CrossChainInbox         # Receives Hyperlane messages from spokes
+├── CrossChainInbox         # Receives cross-chain messages from spokes
 └── (references)
     ├── OperatorRegistry    # DAO-approved operator management
     ├── OperatorSubmitter   # Operator batch submission entry point

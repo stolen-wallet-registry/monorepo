@@ -5,7 +5,7 @@
  * then counts down in real-time.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   estimateTimeFromBlocks,
   formatTimeRemaining,
@@ -220,10 +220,12 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     }
   }, [calculateInitialMs, autoStart]);
 
+  const blocksLeft = useMemo(() => calculateBlocksLeft(), [calculateBlocksLeft]);
+
   return {
     timeRemaining: formatTimeRemaining(totalMs),
     totalMs,
-    blocksLeft: calculateBlocksLeft(),
+    blocksLeft,
     isExpired: hasExpired,
     isRunning,
     isWaitingForBlock,

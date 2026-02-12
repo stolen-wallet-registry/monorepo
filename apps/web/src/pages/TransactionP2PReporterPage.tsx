@@ -6,7 +6,7 @@
  * Relayer pays gas fees on behalf of the reporter.
  */
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount, useChainId } from 'wagmi';
 import { ArrowLeft, Info } from 'lucide-react';
@@ -596,7 +596,7 @@ export function TransactionP2PReporterPage() {
   const [, setLocation] = useLocation();
   const { isConnected, address } = useAccount();
   const chainId = useChainId();
-  const { registrationType, step, setStep } = useTransactionRegistrationFlow();
+  const { step, setStep } = useTransactionRegistrationFlow();
   const {
     setAcknowledgementHash,
     setRegistrationHash,
@@ -832,10 +832,11 @@ export function TransactionP2PReporterPage() {
 
   // Initialize registration type on mount
   useEffect(() => {
-    if (registrationType !== 'p2pRelay') {
-      useTransactionRegistrationStore.getState().setRegistrationType('p2pRelay');
+    const state = useTransactionRegistrationStore.getState();
+    if (state.registrationType !== 'p2pRelay') {
+      state.setRegistrationType('p2pRelay');
     }
-  }, [registrationType]);
+  }, []);
 
   // Set initial step
   useEffect(() => {
@@ -901,6 +902,18 @@ export function TransactionP2PReporterPage() {
     }
   };
 
+  // Compute data hash for display in selection summary
+  const displayDataHash = useMemo(
+    () =>
+      selectedTxHashes.length > 0 && chainId
+        ? computeTransactionDataHash(
+            selectedTxHashes,
+            selectedTxHashes.map(() => chainIdToBytes32(chainId))
+          )
+        : null,
+    [selectedTxHashes, chainId]
+  );
+
   if (!isConnected) {
     return null;
   }
@@ -909,15 +922,6 @@ export function TransactionP2PReporterPage() {
   const currentDescription = step
     ? (STEP_DESCRIPTIONS[step] ?? '')
     : 'Follow the steps to register fraudulent transactions via P2P relay.';
-
-  // Compute data hash for display in selection summary
-  const displayDataHash =
-    selectedTxHashes.length > 0 && chainId
-      ? computeTransactionDataHash(
-          selectedTxHashes,
-          selectedTxHashes.map(() => chainIdToBytes32(chainId))
-        )
-      : null;
 
   const renderStep = () => {
     if (isInitializing) {

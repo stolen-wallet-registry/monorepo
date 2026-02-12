@@ -638,7 +638,7 @@ export interface RawRecentTransactionEntriesResponse {
       txHash: string;
       caip2ChainId: string;
       numericChainId?: number;
-      batchId: string;
+      batchId?: string;
       reporter: string;
       reportedAt: string;
       transactionHash: string;

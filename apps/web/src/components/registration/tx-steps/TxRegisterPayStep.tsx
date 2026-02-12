@@ -130,7 +130,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     setStoredSignatureState(getTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.REGISTRATION));
   }, [dataHash, chainId]);
 
-  // Expected wallet for this step: forwarder (gas wallet) for self-relay, reporter for standard
+  // Expected wallet for this step: forwarder (gas wallet) for relayed flows, reporter for standard
   const expectedWallet = storedSignatureState
     ? isRelayed
       ? storedSignatureState.trustedForwarder
@@ -516,7 +516,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
 
   return (
     <div className="space-y-4">
-      {/* Wallet switch prompt (self-relay only) */}
+      {/* Wallet switch prompt for relayed transactions */}
       {isRelayed && expectedWallet && (
         <WalletSwitchPrompt
           currentAddress={address}

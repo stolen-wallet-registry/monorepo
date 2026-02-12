@@ -63,7 +63,7 @@ export const P2PStateOverTheWireSchema = z
 export const TransactionBatchOverTheWireSchema = z
   .object({
     /** keccak256(abi.encode(txHashes, chainIds)) */
-    dataHash: txHashSchema,
+    dataHash: bytes32Schema,
     /** CAIP-2 chain ID as bytes32 hash */
     reportedChainId: bytes32Schema,
     /** Number of transactions in the batch */

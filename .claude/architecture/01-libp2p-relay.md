@@ -178,6 +178,9 @@ export const PROTOCOLS = {
 
 ```typescript
 // packages/p2p/src/types.ts
+// NOTE: These are simplified representations. The actual types are
+// derived from Zod schemas (e.g. ParsedStreamDataSchema.strict())
+// which enforce runtime validation and reject unknown keys.
 
 export interface ParsedStreamData {
   success?: boolean;

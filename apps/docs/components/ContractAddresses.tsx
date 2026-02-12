@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   allNetworks,
   getExplorerAddressUrl,
@@ -33,13 +33,21 @@ const monoTdStyle: React.CSSProperties = {
 
 function CopyableAddress({ address, chainId }: { address: string; chainId: number }) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
   const url = getExplorerAddressUrl(chainId, address) ?? undefined;
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(address).then(
       () => {
         setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => setCopied(false), 1500);
       },
       () => {
         // Clipboard API unavailable or denied — silently ignore
