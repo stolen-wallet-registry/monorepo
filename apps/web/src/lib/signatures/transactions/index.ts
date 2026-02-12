@@ -1,13 +1,14 @@
 // Transaction batch signature utilities barrel export
 
 export {
-  TX_EIP712_DOMAIN_NAME,
-  TX_EIP712_DOMAIN_VERSION,
   TX_EIP712_TYPES,
   TX_SIGNATURE_STEP,
-  getTxEIP712Domain,
+  STATEMENTS,
+  getEIP712Domain,
+  getSpokeEIP712Domain,
   buildTxAcknowledgementTypedData,
   buildTxRegistrationTypedData,
+  computeTransactionDataHash,
   type TxAcknowledgementMessage,
   type TxRegistrationMessage,
   type TxSignatureStep,

@@ -4,30 +4,34 @@
  * This is Phase 1 of the two-phase registration flow.
  * After acknowledgement, a grace period begins before registration can be completed.
  *
- * Chain-aware: Uses StolenWalletRegistry on hub chains, SpokeRegistry on spoke chains.
+ * Unified signature (hub and spoke):
+ *   acknowledge(wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+ *
+ * isSponsored is derived on-chain as (wallet != trustedForwarder).
  */
 
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import type { ParsedSignature } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
 export interface AcknowledgementParams {
-  deadline: bigint;
-  nonce: bigint;
-  /**
-   * The wallet address being registered as stolen.
-   * Maps to `owner` parameter in the contract ABI.
-   */
+  /** The wallet address being registered as stolen */
   registeree: Address;
+  /** The address authorized to complete registration (same as registeree for standard) */
+  trustedForwarder: Address;
+  /** Raw EVM chain ID where incident occurred (uint64) */
+  reportedChainId: bigint;
+  /** Unix timestamp when incident occurred */
+  incidentTimestamp: bigint;
+  /** Signature deadline (timestamp) */
+  deadline: bigint;
+  /** Nonce for replay protection */
+  nonce: bigint;
+  /** EIP-712 signature */
   signature: ParsedSignature;
-  /**
-   * Protocol fee to send with the acknowledgement transaction.
-   * Obtained from useFeeEstimate hook.
-   */
-  feeWei?: bigint;
 }
 
 export interface UseAcknowledgementResult {
@@ -57,8 +61,7 @@ export function useAcknowledgement(): UseAcknowledgementResult {
     'useAcknowledgement'
   );
 
-  // Get the correct ABI and function names for hub/spoke
-  const { abi, functions } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
 
   const {
     writeContractAsync,
@@ -84,37 +87,56 @@ export function useAcknowledgement(): UseAcknowledgementResult {
       throw new Error('Contract not configured for this chain');
     }
 
-    const { deadline, nonce, registeree, signature, feeWei } = params;
-
-    // Use metadata for correct ABI and function name based on chain type
-    const functionName = functions.acknowledge;
+    const {
+      registeree,
+      trustedForwarder,
+      reportedChainId,
+      incidentTimestamp,
+      deadline,
+      nonce,
+      signature,
+    } = params;
 
     logger.registration.info('Submitting acknowledgement transaction', {
       chainId,
       registryType,
       contractAddress,
-      functionName,
+      functionName: 'acknowledge',
       registeree,
+      trustedForwarder,
+      reportedChainId: reportedChainId.toString(),
+      incidentTimestamp: incidentTimestamp.toString(),
       deadline: deadline.toString(),
       nonce: nonce.toString(),
-      feeWei: feeWei?.toString() ?? '0',
     });
 
     try {
-      // Cast to any for value since wagmi's strict typing with union ABIs
-      // incorrectly infers value as undefined for some ABI function combinations
+      // Unified: acknowledge(wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+      const args = [
+        registeree,
+        trustedForwarder,
+        reportedChainId,
+        incidentTimestamp,
+        deadline,
+        nonce,
+        signature.v,
+        signature.r,
+        signature.s,
+      ] as const;
+
+      // Both hub and spoke acknowledge are nonpayable (fees collected at register)
+      const abi = isSpoke ? spokeRegistryAbi : walletRegistryAbi;
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi,
-        functionName: functionName as 'acknowledge',
-        args: [deadline, nonce, registeree, signature.v, signature.r, signature.s],
-        value: feeWei ?? 0n,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
+        functionName: 'acknowledge',
+        args,
+      });
 
       logger.registration.info('Acknowledgement transaction submitted', {
         txHash,
         registeree,
+        trustedForwarder,
         chainId,
         registryType,
       });

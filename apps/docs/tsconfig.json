@@ -19,6 +19,12 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true
   },
-  "include": ["vocs.config.ts", "pages/**/*.ts", "pages/**/*.tsx"],
+  "include": [
+    "vocs.config.tsx",
+    "pages/**/*.ts",
+    "pages/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx"
+  ],
   "exclude": ["node_modules", "dist"]
 }

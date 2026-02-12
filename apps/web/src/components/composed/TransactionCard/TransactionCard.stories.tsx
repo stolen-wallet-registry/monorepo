@@ -29,7 +29,7 @@ const sampleHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890
 
 const sampleSignedMessage: SignedMessageData = {
   registeree: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address,
-  forwarder: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address,
+  trustedForwarder: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address,
   nonce: 0n,
   deadline: 12345678n,
   signature:
@@ -217,5 +217,26 @@ export const HubConfirmed: Story = {
     explorerUrl: 'https://basescan.org/tx/' + sampleHash,
     chainId: 8453, // Base
     onSubmit: () => {},
+  },
+};
+
+/**
+ * Cross-chain confirmation timed out - spoke confirmed but hub unconfirmed.
+ */
+export const HubTimeout: Story = {
+  args: {
+    type: 'registration',
+    status: 'hub-timeout',
+    hash: sampleHash,
+    explorerUrl: 'https://optimistic.etherscan.io/tx/' + sampleHash,
+    chainId: 10,
+    crossChainProgress: {
+      elapsedTime: 120000,
+      hubChainName: 'Base',
+      bridgeName: 'Hyperlane',
+      explorerUrl: 'https://explorer.hyperlane.xyz/message/' + sampleHash,
+    },
+    onSubmit: () => {},
+    onContinueAnyway: () => console.log('Continue anyway clicked'),
   },
 };

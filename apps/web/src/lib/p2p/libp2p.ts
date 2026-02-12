@@ -58,7 +58,7 @@ const PRIVATE_ADDRESS_PATTERNS = [
  */
 function isPrivate172Range(addr: string): boolean {
   const match = addr.match(/\/ip4\/172\.(\d+)\./);
-  if (!match) return false;
+  if (!match?.[1]) return false;
   const secondOctet = parseInt(match[1], 10);
   return secondOctet >= 16 && secondOctet <= 31;
 }

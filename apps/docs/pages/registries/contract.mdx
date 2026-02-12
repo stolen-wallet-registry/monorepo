@@ -1,0 +1,115 @@
+# Contract Registry
+
+Catalogs malicious smart contract addresses. Operator-only - individual users cannot submit to this registry.
+
+**Who can submit:** DAO-approved operators with `CONTRACT_REGISTRY` capability (`0x04` bit set in OperatorRegistry).
+
+## Why Operator-Only
+
+Determining whether a contract is malicious requires technical expertise (bytecode analysis, behavior patterns, known scam signatures). The DAO operator approval process is the trust mechanism that substitutes for the two-phase EIP-712 flow used in the other registries.
+
+This means:
+
+- No acknowledgement phase
+- No grace period
+- No EIP-712 signatures
+- No individual user submissions
+
+Just batch-submit arrays of contract addresses.
+
+## Storage
+
+```solidity
+mapping(bytes32 => ContractEntry) private _contracts;
+```
+
+Storage key is chain-specific:
+
+```solidity
+key = keccak256(abi.encode(contractAddr, chainId))
+```
+
+The same contract address on different chains produces different keys. A scam contract on Base is a separate entry from one deployed at the same address on Optimism.
+
+## ContractEntry
+
+```solidity
+struct ContractEntry {
+    uint64  registeredAt;      // Block timestamp of registration
+    bytes32 reportedChainId;   // CAIP-2 hash of chain where contract is deployed
+    bytes32 operatorId;        // Operator that registered this entry
+    uint256 batchId;           // Batch this entry belongs to
+}
+```
+
+Every entry tracks its `batchId` directly in the struct. This is different from the other registries where batch linking is done at the indexer level via transaction hash matching.
+
+## Registration
+
+Single function, single phase:
+
+```solidity
+function registerContractsFromOperator(
+    bytes32   operatorId,
+    bytes32[] identifiers,        // Contract addresses as bytes32
+    bytes32[] reportedChainIds    // CAIP-2 hash per contract
+) external onlyOperatorSubmitter returns (uint256 batchId);
+```
+
+- Callable only by the `OperatorSubmitter` contract
+- Arrays must be equal length and non-empty
+- Skips zero identifiers and already-registered contracts
+- Reverts with `ContractRegistry__EmptyBatch` if all entries were skipped (actualCount == 0)
+- Returns the auto-incrementing `batchId`
+
+The `OperatorSubmitter` validates that the operator has `CONTRACT_REGISTRY` capability before forwarding the call.
+
+## Batch Metadata
+
+```solidity
+struct ContractBatch {
+    bytes32 operatorId;      // Which operator submitted
+    uint64  timestamp;       // When
+    uint32  contractCount;   // How many (actual, excludes skipped)
+}
+```
+
+## Events
+
+| Event                  | When                        | Key fields                                               |
+| ---------------------- | --------------------------- | -------------------------------------------------------- |
+| `ContractRegistered`   | Per contract registered     | `identifier`, `reportedChainId`, `operatorId`, `batchId` |
+| `ContractBatchCreated` | After all entries processed | `batchId`, `operatorId`, `contractCount`                 |
+
+Event ordering in a single transaction:
+
+```
+tx 0xabc...
+  ├── ContractRegistered(addr1, chainId, operatorId, batchId)
+  ├── ContractRegistered(addr2, chainId, operatorId, batchId)
+  └── ContractBatchCreated(batchId, operatorId, 2)
+```
+
+Per-entry `ContractRegistered` events include the `batchId` directly (unlike the other registries). This makes indexing simpler at a small gas cost per entry.
+
+## View Functions
+
+| Function                                         | Returns                                                                       |
+| ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `isContractRegistered(string caip10)`            | Whether contract is registered (CAIP-10 string, e.g. `eip155:8453:0x9fE4...`) |
+| `isContractRegistered(address, bytes32 chainId)` | Whether contract is registered (gas-efficient EVM overload)                   |
+| `getContractEntry(...)`                          | Full `ContractEntry` struct (both overloads)                                  |
+| `getContractBatch(uint256 batchId)`              | Batch metadata                                                                |
+| `contractBatchCount()`                           | Total number of batches created                                               |
+
+## Comparison with Other Registries
+
+| Feature                    | Wallet                    | Transaction    | Contract       |
+| -------------------------- | ------------------------- | -------------- | -------------- |
+| Individual submissions     | Yes                       | Yes            | No             |
+| Operator submissions       | Yes                       | Yes            | Yes            |
+| Two-phase EIP-712          | Yes                       | Yes            | No             |
+| Grace period               | Yes                       | Yes            | No             |
+| Cross-chain (hub)          | Yes                       | Yes            | No             |
+| Storage key                | Wildcard (all EVM chains) | Chain-specific | Chain-specific |
+| batchId in per-entry event | No                        | No             | Yes            |

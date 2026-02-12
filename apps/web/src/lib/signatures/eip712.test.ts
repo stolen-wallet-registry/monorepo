@@ -16,7 +16,7 @@ import type { Address } from '@/lib/types/ethereum';
 describe('EIP-712 typed data', () => {
   const testChainId = 1;
   const testContract = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as Address;
-  const testOwner = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
+  const testWallet = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
   const testForwarder = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address;
 
   describe('constants', () => {
@@ -37,16 +37,20 @@ describe('EIP-712 typed data', () => {
       // Statement is FIRST field for visibility in wallet UI (MetaMask)
       expect(EIP712_TYPES.AcknowledgementOfRegistry).toEqual([
         { name: 'statement', type: 'string' },
-        { name: 'owner', type: 'address' },
-        { name: 'forwarder', type: 'address' },
+        { name: 'wallet', type: 'address' },
+        { name: 'trustedForwarder', type: 'address' },
+        { name: 'reportedChainId', type: 'uint64' },
+        { name: 'incidentTimestamp', type: 'uint64' },
         { name: 'nonce', type: 'uint256' },
         { name: 'deadline', type: 'uint256' },
       ]);
 
       expect(EIP712_TYPES.Registration).toEqual([
         { name: 'statement', type: 'string' },
-        { name: 'owner', type: 'address' },
-        { name: 'forwarder', type: 'address' },
+        { name: 'wallet', type: 'address' },
+        { name: 'trustedForwarder', type: 'address' },
+        { name: 'reportedChainId', type: 'uint64' },
+        { name: 'incidentTimestamp', type: 'uint64' },
         { name: 'nonce', type: 'uint256' },
         { name: 'deadline', type: 'uint256' },
       ]);
@@ -93,21 +97,22 @@ describe('EIP-712 typed data', () => {
   });
 
   describe('buildAcknowledgementTypedData', () => {
-    // Builder accepts message without statement (adds it internally)
     const message: Omit<AcknowledgementMessage, 'statement'> = {
-      owner: testOwner,
-      forwarder: testForwarder,
+      wallet: testWallet,
+      trustedForwarder: testForwarder,
+      reportedChainId: 1n,
+      incidentTimestamp: 0n,
       nonce: 0n,
       deadline: 12345678n,
     };
 
     it('returns correct primaryType', () => {
-      const typedData = buildAcknowledgementTypedData(testChainId, testContract, message);
+      const typedData = buildAcknowledgementTypedData(testChainId, testContract, true, message);
       expect(typedData.primaryType).toBe('AcknowledgementOfRegistry');
     });
 
     it('includes correct domain', () => {
-      const typedData = buildAcknowledgementTypedData(testChainId, testContract, message);
+      const typedData = buildAcknowledgementTypedData(testChainId, testContract, true, message);
 
       expect(typedData.domain.name).toBe(EIP712_DOMAIN_NAME);
       expect(typedData.domain.version).toBe(EIP712_DOMAIN_VERSION);
@@ -116,7 +121,7 @@ describe('EIP-712 typed data', () => {
     });
 
     it('includes all EIP712 types', () => {
-      const typedData = buildAcknowledgementTypedData(testChainId, testContract, message);
+      const typedData = buildAcknowledgementTypedData(testChainId, testContract, true, message);
 
       expect(typedData.types).toBe(EIP712_TYPES);
       expect(typedData.types.AcknowledgementOfRegistry).toBeDefined();
@@ -124,25 +129,31 @@ describe('EIP-712 typed data', () => {
     });
 
     it('includes message with all fields including statement', () => {
-      const typedData = buildAcknowledgementTypedData(testChainId, testContract, message);
+      const typedData = buildAcknowledgementTypedData(testChainId, testContract, true, message);
 
-      // Statement is added by the builder
       expect(typedData.message.statement).toBe(STATEMENTS.WALLET_ACK);
-      expect(typedData.message.owner).toBe(testOwner);
-      expect(typedData.message.forwarder).toBe(testForwarder);
+      expect(typedData.message.wallet).toBe(testWallet);
+      expect(typedData.message.trustedForwarder).toBe(testForwarder);
       expect(typedData.message.nonce).toBe(0n);
       expect(typedData.message.deadline).toBe(12345678n);
     });
 
     it('preserves BigInt message values', () => {
       const largeMessage: Omit<AcknowledgementMessage, 'statement'> = {
-        owner: testOwner,
-        forwarder: testForwarder,
+        wallet: testWallet,
+        trustedForwarder: testForwarder,
+        reportedChainId: 1n,
+        incidentTimestamp: 0n,
         nonce: 999999999999n,
         deadline: 18000000n,
       };
 
-      const typedData = buildAcknowledgementTypedData(testChainId, testContract, largeMessage);
+      const typedData = buildAcknowledgementTypedData(
+        testChainId,
+        testContract,
+        true,
+        largeMessage
+      );
 
       expect(typedData.message.nonce).toBe(999999999999n);
       expect(typedData.message.deadline).toBe(18000000n);
@@ -150,21 +161,22 @@ describe('EIP-712 typed data', () => {
   });
 
   describe('buildRegistrationTypedData', () => {
-    // Builder accepts message without statement (adds it internally)
     const message: Omit<RegistrationMessage, 'statement'> = {
-      owner: testOwner,
-      forwarder: testForwarder,
+      wallet: testWallet,
+      trustedForwarder: testForwarder,
+      reportedChainId: 1n,
+      incidentTimestamp: 0n,
       nonce: 1n,
       deadline: 12345700n,
     };
 
     it('returns correct primaryType', () => {
-      const typedData = buildRegistrationTypedData(testChainId, testContract, message);
+      const typedData = buildRegistrationTypedData(testChainId, testContract, true, message);
       expect(typedData.primaryType).toBe('Registration');
     });
 
     it('includes correct domain', () => {
-      const typedData = buildRegistrationTypedData(testChainId, testContract, message);
+      const typedData = buildRegistrationTypedData(testChainId, testContract, true, message);
 
       expect(typedData.domain.name).toBe(EIP712_DOMAIN_NAME);
       expect(typedData.domain.version).toBe(EIP712_DOMAIN_VERSION);
@@ -173,18 +185,17 @@ describe('EIP-712 typed data', () => {
     });
 
     it('includes all EIP712 types', () => {
-      const typedData = buildRegistrationTypedData(testChainId, testContract, message);
+      const typedData = buildRegistrationTypedData(testChainId, testContract, true, message);
 
       expect(typedData.types).toBe(EIP712_TYPES);
     });
 
     it('includes message with all fields including statement', () => {
-      const typedData = buildRegistrationTypedData(testChainId, testContract, message);
+      const typedData = buildRegistrationTypedData(testChainId, testContract, true, message);
 
-      // Statement is added by the builder
       expect(typedData.message.statement).toBe(STATEMENTS.WALLET_REG);
-      expect(typedData.message.owner).toBe(testOwner);
-      expect(typedData.message.forwarder).toBe(testForwarder);
+      expect(typedData.message.wallet).toBe(testWallet);
+      expect(typedData.message.trustedForwarder).toBe(testForwarder);
       expect(typedData.message.nonce).toBe(1n);
       expect(typedData.message.deadline).toBe(12345700n);
     });
@@ -193,21 +204,25 @@ describe('EIP-712 typed data', () => {
   describe('acknowledgement vs registration typed data', () => {
     it('differ in primaryType and statement', () => {
       const ackMessage: Omit<AcknowledgementMessage, 'statement'> = {
-        owner: testOwner,
-        forwarder: testForwarder,
+        wallet: testWallet,
+        trustedForwarder: testForwarder,
+        reportedChainId: 1n,
+        incidentTimestamp: 0n,
         nonce: 0n,
         deadline: 100n,
       };
 
       const regMessage: Omit<RegistrationMessage, 'statement'> = {
-        owner: testOwner,
-        forwarder: testForwarder,
+        wallet: testWallet,
+        trustedForwarder: testForwarder,
+        reportedChainId: 1n,
+        incidentTimestamp: 0n,
         nonce: 0n,
         deadline: 100n,
       };
 
-      const ackData = buildAcknowledgementTypedData(testChainId, testContract, ackMessage);
-      const regData = buildRegistrationTypedData(testChainId, testContract, regMessage);
+      const ackData = buildAcknowledgementTypedData(testChainId, testContract, true, ackMessage);
+      const regData = buildRegistrationTypedData(testChainId, testContract, true, regMessage);
 
       // Same domain
       expect(ackData.domain).toEqual(regData.domain);
@@ -220,8 +235,8 @@ describe('EIP-712 typed data', () => {
       expect(regData.message.statement).toBe(STATEMENTS.WALLET_REG);
 
       // Same other message fields
-      expect(ackData.message.owner).toBe(regData.message.owner);
-      expect(ackData.message.forwarder).toBe(regData.message.forwarder);
+      expect(ackData.message.wallet).toBe(regData.message.wallet);
+      expect(ackData.message.trustedForwarder).toBe(regData.message.trustedForwarder);
       expect(ackData.message.nonce).toBe(regData.message.nonce);
       expect(ackData.message.deadline).toBe(regData.message.deadline);
 

@@ -78,7 +78,7 @@ export function SoulboundPreviewModal({
         {trigger ?? (
           <Button variant="outline" size="sm" className={cn('gap-2', className)}>
             <Eye className="h-4 w-4" />
-            Preview
+            Preview {type === 'wallet' ? 'Wallet' : 'Support'} Soulbound
           </Button>
         )}
       </DialogTrigger>

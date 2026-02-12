@@ -15,9 +15,17 @@
  */
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { parseAbi } from 'viem';
 import { useReadContract } from 'wagmi';
-import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
-import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
+import { getWalletRegistryAddress } from '@/lib/contracts/addresses';
+
+/**
+ * Minimal ABI for isWalletRegistered(address) to avoid viem ambiguity
+ * with the string overload isWalletRegistered(string).
+ */
+const isWalletRegisteredAbi = parseAbi([
+  'function isWalletRegistered(address wallet) view returns (bool)',
+]);
 import { getHubChainId, isSpokeChain } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
@@ -79,7 +87,7 @@ export function useCrossChainConfirmation({
   let hubRegistryAddress: Address | undefined;
   try {
     if (hubChainId) {
-      hubRegistryAddress = getStolenWalletRegistryAddress(hubChainId);
+      hubRegistryAddress = getWalletRegistryAddress(hubChainId);
     }
   } catch (err) {
     logger.registration.warn('Failed to get hub registry address', {
@@ -93,14 +101,15 @@ export function useCrossChainConfirmation({
   const shouldPoll = enabled && elapsedTime >= INITIAL_DELAY;
 
   // Query hub chain for registration status
+  // Uses minimal ABI to avoid viem ambiguity between address and string overloads
   const {
-    data: isRegisteredOnHub,
+    data: isRegisteredOnHubRaw,
     refetch,
     isError: isQueryError,
   } = useReadContract({
     address: hubRegistryAddress,
-    abi: stolenWalletRegistryAbi,
-    functionName: 'isRegistered',
+    abi: isWalletRegisteredAbi,
+    functionName: 'isWalletRegistered',
     args: wallet ? [wallet] : undefined,
     chainId: hubChainId,
     query: {
@@ -109,6 +118,10 @@ export function useCrossChainConfirmation({
       staleTime: 1000, // Consider data stale after 1 second
     },
   });
+
+  // Coerce to boolean - wagmi returns boolean for isWalletRegistered(address)
+  const isRegisteredOnHub =
+    typeof isRegisteredOnHubRaw === 'boolean' ? isRegisteredOnHubRaw : false;
 
   // DERIVE status from inputs - no useState for status
   const status: CrossChainStatus = useMemo(() => {
@@ -216,7 +229,7 @@ export function useCrossChainConfirmation({
 
   return {
     status,
-    isRegisteredOnHub: isRegisteredOnHub ?? false,
+    isRegisteredOnHub,
     elapsedTime,
     refresh,
     reset,

@@ -548,13 +548,12 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
         </div>
 
         {/* Preview button only - language is auto-detected, modal allows override */}
-        <div className="flex justify-end">
-          <SoulboundPreviewModal
-            type="support"
-            initialLanguage={language}
-            onLanguageChange={setLanguage}
-          />
-        </div>
+        <SoulboundPreviewModal
+          type="support"
+          initialLanguage={language}
+          onLanguageChange={setLanguage}
+          className="w-full"
+        />
 
         {/* Spoke chain info - show cross-chain option */}
         {isOnSpokeChain && (

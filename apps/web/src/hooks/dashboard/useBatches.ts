@@ -18,13 +18,22 @@ import type { Address, Hash } from '@/lib/types/ethereum';
 
 export type BatchType = 'wallet' | 'transaction' | 'contract';
 
+const BATCH_PREFIX: Record<BatchType, string> = {
+  wallet: 'W',
+  transaction: 'TX',
+  contract: 'C',
+};
+
+/** Format a batch ID with a registry-type prefix for display (e.g. "W-1", "TX-2", "C-3"). */
+export function formatBatchId(type: BatchType, rawId: string): string {
+  return `${BATCH_PREFIX[type]}-${rawId}`;
+}
+
 export interface BatchSummary {
-  /** Batch ID (bytes32) */
+  /** Batch ID (uint256 as string) */
   id: string;
   /** Batch registry type */
   type: BatchType;
-  /** Merkle root for the batch */
-  merkleRoot: string;
   /** Operator or reporter address */
   submitter: Address;
   /** Reported chain (CAIP-2) */
@@ -35,11 +44,12 @@ export interface BatchSummary {
   registeredAt: bigint;
   /** Registration transaction hash */
   transactionHash: Hash;
-  /** Transaction batches only */
-  isOperatorVerified?: boolean;
-  verifyingOperator?: Address;
-  /** Contract batches only */
-  invalidated?: boolean;
+  /** Transaction batches: whether from operator (TransactionBatchCreated) */
+  isOperator?: boolean;
+  /** Operator ID (bytes32, for operator batches) */
+  operatorId?: string;
+  /** Transaction batches: dataHash */
+  dataHash?: string;
 }
 
 export interface UseBatchesOptions {
@@ -100,12 +110,12 @@ export function useBatches(options: UseBatchesOptions = {}): UseBatchesResult {
           batches.push({
             id: raw.id,
             type: 'wallet',
-            merkleRoot: raw.merkleRoot,
             submitter: raw.operator as Address,
             reportedChainId: raw.reportedChainCAIP2,
             count: raw.walletCount,
             registeredAt: BigInt(raw.registeredAt),
             transactionHash: raw.transactionHash as Hash,
+            operatorId: raw.operatorId,
           });
         }
       }
@@ -115,14 +125,14 @@ export function useBatches(options: UseBatchesOptions = {}): UseBatchesResult {
           batches.push({
             id: raw.id,
             type: 'transaction',
-            merkleRoot: raw.merkleRoot,
             submitter: raw.reporter as Address,
             reportedChainId: raw.reportedChainCAIP2,
             count: raw.transactionCount,
             registeredAt: BigInt(raw.registeredAt),
             transactionHash: raw.transactionHash as Hash,
-            isOperatorVerified: raw.isOperatorVerified,
-            verifyingOperator: raw.verifyingOperator as Address | undefined,
+            isOperator: raw.isOperator,
+            operatorId: raw.operatorId,
+            dataHash: raw.dataHash,
           });
         }
       }
@@ -132,13 +142,12 @@ export function useBatches(options: UseBatchesOptions = {}): UseBatchesResult {
           batches.push({
             id: raw.id,
             type: 'contract',
-            merkleRoot: raw.merkleRoot,
             submitter: raw.operator as Address,
             reportedChainId: raw.reportedChainCAIP2,
             count: raw.contractCount,
             registeredAt: BigInt(raw.registeredAt),
             transactionHash: raw.transactionHash as Hash,
-            invalidated: raw.invalidated,
+            operatorId: raw.operatorId,
           });
         }
       }

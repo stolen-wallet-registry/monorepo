@@ -1,15 +1,19 @@
 /**
  * Hook to read deadline and hash struct from the transaction registry contract.
- * Supports both hub (StolenTransactionRegistry) and spoke (SpokeTransactionRegistry) chains.
+ * Chain-aware: works on both hub (TransactionRegistry) and spoke (SpokeRegistry).
+ *
+ * Both contracts expose `generateTransactionHashStruct` with the same signature:
+ *   (bytes32 dataHash, bytes32 reportedChainId, uint32 transactionCount, address trustedForwarder, uint8 step)
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
- * The transaction registry has a different generateHashStruct signature that includes
- * merkleRoot, chainId, and transactionCount.
  */
 
-import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
-import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { useEffect, useMemo } from 'react';
+import { useReadContract, useChainId } from 'wagmi';
+import { transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
+import { getTransactionRegistryAddress } from '@/lib/contracts/addresses';
+import { getSpokeContractAddress } from '@/lib/contracts/crosschain-addresses';
+import { isHubChain, isSpokeChain } from '@swr/chains';
 import { TX_SIGNATURE_STEP, type TxSignatureStep } from '@/lib/signatures/transactions';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -19,18 +23,33 @@ export interface TxHashStructData {
   hashStruct: Hash;
 }
 
+/** Result type for refetch operations */
+export interface TxHashStructRefetchResult {
+  data: TxHashStructData | undefined;
+  status: 'success' | 'error';
+}
+
 export interface UseTxHashStructResult {
   data: TxHashStructData | undefined;
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
-  refetch: UseReadContractReturnType['refetch'];
+  refetch: () => Promise<TxHashStructRefetchResult>;
+}
+
+/** Transform raw contract result to typed format */
+function transformResult(raw: unknown): TxHashStructData | undefined {
+  if (raw && Array.isArray(raw) && raw.length >= 2) {
+    const [deadline, hashStruct] = raw as [bigint, Hash];
+    return { deadline, hashStruct };
+  }
+  return undefined;
 }
 
 /**
  * Reads the deadline and hash struct for signing from the transaction registry contract.
  *
- * @param merkleRoot - Merkle root of the transaction batch
+ * @param dataHash - Data hash (merkle root of transaction batch)
  * @param reportedChainId - CAIP-2 chain ID as bytes32
  * @param transactionCount - Number of transactions in the batch
  * @param forwarderAddress - The trusted forwarder address (who can submit the tx)
@@ -38,7 +57,7 @@ export interface UseTxHashStructResult {
  * @returns The deadline and hash struct for the EIP-712 message
  */
 export function useTransactionHashStruct(
-  merkleRoot: Hash | undefined,
+  dataHash: Hash | undefined,
   reportedChainId: Hash | undefined,
   transactionCount: number | undefined,
   forwarderAddress: Address | undefined,
@@ -46,69 +65,117 @@ export function useTransactionHashStruct(
 ): UseTxHashStructResult {
   const chainId = useChainId();
 
-  // Resolve contract address with built-in error handling and logging
-  const { address: contractAddress, role: registryType } = resolveRegistryContract(
-    chainId,
-    'transaction',
-    'useTransactionHashStruct'
-  );
+  const isSpoke = isSpokeChain(chainId);
+  const isHub = isHubChain(chainId);
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata('transaction', registryType);
+  // Get contract address
+  let contractAddress: Address | undefined;
+  if (isSpoke) {
+    contractAddress = getSpokeContractAddress('spokeRegistry', chainId);
+  } else if (isHub) {
+    contractAddress = getTransactionRegistryAddress(chainId);
+  }
+
+  // Log unsupported chain to help catch configuration issues
+  if (!isSpoke && !isHub && import.meta.env.DEV) {
+    logger.contract.debug('useTransactionHashStruct: chain is neither hub nor spoke', { chainId });
+  }
 
   const enabled =
-    !!merkleRoot &&
+    !!dataHash &&
     !!reportedChainId &&
     transactionCount !== undefined &&
     transactionCount > 0 &&
     !!forwarderAddress &&
     !!contractAddress;
 
-  const result = useReadContract({
+  // Hub chain: TransactionRegistry.generateTransactionHashStruct
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
+    abi: transactionRegistryAbi,
     chainId,
-    functionName: 'generateHashStruct',
+    functionName: 'generateTransactionHashStruct',
     args: enabled
-      ? [merkleRoot!, reportedChainId!, transactionCount!, forwarderAddress!, step]
+      ? [dataHash!, reportedChainId!, transactionCount!, forwarderAddress!, step]
       : undefined,
     query: {
-      enabled,
-      staleTime: 10_000, // 10 seconds
+      enabled: enabled && isHub,
+      staleTime: 10_000,
     },
   });
 
-  if (result.isError) {
-    logger.contract.error('generateHashStruct call failed (transaction registry)', {
-      chainId,
-      contractAddress,
-      merkleRoot,
-      transactionCount,
-      forwarderAddress,
-      step,
-      error: result.error?.message,
-    });
-  } else if (result.data) {
-    logger.contract.debug('generateHashStruct call succeeded (transaction registry)', {
-      chainId,
-      contractAddress,
-      deadline: result.data[0]?.toString(),
-    });
-  }
+  // Spoke chain: SpokeRegistry.generateTransactionHashStruct (same signature)
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'generateTransactionHashStruct',
+    args: enabled
+      ? [dataHash!, reportedChainId!, transactionCount!, forwarderAddress!, step]
+      : undefined,
+    query: {
+      enabled: enabled && isSpoke,
+      staleTime: 10_000,
+    },
+  });
 
-  const transformedData: TxHashStructData | undefined = result.data
-    ? {
-        deadline: result.data[0],
-        hashStruct: result.data[1] as Hash,
-      }
-    : undefined;
+  // Select result based on chain role
+  const result = isSpoke ? spokeResult : hubResult;
+  const transformedData = useMemo(() => transformResult(result.data), [result.data]);
+
+  // Log in useEffect to avoid render-time side effects
+  useEffect(() => {
+    if (result.isError) {
+      logger.contract.error('generateTransactionHashStruct call failed', {
+        chainId,
+        contractAddress,
+        isSpoke,
+        dataHash,
+        transactionCount,
+        forwarderAddress,
+        step,
+        error: result.error?.message,
+      });
+    }
+  }, [
+    result.isError,
+    result.error,
+    chainId,
+    contractAddress,
+    isSpoke,
+    dataHash,
+    transactionCount,
+    forwarderAddress,
+    step,
+  ]);
+
+  useEffect(() => {
+    if (transformedData) {
+      logger.contract.debug('generateTransactionHashStruct call succeeded', {
+        chainId,
+        contractAddress,
+        isSpoke,
+        deadline: transformedData.deadline.toString(),
+      });
+    }
+  }, [transformedData, chainId, contractAddress, isSpoke]);
+
+  // Wrap refetch to return properly typed result
+  const refetch = async (): Promise<TxHashStructRefetchResult> => {
+    const refetchResult = await result.refetch();
+    const refetchedData = transformResult(refetchResult.data);
+    return {
+      data: refetchedData,
+      status: refetchResult.status === 'success' ? 'success' : 'error',
+    };
+  };
 
   return {
     data: transformedData,
     isLoading: result.isLoading,
     isError: result.isError,
     error: result.error,
-    refetch: result.refetch,
+    refetch,
   };
 }
 
@@ -116,13 +183,13 @@ export function useTransactionHashStruct(
  * Helper to get hash struct for transaction acknowledgement step.
  */
 export function useTransactionAcknowledgementHashStruct(
-  merkleRoot: Hash | undefined,
+  dataHash: Hash | undefined,
   reportedChainId: Hash | undefined,
   transactionCount: number | undefined,
   forwarderAddress: Address | undefined
 ): UseTxHashStructResult {
   return useTransactionHashStruct(
-    merkleRoot,
+    dataHash,
     reportedChainId,
     transactionCount,
     forwarderAddress,
@@ -134,13 +201,13 @@ export function useTransactionAcknowledgementHashStruct(
  * Helper to get hash struct for transaction registration step.
  */
 export function useTransactionRegistrationHashStruct(
-  merkleRoot: Hash | undefined,
+  dataHash: Hash | undefined,
   reportedChainId: Hash | undefined,
   transactionCount: number | undefined,
   forwarderAddress: Address | undefined
 ): UseTxHashStructResult {
   return useTransactionHashStruct(
-    merkleRoot,
+    dataHash,
     reportedChainId,
     transactionCount,
     forwarderAddress,

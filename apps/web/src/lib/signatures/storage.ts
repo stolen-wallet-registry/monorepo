@@ -22,6 +22,10 @@ export interface StoredSignature {
   chainId: number;
   step: SignatureStep;
   storedAt: number; // timestamp
+  /** Raw EVM chain ID where incident occurred (e.g., 1 for mainnet, 8453 for Base) */
+  reportedChainId?: bigint;
+  /** Unix timestamp when incident occurred */
+  incidentTimestamp?: bigint;
 }
 
 // Serializable version for sessionStorage
@@ -33,6 +37,9 @@ interface SerializedSignature {
   chainId: number;
   step: number;
   storedAt: number;
+  // Optional fields for incident context
+  reportedChainId?: string;
+  incidentTimestamp?: string;
 }
 
 // Store a signature
@@ -46,6 +53,9 @@ export function storeSignature(sig: StoredSignature): void {
     chainId: sig.chainId,
     step: sig.step,
     storedAt: sig.storedAt,
+    // Optional fields (backward compatible)
+    reportedChainId: sig.reportedChainId?.toString(),
+    incidentTimestamp: sig.incidentTimestamp?.toString(),
   };
   sessionStorage.setItem(key, JSON.stringify(serialized));
 }
@@ -79,6 +89,43 @@ export function getSignature(
       return null;
     }
 
+    // Parse and validate optional fields if present
+    let reportedChainId: bigint | undefined;
+    let incidentTimestamp: bigint | undefined;
+
+    if (parsed.reportedChainId !== undefined) {
+      try {
+        reportedChainId = BigInt(parsed.reportedChainId);
+        // Chain IDs must be positive
+        if (reportedChainId <= 0n) {
+          sessionStorage.removeItem(key);
+          return null;
+        }
+      } catch {
+        sessionStorage.removeItem(key);
+        return null;
+      }
+    }
+
+    if (parsed.incidentTimestamp !== undefined) {
+      try {
+        incidentTimestamp = BigInt(parsed.incidentTimestamp);
+        // Allow 0 (placeholder) or reasonable range (2020-2100)
+        const minTimestamp = 1577836800n; // 2020-01-01
+        const maxTimestamp = 4102444800n; // 2100-01-01
+        if (
+          incidentTimestamp !== 0n &&
+          (incidentTimestamp < minTimestamp || incidentTimestamp > maxTimestamp)
+        ) {
+          sessionStorage.removeItem(key);
+          return null;
+        }
+      } catch {
+        sessionStorage.removeItem(key);
+        return null;
+      }
+    }
+
     const signature: StoredSignature = {
       signature: parsed.signature as Hex,
       deadline: BigInt(parsed.deadline),
@@ -87,6 +134,9 @@ export function getSignature(
       chainId: parsed.chainId,
       step: parsed.step as SignatureStep,
       storedAt: parsed.storedAt,
+      // Optional fields (validated above)
+      reportedChainId,
+      incidentTimestamp,
     };
 
     return signature;

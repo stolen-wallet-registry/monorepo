@@ -14,7 +14,6 @@ import { SignatureDetails } from '@/components/composed/SignatureDetails';
 import { WaitingForData } from '@/components/p2p';
 import { Alert, AlertDescription, Button } from '@swr/ui';
 import { useAcknowledgement } from '@/hooks/useAcknowledgement';
-import { useQuoteRegistration } from '@/hooks/useQuoteRegistration';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
@@ -77,7 +76,6 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
   } = useAcknowledgement();
 
   // Get protocol fee (chain-aware - works on hub and spoke)
-  const { feeWei } = useQuoteRegistration(registeree);
 
   // Derive TransactionCard status
   const getStatus = (): TransactionStatus => {
@@ -88,9 +86,20 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     return 'idle';
   };
 
+  // Check if stored signature has required fields
+  const hasRequiredFields = Boolean(
+    storedSig?.reportedChainId !== undefined && storedSig?.incidentTimestamp !== undefined
+  );
+
   // Relayer: Submit acknowledgement transaction
   const handleSubmit = useCallback(async () => {
     if (!storedSig || !registeree) {
+      return;
+    }
+
+    // Relayer address is required for P2P
+    if (!relayerAddress) {
+      logger.p2p.error('Cannot submit ACK - relayer wallet not connected');
       return;
     }
 
@@ -99,14 +108,17 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     // Parse signature to v, r, s components
     const parsedSig = parseSignature(storedSig.signature);
 
+    // P2P relay: relayer is the forwarder (contract derives isSponsored from wallet != forwarder)
     await submitAcknowledgement({
+      registeree,
+      trustedForwarder: relayerAddress,
+      reportedChainId: storedSig.reportedChainId ?? BigInt(chainId),
+      incidentTimestamp: storedSig.incidentTimestamp ?? 0n,
       deadline: storedSig.deadline,
       nonce: storedSig.nonce,
-      registeree,
       signature: parsedSig,
-      feeWei,
     });
-  }, [storedSig, registeree, submitAcknowledgement, feeWei]);
+  }, [storedSig, registeree, relayerAddress, chainId, submitAcknowledgement]);
 
   // Cleanup retry timeout on unmount
   useEffect(() => {
@@ -250,7 +262,7 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
             <SignatureDetails
               data={{
                 registeree,
-                forwarder: relayerAddress,
+                trustedForwarder: relayerAddress,
                 nonce: storedSig.nonce,
                 deadline: storedSig.deadline,
                 chainId: storedSig.chainId,
@@ -262,11 +274,17 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
             type="acknowledgement"
             status={getStatus()}
             hash={hash}
-            error={error ? sanitizeErrorMessage(error) : null}
+            error={
+              !hasRequiredFields && storedSig
+                ? 'Signature is missing required data. Registeree may need to sign again.'
+                : error
+                  ? sanitizeErrorMessage(error)
+                  : null
+            }
             chainId={chainId}
             onSubmit={handleSubmit}
             onRetry={reset}
-            disabled={!storedSig}
+            disabled={!storedSig || !hasRequiredFields}
           />
           {sendError && isConfirmed && !hasSentHash && (
             <Alert variant="destructive" className="mt-4">

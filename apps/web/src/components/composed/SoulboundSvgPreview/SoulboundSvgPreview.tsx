@@ -162,7 +162,7 @@ export function SoulboundSvgPreview({
 
             {/* English subtitle - ALWAYS shown (no lang attribute) */}
             <text x="200" y="135" textAnchor="middle" fill="#fff" fontSize="12">
-              Registry Supporter
+              Thank you for your support
             </text>
 
             {/* Translation line - only show if NOT English */}

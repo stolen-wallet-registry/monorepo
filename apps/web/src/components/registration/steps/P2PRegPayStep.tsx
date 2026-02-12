@@ -98,6 +98,26 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       return;
     }
 
+    if (!relayerAddress) {
+      logger.p2p.error('Cannot submit REG - relayer wallet not connected');
+      return;
+    }
+
+    if (
+      storedSig.reportedChainId === undefined ||
+      storedSig.incidentTimestamp === undefined ||
+      storedSig.nonce === undefined ||
+      storedSig.deadline === undefined
+    ) {
+      logger.p2p.error('Cannot submit REG - missing required signature fields', {
+        hasReportedChainId: storedSig.reportedChainId !== undefined,
+        hasIncidentTimestamp: storedSig.incidentTimestamp !== undefined,
+        hasNonce: storedSig.nonce !== undefined,
+        hasDeadline: storedSig.deadline !== undefined,
+      });
+      return;
+    }
+
     if (feeWei === undefined) {
       logger.p2p.error('Cannot submit registration - fee quote unavailable', {
         registeree,
@@ -110,14 +130,21 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     // Parse signature to v, r, s components
     const parsedSig = parseSignature(storedSig.signature);
 
+    // reportedChainId is raw uint64 chain ID — contract converts to CAIP-2 hash internally
+    const reportedChainId = storedSig.reportedChainId;
+    const incidentTimestamp = storedSig.incidentTimestamp;
+
     await submitRegistration({
+      registeree,
+      trustedForwarder: relayerAddress,
+      reportedChainId,
+      incidentTimestamp,
       deadline: storedSig.deadline,
       nonce: storedSig.nonce,
-      registeree,
       signature: parsedSig,
       feeWei,
     });
-  }, [storedSig, registeree, submitRegistration, feeWei]);
+  }, [storedSig, registeree, relayerAddress, submitRegistration, feeWei]);
 
   // Cleanup retry timeout on unmount
   useEffect(() => {
@@ -285,17 +312,20 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       ) : (
         <>
           {/* Show signature details for relayer to review */}
-          {registeree && relayerAddress && (
-            <SignatureDetails
-              data={{
-                registeree,
-                forwarder: relayerAddress,
-                nonce: storedSig.nonce,
-                deadline: storedSig.deadline,
-                chainId: storedSig.chainId,
-              }}
-            />
-          )}
+          {registeree &&
+            relayerAddress &&
+            storedSig.nonce !== undefined &&
+            storedSig.deadline !== undefined && (
+              <SignatureDetails
+                data={{
+                  registeree,
+                  trustedForwarder: relayerAddress,
+                  nonce: storedSig.nonce,
+                  deadline: storedSig.deadline,
+                  chainId: storedSig.chainId,
+                }}
+              />
+            )}
 
           <TransactionCard
             type="registration"

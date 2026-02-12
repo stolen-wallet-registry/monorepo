@@ -33,18 +33,19 @@ export const WALLET_TRANSLATIONS: Record<string, string> = {
   ar: 'موقع كمسروق',
 };
 
-/** Map of ISO 639-1 codes to support soulbound preview translations (max ~25 chars) */
+/** Map of ISO 639-1 codes to support soulbound preview translations.
+ *  Must match TranslationRegistry.supportSubtitle values (SeedLanguages.s.sol). */
 export const SUPPORT_TRANSLATIONS: Record<string, string> = {
-  en: 'Registry Supporter',
-  es: 'Apoyador del Registro',
-  zh: '注册支持者',
-  fr: 'Supporteur du Registre',
-  de: 'Registry Unterstützer',
-  ja: 'レジストリサポーター',
-  ko: '레지스트리 지지자',
-  pt: 'Apoiador do Registro',
-  ru: 'Поддержка реестра',
-  ar: 'داعم السجل',
+  en: 'Thank you for your support',
+  es: 'Gracias por tu apoyo',
+  zh: '感谢您的支持',
+  fr: 'Merci pour votre soutien',
+  de: 'Danke für Ihre Unterstützung',
+  ja: 'ご支援ありがとうございます',
+  ko: '지원해 주셔서 감사합니다',
+  pt: 'Obrigado pelo seu apoio',
+  ru: 'Спасибо за вашу поддержку',
+  ar: 'شكرا لدعمك',
 };
 
 /**
@@ -67,5 +68,5 @@ export function getLanguageTranslation(
   type: 'wallet' | 'support' = 'wallet'
 ): string {
   const translations = type === 'wallet' ? WALLET_TRANSLATIONS : SUPPORT_TRANSLATIONS;
-  return translations[code] ?? translations.en;
+  return translations[code] ?? translations['en'] ?? 'Signed as stolen';
 }

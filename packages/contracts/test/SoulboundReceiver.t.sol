@@ -6,48 +6,54 @@ import { SoulboundReceiver } from "../src/soulbound/SoulboundReceiver.sol";
 import { ISoulboundReceiver } from "../src/interfaces/ISoulboundReceiver.sol";
 import { WalletSoulbound } from "../src/soulbound/WalletSoulbound.sol";
 import { SupportSoulbound } from "../src/soulbound/SupportSoulbound.sol";
-import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
 import { TranslationRegistry } from "../src/soulbound/TranslationRegistry.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
+
+/// @notice Mock wallet registry for SoulboundReceiver tests
+/// @dev WalletSoulbound now uses IWalletRegistry interface (isWalletRegistered/isWalletPending)
+contract MockWalletRegistry {
+    mapping(address => bool) public registered;
+    mapping(address => bool) public pending;
+
+    function setRegistered(address wallet, bool value) external {
+        registered[wallet] = value;
+    }
+
+    function setPending(address wallet, bool value) external {
+        pending[wallet] = value;
+    }
+
+    function isWalletRegistered(address wallet) external view returns (bool) {
+        return registered[wallet];
+    }
+
+    function isWalletPending(address wallet) external view returns (bool) {
+        return pending[wallet];
+    }
+}
 
 contract SoulboundReceiverTest is Test {
     SoulboundReceiver receiver;
     WalletSoulbound walletSoulbound;
     SupportSoulbound supportSoulbound;
-    StolenWalletRegistry walletRegistry;
+    MockWalletRegistry mockRegistry;
     TranslationRegistry translations;
     MockMailbox mailbox;
 
     address owner;
     address spokeForwarder;
     address registeredWallet;
-    uint256 registeredWalletPk;
 
     uint32 constant HUB_CHAIN_ID = 84_532; // Base Sepolia
     uint32 constant SPOKE_DOMAIN = 11_155_420; // Optimism Sepolia
     uint256 constant MIN_WEI = 0.01 ether;
-
-    bytes32 private constant ACK_TYPEHASH = keccak256(
-        "AcknowledgementOfRegistry(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)"
-    );
-    bytes32 private constant REG_TYPEHASH =
-        keccak256("Registration(string statement,address owner,address forwarder,uint256 nonce,uint256 deadline)");
-    bytes32 private constant TYPE_HASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-
-    // Statement constants (must match contract)
-    string private constant ACK_STATEMENT =
-        "This signature acknowledges that the signing wallet is being reported as stolen to the Stolen Wallet Registry.";
-    string private constant REG_STATEMENT =
-        "This signature confirms permanent registration of the signing wallet in the Stolen Wallet Registry. This action is irreversible.";
 
     function setUp() public {
         vm.chainId(HUB_CHAIN_ID);
 
         owner = makeAddr("owner");
         spokeForwarder = makeAddr("spokeForwarder");
-        registeredWalletPk = 0xA11CE;
-        registeredWallet = vm.addr(registeredWalletPk);
+        registeredWallet = makeAddr("registeredWallet");
 
         vm.startPrank(owner);
 
@@ -55,15 +61,16 @@ contract SoulboundReceiverTest is Test {
         mailbox = new MockMailbox(HUB_CHAIN_ID);
 
         // Deploy translation registry (has built-in English)
-        translations = new TranslationRegistry();
+        translations = new TranslationRegistry(owner);
 
-        // Deploy wallet registry
-        walletRegistry = new StolenWalletRegistry(owner, address(0), address(0), 5, 20);
+        // Deploy mock wallet registry
+        mockRegistry = new MockWalletRegistry();
 
-        // Deploy soulbound contracts
-        walletSoulbound = new WalletSoulbound(address(walletRegistry), address(translations), owner, "stolenwallet.xyz");
+        // Deploy soulbound contracts (owner serves as both feeCollector and initialOwner for test simplicity)
+        walletSoulbound =
+            new WalletSoulbound(address(mockRegistry), address(translations), owner, "stolenwallet.xyz", owner);
 
-        supportSoulbound = new SupportSoulbound(MIN_WEI, address(translations), owner, "stolenwallet.xyz");
+        supportSoulbound = new SupportSoulbound(MIN_WEI, address(translations), owner, "stolenwallet.xyz", owner);
 
         // Deploy receiver
         receiver = new SoulboundReceiver(owner, address(mailbox), address(walletSoulbound), address(supportSoulbound));
@@ -74,61 +81,7 @@ contract SoulboundReceiverTest is Test {
         // Authorize receiver to mint support tokens (for cross-chain mints)
         supportSoulbound.setAuthorizedMinter(address(receiver), true);
 
-        // Note: No vm.deal needed - cross-chain mints use mintTo() which doesn't require ETH
-        // (donations stay on spoke chain)
-
         vm.stopPrank();
-    }
-
-    function _registerWallet(address wallet, uint256 pk) internal {
-        // Register wallet using two-phase flow
-        address forwarder = wallet;
-
-        // Phase 1: Acknowledgement
-        _doAcknowledge(wallet, forwarder, pk);
-
-        // Skip to grace period
-        (,, uint256 startBlock,,,) = walletRegistry.getDeadlines(wallet);
-        vm.roll(startBlock + 1);
-
-        // Phase 2: Registration
-        _doRegister(wallet, forwarder, pk);
-    }
-
-    function _doAcknowledge(address wallet, address forwarder, uint256 pk) internal {
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = walletRegistry.nonces(wallet);
-        // Statement is hashed per EIP-712 for string types
-        bytes32 structHash =
-            keccak256(abi.encode(ACK_TYPEHASH, keccak256(bytes(ACK_STATEMENT)), wallet, forwarder, nonce, deadline));
-        bytes32 domainSep = keccak256(
-            abi.encode(
-                TYPE_HASH, keccak256("StolenWalletRegistry"), keccak256("4"), block.chainid, address(walletRegistry)
-            )
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSep, structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
-
-        vm.prank(forwarder);
-        walletRegistry.acknowledge(deadline, nonce, wallet, v, r, s);
-    }
-
-    function _doRegister(address wallet, address forwarder, uint256 pk) internal {
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = walletRegistry.nonces(wallet);
-        // Statement is hashed per EIP-712 for string types
-        bytes32 structHash =
-            keccak256(abi.encode(REG_TYPEHASH, keccak256(bytes(REG_STATEMENT)), wallet, forwarder, nonce, deadline));
-        bytes32 domainSep = keccak256(
-            abi.encode(
-                TYPE_HASH, keccak256("StolenWalletRegistry"), keccak256("4"), block.chainid, address(walletRegistry)
-            )
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSep, structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
-
-        vm.prank(forwarder);
-        walletRegistry.register(deadline, nonce, wallet, v, r, s);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -161,8 +114,8 @@ contract SoulboundReceiverTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_HandleWalletMint_Success() public {
-        // Register the wallet first
-        _registerWallet(registeredWallet, registeredWalletPk);
+        // Mark wallet as registered in mock
+        mockRegistry.setRegistered(registeredWallet, true);
 
         // Encode mint request
         bytes memory payload = abi.encode(
@@ -266,8 +219,9 @@ contract SoulboundReceiverTest is Test {
     }
 
     function test_SetTrustedForwarder_OnlyOwner() public {
-        vm.prank(makeAddr("attacker"));
-        vm.expectRevert();
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", attacker));
         receiver.setTrustedForwarder(SPOKE_DOMAIN, makeAddr("malicious"));
     }
 

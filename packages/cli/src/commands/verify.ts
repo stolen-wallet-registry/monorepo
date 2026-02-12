@@ -1,9 +1,9 @@
 import chalk from 'chalk';
 import ora from 'ora';
-import { createPublicClient, http, isAddress, zeroAddress, type Address, type Hex } from 'viem';
+import { createPublicClient, http, isAddress, zeroAddress, type Address } from 'viem';
 import { getConfig } from '../lib/config.js';
 import { chainIdToBytes32 } from '../lib/caip.js';
-import { FraudulentContractRegistryABI, StolenWalletRegistryABI } from '@swr/abis';
+import { WalletRegistryABI, ContractRegistryABI } from '@swr/abis';
 
 export interface VerifyOptions {
   address: string;
@@ -36,8 +36,6 @@ export async function verify(options: VerifyOptions): Promise<void> {
 
     spinner.start(`Checking ${options.type} registry...`);
 
-    let entryHash: Hex;
-    let isInvalidated: boolean;
     let registryName: string;
 
     switch (options.type) {
@@ -46,27 +44,20 @@ export async function verify(options: VerifyOptions): Promise<void> {
           throw new Error('Wallet registry not configured for this environment');
         }
 
-        // Check if wallet is registered via individual registration
+        // Check if wallet is registered
         const isRegistered = await publicClient.readContract({
           address: config.contracts.stolenWalletRegistry,
-          abi: StolenWalletRegistryABI,
-          functionName: 'isRegistered',
+          abi: WalletRegistryABI,
+          functionName: 'isWalletRegistered',
           args: [options.address as Address],
         });
 
-        // Compute entry hash for operator batch entries
-        entryHash = await publicClient.readContract({
+        // Check if wallet is pending (acknowledged but not yet registered)
+        const isPending = await publicClient.readContract({
           address: config.contracts.stolenWalletRegistry,
-          abi: StolenWalletRegistryABI,
-          functionName: 'computeWalletEntryHash',
-          args: [options.address as Address, chainIdBytes],
-        });
-
-        isInvalidated = await publicClient.readContract({
-          address: config.contracts.stolenWalletRegistry,
-          abi: StolenWalletRegistryABI,
-          functionName: 'isWalletEntryInvalidated',
-          args: [entryHash],
+          abi: WalletRegistryABI,
+          functionName: 'isWalletPending',
+          args: [options.address as Address],
         });
 
         registryName = 'Stolen Wallet Registry';
@@ -75,12 +66,11 @@ export async function verify(options: VerifyOptions): Promise<void> {
         console.log(`\n${chalk.bold(registryName)}`);
         console.log(`  Address: ${chalk.cyan(options.address)}`);
         console.log(`  Chain ID: ${options.chainId}`);
-        console.log(`  Entry Hash: ${entryHash}`);
         console.log(
-          `  Individual Registration: ${isRegistered ? chalk.red('REGISTERED') : chalk.green('Not registered')}`
+          `  Registered: ${isRegistered ? chalk.red('YES - STOLEN') : chalk.green('No')}`
         );
         console.log(
-          `  Entry Invalidated: ${isInvalidated ? chalk.yellow('Yes') : chalk.green('No')}`
+          `  Pending: ${isPending ? chalk.yellow('Yes (acknowledged, awaiting registration)') : chalk.green('No')}`
         );
         break;
       }
@@ -90,18 +80,11 @@ export async function verify(options: VerifyOptions): Promise<void> {
           throw new Error('Contract registry not configured for this environment');
         }
 
-        entryHash = await publicClient.readContract({
+        const isRegistered = await publicClient.readContract({
           address: config.contracts.fraudulentContractRegistry,
-          abi: FraudulentContractRegistryABI,
-          functionName: 'computeEntryHash',
+          abi: ContractRegistryABI,
+          functionName: 'isContractRegistered',
           args: [options.address as Address, chainIdBytes],
-        });
-
-        isInvalidated = await publicClient.readContract({
-          address: config.contracts.fraudulentContractRegistry,
-          abi: FraudulentContractRegistryABI,
-          functionName: 'isEntryInvalidated',
-          args: [entryHash],
         });
 
         registryName = 'Fraudulent Contract Registry';
@@ -110,9 +93,8 @@ export async function verify(options: VerifyOptions): Promise<void> {
         console.log(`\n${chalk.bold(registryName)}`);
         console.log(`  Address: ${chalk.cyan(options.address)}`);
         console.log(`  Chain ID: ${options.chainId}`);
-        console.log(`  Entry Hash: ${entryHash}`);
         console.log(
-          `  Entry Invalidated: ${isInvalidated ? chalk.yellow('Yes') : chalk.green('No')}`
+          `  Registered: ${isRegistered ? chalk.red('YES - FRAUDULENT') : chalk.green('No')}`
         );
         break;
       }

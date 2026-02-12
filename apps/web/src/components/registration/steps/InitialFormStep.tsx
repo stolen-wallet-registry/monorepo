@@ -219,7 +219,10 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     logger.contract.debug('Refetching hash struct for fresh deadline');
     const refetchResult = await refetchHashStruct();
     // Refetch returns raw contract data [deadline, hashStruct], transform if present
-    const rawData = refetchResult?.data as [bigint, Hex] | undefined;
+    const rawData =
+      refetchResult?.data && Array.isArray(refetchResult.data) && refetchResult.data.length >= 2
+        ? (refetchResult.data as [bigint, Hex])
+        : undefined;
     const freshDeadline = rawData?.[0] ?? hashStructData?.deadline;
 
     if (freshDeadline === undefined) {
@@ -235,17 +238,25 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     try {
       const forwarder = isSelfRelay ? (form.getValues('relayer') as Address) : address;
 
+      // Generate reportedChainId (raw chain ID) and incidentTimestamp
+      const reportedChainId = BigInt(chainId);
+      const incidentTimestamp = 0n; // TODO: Add incident timestamp selection UI (block/tx picker)
+
       logger.signature.info('Requesting EIP-712 acknowledgement signature', {
-        owner: address,
+        wallet: address,
         forwarder,
+        reportedChainId,
+        incidentTimestamp: incidentTimestamp.toString(),
         nonce: nonce.toString(),
         deadline: freshDeadline.toString(),
         chainId,
       });
 
       const sig = await signAcknowledgement({
-        owner: address,
-        forwarder,
+        wallet: address,
+        trustedForwarder: forwarder,
+        reportedChainId,
+        incidentTimestamp,
         nonce,
         deadline: freshDeadline,
       });
@@ -254,7 +265,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
       });
 
-      // Store signature
+      // Store signature with all required fields
       storeSignature({
         signature: sig,
         deadline: freshDeadline,
@@ -263,6 +274,8 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         chainId,
         step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
         storedAt: Date.now(),
+        reportedChainId,
+        incidentTimestamp,
       });
       logger.signature.debug('Acknowledgement signature stored in sessionStorage');
 
@@ -371,7 +384,7 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
               type="acknowledgement"
               data={{
                 registeree: address,
-                forwarder,
+                trustedForwarder: forwarder,
                 nonce,
                 deadline: hashStructData.deadline,
                 chainId,

@@ -41,7 +41,7 @@ export const anvilSpoke: SpokeNetworkConfig = {
   },
 
   spokeContracts: {
-    // Deterministic addresses from Anvil Account 0 deployer
+    // Regular CREATE (deployer + nonce) addresses from Deploy.s.sol
     spokeRegistry: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707',
     feeManager: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9',
     bridgeAdapters: {

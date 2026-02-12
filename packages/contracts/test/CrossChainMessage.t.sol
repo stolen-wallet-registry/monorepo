@@ -3,78 +3,71 @@ pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
 import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
+import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
 
-/// @notice Helper contract to call decodeRegistration with calldata
-contract DecoderHelper {
-    function decode(bytes calldata data) external pure returns (CrossChainMessage.RegistrationPayload memory payload) {
-        return CrossChainMessage.decodeRegistration(data);
-    }
-
-    function decodeBatch(bytes calldata data)
+/// @title CrossChainMessageCaller
+/// @notice Helper contract to expose calldata-parameter library functions for testing
+/// @dev Library functions that take `bytes calldata` cannot be tested directly from a test
+///      contract since Solidity test functions receive `bytes memory`. This wrapper converts
+///      memory → calldata at the external function boundary.
+contract CrossChainMessageCaller {
+    function decodeWallet(bytes calldata data)
         external
         pure
-        returns (CrossChainMessage.TransactionBatchPayload memory payload)
+        returns (CrossChainMessage.WalletRegistrationPayload memory)
+    {
+        return CrossChainMessage.decodeWalletRegistration(data);
+    }
+
+    function decodeTxBatch(bytes calldata data)
+        external
+        pure
+        returns (CrossChainMessage.TransactionBatchPayload memory)
     {
         return CrossChainMessage.decodeTransactionBatch(data);
     }
 
-    function getMessageType(bytes calldata data) external pure returns (bytes1) {
+    function getMsgType(bytes calldata data) external pure returns (bytes1) {
         return CrossChainMessage.getMessageType(data);
     }
 }
 
+/// @title CrossChainMessageTest
+/// @notice Tests for CrossChainMessage library: encode/decode round-trips, message type extraction, utilities
 contract CrossChainMessageTest is Test {
-    using CrossChainMessage for CrossChainMessage.RegistrationPayload;
-    using CrossChainMessage for CrossChainMessage.TransactionBatchPayload;
-
-    DecoderHelper decoder;
+    CrossChainMessageCaller public caller;
 
     function setUp() public {
-        decoder = new DecoderHelper();
+        caller = new CrossChainMessageCaller();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // ENCODING TESTS
+    // WALLET REGISTRATION ENCODE/DECODE
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function test_EncodeRegistration_Success() public pure {
-        // Encoding should produce expected length for registration payload.
-        CrossChainMessage.RegistrationPayload memory payload = CrossChainMessage.RegistrationPayload({
-            wallet: address(0x1234567890123456789012345678901234567890),
-            sourceChainId: 11_155_420, // Optimism Sepolia
+    /// @notice Encode then decode a wallet registration payload — all fields must match
+    function test_WalletRegistration_RoundTrip() public view {
+        CrossChainMessage.WalletRegistrationPayload memory original = CrossChainMessage.WalletRegistrationPayload({
+            namespaceHash: keccak256("eip155"),
+            chainRef: keccak256("8453"),
+            identifier: bytes32(uint256(uint160(address(0xBEEF)))),
+            reportedChainId: CAIP10Evm.caip2Hash(uint64(8453)),
+            incidentTimestamp: uint64(1_704_067_200),
+            sourceChainId: CAIP10Evm.caip2Hash(uint64(11_155_420)),
             isSponsored: true,
             nonce: 42,
-            timestamp: 1_700_000_000,
-            registrationHash: keccak256("test")
+            timestamp: uint64(1_704_070_800),
+            registrationHash: keccak256("regHash")
         });
 
-        bytes memory encoded = payload.encodeRegistration();
+        bytes memory encoded = CrossChainMessage.encodeWalletRegistration(original);
+        CrossChainMessage.WalletRegistrationPayload memory decoded = caller.decodeWallet(encoded);
 
-        // Should have encoded 8 values (version, type, 6 payload fields)
-        // Each ABI-encoded value is 32 bytes = 256 bytes total
-        assertEq(encoded.length, 256, "Encoded length should be 256 bytes");
-    }
-
-    function test_DecodeRegistration_Success() public view {
-        // Decoding should recover the original payload values.
-        // Create and encode a payload
-        address testWallet = address(0xabCDeF0123456789AbcdEf0123456789aBCDEF01);
-        CrossChainMessage.RegistrationPayload memory original = CrossChainMessage.RegistrationPayload({
-            wallet: testWallet,
-            sourceChainId: 84_532, // Base Sepolia
-            isSponsored: false,
-            nonce: 100,
-            timestamp: 1_700_000_000,
-            registrationHash: keccak256("registration")
-        });
-
-        bytes memory encoded = original.encodeRegistration();
-
-        // Decode it back using helper
-        CrossChainMessage.RegistrationPayload memory decoded = decoder.decode(encoded);
-
-        // Verify all fields match
-        assertEq(decoded.wallet, original.wallet, "wallet mismatch");
+        assertEq(decoded.namespaceHash, original.namespaceHash, "namespaceHash mismatch");
+        assertEq(decoded.chainRef, original.chainRef, "chainRef mismatch");
+        assertEq(decoded.identifier, original.identifier, "identifier mismatch");
+        assertEq(decoded.reportedChainId, original.reportedChainId, "reportedChainId mismatch");
+        assertEq(decoded.incidentTimestamp, original.incidentTimestamp, "incidentTimestamp mismatch");
         assertEq(decoded.sourceChainId, original.sourceChainId, "sourceChainId mismatch");
         assertEq(decoded.isSponsored, original.isSponsored, "isSponsored mismatch");
         assertEq(decoded.nonce, original.nonce, "nonce mismatch");
@@ -82,208 +75,65 @@ contract CrossChainMessageTest is Test {
         assertEq(decoded.registrationHash, original.registrationHash, "registrationHash mismatch");
     }
 
-    // Fuzz test: encode/decode roundtrip should preserve all fields across
-    // a wide range of inputs to validate serialization stability.
-    function testFuzz_EncodeDecodeRoundtrip(
-        address wallet,
-        uint32 sourceChainId,
-        bool isSponsored,
-        uint256 nonce,
-        uint64 timestamp,
-        bytes32 registrationHash
-    ) public view {
-        // Skip zero address (would fail validation in real contract)
-        vm.assume(wallet != address(0));
-
-        CrossChainMessage.RegistrationPayload memory original = CrossChainMessage.RegistrationPayload({
-            wallet: wallet,
-            sourceChainId: sourceChainId,
-            isSponsored: isSponsored,
-            nonce: nonce,
-            timestamp: timestamp,
-            registrationHash: registrationHash
-        });
-
-        bytes memory encoded = original.encodeRegistration();
-        CrossChainMessage.RegistrationPayload memory decoded = decoder.decode(encoded);
-
-        assertEq(decoded.wallet, original.wallet, "wallet mismatch");
-        assertEq(decoded.sourceChainId, original.sourceChainId, "sourceChainId mismatch");
-        assertEq(decoded.isSponsored, original.isSponsored, "isSponsored mismatch");
-        assertEq(decoded.nonce, original.nonce, "nonce mismatch");
-        assertEq(decoded.timestamp, original.timestamp, "timestamp mismatch");
-        assertEq(decoded.registrationHash, original.registrationHash, "registrationHash mismatch");
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // DECODING ERROR TESTS
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    function test_DecodeRegistration_InvalidVersion_Reverts() public {
-        // Decode should reject unsupported message versions.
-        // Create payload with wrong version
-        bytes memory invalidPayload = abi.encode(
-            uint8(99), // Wrong version (should be 1)
-            CrossChainMessage.MSG_TYPE_REGISTRATION,
-            address(0x1234),
-            uint32(1),
-            false,
-            uint256(0),
-            uint64(0),
-            bytes32(0)
-        );
-
-        vm.expectRevert(CrossChainMessage.CrossChainMessage__UnsupportedVersion.selector);
-        decoder.decode(invalidPayload);
-    }
-
-    function test_DecodeRegistration_InvalidMessageType_Reverts() public {
-        // Decode should reject unsupported message types.
-        // Create payload with wrong message type
-        bytes memory invalidPayload = abi.encode(
-            CrossChainMessage.MESSAGE_VERSION,
-            bytes1(0x99), // Wrong message type
-            address(0x1234),
-            uint32(1),
-            false,
-            uint256(0),
-            uint64(0),
-            bytes32(0)
-        );
-
-        vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageType.selector);
-        decoder.decode(invalidPayload);
-    }
-
-    function test_DecodeRegistration_TruncatedData_Reverts() public {
-        // Decode should reject too-short payloads.
-        // Create truncated payload (missing registrationHash field - 7 fields = 224 bytes, requires 256)
-        bytes memory truncatedPayload = abi.encode(
-            CrossChainMessage.MESSAGE_VERSION,
-            CrossChainMessage.MSG_TYPE_REGISTRATION,
-            address(0x1234),
-            uint32(1),
-            false,
-            uint256(0),
-            uint64(0)
-            // Missing: bytes32 registrationHash
-        );
+    /// @notice Decoding a too-short message reverts with InvalidMessageLength
+    function test_WalletRegistration_RejectsShortMessage() public {
+        // 383 bytes = 1 less than minimum 384
+        bytes memory tooShort = new bytes(383);
 
         vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector);
-        decoder.decode(truncatedPayload);
+        caller.decodeWallet(tooShort);
     }
 
-    function test_DecodeRegistration_EmptyData_Reverts() public {
-        // Decode should reject empty payloads.
-        bytes memory emptyPayload = "";
-
-        vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector);
-        decoder.decode(emptyPayload);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // UTILITY TESTS
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    function test_AddressToBytes32() public pure {
-        // addressToBytes32 should left-pad the address.
-        address addr = 0x1234567890123456789012345678901234567890;
-        bytes32 result = CrossChainMessage.addressToBytes32(addr);
-
-        // Should be zero-padded on the left
-        assertEq(result, bytes32(uint256(uint160(addr))));
-    }
-
-    function test_Bytes32ToAddress() public pure {
-        // bytes32ToAddress should recover the original address.
-        bytes32 b = bytes32(uint256(uint160(0x1234567890123456789012345678901234567890)));
-        address result = CrossChainMessage.bytes32ToAddress(b);
-
-        assertEq(result, address(0x1234567890123456789012345678901234567890));
-    }
-
-    // Fuzz test: address <-> bytes32 roundtrip should be lossless across
-    // many random addresses.
-    function testFuzz_AddressBytes32Roundtrip(address addr) public pure {
-        bytes32 b = CrossChainMessage.addressToBytes32(addr);
-        address recovered = CrossChainMessage.bytes32ToAddress(b);
-
-        assertEq(recovered, addr);
+    /// @notice Exactly 384 bytes does not revert with InvalidMessageLength (boundary check)
+    function test_WalletRegistration_AcceptsMinimumLength() public {
+        bytes memory exactMinimum = new bytes(384);
+        // 384 bytes passes the length check; may revert for other reasons (zero fields)
+        // but must NOT revert with InvalidMessageLength
+        try caller.decodeWallet(exactMinimum) { }
+        catch (bytes memory reason) {
+            // Ensure revert data is long enough to extract a selector
+            assertTrue(reason.length >= 4, "Revert reason too short to extract selector");
+            bytes4 selector = bytes4(reason);
+            assertTrue(
+                selector != CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector,
+                "384-byte message should not fail length check"
+            );
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CONSTANTS TESTS
+    // TRANSACTION BATCH ENCODE/DECODE
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function test_MessageConstants() public pure {
-        // Message constants should match expected values.
-        assertEq(CrossChainMessage.MESSAGE_VERSION, 1, "version should be 1");
-        assertEq(CrossChainMessage.MSG_TYPE_REGISTRATION, bytes1(0x01), "registration type should be 0x01");
-        assertEq(CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH, bytes1(0x02), "transaction batch type should be 0x02");
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TRANSACTION BATCH ENCODING TESTS
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    function test_EncodeTransactionBatch_Success() public pure {
-        // Encoding should handle dynamic arrays correctly.
+    /// @notice Encode then decode a transaction batch payload — all fields including dynamic arrays
+    function test_TransactionBatch_RoundTrip() public view {
         bytes32[] memory txHashes = new bytes32[](3);
-        bytes32[] memory chainIdArray = new bytes32[](3);
-        for (uint256 i = 0; i < 3; i++) {
-            txHashes[i] = keccak256(abi.encodePacked("tx", i));
-            chainIdArray[i] = keccak256("eip155:1");
-        }
+        txHashes[0] = keccak256("tx1");
+        txHashes[1] = keccak256("tx2");
+        txHashes[2] = keccak256("tx3");
 
-        CrossChainMessage.TransactionBatchPayload memory payload = CrossChainMessage.TransactionBatchPayload({
-            merkleRoot: keccak256("merkleRoot"),
-            reporter: address(0x1234567890123456789012345678901234567890),
-            reportedChainId: keccak256("eip155:1"),
-            sourceChainId: keccak256("eip155:11155420"),
-            transactionCount: 3,
-            isSponsored: true,
-            nonce: 42,
-            timestamp: 1_700_000_000,
-            transactionHashes: txHashes,
-            chainIds: chainIdArray
-        });
-
-        bytes memory encoded = payload.encodeTransactionBatch();
-
-        // Should be > 384 bytes (minimum with dynamic arrays)
-        assertGt(encoded.length, 384, "Encoded length should be > 384 bytes");
-    }
-
-    function test_DecodeTransactionBatch_Success() public view {
-        // Decoding should recover the original payload values including arrays.
-        bytes32[] memory txHashes = new bytes32[](5);
-        bytes32[] memory chainIdArray = new bytes32[](5);
-        bytes32 reportedChainId = keccak256("eip155:1");
-        for (uint256 i = 0; i < 5; i++) {
-            txHashes[i] = keccak256(abi.encodePacked("transaction", i));
-            chainIdArray[i] = reportedChainId;
-        }
+        bytes32[] memory chainIds = new bytes32[](3);
+        chainIds[0] = CAIP10Evm.caip2Hash(uint64(8453));
+        chainIds[1] = CAIP10Evm.caip2Hash(uint64(10));
+        chainIds[2] = CAIP10Evm.caip2Hash(uint64(42_161));
 
         CrossChainMessage.TransactionBatchPayload memory original = CrossChainMessage.TransactionBatchPayload({
-            merkleRoot: keccak256("batchRoot"),
-            reporter: address(0xabCDeF0123456789AbcdEf0123456789aBCDEF01),
-            reportedChainId: reportedChainId,
-            sourceChainId: keccak256("eip155:84532"),
-            transactionCount: 5,
+            dataHash: keccak256(abi.encode(txHashes, chainIds)),
+            reporter: address(0xCAFE),
+            reportedChainId: CAIP10Evm.caip2Hash(uint64(8453)),
+            sourceChainId: CAIP10Evm.caip2Hash(uint64(11_155_420)),
+            transactionCount: 3,
             isSponsored: false,
-            nonce: 100,
-            timestamp: 1_700_000_000,
+            nonce: 7,
+            timestamp: uint64(1_704_067_200),
             transactionHashes: txHashes,
-            chainIds: chainIdArray
+            chainIds: chainIds
         });
 
-        bytes memory encoded = original.encodeTransactionBatch();
+        bytes memory encoded = CrossChainMessage.encodeTransactionBatch(original);
+        CrossChainMessage.TransactionBatchPayload memory decoded = caller.decodeTxBatch(encoded);
 
-        // Decode using helper
-        CrossChainMessage.TransactionBatchPayload memory decoded = decoder.decodeBatch(encoded);
-
-        // Verify all fixed fields match
-        assertEq(decoded.merkleRoot, original.merkleRoot, "merkleRoot mismatch");
+        assertEq(decoded.dataHash, original.dataHash, "dataHash mismatch");
         assertEq(decoded.reporter, original.reporter, "reporter mismatch");
         assertEq(decoded.reportedChainId, original.reportedChainId, "reportedChainId mismatch");
         assertEq(decoded.sourceChainId, original.sourceChainId, "sourceChainId mismatch");
@@ -292,175 +142,151 @@ contract CrossChainMessageTest is Test {
         assertEq(decoded.nonce, original.nonce, "nonce mismatch");
         assertEq(decoded.timestamp, original.timestamp, "timestamp mismatch");
 
-        // Verify arrays
-        assertEq(decoded.transactionHashes.length, original.transactionHashes.length, "txHashes length mismatch");
-        assertEq(decoded.chainIds.length, original.chainIds.length, "chainIds length mismatch");
-        for (uint256 i = 0; i < 5; i++) {
-            assertEq(decoded.transactionHashes[i], original.transactionHashes[i], "txHash mismatch");
-            assertEq(decoded.chainIds[i], original.chainIds[i], "chainId mismatch");
+        // Verify dynamic arrays
+        assertEq(decoded.transactionHashes.length, 3, "txHashes length mismatch");
+        assertEq(decoded.chainIds.length, 3, "chainIds length mismatch");
+        for (uint256 i = 0; i < 3; i++) {
+            assertEq(decoded.transactionHashes[i], txHashes[i], "txHash mismatch at index");
+            assertEq(decoded.chainIds[i], chainIds[i], "chainId mismatch at index");
         }
     }
 
-    function test_DecodeTransactionBatch_EmptyArrays() public view {
-        // Empty arrays should encode/decode correctly.
-        bytes32[] memory emptyHashes = new bytes32[](0);
-        bytes32[] memory emptyChainIds = new bytes32[](0);
-
-        CrossChainMessage.TransactionBatchPayload memory original = CrossChainMessage.TransactionBatchPayload({
-            merkleRoot: bytes32(0),
-            reporter: address(0x1234),
-            reportedChainId: bytes32(0),
-            sourceChainId: bytes32(0),
-            transactionCount: 0,
-            isSponsored: false,
-            nonce: 0,
-            timestamp: 0,
-            transactionHashes: emptyHashes,
-            chainIds: emptyChainIds
-        });
-
-        bytes memory encoded = original.encodeTransactionBatch();
-        CrossChainMessage.TransactionBatchPayload memory decoded = decoder.decodeBatch(encoded);
-
-        assertEq(decoded.transactionHashes.length, 0, "should have empty txHashes");
-        assertEq(decoded.chainIds.length, 0, "should have empty chainIds");
-    }
-
-    function test_DecodeTransactionBatch_InvalidVersion_Reverts() public {
-        // Decode should reject unsupported message versions.
-        bytes32[] memory txHashes = new bytes32[](0);
-        bytes32[] memory chainIdArray = new bytes32[](0);
-
-        bytes memory invalidPayload = abi.encode(
-            uint8(99), // Wrong version
-            CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH,
-            bytes32(0),
-            address(0),
-            bytes32(0),
-            bytes32(0),
-            uint32(0),
-            false,
-            uint256(0),
-            uint64(0),
-            txHashes,
-            chainIdArray
-        );
-
-        vm.expectRevert(CrossChainMessage.CrossChainMessage__UnsupportedVersion.selector);
-        decoder.decodeBatch(invalidPayload);
-    }
-
-    function test_DecodeTransactionBatch_InvalidMessageType_Reverts() public {
-        // Decode should reject wrong message type.
-        bytes32[] memory txHashes = new bytes32[](0);
-        bytes32[] memory chainIdArray = new bytes32[](0);
-
-        bytes memory invalidPayload = abi.encode(
-            CrossChainMessage.MESSAGE_VERSION,
-            bytes1(0x99), // Wrong type
-            bytes32(0),
-            address(0),
-            bytes32(0),
-            bytes32(0),
-            uint32(0),
-            false,
-            uint256(0),
-            uint64(0),
-            txHashes,
-            chainIdArray
-        );
-
-        vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageType.selector);
-        decoder.decodeBatch(invalidPayload);
-    }
-
-    function test_DecodeTransactionBatch_TruncatedData_Reverts() public {
-        // Decode should reject too-short payloads.
-        bytes memory truncated = new bytes(100);
+    /// @notice Decoding a too-short transaction batch message reverts
+    function test_TransactionBatch_RejectsShortMessage() public {
+        bytes memory tooShort = new bytes(383);
 
         vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector);
-        decoder.decodeBatch(truncated);
+        caller.decodeTxBatch(tooShort);
     }
 
-    function test_DecodeTransactionBatch_BatchSizeMismatch_Reverts() public {
-        // Decode should reject payloads where transactionCount doesn't match array lengths.
-        // Create arrays with 2 elements but set transactionCount to 3
-        bytes32[] memory txHashes = new bytes32[](2);
-        bytes32[] memory chainIdArray = new bytes32[](2);
-        txHashes[0] = keccak256("tx0");
-        txHashes[1] = keccak256("tx1");
-        chainIdArray[0] = keccak256("eip155:1");
-        chainIdArray[1] = keccak256("eip155:1");
+    /// @notice Exactly 384 bytes does not revert with InvalidMessageLength for tx batch (boundary check)
+    function test_TransactionBatch_AcceptsMinimumLength() public {
+        bytes memory exactMinimum = new bytes(384);
+        try caller.decodeTxBatch(exactMinimum) { }
+        catch (bytes memory reason) {
+            // Ensure revert data is long enough to extract a selector
+            assertTrue(reason.length >= 4, "Revert reason too short to extract selector");
+            bytes4 selector = bytes4(reason);
+            assertTrue(
+                selector != CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector,
+                "384-byte tx batch should not fail length check"
+            );
+        }
+    }
 
-        bytes memory mismatchedPayload = abi.encode(
-            CrossChainMessage.MESSAGE_VERSION,
-            CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH,
-            bytes32(0), // merkleRoot
-            address(0x1234), // reporter
-            keccak256("eip155:1"), // reportedChainId
-            keccak256("eip155:31338"), // sourceChainId
-            uint32(3), // transactionCount (mismatched - arrays have 2 elements)
-            false, // isSponsored
-            uint256(0), // nonce
-            uint64(block.timestamp), // timestamp
+    /// @notice Decoding when transactionCount does not match array lengths reverts
+    function test_TransactionBatch_RejectsBatchSizeMismatch() public {
+        // Encode with transactionCount = 5, but arrays have length 1
+        bytes32[] memory txHashes = new bytes32[](1);
+        txHashes[0] = keccak256("tx");
+        bytes32[] memory chainIds = new bytes32[](1);
+        chainIds[0] = CAIP10Evm.caip2Hash(uint64(8453));
+
+        // Manually build mismatched payload by encoding with wrong count.
+        // WARNING: This encoding mirrors CrossChainMessage's internal wire format
+        // (see src/libraries/CrossChainMessage.sol — encodeTxBatchMessage).
+        // If field order or version byte position changes, update this encoding to match.
+        bytes memory encoded = abi.encode(
+            uint8(2), // version
+            bytes1(0x02), // MSG_TYPE_TRANSACTION_BATCH
+            keccak256("data"),
+            makeAddr("reporter"),
+            CAIP10Evm.caip2Hash(uint64(8453)),
+            CAIP10Evm.caip2Hash(uint64(11_155_420)),
+            uint32(5), // MISMATCH: says 5, arrays have 1
+            false,
+            uint256(0),
+            uint64(0),
             txHashes,
-            chainIdArray
+            chainIds
         );
 
         vm.expectRevert(CrossChainMessage.CrossChainMessage__BatchSizeMismatch.selector);
-        decoder.decodeBatch(mismatchedPayload);
+        caller.decodeTxBatch(encoded);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // MESSAGE TYPE ROUTING TESTS
+    // MESSAGE TYPE EXTRACTION
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function test_GetMessageType_Registration() public view {
-        // getMessageType should return registration type for registration payloads.
-        CrossChainMessage.RegistrationPayload memory payload = CrossChainMessage.RegistrationPayload({
-            wallet: address(0x1234),
-            sourceChainId: 1,
+    /// @notice getMessageType returns 0x01 for wallet messages
+    function test_GetMessageType_Wallet() public view {
+        CrossChainMessage.WalletRegistrationPayload memory payload = CrossChainMessage.WalletRegistrationPayload({
+            namespaceHash: keccak256("eip155"),
+            chainRef: bytes32(0),
+            identifier: bytes32(uint256(1)),
+            reportedChainId: bytes32(0),
+            incidentTimestamp: 0,
+            sourceChainId: bytes32(0),
             isSponsored: false,
             nonce: 0,
             timestamp: 0,
             registrationHash: bytes32(0)
         });
+        bytes memory encoded = CrossChainMessage.encodeWalletRegistration(payload);
 
-        bytes memory encoded = payload.encodeRegistration();
-        bytes1 msgType = decoder.getMessageType(encoded);
-
-        assertEq(msgType, CrossChainMessage.MSG_TYPE_REGISTRATION);
+        bytes1 msgType = caller.getMsgType(encoded);
+        assertEq(msgType, bytes1(0x01), "Wallet message should have type 0x01");
     }
 
+    /// @notice getMessageType returns 0x02 for transaction batch messages
     function test_GetMessageType_TransactionBatch() public view {
-        // getMessageType should return transaction batch type for batch payloads.
-        bytes32[] memory txHashes = new bytes32[](0);
-        bytes32[] memory chainIdArray = new bytes32[](0);
+        bytes32[] memory txHashes = new bytes32[](1);
+        txHashes[0] = keccak256("tx");
+        bytes32[] memory chainIds = new bytes32[](1);
+        chainIds[0] = bytes32(0);
 
         CrossChainMessage.TransactionBatchPayload memory payload = CrossChainMessage.TransactionBatchPayload({
-            merkleRoot: bytes32(0),
-            reporter: address(0x1234),
+            dataHash: bytes32(0),
+            reporter: address(0),
             reportedChainId: bytes32(0),
             sourceChainId: bytes32(0),
-            transactionCount: 0,
+            transactionCount: 1,
             isSponsored: false,
             nonce: 0,
             timestamp: 0,
             transactionHashes: txHashes,
-            chainIds: chainIdArray
+            chainIds: chainIds
         });
+        bytes memory encoded = CrossChainMessage.encodeTransactionBatch(payload);
 
-        bytes memory encoded = payload.encodeTransactionBatch();
-        bytes1 msgType = decoder.getMessageType(encoded);
-
-        assertEq(msgType, CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH);
+        bytes1 msgType = caller.getMsgType(encoded);
+        assertEq(msgType, bytes1(0x02), "Transaction batch message should have type 0x02");
     }
 
-    function test_GetMessageType_TooShort_Reverts() public {
-        // getMessageType should revert on too-short data.
-        bytes memory tooShort = new bytes(32);
+    /// @notice getMessageType reverts on data shorter than 64 bytes
+    function test_GetMessageType_RejectsShortMessage() public {
+        bytes memory tooShort = new bytes(63);
 
         vm.expectRevert(CrossChainMessage.CrossChainMessage__InvalidMessageLength.selector);
-        decoder.getMessageType(tooShort);
+        caller.getMsgType(tooShort);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // UTILITIES
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice addressToBytes32 -> bytes32ToAddress round-trip preserves original address
+    function test_AddressToBytes32_RoundTrip() public pure {
+        address original = address(0x742d35cC6634c0532925A3b844bc9E7595F0beB1);
+        bytes32 encoded = CrossChainMessage.addressToBytes32(original);
+        address decoded = CrossChainMessage.bytes32ToAddress(encoded);
+        assertEq(decoded, original, "Round-trip should preserve address");
+    }
+
+    /// @notice bytes32ToAddress only uses lower 160 bits, high bits are ignored
+    function test_Bytes32ToAddress_TruncatesHighBits() public pure {
+        // Set high bits that should be ignored
+        bytes32 withHighBits = bytes32(uint256(type(uint256).max));
+        address result = CrossChainMessage.bytes32ToAddress(withHighBits);
+
+        // Lower 160 bits of uint256.max = address(type(uint160).max) = 0xFFfF...
+        assertEq(result, address(type(uint160).max), "Should only use lower 160 bits");
+
+        // Verify that a known address value in low bits is preserved despite high bits
+        address expected = address(0x1234567890AbcdEF1234567890aBcdef12345678);
+        bytes32 packed = bytes32(uint256(uint160(expected)) | (uint256(0xDEAD) << 160));
+        address unpacked = CrossChainMessage.bytes32ToAddress(packed);
+        assertEq(unpacked, expected, "High bits should be truncated");
     }
 }

@@ -29,9 +29,9 @@ export function sanitizeErrorMessage(error: unknown): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Tooltip content for Merkle root display in transaction registry.
+ * Tooltip content for data hash display in transaction registry.
  *
- * Explains what the merkle root is, how it can be verified, and that
- * transactions emit events for external services to monitor.
+ * Explains that the data hash links the acknowledgement and registration
+ * phases, ensuring the same transactions are used throughout.
  */
-export const MERKLE_ROOT_TOOLTIP = `A cryptographic fingerprint of your selected transactions, stored on-chain as tamper-proof evidence. This root can be verified against the original transaction hashes using Merkle proofs, enabling anyone to confirm exactly which transactions you reported. When registered, each transaction emits a blockchain event that off-ramps, wallets, and other services can monitor to identify potentially stolen funds.`;
+export const DATA_HASH_TOOLTIP = `A cryptographic hash of your selected transactions that links the acknowledgement and registration phases. This ensures the same set of transactions is used in both steps, preventing tampering. When registered, each transaction emits a blockchain event that off-ramps, wallets, and other services can monitor.`;

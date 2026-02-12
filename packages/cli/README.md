@@ -27,7 +27,7 @@ pnpm --filter @swr/cli build
 -e, --env <env>         Environment: local, testnet, mainnet [default: local]
 -k, --private-key <key> Operator private key (or set OPERATOR_PRIVATE_KEY)
 -c, --chain-id <id>     Default chain ID for entries [default: 8453]
--o, --output-dir <path> Directory to save Merkle tree + tx data
+-o, --output-dir <path> Directory to save transaction data
 --dry-run               Simulate without submitting
 --build-only            Build transaction data for multisig (no private key needed)
 ```

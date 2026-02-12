@@ -30,6 +30,7 @@ export interface NetworkConfig {
   contracts: {
     registryHub: `0x${string}`;
     operatorRegistry: `0x${string}`;
+    operatorSubmitter: `0x${string}`;
     stolenWalletRegistry: `0x${string}`;
     stolenTransactionRegistry: `0x${string}`;
     fraudulentContractRegistry: `0x${string}`;
@@ -58,6 +59,8 @@ export function getConfig(env: CliEnvironment): NetworkConfig {
     contracts: {
       registryHub: contracts.registryHub,
       operatorRegistry: contracts.operatorRegistry ?? '0x0000000000000000000000000000000000000000',
+      operatorSubmitter:
+        contracts.operatorSubmitter ?? '0x0000000000000000000000000000000000000000',
       stolenWalletRegistry: contracts.stolenWalletRegistry,
       stolenTransactionRegistry: contracts.stolenTransactionRegistry,
       fraudulentContractRegistry: contracts.fraudulentContractRegistry,

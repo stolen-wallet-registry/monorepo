@@ -2,13 +2,13 @@
  * Hook to get the registration fee for transaction batch registration.
  *
  * Calls quoteRegistration() on the transaction registry to get the required fee.
- * Supports both hub (StolenTransactionRegistry) and spoke (SpokeTransactionRegistry) chains.
+ * Supports both hub (TransactionRegistry) and spoke (SpokeRegistry) chains.
  */
 
 import { useMemo } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import { formatEthConsistent } from '@/lib/utils';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { logger } from '@/lib/logger';
@@ -51,36 +51,55 @@ export function useTxQuoteFee(reporterAddress: Address | null | undefined): UseT
     'useTxQuoteFee'
   );
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata('transaction', registryType);
+  const isSpoke = registryType === 'spoke';
 
   // Convert null to undefined for wagmi compatibility
   const normalizedAddress = reporterAddress ?? undefined;
+  const enabled = !!normalizedAddress && !!contractAddress;
 
-  const {
-    data: rawFee,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useReadContract({
+  const sharedQuery = { staleTime: 30_000, refetchInterval: 60_000 };
+
+  // Split-call: one hook per ABI, only one fires based on registryType
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
+    abi: transactionRegistryAbi,
     chainId,
     functionName: 'quoteRegistration',
     args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {
-      enabled: !!normalizedAddress && !!contractAddress,
-      staleTime: 30_000, // 30 seconds
-      refetchInterval: 60_000, // 1 minute
+      enabled: !isSpoke && enabled,
+      ...sharedQuery,
     },
   });
+
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'quoteRegistration',
+    args: normalizedAddress ? [normalizedAddress] : undefined,
+    query: {
+      enabled: isSpoke && enabled,
+      ...sharedQuery,
+    },
+  });
+
+  const { data: rawFee, isLoading, isError, error, refetch } = isSpoke ? spokeResult : hubResult;
 
   // Transform raw fee into formatted data
   const data = useMemo(() => {
     if (rawFee === undefined) return null;
 
-    const feeWei = rawFee as bigint;
+    let feeWei: bigint;
+    if (typeof rawFee === 'bigint') {
+      feeWei = rawFee;
+    } else {
+      logger.contract.warn('useTxQuoteFee: unexpected rawFee type', {
+        rawFee: String(rawFee),
+        type: typeof rawFee,
+      });
+      feeWei = 0n;
+    }
     const feeEth = formatEthConsistent(feeWei);
     const ethPriceUsd = ethPrice?.usd;
 

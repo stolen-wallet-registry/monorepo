@@ -37,12 +37,11 @@ import {
   Info,
 } from 'lucide-react';
 import { formatRelativeTime, formatTimestamp, truncateHash } from '@swr/search';
-import { useBatchDetail, useOperators } from '@/hooks/dashboard';
+import { useBatchDetail, useOperators, formatBatchId, type BatchType } from '@/hooks/dashboard';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { getChainDisplayFromCaip2 } from '@/lib/chains';
 import { extractAddressFromCAIP10, extractCAIP2FromCAIP10 } from '@swr/chains';
-import type { BatchType } from '@/hooks/dashboard';
 
 interface DashboardBatchDetailPageProps {
   params: {
@@ -66,13 +65,22 @@ function SummaryItem({ label, value }: { label: string; value: React.ReactNode }
   );
 }
 
-function CopyableHash({ value }: { value: string }) {
+function CopyableHash({
+  value,
+  displayValue,
+}: {
+  /** The value copied to clipboard */
+  value: string;
+  /** Optional display text (defaults to value) */
+  displayValue?: string;
+}) {
   const { copy, copied } = useCopyToClipboard({ resetMs: 2000 });
+  const display = displayValue ?? value;
   return (
     <div className="flex items-center gap-2">
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="font-mono text-sm">{truncateHash(value, 10, 6)}</span>
+          <span className="font-mono text-sm">{truncateHash(display, 10, 6)}</span>
         </TooltipTrigger>
         <TooltipContent side="top">
           <p className="text-xs font-mono break-all">{value}</p>
@@ -243,7 +251,7 @@ function BatchDetailContent({
     const address = 'operator' in data.batch ? data.batch.operator : data.batch.reporter;
     const name = operatorNames.get(address.toLowerCase());
     if (data.type === 'transaction' && !name) {
-      return data.batch.isOperatorVerified ? 'Operator' : 'Individual';
+      return data.batch.isOperator ? 'Operator' : 'Individual';
     }
     return name ?? truncateHash(address, 6, 4);
   }, [data, operatorNames]);
@@ -345,11 +353,27 @@ function BatchDetailContent({
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              <SummaryItem label="Batch ID" value={<CopyableHash value={data.batch.id} />} />
               <SummaryItem
-                label="Merkle Root"
-                value={<CopyableHash value={data.batch.merkleRoot} />}
+                label="Batch ID"
+                value={
+                  <CopyableHash
+                    value={data.batch.id}
+                    displayValue={formatBatchId(batchType, data.batch.id)}
+                  />
+                }
               />
+              {'dataHash' in data.batch && data.batch.dataHash && (
+                <SummaryItem
+                  label="Data Hash"
+                  value={<CopyableHash value={data.batch.dataHash} />}
+                />
+              )}
+              {'operatorId' in data.batch && data.batch.operatorId && (
+                <SummaryItem
+                  label="Operator ID"
+                  value={<CopyableHash value={data.batch.operatorId} />}
+                />
+              )}
               <SummaryItem
                 label={data.type === 'transaction' ? 'Reporter' : 'Operator'}
                 value={
@@ -392,13 +416,7 @@ function BatchDetailContent({
               {data.type === 'contract' && (
                 <SummaryItem
                   label="Batch Status"
-                  value={
-                    data.batch.invalidated ? (
-                      <Badge variant="destructive">Invalidated</Badge>
-                    ) : (
-                      <Badge variant="secondary">Active</Badge>
-                    )
-                  }
+                  value={<Badge variant="secondary">Active</Badge>}
                 />
               )}
             </div>
@@ -460,23 +478,23 @@ function BatchDetailContent({
                       <>
                         <TableHead>
                           <span className="inline-flex items-center gap-1">
-                            Transaction
+                            Registry Key
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-3 w-3 cursor-help text-muted-foreground" />
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-xs">
                                 <p className="text-xs">
-                                  Transactions are shown with their <strong>chain context</strong>{' '}
-                                  (CAIP-2 format) to uniquely identify them across blockchains.
-                                </p>
-                                <p className="text-xs mt-1 text-muted-foreground">
-                                  Format: eip155:{'{chainId}'}:{'{txHash}'}
+                                  Chain-qualified reference stored in the registry. Format:{' '}
+                                  <code>
+                                    eip155:{'{chainId}'}:{'{txHash}'}
+                                  </code>
                                 </p>
                               </TooltipContent>
                             </Tooltip>
                           </span>
                         </TableHead>
+                        <TableHead>Transaction</TableHead>
                         <TableHead>Chain</TableHead>
                         <TableHead>Reported</TableHead>
                       </>
@@ -511,7 +529,7 @@ function BatchDetailContent({
                   {data.entries.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={data.type === 'contract' ? 4 : 3}
+                        colSpan={data.type === 'wallet' ? 3 : 4}
                         className="text-center text-sm text-muted-foreground"
                       >
                         No entries found for this batch.
@@ -557,9 +575,18 @@ function BatchDetailContent({
                             <Caip10Entry
                               identifier={entry.txHash}
                               caip2={entry.caip2ChainId}
-                              explorerUrl={txHref}
+                              explorerUrl={null}
                               type="transaction"
                             />
+                          </TableCell>
+                          <TableCell>
+                            {txHref ? (
+                              <ExplorerLink value={entry.txHash} type="transaction" href={txHref} />
+                            ) : (
+                              <code className="font-mono text-xs">
+                                {truncateHash(entry.txHash, 6, 4)}
+                              </code>
+                            )}
                           </TableCell>
                           <TableCell>{renderChainBadge(entry.caip2ChainId)}</TableCell>
                           <TableCell>
@@ -577,15 +604,8 @@ function BatchDetailContent({
                       const contractHref = chainIdForExplorer
                         ? getExplorerAddressUrl(chainIdForExplorer, entry.contractAddress)
                         : null;
-                      const statusLabel = data.batch.invalidated
-                        ? 'Batch invalidated'
-                        : entry.invalidated
-                          ? 'Invalidated'
-                          : 'Active';
-                      const statusVariant =
-                        data.batch.invalidated || entry.invalidated ? 'destructive' : 'secondary';
                       return (
-                        <TableRow key={entry.entryHash}>
+                        <TableRow key={`${entry.contractAddress}-${entry.caip2ChainId}`}>
                           <TableCell>
                             <Caip10Entry
                               identifier={entry.contractAddress}
@@ -601,11 +621,8 @@ function BatchDetailContent({
                             </span>
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant={statusVariant as 'secondary' | 'destructive'}
-                              className="text-xs"
-                            >
-                              {statusLabel}
+                            <Badge variant="secondary" className="text-xs">
+                              Active
                             </Badge>
                           </TableCell>
                         </TableRow>

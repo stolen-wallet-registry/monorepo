@@ -8,6 +8,8 @@ import { SoulboundSvgPreview } from '@/components/composed/SoulboundSvgPreview';
 
 type DevToolsTab = 'theme' | 'tests' | 'soulbound' | 'wallet';
 
+const DEVTOOLS_TABS: DevToolsTab[] = ['theme', 'tests', 'soulbound', 'wallet'];
+
 /**
  * Component that throws an error on mount.
  * Used to test the ErrorBoundary.
@@ -154,26 +156,29 @@ export function DevTools() {
             role="tablist"
             aria-label="DevTools sections"
             onKeyDown={(e) => {
-              const tabs: DevToolsTab[] = ['theme', 'tests', 'soulbound', 'wallet'];
-              const currentIndex = tabs.indexOf(activeTab);
+              const currentIndex = DEVTOOLS_TABS.indexOf(activeTab);
               if (e.key === 'ArrowRight') {
                 e.preventDefault();
-                const nextIndex = (currentIndex + 1) % tabs.length;
-                setActiveTab(tabs[nextIndex]);
+                const nextIndex = (currentIndex + 1) % DEVTOOLS_TABS.length;
+                const next = DEVTOOLS_TABS[nextIndex];
+                if (next) setActiveTab(next);
               } else if (e.key === 'ArrowLeft') {
                 e.preventDefault();
-                const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-                setActiveTab(tabs[prevIndex]);
+                const prevIndex = (currentIndex - 1 + DEVTOOLS_TABS.length) % DEVTOOLS_TABS.length;
+                const prev = DEVTOOLS_TABS[prevIndex];
+                if (prev) setActiveTab(prev);
               } else if (e.key === 'Home') {
                 e.preventDefault();
-                setActiveTab(tabs[0]);
+                const first = DEVTOOLS_TABS[0];
+                if (first) setActiveTab(first);
               } else if (e.key === 'End') {
                 e.preventDefault();
-                setActiveTab(tabs[tabs.length - 1]);
+                const last = DEVTOOLS_TABS[DEVTOOLS_TABS.length - 1];
+                if (last) setActiveTab(last);
               }
             }}
           >
-            {(['theme', 'tests', 'soulbound', 'wallet'] as DevToolsTab[]).map((tab) => (
+            {DEVTOOLS_TABS.map((tab) => (
               <button
                 key={tab}
                 type="button"

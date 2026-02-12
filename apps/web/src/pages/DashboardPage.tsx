@@ -107,13 +107,13 @@ export function DashboardPage() {
               <ListOrdered className="h-4 w-4" />
               <span className="hidden sm:inline">Recent</span>
             </TabsTrigger>
-            <TabsTrigger value="operators" className="gap-2">
-              <Users className="h-4 w-4" />
-              <span className="hidden sm:inline">Operators</span>
-            </TabsTrigger>
             <TabsTrigger value="batches" className="gap-2">
               <Layers className="h-4 w-4" />
               <span className="hidden sm:inline">Batches</span>
+            </TabsTrigger>
+            <TabsTrigger value="operators" className="gap-2">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Operators</span>
             </TabsTrigger>
             {showSubmitTab && (
               <TabsTrigger value="submit" className="gap-2">
@@ -128,12 +128,12 @@ export function DashboardPage() {
           <RecentRegistrationsTable />
         </TabsContent>
 
-        <TabsContent value="operators">
-          <OperatorsTable canManage={isDAO} />
-        </TabsContent>
-
         <TabsContent value="batches">
           <BatchesTable />
+        </TabsContent>
+
+        <TabsContent value="operators">
+          <OperatorsTable canManage={isDAO} />
         </TabsContent>
 
         {showSubmitTab && (

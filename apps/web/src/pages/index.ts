@@ -12,6 +12,9 @@ export { P2PRelayerRegistrationPage } from './P2PRelayerRegistrationPage';
 export { TransactionHomePage } from './TransactionHomePage';
 export { TransactionStandardRegistrationPage } from './TransactionStandardRegistrationPage';
 export { TransactionSelfRelayRegistrationPage } from './TransactionSelfRelayRegistrationPage';
+export { TransactionP2PRoleSelectionPage } from './TransactionP2PRoleSelectionPage';
+export { TransactionP2PReporterPage } from './TransactionP2PReporterPage';
+export { TransactionP2PRelayerPage } from './TransactionP2PRelayerPage';
 // Other pages
 export { FraudulentContractRegistryPage } from './FraudulentContractRegistryPage';
 export { SoulboundPage } from './SoulboundPage';

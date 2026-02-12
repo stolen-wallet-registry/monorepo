@@ -59,7 +59,6 @@ export const TRANSACTION_QUERY = gql`
 
 /**
  * Query fraudulent contracts by address.
- * Note: entryHash is used to check invalidation status via separate query.
  */
 export const CONTRACT_QUERY = gql`
   query SearchContract($address: String!) {
@@ -71,40 +70,6 @@ export const CONTRACT_QUERY = gql`
         batchId
         operator
         reportedAt
-        entryHash
-      }
-    }
-  }
-`;
-
-/**
- * Query invalidation status for a single entry hash.
- */
-export const INVALIDATION_CHECK_QUERY = gql`
-  query CheckInvalidation($entryHash: String!) {
-    invalidatedEntry(id: $entryHash) {
-      id
-      invalidatedAt
-      invalidatedBy
-      reinstated
-      reinstatedAt
-    }
-  }
-`;
-
-/**
- * Query invalidation status for multiple entry hashes.
- * Used for batch checking after CONTRACT_QUERY.
- */
-export const INVALIDATIONS_BATCH_QUERY = gql`
-  query CheckInvalidations($entryHashes: [String!]!) {
-    invalidatedEntrys(where: { id_in: $entryHashes }) {
-      items {
-        id
-        invalidatedAt
-        invalidatedBy
-        reinstated
-        reinstatedAt
       }
     }
   }
@@ -174,7 +139,6 @@ export const REGISTRY_STATS_QUERY = gql`
       totalOperatorTransactionBatches
       totalContractBatches
       totalFraudulentContracts
-      invalidatedContractBatches
       lastUpdated
     }
   }
@@ -194,6 +158,7 @@ export const RECENT_WALLETS_QUERY = gql`
         isSponsored
         operator
         sourceChainCAIP2
+        batchId
       }
     }
   }
@@ -236,13 +201,13 @@ export const RECENT_TRANSACTIONS_QUERY = gql`
     ) {
       items {
         id
-        merkleRoot
+        dataHash
         reporter
         reportedChainCAIP2
         transactionCount
         isSponsored
-        isOperatorVerified
-        verifyingOperator
+        isOperator
+        operatorId
         registeredAt
         transactionHash
       }
@@ -270,6 +235,7 @@ export const RECENT_TRANSACTION_ENTRIES_QUERY = gql`
         batchId
         reporter
         reportedAt
+        transactionHash
       }
     }
   }
@@ -283,7 +249,7 @@ export const RECENT_WALLET_BATCHES_QUERY = gql`
     walletBatchs(orderBy: "registeredAt", orderDirection: "desc", limit: $limit, offset: $offset) {
       items {
         id
-        merkleRoot
+        operatorId
         operator
         reportedChainCAIP2
         walletCount
@@ -307,14 +273,12 @@ export const RECENT_CONTRACT_BATCHES_QUERY = gql`
     ) {
       items {
         id
-        merkleRoot
+        operatorId
         operator
         reportedChainCAIP2
         contractCount
         registeredAt
         transactionHash
-        invalidated
-        invalidatedAt
       }
     }
   }
@@ -323,11 +287,57 @@ export const RECENT_CONTRACT_BATCHES_QUERY = gql`
 /**
  * Query wallet batch detail + entries.
  */
+/**
+ * Query wallet batch only (no entries). Used as step 1 of two-step fetch.
+ */
+export const WALLET_BATCH_ONLY_QUERY = gql`
+  query WalletBatchOnly($batchId: String!) {
+    walletBatch(id: $batchId) {
+      id
+      operatorId
+      operator
+      reportedChainCAIP2
+      walletCount
+      registeredAt
+      transactionHash
+    }
+  }
+`;
+
+/**
+ * Query wallet entries by transactionHash (join key). Used as step 2 of two-step fetch.
+ */
+export const WALLET_ENTRIES_BY_TX_HASH_QUERY = gql`
+  query WalletEntriesByTxHash($txHash: String!, $limit: Int!, $offset: Int) {
+    stolenWallets(
+      where: { transactionHash: $txHash }
+      orderBy: "registeredAt"
+      orderDirection: "desc"
+      limit: $limit
+      offset: $offset
+    ) {
+      items {
+        id
+        caip10
+        registeredAt
+        transactionHash
+        operator
+        sourceChainCAIP2
+        reportedChainCAIP2
+      }
+    }
+  }
+`;
+
+/**
+ * Query wallet batch detail + entries (legacy single-query, kept for reference).
+ * @deprecated Use WALLET_BATCH_ONLY_QUERY + WALLET_ENTRIES_BY_TX_HASH_QUERY instead.
+ */
 export const WALLET_BATCH_DETAIL_QUERY = gql`
   query WalletBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
     walletBatch(id: $batchId) {
       id
-      merkleRoot
+      operatorId
       operator
       reportedChainCAIP2
       walletCount
@@ -348,25 +358,71 @@ export const WALLET_BATCH_DETAIL_QUERY = gql`
         transactionHash
         operator
         sourceChainCAIP2
+        reportedChainCAIP2
       }
     }
   }
 `;
 
 /**
- * Query transaction batch detail + entries.
+ * Query transaction batch only (no entries). Used as step 1 of two-step fetch.
+ */
+export const TRANSACTION_BATCH_ONLY_QUERY = gql`
+  query TransactionBatchOnly($batchId: String!) {
+    transactionBatch(id: $batchId) {
+      id
+      dataHash
+      reporter
+      reportedChainCAIP2
+      transactionCount
+      isSponsored
+      isOperator
+      operatorId
+      registeredAt
+      transactionHash
+    }
+  }
+`;
+
+/**
+ * Query transaction entries by transactionHash (join key). Used as step 2 of two-step fetch.
+ */
+export const TRANSACTION_ENTRIES_BY_TX_HASH_QUERY = gql`
+  query TransactionEntriesByTxHash($txHash: String!, $limit: Int!, $offset: Int) {
+    transactionInBatchs(
+      where: { transactionHash: $txHash }
+      orderBy: "reportedAt"
+      orderDirection: "desc"
+      limit: $limit
+      offset: $offset
+    ) {
+      items {
+        id
+        txHash
+        caip2ChainId
+        numericChainId
+        reporter
+        reportedAt
+      }
+    }
+  }
+`;
+
+/**
+ * Query transaction batch detail + entries (legacy single-query, kept for reference).
+ * @deprecated Use TRANSACTION_BATCH_ONLY_QUERY + TRANSACTION_ENTRIES_BY_TX_HASH_QUERY instead.
  */
 export const TRANSACTION_BATCH_DETAIL_QUERY = gql`
   query TransactionBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
     transactionBatch(id: $batchId) {
       id
-      merkleRoot
+      dataHash
       reporter
       reportedChainCAIP2
       transactionCount
       isSponsored
-      isOperatorVerified
-      verifyingOperator
+      isOperator
+      operatorId
       registeredAt
       transactionHash
     }
@@ -396,14 +452,12 @@ export const CONTRACT_BATCH_DETAIL_QUERY = gql`
   query ContractBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
     fraudulentContractBatch(id: $batchId) {
       id
-      merkleRoot
+      operatorId
       operator
       reportedChainCAIP2
       contractCount
       registeredAt
       transactionHash
-      invalidated
-      invalidatedAt
     }
     fraudulentContracts(
       where: { batchId: $batchId }
@@ -418,7 +472,6 @@ export const CONTRACT_BATCH_DETAIL_QUERY = gql`
         numericChainId
         operator
         reportedAt
-        entryHash
       }
     }
   }
@@ -475,29 +528,6 @@ export interface RawContractResponse {
       batchId: string;
       operator: string;
       reportedAt: string;
-      entryHash: string;
-    }>;
-  };
-}
-
-export interface RawInvalidationCheckResponse {
-  invalidatedEntry: {
-    id: string;
-    invalidatedAt: string;
-    invalidatedBy: string;
-    reinstated: boolean;
-    reinstatedAt: string | null;
-  } | null;
-}
-
-export interface RawInvalidationsBatchResponse {
-  invalidatedEntrys: {
-    items: Array<{
-      id: string;
-      invalidatedAt: string;
-      invalidatedBy: string;
-      reinstated: boolean;
-      reinstatedAt: string | null;
     }>;
   };
 }
@@ -552,7 +582,6 @@ export interface RawRegistryStatsResponse {
     totalOperatorTransactionBatches: number;
     totalContractBatches: number;
     totalFraudulentContracts: number;
-    invalidatedContractBatches: number;
     lastUpdated: string;
   } | null;
 }
@@ -567,6 +596,7 @@ export interface RawRecentWalletsResponse {
       isSponsored: boolean;
       operator?: string;
       sourceChainCAIP2?: string;
+      batchId?: string;
     }>;
   };
 }
@@ -588,13 +618,13 @@ export interface RawRecentTransactionsResponse {
   transactionBatchs: {
     items: Array<{
       id: string;
-      merkleRoot: string;
+      dataHash: string;
       reporter: string;
       reportedChainCAIP2?: string;
       transactionCount: number;
       isSponsored: boolean;
-      isOperatorVerified: boolean;
-      verifyingOperator?: string;
+      isOperator: boolean;
+      operatorId?: string;
       registeredAt: string;
       transactionHash: string;
     }>;
@@ -608,9 +638,10 @@ export interface RawRecentTransactionEntriesResponse {
       txHash: string;
       caip2ChainId: string;
       numericChainId?: number;
-      batchId: string;
+      batchId?: string;
       reporter: string;
       reportedAt: string;
+      transactionHash: string;
     }>;
   };
 }
@@ -619,7 +650,7 @@ export interface RawRecentWalletBatchesResponse {
   walletBatchs: {
     items: Array<{
       id: string;
-      merkleRoot: string;
+      operatorId: string;
       operator: string;
       reportedChainCAIP2?: string;
       walletCount: number;
@@ -633,14 +664,38 @@ export interface RawRecentContractBatchesResponse {
   fraudulentContractBatchs: {
     items: Array<{
       id: string;
-      merkleRoot: string;
+      operatorId: string;
       operator: string;
       reportedChainCAIP2?: string;
       contractCount: number;
       registeredAt: string;
       transactionHash: string;
-      invalidated: boolean;
-      invalidatedAt?: string | null;
+    }>;
+  };
+}
+
+export interface RawWalletBatchOnlyResponse {
+  walletBatch: {
+    id: string;
+    operatorId: string;
+    operator: string;
+    reportedChainCAIP2?: string;
+    walletCount: number;
+    registeredAt: string;
+    transactionHash: string;
+  } | null;
+}
+
+export interface RawWalletEntriesByTxHashResponse {
+  stolenWallets: {
+    items: Array<{
+      id: string;
+      caip10: string;
+      registeredAt: string;
+      transactionHash: string;
+      operator?: string;
+      sourceChainCAIP2?: string;
+      reportedChainCAIP2?: string;
     }>;
   };
 }
@@ -648,7 +703,7 @@ export interface RawRecentContractBatchesResponse {
 export interface RawWalletBatchDetailResponse {
   walletBatch: {
     id: string;
-    merkleRoot: string;
+    operatorId: string;
     operator: string;
     reportedChainCAIP2?: string;
     walletCount: number;
@@ -663,6 +718,35 @@ export interface RawWalletBatchDetailResponse {
       transactionHash: string;
       operator?: string;
       sourceChainCAIP2?: string;
+      reportedChainCAIP2?: string;
+    }>;
+  };
+}
+
+export interface RawTransactionBatchOnlyResponse {
+  transactionBatch: {
+    id: string;
+    dataHash: string;
+    reporter: string;
+    reportedChainCAIP2?: string;
+    transactionCount: number;
+    isSponsored: boolean;
+    isOperator: boolean;
+    operatorId?: string;
+    registeredAt: string;
+    transactionHash: string;
+  } | null;
+}
+
+export interface RawTransactionEntriesByTxHashResponse {
+  transactionInBatchs: {
+    items: Array<{
+      id: string;
+      txHash: string;
+      caip2ChainId: string;
+      numericChainId?: number;
+      reporter: string;
+      reportedAt: string;
     }>;
   };
 }
@@ -670,13 +754,13 @@ export interface RawWalletBatchDetailResponse {
 export interface RawTransactionBatchDetailResponse {
   transactionBatch: {
     id: string;
-    merkleRoot: string;
+    dataHash: string;
     reporter: string;
     reportedChainCAIP2?: string;
     transactionCount: number;
     isSponsored: boolean;
-    isOperatorVerified: boolean;
-    verifyingOperator?: string;
+    isOperator: boolean;
+    operatorId?: string;
     registeredAt: string;
     transactionHash: string;
   } | null;
@@ -695,14 +779,12 @@ export interface RawTransactionBatchDetailResponse {
 export interface RawContractBatchDetailResponse {
   fraudulentContractBatch: {
     id: string;
-    merkleRoot: string;
+    operatorId: string;
     operator: string;
     reportedChainCAIP2?: string;
     contractCount: number;
     registeredAt: string;
     transactionHash: string;
-    invalidated: boolean;
-    invalidatedAt?: string | null;
   } | null;
   fraudulentContracts: {
     items: Array<{
@@ -711,7 +793,6 @@ export interface RawContractBatchDetailResponse {
       numericChainId?: number;
       operator: string;
       reportedAt: string;
-      entryHash: string;
     }>;
   };
 }

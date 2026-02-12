@@ -444,13 +444,12 @@ export function WalletSoulboundMintCard({
               </AlertDescription>
             </Alert>
             {/* Still allow preview even when not eligible */}
-            <div className="flex justify-end">
-              <SoulboundPreviewModal
-                type="wallet"
-                initialLanguage={language}
-                onLanguageChange={setLanguage}
-              />
-            </div>
+            <SoulboundPreviewModal
+              type="wallet"
+              initialLanguage={language}
+              onLanguageChange={setLanguage}
+              className="w-full"
+            />
           </>
         )}
 
@@ -458,13 +457,12 @@ export function WalletSoulboundMintCard({
         {!isLoading && canMint && (
           <>
             {/* Preview button only - language is auto-detected, modal allows override */}
-            <div className="flex justify-end">
-              <SoulboundPreviewModal
-                type="wallet"
-                initialLanguage={language}
-                onLanguageChange={setLanguage}
-              />
-            </div>
+            <SoulboundPreviewModal
+              type="wallet"
+              initialLanguage={language}
+              onLanguageChange={setLanguage}
+              className="w-full"
+            />
 
             {/* Spoke chain info - show cross-chain option */}
             {isOnSpokeChain && (

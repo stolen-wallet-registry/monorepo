@@ -1,0 +1,184 @@
+import { Mermaid } from '../../components/Mermaid';
+
+# Indexer & Search
+
+On-chain storage gives you O(1) lookups for a single identifier (`isWalletRegistered(address)`). But listing, filtering, sorting, and aggregate statistics require an indexer. The SWR indexer powers the dashboard and search UI.
+
+## Technology
+
+- **[Ponder](https://ponder.sh)** 0.16.x -- Event-driven blockchain indexer
+- **PostgreSQL** (production) / PGlite (development)
+- **Auto-generated GraphQL API** -- Query any indexed table with filters, pagination, and sorting
+
+## What Gets Indexed
+
+| Contract Event                 | Table                             | Key Fields                                                             |
+| ------------------------------ | --------------------------------- | ---------------------------------------------------------------------- |
+| `WalletAcknowledged`           | `walletAcknowledgement`           | registeree, trustedForwarder, status, gracePeriodStart, gracePeriodEnd |
+| `WalletRegistered`             | `stolenWallet`                    | address, caip10, registeredAt, isSponsored, reportedChainId            |
+| `BatchCreated`                 | `walletBatch`                     | batchId, operatorId, walletCount, operator                             |
+| `TransactionBatchAcknowledged` | `transactionBatchAcknowledgement` | reporter, trustedForwarder, dataHash, status                           |
+| `TransactionRegistered`        | `transactionInBatch`              | txHash, chainIdHash, caip2ChainId, reporter                            |
+| `TransactionBatchRegistered`   | `transactionBatch`                | batchId, dataHash, transactionCount, isSponsored                       |
+| `TransactionBatchCreated`      | `transactionBatch`                | batchId, operatorId, transactionCount (operator path)                  |
+| `ContractRegistered`           | `fraudulentContract`              | contractAddress, caip2ChainId, batchId, operator                       |
+| `ContractBatchCreated`         | `fraudulentContractBatch`         | batchId, operatorId, contractCount                                     |
+| `CrossChainWalletRegistered`   | `crossChainMessage`               | messageId, sourceChainId, bridgeId, status                             |
+| `WalletRegistrationReceived`   | `crossChainMessage`               | messageId, wallet, sourceChainId                                       |
+| `TransactionBatchReceived`     | `crossChainMessage`               | messageId, dataHash, sourceChainId                                     |
+| `OperatorApproved`             | `operator`                        | identifier, capabilities, approved                                     |
+| `OperatorRevoked`              | `operator`                        | approved=false, revokedAt                                              |
+| `OperatorCapabilitiesUpdated`  | `operatorCapabilityChange`        | oldCapabilities, newCapabilities                                       |
+| `WalletSoulboundMinted`        | `walletSoulboundToken`            | wallet, minter, tokenId                                                |
+| `SupportSoulboundMinted`       | `supportSoulboundToken`           | supporter, amount, tokenId                                             |
+
+A `registryStats` table tracks global aggregates, updated incrementally on every event.
+
+## Search Pipeline
+
+<Mermaid
+  chart={`
+flowchart TD
+    A[User enters query] --> B{detectSearchType}
+    B -->|42-char hex| C[Address search]
+    B -->|66-char hex| D[Transaction search]
+    B -->|Contains ':'| E[CAIP-10 search]
+    B -->|*.eth| F[ENS resolution]
+    F --> C
+    C --> G[Parallel queries]
+    G --> H[WALLET_QUERY]
+    G --> I[CONTRACT_QUERY]
+    D --> J[TRANSACTION_QUERY]
+    E --> K[WALLET_BY_CAIP10_QUERY]
+    H & I --> L[Combine results]
+    J --> L
+    K --> L
+    L --> M[Display in UI]
+`}
+/>
+
+### Search Type Detection
+
+The frontend determines the query type by format:
+
+- **Address** (42 chars, `0x` prefix) -- Searches both wallet and contract registries in parallel
+- **Transaction hash** (66 chars, `0x` prefix) -- Searches the transaction registry
+- **CAIP-10** (contains `:` separator, e.g., `eip155:8453:0x...`) -- Searches wallets by CAIP-10 string
+- **ENS name** (ends with `.eth`) -- Resolves to address first, then searches as address
+
+## Key GraphQL Queries
+
+### Lookup Queries
+
+| Query                    | Purpose                                              |
+| ------------------------ | ---------------------------------------------------- |
+| `WALLET_QUERY`           | Find a stolen wallet by address (primary key lookup) |
+| `WALLET_BY_CAIP10_QUERY` | Find a stolen wallet by CAIP-10 string               |
+| `TRANSACTION_QUERY`      | Find reported transactions by tx hash                |
+| `CONTRACT_QUERY`         | Find fraudulent contracts by address                 |
+| `OPERATOR_QUERY`         | Get operator details by address                      |
+
+### Dashboard Queries
+
+| Query                              | Purpose                                           |
+| ---------------------------------- | ------------------------------------------------- |
+| `REGISTRY_STATS_QUERY`             | Global aggregate statistics                       |
+| `RECENT_WALLETS_QUERY`             | Latest wallet registrations (paginated)           |
+| `RECENT_TRANSACTIONS_QUERY`        | Latest transaction batches (paginated)            |
+| `RECENT_CONTRACTS_QUERY`           | Latest fraudulent contracts (paginated)           |
+| `RECENT_TRANSACTION_ENTRIES_QUERY` | Latest individual transaction entries (paginated) |
+| `OPERATORS_LIST_QUERY`             | List operators, filterable by approval status     |
+
+### Batch Detail Queries
+
+Batch detail uses a two-step fetch pattern for efficiency:
+
+1. **Step 1**: Fetch the batch summary by `batchId`
+2. **Step 2**: Fetch entries by `transactionHash` (the join key)
+
+| Query                                                                   | Purpose                              |
+| ----------------------------------------------------------------------- | ------------------------------------ |
+| `WALLET_BATCH_ONLY_QUERY` + `WALLET_ENTRIES_BY_TX_HASH_QUERY`           | Wallet batch detail                  |
+| `TRANSACTION_BATCH_ONLY_QUERY` + `TRANSACTION_ENTRIES_BY_TX_HASH_QUERY` | Transaction batch detail             |
+| `CONTRACT_BATCH_DETAIL_QUERY`                                           | Contract batch detail (single query) |
+
+## Batch-Entry Linking
+
+Per-entry events (`WalletRegistered`, `TransactionRegistered`, `ContractRegistered`) do not carry a `batchId` field. This is a deliberate gas optimization -- adding an indexed `batchId` to every per-entry event would cost extra gas per entry, and batches can contain hundreds of entries.
+
+Instead, the indexer joins entries to their parent batch using `transactionHash`. All per-entry events and the batch summary event fire in the same transaction, so they share the same hash.
+
+```
+Same transaction:
+  ├── WalletRegistered(identifier_1, ...)     ← no batchId
+  ├── WalletRegistered(identifier_2, ...)     ← no batchId
+  ├── WalletRegistered(identifier_3, ...)     ← no batchId
+  └── BatchCreated(batchId, operatorId, 3)    ← has batchId
+                                                 ↑ same transactionHash
+```
+
+The `ContractRegistered` event is the exception -- it does include `batchId` on per-entry events since contract registrations are operator-only (no individual path).
+
+## Global Statistics
+
+The `registryStats` table maintains a single `"global"` row with incrementally updated counters:
+
+| Stat                        | Description                                 |
+| --------------------------- | ------------------------------------------- |
+| `totalWalletRegistrations`  | All registered wallets                      |
+| `totalTransactionBatches`   | Individual + operator transaction batches   |
+| `totalTransactionsReported` | Sum of all tx counts across batches         |
+| `sponsoredRegistrations`    | Registrations where someone else paid gas   |
+| `directRegistrations`       | Computed: total - sponsored                 |
+| `crossChainRegistrations`   | Registrations originating from spoke chains |
+| `walletSoulboundsMinted`    | Wallet attestation NFTs minted              |
+| `supportSoulboundsMinted`   | Donor recognition NFTs minted               |
+| `totalSupportDonations`     | Total wei donated                           |
+| `activeOperators`           | Currently approved operators                |
+| `totalWalletBatches`        | Operator wallet batch submissions           |
+| `totalContractBatches`      | Operator contract batch submissions         |
+| `totalFraudulentContracts`  | Individual fraudulent contracts reported    |
+
+## Cross-Chain Message Tracking
+
+The `crossChainMessage` table correlates spoke-to-hub message flow:
+
+```
+Status: sent → received → registered
+```
+
+Messages are created when the `CrossChainInbox` receives a Hyperlane message (`WalletRegistrationReceived` or `TransactionBatchReceived`), then updated to `registered` when the corresponding `CrossChainWalletRegistered` or `CrossChainTransactionRegistered` event fires.
+
+## Environment Configuration
+
+| Environment | Chain        | Chain ID | Database            | RPC                     |
+| ----------- | ------------ | -------- | ------------------- | ----------------------- |
+| Development | Local Anvil  | 31337    | PGlite (in-process) | `http://localhost:8545` |
+| Staging     | Base Sepolia | 84532    | PostgreSQL          | Alchemy / public RPC    |
+| Production  | Base         | 8453     | PostgreSQL          | Alchemy                 |
+
+Key environment variables:
+
+| Variable           | Purpose                                           |
+| ------------------ | ------------------------------------------------- |
+| `PONDER_ENV`       | `development`, `staging`, or `production`         |
+| `PONDER_RPC_URL_*` | Chain-specific RPC endpoints                      |
+| `DATABASE_URL`     | PostgreSQL connection string (staging/production) |
+
+In development, Ponder uses PGlite (an embedded PostgreSQL) so no external database is needed.
+
+## CAIP-2 Resolution
+
+The indexer resolves `bytes32` chain ID hashes to human-readable CAIP-2 strings (e.g., `eip155:8453`) using `@swr/chains` utilities:
+
+```typescript
+import { resolveChainIdHash, caip2ToNumericChainId } from '@swr/chains';
+
+// bytes32 → "eip155:8453"
+const caip2 = resolveChainIdHash(reportedChainId);
+
+// "eip155:8453" → 8453
+const numeric = caip2ToNumericChainId(caip2);
+```
+
+This resolution happens at indexing time, so GraphQL consumers get readable chain identifiers without needing to decode hashes themselves.

@@ -1,88 +1,88 @@
+import { Mermaid } from '../components/Mermaid';
+
 # Stolen Wallet Registry
 
-A cross-chain fraud detection and transparency registry for Web3.
+The Stolen Wallet Registry (SWR) is a cross-chain, on-chain fraud registry. Victims of crypto theft register compromised wallets, flagged transactions, and malicious contracts - creating a shared fraud intelligence layer that exchanges, wallets, and dApps can query.
 
-## What is the Stolen Wallet Registry?
+DAO-approved operators (exchanges, security firms, blockchain investigators) can submit batch fraud data at scale, making the registry an industry-grade data source rather than just a self-reporting tool. See the [Operator Protocol](/operator) for details on how operators participate.
 
-The Stolen Wallet Registry (SWR) provides victims of crypto fraud a decentralized mechanism to register stolen wallets and transactions, enabling off-ramps, wallets, and other Web3 services to access verified fraud data for prevention and recovery.
+## Three Registries
 
-### Core Value Proposition
+| Registry        | What gets registered                    | Who can submit          | Security model                                    |
+| --------------- | --------------------------------------- | ----------------------- | ------------------------------------------------- |
+| **Wallet**      | Compromised wallet addresses            | Individuals + Operators | Two-phase EIP-712 / DAO-approved batch            |
+| **Transaction** | Fraudulent transaction hashes (batched) | Individuals + Operators | Two-phase EIP-712 + dataHash / DAO-approved batch |
+| **Contract**    | Malicious contract addresses            | Operators only          | DAO-approved batch submission                     |
 
-- **Victim empowerment** - Register compromised wallets even without access to funds
-- **Shared intelligence** - Exchanges and off-ramps gain access to crowdsourced fraud data
-- **On-chain transparency** - Reduces siloed fraud data across the ecosystem
-- **Cross-chain support** - CAIP-10 compliant for multi-chain address tracking
+## Three Registration Methods
 
-## Three Subregistries
+| Method         | How it works                                               | Best for                                        |
+| -------------- | ---------------------------------------------------------- | ----------------------------------------------- |
+| **Standard**   | Sign and pay with the wallet you are registering           | Compromised wallet still has funds              |
+| **Self-Relay** | Sign with compromised wallet, pay with a different wallet  | Wallet drained, but you have another with funds |
+| **P2P Relay**  | Sign with compromised wallet, a helper pays gas via libp2p | No funds on any wallet, a friend can help       |
 
-| Registry                | Purpose                                        | Who Can Submit          |
-| ----------------------- | ---------------------------------------------- | ----------------------- |
-| **Stolen Wallet**       | Mark entire wallets as permanently compromised | Individuals + Operators |
-| **Fraudulent Contract** | Catalog malicious smart contract addresses     | Operators only          |
-| **Stolen Transaction**  | Flag specific fraudulent transactions          | Individuals + Operators |
+## Architecture
 
-## Registration Methods
+<Mermaid chart={`
+graph TB
+    Users([Users / Operators])
 
-Choose the method that fits your situation:
+    subgraph Frontend
+        WebApp[Web App]
+        CLI[Operator CLI]
+    end
 
-### 1. Standard Registration
+    subgraph Hub Chain
+        Hub[FraudRegistryHub]
+        WR[WalletRegistry]
+        TR[TransactionRegistry]
+        CR[ContractRegistry]
+    end
 
-Sign and pay with the same wallet you're registering. Best when you still have temporary access to a compromised wallet.
+    subgraph Spoke Chains
+        Spoke[SpokeRegistry]
+        Adapter[Bridge Adapter]
+    end
 
-[Standard Registration Guide](/guide/registration-standard)
+    Inbox[CrossChainInbox]
+    Indexer[Ponder Indexer]
+    Dashboard[Dashboard + Search]
 
-### 2. Self-Relay Registration
+    Users --> WebApp
+    Users --> CLI
+    WebApp --> Hub
+    WebApp --> Spoke
+    CLI --> Hub
+    Hub --> WR
+    Hub --> TR
+    Hub --> CR
+    Spoke --> Adapter
+    Adapter -->|Cross-Chain Message| Inbox
+    Inbox --> Hub
+    WR --> Indexer
+    TR --> Indexer
+    CR --> Indexer
+    Indexer --> Dashboard
 
-Sign with your compromised wallet, then switch to a different wallet to pay for gas. Useful when your wallet is drained but you have another wallet with funds.
-
-[Self-Relay Guide](/guide/registration-self-relay)
-
-### 3. P2P Relay Registration
-
-Sign with your compromised wallet and send the signature to a trusted helper via libp2p. The helper pays gas on your behalf. For when you have no funds at all.
-
-[P2P Relay Guide](/guide/registration-p2p-relay)
-
-## Quick Start
-
-Ready to register a stolen wallet?
-
-1. **Connect your wallet** at the [registration app](https://app.stolenwallet.registry)
-2. **Choose your registration method** based on your situation
-3. **Complete the two-phase process** (acknowledgement + registration)
-4. **Done** - Your wallet is now marked as stolen on-chain
-
-[Full Quick Start Guide](/guide)
+`} />
 
 ## Security Model
 
-The registry uses a **two-phase EIP-712 signature flow** to prevent phishing attacks:
+Every wallet and transaction registration requires **two separate signatures** with a randomized delay between them. This two-phase EIP-712 flow prevents single-transaction phishing attacks - an attacker cannot trick a victim into registering a legitimate wallet in one step.
 
-1. **Acknowledgement Phase** - Sign intent to register, starts a grace period
-2. **Grace Period** - 1-4 minute randomized delay
-3. **Registration Phase** - Sign final registration within the time window
+Operator submissions bypass the two-phase flow but are protected by a **DAO trust model** - only entities explicitly approved by governance vote (exchanges, security firms, blockchain analytics providers) can submit batch registrations. The DAO approval process is the security control that substitutes for the individual signature requirement.
 
-This requires two separate signatures, making it much harder for attackers to trick victims into accidentally registering legitimate wallets.
+[Learn more about two-phase registration](/concepts/two-phase-registration)
 
-[Learn more about the security model](/technical/eip712-signatures)
+## Explore the Docs
 
-## For Operators
-
-Operators are DAO-approved entities (exchanges, security firms) with enhanced capabilities:
-
-- Batch submission of addresses across all registries
-- Higher trust signals for submitted data
-- Integration with Operator-as-Paymaster for gasless user registration
-
-[Governance & Operators](/philosophy/governance)
-
-## Tech Stack
-
-Built with the modern Web3 stack:
-
-- **Contracts**: Foundry, Solidity 0.8.21+, OpenZeppelin
-- **Frontend**: Vite, React 19, wagmi 2.x, viem 2.x
-- **P2P**: libp2p 3.x with WebRTC
-- **Settlement**: Base (Optimism L2)
-
-[Technical Architecture](/technical/architecture)
+| Section                                           | What you will find                                        |
+| ------------------------------------------------- | --------------------------------------------------------- |
+| [Quick Start](/getting-started/quick-start)       | Run the app locally in under 5 minutes                    |
+| [Core Concepts](/concepts/two-phase-registration) | Two-phase registration, CAIP identifiers, hub-spoke model |
+| [Registries](/registries/wallet)                  | Deep dives into each registry contract                    |
+| [Operator Protocol](/operator)                    | Batch submissions, economics, CLI usage                   |
+| [P2P Relay](/p2p)                                 | libp2p architecture and protocol details                  |
+| [Infrastructure](/infrastructure/fee-manager)     | Fee manager, soulbound tokens, indexer                    |
+| [Philosophy](/philosophy/manifesto)               | Manifesto and governance model                            |

@@ -19,6 +19,7 @@ import { useFormStore } from '@/stores/formStore';
 import { useAcknowledgement } from '@/hooks/useAcknowledgement';
 import { useTransactionCost } from '@/hooks/useTransactionCost';
 import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import type { WalletAcknowledgeArgs } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
@@ -70,23 +71,41 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
     ? getSignature(registeree, chainId, SIGNATURE_STEP.ACKNOWLEDGEMENT)
     : null;
 
+  // Parse signature once for reuse (avoid calling parseSignature 4 times)
+  const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
+
+  // Determine forwarder: for standard registration, it's the same as registeree
+  // For self-relay, it's the relayer wallet
+  const forwarder = isSelfRelay && relayer ? relayer : registeree;
+
   // Build transaction args for gas estimation (needs to be before early returns)
-  const transactionArgs =
-    storedSignature && registeree
+  // Unified: acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+  const transactionArgs: WalletAcknowledgeArgs | undefined =
+    storedSignature &&
+    registeree &&
+    forwarder &&
+    parsedSig &&
+    storedSignature.reportedChainId !== undefined &&
+    storedSignature.incidentTimestamp !== undefined &&
+    storedSignature.nonce !== undefined
       ? ([
+          registeree,
+          forwarder,
+          storedSignature.reportedChainId,
+          storedSignature.incidentTimestamp,
           storedSignature.deadline,
           storedSignature.nonce,
-          registeree,
-          parseSignature(storedSignature.signature).v,
-          parseSignature(storedSignature.signature).r,
-          parseSignature(storedSignature.signature).s,
-        ] as const)
+          parsedSig.v,
+          parsedSig.r,
+          parsedSig.s,
+        ] as const satisfies WalletAcknowledgeArgs)
       : undefined;
 
   // Get transaction cost estimate (must be called unconditionally - hooks rule)
   const costEstimate = useTransactionCost({
     step: 'acknowledgement',
     args: transactionArgs,
+    ownerAddress: registeree,
   });
 
   // Map hook state to TransactionStatus
@@ -135,12 +154,31 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
       isCorrectWallet,
     });
 
-    if (!storedSignature || !registeree) {
+    if (!storedSignature || !registeree || !forwarder || !parsedSig) {
       logger.contract.error('Cannot submit acknowledgement - missing data', {
         hasStoredSignature: !!storedSignature,
+        hasParsedSig: !!parsedSig,
         registeree,
+        forwarder,
       });
       setLocalError('Missing signature data. Please go back and sign again.');
+      return;
+    }
+
+    // Required fields guard - guard against missing data instead of silent fallback
+    if (
+      storedSignature.reportedChainId === undefined ||
+      storedSignature.incidentTimestamp === undefined ||
+      storedSignature.nonce === undefined ||
+      storedSignature.deadline === undefined
+    ) {
+      logger.contract.error('Cannot submit acknowledgement - missing required fields', {
+        hasReportedChainId: storedSignature.reportedChainId !== undefined,
+        hasIncidentTimestamp: storedSignature.incidentTimestamp !== undefined,
+        hasNonce: storedSignature.nonce !== undefined,
+        hasDeadline: storedSignature.deadline !== undefined,
+      });
+      setLocalError('Signature is missing required data. Please go back and sign again.');
       return;
     }
 
@@ -148,8 +186,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
     setLocalError(null);
 
     try {
-      const parsedSig = parseSignature(storedSignature.signature);
-
+      // parsedSig already computed at component level (reused here)
       logger.contract.info('Submitting acknowledgementOfRegistry to contract', {
         deadline: storedSignature.deadline.toString(),
         nonce: storedSignature.nonce.toString(),
@@ -159,9 +196,12 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
       });
 
       await submitAcknowledgement({
+        registeree,
+        trustedForwarder: forwarder,
+        reportedChainId: storedSignature.reportedChainId,
+        incidentTimestamp: storedSignature.incidentTimestamp,
         deadline: storedSignature.deadline,
         nonce: storedSignature.nonce,
-        registeree,
         signature: parsedSig,
       });
 
@@ -229,16 +269,20 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   // Get error message - sanitize both local errors and hook errors
   const errorMessage = localError || (error ? sanitizeErrorMessage(error) : null);
 
-  // Build signed message data for display
-  const signedMessageData: SignedMessageData | null = storedSignature
-    ? {
-        registeree,
-        forwarder: expectedWallet,
-        nonce: storedSignature.nonce,
-        deadline: storedSignature.deadline,
-        signature: storedSignature.signature,
-      }
-    : null;
+  // Build signed message data for display (guard all required fields to prevent .toString() crash)
+  const signedMessageData: SignedMessageData | null =
+    storedSignature &&
+    forwarder &&
+    storedSignature.nonce !== undefined &&
+    storedSignature.deadline !== undefined
+      ? {
+          registeree,
+          trustedForwarder: forwarder,
+          nonce: storedSignature.nonce,
+          deadline: storedSignature.deadline,
+          signature: storedSignature.signature,
+        }
+      : null;
 
   return (
     <div className="space-y-4">

@@ -1,7 +1,13 @@
 export const TranslationRegistryABI = [
   {
     type: 'constructor',
-    inputs: [],
+    inputs: [
+      {
+        name: '_initialOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
     stateMutability: 'nonpayable',
   },
   {

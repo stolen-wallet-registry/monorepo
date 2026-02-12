@@ -1,0 +1,25 @@
+# Local Development Contracts
+
+import { HubContracts, SpokeContracts, NetworkOverview } from '../../components/ContractAddresses';
+
+:::warning
+These are **local development addresses** deployed to Anvil instances via the `pnpm deploy:crosschain` script. They are deterministic (same every deployment) but only exist on your local chains. These are **not** testnet or mainnet addresses.
+:::
+
+All contract addresses are pulled from `@swr/chains`. They update automatically when the package is updated after a new deployment.
+
+## Local Networks
+
+<NetworkOverview />
+
+## Hub Contracts (Local Anvil — Chain 31337)
+
+The hub chain is the canonical source of truth. All registries (wallet, transaction, contract) live here, along with the FraudRegistryHub entry point, operator infrastructure, and the cross-chain inbox.
+
+<HubContracts />
+
+## Spoke Contracts (Local Anvil — Chain 31338)
+
+Spoke chains accept registrations locally and relay them to the hub via cross-chain bridge adapters. Each spoke deploys a SpokeRegistry, a FeeManager, and a bridge adapter. See [Hub-Spoke Architecture](/concepts/hub-spoke) for details on how cross-chain messaging works.
+
+<SpokeContracts />

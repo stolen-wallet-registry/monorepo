@@ -65,7 +65,7 @@ function decodeDataUri(dataUri: string): string {
   // data:application/json;base64,{content}
   // data:image/svg+xml;base64,{content}
   const match = dataUri.match(/^data:[^;]+;base64,(.+)$/);
-  if (!match) {
+  if (!match?.[1]) {
     throw new Error('Invalid data URI format');
   }
 

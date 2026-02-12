@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { BaseSoulbound } from "./BaseSoulbound.sol";
-import { IStolenWalletRegistry } from "../interfaces/IStolenWalletRegistry.sol";
+import { IWalletRegistry } from "../interfaces/IWalletRegistry.sol";
 import { SVGRenderer } from "./libraries/SVGRenderer.sol";
 import { Base64 } from "@openzeppelin/contracts/utils/Base64.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
@@ -26,8 +26,8 @@ contract WalletSoulbound is BaseSoulbound {
     // STATE
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Reference to the Stolen Wallet Registry
-    IStolenWalletRegistry public immutable registry;
+    /// @notice Reference to the Wallet Registry
+    IWalletRegistry public immutable registry;
 
     /// @notice Tracks which wallet each token represents
     mapping(uint256 tokenId => address wallet) public tokenWallet;
@@ -70,11 +70,16 @@ contract WalletSoulbound is BaseSoulbound {
     /// @param _translations Address of the TranslationRegistry contract
     /// @param _feeCollector Address to receive fees
     /// @param _domain Domain to display in SVG (e.g., "stolenwallet.xyz")
-    constructor(address _registry, address _translations, address _feeCollector, string memory _domain)
-        BaseSoulbound("SWR Wallet Soulbound", "SWRW", _translations, _feeCollector, _domain)
-    {
+    /// @param _initialOwner Address that will own this contract
+    constructor(
+        address _registry,
+        address _translations,
+        address _feeCollector,
+        string memory _domain,
+        address _initialOwner
+    ) BaseSoulbound("SWR Wallet Soulbound", "SWRW", _translations, _feeCollector, _domain, _initialOwner) {
         if (_registry == address(0)) revert InvalidRegistry();
-        registry = IStolenWalletRegistry(_registry);
+        registry = IWalletRegistry(_registry);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -89,7 +94,7 @@ contract WalletSoulbound is BaseSoulbound {
     /// @param wallet The wallet address to mint for (must be registered or pending)
     function mintTo(address wallet) external payable {
         // Check wallet is in registry (registered or pending acknowledgement)
-        if (!registry.isRegistered(wallet) && !registry.isPending(wallet)) {
+        if (!registry.isWalletRegistered(wallet) && !registry.isWalletPending(wallet)) {
             revert NotRegisteredOrPending();
         }
 
@@ -161,7 +166,7 @@ contract WalletSoulbound is BaseSoulbound {
         if (hasMinted[wallet]) {
             return (false, "Already minted");
         }
-        if (!registry.isRegistered(wallet) && !registry.isPending(wallet)) {
+        if (!registry.isWalletRegistered(wallet) && !registry.isWalletPending(wallet)) {
             return (false, "This wallet is not registered");
         }
         return (true, "");

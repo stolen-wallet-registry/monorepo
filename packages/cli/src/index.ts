@@ -28,7 +28,7 @@ program
   .option('-e, --env <env>', 'Environment: local, testnet, mainnet', 'local')
   .option('-k, --private-key <key>', 'Operator private key (or set OPERATOR_PRIVATE_KEY env)')
   .option('-c, --chain-id <id>', 'Default chain ID for entries', '8453')
-  .option('-o, --output-dir <path>', 'Directory to save Merkle tree and transaction data')
+  .option('-o, --output-dir <path>', 'Directory to save transaction data')
   .option('--dry-run', 'Simulate without submitting')
   .option('--build-only', 'Build transaction data for multisig (no private key needed)')
   .action(async (options) => {
@@ -78,7 +78,7 @@ program
   .option('-e, --env <env>', 'Environment: local, testnet, mainnet', 'local')
   .option('-k, --private-key <key>', 'Operator private key')
   .option('-c, --chain-id <id>', 'Default chain ID', '8453')
-  .option('-o, --output-dir <path>', 'Directory to save Merkle tree and transaction data')
+  .option('-o, --output-dir <path>', 'Directory to save transaction data')
   .option('--dry-run', 'Simulate without submitting')
   .option('--build-only', 'Build transaction data for multisig (no private key needed)')
   .action(async (options) => {
@@ -128,7 +128,7 @@ program
   .option('-e, --env <env>', 'Environment: local, testnet, mainnet', 'local')
   .option('-k, --private-key <key>', 'Operator private key')
   .option('-c, --chain-id <id>', 'Default chain ID', '8453')
-  .option('-o, --output-dir <path>', 'Directory to save Merkle tree and transaction data')
+  .option('-o, --output-dir <path>', 'Directory to save transaction data')
   .option('--dry-run', 'Simulate without submitting')
   .option('--build-only', 'Build transaction data for multisig (no private key needed)')
   .action(async (options) => {

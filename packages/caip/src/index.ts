@@ -56,10 +56,20 @@ export {
   isValidCAIP10,
   extractAddressFromCAIP10,
   extractCAIP2FromCAIP10,
+  // Wildcard support
+  toCAIP10Wildcard,
+  isWildcardCAIP10,
 } from './caip10';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BYTES32 CONVERSIONS
 // ═══════════════════════════════════════════════════════════════════════════
 
-export { computeCAIP2Hash, chainIdToBytes32, caip2ToBytes32 } from './bytes32';
+export {
+  computeCAIP2Hash,
+  chainIdToBytes32,
+  caip2ToBytes32,
+  // Truncated hashes for Hub contract
+  truncateChainIdHash,
+  getTruncatedChainIdHash,
+} from './bytes32';

@@ -11,7 +11,7 @@
 import { useEffect, useCallback } from 'react';
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
 import { resolveRegistryContract, type RegistryVariant } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import type { Address } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
@@ -60,25 +60,44 @@ export function useContractNonce(
     'useContractNonce'
   );
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata(variant, registryType);
+  const isSpoke = registryType === 'spoke';
+  const enabled = !!ownerAddress && !!contractAddress;
 
   // Transaction registry needs faster polling for merkle batch workflows
   const refetchInterval = variant === 'transaction' ? 5_000 : undefined;
   const staleTime = variant === 'transaction' ? undefined : 30_000;
 
-  const result = useReadContract({
+  // Split-call: one hook per ABI, only one fires based on registryType
+  // For hub, choose wallet or transaction ABI based on variant
+  const hubAbi = variant === 'transaction' ? transactionRegistryAbi : walletRegistryAbi;
+
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
+    abi: hubAbi,
     chainId,
     functionName: 'nonces',
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
-      enabled: !!ownerAddress && !!contractAddress,
+      enabled: !isSpoke && enabled,
       staleTime,
       refetchInterval,
     },
   });
+
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    chainId,
+    functionName: 'nonces',
+    args: ownerAddress ? [ownerAddress] : undefined,
+    query: {
+      enabled: isSpoke && enabled,
+      staleTime,
+      refetchInterval,
+    },
+  });
+
+  const result = isSpoke ? spokeResult : hubResult;
 
   // Log nonce changes for debugging (transaction registry only)
   useEffect(() => {
@@ -89,7 +108,7 @@ export function useContractNonce(
         nonce: (result.data as bigint).toString(),
       });
     }
-  }, [variant, result.data, ownerAddress]);
+  }, [variant, result.data, ownerAddress, isSpoke]);
 
   return {
     nonce: result.data as bigint | undefined,
@@ -117,28 +136,35 @@ export function useTxContractNonce(address: Address | undefined): UseContractNon
     'useTxContractNonce'
   );
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata('transaction', registryType);
-
+  const isSpoke = registryType === 'spoke';
   const enabled = !!address && !!contractAddress;
 
-  const {
-    data: nonce,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useReadContract({
+  // Split-call: one hook per ABI, only one fires based on registryType
+  const hubResult = useReadContract({
     address: contractAddress,
-    abi,
+    abi: transactionRegistryAbi,
     functionName: 'nonces',
     args: address ? [address] : undefined,
     chainId,
     query: {
-      enabled,
-      refetchInterval: 5_000, // Auto-refetch every 5 seconds
+      enabled: !isSpoke && enabled,
+      refetchInterval: 5_000,
     },
   });
+
+  const spokeResult = useReadContract({
+    address: contractAddress,
+    abi: spokeRegistryAbi,
+    functionName: 'nonces',
+    args: address ? [address] : undefined,
+    chainId,
+    query: {
+      enabled: isSpoke && enabled,
+      refetchInterval: 5_000,
+    },
+  });
+
+  const { data: nonce, isLoading, isError, error, refetch } = isSpoke ? spokeResult : hubResult;
 
   // Log nonce changes in useEffect to avoid logging on every render
   useEffect(() => {
@@ -148,13 +174,14 @@ export function useTxContractNonce(address: Address | undefined): UseContractNon
         nonce: (nonce as bigint).toString(),
       });
     }
-  }, [nonce, address]);
+  }, [nonce, address, isSpoke]);
 
   // Type-safe wrapper for refetch that returns a properly typed result
   const wrappedRefetch = useCallback(async (): Promise<RefetchResult<bigint>> => {
     try {
       const result = await refetch();
       return {
+        // wagmi's refetch can also return 'pending'; we treat non-success as error
         status: result.status === 'success' ? 'success' : 'error',
         data: result.data as bigint | undefined,
         error: result.error as Error | null,

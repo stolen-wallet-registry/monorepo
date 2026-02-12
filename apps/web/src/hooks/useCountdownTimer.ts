@@ -5,7 +5,7 @@
  * then counts down in real-time.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   estimateTimeFromBlocks,
   formatTimeRemaining,
@@ -59,14 +59,16 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
 
   // Calculate initial values
   const calculateInitialMs = useCallback((): number => {
-    if (!targetBlock || !currentBlock) return 0;
+    if (targetBlock === null || targetBlock === 0n || currentBlock === null || currentBlock === 0n)
+      return 0;
     const blocks = blocksRemaining(currentBlock, targetBlock);
     if (blocks <= 0n) return 0;
     return estimateTimeFromBlocks(blocks, chainId);
   }, [targetBlock, currentBlock, chainId]);
 
   const calculateBlocksLeft = useCallback((): bigint => {
-    if (!targetBlock || !currentBlock) return 0n;
+    if (targetBlock === null || targetBlock === 0n || currentBlock === null || currentBlock === 0n)
+      return 0n;
     // blocksRemaining already returns 0n when targetBlock <= currentBlock
     return blocksRemaining(currentBlock, targetBlock);
   }, [targetBlock, currentBlock]);
@@ -86,14 +88,23 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
 
   // Check if actual block target has been reached
   const isBlockTargetReached = useCallback((): boolean => {
-    if (targetBlock === null || currentBlock === null) return false;
+    if (targetBlock === null || targetBlock === 0n || currentBlock === null || currentBlock === 0n)
+      return false;
     return currentBlock >= targetBlock;
   }, [targetBlock, currentBlock]);
 
   // Reset when target/current block changes
   useEffect(() => {
+    // Don't recalculate after the timer has already completed
+    if (hasExpired) return;
+
     // Don't process if we don't have valid block data yet
-    if (targetBlock === null || currentBlock === null) {
+    if (
+      targetBlock === null ||
+      targetBlock === 0n ||
+      currentBlock === null ||
+      currentBlock === 0n
+    ) {
       logger.registration.debug('Countdown timer waiting for block data', {
         targetBlock: targetBlock?.toString() ?? 'null',
         currentBlock: currentBlock?.toString() ?? 'null',
@@ -128,7 +139,7 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
       setIsRunning(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chainId is captured within calculateInitialMs
-  }, [calculateInitialMs, autoStart, targetBlock, currentBlock]);
+  }, [calculateInitialMs, autoStart, targetBlock, currentBlock, hasExpired]);
 
   // Countdown interval - only manages display time, NOT expiration
   useEffect(() => {
@@ -152,7 +163,8 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isRunning, totalMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning]); // totalMs intentionally excluded — setTotalMs uses functional updater
 
   // Block verification effect - determines actual expiration from chain data
   // This runs whenever currentBlock updates from contract polling
@@ -171,29 +183,9 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
       });
       setIsWaitingForBlock(false);
       setHasExpired(true);
-    } else if (isWaitingForBlock && !blockReached) {
-      // Timer estimate hit 0 but blocks haven't caught up - resync
-      const newMs = calculateInitialMs();
-      if (newMs > 0) {
-        logger.registration.info('Resyncing timer - blocks behind estimate', {
-          newMs,
-          targetBlock: targetBlock?.toString() ?? 'null',
-          currentBlock: currentBlock?.toString() ?? 'null',
-        });
-        setTotalMs(newMs);
-        setIsWaitingForBlock(false);
-        setIsRunning(true);
-      }
     }
-  }, [
-    currentBlock,
-    targetBlock,
-    isWaitingForBlock,
-    totalMs,
-    hasExpired,
-    isBlockTargetReached,
-    calculateInitialMs,
-  ]);
+    // No resync — stay in "Waiting for Block" state until block arrives
+  }, [currentBlock, targetBlock, isWaitingForBlock, totalMs, hasExpired, isBlockTargetReached]);
 
   // Fire onExpire callback once
   useEffect(() => {
@@ -217,6 +209,7 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     const newMs = calculateInitialMs();
     setTotalMs(newMs);
     setHasExpired(newMs <= 0);
+    setIsWaitingForBlock(false);
     expiredCallbackFired.current = false;
 
     if (newMs <= 0) {
@@ -227,10 +220,12 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     }
   }, [calculateInitialMs, autoStart]);
 
+  const blocksLeft = useMemo(() => calculateBlocksLeft(), [calculateBlocksLeft]);
+
   return {
     timeRemaining: formatTimeRemaining(totalMs),
     totalMs,
-    blocksLeft: calculateBlocksLeft(),
+    blocksLeft,
     isExpired: hasExpired,
     isRunning,
     isWaitingForBlock,

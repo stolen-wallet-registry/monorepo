@@ -5,7 +5,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useLocation, useSearch } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
 import {
   Card,
   CardContent,
@@ -44,6 +44,8 @@ import {
   useRecentRegistrations,
   type RegistrationEntry,
   type RegistrationType,
+  type BatchType,
+  formatBatchId,
 } from '@/hooks/dashboard';
 import { useOperators } from '@/hooks/dashboard';
 import { cn } from '@/lib/utils';
@@ -129,7 +131,11 @@ function RegistrationRow({ entry, operatorNames }: RegistrationRowProps) {
 
   // Parse chain info from CAIP-2
   const chainParts = entry.chainId.split(':');
-  const { chainId, name: chainName, Icon: ChainIcon } = getChainInfo(chainParts[0], chainParts[1]);
+  const {
+    chainId,
+    name: chainName,
+    Icon: ChainIcon,
+  } = getChainInfo(chainParts[0] ?? '', chainParts[1] ?? '');
 
   // Resolve explorer URLs (returns null for unsupported chains)
   const identifierHref =
@@ -183,6 +189,18 @@ function RegistrationRow({ entry, operatorNames }: RegistrationRowProps) {
         <span className="text-sm text-muted-foreground">
           {formatRelativeTime(entry.registeredAt)}
         </span>
+      </TableCell>
+      <TableCell>
+        {entry.batchId ? (
+          <Link
+            href={`/dashboard/batches/${encodeURIComponent(entry.batchId)}?tab=batches&batchType=${entry.type}`}
+            className="text-xs font-mono text-primary hover:underline"
+          >
+            {formatBatchId(entry.type as BatchType, entry.batchId)}
+          </Link>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
       </TableCell>
       <TableCell>
         {entry.transactionHash ? (
@@ -316,6 +334,7 @@ export function RecentRegistrationsTable({ className }: RecentRegistrationsTable
                     <TableHead>Submitter</TableHead>
                     <TableHead>Chain</TableHead>
                     <TableHead>Time</TableHead>
+                    <TableHead>Batch</TableHead>
                     <TableHead>Tx</TableHead>
                   </TableRow>
                 </TableHeader>

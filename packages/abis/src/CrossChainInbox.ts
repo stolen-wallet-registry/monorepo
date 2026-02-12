@@ -8,7 +8,7 @@ export const CrossChainInboxABI = [
         internalType: 'address',
       },
       {
-        name: '_registryHub',
+        name: '_hub',
         type: 'address',
         internalType: 'address',
       },
@@ -78,6 +78,19 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'function',
+    name: 'hub',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address payable',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'isTrustedSource',
     inputs: [
       {
@@ -129,19 +142,6 @@ export const CrossChainInboxABI = [
   {
     type: 'function',
     name: 'pendingOwner',
-    inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'registryHub',
     inputs: [],
     outputs: [
       {
@@ -235,35 +235,10 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'event',
-    name: 'RegistrationReceived',
-    inputs: [
-      {
-        name: 'sourceChain',
-        type: 'uint32',
-        indexed: true,
-        internalType: 'uint32',
-      },
-      {
-        name: 'wallet',
-        type: 'address',
-        indexed: true,
-        internalType: 'address',
-      },
-      {
-        name: 'messageId',
-        type: 'bytes32',
-        indexed: false,
-        internalType: 'bytes32',
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: 'event',
     name: 'TransactionBatchReceived',
     inputs: [
       {
-        name: 'sourceChain',
+        name: 'origin',
         type: 'uint32',
         indexed: true,
         internalType: 'uint32',
@@ -275,9 +250,9 @@ export const CrossChainInboxABI = [
         internalType: 'address',
       },
       {
-        name: 'merkleRoot',
+        name: 'dataHash',
         type: 'bytes32',
-        indexed: true,
+        indexed: false,
         internalType: 'bytes32',
       },
       {
@@ -315,13 +290,33 @@ export const CrossChainInboxABI = [
     anonymous: false,
   },
   {
-    type: 'error',
-    name: 'CrossChainInbox__InvalidMessage',
-    inputs: [],
+    type: 'event',
+    name: 'WalletRegistrationReceived',
+    inputs: [
+      {
+        name: 'origin',
+        type: 'uint32',
+        indexed: true,
+        internalType: 'uint32',
+      },
+      {
+        name: 'identifier',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'messageId',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
   },
   {
     type: 'error',
-    name: 'CrossChainInbox__OnlyBridge',
+    name: 'CrossChainInbox__OnlyMailbox',
     inputs: [],
   },
   {
@@ -362,11 +357,6 @@ export const CrossChainInboxABI = [
   {
     type: 'error',
     name: 'CrossChainMessage__UnsupportedVersion',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'InvalidChainId',
     inputs: [],
   },
   {

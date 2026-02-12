@@ -24,7 +24,8 @@ import { ChainIcon } from '@/components/composed/ChainIcon';
 import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
-import { clearAllTxSignatures } from '@/lib/signatures/transactions';
+import { clearAllTxSignatures, computeTransactionDataHash } from '@/lib/signatures/transactions';
+import type { Hash } from '@/lib/types/ethereum';
 import {
   getExplorerTxUrl,
   getChainName,
@@ -33,7 +34,7 @@ import {
 } from '@/lib/explorer';
 import { isSpokeChain, getHubChainId } from '@/lib/chains/config';
 import { chainIdToBytes32, toCAIP2 } from '@swr/chains';
-import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
+import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { CheckCircle2, Home, RefreshCw, Heart, ArrowRight } from 'lucide-react';
 
@@ -50,8 +51,21 @@ export function TxSuccessStep() {
     bridgeMessageId,
     reset: resetRegistration,
   } = useTransactionRegistrationStore();
-  const { selectedTxHashes, selectedTxDetails, merkleRoot, reportedChainId } =
-    useTransactionSelection();
+  const {
+    selectedTxHashes,
+    selectedTxDetails,
+    reportedChainId,
+    txHashesForContract,
+    chainIdsForContract,
+  } = useTransactionSelection();
+
+  // Compute dataHash from sorted arrays for display
+  const dataHash: Hash | undefined =
+    txHashesForContract.length > 0 &&
+    chainIdsForContract.length > 0 &&
+    txHashesForContract.length === chainIdsForContract.length
+      ? computeTransactionDataHash(txHashesForContract, chainIdsForContract)
+      : undefined;
   const formStore = useTransactionFormStore();
   // Guard against invalid chain IDs (must be positive safe integer)
   const reportedChainIdHash =
@@ -79,7 +93,7 @@ export function TxSuccessStep() {
    */
   const handleGoHome = () => {
     logger.registration.info('User navigating home, resetting transaction registration state', {
-      merkleRoot,
+      dataHash,
       acknowledgementHash,
       registrationHash,
       transactionCount: selectedTxHashes.length,
@@ -95,7 +109,7 @@ export function TxSuccessStep() {
    */
   const handleRegisterAnother = () => {
     logger.registration.info('User starting new transaction registration, resetting state', {
-      previousMerkleRoot: merkleRoot,
+      previousDataHash: dataHash,
       previousTransactionCount: selectedTxHashes.length,
     });
     resetRegistration();
@@ -185,19 +199,19 @@ export function TxSuccessStep() {
               </div>
             )}
 
-            {/* Merkle Root */}
-            {merkleRoot && (
+            {/* Data Hash */}
+            {dataHash && (
               <div className="flex items-start gap-2">
                 <span className="text-muted-foreground flex items-center gap-1 shrink-0">
-                  Merkle Root:
-                  <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
+                  Data Hash:
+                  <InfoTooltip content={DATA_HASH_TOOLTIP} side="right" />
                 </span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <code className="font-mono text-xs break-all cursor-default">{merkleRoot}</code>
+                    <code className="font-mono text-xs break-all cursor-default">{dataHash}</code>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-md">
-                    <p className="text-xs font-mono break-all">{merkleRoot}</p>
+                    <p className="text-xs font-mono break-all">{dataHash}</p>
                   </TooltipContent>
                 </Tooltip>
               </div>

@@ -13,14 +13,12 @@ import {
   WALLET_BY_CAIP10_QUERY,
   TRANSACTION_QUERY,
   CONTRACT_QUERY,
-  INVALIDATIONS_BATCH_QUERY,
   OPERATOR_QUERY,
   OPERATORS_LIST_QUERY,
   type RawWalletResponse,
   type RawWalletByCAIP10Response,
   type RawTransactionResponse,
   type RawContractResponse,
-  type RawInvalidationsBatchResponse,
   type RawOperatorResponse,
   type RawOperatorsListResponse,
 } from './queries';
@@ -148,8 +146,9 @@ export async function searchTransaction(
   });
 
   const transactions = result.transactionInBatchs?.items ?? [];
+  const firstTx = transactions[0];
 
-  if (transactions.length === 0) {
+  if (!firstTx) {
     return { type: 'transaction', found: false, data: null };
   }
 
@@ -157,7 +156,7 @@ export async function searchTransaction(
     type: 'transaction',
     found: true,
     data: {
-      txHash: transactions[0].txHash as Hash,
+      txHash: firstTx.txHash as Hash,
       chains: transactions.map((t) => ({
         caip2ChainId: t.caip2ChainId,
         chainName: getCAIP2ChainName(t.caip2ChainId),
@@ -177,9 +176,6 @@ export async function searchTransaction(
 /**
  * Search for a fraudulent contract by address.
  *
- * Queries the fraudulent contract registry and checks invalidation status
- * for each entry via a separate query to the invalidatedEntry table.
- *
  * @param config - Search configuration with indexer URL
  * @param address - Contract address to search (will be lowercased)
  * @returns Contract data if found, null otherwise
@@ -188,48 +184,19 @@ export async function searchContract(
   config: SearchConfig,
   address: string
 ): Promise<ContractSearchData | null> {
-  // First, query for contracts
   const result = await request<RawContractResponse>(config.indexerUrl, CONTRACT_QUERY, {
     address: address.toLowerCase(),
   });
 
   const contracts = result.fraudulentContracts?.items ?? [];
+  const firstContract = contracts[0];
 
-  if (contracts.length === 0) {
+  if (!firstContract) {
     return null;
   }
 
-  // Collect all entryHashes to check invalidation status
-  const entryHashes = contracts.map((c) => c.entryHash);
-
-  // Batch query for invalidation status
-  // This is more efficient than individual queries per contract
-  const invalidatedSet = new Set<string>();
-
-  if (entryHashes.length > 0) {
-    try {
-      const invalidationResult = await request<RawInvalidationsBatchResponse>(
-        config.indexerUrl,
-        INVALIDATIONS_BATCH_QUERY,
-        { entryHashes }
-      );
-
-      // Build a set of invalidated (but not reinstated) entry hashes
-      for (const entry of invalidationResult.invalidatedEntrys?.items ?? []) {
-        // Entry is considered invalidated only if not reinstated
-        if (!entry.reinstated) {
-          invalidatedSet.add(entry.id.toLowerCase());
-        }
-      }
-    } catch (err) {
-      // If invalidation query fails, assume not invalidated
-      // This is a graceful degradation - the contract was still found
-      console.warn('Failed to fetch invalidation status, assuming not invalidated', err);
-    }
-  }
-
   return {
-    contractAddress: contracts[0].contractAddress as Address,
+    contractAddress: firstContract.contractAddress as Address,
     chains: contracts.map((c) => ({
       caip2ChainId: c.caip2ChainId,
       chainName: getCAIP2ChainName(c.caip2ChainId),
@@ -237,7 +204,6 @@ export async function searchContract(
       batchId: c.batchId as Hash,
       operator: c.operator as Address,
       reportedAt: BigInt(c.reportedAt),
-      isInvalidated: invalidatedSet.has(c.entryHash.toLowerCase()),
     })),
   };
 }

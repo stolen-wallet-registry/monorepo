@@ -5,25 +5,35 @@
 //   pnpm --filter @swr/contracts build
 //   pnpm --filter @swr/contracts export-abi
 
-// Hub contracts
-export { StolenWalletRegistryABI as stolenWalletRegistryAbi } from '@swr/abis';
-export { StolenTransactionRegistryABI as stolenTransactionRegistryAbi } from '@swr/abis';
-export { FeeManagerABI as feeManagerAbi } from '@swr/abis';
-export { RegistryHubABI as registryHubAbi } from '@swr/abis';
-export { CrossChainInboxABI as crossChainInboxAbi } from '@swr/abis';
-export { OperatorRegistryABI as operatorRegistryAbi } from '@swr/abis';
-export { FraudulentContractRegistryABI as fraudulentContractRegistryAbi } from '@swr/abis';
+// ═══════════════════════════════════════════════════════════════════════════
+// HUB + SEPARATE REGISTRIES ABIs
+// ═══════════════════════════════════════════════════════════════════════════
 
-// Spoke contracts (cross-chain)
+// Hub + Separate Registries (core architecture)
+export { FraudRegistryHubABI as fraudRegistryHubAbi } from '@swr/abis';
+export { WalletRegistryABI as walletRegistryAbi } from '@swr/abis';
+export { TransactionRegistryABI as transactionRegistryAbi } from '@swr/abis';
+export { ContractRegistryABI as contractRegistryAbi } from '@swr/abis';
+export { OperatorSubmitterABI as operatorSubmitterAbi } from '@swr/abis';
+export { CrossChainInboxABI as crossChainInboxAbi } from '@swr/abis';
+
+// Spoke contracts
 export { SpokeRegistryABI as spokeRegistryAbi } from '@swr/abis';
-export { SpokeTransactionRegistryABI as spokeTransactionRegistryAbi } from '@swr/abis';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INFRASTRUCTURE ABIs
+// ═══════════════════════════════════════════════════════════════════════════
+
+export { FeeManagerABI as feeManagerAbi } from '@swr/abis';
+export { OperatorRegistryABI as operatorRegistryAbi } from '@swr/abis';
 export { HyperlaneAdapterABI as hyperlaneAdapterAbi } from '@swr/abis';
 
-// Soulbound contracts
+// ═══════════════════════════════════════════════════════════════════════════
+// SOULBOUND ABIs
+// ═══════════════════════════════════════════════════════════════════════════
+
 export { TranslationRegistryABI as translationRegistryAbi } from '@swr/abis';
 export { WalletSoulboundABI as walletSoulboundAbi } from '@swr/abis';
 export { SupportSoulboundABI as supportSoulboundAbi } from '@swr/abis';
-
-// Cross-chain soulbound contracts
 export { SpokeSoulboundForwarderABI as spokeSoulboundForwarderAbi } from '@swr/abis';
 export { SoulboundReceiverABI as soulboundReceiverAbi } from '@swr/abis';

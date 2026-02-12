@@ -97,10 +97,16 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
       setSendError(null);
       resetSign();
 
+      // Generate reportedChainId (raw chain ID) and incidentTimestamp
+      const reportedChainId = BigInt(chainId);
+      const incidentTimestamp = 0n; // TODO: Add incident timestamp selection UI
+
       // Sign the acknowledgement
       const sig = await signAcknowledgement({
-        owner: registeree,
-        forwarder: relayer,
+        wallet: registeree,
+        trustedForwarder: relayer,
+        reportedChainId,
+        incidentTimestamp,
         nonce,
         deadline: hashData.deadline,
       });
@@ -123,6 +129,9 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
             nonce: nonce.toString(),
             address: registeree,
             chainId,
+            // Field data (stringified for P2P serialization)
+            reportedChainId: reportedChainId.toString(),
+            incidentTimestamp: incidentTimestamp.toString(),
           },
         },
       });
@@ -159,7 +168,7 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
     registeree && relayer && hashData && nonce !== undefined
       ? {
           registeree,
-          forwarder: relayer,
+          trustedForwarder: relayer,
           nonce,
           deadline: hashData.deadline,
           chainId,

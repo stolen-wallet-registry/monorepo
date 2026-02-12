@@ -73,3 +73,48 @@ export function caip2ToBytes32(caip2: string): Hex {
   // Hash the validated string directly (equivalent to toCAIP2(chainId))
   return computeCAIP2Hash(caip2);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRUNCATED CHAIN ID HASHES (for Hub contract storage efficiency)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Truncate bytes32 CAIP-2 hash to uint64 for Hub contract storage.
+ * Matches Solidity: uint64(uint256(fullHash) >> 192)
+ *
+ * The Hub contract uses truncated hashes (top 64 bits) for storage efficiency.
+ * With ~18 quintillion possible values and only thousands of chains,
+ * collision probability is effectively zero.
+ *
+ * @param fullHash - Full bytes32 CAIP-2 hash
+ * @returns Truncated uint64 as bigint
+ *
+ * @example
+ * ```ts
+ * const fullHash = chainIdToBytes32(8453);
+ * truncateChainIdHash(fullHash);
+ * // => 4843947148038746616n (top 64 bits of the hash)
+ * ```
+ */
+export function truncateChainIdHash(fullHash: Hex): bigint {
+  const hashBigInt = BigInt(fullHash);
+  return hashBigInt >> 192n;
+}
+
+/**
+ * Get truncated chain ID hash directly from numeric chain ID.
+ * Convenience function for Hub contract calls.
+ *
+ * @param chainId - Numeric chain ID (e.g., 8453 for Base)
+ * @returns Truncated uint64 as bigint
+ *
+ * @example
+ * ```ts
+ * getTruncatedChainIdHash(8453);
+ * // => 4843947148038746616n
+ * ```
+ */
+export function getTruncatedChainIdHash(chainId: number | bigint): bigint {
+  const fullHash = chainIdToBytes32(chainId);
+  return truncateChainIdHash(fullHash);
+}

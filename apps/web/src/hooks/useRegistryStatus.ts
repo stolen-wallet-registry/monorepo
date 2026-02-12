@@ -13,8 +13,8 @@ import {
   type AcknowledgementData,
   type RegistryStatusResult,
 } from '@/lib/contracts/query';
-import { stolenWalletRegistryAbi } from '@/lib/contracts/abis';
-import { getStolenWalletRegistryAddress } from '@/lib/contracts/addresses';
+import { walletRegistryAbi } from '@/lib/contracts/abis';
+import { getWalletRegistryAddress } from '@/lib/contracts/addresses';
 import { registryStaleTime, registryKeys } from '@/lib/contracts/queryKeys';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
@@ -77,7 +77,7 @@ export function useRegistryStatus({
 
   let contractAddress: Address | undefined;
   try {
-    contractAddress = getStolenWalletRegistryAddress(chainId);
+    contractAddress = getWalletRegistryAddress(chainId);
   } catch {
     contractAddress = undefined;
   }
@@ -117,7 +117,7 @@ export function useRegistryStatus({
       if (!client || !contractAddress || !address) {
         throw new Error('Missing required parameters');
       }
-      return queryRegistryStatus(client, address, contractAddress, stolenWalletRegistryAbi);
+      return queryRegistryStatus(client, address, contractAddress, walletRegistryAbi);
     },
     enabled,
     staleTime: registryStaleTime.status,

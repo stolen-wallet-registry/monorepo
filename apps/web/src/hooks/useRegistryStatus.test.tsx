@@ -16,7 +16,7 @@ vi.mock('wagmi', () => ({
 // Mock contract addresses with controllable behavior
 let mockContractAddress: string | null = '0x5fbdb2315678afecb367f032d93f642f64180aa3';
 vi.mock('@/lib/contracts/addresses', () => ({
-  getStolenWalletRegistryAddress: () => {
+  getWalletRegistryAddress: () => {
     if (mockContractAddress === null) {
       throw new Error('No contract for this chain');
     }
@@ -94,11 +94,13 @@ describe('useRegistryStatus', () => {
       isRegistered: true,
       isPending: false,
       registrationData: {
+        reportedChainId: '0x0000000000000000000000000000000000000000000000000000000000000000',
+        sourceChainId: '0x0000000000000000000000000000000000000000000000000000000000000000',
+        messageId: '0x0000000000000000000000000000000000000000000000000000000000000000',
         registeredAt: 12345678n,
-        sourceChainId: 0,
+        incidentTimestamp: 0n,
         bridgeId: 0,
         isSponsored: false,
-        crossChainMessageId: '0x0000000000000000000000000000000000000000000000000000000000000000',
       },
       acknowledgementData: null,
     });
@@ -114,11 +116,13 @@ describe('useRegistryStatus', () => {
     expect(result.current.isRegistered).toBe(true);
     expect(result.current.isPending).toBe(false);
     expect(result.current.registrationData).toEqual({
+      reportedChainId: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      sourceChainId: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      messageId: '0x0000000000000000000000000000000000000000000000000000000000000000',
       registeredAt: 12345678n,
-      sourceChainId: 0,
+      incidentTimestamp: 0n,
       bridgeId: 0,
       isSponsored: false,
-      crossChainMessageId: '0x0000000000000000000000000000000000000000000000000000000000000000',
     });
   });
 

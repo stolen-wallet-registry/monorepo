@@ -5,7 +5,7 @@
  * Follows the same pattern as wallet self-relay but for transaction batches.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount, useChainId } from 'wagmi';
 import { isAddress } from 'viem';
@@ -41,9 +41,10 @@ import {
   TxRegisterPayStep,
   TxSuccessStep,
 } from '@/components/registration/tx-steps';
-import { useUserTransactions, useMerkleTree, type TransactionLeaf } from '@/hooks/transactions';
+import { useUserTransactions } from '@/hooks/transactions';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
-import { MERKLE_ROOT_TOOLTIP } from '@/lib/utils';
+import { computeTransactionDataHash } from '@/lib/signatures/transactions';
+import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import {
   useTransactionRegistrationFlow,
@@ -109,7 +110,7 @@ export function TransactionSelfRelayRegistrationPage() {
     setSelectedTxHashes,
     setSelectedTxDetails,
     setReportedChainId,
-    setMerkleTreeData,
+    setTransactionData,
   } = useTransactionSelection();
   const resetForm = useTransactionFormStore((s) => s.reset);
   const setReporter = useTransactionFormStore((s) => s.setReporter);
@@ -136,16 +137,6 @@ export function TransactionSelfRelayRegistrationPage() {
     lowestBlockScanned,
   } = useUserTransactions(address);
 
-  // Build Merkle tree from selected transactions
-  const transactionLeaves: TransactionLeaf[] = useMemo(() => {
-    return selectedTxHashes.map((hash) => ({
-      txHash: hash,
-      chainId: chainId,
-    }));
-  }, [selectedTxHashes, chainId]);
-
-  const merkleTree = useMerkleTree(transactionLeaves);
-
   // Initialize registration type on mount and normalize step for self-relay flow.
   useEffect(() => {
     if (registrationType !== 'selfRelay') {
@@ -158,14 +149,17 @@ export function TransactionSelfRelayRegistrationPage() {
     }
   }, [registrationType, setRegistrationType, step, setStep]);
 
-  // Update form state when merkle tree changes
+  // Compute data hash and chain ID arrays when selections change
   useEffect(() => {
-    if (merkleTree) {
-      setMerkleTreeData(merkleTree.root, merkleTree.txHashes, merkleTree.chainIds);
+    if (selectedTxHashes.length > 0 && chainId) {
+      const chainIdHash = chainIdToBytes32(chainId);
+      const chainIds = selectedTxHashes.map(() => chainIdHash);
+      const dataHash = computeTransactionDataHash(selectedTxHashes, chainIds);
+      setTransactionData(dataHash, selectedTxHashes, chainIds);
     } else {
-      setMerkleTreeData(null, [], []);
+      setTransactionData(null, [], []);
     }
-  }, [merkleTree, setMerkleTreeData]);
+  }, [selectedTxHashes, chainId, setTransactionData]);
 
   // Set reported chain ID when chain changes
   useEffect(() => {
@@ -173,9 +167,9 @@ export function TransactionSelfRelayRegistrationPage() {
       setReportedChainId(chainId);
       setSelectedTxHashes([]);
       setSelectedTxDetails([]);
-      setMerkleTreeData(null, [], []);
+      setTransactionData(null, [], []);
     }
-  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setMerkleTreeData]);
+  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setTransactionData]);
 
   // Set reporter address when on select-transactions step
   // IMPORTANT: Only clear selection when on the initial step, not during wallet switches for payment
@@ -186,9 +180,9 @@ export function TransactionSelfRelayRegistrationPage() {
       setReporter(address);
       setSelectedTxHashes([]);
       setSelectedTxDetails([]);
-      setMerkleTreeData(null, [], []);
+      setTransactionData(null, [], []);
     }
-  }, [address, step, setReporter, setSelectedTxHashes, setSelectedTxDetails, setMerkleTreeData]);
+  }, [address, step, setReporter, setSelectedTxHashes, setSelectedTxDetails, setTransactionData]);
 
   // Redirect if not connected
   useEffect(() => {
@@ -233,13 +227,22 @@ export function TransactionSelfRelayRegistrationPage() {
     }
     setForwarderError(null);
 
-    if (selectedTxHashes.length > 0 && merkleTree && address) {
+    if (selectedTxHashes.length > 0 && address) {
       // Store addresses in form store
       setReporter(address);
       setForwarder(forwarderInput as Address);
       setStep('acknowledge-sign');
     }
   };
+
+  // Compute data hash for display in selection summary
+  const displayDataHash =
+    selectedTxHashes.length > 0 && chainId
+      ? computeTransactionDataHash(
+          selectedTxHashes,
+          selectedTxHashes.map(() => chainIdToBytes32(chainId))
+        )
+      : null;
 
   const currentTitle = step ? (STEP_TITLES[step] ?? 'Unknown Step') : 'Getting Started';
   const currentDescription = step
@@ -358,7 +361,7 @@ export function TransactionSelfRelayRegistrationPage() {
             />
 
             {/* Transaction Batch Summary */}
-            {selectedTxHashes.length > 0 && merkleTree && (
+            {selectedTxHashes.length > 0 && (
               <div className="space-y-4">
                 <div className="rounded-lg border p-4 bg-muted/30">
                   <p className="text-sm font-medium mb-3">Transaction Batch Summary</p>
@@ -412,17 +415,17 @@ export function TransactionSelfRelayRegistrationPage() {
 
                     <div className="flex items-start gap-2">
                       <span className="text-muted-foreground flex items-center gap-1 shrink-0">
-                        Merkle Root:
-                        <InfoTooltip content={MERKLE_ROOT_TOOLTIP} side="right" />
+                        Data Hash:
+                        <InfoTooltip content={DATA_HASH_TOOLTIP} side="right" />
                       </span>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <code className="font-mono text-xs break-all cursor-default">
-                            {merkleTree.root}
+                            {displayDataHash}
                           </code>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-md">
-                          <p className="text-xs font-mono break-all">{merkleTree.root}</p>
+                          <p className="text-xs font-mono break-all">{displayDataHash}</p>
                         </TooltipContent>
                       </Tooltip>
                     </div>
@@ -447,10 +450,7 @@ export function TransactionSelfRelayRegistrationPage() {
 
             {/* Continue Button - single button with conditional state */}
             <div className="flex justify-end">
-              {selectedTxHashes.length > 0 &&
-              merkleTree &&
-              isForwarderValid &&
-              !isForwarderSameAsReporter ? (
+              {selectedTxHashes.length > 0 && isForwarderValid && !isForwarderSameAsReporter ? (
                 <Button onClick={handleContinue}>Continue to Sign</Button>
               ) : (
                 <Tooltip>

@@ -7,15 +7,16 @@ export {
   EIP712_DOMAIN_VERSION,
   getEIP712Domain,
   // Type definitions
-  TYPE_HASHES,
   EIP712_TYPES,
-  SIGNATURE_STEP,
-  // Statement constants
   STATEMENTS,
+  // Step constants
+  SIGNATURE_STEP,
+  type SignatureStep,
   // Types
   type AcknowledgementMessage,
   type RegistrationMessage,
-  type SignatureStep,
+  type WalletAcknowledgeArgs,
+  type WalletRegistrationArgs,
   // Builders
   buildAcknowledgementTypedData,
   buildRegistrationTypedData,

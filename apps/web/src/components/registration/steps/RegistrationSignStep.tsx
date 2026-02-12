@@ -4,7 +4,7 @@
  * Signs the registration message after the grace period.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
 import { Alert, AlertDescription } from '@swr/ui';
@@ -46,6 +46,16 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
 
   // Forwarder is either relayer (self-relay) or registeree (standard)
   const forwarder = isSelfRelay ? relayer : registeree;
+
+  // Stabilize fields for this signing session - computed once per mount
+  // This ensures the same values are used for both signing and storage
+  const stableFields = useMemo(
+    () => ({
+      reportedChainId: BigInt(chainId),
+      incidentTimestamp: 0n, // TODO: Add incident timestamp selection UI
+    }),
+    [chainId]
+  );
 
   // Local state
   const [signatureStatus, setSignatureStatus] = useState<SignatureStatus>('idle');
@@ -141,17 +151,24 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
     setSignatureError(null);
 
     try {
+      // Use stabilized fields - computed once per mount, not fresh on each sign
+      const { reportedChainId, incidentTimestamp } = stableFields;
+
       logger.signature.info('Requesting EIP-712 registration signature', {
-        owner: registeree,
+        wallet: registeree,
         forwarder,
+        reportedChainId: reportedChainId.toString(),
+        incidentTimestamp: incidentTimestamp.toString(),
         nonce: nonce.toString(),
         deadline: freshDeadline.toString(),
         chainId,
       });
 
       const sig = await signRegistration({
-        owner: registeree,
-        forwarder,
+        wallet: registeree,
+        trustedForwarder: forwarder,
+        reportedChainId,
+        incidentTimestamp,
         nonce,
         deadline: freshDeadline,
       });
@@ -160,7 +177,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
       });
 
-      // Store signature
+      // Store signature with stabilized fields (same values used for signing)
       storeSignature({
         signature: sig,
         deadline: freshDeadline,
@@ -169,6 +186,8 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         chainId,
         step: SIGNATURE_STEP.REGISTRATION,
         storedAt: Date.now(),
+        reportedChainId,
+        incidentTimestamp,
       });
       logger.signature.debug('Registration signature stored in sessionStorage');
 
@@ -256,7 +275,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
           type="registration"
           data={{
             registeree,
-            forwarder,
+            trustedForwarder: forwarder,
             nonce,
             deadline: hashStructData.deadline,
             chainId,

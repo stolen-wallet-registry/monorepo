@@ -48,9 +48,7 @@ P2P signature relay for helper-assisted wallet registration using libp2p 3.x.
 ```typescript
 transports: [
   circuitRelayTransport({
-    // Give slow connections more time during relay reservation
-    // Default: 10s, we use 15s for unreliable networks
-    reservationCompletionTimeout: 15_000,
+    reservationCompletionTimeout: 15_000, // Default 10s, extended for slow networks
   }),
   webRTC(),
   webRTCDirect(),
@@ -86,11 +84,10 @@ connectionManager: {
 
 services: {
   identify: identify(),
-  ping: ping(),     // Enables keep-alive pings from clients
-  dcutr: dcutr(),   // Enables direct connection upgrade through relay
+  ping: ping(),
+  dcutr: dcutr(),
   relay: circuitRelayServer({
-    // Grace period takes 1-4 min; longer timeout prevents premature resets
-    hopTimeout: 60_000,  // Default: 30s
+    hopTimeout: 60_000,  // Default 30s; covers 1-4 min grace period
     reservations: {
       maxReservations: 15,
       reservationTtl: 30 * 60 * 1000, // 30 minutes
@@ -103,29 +100,20 @@ services: {
 
 ## How dcutr Works
 
-Direct Connection Upgrade through Relay (dcutr) enables peers to upgrade from a relayed connection to a direct one:
-
 ```text
 1. INITIAL STATE
    Peer A ←──relay──→ Relay Server ←──relay──→ Peer B
-   (All traffic flows through relay - higher latency)
 
 2. DCUTR NEGOTIATION
-   - Peer A sends its public addresses to Peer B via relay
-   - Peer B sends its public addresses to Peer A via relay
-   - Both peers attempt direct connections simultaneously
-   - Simultaneous open helps punch through NAT
+   - Peers exchange public addresses via relay
+   - Both attempt direct connections simultaneously
+   - Simultaneous open punches through NAT
 
 3. UPGRADED STATE
    Peer A ←─────────direct WebRTC─────────→ Peer B
-   (Relay no longer in data path - lower latency)
 ```
 
-**Benefits:**
-
-- Reduces relay server load
-- Lower latency for data transfer
-- Works for ~85% of connections (depends on NAT types)
+Works for ~85% of connections (depends on NAT types).
 
 ---
 
@@ -146,42 +134,16 @@ Without keep-alive, connections drop during grace period (1-4 min).
        └────────────────────────────────────────┘
 ```
 
-**Configuration:**
-
-- Ping interval: 45 seconds (default)
-- Max latency warning: 5 seconds
-- Consecutive failures before unhealthy: 3
-
 ---
 
 ## Key Configuration Options
 
-### `reservationCompletionTimeout` (Client)
-
-Time allowed for relay reservation to complete. Increase for slow/unreliable networks.
-
-- Default: 10,000ms (10s)
-- Our setting: 15,000ms (15s)
-
-### `hopTimeout` (Relay Server)
-
-Maximum time a relay hop can remain open. Must be longer than your longest operation.
-
-- Default: 30,000ms (30s)
-- Our setting: 60,000ms (60s) - covers 1-4 minute grace period
-
-### `maxReservations` (Relay Server)
-
-Maximum concurrent relay reservations. Limits resource usage.
-
-- Default: 15
-- Development: Can set to `Infinity` for testing
-
-### `reservationTtl` (Relay Server)
-
-How long a reservation remains valid without activity.
-
-- Our setting: 30 minutes
+| Option                         | Location | Default  | Our Setting | Why                           |
+| ------------------------------ | -------- | -------- | ----------- | ----------------------------- |
+| `reservationCompletionTimeout` | Client   | 10,000ms | 15,000ms    | Slow/unreliable networks      |
+| `hopTimeout`                   | Relay    | 30,000ms | 60,000ms    | Grace period can last 1-4 min |
+| `maxReservations`              | Relay    | 15       | 15          | Limits resource usage         |
+| `reservationTtl`               | Relay    | —        | 30 min      | Keep reservation alive        |
 
 ---
 
@@ -191,6 +153,7 @@ How long a reservation remains valid without activity.
 // packages/p2p/src/protocols.ts
 
 export const PROTOCOLS = {
+  // ── Wallet Registration ──────────────────────────────────────────────
   CONNECT: '/swr/connected/1.0.0',
   ACK_SIG: '/swr/acknowledgement/signature/1.0.0',
   ACK_REC: '/swr/acknowledgement/signature/1.0.0/received',
@@ -198,6 +161,14 @@ export const PROTOCOLS = {
   REG_SIG: '/swr/register/signature/1.0.0',
   REG_REC: '/swr/register/signature/1.0.0/received',
   REG_PAY: '/swr/register/payment/1.0.0',
+
+  // ── Transaction Registration ─────────────────────────────────────────
+  TX_ACK_SIG: '/swr/tx-acknowledgement/signature/1.0.0',
+  TX_ACK_REC: '/swr/tx-acknowledgement/signature/1.0.0/received',
+  TX_ACK_PAY: '/swr/tx-acknowledgement/payment/1.0.0',
+  TX_REG_SIG: '/swr/tx-register/signature/1.0.0',
+  TX_REG_REC: '/swr/tx-register/signature/1.0.0/received',
+  TX_REG_PAY: '/swr/tx-register/payment/1.0.0',
 } as const;
 ```
 
@@ -206,24 +177,31 @@ export const PROTOCOLS = {
 ## Message Format
 
 ```typescript
-// apps/web/src/lib/p2p/types.ts
+// packages/p2p/src/types.ts
+// NOTE: These are simplified representations. The actual types are
+// derived from Zod schemas (e.g. ParsedStreamDataSchema.strict())
+// which enforce runtime validation and reject unknown keys.
 
 export interface ParsedStreamData {
   success?: boolean;
   message?: string;
   p2p?: { peerId?: string; partnerPeerId?: string; connectedToPeer?: boolean };
-  form?: { registeree?: `0x${string}`; relayer?: `0x${string}` };
+  form?: { registeree?: Address; relayer?: Address };
   signature?: SignatureOverTheWire;
-  hash?: `0x${string}`;
+  hash?: Hash;
+  messageId?: Hash; // Hyperlane message ID for cross-chain
+  txChainId?: number; // Chain where tx was submitted
 }
 
 export interface SignatureOverTheWire {
   keyRef: string;
   chainId: number;
-  address: `0x${string}`;
-  value: string;
+  address: Address;
+  value: string; // Hex signature bytes
   deadline: string; // BigInt as string
   nonce: string; // BigInt as string
+  reportedChainId?: string; // Chain hash or raw ID (BigInt as string)
+  incidentTimestamp?: string; // Unix timestamp (BigInt as string)
 }
 ```
 
@@ -293,7 +271,8 @@ apps/web/src/
 │   └── types.ts        # Zod schemas, interfaces
 ├── hooks/
 │   ├── useP2PConnection.ts
-│   └── useP2PSignatureRelay.ts
+│   ├── useP2PSignatureRelay.ts
+│   └── useP2PKeepAlive.ts
 └── stores/
     └── p2pStore.ts     # Connection state
 packages/p2p/src/

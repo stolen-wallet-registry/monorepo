@@ -13,12 +13,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } fro
 import { RegistrationMethodSelector } from '@/components/composed/RegistrationMethodSelector';
 import { useRegistrationStore, type RegistrationType } from '@/stores/registrationStore';
 import { useRegistrySearch } from '@/hooks/indexer';
+import { isP2PAvailable } from '@/lib/p2p/types';
 
 export function HomePage() {
   const [, setLocation] = useLocation();
   const { isConnected, address } = useAccount();
   const { setRegistrationType } = useRegistrationStore();
-  const p2pAvailable = Boolean(import.meta.env.VITE_RELAY_MULTIADDR);
+  const p2pAvailable = isP2PAvailable();
 
   // Check if the connected wallet is already registered via indexer
   // This catches both individual and batch registrations

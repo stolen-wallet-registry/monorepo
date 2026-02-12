@@ -1,18 +1,18 @@
 // Generated ABI exports - populated by `pnpm --filter @swr/contracts export-abi`
 // Run `forge build` in packages/contracts first, then export-abi
 
-export { RegistryHubABI } from './RegistryHub.js';
-export { StolenWalletRegistryABI } from './StolenWalletRegistry.js';
-export { StolenTransactionRegistryABI } from './StolenTransactionRegistry.js';
-export { FeeManagerABI } from './FeeManager.js';
-export { OperatorRegistryABI } from './OperatorRegistry.js';
-export { FraudulentContractRegistryABI } from './FraudulentContractRegistry.js';
-export { CrossChainInboxABI } from './CrossChainInbox.js';
-export { SpokeRegistryABI } from './SpokeRegistry.js';
-export { SpokeTransactionRegistryABI } from './SpokeTransactionRegistry.js';
-export { HyperlaneAdapterABI } from './HyperlaneAdapter.js';
-export { TranslationRegistryABI } from './TranslationRegistry.js';
-export { WalletSoulboundABI } from './WalletSoulbound.js';
-export { SupportSoulboundABI } from './SupportSoulbound.js';
-export { SpokeSoulboundForwarderABI } from './SpokeSoulboundForwarder.js';
-export { SoulboundReceiverABI } from './SoulboundReceiver.js';
+export { FraudRegistryHubABI } from './FraudRegistryHub';
+export { WalletRegistryABI } from './WalletRegistry';
+export { TransactionRegistryABI } from './TransactionRegistry';
+export { ContractRegistryABI } from './ContractRegistry';
+export { OperatorSubmitterABI } from './OperatorSubmitter';
+export { SpokeRegistryABI } from './SpokeRegistry';
+export { CrossChainInboxABI } from './CrossChainInbox';
+export { FeeManagerABI } from './FeeManager';
+export { OperatorRegistryABI } from './OperatorRegistry';
+export { HyperlaneAdapterABI } from './HyperlaneAdapter';
+export { TranslationRegistryABI } from './TranslationRegistry';
+export { WalletSoulboundABI } from './WalletSoulbound';
+export { SupportSoulboundABI } from './SupportSoulbound';
+export { SpokeSoulboundForwarderABI } from './SpokeSoulboundForwarder';
+export { SoulboundReceiverABI } from './SoulboundReceiver';

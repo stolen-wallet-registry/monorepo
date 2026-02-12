@@ -4,7 +4,7 @@
  * Local addresses come from `pnpm deploy:crosschain`.
  * Testnet/mainnet addresses added after deployment.
  *
- * IMPORTANT: These are deterministic addresses based on Account 0 nonces.
+ * IMPORTANT: Local addresses use regular CREATE (deployer + nonce) from Deploy.s.sol.
  * Hyperlane infrastructure is deployed by Account 9 (separate nonce space).
  */
 
@@ -59,103 +59,53 @@ export const HYPERLANE_ADDRESSES = {
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// HUB CHAIN CONTRACTS (31337) - Account 0 nonces
+// HUB CHAIN CONTRACTS (31337) - Regular CREATE (deployer + nonce)
 // ═══════════════════════════════════════════════════════════════════════════
 // Deployed via `pnpm deploy:crosschain` using Account 0
-//
-// Nonce order:
-//   0: MockAggregator       → 0x5FbDB2315678afecb367f032d93F642f64180aa3
-//   1: FeeManager           → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-//   2: RegistryHub          → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
-//   3: StolenWalletRegistry → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
-//   4: (setRegistry tx)
-//   5: CrossChainInbox      → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
-//   6: (setCrossChainInbox tx)
-// ═══════════════════════════════════════════════════════════════════════════
 
 /** Hub chain cross-chain contracts */
 export const HUB_CROSSCHAIN_ADDRESSES = {
   crossChainInbox: {
-    [anvilHub.chainId]: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853' as Address,
+    [anvilHub.chainId]: '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6' as Address,
     // Base Sepolia (testnet hub) - fill after deployment
     [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SPOKE CHAIN CONTRACTS (31338) - Account 0 nonces
+// SPOKE CHAIN CONTRACTS (31338) - Regular CREATE (deployer + nonce)
 // ═══════════════════════════════════════════════════════════════════════════
 // Deployed via `pnpm deploy:crosschain` using Account 0
-//
-// Nonce order:
-//   0: MockGasPaymaster           → 0x5FbDB2315678afecb367f032d93F642f64180aa3
-//   1: HyperlaneAdapter           → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-//   2: (setDomainSupport tx)
-//   3: MockAggregator             → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
-//   4: FeeManager                 → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
-//   5: SpokeRegistry              → 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
-//   6: SpokeTransactionRegistry   → 0x0165878A594ca255338adfa4d48449f69242Eb8F
-//   7: SpokeSoulboundForwarder    → 0xa513E6E4b8f2a923D98304ec87F64353C4D5C853
-//   8: Multicall3                 → 0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6
-// ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Spoke chain contracts.
- *
- * NOTE: These are deployment-specific addresses. For runtime access, prefer
- * using the network configs from @swr/chains (e.g., anvilSpoke.spokeContracts).
- */
-export const SPOKE_ADDRESSES = {
-  mockGasPaymaster: {
-    [anvilSpoke.chainId]: '0x5FbDB2315678afecb367f032d93F642f64180aa3' as Address,
-    // Optimism Sepolia uses real Hyperlane IGP, not mock
+// ═══════════════════════════════════════════════════════════════════════════
+// SPOKE CHAIN CONTRACTS (SpokeRegistry)
+// ═══════════════════════════════════════════════════════════════════════════
+// From `pnpm deploy:crosschain` output
+
+export const SPOKE_CONTRACT_ADDRESSES = {
+  spokeRegistry: {
+    [anvilSpoke.chainId]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
+    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address, // TBD
   },
-  bridgeAdapters: {
-    [anvilSpoke.chainId]: {
-      hyperlane: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address,
-    },
-    [optimismSepolia.chainId]: {
-      hyperlane: '0x0000000000000000000000000000000000000000' as Address, // Fill after deployment
-    },
+  hyperlaneAdapter: {
+    [anvilSpoke.chainId]: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512' as Address,
+    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
-  feeManager: {
+  spokeFeeManager: {
     [anvilSpoke.chainId]: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9' as Address,
     [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
-  spokeRegistry: {
-    [anvilSpoke.chainId]: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707' as Address,
-    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
-  },
-  spokeTransactionRegistry: {
+  spokeSoulboundForwarder: {
     [anvilSpoke.chainId]: '0x0165878A594ca255338adfa4d48449f69242Eb8F' as Address,
     [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
   },
-  /** SpokeSoulboundForwarder for cross-chain soulbound minting */
-  spokeSoulboundForwarder: {
-    [anvilSpoke.chainId]: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853' as Address,
-    [optimismSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
-  },
 } as const;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// HUB SOULBOUND RECEIVER
-// ═══════════════════════════════════════════════════════════════════════════
+export type SpokeContractName = keyof typeof SPOKE_CONTRACT_ADDRESSES;
 
-/** SoulboundReceiver on hub chain for cross-chain minting */
-export const HUB_SOULBOUND_RECEIVER = {
-  [anvilHub.chainId]: '0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82' as Address,
-  [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
-} as const;
-
-// ═══════════════════════════════════════════════════════════════════════════
-// HELPER FUNCTIONS
-// ═══════════════════════════════════════════════════════════════════════════
-
-/** Simple spoke address contracts (excludes bridgeAdapters which has different structure) */
-type SimpleSpokeContract = Exclude<keyof typeof SPOKE_ADDRESSES, 'bridgeAdapters'>;
-
-export function getSpokeAddress(contract: SimpleSpokeContract, chainId: number): Address {
-  const addresses = SPOKE_ADDRESSES[contract];
+/** Get spoke contract address */
+export function getSpokeContractAddress(contract: SpokeContractName, chainId: number): Address {
+  const addresses = SPOKE_CONTRACT_ADDRESSES[contract];
   const address = addresses[chainId as keyof typeof addresses];
   if (!address || address === zeroAddress) {
     throw new Error(
@@ -165,42 +115,39 @@ export function getSpokeAddress(contract: SimpleSpokeContract, chainId: number):
   return address as Address;
 }
 
-/** Get bridge adapter address for a specific provider on a spoke chain */
-export function getBridgeAdapterAddress(
-  chainId: number,
-  provider: 'hyperlane' | 'wormhole' | 'ccip' = 'hyperlane'
-): Address {
-  const chainAdapters =
-    SPOKE_ADDRESSES.bridgeAdapters[chainId as keyof typeof SPOKE_ADDRESSES.bridgeAdapters];
-  if (!chainAdapters) {
-    throw new Error(`No bridge adapters configured for chain ID ${chainId}.`);
-  }
-  const address = chainAdapters[provider as keyof typeof chainAdapters];
-  if (!address || address === zeroAddress) {
-    throw new Error(
-      `No ${provider} adapter configured for chain ID ${chainId}. Deploy adapter first.`
-    );
-  }
-  return address as Address;
+/** Get SpokeRegistry address */
+export function getSpokeRegistryContractAddress(chainId: number): Address {
+  return getSpokeContractAddress('spokeRegistry', chainId);
 }
 
-export function getSpokeRegistryAddress(chainId: number): Address | null {
-  if (!isSpokeChain(chainId)) return null;
-  return getSpokeAddress('spokeRegistry', chainId);
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// HUB SOULBOUND RECEIVER
+// ═══════════════════════════════════════════════════════════════════════════
 
-export function getSpokeTransactionRegistryAddress(chainId: number): Address | null {
-  if (!isSpokeChain(chainId)) return null;
-  return getSpokeAddress('spokeTransactionRegistry', chainId);
-}
+/** SoulboundReceiver on hub chain for cross-chain minting */
+export const HUB_SOULBOUND_RECEIVER = {
+  [anvilHub.chainId]: '0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1' as Address,
+  [baseSepolia.chainId]: '0x0000000000000000000000000000000000000000' as Address,
+} as const;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
 
 export function getSpokeSoulboundForwarderAddress(chainId: number): Address | null {
   if (!isSpokeChain(chainId)) return null;
   try {
-    return getSpokeAddress('spokeSoulboundForwarder', chainId);
+    return getSpokeContractAddress('spokeSoulboundForwarder', chainId);
   } catch {
     return null;
   }
+}
+
+export function getBridgeAdapterAddress(chainId: number): Address {
+  if (!isSpokeChain(chainId)) {
+    throw new Error(`getBridgeAdapterAddress called with non-spoke chain ID ${chainId}`);
+  }
+  return getSpokeContractAddress('hyperlaneAdapter', chainId);
 }
 
 export function getSoulboundReceiverAddress(chainId: number): Address | null {

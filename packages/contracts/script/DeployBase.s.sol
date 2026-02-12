@@ -3,29 +3,15 @@ pragma solidity ^0.8.24;
 
 import { Script, console2 } from "forge-std/Script.sol";
 import { IMulticall3 } from "forge-std/interfaces/IMulticall3.sol";
-import { StolenWalletRegistry } from "../src/registries/StolenWalletRegistry.sol";
-import { StolenTransactionRegistry } from "../src/registries/StolenTransactionRegistry.sol";
-import { FeeManager } from "../src/FeeManager.sol";
-import { RegistryHub } from "../src/RegistryHub.sol";
 import { TranslationRegistry } from "../src/soulbound/TranslationRegistry.sol";
 import { WalletSoulbound } from "../src/soulbound/WalletSoulbound.sol";
 import { SupportSoulbound } from "../src/soulbound/SupportSoulbound.sol";
+import { Create2Deployer } from "./Create2Deployer.sol";
+import { Salts } from "./Salts.sol";
 
 /// @title DeployBase
-/// @notice Shared deployment logic for core SWR contracts
-/// @dev Inherit from this to ensure consistent addresses across deploy scripts
-///
-/// Core deployment nonce order (Account 0):
-///   0: MockAggregator            → 0x5FbDB2315678afecb367f032d93F642f64180aa3
-///   1: FeeManager                → 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-///   2: RegistryHub               → 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
-///   3: StolenWalletRegistry      → 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
-///   4: StolenTransactionRegistry → 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
-///   5: (setRegistry STOLEN_WALLET tx)
-///   6: (setRegistry STOLEN_TRANSACTION tx)
-///
-/// Additional deployments (nonces continue from 7+):
-///   See DeployCrossChain.s.sol for CrossChainInbox, Soulbound, and Multicall3 nonces.
+/// @notice Shared deployment utilities (timing config, Chainlink feeds, Multicall3, soulbound)
+/// @dev Inherit from this to ensure consistent configuration across deploy scripts.
 abstract contract DeployBase is Script {
     // ═══════════════════════════════════════════════════════════════════════════
     // BLOCK TIMING CONFIGURATION
@@ -97,75 +83,18 @@ abstract contract DeployBase is Script {
         return address(0); // Local/unknown chains: deploy mock
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // CORE DEPLOYMENT
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @notice Deploy core SWR contracts (shared between single-chain and cross-chain)
-    /// @param deployer The deployer/owner address
-    /// @param crossChainInbox Optional cross-chain inbox address (address(0) for single-chain)
-    /// @return priceFeed The price feed address (mock or Chainlink)
-    /// @return feeManager The FeeManager address
-    /// @return hub The RegistryHub address
-    /// @return walletRegistry The StolenWalletRegistry address
-    /// @return txRegistry The StolenTransactionRegistry address
-    function deployCore(address deployer, address crossChainInbox)
-        internal
-        returns (address priceFeed, address feeManager, address payable hub, address walletRegistry, address txRegistry)
-    {
-        uint256 chainId = block.chainid;
-
-        // Get chain-specific timing configuration
-        (uint256 graceBlocks, uint256 deadlineBlocks) = getTimingConfig(chainId);
-        console2.log("Timing Config - Grace Blocks:", graceBlocks);
-        console2.log("Timing Config - Deadline Blocks:", deadlineBlocks);
-
-        // nonce 0: Deploy price feed (mock for local, Chainlink for mainnet/testnet)
-        priceFeed = getChainlinkFeed(chainId);
-        if (priceFeed == address(0)) {
-            priceFeed = address(new MockAggregator(350_000_000_000)); // $3500 ETH
-            console2.log("MockAggregator:", priceFeed);
-        } else {
-            console2.log("Chainlink Feed:", priceFeed);
-        }
-
-        // nonce 1: Deploy FeeManager
-        feeManager = address(new FeeManager(deployer, priceFeed));
-        console2.log("FeeManager:", feeManager);
-
-        // nonce 2: Deploy RegistryHub
-        RegistryHub hubContract = new RegistryHub(deployer, feeManager, crossChainInbox);
-        hub = payable(address(hubContract));
-        console2.log("RegistryHub:", hub);
-
-        // nonce 3: Deploy StolenWalletRegistry (with chain-specific timing)
-        walletRegistry = address(new StolenWalletRegistry(deployer, feeManager, hub, graceBlocks, deadlineBlocks));
-        console2.log("StolenWalletRegistry:", walletRegistry);
-
-        // nonce 4: Deploy StolenTransactionRegistry (with same chain-specific timing)
-        txRegistry = address(new StolenTransactionRegistry(deployer, feeManager, hub, graceBlocks, deadlineBlocks));
-        console2.log("StolenTransactionRegistry:", txRegistry);
-
-        // nonce 5-6: Wire up hub to registries
-        hubContract.setRegistry(hubContract.STOLEN_WALLET(), walletRegistry);
-        hubContract.setRegistry(hubContract.STOLEN_TRANSACTION(), txRegistry);
-    }
-
     /// @notice Canonical Multicall3 address (pre-deployed on all major chains)
     /// @dev See https://www.multicall3.com for deployment addresses
     address internal constant CANONICAL_MULTICALL3 = 0xcA11bde05977b3631167028862bE2a173976CA11;
 
     /// @notice Deploy Multicall3 for local chains (mainnet/testnets have it pre-deployed)
-    /// @dev Call this AFTER deployCore to maintain deterministic nonce ordering.
-    ///      On hub chain with CrossChainInbox, this will be nonce 9.
-    ///      On spoke chain, nonce varies by deployment script.
+    /// @param salt CREATE2 salt (use Salts.MULTICALL3 for hub, Salts.MULTICALL3_SPOKE for spoke)
     /// @return multicall3 The deployed Multicall3 address
-    function deployMulticall3() internal returns (address multicall3) {
+    function deployMulticall3(bytes32 salt) internal returns (address multicall3) {
         // On mainnet/testnets, Multicall3 is deployed at canonical address
         // Only deploy for local chains
         if (block.chainid == 31_337 || block.chainid == 31_338) {
-            // Deploy Multicall3 (nonce depends on what was deployed before)
-            multicall3 = address(new Multicall3());
+            multicall3 = Create2Deployer.deploy(salt, type(Multicall3).creationCode);
             console2.log("Multicall3:", multicall3);
         } else {
             // Use canonical Multicall3 address on all other chains
@@ -185,32 +114,51 @@ abstract contract DeployBase is Script {
     /// @notice Default domain for soulbound SVG display
     string internal constant DEFAULT_DOMAIN = "stolenwallet.xyz";
 
-    /// @notice Deploy soulbound token contracts with default domain
+    /// @notice Deploy soulbound token contracts with default domain and default salts
     /// @param registry The StolenWalletRegistry address (for WalletSoulbound gate)
     /// @param feeCollector The address to receive withdrawn fees (typically RegistryHub)
+    /// @param initialOwner The address that will own the deployed contracts
     /// @return translations The TranslationRegistry address
     /// @return walletSoulbound The WalletSoulbound address
     /// @return supportSoulbound The SupportSoulbound address
-    function deploySoulbound(address registry, address feeCollector)
+    function deploySoulbound(address registry, address feeCollector, address initialOwner)
         internal
         returns (address translations, address walletSoulbound, address supportSoulbound)
     {
-        return deploySoulbound(registry, feeCollector, DEFAULT_DOMAIN);
+        return deploySoulbound(
+            registry,
+            feeCollector,
+            initialOwner,
+            DEFAULT_DOMAIN,
+            Salts.TRANSLATION_REGISTRY,
+            Salts.WALLET_SOULBOUND,
+            Salts.SUPPORT_SOULBOUND
+        );
     }
 
-    /// @notice Deploy soulbound token contracts with custom domain
+    /// @notice Deploy soulbound token contracts with custom domain via CREATE2
     /// @param registry The StolenWalletRegistry address (for WalletSoulbound gate)
     /// @param feeCollector The address to receive withdrawn fees (typically RegistryHub)
+    /// @param initialOwner The address that will own the deployed contracts
     /// @param domain The domain to display in SVG (e.g., "stolenwallet.xyz")
+    /// @param translationSalt CREATE2 salt for TranslationRegistry
+    /// @param walletSbSalt CREATE2 salt for WalletSoulbound
+    /// @param supportSbSalt CREATE2 salt for SupportSoulbound
     /// @return translations The TranslationRegistry address
     /// @return walletSoulbound The WalletSoulbound address
     /// @return supportSoulbound The SupportSoulbound address
-    function deploySoulbound(address registry, address feeCollector, string memory domain)
-        internal
-        returns (address translations, address walletSoulbound, address supportSoulbound)
-    {
+    function deploySoulbound(
+        address registry,
+        address feeCollector,
+        address initialOwner,
+        string memory domain,
+        bytes32 translationSalt,
+        bytes32 walletSbSalt,
+        bytes32 supportSbSalt
+    ) internal returns (address translations, address walletSoulbound, address supportSoulbound) {
         require(registry != address(0), "DeployBase: registry is zero address");
         require(feeCollector != address(0), "DeployBase: feeCollector is zero address");
+        require(initialOwner != address(0), "DeployBase: initialOwner is zero address");
 
         console2.log("");
         console2.log("=== SOULBOUND DEPLOYMENT ===");
@@ -218,15 +166,29 @@ abstract contract DeployBase is Script {
 
         // Deploy TranslationRegistry (no dependencies)
         // Note: Languages are seeded separately via SeedLanguages.s.sol to keep addresses deterministic
-        translations = address(new TranslationRegistry());
+        translations = Create2Deployer.deploy(
+            translationSalt, abi.encodePacked(type(TranslationRegistry).creationCode, abi.encode(initialOwner))
+        );
         console2.log("TranslationRegistry:", translations);
 
         // Deploy WalletSoulbound (gated by registry)
-        walletSoulbound = address(new WalletSoulbound(registry, translations, feeCollector, domain));
+        walletSoulbound = Create2Deployer.deploy(
+            walletSbSalt,
+            abi.encodePacked(
+                type(WalletSoulbound).creationCode,
+                abi.encode(registry, translations, feeCollector, domain, initialOwner)
+            )
+        );
         console2.log("WalletSoulbound:", walletSoulbound);
 
         // Deploy SupportSoulbound (donation-based, no gate)
-        supportSoulbound = address(new SupportSoulbound(MIN_DONATION, translations, feeCollector, domain));
+        supportSoulbound = Create2Deployer.deploy(
+            supportSbSalt,
+            abi.encodePacked(
+                type(SupportSoulbound).creationCode,
+                abi.encode(MIN_DONATION, translations, feeCollector, domain, initialOwner)
+            )
+        );
         console2.log("SupportSoulbound:", supportSoulbound);
     }
 }

@@ -284,7 +284,7 @@ library SVGRenderer {
     }
 
     /// @dev Support content with multilingual subtitle
-    /// @notice English "SUPPORTER" + "Registry Supporter" ALWAYS displayed (no systemLanguage)
+    /// @notice English "SUPPORTER" + "Thank you for your support" ALWAYS displayed (no systemLanguage)
     /// @notice Other language translations shown below via <switch> with systemLanguage
     /// @param supporter The supporter address
     /// @param tokenId The token ID
@@ -312,11 +312,20 @@ library SVGRenderer {
             )
         );
 
-        // English subtitle - ALWAYS shown
+        // English subtitle - dynamic from TranslationRegistry
+        string memory englishSubtitleText = "Thank you for your support"; // fallback if no "en" in array
+        for (uint256 i = 0; i < langCodes.length; i++) {
+            if (keccak256(bytes(langCodes[i])) == keccak256(bytes("en"))) {
+                englishSubtitleText = supportSubtitles[i];
+                break;
+            }
+        }
         string memory subtitle = string(
             abi.encodePacked(
                 "<text x=\"200\" y=\"135\" text-anchor=\"middle\" fill=\"#fff\" ",
-                "font-size=\"12\" font-family=\"monospace\">Registry Supporter</text>"
+                "font-size=\"12\" font-family=\"monospace\">",
+                englishSubtitleText,
+                "</text>"
             )
         );
 

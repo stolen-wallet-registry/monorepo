@@ -1,0 +1,184 @@
+import { Mermaid } from '../../components/Mermaid';
+
+# Batch Submissions
+
+All operator submissions flow through the `OperatorSubmitter` contract. It enforces permission checks, collects fees, and delegates to the appropriate registry.
+
+## Why a Separate Contract?
+
+Operators don't call registries directly. The `OperatorSubmitter` sits between operators and registries to:
+
+1. **Check permissions** - Validates operator approval via `OperatorRegistry`
+2. **Collect fees** - Charges a flat batch fee via `FeeManager`
+3. **Forward data** - Delegates validated entries to the target registry
+4. **Emit batch metadata** - Tracks submissions with `BatchSubmitted` events
+
+This separation keeps registry contracts clean - they don't need to know about operator permissions or fee logic.
+
+## Three Submission Paths
+
+### 1. Wallet Batch
+
+```solidity
+function registerWalletsAsOperator(
+    bytes32[] calldata identifiers,        // Wallet addresses as bytes32
+    bytes32[] calldata reportedChainIds,   // CAIP-2 chain ID hashes
+    uint64[]  calldata incidentTimestamps  // When each incident occurred
+) external payable;
+```
+
+Requires `WALLET_REGISTRY` capability (`0x01`).
+
+### 2. Transaction Batch
+
+```solidity
+function registerTransactionsAsOperator(
+    bytes32[] calldata transactionHashes,  // Transaction hashes
+    bytes32[] calldata chainIds            // CAIP-2 chain ID hashes
+) external payable;
+```
+
+Requires `TX_REGISTRY` capability (`0x02`).
+
+### 3. Contract Batch
+
+```solidity
+function registerContractsAsOperator(
+    bytes32[] calldata identifiers,        // Contract addresses as bytes32
+    bytes32[] calldata reportedChainIds    // CAIP-2 chain ID hashes
+) external payable;
+```
+
+Requires `CONTRACT_REGISTRY` capability (`0x04`).
+
+## Submission Flow
+
+<Mermaid chart={`
+sequenceDiagram
+    participant Op as Operator
+    participant OS as OperatorSubmitter
+    participant OR as OperatorRegistry
+    participant FM as FeeManager
+    participant WR as WalletRegistry
+    participant FR as Fee Recipient
+
+    Op->>OS: registerWalletsAsOperator(identifiers, chainIds, timestamps) + ETH
+    OS->>OR: isApprovedFor(operator, WALLET_CAPABILITY)
+    OR-->>OS: true
+    OS->>FM: operatorBatchFeeWei()
+    FM-->>OS: fee amount
+    OS->>FR: forward fee
+    OS->>WR: registerWalletsFromOperator(operatorId, identifiers, chainIds, timestamps)
+    WR-->>WR: emit WalletRegistered (per entry)
+    WR-->>WR: emit BatchCreated (once)
+    WR-->>OS: batchId
+    OS-->>OS: emit BatchSubmitted(operator, registry, batchId, count)
+    OS-->>Op: refund excess ETH
+
+`} />
+
+## Event Ordering
+
+Each batch submission produces events in a specific order:
+
+1. **Per-entry events** - One `WalletRegistered`, `TransactionRegistered`, or `ContractRegistered` event per entry in the batch
+2. **Batch event** - A single `BatchCreated` (or `TransactionBatchRegistered`) fires **after** all per-entry events in the same transaction
+3. **Submitter event** - `BatchSubmitted` from the `OperatorSubmitter` fires last
+
+All events share the same transaction hash, which indexers use to link individual entries to their batch.
+
+```solidity
+// Fired by OperatorSubmitter after each batch
+event BatchSubmitted(
+    address indexed operator,  // The operator address
+    address indexed registry,  // Which registry received the batch
+    uint256 batchId,           // Auto-incremented batch ID from the registry
+    uint32 entryCount          // Number of entries submitted
+);
+```
+
+## Batch IDs
+
+Each registry maintains its own auto-incrementing `uint256` batch counter. When an operator submits a batch:
+
+- The registry assigns the next batch ID
+- The `BatchCreated` event includes the batch ID and actual entry count
+- The actual count excludes zero-address entries and already-registered entries (silently skipped)
+
+## Identifiers
+
+Wallet and contract addresses are stored as `bytes32`:
+
+```
+bytes32(uint256(uint160(address)))
+```
+
+To recover the address from an identifier:
+
+```
+address(uint160(uint256(identifier)))
+```
+
+## Operator ID
+
+The `OperatorSubmitter` converts `msg.sender` to a `bytes32` operator ID using the same encoding:
+
+```solidity
+function _getOperatorId() internal view returns (bytes32) {
+    return bytes32(uint256(uint160(msg.sender)));
+}
+```
+
+This ID is stored alongside each batch in the registry, linking entries back to the submitting operator.
+
+## The CLI Tool
+
+Operators don't need the web frontend. The `packages/cli/` package provides a command-line interface for batch submissions:
+
+```bash
+# Submit a batch of stolen wallets
+swr operator submit-wallets \
+  --file wallets.csv \
+  --rpc-url https://mainnet.base.org
+
+# Submit flagged transactions
+swr operator submit-transactions \
+  --file transactions.csv \
+  --rpc-url https://mainnet.base.org
+
+# Submit malicious contracts
+swr operator submit-contracts \
+  --file contracts.csv \
+  --rpc-url https://mainnet.base.org
+```
+
+The CLI handles ABI encoding, fee quoting, and transaction submission. Operators provide a CSV and a funded wallet.
+
+## No Two-Phase for Operators
+
+Individual registrations require two signatures with a randomized delay between them. This protects against phishing - an attacker can't trick a victim into permanently registering a wallet in one step.
+
+Operators bypass this entirely. The DAO approval vote is their trust mechanism. Adding a grace period to batch submissions would introduce unnecessary latency for entities that are already verified by governance.
+
+## Pausability
+
+The `OperatorSubmitter` contract inherits OpenZeppelin's `Pausable`. The contract owner can pause all submissions in an emergency:
+
+```solidity
+function pause() external onlyOwner;
+function unpause() external onlyOwner;
+```
+
+All three submission functions use the `whenNotPaused` modifier. Individual registries are not affected by the submitter's pause state - only operator batch submissions are halted.
+
+## Error Conditions
+
+| Error                                      | When                                                           |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| `OperatorSubmitter__NotApprovedOperator()` | Caller is not an approved operator for the required capability |
+| `OperatorSubmitter__EmptyBatch()`          | Submitted array has zero entries                               |
+| `OperatorSubmitter__ArrayLengthMismatch()` | Input arrays have different lengths                            |
+| `OperatorSubmitter__InsufficientFee()`     | `msg.value` is less than the required batch fee                |
+| `OperatorSubmitter__FeeForwardFailed()`    | Fee transfer to recipient failed                               |
+| `OperatorSubmitter__RefundFailed()`        | Excess ETH refund to operator failed                           |
+| `OperatorSubmitter__InvalidFeeConfig()`    | Fee manager set without a fee recipient                        |

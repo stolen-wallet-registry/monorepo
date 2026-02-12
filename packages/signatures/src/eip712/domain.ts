@@ -5,20 +5,20 @@
 import type { TypedDataDomain, Address } from 'viem';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// STOLEN WALLET REGISTRY (SWR)
+// EIP-712 DOMAIN CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** EIP-712 domain name for StolenWalletRegistry */
+/** EIP-712 domain name for all registries (hub + spoke) */
 export const EIP712_DOMAIN_NAME = 'StolenWalletRegistry';
 
-/** EIP-712 domain version for StolenWalletRegistry */
+/** EIP-712 domain version for all registries */
 export const EIP712_DOMAIN_VERSION = '4';
 
 /**
- * Get EIP-712 domain for StolenWalletRegistry.
+ * Get EIP-712 domain for hub registries (WalletRegistry, TransactionRegistry).
  *
  * @param chainId - The chain ID
- * @param verifyingContract - The contract address
+ * @param verifyingContract - The registry contract address
  * @returns EIP-712 domain object
  */
 export function getEIP712Domain(chainId: number, verifyingContract: Address): TypedDataDomain {
@@ -30,27 +30,18 @@ export function getEIP712Domain(chainId: number, verifyingContract: Address): Ty
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// STOLEN TRANSACTION REGISTRY (STR)
-// ═══════════════════════════════════════════════════════════════════════════
-
-/** EIP-712 domain name for StolenTransactionRegistry */
-export const TX_EIP712_DOMAIN_NAME = 'StolenTransactionRegistry';
-
-/** EIP-712 domain version for StolenTransactionRegistry */
-export const TX_EIP712_DOMAIN_VERSION = '4';
-
 /**
- * Get EIP-712 domain for StolenTransactionRegistry.
+ * Get EIP-712 domain for SpokeRegistry (spoke chains).
+ * Uses "StolenWalletRegistry" domain name for backward compatibility.
  *
  * @param chainId - The chain ID
- * @param verifyingContract - The contract address
+ * @param verifyingContract - The SpokeRegistry contract address
  * @returns EIP-712 domain object
  */
-export function getTxEIP712Domain(chainId: number, verifyingContract: Address): TypedDataDomain {
+export function getSpokeEIP712Domain(chainId: number, verifyingContract: Address): TypedDataDomain {
   return {
-    name: TX_EIP712_DOMAIN_NAME,
-    version: TX_EIP712_DOMAIN_VERSION,
+    name: EIP712_DOMAIN_NAME,
+    version: EIP712_DOMAIN_VERSION,
     chainId: BigInt(chainId),
     verifyingContract,
   };

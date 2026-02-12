@@ -4,12 +4,15 @@
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
  * The hash struct returned can be used for verification but is typically not needed client-side.
  *
- * Chain-aware: Works with both StolenWalletRegistry (hub) and SpokeRegistry (spoke).
+ * Chain-aware: Works with WalletRegistry (hub) and SpokeRegistry (spoke).
+ *
+ * Contract signature: generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
  */
 
+import { useMemo } from 'react';
 import { useReadContract, useChainId, type UseReadContractReturnType } from 'wagmi';
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
-import { getRegistryMetadata } from '@/lib/contracts/registryMetadata';
+import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import type { SignatureStep } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -30,15 +33,28 @@ export interface UseGenerateHashStructResult {
 /**
  * Reads the deadline and hash struct for signing from the contract.
  *
- * @param forwarderAddress - The trusted forwarder address (who can submit the tx)
- * @param step - The signature step (1 = Acknowledgement, 2 = Registration)
+ * @param params - Parameters for hash struct generation
  * @returns The deadline and hash struct for the EIP-712 message
  */
 export function useGenerateHashStruct(
   forwarderAddress: Address | undefined,
-  step: SignatureStep
+  step: SignatureStep,
+  reportedChainId?: bigint,
+  incidentTimestamp?: bigint
 ): UseGenerateHashStructResult {
   const chainId = useChainId();
+
+  // Stabilize fields - useMemo prevents Date.now() from causing re-renders
+  // The timestamp is computed once per mount (when incidentTimestamp is not provided)
+  // This ensures the same timestamp is used for the contract call and won't change between renders
+  const effectiveReportedChainId = useMemo(
+    () => reportedChainId ?? BigInt(chainId),
+    [reportedChainId, chainId]
+  );
+  const effectiveIncidentTimestamp = useMemo(
+    () => incidentTimestamp ?? 0n, // TODO: Add incident timestamp selection UI
+    [incidentTimestamp]
+  );
 
   // Resolve contract address with built-in error handling and logging
   const { address: contractAddress, role: registryType } = resolveRegistryContract(
@@ -47,15 +63,18 @@ export function useGenerateHashStruct(
     'useGenerateHashStruct'
   );
 
-  // Get the correct ABI for hub/spoke
-  const { abi } = getRegistryMetadata('wallet', registryType);
+  const isSpoke = registryType === 'spoke';
+  const abi = isSpoke ? spokeRegistryAbi : walletRegistryAbi;
 
   const result = useReadContract({
     address: contractAddress,
     abi,
     chainId, // Explicit chain ID ensures RPC call targets correct chain
     functionName: 'generateHashStruct',
-    args: forwarderAddress ? [forwarderAddress, step] : undefined,
+    // Contract signature: (uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
+    args: forwarderAddress
+      ? [effectiveReportedChainId, effectiveIncidentTimestamp, forwarderAddress, step]
+      : undefined,
     query: {
       enabled: !!forwarderAddress && !!contractAddress,
       // Deadline changes with each block, but we don't need real-time updates

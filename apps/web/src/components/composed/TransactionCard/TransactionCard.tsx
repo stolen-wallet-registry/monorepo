@@ -52,7 +52,7 @@ export interface SignedMessageData {
   /** Wallet being registered */
   registeree: Address;
   /** Wallet that will submit transaction */
-  forwarder: Address;
+  trustedForwarder: Address;
   /** Signature nonce */
   nonce: bigint;
   /** Block deadline for signature validity */
@@ -273,7 +273,7 @@ export function TransactionCard({
                   size="sm"
                 />
               </span>
-              <span>{truncateAddress(signedMessage.forwarder, 6)}</span>
+              <span>{truncateAddress(signedMessage.trustedForwarder, 6)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground flex items-center gap-1">

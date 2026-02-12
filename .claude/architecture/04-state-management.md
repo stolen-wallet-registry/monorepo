@@ -6,13 +6,13 @@ Zustand stores with immer, persist, and devtools middleware.
 
 ## Stores
 
-| Store                             | Purpose                             | Persisted |
-| --------------------------------- | ----------------------------------- | --------- |
-| `useRegistrationStore`            | Wallet flow state, tx hashes        | Yes       |
-| `useFormStore`                    | Wallet form values                  | Yes       |
-| `useTransactionRegistrationStore` | Transaction flow state              | Yes       |
-| `useTransactionFormStore`         | Transaction selection + merkle data | Yes       |
-| `useP2PStore`                     | Connection state                    | Partial   |
+| Store                             | Purpose                           | Persisted | Version |
+| --------------------------------- | --------------------------------- | --------- | ------- |
+| `useRegistrationStore`            | Wallet flow state, tx hashes      | Yes       | v2      |
+| `useFormStore`                    | Wallet form values                | Yes       | v1      |
+| `useTransactionRegistrationStore` | Transaction flow state            | Yes       | v1      |
+| `useTransactionFormStore`         | Transaction selection + data hash | Partial   | v3      |
+| `useP2PStore`                     | Connection state                  | Partial   | v1      |
 
 ---
 
@@ -36,7 +36,7 @@ Order matters: `devtools(persist(immer(...)))`
 
 ---
 
-## Registration Store
+## Registration Store (v2)
 
 ```typescript
 // apps/web/src/stores/registrationStore.ts
@@ -44,11 +44,13 @@ Order matters: `devtools(persist(immer(...)))`
 interface RegistrationState {
   registrationType: 'standard' | 'selfRelay' | 'p2pRelay';
   step: RegistrationStep | null;
-  acknowledgementHash: `0x${string}` | null;
+  acknowledgementHash: Hash | null;
   acknowledgementChainId: number | null;
-  registrationHash: `0x${string}` | null;
+  registrationHash: Hash | null;
   registrationChainId: number | null;
-  bridgeMessageId: `0x${string}` | null;
+  bridgeMessageId: Hash | null;
+  reportedChainId: bigint | null;      // Added in v2
+  incidentTimestamp: bigint | null;    // Added in v2
 }
 
 // Step sequences
@@ -59,24 +61,26 @@ export const STEP_SEQUENCES = {
 };
 ```
 
+Persists with custom BigInt serialization. Migration v1→v2 adds `reportedChainId` and `incidentTimestamp` fields.
+
 ---
 
-## Form Store
+## Form Store (v1)
 
 ```typescript
 // apps/web/src/stores/formStore.ts
 
 interface FormState {
-  registeree: `0x${string}` | null;
-  relayer: `0x${string}` | null;
-  supportNFT: boolean;
-  walletNFT: boolean;
+  registeree: Address | null;
+  relayer: Address | null;
 }
 ```
 
+Migration validates addresses with `isAddress()`.
+
 ---
 
-## Transaction Stores
+## Transaction Registration Store (v1)
 
 ```typescript
 // apps/web/src/stores/transactionRegistrationStore.ts
@@ -84,24 +88,40 @@ interface FormState {
 interface TransactionRegistrationState {
   registrationType: 'standard' | 'selfRelay' | 'p2pRelay';
   step: TransactionRegistrationStep | null;
-  acknowledgementHash: `0x${string}` | null;
-  registrationHash: `0x${string}` | null;
-}
-
-// apps/web/src/stores/transactionFormStore.ts
-
-interface TransactionFormState {
-  reporter: `0x${string}` | null;
-  forwarder: `0x${string}` | null;
-  selectedTxHashes: `0x${string}`[];
-  reportedChainId: number | null;
-  merkleRoot: `0x${string}` | null;
+  acknowledgementHash: Hash | null;
+  acknowledgementChainId: number | null;
+  registrationHash: Hash | null;
+  registrationChainId: number | null;
+  bridgeMessageId: Hash | null;
 }
 ```
 
 ---
 
-## P2P Store
+## Transaction Form Store (v3)
+
+```typescript
+// apps/web/src/stores/transactionFormStore.ts
+
+interface TransactionFormState {
+  reporter: Address | null;
+  forwarder: Address | null;
+  selectedTxHashes: Hash[];
+  selectedTxDetails: StoredTransactionDetail[];
+  reportedChainId: number | null;
+  dataHash: Hash | null; // Transient (not persisted)
+  txHashesForContract: Hash[]; // Transient (not persisted)
+  chainIdsForContract: Hash[]; // Transient (not persisted)
+}
+```
+
+**Partial persistence:** Only `reporter`, `forwarder`, `selectedTxHashes`, `selectedTxDetails`, and `reportedChainId` are persisted via `partialize`. Derived fields (`dataHash`, `txHashesForContract`, `chainIdsForContract`) are transient and recomputed on use.
+
+Migration v1→v3 clears derived fields (renamed from merkleRoot to dataHash).
+
+---
+
+## P2P Store (v1)
 
 ```typescript
 // apps/web/src/stores/p2pStore.ts
@@ -112,8 +132,11 @@ interface P2PState {
   connectedToPeer: boolean; // Resets on reload
   connectionStatus: P2PConnectionStatus; // Resets on reload
   isInitialized: boolean; // Resets on reload
+  errorMessage: string | null; // Resets on reload
 }
 ```
+
+Connection status and initialization are ephemeral -- libp2p needs re-initialization on each page load, so persisting these would be misleading.
 
 ---
 
@@ -141,7 +164,7 @@ export const useRegisteree = () => useFormStore((s) => s.registeree);
 const resetFlow = () => {
   resetRegistration(); // registrationStore.reset()
   resetForm(); // formStore.reset()
-  clearAllSignatures(); // localStorage signatures
+  clearAllSignatures(); // sessionStorage signatures
 };
 ```
 
@@ -151,8 +174,8 @@ const resetFlow = () => {
 
 | Store           | Key                                  | Version |
 | --------------- | ------------------------------------ | ------- |
-| Registration    | `swr-registration-state`             | 1       |
+| Registration    | `swr-registration-state`             | 2       |
 | Form            | `swr-form-state`                     | 1       |
 | Tx Registration | `swr-transaction-registration-state` | 1       |
-| Tx Form         | `swr-transaction-form-state`         | 1       |
+| Tx Form         | `swr-transaction-form-state`         | 3       |
 | P2P             | `swr-p2p-state`                      | 1       |

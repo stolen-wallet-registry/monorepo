@@ -1,0 +1,142 @@
+# Quick Start
+
+Get the Stolen Wallet Registry running locally with full cross-chain support. This is the recommended development setup - it runs two Anvil chains with a bridge relayer passing messages between them.
+
+## Prerequisites
+
+| Tool    | Version | Install                                                     |
+| ------- | ------- | ----------------------------------------------------------- |
+| Node.js | 22+     | [nodejs.org](https://nodejs.org)                            |
+| pnpm    | 9+      | `npm install -g pnpm`                                       |
+| Foundry | Latest  | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` |
+
+## Install Dependencies
+
+```bash
+git clone https://github.com/stolen-wallet-registry/monorepo.git
+cd monorepo
+pnpm install
+```
+
+Build contracts and generate ABIs:
+
+```bash
+pnpm forge:build
+```
+
+## Cross-Chain Development (Recommended)
+
+Three terminals to get the full hub-spoke architecture running locally with cross-chain message passing.
+
+### Terminal 1 - Anvil + Bridge Relayer
+
+```bash
+pnpm anvil:crosschain
+```
+
+Starts three processes:
+
+- **Hub chain** on port 8545 (chain ID 31337, 13s blocks)
+- **Spoke chain** on port 8546 (chain ID 31338, 13s blocks)
+- **Bridge relayer** that auto-relays cross-chain messages
+
+:::info
+The Anvil instances load pre-deployed bridge state from `.anvil-state/`. The relayer starts after a 3-second delay to let the chains initialize.
+:::
+
+### Terminal 2 - Deploy Contracts
+
+```bash
+pnpm deploy:crosschain
+```
+
+Deploys hub contracts to chain 31337, spoke contracts to chain 31338, configures trust relationships, and seeds test operator data. Contract addresses are logged to the console.
+
+### Terminal 3 - Web App + Indexer
+
+```bash
+pnpm dev:crosschain
+```
+
+Starts the frontend with cross-chain features enabled (`VITE_CROSSCHAIN=true`) at [http://localhost:5173](http://localhost:5173).
+
+To also run the indexer (requires PostgreSQL):
+
+```bash
+pnpm indexer
+```
+
+## MetaMask Setup
+
+Add these networks to MetaMask for local development:
+
+### Hub Chain
+
+| Field           | Value                   |
+| --------------- | ----------------------- |
+| Network Name    | Anvil Hub               |
+| RPC URL         | `http://localhost:8545` |
+| Chain ID        | `31337`                 |
+| Currency Symbol | ETH                     |
+
+### Spoke Chain
+
+| Field           | Value                   |
+| --------------- | ----------------------- |
+| Network Name    | Anvil Spoke             |
+| RPC URL         | `http://localhost:8546` |
+| Chain ID        | `31338`                 |
+| Currency Symbol | ETH                     |
+
+## Test Accounts
+
+Import Anvil Account 0 into MetaMask for testing. This account is pre-funded with 10,000 ETH on both chains and is the contract deployer/owner.
+
+| Field       | Value                                                                |
+| ----------- | -------------------------------------------------------------------- |
+| Address     | `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`                         |
+| Private Key | `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80` |
+
+:::warning
+This is a well-known test key. Never use it on a real network.
+:::
+
+Anvil Accounts 3 and 4 are pre-approved as test operators after `deploy:crosschain`:
+
+| Account   | Address                                      | Operator Scope         |
+| --------- | -------------------------------------------- | ---------------------- |
+| Account 3 | `0x90F79bf6EB2c4f870365E785982E1f101E93b906` | All registries         |
+| Account 4 | `0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65` | Contract registry only |
+
+## Single-Chain Development
+
+If you only need hub contracts without cross-chain features:
+
+```bash
+pnpm anvil              # Terminal 1
+pnpm deploy:dev         # Terminal 2
+pnpm dev:web            # Terminal 3
+```
+
+## Running Tests
+
+```bash
+# Solidity tests (538 tests)
+pnpm forge:test
+
+# Web app tests (Vitest)
+pnpm test
+
+# Type checking
+pnpm typecheck
+
+# Linting
+pnpm lint
+```
+
+## Next Steps
+
+- [Two-Phase Registration](/concepts/two-phase-registration) - Understand the security model
+- [Hub-Spoke Architecture](/concepts/hub-spoke) - How cross-chain works
+- [Wallet Registry](/registries/wallet) - Deep dive into the wallet registration flow
+- [Operator Protocol](/operator) - Batch submissions and economics

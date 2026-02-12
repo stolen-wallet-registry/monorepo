@@ -179,6 +179,16 @@ pnpm typecheck        # TypeScript check
 pnpm format           # Prettier
 ```
 
+### ABI Regeneration (MANDATORY)
+
+After ANY Solidity contract change, regenerate the TypeScript ABI exports:
+
+```bash
+cd packages/contracts && forge build && pnpm export-abi
+```
+
+This runs `scripts/export-abi.js` which reads Forge artifacts from `out/` and writes typed ABI constants to `packages/abis/src/`. The frontend (`@swr/abis`) consumes these — stale ABIs cause silent runtime failures.
+
 ---
 
 ## Logger Usage & Guidelines
@@ -540,18 +550,18 @@ apps/web/
 
 For detailed technical documentation on how systems interact, see the `.claude/architecture/` directory:
 
-| Document                                                              | Description                         |
-| --------------------------------------------------------------------- | ----------------------------------- |
-| [Overview](.claude/architecture/00-overview.md)                       | System map, data flow, tech stack   |
-| [libp2p Relay](.claude/architecture/01-libp2p-relay.md)               | P2P signature relay infrastructure  |
-| [EIP-712 Signatures](.claude/architecture/02-eip712-signatures.md)    | Two-phase security model            |
-| [Registration Flow](.claude/architecture/03-registration-flow.md)     | Step sequences, state machines      |
-| [State Management](.claude/architecture/04-state-management.md)       | Zustand stores, persistence         |
-| [Web3 Integration](.claude/architecture/05-web3-integration.md)       | wagmi, viem, RainbowKit             |
-| [Component Patterns](.claude/architecture/06-component-patterns.md)   | UI organization, Storybook          |
-| [Logger System](.claude/architecture/07-logger-system.md)             | Category-based logging              |
-| [Error Handling](.claude/architecture/08-error-handling.md)           | Error types, recovery patterns      |
-| [Merkle Proof System](.claude/architecture/09-merkle-proof-system.md) | Merkle trees, CAIP, batch economics |
+| Document                                                            | Description                               |
+| ------------------------------------------------------------------- | ----------------------------------------- |
+| [Overview](.claude/architecture/00-overview.md)                     | System map, data flow, tech stack         |
+| [libp2p Relay](.claude/architecture/01-libp2p-relay.md)             | P2P signature relay infrastructure        |
+| [EIP-712 Signatures](.claude/architecture/02-eip712-signatures.md)  | Two-phase security model                  |
+| [Registration Flow](.claude/architecture/03-registration-flow.md)   | Step sequences, state machines            |
+| [State Management](.claude/architecture/04-state-management.md)     | Zustand stores, persistence               |
+| [Web3 Integration](.claude/architecture/05-web3-integration.md)     | wagmi, viem, RainbowKit                   |
+| [Component Patterns](.claude/architecture/06-component-patterns.md) | UI organization, Storybook                |
+| [Logger System](.claude/architecture/07-logger-system.md)           | Category-based logging                    |
+| [Error Handling](.claude/architecture/08-error-handling.md)         | Error types, recovery patterns            |
+| [Storage & Events](.claude/architecture/09-storage-and-events.md)   | On-chain storage, events, batch economics |
 
 These documents are optimized for LLM context with:
 

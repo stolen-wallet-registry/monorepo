@@ -103,6 +103,12 @@ export interface HubContracts {
   registryHub: Address;
   crossChainInbox?: Address;
   operatorRegistry?: Address;
+  operatorSubmitter?: Address;
+  // Soulbound attestation contracts
+  translationRegistry?: Address;
+  walletSoulbound?: Address;
+  supportSoulbound?: Address;
+  soulboundReceiver?: Address;
 }
 
 /** Spoke chain contract addresses */

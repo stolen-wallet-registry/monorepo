@@ -10,6 +10,7 @@ import { IERC5192 } from "../../src/soulbound/interfaces/IERC5192.sol";
 import { SVGRenderer } from "../../src/soulbound/libraries/SVGRenderer.sol";
 
 /// @notice Mock registry for testing WalletSoulbound
+/// @dev Implements the IWalletRegistry view methods that WalletSoulbound calls
 contract MockStolenWalletRegistry {
     mapping(address => bool) public registered;
     mapping(address => bool) public pending;
@@ -22,11 +23,11 @@ contract MockStolenWalletRegistry {
         pending[wallet] = value;
     }
 
-    function isRegistered(address wallet) external view returns (bool) {
+    function isWalletRegistered(address wallet) external view returns (bool) {
         return registered[wallet];
     }
 
-    function isPending(address wallet) external view returns (bool) {
+    function isWalletPending(address wallet) external view returns (bool) {
         return pending[wallet];
     }
 }
@@ -54,7 +55,7 @@ contract WalletSoulboundTest is Test {
         minter = makeAddr("minter");
 
         // Deploy dependencies
-        translations = new TranslationRegistry();
+        translations = new TranslationRegistry(address(this));
         // Add Spanish for multilingual testing
         translations.addLanguage(
             "es", "CARTERA ROBADA", "Firmado como robado", "Gracias por tu apoyo", "No envie fondos", "Registro"
@@ -66,7 +67,9 @@ contract WalletSoulboundTest is Test {
         mockRegistry.setPending(pendingWallet, true);
 
         // Deploy soulbound contract
-        soulbound = new WalletSoulbound(address(mockRegistry), address(translations), feeCollector, "stolenwallet.xyz");
+        soulbound = new WalletSoulbound(
+            address(mockRegistry), address(translations), feeCollector, "stolenwallet.xyz", address(this)
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -87,13 +90,19 @@ contract WalletSoulboundTest is Test {
 
     function test_constructor_revert_zeroRegistry() public {
         vm.expectRevert(WalletSoulbound.InvalidRegistry.selector);
-        new WalletSoulbound(address(0), address(translations), feeCollector, "stolenwallet.xyz");
+        new WalletSoulbound(address(0), address(translations), feeCollector, "stolenwallet.xyz", address(this));
     }
 
     /// @notice Constructor reverts with zero translations address
     function test_constructor_revert_zeroTranslations() public {
         vm.expectRevert(BaseSoulbound.InvalidTranslations.selector);
-        new WalletSoulbound(address(mockRegistry), address(0), feeCollector, "stolenwallet.xyz");
+        new WalletSoulbound(address(mockRegistry), address(0), feeCollector, "stolenwallet.xyz", address(this));
+    }
+
+    /// @notice Constructor reverts with zero owner address (OZ Ownable guard)
+    function test_constructor_revert_zeroOwner() public {
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
+        new WalletSoulbound(address(mockRegistry), address(translations), feeCollector, "stolenwallet.xyz", address(0));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

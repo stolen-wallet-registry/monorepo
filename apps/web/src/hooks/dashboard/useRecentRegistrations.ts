@@ -10,9 +10,11 @@ import {
   RECENT_WALLETS_QUERY,
   RECENT_CONTRACTS_QUERY,
   RECENT_TRANSACTION_ENTRIES_QUERY,
+  RECENT_TRANSACTIONS_QUERY,
   type RawRecentWalletsResponse,
   type RawRecentContractsResponse,
   type RawRecentTransactionEntriesResponse,
+  type RawRecentTransactionsResponse,
 } from '@swr/search';
 import { logger } from '@/lib/logger';
 import { INDEXER_URL } from '@/lib/indexer';
@@ -99,7 +101,7 @@ export function useRecentRegistrations(
       // truncation at line ~205. This ensures we capture the most recent items
       // across all types. If bandwidth becomes a concern for large limits,
       // consider reducing per-type fetches (e.g., Math.ceil(limit * 1.5)).
-      const [walletsRes, contractsRes, transactionsRes] = await Promise.all([
+      const [walletsRes, contractsRes, transactionsRes, batchesRes] = await Promise.all([
         fetchWallets
           ? request<RawRecentWalletsResponse>(INDEXER_URL, RECENT_WALLETS_QUERY, {
               limit,
@@ -122,7 +124,25 @@ export function useRecentRegistrations(
               }
             )
           : null,
+        // Also fetch transaction batches to resolve batchId for per-entry records.
+        // Per-entry records (transactionInBatch) don't carry batchId from the indexer,
+        // but they share the same Ethereum transactionHash with their parent batch.
+        fetchTransactions
+          ? request<RawRecentTransactionsResponse>(INDEXER_URL, RECENT_TRANSACTIONS_QUERY, {
+              limit,
+              offset: 0,
+            })
+          : null,
       ]);
+
+      // Build a lookup map: Ethereum transactionHash → batchId
+      // This resolves batchId for per-entry records that don't have it set directly.
+      const txHashToBatchId = new Map<string, string>();
+      if (batchesRes) {
+        for (const batch of batchesRes.transactionBatchs.items) {
+          txHashToBatchId.set(batch.transactionHash, batch.id);
+        }
+      }
 
       // Process wallets
       if (walletsRes) {
@@ -132,10 +152,10 @@ export function useRecentRegistrations(
           let chainId: string;
           let walletAddress: string;
 
-          if (caip10Parts.length >= 3) {
+          if (caip10Parts.length >= 3 && caip10Parts[0] && caip10Parts[1] && caip10Parts[2]) {
             chainId = `${caip10Parts[0]}:${caip10Parts[1]}`;
             walletAddress = caip10Parts[2];
-          } else if (caip10Parts.length >= 2) {
+          } else if (caip10Parts.length >= 2 && caip10Parts[0] && caip10Parts[1]) {
             chainId = `${caip10Parts[0]}:${caip10Parts[1]}`;
             walletAddress = raw.id; // Fallback to raw.id if address part missing
           } else {
@@ -153,6 +173,7 @@ export function useRecentRegistrations(
             isSponsored: raw.isSponsored,
             registeredAt: BigInt(raw.registeredAt),
             transactionHash: raw.transactionHash as Hash,
+            batchId: raw.batchId,
           });
         }
       }
@@ -194,7 +215,8 @@ export function useRecentRegistrations(
             isSponsored: false, // Individual tx entries don't track sponsorship
             registeredAt: BigInt(raw.reportedAt),
             transactionHash: raw.txHash as Hash,
-            batchId: raw.batchId,
+            // Resolve batchId: prefer direct value, fall back to lookup via transactionHash
+            batchId: raw.batchId || txHashToBatchId.get(raw.transactionHash),
           });
         }
       }

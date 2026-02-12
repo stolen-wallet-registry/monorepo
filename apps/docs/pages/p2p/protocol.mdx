@@ -1,0 +1,245 @@
+import { Mermaid } from '../../components/Mermaid';
+
+# Protocol Deep-Dive
+
+SWR defines custom protocols on top of libp2p for relaying EIP-712 signatures between a registeree (victim) and a relayer (helper), supporting both wallet and transaction registration flows.
+
+## Custom Protocols
+
+All protocols follow the naming convention `/swr/{action}/{type}/{version}[/received]`.
+
+### Wallet Registration
+
+| Protocol                                        | Constant  | Direction              | Purpose                                                         |
+| ----------------------------------------------- | --------- | ---------------------- | --------------------------------------------------------------- |
+| `/swr/connected/1.0.0`                          | `CONNECT` | Both                   | Initial handshake - exchange wallet addresses and peer metadata |
+| `/swr/acknowledgement/signature/1.0.0`          | `ACK_SIG` | Registeree --> Relayer | Send signed acknowledgement (EIP-712 signature + metadata)      |
+| `/swr/acknowledgement/signature/1.0.0/received` | `ACK_REC` | Relayer --> Registeree | Confirm signature received and validated                        |
+| `/swr/acknowledgement/payment/1.0.0`            | `ACK_PAY` | Relayer --> Registeree | Send `acknowledge()` transaction hash after on-chain submission |
+| `/swr/register/signature/1.0.0`                 | `REG_SIG` | Registeree --> Relayer | Send signed registration (EIP-712 signature + metadata)         |
+| `/swr/register/signature/1.0.0/received`        | `REG_REC` | Relayer --> Registeree | Confirm signature received and validated                        |
+| `/swr/register/payment/1.0.0`                   | `REG_PAY` | Relayer --> Registeree | Send `register()` transaction hash - registration complete      |
+
+### Transaction Registration
+
+| Protocol                                           | Constant     | Direction            | Purpose                                                                   |
+| -------------------------------------------------- | ------------ | -------------------- | ------------------------------------------------------------------------- |
+| `/swr/tx-acknowledgement/signature/1.0.0`          | `TX_ACK_SIG` | Reporter --> Relayer | Send signed tx batch acknowledgement (signature + batch data)             |
+| `/swr/tx-acknowledgement/signature/1.0.0/received` | `TX_ACK_REC` | Relayer --> Reporter | Confirm tx acknowledgement signature received                             |
+| `/swr/tx-acknowledgement/payment/1.0.0`            | `TX_ACK_PAY` | Relayer --> Reporter | Send tx `acknowledgeBatch()` transaction hash after on-chain submission   |
+| `/swr/tx-register/signature/1.0.0`                 | `TX_REG_SIG` | Reporter --> Relayer | Send signed tx batch registration (signature + batch data)                |
+| `/swr/tx-register/signature/1.0.0/received`        | `TX_REG_REC` | Relayer --> Reporter | Confirm tx registration signature received                                |
+| `/swr/tx-register/payment/1.0.0`                   | `TX_REG_PAY` | Relayer --> Reporter | Send tx `registerBatch()` transaction hash - transaction batch registered |
+
+Defined in `packages/p2p/src/protocols.ts`.
+
+## Complete Message Flow
+
+This is the full sequence from connection to completed registration:
+
+<Mermaid chart={`
+sequenceDiagram
+    participant R as Registeree<br/>(victim's browser)
+    participant L as Relayer<br/>(helper's browser)
+    participant C as Contract<br/>(on-chain)
+
+    Note over R,L: Connection Phase
+    R->>L: CONNECT (peer ID, wallet address)
+    L->>R: CONNECT (peer ID, wallet address)
+    Note over R,L: Both peers know each other's<br/>wallet address and peer ID
+
+    Note over R,L: Acknowledgement Phase
+    R->>R: Sign ACK (EIP-712 in wallet)
+    R->>L: ACK_SIG (signature + chain data)
+    L->>R: ACK_REC (confirmation)
+    L->>C: acknowledge(registeree, trustedForwarder, ...)
+    C-->>L: tx confirmed
+    L->>R: ACK_PAY (tx hash)
+
+    Note over R,L: Grace Period (1-4 min)
+    R-->>R: Waiting...
+    L-->>L: Waiting...
+
+    Note over R,L: Registration Phase
+    R->>R: Sign REG (EIP-712 in wallet)
+    R->>L: REG_SIG (signature + chain data)
+    L->>R: REG_REC (confirmation)
+    L->>C: register(registeree, trustedForwarder, ...)
+    C-->>L: tx confirmed
+    L->>R: REG_PAY (tx hash)
+
+    Note over R,L: Wallet registered as stolen
+
+`} />
+
+Each protocol opens a new libp2p stream on the existing connection. Streams are length-prefixed, JSON-encoded, and closed after the message is sent.
+
+## Message Format
+
+All P2P messages use the `ParsedStreamData` structure. Not every field is populated in every message - only the relevant fields for that protocol step.
+
+```typescript
+interface ParsedStreamData {
+  // Status
+  success?: boolean;
+  message?: string;
+
+  // Peer info (used in CONNECT handshake)
+  p2p?: {
+    peerId?: string;
+    partnerPeerId?: string;
+    connectedToPeer?: boolean;
+  };
+
+  // Wallet addresses (used in CONNECT handshake)
+  form?: {
+    registeree?: Address;
+    relayer?: Address;
+  };
+
+  // EIP-712 signature (used in ACK_SIG and REG_SIG)
+  signature?: {
+    keyRef: string; // Storage key reference
+    chainId: number; // Chain ID where signature was created
+    address: Address; // Signer's address
+    value: Hex; // The actual signature bytes
+    deadline: string; // Signature deadline (BigInt as string)
+    nonce: string; // Sequential nonce (BigInt as string)
+    reportedChainId?: string; // CAIP-2 chain hash (bytes32)
+    incidentTimestamp?: string; // When theft occurred (BigInt as string)
+  };
+
+  // Transaction result (used in ACK_PAY and REG_PAY)
+  hash?: Hash;
+
+  // Cross-chain fields (optional)
+  messageId?: Hash; // Hyperlane message ID for bridge explorer
+  txChainId?: number; // Chain where tx was submitted
+}
+```
+
+### What Each Protocol Sends
+
+| Protocol  | Key fields populated                                                    |
+| --------- | ----------------------------------------------------------------------- |
+| `CONNECT` | `p2p`, `form`                                                           |
+| `ACK_SIG` | `signature`, `form`                                                     |
+| `ACK_REC` | `success`, `message`                                                    |
+| `ACK_PAY` | `hash`, `success` (optionally `messageId`, `txChainId` for cross-chain) |
+| `REG_SIG` | `signature`, `form`                                                     |
+| `REG_REC` | `success`, `message`                                                    |
+| `REG_PAY` | `hash`, `success` (optionally `messageId`, `txChainId` for cross-chain) |
+
+## Validation
+
+Every incoming message goes through three layers of validation before it is processed.
+
+### 1. Size Limit
+
+Messages are capped at **100 KB** (`MAX_STREAM_SIZE_BYTES`). The stream reader accumulates chunks and aborts if the total exceeds the limit. This prevents memory exhaustion from oversized payloads.
+
+### 2. Safe JSON Parsing
+
+The `safeJsonParse()` function strips dangerous keys during deserialization:
+
+- `__proto__`
+- `constructor`
+- `prototype`
+
+This prevents prototype pollution attacks where a malicious peer injects keys that modify JavaScript object behavior.
+
+### 3. Zod Schema Validation
+
+The parsed JSON is validated against `ParsedStreamDataSchema`, which uses `.strict()` mode - any unknown keys cause rejection. Individual fields have type constraints:
+
+| Field              | Constraint                    |
+| ------------------ | ----------------------------- |
+| Ethereum addresses | `0x` + 40 hex chars           |
+| Transaction hashes | `0x` + 64 hex chars           |
+| Signatures         | Max 500 chars                 |
+| Deadlines/nonces   | Max 50 chars (BigInt strings) |
+| Messages           | Max 1000 chars                |
+| Peer IDs           | Max 100 chars                 |
+
+If any validation layer fails, the message is discarded and a `StreamDataValidationError` is thrown.
+
+## Connection Resilience
+
+### Keep-Alive
+
+Circuit relay reservations expire after ~2 minutes of inactivity. The grace period between acknowledgement and registration can last 1-4 minutes. Without keep-alive, the connection drops mid-flow.
+
+The `useP2PKeepAlive` hook sends libp2p pings every **45 seconds** to keep the relay reservation alive. Three consecutive ping failures mark the connection as unhealthy.
+
+### Message Queue
+
+If a send fails (network glitch, temporary disconnection), messages are queued in-memory for retry:
+
+| Parameter               | Value                                                |
+| ----------------------- | ---------------------------------------------------- |
+| Max queued messages     | 10                                                   |
+| Message expiry          | 5 minutes                                            |
+| Max retries per message | 3                                                    |
+| Retry strategy          | Reconnect on first failure, then exponential backoff |
+
+The queue is **in-memory only** - no sensitive signature data is persisted to `localStorage` or disk. If the browser tab closes, queued messages are lost.
+
+### Reconnection
+
+When a connection drops, the `reconnectToPeer` function:
+
+1. Reconnects to the relay server (exponential backoff, up to 3 attempts)
+2. Re-dials the peer through the relay (exponential backoff, up to 3 attempts)
+3. If successful, flushes the message queue
+
+Backoff jitter (0-30%) prevents thundering herd when both peers reconnect simultaneously.
+
+## Relay Server
+
+The relay server (`apps/relay/`) is a minimal libp2p node that exists solely for NAT traversal. It does not process, store, or inspect SWR protocol messages.
+
+### Configuration
+
+| Parameter          | Value                                           |
+| ------------------ | ----------------------------------------------- |
+| Transport          | WebSocket on TCP port 12312                     |
+| Encryption         | Noise protocol (ChaCha20-Poly1305)              |
+| Stream multiplexer | Yamux                                           |
+| Max connections    | 100                                             |
+| Max reservations   | 15                                              |
+| Reservation TTL    | 30 minutes                                      |
+| Hop timeout        | 60 seconds                                      |
+| Peer ID            | Persistent Ed25519 key (stable across restarts) |
+
+### Key Management
+
+In development, Ed25519 keys are auto-generated and saved to `apps/relay/keys.json`. In production, keys are loaded from the `RELAY_PRIVATE_KEY` environment variable (base64-encoded protobuf). The relay fails fast in production if no keys are configured.
+
+### What the Relay Does NOT Do
+
+- Does not register protocol handlers for `/swr/*` protocols
+- Does not inspect message content
+- Does not store any data beyond peer connection metadata
+- Does not require authentication - any libp2p peer can reserve a slot
+
+## Security Considerations
+
+**Encrypted transport** - All connections use Noise protocol. An eavesdropper on the network cannot read message contents.
+
+**Signature safety** - EIP-712 signatures include the `trustedForwarder` address. Even if intercepted, a signature is only usable by the designated forwarder. It cannot be replayed by a different address.
+
+**No persistence of sensitive data** - The message queue lives in memory. Peer ID keypairs are stored in `localStorage` (Ed25519 private key for identity, not wallet keys). No signatures or transaction data are written to storage.
+
+**Production connection gating** - In production builds, the libp2p connection gater blocks dials to private/localhost IP ranges (RFC 1918, RFC 3927, RFC 4193, link-local). This prevents SSRF-style attacks where a malicious peer advertises a private network address.
+
+**Size and schema enforcement** - Messages exceeding 100 KB or failing Zod validation are rejected before processing. The `.strict()` schema mode rejects payloads with unexpected keys.
+
+## Wire Format
+
+Messages are serialized as JSON, then sent over libp2p streams using [length-prefixed framing](https://github.com/multiformats/unsigned-varint):
+
+```
+[varint: payload length][payload bytes (UTF-8 JSON)]
+```
+
+The sender encodes with `lp.encode.single()`, the receiver decodes with `lp.decode()` (async iterable). Each protocol message uses a dedicated stream that is closed after the message is sent.

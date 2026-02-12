@@ -39,8 +39,6 @@ export interface RegistryStats {
   totalContractBatches: number;
   /** Individual fraudulent contracts */
   totalFraudulentContracts: number;
-  /** Invalidated contract batches */
-  invalidatedContractBatches: number;
   /** Last update timestamp */
   lastUpdated: bigint;
 }
@@ -101,7 +99,6 @@ export function useRegistryStats(): UseRegistryStatsResult {
         totalOperatorTransactionBatches: raw.totalOperatorTransactionBatches,
         totalContractBatches: raw.totalContractBatches,
         totalFraudulentContracts: raw.totalFraudulentContracts,
-        invalidatedContractBatches: raw.invalidatedContractBatches,
         lastUpdated: BigInt(raw.lastUpdated),
       };
 

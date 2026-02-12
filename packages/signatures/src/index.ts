@@ -2,7 +2,7 @@
  * @swr/signatures - EIP-712 signature utilities for SWR registries.
  *
  * Provides typed data builders and validation utilities for both
- * StolenWalletRegistry and StolenTransactionRegistry signatures.
+ * WalletRegistry and TransactionRegistry signatures.
  * Used by web app, relay, and CLI to ensure consistent signing.
  *
  * @example
@@ -15,9 +15,11 @@
  * } from '@swr/signatures';
  *
  * // Build typed data for wallet registration
- * const typedData = buildAcknowledgementTypedData(8453, contractAddress, {
- *   owner: '0x...',
- *   forwarder: '0x...',
+ * const typedData = buildAcknowledgementTypedData(8453, contractAddress, true, {
+ *   wallet: '0x...',
+ *   trustedForwarder: '0x...',
+ *   reportedChainId: 8453n,
+ *   incidentTimestamp: 1234567890n,
  *   nonce: 0n,
  *   deadline: 1234567890n,
  * });
@@ -38,9 +40,7 @@ export {
   EIP712_DOMAIN_NAME,
   EIP712_DOMAIN_VERSION,
   getEIP712Domain,
-  TX_EIP712_DOMAIN_NAME,
-  TX_EIP712_DOMAIN_VERSION,
-  getTxEIP712Domain,
+  getSpokeEIP712Domain,
 } from './eip712/domain';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -49,18 +49,18 @@ export {
 
 export {
   STATEMENTS,
-  TYPE_HASHES,
   EIP712_TYPES,
   SIGNATURE_STEP,
   TX_EIP712_TYPES,
   TX_SIGNATURE_STEP,
-  TX_TYPE_HASHES,
   type AcknowledgementMessage,
   type RegistrationMessage,
   type SignatureStep,
   type TxAcknowledgementMessage,
   type TxRegistrationMessage,
   type TxSignatureStep,
+  type WalletAcknowledgeArgs,
+  type WalletRegistrationArgs,
 } from './eip712/types';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -72,6 +72,7 @@ export {
   buildRegistrationTypedData,
   buildTxAcknowledgementTypedData,
   buildTxRegistrationTypedData,
+  computeTransactionDataHash,
 } from './eip712/builders';
 
 // ═══════════════════════════════════════════════════════════════════════════

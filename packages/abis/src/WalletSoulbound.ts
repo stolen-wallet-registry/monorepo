@@ -22,6 +22,11 @@ export const WalletSoulboundABI = [
         type: 'string',
         internalType: 'string',
       },
+      {
+        name: '_initialOwner',
+        type: 'address',
+        internalType: 'address',
+      },
     ],
     stateMutability: 'nonpayable',
   },
@@ -317,7 +322,7 @@ export const WalletSoulboundABI = [
       {
         name: '',
         type: 'address',
-        internalType: 'contract IStolenWalletRegistry',
+        internalType: 'contract IWalletRegistry',
       },
     ],
     stateMutability: 'view',
