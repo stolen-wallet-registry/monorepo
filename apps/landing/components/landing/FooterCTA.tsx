@@ -10,7 +10,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5173';
 /**
  * Docs URL for documentation links.
  */
-const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL ?? 'http://localhost:5174';
+const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL ?? 'https://monorepo-docs-sepia.vercel.app';
 
 export function FooterCTA() {
   return (

@@ -57,7 +57,7 @@ pnpm deploy:crosschain             # Terminal 2 — Deploy hub + spoke contracts
 pnpm dev:crosschain                # Terminal 3 — Frontend with cross-chain features
 ```
 
-Open `http://localhost:5173`. See the [setup guide](apps/docs/pages/dev/setup.mdx) for MetaMask setup, test accounts, and indexer instructions.
+Open `http://localhost:5173`. See the [setup guide](https://monorepo-docs-sepia.vercel.app/dev/setup) for MetaMask setup, test accounts, and indexer instructions.
 
 ## Tech Stack
 
@@ -73,14 +73,14 @@ Indexer:   Ponder + Postgres
 
 ## Documentation
 
-Documentation lives in `apps/docs/` (Vocs). Run locally with `pnpm --filter docs dev`.
+Full docs at [monorepo-docs-sepia.vercel.app](https://monorepo-docs-sepia.vercel.app). Source lives in `apps/docs/` (Vocs) — run locally with `pnpm --filter docs dev`.
 
 Key sections:
 
-- [Setup Guide](apps/docs/pages/dev/setup.mdx) -- Local development
-- [Hub-Spoke Architecture](apps/docs/pages/concepts/hub-spoke.mdx) -- Cross-chain design
-- [Operator Protocol](apps/docs/pages/operator/) -- Batch submissions
-- [P2P Relay](apps/docs/pages/p2p/) -- Gasless registration
+- [Setup Guide](https://monorepo-docs-sepia.vercel.app/dev/setup) -- Local development
+- [Hub-Spoke Architecture](https://monorepo-docs-sepia.vercel.app/concepts/hub-spoke) -- Cross-chain design
+- [Operator Protocol](https://monorepo-docs-sepia.vercel.app/operator) -- Batch submissions
+- [P2P Relay](https://monorepo-docs-sepia.vercel.app/p2p) -- Gasless registration
 
 ## What's Built
 

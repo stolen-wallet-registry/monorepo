@@ -4,7 +4,7 @@ import { Github, ExternalLink } from 'lucide-react';
 /**
  * Documentation URL for footer link.
  */
-const DOCS_URL = import.meta.env.VITE_DOCS_URL ?? 'http://localhost:5174';
+const DOCS_URL = import.meta.env.VITE_DOCS_URL ?? 'https://monorepo-docs-sepia.vercel.app';
 
 /**
  * GitHub repository URL.
