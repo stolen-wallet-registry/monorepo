@@ -63,7 +63,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     chainIdsForContract,
   } = useTransactionSelection();
 
-  const isSelfRelay = registrationType === 'selfRelay';
+  const isRelayed = registrationType === 'selfRelay' || registrationType === 'p2pRelay';
 
   // Compute dataHash from sorted arrays for signing/contract calls
   const dataHash: Hash | undefined =
@@ -109,9 +109,9 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   // Signature is still loading from sessionStorage
   const isSignatureLoading = storedSignature === undefined;
 
-  // Expected wallet for this step: forwarder (gas wallet) for self-relay, reporter for standard
+  // Expected wallet for this step: forwarder (gas wallet) for self-relay/p2p-relay, reporter for standard
   const expectedWallet = storedSignature
-    ? isSelfRelay
+    ? isRelayed
       ? storedSignature.trustedForwarder
       : storedSignature.reporter
     : undefined;
@@ -413,7 +413,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   return (
     <div className="space-y-4">
       {/* Wallet switch prompt (self-relay only) */}
-      {isSelfRelay && expectedWallet && (
+      {isRelayed && expectedWallet && (
         <WalletSwitchPrompt
           currentAddress={address}
           expectedAddress={expectedWallet}

@@ -356,8 +356,13 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
   const chainId = useChainId();
   const { partnerPeerId } = useP2PStore();
   const forwarder = useTransactionFormStore((s) => s.forwarder);
-  const { selectedTxHashes, reportedChainId, txHashesForContract, chainIdsForContract } =
-    useTransactionSelection();
+  const {
+    selectedTxHashes,
+    selectedTxDetails,
+    reportedChainId,
+    txHashesForContract,
+    chainIdsForContract,
+  } = useTransactionSelection();
 
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -508,6 +513,47 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
           who will complete the registration.
         </AlertDescription>
       </Alert>
+
+      {/* Batch summary */}
+      {dataHash && reportedChainId && (
+        <div className="rounded-lg border p-4 bg-muted/30">
+          <p className="text-sm font-medium mb-3">Transaction Batch Summary</p>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-start gap-2">
+              <span className="text-muted-foreground shrink-0">Transactions:</span>
+              <span className="font-mono font-medium">{selectedTxHashes.length}</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-muted-foreground shrink-0">Chain:</span>
+              <span className="font-mono font-medium">
+                {getChainName(reportedChainId)}{' '}
+                <span className="text-muted-foreground text-xs">({toCAIP2(reportedChainId)})</span>
+              </span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-muted-foreground flex items-center gap-1 shrink-0">
+                Data Hash:
+                <InfoTooltip content={DATA_HASH_TOOLTIP} side="right" />
+              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <code className="font-mono text-xs break-all cursor-default">{dataHash}</code>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-md">
+                  <p className="text-xs font-mono break-all">{dataHash}</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedTxDetails.length > 0 && (
+        <SelectedTransactionsTable
+          transactions={selectedTxDetails}
+          reportedChainId={reportedChainId}
+        />
+      )}
 
       {isLoading && (
         <div className="flex items-center justify-center py-8" role="status" aria-label="Loading">

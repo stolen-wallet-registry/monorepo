@@ -243,6 +243,16 @@ export function TransactionP2PRelayerPage() {
     store.setForwarder(relayerAddress);
     store.setReportedChainId(sig.chainId);
     store.setSelectedTxHashes(batch.transactionHashes as Hash[]);
+    // Populate selectedTxDetails with hash-only entries so payment steps can show the table.
+    // The relayer doesn't have full tx details (to, value, block) — only hashes from P2P.
+    store.setSelectedTxDetails(
+      batch.transactionHashes.map((hash: string) => ({
+        hash: hash as Hash,
+        to: null,
+        value: '0',
+        blockNumber: '0',
+      }))
+    );
     store.setTransactionData(
       batch.dataHash as Hash,
       batch.transactionHashes as Hash[],
