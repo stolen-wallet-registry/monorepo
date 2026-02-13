@@ -76,9 +76,9 @@ contract Deploy is Script {
     // Block times: Anvil ~13s, Base/OP ~2s, Arbitrum ~0.25s
     // Target: ~30s grace for local, ~2 min grace for testnet/mainnet
 
-    // Local Anvil (13s blocks) - fast iteration
+    // Local Anvil (13s blocks) - ~30s grace, ~10 min registration window
     uint256 constant ANVIL_GRACE_BLOCKS = 2; // ~30s
-    uint256 constant ANVIL_DEADLINE_BLOCKS = 12; // ~2.5 min
+    uint256 constant ANVIL_DEADLINE_BLOCKS = 50; // ~10 min
 
     // Base/Optimism L2 (2s blocks)
     uint256 constant L2_GRACE_BLOCKS = 60; // ~2 min
@@ -1084,8 +1084,8 @@ contract Deploy is Script {
             return (ARBITRUM_GRACE_BLOCKS, ARBITRUM_DEADLINE_BLOCKS);
         }
 
-        // Default to L2 config for unknown chains
-        return (L2_GRACE_BLOCKS, L2_DEADLINE_BLOCKS);
+        // Unknown chain — revert to force explicit configuration (aligned with DeployBase)
+        revert("Deploy: unsupported chain ID - add timing config");
     }
 
     function _addressToBytes32(address addr) internal pure returns (bytes32) {

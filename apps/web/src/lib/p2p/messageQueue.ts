@@ -8,7 +8,6 @@ import type { Libp2p, Connection } from '@libp2p/interface';
 
 import { logger } from '@/lib/logger';
 import { passStreamData, getPeerConnection } from './libp2p';
-import { reconnectToPeer } from './reconnect';
 import type { ParsedStreamData } from './types';
 
 /** Maximum messages to queue */
@@ -42,25 +41,6 @@ export interface MessageQueueState {
   isProcessing: boolean;
   /** Last processing error */
   lastError: string | null;
-}
-
-export interface SendWithRetryOptions {
-  /** libp2p node instance */
-  libp2p: Libp2p;
-  /** Remote peer ID to send to */
-  remotePeerId: string;
-  /** Protocol(s) to use */
-  protocols: string[];
-  /** Data to send */
-  streamData: ParsedStreamData;
-  /** Maximum retry attempts (default: 3) */
-  maxRetries?: number;
-  /** Callback when message is queued for retry */
-  onQueued?: (message: QueuedMessage) => void;
-  /** Callback when message fails after all retries */
-  onFailed?: (message: QueuedMessage, error: Error) => void;
-  /** Callback when message is successfully sent */
-  onSuccess?: () => void;
 }
 
 /**
@@ -249,88 +229,6 @@ class MessageQueue {
 const messageQueue = new MessageQueue();
 
 /**
- * Send data to a peer with automatic retry on failure.
- *
- * If the send fails, the message is queued for retry when the connection
- * is re-established.
- *
- * @example
- * ```typescript
- * await sendWithRetry({
- *   libp2p,
- *   remotePeerId: partnerPeerId,
- *   protocols: [PROTOCOLS.ACK_PAY],
- *   streamData: { hash: txHash, success: true },
- *   onQueued: (msg) => setQueuedMessages(prev => [...prev, msg]),
- *   onFailed: (msg, err) => setError(`Failed to send: ${err.message}`),
- *   onSuccess: () => goToNextStep(),
- * });
- * ```
- */
-export async function sendWithRetry({
-  libp2p,
-  remotePeerId,
-  protocols,
-  streamData,
-  maxRetries = MAX_MESSAGE_RETRIES,
-  onQueued,
-  onFailed,
-  onSuccess,
-}: SendWithRetryOptions): Promise<void> {
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      // Try to get or establish connection
-      const connection = await getPeerConnection({ libp2p, remotePeerId });
-
-      // Try to send
-      await passStreamData({
-        connection,
-        protocols,
-        streamData,
-      });
-
-      // Success!
-      onSuccess?.();
-      return;
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error('Unknown error');
-
-      logger.p2p.warn('Send attempt failed', {
-        attempt: attempt + 1,
-        maxRetries,
-        error: lastError.message,
-      });
-
-      // On first failure, try to reconnect
-      if (attempt === 0) {
-        const { result } = await reconnectToPeer(libp2p, remotePeerId);
-        if (!result.success) {
-          // Connection truly lost - queue the message
-          const queued = messageQueue.add({
-            protocols,
-            data: streamData,
-          });
-          onQueued?.(queued);
-          return;
-        }
-        // Reconnected successfully, loop will retry
-      }
-    }
-  }
-
-  // All retries exhausted - queue for later
-  const queued = messageQueue.add({
-    protocols,
-    data: streamData,
-    lastError: lastError?.message,
-  });
-  onQueued?.(queued);
-  onFailed?.(queued, lastError ?? new Error('All retries exhausted'));
-}
-
-/**
  * Process all queued messages.
  *
  * Call this after reconnecting to flush the queue.
@@ -348,13 +246,6 @@ export async function processMessageQueue(
  */
 export function getPendingMessages(): QueuedMessage[] {
   return messageQueue.getAll();
-}
-
-/**
- * Get the number of pending messages.
- */
-export function getPendingMessageCount(): number {
-  return messageQueue.size();
 }
 
 /**

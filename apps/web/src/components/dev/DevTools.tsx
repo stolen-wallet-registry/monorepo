@@ -4,7 +4,7 @@ import { useAccount, useChainId, usePublicClient } from 'wagmi';
 
 import { useTheme, type ColorScheme, type ThemeVariant } from '@/providers';
 import { cn } from '@/lib/utils';
-import { SoulboundSvgPreview } from '@/components/composed/SoulboundSvgPreview';
+import { SoulboundSvgPreview } from '@swr/ui';
 
 type DevToolsTab = 'theme' | 'tests' | 'soulbound' | 'wallet';
 

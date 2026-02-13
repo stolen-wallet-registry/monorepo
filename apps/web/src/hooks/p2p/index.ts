@@ -24,3 +24,5 @@ export {
   type ConnectionHealth,
   type ConnectionStatus,
 } from './useP2PConnectionHealth';
+
+export { useRelayAvailability, type RelayAvailability } from './useRelayAvailability';

@@ -52,19 +52,21 @@ const STEP_TITLES: Partial<Record<RegistrationStep, string>> = {
 
 export function SelfRelayRegistrationPage() {
   const [, setLocation] = useLocation();
-  const { isConnected, address } = useAccount();
+  const { isConnected } = useAccount();
   const { registrationType, step, setRegistrationType } = useRegistrationStore();
   const registeree = useFormStore((s) => s.registeree);
   const { goToNextStep, resetFlow } = useStepNavigation();
 
-  // Check if the registeree (stored or connected wallet) is already registered via indexer
-  // In self-relay, the registeree is stored when user first signs
-  // This catches both individual and batch registrations
-  const registereeToCheck = registeree || address || '';
+  // Check if the registeree is already registered via indexer.
+  // Only check when we have an active registeree AND the flow has progressed past the initial form.
+  // Without the step guard, a stale registeree from localStorage (previous registration session)
+  // triggers a redirect before the user can even enter new data.
+  const hasActiveRegisteree = !!registeree && step !== 'acknowledge-and-sign';
+  const registereeToCheck = hasActiveRegisteree ? registeree : '';
   const { data: searchResult, isLoading: isCheckingRegistration } =
     useRegistrySearch(registereeToCheck);
   const registereeAlreadyRegistered =
-    searchResult?.type === 'address' && searchResult.foundInWalletRegistry;
+    hasActiveRegisteree && searchResult?.type === 'address' && searchResult.foundInWalletRegistry;
 
   // Initialize registration type on mount
   useEffect(() => {

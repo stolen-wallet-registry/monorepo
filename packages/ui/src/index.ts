@@ -106,6 +106,21 @@ export {
 // Bridge logos
 export { HyperlaneLogo, WormholeLogo, type BridgeLogoProps } from './components/bridge-logos';
 
+// Soulbound token preview
+export {
+  SoulboundSvgPreview,
+  type SoulboundSvgPreviewProps,
+} from './components/soulbound-svg-preview';
+
+// Language constants & helpers (soulbound i18n)
+export {
+  LANGUAGE_NAMES,
+  WALLET_TRANSLATIONS,
+  SUPPORT_TRANSLATIONS,
+  getLanguageName,
+  getLanguageTranslation,
+} from './lib/languages';
+
 // Web3 Icons (named exports from @web3icons/react)
 // Next.js App Router doesn't support "export *" in client boundaries
 export {

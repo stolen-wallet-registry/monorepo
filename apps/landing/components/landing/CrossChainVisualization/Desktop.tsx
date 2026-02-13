@@ -88,6 +88,7 @@ interface AnimationState {
   activeBeams: Set<string>;
   pulseListeners: boolean;
   triggerEmission: boolean;
+  triggerBatchEmission: boolean;
   selectedNetwork: number; // 0-3 for random network selection
 }
 
@@ -101,6 +102,7 @@ const initialState: AnimationState = {
   activeBeams: new Set(),
   pulseListeners: false,
   triggerEmission: false,
+  triggerBatchEmission: false,
   selectedNetwork: 0,
 };
 
@@ -139,6 +141,7 @@ function animationReducer(state: AnimationState, action: AnimationAction): Anima
       // Direct step setting - used by runAnimationSequence for precise timing
       const { step, networkIndex = state.selectedNetwork } = action;
       const isListenerStep = step === 'rf_hubToListeners' || step === 'to_hubToListeners';
+      const isOperatorBatch = step === 'to_hubToListeners';
 
       return {
         ...state,
@@ -146,7 +149,9 @@ function animationReducer(state: AnimationState, action: AnimationAction): Anima
         activeBeams: getActiveBeamsForStep(step, networkIndex),
         selectedNetwork: networkIndex,
         pulseListeners: isListenerStep,
-        triggerEmission: isListenerStep,
+        // Report fraud → single emission; Operator → batch emission
+        triggerEmission: isListenerStep && !isOperatorBatch,
+        triggerBatchEmission: isOperatorBatch,
       };
     }
 
@@ -163,6 +168,7 @@ function animationReducer(state: AnimationState, action: AnimationAction): Anima
           activeBeams: new Set([activeBeam]),
           pulseListeners: false,
           triggerEmission: false,
+          triggerBatchEmission: false,
           selectedNetwork: networkIndex,
         };
       } else {
@@ -173,6 +179,7 @@ function animationReducer(state: AnimationState, action: AnimationAction): Anima
           activeBeams: new Set(['operatorToHub']),
           pulseListeners: false,
           triggerEmission: false,
+          triggerBatchEmission: false,
           selectedNetwork: 0,
         };
       }
@@ -183,6 +190,7 @@ function animationReducer(state: AnimationState, action: AnimationAction): Anima
         ...state,
         pulseListeners: false,
         triggerEmission: false,
+        triggerBatchEmission: false,
       };
     }
 
@@ -429,14 +437,14 @@ export function CrossChainVisualizationDesktop({
 
   // Reset triggers after animation has time to detect transition
   useEffect(() => {
-    if (state.pulseListeners || state.triggerEmission) {
+    if (state.pulseListeners || state.triggerEmission || state.triggerBatchEmission) {
       const resetDelay = fastMode ? 100 : 500;
       const resetTimeout = setTimeout(() => {
         dispatch({ type: 'RESET_TRIGGERS' });
       }, resetDelay);
       return () => clearTimeout(resetTimeout);
     }
-  }, [state.pulseListeners, state.triggerEmission, fastMode]);
+  }, [state.pulseListeners, state.triggerEmission, state.triggerBatchEmission, fastMode]);
 
   // ETH L1 and L2s - core (close to ETH)
   const ethHubRef = useRef<HTMLDivElement>(null);
@@ -518,8 +526,9 @@ export function CrossChainVisualizationDesktop({
               >
                 CAIP-2
               </a>{' '}
-              (chain IDs) standards. Exchanges, wallets, and security services listen for events and
-              react in real-time to protect the ecosystem.
+              (chain IDs) standards. EVM wallets use a wildcard key (eip155:_:0x...) so a single
+              registration covers every EVM chain. Exchanges, wallets, and security services listen
+              for events and react in real-time.
             </p>
           </div>
         )}
@@ -543,7 +552,7 @@ export function CrossChainVisualizationDesktop({
               ref={ethEcosystemRef}
               rightAnchorRef={ethRightAnchorRef}
               label={showLabels ? 'Ethereum Ecosystem' : undefined}
-              labelTooltip="Reports from Ethereum and its L2 rollups are formatted as CAIP-10 identifiers (eip155:1:0x..., eip155:10:0x...) and relayed to the central registry via cross-chain messaging. CAIP-10 standardizes chain and signature type identification, enabling unified tracking across all chains."
+              labelTooltip="Reports from Ethereum and its L2 rollups are formatted as CAIP-10 identifiers (eip155:1:0x..., eip155:10:0x...) and relayed to the central registry via cross-chain messaging. Because an EVM address is identical across all EVM chains, the registry stores wallet entries using a CAIP-363 wildcard key (eip155:_:0x...) — one registration covers every EVM chain."
             >
               {/* Core L2s - tightly clustered around ETH */}
               <div className="flex items-center gap-1">
@@ -624,7 +633,7 @@ export function CrossChainVisualizationDesktop({
               ref={evmChainsRef}
               rightAnchorRef={evmRightAnchorRef}
               label={showLabels ? 'EVM Chains' : undefined}
-              labelTooltip="EVM chains share the same 0x address format as Ethereum. Reports are formatted as CAIP-10 (eip155:56:0x... for BNB Chain) and passed through cross-chain messaging to the registry. The standard format enables unified tracking regardless of source chain."
+              labelTooltip="EVM chains share the same 0x address format as Ethereum. Reports are formatted as CAIP-10 (eip155:56:0x... for BNB Chain) and passed through cross-chain messaging to the registry. Wallet entries use the wildcard key (eip155:_:0x...) so a wallet stolen on BNB Chain is automatically flagged on every EVM chain."
             >
               <div className="flex items-center gap-2">
                 <IconCircle label="BNB Chain" size="sm">
@@ -680,7 +689,7 @@ export function CrossChainVisualizationDesktop({
               leftAnchorRef={bridgesLeftAnchorRef}
               rightAnchorRef={bridgesRightAnchorRef}
               label={showLabels ? 'Cross-Chain Messaging' : undefined}
-              labelTooltip="Cross-chain messaging protocols that securely transmit CAIP-10 compliant stolen wallet reports from any source chain to the consolidated registry on Base. These protocols verify message authenticity and ensure data integrity across chains."
+              labelTooltip="Cross-chain messaging protocols that securely transmit stolen wallet reports from any source chain to the consolidated registry on Base. These protocols verify message authenticity and ensure data integrity across chains."
             >
               <div className="flex flex-col gap-2">
                 <BridgeIcon label="Chainlink CCIP">
@@ -700,7 +709,7 @@ export function CrossChainVisualizationDesktop({
               ref={operatorsClusterRef}
               rightAnchorRef={operatorsTopAnchorRef}
               label={showLabels ? 'Trusted Operators' : undefined}
-              labelTooltip="DAO-approved entities with elevated registry access. Operators can batch-submit stolen wallet reports on behalf of victims, aggregate intelligence from multiple sources, and provide higher-trust attestations. Examples include exchanges, security firms, and blockchain forensics companies."
+              labelTooltip="DAO-approved organizations that batch-submit fraud data directly to the registry. Operators bypass the two-phase signature flow, submitting wallets, transactions, and contracts in bulk. Each operator is permissioned for specific registries via capability bits."
             >
               <div className="flex items-center gap-2">
                 <IconCircle label="Coinbase (Operator)" size="xs">
@@ -723,7 +732,10 @@ export function CrossChainVisualizationDesktop({
           <div className="relative flex flex-col items-center justify-center -mt-24">
             {/* Emission container - positioned above the title */}
             <div className="relative mb-2 flex min-h-[80px] items-end justify-center">
-              <Caip10Emission triggerEmission={state.triggerEmission} />
+              <Caip10Emission
+                triggerEmission={state.triggerEmission}
+                triggerBatchEmission={state.triggerBatchEmission}
+              />
             </div>
             <RegistryHub
               ref={hubRef}
@@ -772,7 +784,7 @@ export function CrossChainVisualizationDesktop({
               ref={walletsContainerRef}
               leftAnchorRef={walletsLeftAnchorRef}
               label={showLabels ? 'Wallets' : undefined}
-              labelTooltip="Self-custody wallets that can query the registry to warn users before sending to flagged addresses. Wallets can integrate via on-chain events or indexers, complementing ERC-7730 clear signing for safer transaction approval."
+              labelTooltip="Self-custody wallets that can query the registry to warn users before sending to flagged addresses or interacting with malicious contracts. Wallets integrate via on-chain events or indexers for real-time protection."
             >
               <div className="flex items-center gap-2">
                 <IconCircle label="MetaMask" size="sm" triggerPulse={state.pulseListeners}>

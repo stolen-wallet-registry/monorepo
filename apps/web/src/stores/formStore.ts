@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
-import { useShallow } from 'zustand/shallow';
 import { isAddress } from 'viem';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';
@@ -85,33 +84,3 @@ export const useFormStore = create<FormState & FormActions>()(
     { name: 'FormStore', enabled: process.env.NODE_ENV === 'development' }
   )
 );
-
-// ============================================================================
-// Selectors - Use these for granular subscriptions to prevent unnecessary re-renders
-// ============================================================================
-
-/**
- * Select wallet addresses (registeree and relayer).
- * Use when component needs to display or compare addresses.
- */
-export const useFormAddresses = () =>
-  useFormStore(
-    useShallow((s) => ({
-      registeree: s.registeree,
-      relayer: s.relayer,
-      setRegisteree: s.setRegisteree,
-      setRelayer: s.setRelayer,
-    }))
-  );
-
-/**
- * Select registeree only (read-only).
- * Use when component just needs to display the stolen wallet address.
- */
-export const useRegisteree = () => useFormStore((s) => s.registeree);
-
-/**
- * Select relayer only (read-only).
- * Use when component just needs to display the relayer address.
- */
-export const useRelayer = () => useFormStore((s) => s.relayer);

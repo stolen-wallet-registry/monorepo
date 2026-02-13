@@ -145,6 +145,29 @@ export {
   getRpcUrls,
 } from './utils';
 
+// Contract address getters
+export {
+  type RegistryType,
+  type RegistryVariant,
+  getWalletRegistryAddress,
+  getTransactionRegistryAddress,
+  getContractRegistryAddress,
+  getFraudRegistryHubAddress,
+  getOperatorSubmitterAddress,
+  getCrossChainInboxAddress,
+  getOperatorRegistryAddress,
+  getFeeManagerAddress,
+  getTranslationRegistryAddress,
+  getWalletSoulboundAddress,
+  getSupportSoulboundAddress,
+  getSoulboundReceiverAddress,
+  getSpokeRegistryAddress,
+  getSpokeFeeManagerAddress,
+  getSpokeSoulboundForwarderAddress,
+  getRegistryAddress,
+  getRegistryType,
+} from './utils';
+
 // Bridge utilities
 export {
   getPrimaryBridgeProvider,

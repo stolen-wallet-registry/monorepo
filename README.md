@@ -95,10 +95,14 @@ Key sections:
 
 ## Future Development
 
-- Testnet deployment (Base Sepolia / OP Sepolia)
-- DAO governance + operator approval
-- Operator-as-Paymaster (EIP-4337)
+- Testnet deployment (Base Sepolia / OP Sepolia) and cross-chain validation
+- CAIP-10 key storage audit across all registries (see `PRPs/transaction-registry-chain-ids.md`)
+- Abstract bridge layer — add Chainlink CCIP and Wormhole alongside Hyperlane, with per-chain provider config, fee comparison, and provider toggling
+- Solana integration (first non-EVM chain — stress-test storage format assumptions)
 - TypeScript SDK + Solidity on-chain query library
+- CLI improvements — data validation tooling, DAO-verifiable output for on-chain governance proposals
+- DAO governance + operator approval
+- Operator-as-Paymaster (EIP-4337) with iframe-based registration flows (SDK-powered, operator-sponsored)
 - Etherscan direct registration guide
 - Additional chain support
 

@@ -22,7 +22,7 @@ abstract contract DeployBase is Script {
     ///
     ///      | Chain          | Block Time | Grace Blocks | Deadline Blocks | Result           |
     ///      |----------------|------------|--------------|-----------------|------------------|
-    ///      | Anvil (local)  | 13s        | 2            | 12              | ~30s / ~2.5 min  |
+    ///      | Anvil (local)  | 13s        | 2            | 50              | ~30s / ~10 min   |
     ///      | Base/Optimism  | 2s         | 60           | 300             | ~2 min / ~10 min |
     ///      | Arbitrum       | 0.25s      | 480          | 2400            | ~2 min / ~10 min |
     ///      | Ethereum L1    | 12s        | 10           | 50              | ~2 min / ~10 min |
@@ -31,9 +31,9 @@ abstract contract DeployBase is Script {
     /// @return graceBlocks Base blocks for grace period
     /// @return deadlineBlocks Base blocks for deadline window
     function getTimingConfig(uint256 chainId) internal pure returns (uint256 graceBlocks, uint256 deadlineBlocks) {
-        // Anvil/Local (13s blocks) - ~30s grace, ~2.5 min deadline for fast iteration
+        // Anvil/Local (13s blocks) - ~30s grace, ~10 min registration window
         if (chainId == 31_337 || chainId == 31_338) {
-            return (2, 12);
+            return (2, 50);
         }
 
         // Base mainnet/Sepolia (2s blocks)

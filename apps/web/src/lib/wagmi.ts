@@ -42,7 +42,6 @@ const optimismSepoliaChain = toWagmiChain(optimismSepolia);
 
 // Legacy exports for backward compatibility during migration
 export { anvilHubChain as anvilHub, anvilSpokeChain as anvilSpoke };
-export const localhost = anvilHubChain;
 
 // Build chains array based on mode (L2 only — no mainnet)
 const getChains = (): readonly [Chain, ...Chain[]] => {

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
-import { useShallow } from 'zustand/shallow';
 import { logger } from '@/lib/logger';
 import type { Hash } from '@/lib/types/ethereum';
 import type { RegistrationType, RegistrationStep } from '@/lib/types/registration';
@@ -253,78 +252,3 @@ export function getPreviousStep(
   }
   return sequence[currentIndex - 1] ?? null;
 }
-
-// ============================================================================
-// Selectors - Use these for granular subscriptions to prevent unnecessary re-renders
-// ============================================================================
-
-/**
- * Select registration type and setter.
- * Use when component only needs to read/change the registration type.
- */
-export const useRegistrationType = () =>
-  useRegistrationStore(
-    useShallow((s) => ({
-      registrationType: s.registrationType,
-      setRegistrationType: s.setRegistrationType,
-    }))
-  );
-
-/**
- * Select current step and setter.
- * Use when component only needs to manage the current step.
- */
-export const useRegistrationStep = () =>
-  useRegistrationStore(
-    useShallow((s) => ({
-      step: s.step,
-      setStep: s.setStep,
-    }))
-  );
-
-/**
- * Select transaction hashes, chain IDs, and bridge message ID.
- * Use when component needs acknowledgement, registration, and cross-chain info.
- */
-export const useRegistrationTxHashes = () =>
-  useRegistrationStore(
-    useShallow((s) => ({
-      acknowledgementHash: s.acknowledgementHash,
-      acknowledgementChainId: s.acknowledgementChainId,
-      registrationHash: s.registrationHash,
-      registrationChainId: s.registrationChainId,
-      bridgeMessageId: s.bridgeMessageId,
-      setAcknowledgementHash: s.setAcknowledgementHash,
-      setRegistrationHash: s.setRegistrationHash,
-      setBridgeMessageId: s.setBridgeMessageId,
-    }))
-  );
-
-/**
- * Select full registration flow state (type + step).
- * Use when component needs to determine overall registration progress.
- */
-export const useRegistrationFlow = () =>
-  useRegistrationStore(
-    useShallow((s) => ({
-      registrationType: s.registrationType,
-      step: s.step,
-      setStep: s.setStep,
-      reset: s.reset,
-    }))
-  );
-
-/**
- * Select registration incident fields and setters.
- * Use when component needs incident chain and timestamp info.
- */
-export const useRegistrationFields = () =>
-  useRegistrationStore(
-    useShallow((s) => ({
-      reportedChainId: s.reportedChainId,
-      incidentTimestamp: s.incidentTimestamp,
-      setReportedChainId: s.setReportedChainId,
-      setIncidentTimestamp: s.setIncidentTimestamp,
-      initializeFields: s.initializeFields,
-    }))
-  );

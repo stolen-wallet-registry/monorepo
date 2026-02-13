@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { usePublicClient } from 'wagmi';
 import { zeroAddress } from 'viem';
 import { walletSoulboundAbi } from '@/lib/contracts/abis';
-import { getWalletSoulboundAddress } from '@/lib/contracts/addresses';
+import { getWalletSoulboundAddress } from '@swr/chains';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';

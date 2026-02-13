@@ -3,10 +3,13 @@
  *
  * Renders an animated SVG preview that matches the on-chain SVGRenderer.sol exactly.
  * Uses 400x400 viewBox with single border path (text at 0% and 50% offset for opposite sides).
+ *
+ * Shared across apps (web, docs) to prevent drift from the on-chain implementation.
  */
 
-import { cn } from '@/lib/utils';
-import { getLanguageTranslation } from '@/lib/constants/languages';
+import { useId } from 'react';
+import { cn } from '../lib/utils';
+import { getLanguageTranslation } from '../lib/languages';
 
 // Domain shown in SVG (matches contract default)
 const DOMAIN = 'stolenwallet.xyz';
@@ -43,6 +46,8 @@ export function SoulboundSvgPreview({
   size = 400,
   className,
 }: SoulboundSvgPreviewProps) {
+  const id = useId();
+  const pathId = `${id}-bp`;
   const translation = getLanguageTranslation(language, type);
   const isEnglish = language === 'en';
 
@@ -63,7 +68,7 @@ export function SoulboundSvgPreview({
           {/* Single rectangular path - centered in gutter at y=12 */}
           {/* Path bounds: 12-388 (376px), corners at ±16px from edges for 16px radius arcs */}
           <path
-            id="borderPath"
+            id={pathId}
             d="M200 12 H372 A16 16 0 0 1 388 28 V372 A16 16 0 0 1 372 388 H28 A16 16 0 0 1 12 372 V28 A16 16 0 0 1 28 12 H200"
           />
         </defs>
@@ -85,7 +90,7 @@ export function SoulboundSvgPreview({
 
         {/* First text at 0% offset, animates 0% -> 100% (clockwise) */}
         <text fill="#fff" fontSize="10" fontFamily="monospace">
-          <textPath href="#borderPath">
+          <textPath href={`#${pathId}`}>
             <animate
               attributeName="startOffset"
               from="0%"
@@ -99,7 +104,7 @@ export function SoulboundSvgPreview({
 
         {/* Second text at 50% offset (opposite side), animates 50% -> 150% */}
         <text fill="#fff" fontSize="10" fontFamily="monospace">
-          <textPath href="#borderPath" startOffset="50%">
+          <textPath href={`#${pathId}`} startOffset="50%">
             <animate
               attributeName="startOffset"
               from="50%"

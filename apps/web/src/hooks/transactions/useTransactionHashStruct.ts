@@ -11,8 +11,7 @@
 import { useEffect, useMemo } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
 import { transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
-import { getTransactionRegistryAddress } from '@/lib/contracts/addresses';
-import { getSpokeContractAddress } from '@/lib/contracts/crosschain-addresses';
+import { getTransactionRegistryAddress, getSpokeRegistryAddress } from '@swr/chains';
 import { isHubChain, isSpokeChain } from '@swr/chains';
 import { TX_SIGNATURE_STEP, type TxSignatureStep } from '@/lib/signatures/transactions';
 import type { Address, Hash } from '@/lib/types/ethereum';
@@ -68,12 +67,16 @@ export function useTransactionHashStruct(
   const isSpoke = isSpokeChain(chainId);
   const isHub = isHubChain(chainId);
 
-  // Get contract address
+  // Get contract address (these throw on missing config, so catch gracefully)
   let contractAddress: Address | undefined;
-  if (isSpoke) {
-    contractAddress = getSpokeContractAddress('spokeRegistry', chainId);
-  } else if (isHub) {
-    contractAddress = getTransactionRegistryAddress(chainId);
+  try {
+    if (isSpoke) {
+      contractAddress = getSpokeRegistryAddress(chainId);
+    } else if (isHub) {
+      contractAddress = getTransactionRegistryAddress(chainId);
+    }
+  } catch {
+    // Chain not configured — contractAddress stays undefined, query won't fire
   }
 
   // Log unsupported chain to help catch configuration issues

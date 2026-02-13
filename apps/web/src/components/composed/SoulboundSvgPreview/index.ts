@@ -1,2 +1,1 @@
-export { SoulboundSvgPreview } from './SoulboundSvgPreview';
-export type { SoulboundSvgPreviewProps } from './SoulboundSvgPreview';
+export { SoulboundSvgPreview, type SoulboundSvgPreviewProps } from '@swr/ui';

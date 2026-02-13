@@ -244,19 +244,6 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
 // ============================================================================
 
 /**
- * Select reporter and forwarder addresses.
- */
-export const useTransactionFormAddresses = () =>
-  useTransactionFormStore(
-    useShallow((s) => ({
-      reporter: s.reporter,
-      forwarder: s.forwarder,
-      setReporter: s.setReporter,
-      setForwarder: s.setForwarder,
-    }))
-  );
-
-/**
  * Select transaction selection state.
  */
 export const useTransactionSelection = () =>
@@ -277,19 +264,3 @@ export const useTransactionSelection = () =>
       setTransactionData: s.setTransactionData,
     }))
   );
-
-/**
- * Select just the transaction details (read-only).
- */
-export const useSelectedTransactionDetails = () =>
-  useTransactionFormStore((s) => s.selectedTxDetails);
-
-/**
- * Select just the data hash (read-only).
- */
-export const useTransactionDataHash = () => useTransactionFormStore((s) => s.dataHash);
-
-/**
- * Select transaction count (read-only).
- */
-export const useTransactionCount = () => useTransactionFormStore((s) => s.selectedTxHashes.length);

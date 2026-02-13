@@ -37,7 +37,7 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   const chainId = useChainId();
   const { registeree } = useFormStore();
   const { acknowledgementHash } = useRegistrationStore();
-  const { themeVariant, triggerThemeAnimation, setThemeVariant } = useTheme();
+  const { themeVariant, triggerThemeAnimation, setThemeVariant, setColorScheme } = useTheme();
 
   // Use refs for theme values to avoid stale closure issues in handleExpire callback.
   // useLayoutEffect runs synchronously after render but before paint, ensuring refs
@@ -108,23 +108,22 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
     const currentThemeVariant = themeVariantRef.current;
     const currentTriggerFn = triggerThemeAnimationRef.current;
 
-    // Switch to hacker theme when grace period expires
+    // Switch to hacker dark theme when grace period expires.
+    // Both variant and colorScheme are applied in the same View Transition animation.
     if (currentThemeVariant !== 'hacker') {
       if (currentTriggerFn) {
-        // Preferred: animated theme switch
-        logger.registration.info('Triggering hacker theme animation');
-        currentTriggerFn('hacker');
+        logger.registration.info('Triggering hacker dark theme animation');
+        currentTriggerFn('hacker', 'dark');
       } else {
-        // Fallback: direct theme switch (no animation)
         logger.registration.warn('triggerThemeAnimation not available, using fallback');
-        logger.registration.info('Setting hacker theme directly');
         setThemeVariant('hacker');
+        setColorScheme('dark');
       }
     }
 
     logger.registration.info('Grace period complete');
     onComplete();
-  }, [setThemeVariant, onComplete]);
+  }, [setThemeVariant, setColorScheme, onComplete]);
 
   // Countdown timer - target is the START block (when window opens)
   // Note: The hook is intentionally called even when deadlines is null/loading.

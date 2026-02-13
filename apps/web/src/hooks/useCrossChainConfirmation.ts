@@ -17,7 +17,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { parseAbi } from 'viem';
 import { useReadContract } from 'wagmi';
-import { getWalletRegistryAddress } from '@/lib/contracts/addresses';
+import { getWalletRegistryAddress } from '@swr/chains';
 
 /**
  * Minimal ABI for isWalletRegistered(address) to avoid viem ambiguity

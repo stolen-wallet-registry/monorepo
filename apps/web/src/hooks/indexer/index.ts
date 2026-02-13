@@ -4,7 +4,6 @@
 
 export {
   useRegistrySearch,
-  useSearchType,
   detectSearchType,
   type SearchType,
   type SearchResult,

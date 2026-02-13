@@ -64,43 +64,14 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
 
     /// @inheritdoc IContractRegistry
     function isContractRegistered(string calldata caip10) external view returns (bool) {
-        // Parse CAIP-10: namespace:chainId:address
-        (bytes32 namespaceHash, bytes32 chainRef, uint256 addrStart,) = CAIP10.parse(caip10);
-
-        // Extract CAIP-2 hash directly from the string (e.g., keccak256("eip155:8453"))
-        bytes32 chainId = CAIP10.extractCaip2Hash(caip10);
-
-        // Extract address from CAIP-10 string
-        if (namespaceHash == CAIP10.NAMESPACE_EIP155) {
-            address contractAddr = CAIP10Evm.parseEvmAddress(caip10, addrStart);
-            bytes32 evmKey = CAIP10.contractStorageKey(contractAddr, chainId);
-            return _contracts[evmKey].registeredAt > 0;
-        }
-
-        // For non-EVM namespaces, hash the identifier portion
-        bytes memory identifierBytes = bytes(caip10)[addrStart:];
-        bytes32 identifier = keccak256(identifierBytes);
-        bytes32 nonEvmKey = CAIP10.contractKey(namespaceHash, chainRef, identifier);
-        return _contracts[nonEvmKey].registeredAt > 0;
+        bytes32 key = _resolveContractKey(caip10);
+        return _contracts[key].registeredAt > 0;
     }
 
     /// @inheritdoc IContractRegistry
     function getContractEntry(string calldata caip10) external view returns (ContractEntry memory) {
-        (bytes32 namespaceHash, bytes32 chainRef, uint256 addrStart,) = CAIP10.parse(caip10);
-
-        // Extract CAIP-2 hash directly from the string
-        bytes32 chainId = CAIP10.extractCaip2Hash(caip10);
-
-        if (namespaceHash == CAIP10.NAMESPACE_EIP155) {
-            address contractAddr = CAIP10Evm.parseEvmAddress(caip10, addrStart);
-            bytes32 evmKey = CAIP10.contractStorageKey(contractAddr, chainId);
-            return _contracts[evmKey];
-        }
-
-        bytes memory identifierBytes = bytes(caip10)[addrStart:];
-        bytes32 identifier = keccak256(identifierBytes);
-        bytes32 nonEvmKey = CAIP10.contractKey(namespaceHash, chainRef, identifier);
-        return _contracts[nonEvmKey];
+        bytes32 key = _resolveContractKey(caip10);
+        return _contracts[key];
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -190,5 +161,25 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
         address oldOperatorSubmitter = operatorSubmitter;
         operatorSubmitter = newOperatorSubmitter;
         emit OperatorSubmitterUpdated(oldOperatorSubmitter, newOperatorSubmitter);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // INTERNAL HELPERS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev Resolve a CAIP-10 string to its `_contracts` storage key.
+    ///      Handles both EVM (address-based) and non-EVM (hash-based) namespaces.
+    function _resolveContractKey(string calldata caip10) internal pure returns (bytes32) {
+        (bytes32 namespaceHash, bytes32 chainRef, uint256 addrStart, uint256 addrLen) = CAIP10.parse(caip10);
+        bytes32 chainId = CAIP10.extractCaip2Hash(caip10);
+
+        if (namespaceHash == CAIP10.NAMESPACE_EIP155) {
+            address contractAddr = CAIP10Evm.parseEvmAddress(caip10, addrStart);
+            return CAIP10.contractStorageKey(contractAddr, chainId);
+        }
+
+        bytes memory identifierBytes = bytes(caip10)[addrStart:addrStart + addrLen];
+        bytes32 identifier = keccak256(identifierBytes);
+        return CAIP10.contractKey(namespaceHash, chainRef, identifier);
     }
 }

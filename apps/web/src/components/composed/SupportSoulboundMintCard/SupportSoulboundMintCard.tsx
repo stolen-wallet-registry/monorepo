@@ -36,7 +36,7 @@ import { SoulboundPreviewModal } from '@/components/composed/SoulboundPreviewMod
 import { MintedTokenDisplay } from '@/components/composed/MintedTokenDisplay';
 import { cn, sanitizeErrorMessage } from '@/lib/utils';
 import { getChainName } from '@/lib/chains/config';
-import { getSupportSoulboundAddress } from '@/lib/contracts/addresses';
+import { getSupportSoulboundAddress } from '@swr/chains';
 import { getBrowserLanguage } from '@/lib/browser';
 import { useAccount, useSwitchChain } from 'wagmi';
 import {

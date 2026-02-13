@@ -13,13 +13,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button } fro
 import { RegistrationMethodSelector } from '@/components/composed/RegistrationMethodSelector';
 import { useRegistrationStore, type RegistrationType } from '@/stores/registrationStore';
 import { useRegistrySearch } from '@/hooks/indexer';
-import { isP2PAvailable } from '@/lib/p2p/types';
+import { useRelayAvailability } from '@/hooks/p2p';
 
 export function HomePage() {
   const [, setLocation] = useLocation();
   const { isConnected, address } = useAccount();
   const { setRegistrationType } = useRegistrationStore();
-  const p2pAvailable = isP2PAvailable();
+  const { available: p2pAvailable } = useRelayAvailability();
 
   // Check if the connected wallet is already registered via indexer
   // This catches both individual and batch registrations

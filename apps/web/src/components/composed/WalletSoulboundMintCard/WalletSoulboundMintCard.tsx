@@ -37,7 +37,7 @@ import { SoulboundPreviewModal } from '@/components/composed/SoulboundPreviewMod
 import { MintedTokenDisplay } from '@/components/composed/MintedTokenDisplay';
 import { cn, sanitizeErrorMessage } from '@/lib/utils';
 import { getChainName } from '@/lib/chains/config';
-import { getWalletSoulboundAddress } from '@/lib/contracts/addresses';
+import { getWalletSoulboundAddress } from '@swr/chains';
 import { getBrowserLanguage } from '@/lib/browser';
 import {
   Loader2,

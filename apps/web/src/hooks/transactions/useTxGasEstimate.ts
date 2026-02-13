@@ -15,8 +15,7 @@ import { useMemo, useEffect, useRef } from 'react';
 import { useEstimateGas, useGasPrice, useChainId } from 'wagmi';
 import { formatGwei, encodeFunctionData } from 'viem';
 import { transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
-import { getTransactionRegistryAddress } from '@/lib/contracts/addresses';
-import { getSpokeContractAddress } from '@/lib/contracts/crosschain-addresses';
+import { getTransactionRegistryAddress, getSpokeRegistryAddress } from '@swr/chains';
 import { isHubChain, isSpokeChain } from '@swr/chains';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { logger } from '@/lib/logger';
@@ -119,7 +118,7 @@ export function useTxGasEstimate({
   let contractAddress: Address | undefined;
   try {
     if (isSpoke) {
-      contractAddress = getSpokeContractAddress('spokeRegistry', chainId);
+      contractAddress = getSpokeRegistryAddress(chainId);
     } else if (isHub) {
       contractAddress = getTransactionRegistryAddress(chainId);
     }

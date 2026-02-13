@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
-import { useShallow } from 'zustand/shallow';
 import { logger } from '@/lib/logger';
 
 export type P2PConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -125,50 +124,3 @@ export const useP2PStore = create<P2PState & P2PActions>()(
     { name: 'P2PStore', enabled: process.env.NODE_ENV === 'development' }
   )
 );
-
-// ============================================================================
-// Selectors - Use these for granular subscriptions to prevent unnecessary re-renders
-// ============================================================================
-
-/**
- * Select peer IDs (local and partner).
- * Use when component needs to display or share peer IDs.
- */
-export const useP2PPeerIds = () =>
-  useP2PStore(
-    useShallow((s) => ({
-      peerId: s.peerId,
-      partnerPeerId: s.partnerPeerId,
-      setPeerId: s.setPeerId,
-      setPartnerPeerId: s.setPartnerPeerId,
-    }))
-  );
-
-/**
- * Select connection status.
- * Use when component needs to show connection state or error.
- */
-export const useP2PConnection = () =>
-  useP2PStore(
-    useShallow((s) => ({
-      connectionStatus: s.connectionStatus,
-      connectedToPeer: s.connectedToPeer,
-      errorMessage: s.errorMessage,
-      isInitialized: s.isInitialized,
-      setConnectionStatus: s.setConnectionStatus,
-      setConnectedToPeer: s.setConnectedToPeer,
-      setInitialized: s.setInitialized,
-    }))
-  );
-
-/**
- * Select connection status only (read-only).
- * Use for simple status indicators.
- */
-export const useP2PConnectionStatus = () => useP2PStore((s) => s.connectionStatus);
-
-/**
- * Select whether connected to peer (read-only).
- * Use for conditional rendering based on connection.
- */
-export const useIsConnectedToPeer = () => useP2PStore((s) => s.connectedToPeer);

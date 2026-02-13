@@ -209,46 +209,12 @@ export function getTxNextStep(
   return sequence[currentIndex + 1] ?? null;
 }
 
-export function getTxPreviousStep(
-  type: TransactionRegistrationType,
-  currentStep: TransactionRegistrationStep
-): TransactionRegistrationStep | null {
-  const sequence = TX_STEP_SEQUENCES[type];
-  const currentIndex = sequence.indexOf(currentStep);
-  if (currentIndex <= 0) {
-    return null;
-  }
-  return sequence[currentIndex - 1] ?? null;
-}
-
 // Selectors
 export const useTransactionRegistrationType = () =>
   useTransactionRegistrationStore(
     useShallow((s) => ({
       registrationType: s.registrationType,
       setRegistrationType: s.setRegistrationType,
-    }))
-  );
-
-export const useTransactionRegistrationStep = () =>
-  useTransactionRegistrationStore(
-    useShallow((s) => ({
-      step: s.step,
-      setStep: s.setStep,
-    }))
-  );
-
-export const useTransactionRegistrationTxHashes = () =>
-  useTransactionRegistrationStore(
-    useShallow((s) => ({
-      acknowledgementHash: s.acknowledgementHash,
-      acknowledgementChainId: s.acknowledgementChainId,
-      registrationHash: s.registrationHash,
-      registrationChainId: s.registrationChainId,
-      bridgeMessageId: s.bridgeMessageId,
-      setAcknowledgementHash: s.setAcknowledgementHash,
-      setRegistrationHash: s.setRegistrationHash,
-      setBridgeMessageId: s.setBridgeMessageId,
     }))
   );
 

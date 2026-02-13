@@ -5,7 +5,7 @@
  * Follows the same pattern as wallet self-relay but for transaction batches.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount, useChainId } from 'wagmi';
 import { isAddress } from 'viem';
@@ -137,10 +137,20 @@ export function TransactionSelfRelayRegistrationPage() {
     lowestBlockScanned,
   } = useUserTransactions(address);
 
-  // Initialize registration type on mount and normalize step for self-relay flow.
+  // Initialize registration type on mount.
+  // Reset step to initial on first mount to prevent stale persisted state from a previous
+  // session from skipping steps (e.g., grace period showing as "completed" from old data).
+  const hasInitialized = useRef(false);
   useEffect(() => {
     if (registrationType !== 'selfRelay') {
       setRegistrationType('selfRelay');
+    }
+
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      // Always start fresh — persisted step from a prior session is stale
+      setStep('select-transactions');
+      return;
     }
 
     const allowedSteps = TX_STEP_SEQUENCES.selfRelay;

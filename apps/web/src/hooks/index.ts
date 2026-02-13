@@ -107,7 +107,6 @@ export {
 // Indexer hooks (Ponder GraphQL)
 export {
   useRegistrySearch,
-  useSearchType,
   detectSearchType,
   type SearchType,
   type SearchResult,

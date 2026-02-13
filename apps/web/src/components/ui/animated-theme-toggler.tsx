@@ -4,7 +4,7 @@ import { flushSync } from 'react-dom';
 
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/useTheme';
-import type { ThemeVariant } from '@/providers/ThemeProviderContext';
+import type { ColorScheme, ThemeVariant } from '@/providers/ThemeProviderContext';
 
 interface AnimatedThemeTogglerProps extends React.ComponentPropsWithoutRef<'button'> {
   duration?: number;
@@ -12,10 +12,11 @@ interface AnimatedThemeTogglerProps extends React.ComponentPropsWithoutRef<'butt
 
 /** Handle exposed by AnimatedThemeToggler for programmatic control */
 export interface ThemeTogglerHandle {
-  /** Trigger animated switch to a specific theme variant */
-  triggerVariantSwitch: (variant: ThemeVariant) => void;
+  /** Trigger animated switch to a specific theme variant, optionally also switching color scheme in the same animation */
+  triggerVariantSwitch: (variant: ThemeVariant, colorScheme?: ColorScheme) => void;
 }
 
+// TODO: forwardRef is deprecated in React 19 — migrate ref to a regular prop
 export const AnimatedThemeToggler = forwardRef<ThemeTogglerHandle, AnimatedThemeTogglerProps>(
   function AnimatedThemeToggler({ className, duration = 400, onClick, ...rest }, ref) {
     const { resolvedColorScheme, setColorScheme, themeVariant, setThemeVariant } = useTheme();
@@ -86,15 +87,23 @@ export const AnimatedThemeToggler = forwardRef<ThemeTogglerHandle, AnimatedTheme
     }, [isDark, animateTransition, setColorScheme]);
 
     const triggerVariantSwitch = useCallback(
-      (variant: ThemeVariant) => {
-        // Skip if already on this variant
-        if (themeVariant === variant) return;
-        animateTransition(() => setThemeVariant(variant)).catch((err) => {
-          // AbortError/InvalidStateError are expected when View Transition is skipped or interrupted
+      (variant: ThemeVariant, colorScheme?: ColorScheme) => {
+        // Skip if nothing to change.
+        // NOTE: If 'system' is passed as colorScheme it will compare against
+        // resolvedColorScheme ('light'|'dark') and appear different, causing a
+        // no-op animation. Current call-sites only pass 'dark'/'light'.
+        const variantSame = themeVariant === variant;
+        const schemeSame = !colorScheme || resolvedColorScheme === colorScheme;
+        if (variantSame && schemeSame) return;
+
+        animateTransition(() => {
+          if (!variantSame) setThemeVariant(variant);
+          if (colorScheme && !schemeSame) setColorScheme(colorScheme);
+        }).catch((err) => {
           if (err.name !== 'AbortError' && err.name !== 'InvalidStateError') console.error(err);
         });
       },
-      [themeVariant, animateTransition, setThemeVariant]
+      [themeVariant, resolvedColorScheme, animateTransition, setThemeVariant, setColorScheme]
     );
 
     // Expose imperative handle for programmatic control

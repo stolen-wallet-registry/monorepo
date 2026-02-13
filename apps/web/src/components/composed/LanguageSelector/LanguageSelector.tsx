@@ -4,8 +4,15 @@
  * Allows users to select their preferred language for the on-chain SVG artwork preview.
  */
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@swr/ui';
-import { getLanguageName, LANGUAGE_NAMES } from '@/lib/constants/languages';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  getLanguageName,
+  LANGUAGE_NAMES,
+} from '@swr/ui';
 
 /** Supported language codes */
 const LANGUAGES = Object.keys(LANGUAGE_NAMES);

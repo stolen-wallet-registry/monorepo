@@ -212,35 +212,3 @@ export async function reconnectToPeer(
     },
   };
 }
-
-/**
- * Check if currently connected to any relay server.
- */
-export function isConnectedToRelay(libp2p: Libp2p): boolean {
-  let relayServers;
-  try {
-    relayServers = getRelayServers();
-  } catch {
-    return false;
-  }
-
-  const connections = libp2p.getConnections();
-
-  for (const server of relayServers) {
-    // Extract peer ID from multiaddr string (format: .../p2p/PEER_ID)
-    const peerIdMatch = server.multiaddr.match(/\/p2p\/([^/]+)$/);
-    if (!peerIdMatch) continue;
-    const peerIdString = peerIdMatch[1];
-
-    // Check if we have an open connection to this relay
-    const hasConnection = connections.some(
-      (conn) => conn.remotePeer.toString() === peerIdString && conn.status === 'open'
-    );
-
-    if (hasConnection) {
-      return true;
-    }
-  }
-
-  return false;
-}

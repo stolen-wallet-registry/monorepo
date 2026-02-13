@@ -26,6 +26,16 @@ export const EXAMPLE_CLEAN_TX =
   '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
 // ═══════════════════════════════════════════════════════════════════════════
+// EXAMPLE CONTRACT ADDRESSES
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Placeholder flagged contract - a known scam contract address (example only)
+export const EXAMPLE_FLAGGED_CONTRACT = '0x00000000000000000000000000000000DeadBeef';
+
+// Clean contract - using Uniswap V2 Router as a well-known legitimate contract
+export const EXAMPLE_CLEAN_CONTRACT = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D';
+
+// ═══════════════════════════════════════════════════════════════════════════
 // INDEXER CONFIGURATION
 // ═══════════════════════════════════════════════════════════════════════════
 

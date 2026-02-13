@@ -36,9 +36,19 @@ import {
   EXAMPLE_CLEAN_ADDRESS,
   EXAMPLE_REPORTED_TX,
   EXAMPLE_CLEAN_TX,
+  EXAMPLE_FLAGGED_CONTRACT,
+  EXAMPLE_CLEAN_CONTRACT,
   INDEXER_URL,
   HUB_CHAIN_ID,
 } from './constants';
+
+type StubScenario =
+  | 'stolen-wallet'
+  | 'clean-wallet'
+  | 'reported-tx'
+  | 'clean-tx'
+  | 'flagged-contract'
+  | 'clean-contract';
 
 interface RegistrySearchPreviewProps {
   className?: string;
@@ -124,6 +134,55 @@ function createStubbedTransactionResult(txHash: string): SearchResult {
   };
 }
 
+function createStubbedNotFoundAddressResult(address: string): SearchResult {
+  return {
+    type: 'address',
+    found: false,
+    foundInWalletRegistry: false,
+    foundInContractRegistry: false,
+    data: {
+      address: address.toLowerCase() as `0x${string}`,
+      wallet: null,
+      contract: null,
+    },
+  };
+}
+
+function createStubbedCleanTransactionResult(_txHash: string): SearchResult {
+  return {
+    type: 'transaction',
+    found: false,
+    data: null,
+  };
+}
+
+function createStubbedContractResult(address: string): SearchResult {
+  return {
+    type: 'address',
+    found: true,
+    foundInWalletRegistry: false,
+    foundInContractRegistry: true,
+    data: {
+      address: address.toLowerCase() as `0x${string}`,
+      wallet: null,
+      contract: {
+        contractAddress: address.toLowerCase() as `0x${string}`,
+        chains: [
+          {
+            caip2ChainId: `eip155:${HUB_CHAIN_ID}`,
+            chainName: HUB_CHAIN_ID === 8453 ? 'Base' : 'Base Sepolia',
+            numericChainId: HUB_CHAIN_ID,
+            batchId:
+              '0x0000000000000000000000000000000000000000000000000000000000000002' as `0x${string}`,
+            operator: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+            reportedAt: BigInt(Math.floor(Date.now() / 1000) - 86400 * 5), // 5 days ago
+          },
+        ],
+      },
+    },
+  };
+}
+
 export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps) {
   const [inputValue, setInputValue] = useState('');
   const [result, setResult] = useState<SearchResult | null>(null);
@@ -132,7 +191,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
   const [error, setError] = useState<string | null>(null);
   const latestQueryRef = useRef<string | null>(null);
 
-  const handleSearch = useCallback(async (query: string, useStub?: 'wallet' | 'transaction') => {
+  const handleSearch = useCallback(async (query: string, useStub?: StubScenario) => {
     const trimmed = query.trim();
 
     if (!trimmed) {
@@ -152,17 +211,32 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
     setSearchedQuery(trimmed);
     latestQueryRef.current = trimmed;
 
-    // Use stubbed data for example "stolen/reported" buttons
-    if (useStub === 'wallet') {
-      setResult(createStubbedWalletResult(trimmed));
-      return;
-    }
-    if (useStub === 'transaction') {
-      setResult(createStubbedTransactionResult(trimmed));
-      return;
+    // Use stubbed data for ALL example buttons (no indexer required)
+    if (useStub) {
+      setIsLoading(false);
+      switch (useStub) {
+        case 'stolen-wallet':
+          setResult(createStubbedWalletResult(trimmed));
+          return;
+        case 'clean-wallet':
+          setResult(createStubbedNotFoundAddressResult(trimmed));
+          return;
+        case 'reported-tx':
+          setResult(createStubbedTransactionResult(trimmed));
+          return;
+        case 'clean-tx':
+          setResult(createStubbedCleanTransactionResult(trimmed));
+          return;
+        case 'flagged-contract':
+          setResult(createStubbedContractResult(trimmed));
+          return;
+        case 'clean-contract':
+          setResult(createStubbedNotFoundAddressResult(trimmed));
+          return;
+      }
     }
 
-    // Real search for user input and "clean" examples
+    // Real search for user-typed input (requires indexer)
     setIsLoading(true);
 
     try {
@@ -203,7 +277,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
   );
 
   const handleExampleClick = useCallback(
-    (value: string, stub?: 'wallet' | 'transaction') => {
+    (value: string, stub: StubScenario) => {
       const trimmed = value.trim();
       setInputValue(trimmed);
       void handleSearch(trimmed, stub);
@@ -256,19 +330,19 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
           </Button>
         </form>
 
-        {/* Example Buttons - Centered */}
+        {/* Example Buttons - Grid layout for uniform alignment */}
         <div
-          className="mt-2 flex flex-wrap items-center justify-center gap-2"
+          className="mt-2 grid w-fit mx-auto grid-cols-[auto_5rem_5rem] items-center gap-x-2 gap-y-1.5"
           role="group"
           aria-label="Example searches"
         >
-          <span className="text-xs text-muted-foreground">Wallets:</span>
+          <span className="text-xs text-muted-foreground text-right">Wallets:</span>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleExampleClick(EXAMPLE_REGISTERED_ADDRESS, 'wallet')}
+            onClick={() => handleExampleClick(EXAMPLE_REGISTERED_ADDRESS, 'stolen-wallet')}
             disabled={isLoading}
-            className="h-7 px-3 text-xs"
+            className="h-7 w-full text-xs"
             aria-label="Search example stolen wallet address"
           >
             Stolen
@@ -276,20 +350,21 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleExampleClick(EXAMPLE_CLEAN_ADDRESS)}
+            onClick={() => handleExampleClick(EXAMPLE_CLEAN_ADDRESS, 'clean-wallet')}
             disabled={isLoading}
-            className="h-7 px-3 text-xs"
+            className="h-7 w-full text-xs"
             aria-label="Search example clean wallet address"
           >
             Clean
           </Button>
-          <span className="text-xs text-muted-foreground ml-2">Transactions:</span>
+
+          <span className="text-xs text-muted-foreground text-right">Transactions:</span>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleExampleClick(EXAMPLE_REPORTED_TX, 'transaction')}
+            onClick={() => handleExampleClick(EXAMPLE_REPORTED_TX, 'reported-tx')}
             disabled={isLoading}
-            className="h-7 px-3 text-xs"
+            className="h-7 w-full text-xs"
             aria-label="Search example reported transaction"
           >
             Reported
@@ -297,10 +372,32 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleExampleClick(EXAMPLE_CLEAN_TX)}
+            onClick={() => handleExampleClick(EXAMPLE_CLEAN_TX, 'clean-tx')}
             disabled={isLoading}
-            className="h-7 px-3 text-xs"
+            className="h-7 w-full text-xs"
             aria-label="Search example clean transaction"
+          >
+            Clean
+          </Button>
+
+          <span className="text-xs text-muted-foreground text-right">Contracts:</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExampleClick(EXAMPLE_FLAGGED_CONTRACT, 'flagged-contract')}
+            disabled={isLoading}
+            className="h-7 w-full text-xs"
+            aria-label="Search example flagged contract address"
+          >
+            Flagged
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExampleClick(EXAMPLE_CLEAN_CONTRACT, 'clean-contract')}
+            disabled={isLoading}
+            className="h-7 w-full text-xs"
+            aria-label="Search example clean contract address"
           >
             Clean
           </Button>

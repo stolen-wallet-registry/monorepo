@@ -8,6 +8,7 @@ import {
   AnimatedThemeToggler,
   type ThemeTogglerHandle,
 } from '@/components/ui/animated-theme-toggler';
+import { ThemeVariantToggle } from '@/components/composed/ThemeVariantToggle';
 import { logger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/useTheme';
@@ -32,9 +33,9 @@ export function Header() {
     logger.ui.debug('Registering triggerThemeAnimation wrapper with context', {
       component: 'Header',
     });
-    setTriggerThemeAnimation((variant) => {
+    setTriggerThemeAnimation((variant, colorScheme) => {
       if (themeTogglerRef.current) {
-        themeTogglerRef.current.triggerVariantSwitch(variant);
+        themeTogglerRef.current.triggerVariantSwitch(variant, colorScheme);
       } else {
         logger.ui.warn('themeTogglerRef.current is null when triggering animation', {
           component: 'Header',
@@ -105,6 +106,7 @@ export function Header() {
           >
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
+          <ThemeVariantToggle />
           <AnimatedThemeToggler
             ref={themeTogglerRef}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9"
