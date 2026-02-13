@@ -11,8 +11,7 @@
 import { useEffect, useMemo } from 'react';
 import { useReadContract, useChainId } from 'wagmi';
 import { transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
-import { getTransactionRegistryAddress } from '@/lib/contracts/addresses';
-import { getSpokeContractAddress } from '@/lib/contracts/crosschain-addresses';
+import { getTransactionRegistryAddress, getSpokeRegistryAddress } from '@swr/chains';
 import { isHubChain, isSpokeChain } from '@swr/chains';
 import { TX_SIGNATURE_STEP, type TxSignatureStep } from '@/lib/signatures/transactions';
 import type { Address, Hash } from '@/lib/types/ethereum';
@@ -71,7 +70,7 @@ export function useTransactionHashStruct(
   // Get contract address
   let contractAddress: Address | undefined;
   if (isSpoke) {
-    contractAddress = getSpokeContractAddress('spokeRegistry', chainId);
+    contractAddress = getSpokeRegistryAddress(chainId);
   } else if (isHub) {
     contractAddress = getTransactionRegistryAddress(chainId);
   }

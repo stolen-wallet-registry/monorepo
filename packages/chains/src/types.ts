@@ -117,6 +117,8 @@ export interface SpokeContracts {
   feeManager: Address;
   /** Bridge adapter contracts (one per supported provider) */
   bridgeAdapters: BridgeAdapters;
+  /** Cross-chain soulbound attestation forwarder */
+  spokeSoulboundForwarder?: Address;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

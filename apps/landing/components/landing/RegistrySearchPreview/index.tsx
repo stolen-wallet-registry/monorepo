@@ -31,6 +31,14 @@ import {
   type SearchResult,
   type ResultStatus,
 } from '@swr/search';
+
+type StubScenario =
+  | 'stolen-wallet'
+  | 'clean-wallet'
+  | 'reported-tx'
+  | 'clean-tx'
+  | 'flagged-contract'
+  | 'clean-contract';
 import {
   EXAMPLE_REGISTERED_ADDRESS,
   EXAMPLE_CLEAN_ADDRESS,
@@ -126,7 +134,7 @@ function createStubbedTransactionResult(txHash: string): SearchResult {
   };
 }
 
-function createStubbedCleanAddressResult(address: string): SearchResult {
+function createStubbedNotFoundAddressResult(address: string): SearchResult {
   return {
     type: 'address',
     found: false,
@@ -175,20 +183,6 @@ function createStubbedContractResult(address: string): SearchResult {
   };
 }
 
-function createStubbedCleanContractResult(address: string): SearchResult {
-  return {
-    type: 'address',
-    found: false,
-    foundInWalletRegistry: false,
-    foundInContractRegistry: false,
-    data: {
-      address: address.toLowerCase() as `0x${string}`,
-      wallet: null,
-      contract: null,
-    },
-  };
-}
-
 export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps) {
   const [inputValue, setInputValue] = useState('');
   const [result, setResult] = useState<SearchResult | null>(null);
@@ -197,91 +191,79 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
   const [error, setError] = useState<string | null>(null);
   const latestQueryRef = useRef<string | null>(null);
 
-  const handleSearch = useCallback(
-    async (
-      query: string,
-      useStub?:
-        | 'stolen-wallet'
-        | 'clean-wallet'
-        | 'reported-tx'
-        | 'clean-tx'
-        | 'flagged-contract'
-        | 'clean-contract'
-    ) => {
-      const trimmed = query.trim();
+  const handleSearch = useCallback(async (query: string, useStub?: StubScenario) => {
+    const trimmed = query.trim();
 
-      if (!trimmed) {
-        setError('Please enter a wallet address or transaction hash');
-        setResult(null);
+    if (!trimmed) {
+      setError('Please enter a wallet address or transaction hash');
+      setResult(null);
+      return;
+    }
+
+    // Basic validation - at least looks like a hex value
+    if (!trimmed.startsWith('0x')) {
+      setError('Invalid format. Must start with 0x');
+      setResult(null);
+      return;
+    }
+
+    setError(null);
+    setSearchedQuery(trimmed);
+    latestQueryRef.current = trimmed;
+
+    // Use stubbed data for ALL example buttons (no indexer required)
+    switch (useStub) {
+      case 'stolen-wallet':
+        setResult(createStubbedWalletResult(trimmed));
         return;
-      }
-
-      // Basic validation - at least looks like a hex value
-      if (!trimmed.startsWith('0x')) {
-        setError('Invalid format. Must start with 0x');
-        setResult(null);
+      case 'clean-wallet':
+        setResult(createStubbedNotFoundAddressResult(trimmed));
         return;
+      case 'reported-tx':
+        setResult(createStubbedTransactionResult(trimmed));
+        return;
+      case 'clean-tx':
+        setResult(createStubbedCleanTransactionResult(trimmed));
+        return;
+      case 'flagged-contract':
+        setResult(createStubbedContractResult(trimmed));
+        return;
+      case 'clean-contract':
+        setResult(createStubbedNotFoundAddressResult(trimmed));
+        return;
+    }
+
+    // Real search for user-typed input (requires indexer)
+    setIsLoading(true);
+
+    try {
+      const searchResult = await search(searchConfig, trimmed);
+
+      // Ignore stale responses from previous searches
+      if (latestQueryRef.current !== trimmed) return;
+
+      setResult(searchResult);
+
+      // Show error for invalid input type
+      if (searchResult.type === 'invalid') {
+        setError(
+          'Invalid format. Enter a wallet address (42 chars) or transaction hash (66 chars).'
+        );
       }
+    } catch (err) {
+      // Ignore errors from stale searches
+      if (latestQueryRef.current !== trimmed) return;
 
-      setError(null);
-      setSearchedQuery(trimmed);
-      latestQueryRef.current = trimmed;
-
-      // Use stubbed data for ALL example buttons (no indexer required)
-      switch (useStub) {
-        case 'stolen-wallet':
-          setResult(createStubbedWalletResult(trimmed));
-          return;
-        case 'clean-wallet':
-          setResult(createStubbedCleanAddressResult(trimmed));
-          return;
-        case 'reported-tx':
-          setResult(createStubbedTransactionResult(trimmed));
-          return;
-        case 'clean-tx':
-          setResult(createStubbedCleanTransactionResult(trimmed));
-          return;
-        case 'flagged-contract':
-          setResult(createStubbedContractResult(trimmed));
-          return;
-        case 'clean-contract':
-          setResult(createStubbedCleanContractResult(trimmed));
-          return;
+      console.error('Registry search failed:', err);
+      setError('Failed to search registry. Please try again.');
+      setResult(null);
+    } finally {
+      // Only clear loading if this is still the latest query
+      if (latestQueryRef.current === trimmed) {
+        setIsLoading(false);
       }
-
-      // Real search for user-typed input (requires indexer)
-      setIsLoading(true);
-
-      try {
-        const searchResult = await search(searchConfig, trimmed);
-
-        // Ignore stale responses from previous searches
-        if (latestQueryRef.current !== trimmed) return;
-
-        setResult(searchResult);
-
-        // Show error for invalid input type
-        if (searchResult.type === 'invalid') {
-          setError(
-            'Invalid format. Enter a wallet address (42 chars) or transaction hash (66 chars).'
-          );
-        }
-      } catch (err) {
-        // Ignore errors from stale searches
-        if (latestQueryRef.current !== trimmed) return;
-
-        console.error('Registry search failed:', err);
-        setError('Failed to search registry. Please try again.');
-        setResult(null);
-      } finally {
-        // Only clear loading if this is still the latest query
-        if (latestQueryRef.current === trimmed) {
-          setIsLoading(false);
-        }
-      }
-    },
-    []
-  );
+    }
+  }, []);
 
   const handleSubmit = useCallback(
     (e: FormEvent<HTMLFormElement>) => {
@@ -292,16 +274,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
   );
 
   const handleExampleClick = useCallback(
-    (
-      value: string,
-      stub:
-        | 'stolen-wallet'
-        | 'clean-wallet'
-        | 'reported-tx'
-        | 'clean-tx'
-        | 'flagged-contract'
-        | 'clean-contract'
-    ) => {
+    (value: string, stub: StubScenario) => {
       const trimmed = value.trim();
       setInputValue(trimmed);
       void handleSearch(trimmed, stub);

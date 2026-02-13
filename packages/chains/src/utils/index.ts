@@ -70,6 +70,29 @@ export {
   getAllBridgeAdapters,
 } from './bridges';
 
+// Contract address getters
+export {
+  type RegistryType,
+  type RegistryVariant,
+  getWalletRegistryAddress,
+  getTransactionRegistryAddress,
+  getContractRegistryAddress,
+  getFraudRegistryHubAddress,
+  getOperatorSubmitterAddress,
+  getCrossChainInboxAddress,
+  getOperatorRegistryAddress,
+  getFeeManagerAddress,
+  getTranslationRegistryAddress,
+  getWalletSoulboundAddress,
+  getSupportSoulboundAddress,
+  getSoulboundReceiverAddress,
+  getSpokeRegistryAddress,
+  getSpokeFeeManagerAddress,
+  getSpokeSoulboundForwarderAddress,
+  getRegistryAddress,
+  getRegistryType,
+} from './contracts';
+
 // CAIP-2 / CAIP-10 utilities
 export {
   // Types (re-exported from @swr/caip)

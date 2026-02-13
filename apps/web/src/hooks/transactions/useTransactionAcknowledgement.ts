@@ -15,8 +15,7 @@
 import { useMemo } from 'react';
 import { useWriteContract, useWaitForTransactionReceipt, useChainId } from 'wagmi';
 import { transactionRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
-import { getTransactionRegistryAddress } from '@/lib/contracts/addresses';
-import { getSpokeContractAddress } from '@/lib/contracts/crosschain-addresses';
+import { getTransactionRegistryAddress, getSpokeRegistryAddress } from '@swr/chains';
 import { isHubChain, isSpokeChain } from '@swr/chains';
 import type { ParsedSignature } from '@/lib/signatures';
 import type { Address, Hash } from '@/lib/types/ethereum';
@@ -97,7 +96,7 @@ export function useTransactionAcknowledgement(): UseTxAcknowledgementResult {
   const contractAddress = useMemo(() => {
     try {
       if (isSpoke) {
-        const address = getSpokeContractAddress('spokeRegistry', chainId);
+        const address = getSpokeRegistryAddress(chainId);
         if (!address) {
           throw new Error(`SpokeRegistry not configured for chain ${chainId}`);
         }

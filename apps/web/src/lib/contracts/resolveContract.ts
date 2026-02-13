@@ -29,10 +29,10 @@ import {
   getRegistryType,
   type RegistryType,
   type RegistryVariant,
-} from './addresses';
+} from '@swr/chains';
 import type { Address } from '@/lib/types/ethereum';
 
-export type { RegistryVariant } from './addresses';
+export type { RegistryVariant } from '@swr/chains';
 
 export interface ResolvedContract {
   /** The resolved contract address (undefined if resolution failed) */

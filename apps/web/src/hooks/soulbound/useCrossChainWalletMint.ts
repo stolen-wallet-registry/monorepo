@@ -9,7 +9,7 @@
 import { useWriteContract, useWaitForTransactionReceipt, useAccount } from 'wagmi';
 import { zeroAddress } from 'viem';
 import { spokeSoulboundForwarderAbi } from '@/lib/contracts/abis';
-import { getSpokeSoulboundForwarderAddress } from '@/lib/contracts/crosschain-addresses';
+import { getSpokeSoulboundForwarderAddress } from '@swr/chains';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { isSpokeChain } from '@swr/chains';
 import { logger } from '@/lib/logger';

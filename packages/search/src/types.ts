@@ -205,9 +205,6 @@ export interface InvalidSearchResult {
  */
 export type SearchResult = AddressSearchResult | TransactionSearchResult | InvalidSearchResult;
 
-// Legacy types for backward compatibility
-export type WalletSearchResultLegacy = WalletSearchResult;
-
 // ═══════════════════════════════════════════════════════════════════════════
 // STATUS INTERPRETATION
 // ═══════════════════════════════════════════════════════════════════════════

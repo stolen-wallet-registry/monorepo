@@ -14,7 +14,7 @@ import {
   type RegistryStatusResult,
 } from '@/lib/contracts/query';
 import { walletRegistryAbi } from '@/lib/contracts/abis';
-import { getWalletRegistryAddress } from '@/lib/contracts/addresses';
+import { getWalletRegistryAddress } from '@swr/chains';
 import { registryStaleTime, registryKeys } from '@/lib/contracts/queryKeys';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';

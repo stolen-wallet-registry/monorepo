@@ -6,13 +6,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import {
-  search,
-  detectSearchType,
-  type SearchConfig,
-  type SearchResult,
-  type SearchType,
-} from '@swr/search';
+import { search, detectSearchType, type SearchConfig, type SearchResult } from '@swr/search';
 import { INDEXER_URL } from '@/lib/indexer';
 
 // Re-export types from @swr/search for convenience
@@ -107,14 +101,4 @@ export function useRegistrySearch(query: string) {
     staleTime: 30_000, // 30 seconds
     retry: 1,
   });
-}
-
-/**
- * Get the detected search type for an input.
- *
- * @param query - User input to analyze
- * @returns Detected type: 'address' | 'transaction' | 'caip10' | 'invalid'
- */
-export function useSearchType(query: string): SearchType {
-  return detectSearchType(query);
 }

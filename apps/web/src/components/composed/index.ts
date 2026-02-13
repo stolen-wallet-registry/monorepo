@@ -57,6 +57,6 @@ export {
   SupportSoulboundMintCard,
   type SupportSoulboundMintCardProps,
 } from './SupportSoulboundMintCard';
-export { SoulboundSvgPreview, type SoulboundSvgPreviewProps } from './SoulboundSvgPreview';
+export { SoulboundSvgPreview, type SoulboundSvgPreviewProps } from '@swr/ui';
 export { SoulboundPreviewModal, type SoulboundPreviewModalProps } from './SoulboundPreviewModal';
 export { MintedTokenDisplay, type MintedTokenDisplayProps } from './MintedTokenDisplay';

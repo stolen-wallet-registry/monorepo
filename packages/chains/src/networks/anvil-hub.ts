@@ -43,6 +43,7 @@ export const anvilHub: HubNetworkConfig = {
     registryHub: '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
     crossChainInbox: '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6',
     operatorRegistry: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
+    operatorSubmitter: '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
     translationRegistry: '0x3Aa5ebB10DC797CAC828524e59A333d0A371443c',
     walletSoulbound: '0xc6e7DF5E7b4f2A278906862b61205850344D4e7d',
     supportSoulbound: '0x59b670e9fA9D0A427751Af201D676719a970857b',

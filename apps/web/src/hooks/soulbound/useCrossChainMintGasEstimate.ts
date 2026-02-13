@@ -8,7 +8,7 @@
 import { useEstimateGas, useGasPrice, useAccount } from 'wagmi';
 import { encodeFunctionData, formatEther, formatGwei } from 'viem';
 import { spokeSoulboundForwarderAbi } from '@/lib/contracts/abis';
-import { getSpokeSoulboundForwarderAddress } from '@/lib/contracts/crosschain-addresses';
+import { getSpokeSoulboundForwarderAddress } from '@swr/chains';
 import { isSpokeChain } from '@swr/chains';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { logger } from '@/lib/logger';

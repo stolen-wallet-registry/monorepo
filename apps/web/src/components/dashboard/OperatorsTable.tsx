@@ -59,7 +59,7 @@ import {
 } from '@/hooks/dashboard';
 import { useWalletType } from '@/hooks/useWalletType';
 import { operatorRegistryAbi } from '@/lib/contracts/abis';
-import { getOperatorRegistryAddress } from '@/lib/contracts/addresses';
+import { getOperatorRegistryAddress } from '@swr/chains';
 import type { Address, Hex } from '@/lib/types/ethereum';
 
 /** Permission description for header tooltip */

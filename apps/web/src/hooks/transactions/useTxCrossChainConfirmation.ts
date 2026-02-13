@@ -17,7 +17,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { parseAbi } from 'viem';
 import { useReadContract } from 'wagmi';
-import { getFraudRegistryHubAddress } from '@/lib/contracts/addresses';
+import { getFraudRegistryHubAddress } from '@swr/chains';
 import { getHubChainId, isSpokeChain } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';

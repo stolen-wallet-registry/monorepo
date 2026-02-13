@@ -6,7 +6,7 @@
 
 import { useReadContract, useAccount, useChainId } from 'wagmi';
 import { operatorRegistryAbi } from '@/lib/contracts/abis';
-import { getOperatorRegistryAddress } from '@/lib/contracts/addresses';
+import { getOperatorRegistryAddress } from '@swr/chains';
 import type { Address } from '@/lib/types/ethereum';
 
 export interface UseIsOperatorOptions {

@@ -145,11 +145,3 @@ export const LEVEL_COLORS: Record<LogLevel, string> = {
   warn: 'color: #FF9800', // Orange
   error: 'color: #F44336', // Red
 };
-
-// Background colors for category tags
-export const CATEGORY_STYLES: Record<LogLevel, string> = {
-  debug: 'color: #888888; font-weight: normal',
-  info: 'color: #2196F3; font-weight: bold',
-  warn: 'color: #FF9800; font-weight: bold',
-  error: 'color: #F44336; font-weight: bold',
-};

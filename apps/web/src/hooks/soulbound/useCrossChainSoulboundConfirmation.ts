@@ -19,7 +19,7 @@ import {
   walletSoulboundAbi,
   supportSoulboundAbi,
 } from '@/lib/contracts/abis';
-import { getWalletSoulboundAddress, getSupportSoulboundAddress } from '@/lib/contracts/addresses';
+import { getWalletSoulboundAddress, getSupportSoulboundAddress } from '@swr/chains';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { getBridgeMessageByIdUrl } from '@swr/chains';
 import { logger } from '@/lib/logger';

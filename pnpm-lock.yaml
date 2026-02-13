@@ -48,6 +48,9 @@ importers:
       '@swr/chains':
         specifier: workspace:*
         version: link:../../packages/chains
+      '@swr/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       mermaid:
         specifier: ^11.12.2
         version: 11.12.2

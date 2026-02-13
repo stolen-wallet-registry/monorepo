@@ -16,8 +16,8 @@ import {
   DialogTrigger,
   Button,
   ScrollArea,
+  SoulboundSvgPreview,
 } from '@swr/ui';
-import { SoulboundSvgPreview } from '@/components/composed/SoulboundSvgPreview';
 import { LanguageSelector } from '@/components/composed/LanguageSelector';
 import { Eye, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';

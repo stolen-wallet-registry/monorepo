@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { usePublicClient } from 'wagmi';
 import { zeroAddress } from 'viem';
 import { supportSoulboundAbi } from '@/lib/contracts/abis';
-import { getSupportSoulboundAddress } from '@/lib/contracts/addresses';
+import { getSupportSoulboundAddress } from '@swr/chains';
 import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { logger } from '@/lib/logger';
 import type { Address } from '@/lib/types/ethereum';

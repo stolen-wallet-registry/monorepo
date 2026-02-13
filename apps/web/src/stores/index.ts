@@ -27,10 +27,7 @@ export {
   type TransactionRegistrationStep,
   TX_STEP_SEQUENCES,
   getTxNextStep,
-  getTxPreviousStep,
   useTransactionRegistrationType,
-  useTransactionRegistrationStep,
-  useTransactionRegistrationTxHashes,
   useTransactionRegistrationFlow,
 } from './transactionRegistrationStore';
 
@@ -39,11 +36,7 @@ export {
   type TransactionFormState,
   type TransactionFormActions,
   type StoredTransactionDetail,
-  useTransactionFormAddresses,
   useTransactionSelection,
-  useSelectedTransactionDetails,
-  useTransactionDataHash,
-  useTransactionCount,
 } from './transactionFormStore';
 
 // Utility to reset all stores at once

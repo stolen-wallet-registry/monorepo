@@ -15,14 +15,18 @@ vi.mock('wagmi', () => ({
 
 // Mock contract addresses with controllable behavior
 let mockContractAddress: string | null = '0x5fbdb2315678afecb367f032d93f642f64180aa3';
-vi.mock('@/lib/contracts/addresses', () => ({
-  getWalletRegistryAddress: () => {
-    if (mockContractAddress === null) {
-      throw new Error('No contract for this chain');
-    }
-    return mockContractAddress;
-  },
-}));
+vi.mock('@swr/chains', async () => {
+  const actual = await vi.importActual('@swr/chains');
+  return {
+    ...actual,
+    getWalletRegistryAddress: () => {
+      if (mockContractAddress === null) {
+        throw new Error('No contract for this chain');
+      }
+      return mockContractAddress;
+    },
+  };
+});
 
 // Mock the contract query function
 vi.mock('@/lib/contracts/query', async () => {

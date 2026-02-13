@@ -1,6 +1,5 @@
 export { RegistrySearch, type RegistrySearchProps } from './RegistrySearch';
 export { AddressSearchResult, type AddressSearchResultProps } from './AddressSearchResult';
-export { WalletSearchResult, type WalletSearchResultProps } from './WalletSearchResult';
 export {
   TransactionSearchResult,
   type TransactionSearchResultProps,
