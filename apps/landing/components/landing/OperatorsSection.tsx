@@ -1,35 +1,27 @@
 'use client';
 
-import { Building2, FileStack, Code2, Users, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Building2, FileStack, Key, Terminal, Users, ExternalLink } from 'lucide-react';
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  TextAnimate,
-  Badge,
-} from '@swr/ui';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, TextAnimate } from '@swr/ui';
 
 const OPERATOR_FEATURES = [
   {
-    title: 'Batch Submissions',
+    title: 'Batch Registration',
     description:
-      'Batch-submit stolen wallets and fraudulent transactions on behalf of victims. Aggregate fraud intelligence from multiple sources into efficient single transactions.',
+      'Submit wallets, transactions, and contracts in bulk. Operators pack hundreds of entries into a single transaction — built for organizations processing fraud data at scale.',
     icon: <FileStack className="size-6" aria-hidden="true" />,
   },
   {
-    title: 'Fraudulent Contracts',
+    title: 'Per-Registry Permissions',
     description:
-      'Exclusive authority to catalog malicious smart contracts. Users can flag suspicious contracts, but only approved operators can formalize registry entries.',
-    icon: <Code2 className="size-6" aria-hidden="true" />,
+      'Each operator is approved for specific registries via capability bits. Wallet, transaction, and contract access are granted independently. The contract registry is operator-exclusive.',
+    icon: <Key className="size-6" aria-hidden="true" />,
   },
   {
-    title: 'Higher Trust Signal',
+    title: 'CLI & Multisig Support',
     description:
-      'Operator attestations carry elevated trust in the registry. Your submissions are weighted higher in fraud detection algorithms.',
-    icon: <ShieldCheck className="size-6" aria-hidden="true" />,
+      'Submit batches via command line or build unsigned transactions for Safe multisig approval. No private key required for the build step — teams review and sign together.',
+    icon: <Terminal className="size-6" aria-hidden="true" />,
   },
 ];
 
@@ -41,9 +33,9 @@ const POTENTIAL_OPERATORS = [
 ];
 
 const OPERATOR_DESCRIPTION =
-  'Any DAO-approved organization committed to sharing reliable, trustworthy information on stolen wallets, ' +
-  'fraudulent transactions, and malicious contracts. Operators coordinate openly to help ' +
-  'off-ramps track and recover stolen funds across the ecosystem.';
+  'Any organization the DAO approves to submit fraud data. Operators are typically exchanges, ' +
+  'security firms, wallet providers, or protocols with access to fraud intelligence at scale. ' +
+  'Each operator gets permissioned access to specific registries based on their role.';
 
 export function OperatorsSection() {
   return (
@@ -54,10 +46,6 @@ export function OperatorsSection() {
       <div className="mx-auto max-w-6xl">
         {/* Section heading */}
         <div className="mb-12 text-center md:mb-16">
-          <Badge variant="default" className="mb-4">
-            <CheckCircle2 className="mr-1 size-3" />
-            Live
-          </Badge>
           <TextAnimate
             as="h2"
             animation="blurInUp"
@@ -77,10 +65,19 @@ export function OperatorsSection() {
             startOnView
             once
           >
-            DAO-approved entities with elevated on-chain registry access. Batch-submit fraud
-            reports, catalog malicious contracts, and coordinate with other operators to protect the
-            ecosystem at scale.
+            DAO-approved organizations that batch-submit fraud data across the wallet, transaction,
+            and contract registries. Operators bypass the individual two-phase signature flow,
+            making bulk submissions gas-efficient.
           </TextAnimate>
+          <a
+            href="https://monorepo-docs-sepia.vercel.app/operator"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+          >
+            Operator documentation
+            <ExternalLink className="size-3.5" />
+          </a>
         </div>
 
         {/* Operator features */}
@@ -127,15 +124,6 @@ export function OperatorsSection() {
                 <p className="text-xs text-muted-foreground">{operator.examples}</p>
               </div>
             ))}
-          </div>
-
-          <div className="mt-6 rounded-lg border border-primary/30 bg-primary/5 p-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">The Operator Program is now live.</span>
-              <br />
-              Approved operators can access the Dashboard to submit fraud data and view indexed
-              registrations. Contact the DAO to apply.
-            </p>
           </div>
         </div>
       </div>

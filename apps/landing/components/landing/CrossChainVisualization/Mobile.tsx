@@ -81,7 +81,7 @@ export function CrossChainVisualizationMobile({
         {/* Networks - representative icons */}
         <MobileSection
           label={showLabels ? 'Report Fraud' : undefined}
-          tooltip="Report stolen wallets from any chain. Addresses are formatted as CAIP-10 identifiers (eip155:1:0x... for Ethereum, solana:mainnet:7S3P... for Solana) enabling unified tracking across all blockchains."
+          tooltip="Report stolen wallets from any chain. EVM wallets use a wildcard key (eip155:_:0x...) so one registration covers every EVM chain. Non-EVM chains (Solana, Bitcoin) use chain-specific identifiers."
         >
           <div className="flex flex-wrap items-center justify-center gap-3">
             <IconCircle label="Ethereum" size="sm">
@@ -108,7 +108,7 @@ export function CrossChainVisualizationMobile({
         {/* Cross-Chain Messaging */}
         <MobileSection
           label={showLabels ? 'Cross-Chain Messaging' : undefined}
-          tooltip="Cross-chain messaging protocols relay CAIP-10 formatted reports from source chains to the central registry on Base, maintaining data integrity across different blockchain architectures."
+          tooltip="Cross-chain messaging protocols relay reports from source chains to the central registry on Base, maintaining data integrity across different blockchain architectures. EVM wallet entries use a wildcard key for universal cross-chain coverage."
         >
           <div className="flex items-center gap-3">
             <BridgeIcon label="Chainlink CCIP">

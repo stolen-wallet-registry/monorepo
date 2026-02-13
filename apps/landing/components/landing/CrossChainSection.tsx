@@ -32,8 +32,8 @@ export function CrossChainSection() {
             once
           >
             Fraud data flows from any chain to a unified on-chain registry, then broadcasts to
-            exchanges, wallets, and security tools worldwide. Competing entities coordinate openly
-            to track stolen funds.
+            exchanges, wallets, and security tools worldwide. EVM wallet entries use a wildcard key
+            so one registration covers every EVM chain.
           </TextAnimate>
           <a
             href="https://standards.chainagnostic.org/CAIPs/caip-10"

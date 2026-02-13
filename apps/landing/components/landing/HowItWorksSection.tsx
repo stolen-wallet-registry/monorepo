@@ -1,6 +1,8 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { PenLine, Clock, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 import { TextAnimate, cn } from '@swr/ui';
 
@@ -25,6 +27,111 @@ const STEPS = [
     icon: <CheckCircle2 className="size-5" aria-hidden="true" />,
   },
 ];
+
+// CAIP-10 examples from diverse chains — cycles through to show cross-chain support
+const CAIP_DISPLAY_EXAMPLES = [
+  {
+    value: 'eip155:_:0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+    label: 'EVM wallet (wildcard)',
+    color: 'text-[#627eea] dark:text-[#8b9eff]',
+  },
+  {
+    value: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:7S3P4HxJpyyigGzodYwHtCxZyUQe9JiBMHyRWXArAaKv',
+    label: 'Solana wallet',
+    color: 'text-[#9945ff] dark:text-[#b980ff]',
+  },
+  {
+    value: 'bip122:000000000019d6689c085ae165831e93:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
+    label: 'Bitcoin wallet',
+    color: 'text-[#f7931a] dark:text-[#ffb54c]',
+  },
+  {
+    value: 'cosmos:cosmoshub-4:cosmos1vk8e95f0f3z5yv0ew3w9q4z6d8y7x3p2s4m1n0',
+    label: 'Cosmos wallet',
+    color: 'text-[#6f7390] dark:text-[#a8adc0]',
+  },
+  {
+    value: 'eip155:1:0xabc123def456789012345678901234567890abcdef1234567890abcdef123456',
+    label: 'EVM transaction',
+    color: 'text-[#627eea] dark:text-[#8b9eff]',
+  },
+];
+
+const CYCLE_INTERVAL_MS = 3000;
+
+// Truncate long CAIP values for display
+function truncateDisplay(value: string): string {
+  const parts = value.split(':');
+  if (parts.length < 3) return value;
+  const namespace = parts[0];
+  let chainId = parts[1];
+  const address = parts.slice(2).join(':');
+  if (chainId.length > 12) chainId = `${chainId.slice(0, 8)}...`;
+  const truncAddr = address.length > 16 ? `${address.slice(0, 6)}...${address.slice(-6)}` : address;
+  return `${namespace}:${chainId}:${truncAddr}`;
+}
+
+function CaipCycler() {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % CAIP_DISPLAY_EXAMPLES.length);
+    }, CYCLE_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
+
+  const current = CAIP_DISPLAY_EXAMPLES[index];
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      {/* Cycling main example */}
+      <div className="relative h-8 w-full overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={index}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.3 }}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            <code className={cn('font-mono text-sm sm:text-base md:text-lg', current.color)}>
+              {truncateDisplay(current.value)}
+            </code>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Label */}
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={index}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="text-xs text-muted-foreground"
+        >
+          {current.label}
+        </motion.span>
+      </AnimatePresence>
+
+      {/* Chain indicator dots */}
+      <div className="flex gap-1.5">
+        {CAIP_DISPLAY_EXAMPLES.map((_, i) => (
+          <div
+            key={i}
+            className={cn(
+              'size-1.5 rounded-full transition-all duration-300',
+              i === index ? 'bg-primary scale-125' : 'bg-muted-foreground/30'
+            )}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StepConnector() {
   return (
@@ -99,26 +206,26 @@ export function HowItWorksSection() {
           ))}
         </div>
 
-        {/* CAIP-10 address example */}
+        {/* CAIP-10 address examples — cycling through multiple chains */}
         <div className="mt-12 rounded-lg border border-border/50 bg-muted/30 p-6 text-center md:mt-16">
           <a
             href="https://standards.chainagnostic.org/CAIPs/caip-10"
             target="_blank"
             rel="noopener noreferrer"
-            className="mb-3 inline-block text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-primary hover:underline"
+            className="mb-4 inline-block text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-primary hover:underline"
           >
-            Cross-Chain Address Format (CAIP-10)
+            Cross-Chain Identifier Format (CAIP-10)
           </a>
-          <TextAnimate
-            animation="blurIn"
-            by="character"
-            duration={3}
-            className="font-mono text-sm text-foreground sm:text-base md:text-lg"
-            startOnView
-            once
-          >
-            eip155:1:0x742d35Cc6634C0532925a3b844Bc454e4438f44e
-          </TextAnimate>
+
+          <CaipCycler />
+
+          <p className="mt-4 text-xs text-muted-foreground">
+            Every chain has a standard identifier format. EVM wallets use a wildcard chain reference{' '}
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">
+              eip155:_:0x...
+            </code>{' '}
+            so one registration covers every EVM chain.
+          </p>
         </div>
       </div>
     </section>

@@ -49,6 +49,11 @@ export const EMIT_DELAY = PHASE_2_END; // When beam reaches hub
 // Chain color and icon mapping for CAIP emissions
 // Dark mode uses higher opacity backgrounds and lighter text colors for visibility
 export const CHAIN_CONFIG: Record<string, { bg: string; text: string; icon: string }> = {
+  'eip155:_': {
+    bg: 'bg-[#627eea]/15 dark:bg-[#627eea]/30',
+    text: 'text-[#627eea] dark:text-[#8b9eff]',
+    icon: '🛡️',
+  }, // CAIP-363 wildcard — covers all EVM chains
   'eip155:1': {
     bg: 'bg-[#627eea]/10 dark:bg-[#627eea]/25',
     text: 'text-[#627eea] dark:text-[#8b9eff]',
@@ -111,12 +116,12 @@ export function getChainConfig(caipAddress: string): { bg: string; text: string;
 }
 
 // Full CAIP-10 address examples (accounts) - valid format for visualization purposes
+// EVM wallets use wildcard (eip155:_:0x...) because the registry stores them chain-agnostically.
+// Non-EVM wallets keep their chain-specific reference.
 export const CAIP10_ADDRESSES = [
-  'eip155:1:0x742d35Cc6634C0532925a3b844Bc454e4438f44e', // Ethereum (42 chars)
-  'eip155:8453:0x1a2b3c4d5e6f7890abcdef1234567890abcdef12', // Base
-  'eip155:10:0x9f8e7d6c5b4a3210fedcba0987654321fedcba09', // Optimism
-  'eip155:43114:0x7d6c5b4a3210fedcba0987654321fedcba098765', // Avalanche (valid hex)
-  'eip155:56:0x890abcdef1234567890abcdef1234567890abcdef', // BNB Chain (valid hex)
+  'eip155:_:0x742d35Cc6634C0532925a3b844Bc454e4438f44e', // EVM wildcard wallet
+  'eip155:_:0x1a2b3c4d5e6f7890abcdef1234567890abcdef12', // EVM wildcard wallet
+  'eip155:_:0x9f8e7d6c5b4a3210fedcba0987654321fedcba09', // EVM wildcard wallet
   'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:7S3P4HxJpyyigGzodYwHtCxZyUQe9JiBMHyRWXArAaKv', // Solana
   'bip122:000000000019d6689c085ae165831e93:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', // Bitcoin
   'cosmos:cosmoshub-4:cosmos1vk8e95f0f3z5yv0ew3w9q4z6d8y7x3p2s4m1n0', // Cosmos
@@ -129,10 +134,19 @@ export const CHAIN_QUALIFIED_TRANSACTIONS = [
   'eip155:8453:0x789xyz012345678901234567890123456789012345678901234567890abcdef',
 ];
 
+// Flagged contract addresses — chain-specific (contracts are deployed on specific chains)
+export const FLAGGED_CONTRACTS = [
+  'eip155:1:0xdead0000000000000000000000000000deadbeef', // Ethereum contract
+  'eip155:8453:0xbad00000000000000000000000000000000000ff', // Base contract
+];
+
 // Combined examples with type indicator
-export const CAIP_EXAMPLES = [
+export type EmissionType = 'address' | 'transaction' | 'contract';
+
+export const CAIP_EXAMPLES: { value: string; type: EmissionType }[] = [
   ...CAIP10_ADDRESSES.map((addr) => ({ value: addr, type: 'address' as const })),
   ...CHAIN_QUALIFIED_TRANSACTIONS.map((tx) => ({ value: tx, type: 'transaction' as const })),
+  ...FLAGGED_CONTRACTS.map((c) => ({ value: c, type: 'contract' as const })),
 ];
 
 // Truncate CAIP address to reasonable length (show namespace:chainId + truncated address)

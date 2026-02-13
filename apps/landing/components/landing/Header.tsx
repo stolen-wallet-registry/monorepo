@@ -14,17 +14,11 @@ import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler';
  */
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5173';
 
-/**
- * Docs URL for documentation links.
- * Configured via NEXT_PUBLIC_DOCS_URL environment variable.
- */
-const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL ?? 'https://monorepo-docs-sepia.vercel.app';
-
 const NAV_LINKS: { href: string; label: string; external?: boolean }[] = [
   { href: '#cross-chain', label: 'Cross-Chain' },
   { href: '#registries', label: 'Registries' },
   { href: '#how-it-works', label: 'How It Works' },
-  { href: DOCS_URL, label: 'Docs', external: true },
+  { href: '#operators', label: 'Operators' },
 ];
 
 export function Header() {
