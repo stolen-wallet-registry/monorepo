@@ -16,6 +16,7 @@ export interface ThemeTogglerHandle {
   triggerVariantSwitch: (variant: ThemeVariant, colorScheme?: ColorScheme) => void;
 }
 
+// TODO: forwardRef is deprecated in React 19 — migrate ref to a regular prop
 export const AnimatedThemeToggler = forwardRef<ThemeTogglerHandle, AnimatedThemeTogglerProps>(
   function AnimatedThemeToggler({ className, duration = 400, onClick, ...rest }, ref) {
     const { resolvedColorScheme, setColorScheme, themeVariant, setThemeVariant } = useTheme();
@@ -87,7 +88,10 @@ export const AnimatedThemeToggler = forwardRef<ThemeTogglerHandle, AnimatedTheme
 
     const triggerVariantSwitch = useCallback(
       (variant: ThemeVariant, colorScheme?: ColorScheme) => {
-        // Skip if nothing to change
+        // Skip if nothing to change.
+        // NOTE: If 'system' is passed as colorScheme it will compare against
+        // resolvedColorScheme ('light'|'dark') and appear different, causing a
+        // no-op animation. Current call-sites only pass 'dark'/'light'.
         const variantSame = themeVariant === variant;
         const schemeSame = !colorScheme || resolvedColorScheme === colorScheme;
         if (variantSame && schemeSame) return;

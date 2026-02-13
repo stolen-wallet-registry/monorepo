@@ -170,7 +170,7 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
     /// @dev Resolve a CAIP-10 string to its `_contracts` storage key.
     ///      Handles both EVM (address-based) and non-EVM (hash-based) namespaces.
     function _resolveContractKey(string calldata caip10) internal pure returns (bytes32) {
-        (bytes32 namespaceHash, bytes32 chainRef, uint256 addrStart,) = CAIP10.parse(caip10);
+        (bytes32 namespaceHash, bytes32 chainRef, uint256 addrStart, uint256 addrLen) = CAIP10.parse(caip10);
         bytes32 chainId = CAIP10.extractCaip2Hash(caip10);
 
         if (namespaceHash == CAIP10.NAMESPACE_EIP155) {
@@ -178,7 +178,7 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
             return CAIP10.contractStorageKey(contractAddr, chainId);
         }
 
-        bytes memory identifierBytes = bytes(caip10)[addrStart:];
+        bytes memory identifierBytes = bytes(caip10)[addrStart:addrStart + addrLen];
         bytes32 identifier = keccak256(identifierBytes);
         return CAIP10.contractKey(namespaceHash, chainRef, identifier);
     }

@@ -1084,8 +1084,8 @@ contract Deploy is Script {
             return (ARBITRUM_GRACE_BLOCKS, ARBITRUM_DEADLINE_BLOCKS);
         }
 
-        // Default to L2 config for unknown chains
-        return (L2_GRACE_BLOCKS, L2_DEADLINE_BLOCKS);
+        // Unknown chain — revert to force explicit configuration (aligned with DeployBase)
+        revert("Deploy: unsupported chain ID - add timing config");
     }
 
     function _addressToBytes32(address addr) internal pure returns (bytes32) {

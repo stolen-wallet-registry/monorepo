@@ -21,6 +21,9 @@ const CHECK_TIMEOUT_MS = 3000;
  * Extract a WebSocket URL from a libp2p multiaddr.
  *
  * Parses `/ip4/{ip}/tcp/{port}/ws/...` → `ws://{ip}:{port}`
+ *
+ * TODO: Only handles /ip4/ multiaddrs. Add /ip6/ and /dns4/ support
+ * if relay servers are ever configured with non-IPv4 addresses.
  */
 function extractWsUrl(multiaddr: string): string | null {
   const ipMatch = multiaddr.match(/\/ip4\/([^/]+)/);

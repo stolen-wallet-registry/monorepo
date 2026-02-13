@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { Terminal, Paintbrush } from 'lucide-react';
 
-import { Tooltip, TooltipTrigger, TooltipContent } from '@swr/ui';
+import { Button, Tooltip, TooltipTrigger, TooltipContent } from '@swr/ui';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/useTheme';
 import { logger } from '@/lib/logger';
@@ -26,18 +26,16 @@ export function ThemeVariantToggle({ className }: { className?: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="icon"
           onClick={toggle}
-          className={cn(
-            'inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9',
-            className
-          )}
+          className={cn(className)}
           aria-label={isHacker ? 'Switch to base theme' : 'Switch to hacker theme'}
         >
           {isHacker ? <Paintbrush className="h-4 w-4" /> : <Terminal className="h-4 w-4" />}
           <span className="sr-only">Toggle theme variant</span>
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">{isHacker ? 'Base theme' : 'Hacker theme'}</TooltipContent>
     </Tooltip>
