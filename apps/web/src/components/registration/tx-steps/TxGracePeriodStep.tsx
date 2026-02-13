@@ -38,7 +38,7 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
   // In self-relay, the connected wallet may be the gas wallet (forwarder), not the reporter
   const reporter = useTransactionFormStore((s) => s.reporter);
   const { acknowledgementHash } = useTransactionRegistrationStore();
-  const { themeVariant, triggerThemeAnimation, setThemeVariant } = useTheme();
+  const { themeVariant, triggerThemeAnimation, setThemeVariant, setColorScheme } = useTheme();
 
   // Use refs for theme values to avoid stale closure issues in handleExpire callback
   const themeVariantRef = useRef(themeVariant);
@@ -104,20 +104,22 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
     const currentThemeVariant = themeVariantRef.current;
     const currentTriggerFn = triggerThemeAnimationRef.current;
 
-    // Switch to hacker theme when grace period expires
+    // Switch to hacker dark theme when grace period expires.
+    // Both variant and colorScheme are applied in the same View Transition animation.
     if (currentThemeVariant !== 'hacker') {
       if (currentTriggerFn) {
-        logger.registration.info('Triggering hacker theme animation');
-        currentTriggerFn('hacker');
+        logger.registration.info('Triggering hacker dark theme animation');
+        currentTriggerFn('hacker', 'dark');
       } else {
         logger.registration.warn('triggerThemeAnimation not available, using fallback');
         setThemeVariant('hacker');
+        setColorScheme('dark');
       }
     }
 
     logger.registration.info('Transaction batch grace period complete');
     onComplete();
-  }, [setThemeVariant, onComplete]);
+  }, [setThemeVariant, setColorScheme, onComplete]);
 
   // Countdown timer - target is the START block (when window opens)
   // Pass null when no pending ack to prevent timer from firing immediately on zeroed data

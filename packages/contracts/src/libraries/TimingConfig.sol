@@ -16,7 +16,7 @@ pragma solidity ^0.8.24;
 /// Different chains have different block times, so block counts must be adjusted:
 /// | Chain          | Block Time | Grace Blocks | Deadline Blocks | Result         |
 /// |----------------|------------|--------------|-----------------|----------------|
-/// | Anvil (local)  | 13s        | 10           | 50              | ~2 min / ~10 min |
+/// | Anvil (local)  | 13s        | 2            | 50              | ~30s / ~10 min |
 /// | Base/Optimism  | 2s         | 60           | 300             | ~2 min / ~10 min |
 /// | Arbitrum       | 0.25s      | 480          | 2400            | ~2 min / ~10 min |
 /// | Ethereum L1    | 12s        | 10           | 50              | ~2 min / ~10 min |

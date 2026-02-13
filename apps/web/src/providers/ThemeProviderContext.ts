@@ -20,10 +20,12 @@ export type ThemeProviderState = {
   setColorScheme: (scheme: ColorScheme) => void;
   /** Set the theme variant */
   setThemeVariant: (variant: ThemeVariant) => void;
-  /** Trigger animated theme variant switch (set by AnimatedThemeToggler) */
-  triggerThemeAnimation: ((variant: ThemeVariant) => void) | null;
+  /** Trigger animated theme variant switch (set by AnimatedThemeToggler). Optional colorScheme forces light/dark in the same animation. */
+  triggerThemeAnimation: ((variant: ThemeVariant, colorScheme?: ColorScheme) => void) | null;
   /** Register the animated theme trigger function */
-  setTriggerThemeAnimation: (fn: ((variant: ThemeVariant) => void) | null) => void;
+  setTriggerThemeAnimation: (
+    fn: ((variant: ThemeVariant, colorScheme?: ColorScheme) => void) | null
+  ) => void;
 };
 
 export const ThemeProviderContext = createContext<ThemeProviderState | undefined>(undefined);

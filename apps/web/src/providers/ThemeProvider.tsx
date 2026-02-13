@@ -52,13 +52,16 @@ export function ThemeProvider({
 
   // Animated theme trigger function (registered by AnimatedThemeToggler)
   const [triggerThemeAnimation, setTriggerThemeAnimationState] = useState<
-    ((variant: ThemeVariant) => void) | null
+    ((variant: ThemeVariant, colorScheme?: ColorScheme) => void) | null
   >(null);
 
   // Wrap setter to track registration
-  const setTriggerThemeAnimation = useCallback((fn: ((variant: ThemeVariant) => void) | null) => {
-    setTriggerThemeAnimationState(fn);
-  }, []);
+  const setTriggerThemeAnimation = useCallback(
+    (fn: ((variant: ThemeVariant, colorScheme?: ColorScheme) => void) | null) => {
+      setTriggerThemeAnimationState(() => fn);
+    },
+    []
+  );
 
   // Derive resolved color scheme from colorScheme and systemPreference
   const resolvedColorScheme = useMemo<'light' | 'dark'>(() => {

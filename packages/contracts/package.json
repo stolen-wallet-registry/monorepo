@@ -28,10 +28,10 @@
     "deploy:testnet:spoke": "source .env.testnet && forge script script/DeployTestnet.s.sol:DeployTestnetSpoke --rpc-url $OPTIMISM_SEPOLIA_RPC --broadcast --verify --etherscan-api-key $OPTIMISM_ETHERSCAN_API_KEY",
     "deploy:testnet:trust": "source .env.testnet && forge script script/DeployTestnet.s.sol:ConfigureTestnetTrust --rpc-url $BASE_SEPOLIA_RPC --broadcast",
     "export-abi": "node scripts/export-abi.js",
-    "slither": "python3 -m slither . --config-file slither.config.json --fail-none",
-    "slither:summary": "python3 -m slither . --config-file slither.config.json --print human-summary --fail-none",
-    "slither:checklist": "python3 -m slither . --config-file slither.config.json --checklist --fail-none",
-    "slither:triage": "python3 -m slither . --config-file slither.config.json --triage-mode"
+    "slither": "slither . --config-file slither.config.json --fail-none",
+    "slither:summary": "slither . --config-file slither.config.json --print human-summary --fail-none",
+    "slither:checklist": "slither . --config-file slither.config.json --checklist --fail-none",
+    "slither:triage": "slither . --config-file slither.config.json --triage-mode"
   },
   "devDependencies": {
     "solhint": "^6.0.3"

@@ -31,9 +31,9 @@ abstract contract DeployBase is Script {
     /// @return graceBlocks Base blocks for grace period
     /// @return deadlineBlocks Base blocks for deadline window
     function getTimingConfig(uint256 chainId) internal pure returns (uint256 graceBlocks, uint256 deadlineBlocks) {
-        // Anvil/Local (13s blocks) - ~30s grace, ~2.5 min deadline for fast iteration
+        // Anvil/Local (13s blocks) - ~30s grace, ~10 min registration window
         if (chainId == 31_337 || chainId == 31_338) {
-            return (2, 12);
+            return (2, 50);
         }
 
         // Base mainnet/Sepolia (2s blocks)

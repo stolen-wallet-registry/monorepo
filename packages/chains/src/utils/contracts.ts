@@ -111,7 +111,6 @@ export function getSpokeFeeManagerAddress(chainId: number): Address {
 }
 
 export function getSpokeSoulboundForwarderAddress(chainId: number): Address | null {
-  if (!isSpokeChain(chainId)) return null;
   const network = getNetworkOrUndefined(chainId);
   if (!network || network.role !== 'spoke' || !network.spokeContracts) return null;
   return network.spokeContracts.spokeSoulboundForwarder ?? null;
@@ -138,6 +137,10 @@ export function getRegistryAddress(chainId: number, variant: RegistryVariant = '
       return getTransactionRegistryAddress(chainId);
     case 'contract':
       return getContractRegistryAddress(chainId);
+    default: {
+      const _exhaustive: never = variant;
+      throw new Error(`Unknown registry variant: ${_exhaustive}`);
+    }
   }
 }
 

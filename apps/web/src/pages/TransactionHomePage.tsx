@@ -15,13 +15,13 @@ import {
   useTransactionRegistrationStore,
   type TransactionRegistrationType,
 } from '@/stores/transactionRegistrationStore';
-import { isP2PAvailable } from '@/lib/p2p/types';
+import { useRelayAvailability } from '@/hooks/p2p';
 
 export function TransactionHomePage() {
   const [, setLocation] = useLocation();
   const { isConnected } = useAccount();
   const { setRegistrationType } = useTransactionRegistrationStore();
-  const p2pAvailable = isP2PAvailable();
+  const { available: p2pAvailable } = useRelayAvailability();
 
   const handleMethodSelect = (type: TransactionRegistrationType) => {
     setRegistrationType(type);

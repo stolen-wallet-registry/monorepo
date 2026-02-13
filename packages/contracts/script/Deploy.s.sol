@@ -76,9 +76,9 @@ contract Deploy is Script {
     // Block times: Anvil ~13s, Base/OP ~2s, Arbitrum ~0.25s
     // Target: ~30s grace for local, ~2 min grace for testnet/mainnet
 
-    // Local Anvil (13s blocks) - fast iteration
+    // Local Anvil (13s blocks) - ~30s grace, ~10 min registration window
     uint256 constant ANVIL_GRACE_BLOCKS = 2; // ~30s
-    uint256 constant ANVIL_DEADLINE_BLOCKS = 12; // ~2.5 min
+    uint256 constant ANVIL_DEADLINE_BLOCKS = 50; // ~10 min
 
     // Base/Optimism L2 (2s blocks)
     uint256 constant L2_GRACE_BLOCKS = 60; // ~2 min

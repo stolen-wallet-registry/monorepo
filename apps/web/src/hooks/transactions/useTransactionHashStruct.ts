@@ -67,12 +67,16 @@ export function useTransactionHashStruct(
   const isSpoke = isSpokeChain(chainId);
   const isHub = isHubChain(chainId);
 
-  // Get contract address
+  // Get contract address (these throw on missing config, so catch gracefully)
   let contractAddress: Address | undefined;
-  if (isSpoke) {
-    contractAddress = getSpokeRegistryAddress(chainId);
-  } else if (isHub) {
-    contractAddress = getTransactionRegistryAddress(chainId);
+  try {
+    if (isSpoke) {
+      contractAddress = getSpokeRegistryAddress(chainId);
+    } else if (isHub) {
+      contractAddress = getTransactionRegistryAddress(chainId);
+    }
+  } catch {
+    // Chain not configured — contractAddress stays undefined, query won't fire
   }
 
   // Log unsupported chain to help catch configuration issues

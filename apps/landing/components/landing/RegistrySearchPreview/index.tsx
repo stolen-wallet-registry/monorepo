@@ -31,14 +31,6 @@ import {
   type SearchResult,
   type ResultStatus,
 } from '@swr/search';
-
-type StubScenario =
-  | 'stolen-wallet'
-  | 'clean-wallet'
-  | 'reported-tx'
-  | 'clean-tx'
-  | 'flagged-contract'
-  | 'clean-contract';
 import {
   EXAMPLE_REGISTERED_ADDRESS,
   EXAMPLE_CLEAN_ADDRESS,
@@ -49,6 +41,14 @@ import {
   INDEXER_URL,
   HUB_CHAIN_ID,
 } from './constants';
+
+type StubScenario =
+  | 'stolen-wallet'
+  | 'clean-wallet'
+  | 'reported-tx'
+  | 'clean-tx'
+  | 'flagged-contract'
+  | 'clean-contract';
 
 interface RegistrySearchPreviewProps {
   className?: string;
@@ -212,25 +212,28 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
     latestQueryRef.current = trimmed;
 
     // Use stubbed data for ALL example buttons (no indexer required)
-    switch (useStub) {
-      case 'stolen-wallet':
-        setResult(createStubbedWalletResult(trimmed));
-        return;
-      case 'clean-wallet':
-        setResult(createStubbedNotFoundAddressResult(trimmed));
-        return;
-      case 'reported-tx':
-        setResult(createStubbedTransactionResult(trimmed));
-        return;
-      case 'clean-tx':
-        setResult(createStubbedCleanTransactionResult(trimmed));
-        return;
-      case 'flagged-contract':
-        setResult(createStubbedContractResult(trimmed));
-        return;
-      case 'clean-contract':
-        setResult(createStubbedNotFoundAddressResult(trimmed));
-        return;
+    if (useStub) {
+      setIsLoading(false);
+      switch (useStub) {
+        case 'stolen-wallet':
+          setResult(createStubbedWalletResult(trimmed));
+          return;
+        case 'clean-wallet':
+          setResult(createStubbedNotFoundAddressResult(trimmed));
+          return;
+        case 'reported-tx':
+          setResult(createStubbedTransactionResult(trimmed));
+          return;
+        case 'clean-tx':
+          setResult(createStubbedCleanTransactionResult(trimmed));
+          return;
+        case 'flagged-contract':
+          setResult(createStubbedContractResult(trimmed));
+          return;
+        case 'clean-contract':
+          setResult(createStubbedNotFoundAddressResult(trimmed));
+          return;
+      }
     }
 
     // Real search for user-typed input (requires indexer)
