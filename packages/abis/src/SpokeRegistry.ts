@@ -652,7 +652,7 @@ export const SpokeRegistryABI = [
     name: 'quoteFeeBreakdown',
     inputs: [
       {
-        name: 'owner',
+        name: 'wallet',
         type: 'address',
         internalType: 'address',
       },
@@ -693,7 +693,7 @@ export const SpokeRegistryABI = [
     name: 'quoteRegistration',
     inputs: [
       {
-        name: 'owner',
+        name: 'wallet',
         type: 'address',
         internalType: 'address',
       },

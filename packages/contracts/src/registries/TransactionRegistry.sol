@@ -451,7 +451,6 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         uint256 batchId = _nextBatchId++;
 
         // Register transactions, counting actual registrations
-        bytes32 localSourceChainId = CAIP10Evm.caip2Hash(uint64(block.chainid));
         uint32 actualCount = 0;
 
         for (uint256 i = 0; i < transactionHashes.length; i++) {
@@ -464,13 +463,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
             if (_transactions[key].registeredAt > 0) continue;
 
             _transactions[key] = TransactionEntry({
-                reportedChainId: chainId,
-                sourceChainId: localSourceChainId,
-                messageId: bytes32(0),
-                reporter: reporter,
-                registeredAt: uint64(block.timestamp),
-                bridgeId: 0,
-                isSponsored: isSponsored
+                registeredAt: uint64(block.timestamp), batchId: uint32(batchId), bridgeId: 0, isSponsored: isSponsored
             });
 
             actualCount++;
@@ -591,11 +584,8 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
             if (_transactions[key].registeredAt > 0) continue;
 
             _transactions[key] = TransactionEntry({
-                reportedChainId: params.reportedChainId,
-                sourceChainId: params.sourceChainId,
-                messageId: params.messageId,
-                reporter: reporter,
                 registeredAt: uint64(block.timestamp),
+                batchId: uint32(batchId),
                 bridgeId: params.bridgeId,
                 isSponsored: params.isSponsored
             });
@@ -663,7 +653,6 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         batchId = _nextBatchId++;
 
         // Register transactions, counting actual registrations
-        bytes32 localSourceChainId = CAIP10Evm.caip2Hash(uint64(block.chainid));
         uint32 actualCount = 0;
 
         for (uint256 i = 0; i < length; i++) {
@@ -676,13 +665,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
             if (_transactions[key].registeredAt > 0) continue;
 
             _transactions[key] = TransactionEntry({
-                reportedChainId: chainId,
-                sourceChainId: localSourceChainId,
-                messageId: bytes32(0),
-                reporter: address(0), // Operator submission
-                registeredAt: uint64(block.timestamp),
-                bridgeId: 0,
-                isSponsored: false
+                registeredAt: uint64(block.timestamp), batchId: uint32(batchId), bridgeId: 0, isSponsored: false
             });
 
             actualCount++;

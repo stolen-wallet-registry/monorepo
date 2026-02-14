@@ -136,16 +136,18 @@ contract OperatorSubmitterTest is Test {
     function _buildContractBatch(uint256 count)
         internal
         pure
-        returns (bytes32[] memory identifiers, bytes32[] memory chainIds)
+        returns (bytes32[] memory identifiers, bytes32[] memory chainIds, uint8[] memory threatCategories)
     {
         identifiers = new bytes32[](count);
         chainIds = new bytes32[](count);
+        threatCategories = new uint8[](count);
 
         bytes32 baseChainId = CAIP10Evm.caip2Hash(8453);
 
         for (uint256 i = 0; i < count; i++) {
             identifiers[i] = bytes32(uint256(uint160(address(uint160(i + 500)))));
             chainIds[i] = baseChainId;
+            threatCategories[i] = uint8((i % 5) + 1); // cycle through 1-5
         }
     }
 
@@ -279,13 +281,13 @@ contract OperatorSubmitterTest is Test {
     /// @notice Approved operator can register a batch of malicious contracts, emitting BatchSubmitted
     /// and persisting entries in the ContractRegistry.
     function test_RegisterContracts_Success() public {
-        (bytes32[] memory ids, bytes32[] memory chainIds) = _buildContractBatch(2);
+        (bytes32[] memory ids, bytes32[] memory chainIds, uint8[] memory threats) = _buildContractBatch(2);
 
         vm.expectEmit(true, true, false, true);
         emit BatchSubmitted(approvedOperator, address(contractRegistry), 1, 2);
 
         vm.prank(approvedOperator);
-        submitter.registerContractsAsOperator(ids, chainIds);
+        submitter.registerContractsAsOperator(ids, chainIds, threats);
 
         // Verify contracts stored in ContractRegistry
         for (uint256 i = 0; i < 2; i++) {
@@ -296,11 +298,11 @@ contract OperatorSubmitterTest is Test {
 
     /// @notice Unapproved operator is rejected for contract batches.
     function test_RegisterContracts_RejectsUnapprovedOperator() public {
-        (bytes32[] memory ids, bytes32[] memory chainIds) = _buildContractBatch(1);
+        (bytes32[] memory ids, bytes32[] memory chainIds, uint8[] memory threats) = _buildContractBatch(1);
 
         vm.prank(unapprovedOperator);
         vm.expectRevert(OperatorSubmitter.OperatorSubmitter__NotApprovedOperator.selector);
-        submitter.registerContractsAsOperator(ids, chainIds);
+        submitter.registerContractsAsOperator(ids, chainIds, threats);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -353,11 +355,11 @@ contract OperatorSubmitterTest is Test {
         vm.prank(owner);
         submitter.pause();
 
-        (bytes32[] memory ids, bytes32[] memory chainIds) = _buildContractBatch(1);
+        (bytes32[] memory ids, bytes32[] memory chainIds, uint8[] memory threats) = _buildContractBatch(1);
 
         vm.prank(approvedOperator);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        submitter.registerContractsAsOperator(ids, chainIds);
+        submitter.registerContractsAsOperator(ids, chainIds, threats);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -675,10 +677,11 @@ contract OperatorSubmitterTest is Test {
     /// @notice registerContractsAsOperator reverts EmptyBatch when length == 0.
     function test_RegisterContracts_RejectsEmptyBatch() public {
         bytes32[] memory empty = new bytes32[](0);
+        uint8[] memory emptyThreats = new uint8[](0);
 
         vm.prank(approvedOperator);
         vm.expectRevert(OperatorSubmitter.OperatorSubmitter__EmptyBatch.selector);
-        submitter.registerContractsAsOperator(empty, empty);
+        submitter.registerContractsAsOperator(empty, empty, emptyThreats);
     }
 
     /// @notice registerContractsAsOperator reverts ArrayLengthMismatch when
@@ -686,14 +689,17 @@ contract OperatorSubmitterTest is Test {
     function test_RegisterContracts_RejectsArrayMismatch() public {
         bytes32[] memory ids = new bytes32[](2);
         bytes32[] memory chainIds = new bytes32[](1);
+        uint8[] memory threats = new uint8[](2);
 
         ids[0] = bytes32(uint256(uint160(address(uint160(600)))));
         ids[1] = bytes32(uint256(uint160(address(uint160(601)))));
         chainIds[0] = CAIP10Evm.caip2Hash(8453);
+        threats[0] = 1;
+        threats[1] = 2;
 
         vm.prank(approvedOperator);
         vm.expectRevert(OperatorSubmitter.OperatorSubmitter__ArrayLengthMismatch.selector);
-        submitter.registerContractsAsOperator(ids, chainIds);
+        submitter.registerContractsAsOperator(ids, chainIds, threats);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -725,11 +731,11 @@ contract OperatorSubmitterTest is Test {
         uint256 requiredFee = fm.operatorBatchFeeWei();
         vm.deal(approvedOperator, 10 ether);
 
-        (bytes32[] memory ids, bytes32[] memory chainIds) = _buildContractBatch(1);
+        (bytes32[] memory ids, bytes32[] memory chainIds, uint8[] memory threats) = _buildContractBatch(1);
 
         vm.prank(approvedOperator);
         vm.expectRevert(OperatorSubmitter.OperatorSubmitter__InsufficientFee.selector);
-        feeSubmitter.registerContractsAsOperator{ value: requiredFee - 1 }(ids, chainIds);
+        feeSubmitter.registerContractsAsOperator{ value: requiredFee - 1 }(ids, chainIds, threats);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -142,7 +142,7 @@ contract StringLookupAndForwarderCheckTest is Test {
         ITransactionRegistry.TransactionEntry memory entry = txRegistry.getTransactionEntry(ref);
 
         assertGt(entry.registeredAt, 0, "registeredAt should be set");
-        assertEq(entry.reportedChainId, chainId, "reportedChainId should match");
+        assertEq(entry.batchId, 1, "batchId should be set");
     }
 
     /// @notice Multiple transactions on different chains, each queryable by string
@@ -189,8 +189,11 @@ contract StringLookupAndForwarderCheckTest is Test {
         bytes32[] memory chainIds = new bytes32[](1);
         chainIds[0] = chainId;
 
+        uint8[] memory threats = new uint8[](1);
+        threats[0] = 1; // drainer
+
         vm.prank(operatorSubmitter);
-        contractRegistry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        contractRegistry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
 
         // Verify typed lookup works
         assertTrue(
@@ -212,17 +215,19 @@ contract StringLookupAndForwarderCheckTest is Test {
         identifiers[0] = identifier;
         bytes32[] memory chainIds = new bytes32[](1);
         chainIds[0] = chainId;
+        uint8[] memory threats = new uint8[](1);
+        threats[0] = 1; // drainer
 
         vm.prank(operatorSubmitter);
-        contractRegistry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        contractRegistry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
 
         // Query via string
         string memory caip10 = _buildContractCaip10(maliciousContract, CHAIN_ID);
         IContractRegistry.ContractEntry memory entry = contractRegistry.getContractEntry(caip10);
 
         assertGt(entry.registeredAt, 0, "registeredAt should be set");
-        assertEq(entry.reportedChainId, chainId, "reportedChainId should match");
-        assertEq(entry.operatorId, operatorId, "operatorId should match");
+        assertEq(entry.batchId, 1, "batchId should be set");
+        assertEq(entry.threatCategory, 1, "threatCategory should match");
     }
 
     /// @notice Multiple contracts on different chains, each queryable by string
@@ -239,8 +244,12 @@ contract StringLookupAndForwarderCheckTest is Test {
         chainIds[0] = chainIdBase;
         chainIds[1] = chainIdArb;
 
+        uint8[] memory threats = new uint8[](2);
+        threats[0] = 1; // drainer
+        threats[1] = 2; // rug pull
+
         vm.prank(operatorSubmitter);
-        contractRegistry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        contractRegistry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
 
         assertTrue(
             contractRegistry.isContractRegistered(_buildContractCaip10(contract1, 8453)), "Base contract string lookup"
@@ -283,8 +292,11 @@ contract StringLookupAndForwarderCheckTest is Test {
         bytes32[] memory contractChainIds = new bytes32[](1);
         contractChainIds[0] = contractChainId;
 
+        uint8[] memory contractThreats = new uint8[](1);
+        contractThreats[0] = 3; // honeypot
+
         vm.prank(operatorSubmitter);
-        contractRegistry.registerContractsFromOperator(operatorId, contractIds, contractChainIds);
+        contractRegistry.registerContractsFromOperator(operatorId, contractIds, contractChainIds, contractThreats);
 
         // Query via hub string interface
         string memory txRef = _buildTxRef(txHash, CHAIN_ID);

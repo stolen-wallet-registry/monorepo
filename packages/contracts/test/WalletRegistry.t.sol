@@ -385,12 +385,11 @@ contract WalletRegistryTest is EIP712TestHelper {
 
         // Verify wallet entry data
         IWalletRegistry.WalletEntry memory entry = walletRegistry.getWalletEntry(wallet);
-        assertEq(entry.reportedChainId, expectedChainIdHash);
         assertEq(entry.incidentTimestamp, incidentTimestamp);
         assertEq(entry.registeredAt, uint64(block.timestamp));
         assertTrue(entry.isSponsored);
+        assertEq(entry.batchId, 0); // two-phase registration has no batch
         assertEq(entry.bridgeId, 0); // Local registration
-        assertEq(entry.messageId, bytes32(0));
     }
 
     /// @notice Registration rejects if called before grace period starts
@@ -582,11 +581,8 @@ contract WalletRegistryTest is EIP712TestHelper {
         // Verify wallet is registered
         assertTrue(walletRegistry.isWalletRegistered(wallet));
         IWalletRegistry.WalletEntry memory entry = walletRegistry.getWalletEntry(wallet);
-        assertEq(entry.reportedChainId, reportedChainId);
-        assertEq(entry.sourceChainId, sourceChainId);
         assertEq(entry.incidentTimestamp, incidentTimestamp);
         assertEq(entry.bridgeId, bridgeId);
-        assertEq(entry.messageId, messageId);
         assertTrue(entry.isSponsored);
     }
 
@@ -890,7 +886,7 @@ contract WalletRegistryTest is EIP712TestHelper {
             walletRegistry.getWalletEntry(CAIP10Evm.formatEvmWildcardLower(wallet));
 
         assertEq(byAddr.registeredAt, byStr.registeredAt);
-        assertEq(byAddr.reportedChainId, byStr.reportedChainId);
+        assertEq(byAddr.batchId, byStr.batchId);
         assertEq(byAddr.incidentTimestamp, byStr.incidentTimestamp);
     }
 
@@ -1019,5 +1015,42 @@ contract WalletRegistryTest is EIP712TestHelper {
         feeRegistry.withdrawCollectedFees();
         assertEq(address(feeRegistry).balance, 0);
         assertEq(owner.balance - ownerBefore, fee);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STORAGE SLOT INVARIANT — WalletEntry MUST fit in 1 slot
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice WalletEntry fits in exactly 1 storage slot (no overflow to next slot).
+    /// @dev Uses vm.load to read raw storage and verify the next slot is empty.
+    ///      Mapping slot for _wallets is 4 (from forge inspect WalletRegistry storage-layout).
+    function test_WalletEntryFitsInOneSlot() public {
+        // Register a wallet via operator path
+        address opSubmitter = makeAddr("slotTestSubmitter");
+        walletRegistry.setOperatorSubmitter(opSubmitter);
+
+        address testWallet = makeAddr("slotTestWallet");
+        bytes32[] memory identifiers = new bytes32[](1);
+        identifiers[0] = bytes32(uint256(uint160(testWallet)));
+        bytes32[] memory reportedChainIds = new bytes32[](1);
+        reportedChainIds[0] = CAIP10Evm.caip2Hash(REPORTED_CHAIN_ID);
+        uint64[] memory timestamps = new uint64[](1);
+        timestamps[0] = incidentTimestamp;
+
+        vm.prank(opSubmitter);
+        walletRegistry.registerWalletsFromOperator(keccak256("op"), identifiers, reportedChainIds, timestamps);
+
+        // Compute storage slot: keccak256(abi.encode(key, MAPPING_SLOT))
+        bytes32 key = CAIP10Evm.evmWalletKey(testWallet);
+        uint256 WALLETS_MAPPING_SLOT = 4;
+        bytes32 slot = keccak256(abi.encode(key, WALLETS_MAPPING_SLOT));
+
+        // Entry should be populated in this slot
+        bytes32 packed = vm.load(address(walletRegistry), slot);
+        assertNotEq(packed, bytes32(0), "WalletEntry should be populated");
+
+        // Next slot must be empty — proves no overflow to a second slot
+        bytes32 nextSlot = bytes32(uint256(slot) + 1);
+        assertEq(vm.load(address(walletRegistry), nextSlot), bytes32(0), "WalletEntry overflowed to second slot");
     }
 }

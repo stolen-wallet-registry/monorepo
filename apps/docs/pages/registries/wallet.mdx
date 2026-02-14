@@ -35,15 +35,25 @@ The wildcard `_` means an EVM wallet registered on any chain is marked as compro
 
 ```solidity
 struct WalletEntry {
-    bytes32 reportedChainId;    // CAIP-2 hash of chain where incident occurred
-    bytes32 sourceChainId;      // CAIP-2 hash of chain where registration was submitted
-    bytes32 messageId;          // Cross-chain message ID (bytes32(0) for local)
     uint64  registeredAt;       // Block timestamp of registration
     uint64  incidentTimestamp;  // Unix timestamp of incident (0 if unknown)
+    uint32  batchId;            // Operator batch ID (0 for individual/cross-chain)
     uint8   bridgeId;           // 0 = local, 1 = Hyperlane
     bool    isSponsored;        // True if someone else paid gas
 }
 ```
+
+The struct is 22 bytes, fitting in a single EVM storage slot. This is a deliberate design choice: storage carries minimal data per entry, while events carry rich provenance data (chain IDs, message IDs, reporters, etc.).
+
+Fields that were moved to events-only:
+
+| Field             | Why events-only                                                                                          |
+| ----------------- | -------------------------------------------------------------------------------------------------------- |
+| `reportedChainId` | Emitted in `WalletRegistered` -- needed for indexing/display but not for on-chain `isRegistered` lookups |
+| `sourceChainId`   | Emitted in `CrossChainWalletRegistered` -- only relevant for cross-chain provenance tracing              |
+| `messageId`       | Emitted in `CrossChainWalletRegistered` -- only relevant for bridge explorer linking                     |
+
+The storage key already encodes identity (wallet address + chain namespace). Events encode provenance (where, when, how). The indexer reconstructs the full picture by joining both.
 
 ## Two-Phase Registration
 
@@ -144,7 +154,7 @@ function registerFromHub(
 ) external onlyHub;
 ```
 
-Called by `FraudRegistryHub` when a cross-chain message arrives from a `SpokeRegistry`. Silently succeeds if the wallet is already registered (no revert). Sets `bridgeId=1` and `messageId` for Hyperlane messages.
+Called by `FraudRegistryHub` when a cross-chain message arrives from a `SpokeRegistry`. Silently succeeds if the wallet is already registered (no revert). The entry struct stores only `registeredAt`, `incidentTimestamp`, `bridgeId`, and `isSponsored`. Cross-chain provenance fields (`reportedChainId`, `sourceChainId`, `messageId`) are emitted in events only -- they are not written to storage.
 
 Emits both `WalletRegistered` and `CrossChainWalletRegistered`.
 

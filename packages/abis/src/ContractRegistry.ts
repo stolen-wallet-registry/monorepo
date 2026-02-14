@@ -93,19 +93,14 @@ export const ContractRegistryABI = [
             internalType: 'uint64',
           },
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'operatorId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
             name: 'batchId',
-            type: 'uint256',
-            internalType: 'uint256',
+            type: 'uint32',
+            internalType: 'uint32',
+          },
+          {
+            name: 'threatCategory',
+            type: 'uint8',
+            internalType: 'uint8',
           },
         ],
       },
@@ -134,19 +129,14 @@ export const ContractRegistryABI = [
             internalType: 'uint64',
           },
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'operatorId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
             name: 'batchId',
-            type: 'uint256',
-            internalType: 'uint256',
+            type: 'uint32',
+            internalType: 'uint32',
+          },
+          {
+            name: 'threatCategory',
+            type: 'uint8',
+            internalType: 'uint8',
           },
         ],
       },
@@ -253,6 +243,11 @@ export const ContractRegistryABI = [
         name: 'reportedChainIds',
         type: 'bytes32[]',
         internalType: 'bytes32[]',
+      },
+      {
+        name: 'threatCategories',
+        type: 'uint8[]',
+        internalType: 'uint8[]',
       },
     ],
     outputs: [

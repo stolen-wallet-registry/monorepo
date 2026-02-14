@@ -5,7 +5,7 @@
  * Use this for real-time state during registration flows.
  */
 
-import { parseAbi, type PublicClient, type Address, type Abi, type Hash } from 'viem';
+import { parseAbi, type PublicClient, type Address, type Abi } from 'viem';
 
 /**
  * Minimal ABI for isWalletRegistered(address) to avoid viem ambiguity
@@ -20,18 +20,16 @@ const isWalletRegisteredAbi = parseAbi([
  * with the string overload getWalletEntry(string).
  */
 const getWalletEntryAbi = parseAbi([
-  'function getWalletEntry(address wallet) view returns ((bytes32 reportedChainId, bytes32 sourceChainId, bytes32 messageId, uint64 registeredAt, uint64 incidentTimestamp, uint8 bridgeId, bool isSponsored))',
+  'function getWalletEntry(address wallet) view returns ((uint64 registeredAt, uint64 incidentTimestamp, uint32 batchId, uint8 bridgeId, bool isSponsored))',
 ]);
 
 /**
  * Registration data from the contract (WalletEntry struct).
  */
 export interface RegistrationData {
-  reportedChainId: Hash;
-  sourceChainId: Hash;
-  messageId: Hash;
   registeredAt: bigint;
   incidentTimestamp: bigint;
+  batchId: number;
   bridgeId: number;
   isSponsored: boolean;
 }
@@ -104,20 +102,16 @@ export async function queryRegistryStatus(
   let registrationData: RegistrationData | null = null;
   if (results[2].status === 'success' && isRegistered) {
     const result = results[2].result as {
-      reportedChainId: Hash;
-      sourceChainId: Hash;
-      messageId: Hash;
       registeredAt: bigint;
       incidentTimestamp: bigint;
+      batchId: number;
       bridgeId: number;
       isSponsored: boolean;
     };
     registrationData = {
-      reportedChainId: result.reportedChainId,
-      sourceChainId: result.sourceChainId,
-      messageId: result.messageId,
       registeredAt: result.registeredAt,
       incidentTimestamp: result.incidentTimestamp,
+      batchId: result.batchId,
       bridgeId: result.bridgeId,
       isSponsored: result.isSponsored,
     };

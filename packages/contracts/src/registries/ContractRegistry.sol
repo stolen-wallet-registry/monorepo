@@ -108,12 +108,15 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
     function registerContractsFromOperator(
         bytes32 operatorId,
         bytes32[] calldata identifiers,
-        bytes32[] calldata reportedChainIds
+        bytes32[] calldata reportedChainIds,
+        uint8[] calldata threatCategories
     ) external onlyOperatorSubmitter returns (uint256 batchId) {
         uint256 length = identifiers.length;
 
         if (length == 0) revert ContractRegistry__EmptyBatch();
-        if (length != reportedChainIds.length) revert ContractRegistry__ArrayLengthMismatch();
+        if (length != reportedChainIds.length || length != threatCategories.length) {
+            revert ContractRegistry__ArrayLengthMismatch();
+        }
 
         // Create batch (contractCount updated after loop)
         batchId = _nextBatchId++;
@@ -133,10 +136,7 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
             if (_contracts[key].registeredAt > 0) continue;
 
             _contracts[key] = ContractEntry({
-                registeredAt: uint64(block.timestamp),
-                reportedChainId: chainId,
-                operatorId: operatorId,
-                batchId: batchId
+                registeredAt: uint64(block.timestamp), batchId: uint32(batchId), threatCategory: threatCategories[i]
             });
 
             actualCount++;

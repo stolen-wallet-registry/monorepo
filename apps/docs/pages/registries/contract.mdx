@@ -36,13 +36,37 @@ The same contract address on different chains produces different keys. A scam co
 ```solidity
 struct ContractEntry {
     uint64  registeredAt;      // Block timestamp of registration
-    bytes32 reportedChainId;   // CAIP-2 hash of chain where contract is deployed
-    bytes32 operatorId;        // Operator that registered this entry
-    uint256 batchId;           // Batch this entry belongs to
+    uint32  batchId;           // Batch this entry belongs to
+    uint8   threatCategory;    // Classification of malicious behavior
 }
 ```
 
-Every entry tracks its `batchId` directly in the struct. This is different from the other registries where batch linking is done at the indexer level via transaction hash matching.
+The struct is 13 bytes, fitting in a single EVM storage slot. Every entry tracks its `batchId` directly in the struct. This is different from the other registries where batch linking is done at the indexer level via transaction hash matching.
+
+Fields that were moved to events-only:
+
+| Field             | Where it lives                                              |
+| ----------------- | ----------------------------------------------------------- |
+| `reportedChainId` | `ContractRegistered` event                                  |
+| `operatorId`      | `ContractRegistered` event and `ContractBatchCreated` event |
+
+### Threat Categories
+
+The `threatCategory` field classifies the type of malicious behavior:
+
+| Value | Category     | Description                              |
+| ----- | ------------ | ---------------------------------------- |
+| 0     | Unclassified | Default / no specific classification     |
+| 1     | Drainer      | Wallet drainer contract                  |
+| 2     | Rug Pull     | Liquidity removal / exit scam            |
+| 3     | Honeypot     | Contract that traps funds                |
+| 4     | Ponzi        | Ponzi / pyramid scheme contract          |
+| 5     | Fake Token   | Counterfeit or misleading token contract |
+| 6-255 | Reserved     | Available for future threat categories   |
+
+These values are currently documented conventions only — there is no on-chain enum or validation. Operators may pass any `uint8` value. Defining a formal threat category schema, adding on-chain validation, and surfacing categories in the frontend dashboard are future enhancements.
+
+Note that `batchId` changed from `uint256` to `uint32`, which is sufficient for over 4 billion batches while keeping the struct within a single storage slot.
 
 ## Registration
 

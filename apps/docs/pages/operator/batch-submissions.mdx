@@ -99,7 +99,7 @@ event BatchSubmitted(
 
 ## Batch IDs
 
-Each registry maintains its own auto-incrementing `uint256` batch counter. When an operator submits a batch:
+Each registry maintains its own auto-incrementing batch counter. The batch ID type varies by registry: `WalletRegistry` and `TransactionRegistry` use `uint256`, while `ContractRegistry` uses `uint32` (sufficient for over 4 billion batches, and keeps the `ContractEntry` struct within a single storage slot). When an operator submits a batch:
 
 - The registry assigns the next batch ID
 - The `BatchCreated` event includes the batch ID and actual entry count

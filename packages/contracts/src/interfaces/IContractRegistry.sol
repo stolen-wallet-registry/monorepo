@@ -15,16 +15,20 @@ interface IContractRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Data for a registered malicious contract
+    /// @notice STORAGE INVARIANT: This struct MUST fit in 1 storage slot (32 bytes max).
+    /// Current: 13 bytes (19 spare). Any new field requires a byte-count proof.
+    /// Chain IDs and operatorId are EVENTS-ONLY — see events below.
     /// @param registeredAt Block timestamp when contract was registered
-    /// @param reportedChainId CAIP-2 chain ID hash where contract is deployed
-    /// @param operatorId Operator that registered this contract
-    /// @param batchId Batch ID this contract was part of
+    /// @param batchId Operator batch reference (max ~4.2B)
+    /// @param threatCategory Threat type: 0=unclassified, 1=drainer/phishing, 2=rug pull,
+    ///        3=honeypot, 4=ponzi, 5=fake token, 6-255=reserved for future categories
     struct ContractEntry {
         uint64 registeredAt;
-        bytes32 reportedChainId;
-        bytes32 operatorId;
-        uint256 batchId;
+        uint32 batchId;
+        uint8 threatCategory;
     }
+
+    // Total: 8 + 4 + 1 = 13 bytes → 1 SLOT (19 bytes spare)
 
     /// @notice Batch registration data
     /// @param operatorId The operator who submitted this batch
@@ -79,11 +83,13 @@ interface IContractRegistry {
     /// @param operatorId The operator's identifier
     /// @param identifiers Array of contract address identifiers
     /// @param reportedChainIds Array of CAIP-2 chain ID hashes where contracts are deployed
+    /// @param threatCategories Array of threat category values (0=unclassified, 1-5=defined, 6-255=future)
     /// @return batchId The created batch ID
     function registerContractsFromOperator(
         bytes32 operatorId,
         bytes32[] calldata identifiers,
-        bytes32[] calldata reportedChainIds
+        bytes32[] calldata reportedChainIds,
+        uint8[] calldata threatCategories
     ) external returns (uint256 batchId);
 
     // ═══════════════════════════════════════════════════════════════════════════

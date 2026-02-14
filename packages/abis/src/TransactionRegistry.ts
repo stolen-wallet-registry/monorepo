@@ -366,29 +366,14 @@ export const TransactionRegistryABI = [
         internalType: 'struct ITransactionRegistry.TransactionEntry',
         components: [
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'sourceChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'messageId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'reporter',
-            type: 'address',
-            internalType: 'address',
-          },
-          {
             name: 'registeredAt',
             type: 'uint64',
             internalType: 'uint64',
+          },
+          {
+            name: 'batchId',
+            type: 'uint32',
+            internalType: 'uint32',
           },
           {
             name: 'bridgeId',
@@ -427,29 +412,14 @@ export const TransactionRegistryABI = [
         internalType: 'struct ITransactionRegistry.TransactionEntry',
         components: [
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'sourceChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'messageId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'reporter',
-            type: 'address',
-            internalType: 'address',
-          },
-          {
             name: 'registeredAt',
             type: 'uint64',
             internalType: 'uint64',
+          },
+          {
+            name: 'batchId',
+            type: 'uint32',
+            internalType: 'uint32',
           },
           {
             name: 'bridgeId',

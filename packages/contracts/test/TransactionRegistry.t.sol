@@ -645,11 +645,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
 
             ITransactionRegistry.TransactionEntry memory entry =
                 txRegistry.getTransactionEntry(txHashes[i], chainIds[i]);
-            assertEq(entry.reporter, reporter);
-            assertEq(entry.reportedChainId, reportedChainId);
-            assertEq(entry.sourceChainId, sourceChainId);
             assertEq(entry.bridgeId, 1);
-            assertEq(entry.messageId, messageId);
             assertTrue(entry.isSponsored);
         }
     }
@@ -697,7 +693,6 @@ contract TransactionRegistryTest is EIP712TestHelper {
 
             ITransactionRegistry.TransactionEntry memory entry =
                 txRegistry.getTransactionEntry(txHashes[i], chainIds[i]);
-            assertEq(entry.reporter, address(0), "Operator submissions have no reporter");
             assertFalse(entry.isSponsored);
         }
 
@@ -1199,7 +1194,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
         string memory ref = _buildTxRef(txHashes[0], uint64(1));
         ITransactionRegistry.TransactionEntry memory entry = txRegistry.getTransactionEntry(ref);
 
-        assertEq(entry.reporter, reporter, "Reporter should match");
+        assertGt(entry.batchId, 0, "batchId should be set");
         assertTrue(entry.registeredAt > 0, "registeredAt should be set");
     }
 
@@ -1268,5 +1263,38 @@ contract TransactionRegistryTest is EIP712TestHelper {
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__OnlyOperatorSubmitter.selector);
         vm.prank(makeAddr("anyone"));
         noSubRegistry.registerTransactionsFromOperator(operatorId, txHashes, chainIds);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STORAGE SLOT INVARIANT — TransactionEntry MUST fit in 1 slot
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice TransactionEntry fits in exactly 1 storage slot (no overflow to next slot).
+    /// @dev Uses vm.load to read raw storage and verify the next slot is empty.
+    ///      Mapping slot for _transactions is 4 (from forge inspect TransactionRegistry storage-layout).
+    function test_TransactionEntryFitsInOneSlot() public {
+        bytes32 txHash = keccak256("slotTestTx");
+        bytes32 chainId = CAIP10Evm.caip2Hash(uint64(1));
+
+        bytes32[] memory hashes = new bytes32[](1);
+        hashes[0] = txHash;
+        bytes32[] memory chainIds = new bytes32[](1);
+        chainIds[0] = chainId;
+
+        vm.prank(operatorSubmitter);
+        txRegistry.registerTransactionsFromOperator(keccak256("op"), hashes, chainIds);
+
+        // Compute storage slot: keccak256(abi.encode(key, MAPPING_SLOT))
+        bytes32 key = CAIP10.txStorageKey(txHash, chainId);
+        uint256 TRANSACTIONS_MAPPING_SLOT = 4;
+        bytes32 slot = keccak256(abi.encode(key, TRANSACTIONS_MAPPING_SLOT));
+
+        // Entry should be populated in this slot
+        bytes32 packed = vm.load(address(txRegistry), slot);
+        assertNotEq(packed, bytes32(0), "TransactionEntry should be populated");
+
+        // Next slot must be empty — proves no overflow to a second slot
+        bytes32 nextSlot = bytes32(uint256(slot) + 1);
+        assertEq(vm.load(address(txRegistry), nextSlot), bytes32(0), "TransactionEntry overflowed to second slot");
     }
 }

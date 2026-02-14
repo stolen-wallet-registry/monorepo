@@ -477,13 +477,11 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         nonces[registeree]++;
         delete _pendingAcknowledgements[registeree];
 
-        // Store wallet entry
+        // Store wallet entry (1-slot packed: 22 bytes)
         _wallets[key] = WalletEntry({
-            reportedChainId: reportedChainIdHash,
-            sourceChainId: CAIP10Evm.caip2Hash(uint64(block.chainid)),
-            messageId: bytes32(0),
             registeredAt: uint64(block.timestamp),
             incidentTimestamp: incidentTimestamp,
+            batchId: 0,
             bridgeId: 0,
             isSponsored: ack.isSponsored
         });
@@ -530,11 +528,9 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         }
 
         _wallets[key] = WalletEntry({
-            reportedChainId: reportedChainId,
-            sourceChainId: sourceChainId,
-            messageId: messageId,
             registeredAt: uint64(block.timestamp),
             incidentTimestamp: incidentTimestamp,
+            batchId: 0,
             bridgeId: bridgeId,
             isSponsored: isSponsored
         });
@@ -565,7 +561,6 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         batchId = _nextBatchId++;
 
         // Register each wallet, counting actual registrations
-        bytes32 localSourceChainId = CAIP10Evm.caip2Hash(uint64(block.chainid));
         uint32 actualCount = 0;
 
         for (uint256 i = 0; i < length; i++) {
@@ -579,11 +574,9 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
             if (_wallets[key].registeredAt > 0) continue;
 
             _wallets[key] = WalletEntry({
-                reportedChainId: reportedChainIds[i],
-                sourceChainId: localSourceChainId,
-                messageId: bytes32(0),
                 registeredAt: uint64(block.timestamp),
                 incidentTimestamp: incidentTimestamps[i],
+                batchId: uint32(batchId),
                 bridgeId: 0,
                 isSponsored: false
             });

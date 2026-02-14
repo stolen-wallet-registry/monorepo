@@ -104,9 +104,13 @@ Batch detail uses a two-step fetch pattern for efficiency:
 
 ## Batch-Entry Linking
 
-Per-entry events (`WalletRegistered`, `TransactionRegistered`, `ContractRegistered`) do not carry a `batchId` field. This is a deliberate gas optimization -- adding an indexed `batchId` to every per-entry event would cost extra gas per entry, and batches can contain hundreds of entries.
+Per-entry events (`WalletRegistered`, `TransactionRegistered`) do not carry a `batchId` field. This is a deliberate gas optimization -- adding an indexed `batchId` to every per-entry event would cost extra gas per entry, and batches can contain hundreds of entries.
 
 Instead, the indexer joins entries to their parent batch using `transactionHash`. All per-entry events and the batch summary event fire in the same transaction, so they share the same hash.
+
+:::info
+The entry structs stored on-chain are minimal (1 storage slot each) and do not contain provenance fields like `reportedChainId`, `sourceChainId`, `messageId`, or `reporter`. The indexer reads these fields from **events**, not from entry struct storage. This means the indexer is the authoritative source for rich query data -- on-chain `getWalletEntry()` / `getTransactionEntry()` / `getContractEntry()` return only the minimal struct fields needed for on-chain lookups.
+:::
 
 ```
 Same transaction:

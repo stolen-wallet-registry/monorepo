@@ -136,9 +136,11 @@ contract FraudRegistryHubTest is Test {
         identifiers[0] = bytes32(uint256(uint160(contractAddr)));
         bytes32[] memory chainIds = new bytes32[](1);
         chainIds[0] = CAIP10Evm.caip2Hash(CHAIN_ID);
+        uint8[] memory threats = new uint8[](1);
+        threats[0] = 1; // drainer
 
         vm.prank(operatorSubmitter);
-        contractRegistry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        contractRegistry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -363,8 +365,9 @@ contract FraudRegistryHubTest is Test {
 
         IWalletRegistry.WalletEntry memory entry = freshHub.getWalletEntry(makeAddr("any"));
         assertEq(entry.registeredAt, 0, "registeredAt should be 0");
-        assertEq(entry.reportedChainId, bytes32(0), "reportedChainId should be zero");
         assertEq(entry.incidentTimestamp, 0, "incidentTimestamp should be 0");
+        assertEq(entry.batchId, 0, "batchId should be 0");
+        assertEq(entry.bridgeId, 0, "bridgeId should be 0");
         assertFalse(entry.isSponsored, "isSponsored should be false");
     }
 
@@ -627,8 +630,8 @@ contract FraudRegistryHubTest is Test {
 
         ITransactionRegistry.TransactionEntry memory entry = freshHub.getTransactionEntry(txHash, chainId);
         assertEq(entry.registeredAt, 0, "registeredAt should be 0");
-        assertEq(entry.reportedChainId, bytes32(0), "reportedChainId should be zero");
-        assertEq(entry.reporter, address(0), "reporter should be zero address");
+        assertEq(entry.batchId, 0, "batchId should be 0");
+        assertEq(entry.bridgeId, 0, "bridgeId should be 0");
         assertFalse(entry.isSponsored, "isSponsored should be false");
     }
 
@@ -641,9 +644,8 @@ contract FraudRegistryHubTest is Test {
 
         IContractRegistry.ContractEntry memory entry = freshHub.getContractEntry(anyContract, chainId);
         assertEq(entry.registeredAt, 0, "registeredAt should be 0");
-        assertEq(entry.reportedChainId, bytes32(0), "reportedChainId should be zero");
-        assertEq(entry.operatorId, bytes32(0), "operatorId should be zero");
         assertEq(entry.batchId, 0, "batchId should be 0");
+        assertEq(entry.threatCategory, 0, "threatCategory should be 0");
     }
 
     /// @notice getWalletEntry returns actual data after wallet is registered
@@ -653,7 +655,7 @@ contract FraudRegistryHubTest is Test {
 
         IWalletRegistry.WalletEntry memory entry = hub.getWalletEntry(wallet);
         assertGt(entry.registeredAt, 0, "registeredAt should be non-zero");
-        assertEq(entry.reportedChainId, CAIP10Evm.caip2Hash(CHAIN_ID), "reportedChainId should match");
+        assertEq(entry.batchId, 1, "batchId should match"); // operator batch = 1
         // incidentTimestamp was set to block.timestamp - 1 days in _registerWalletViaOperator
         assertEq(entry.incidentTimestamp, uint64(block.timestamp - 1 days), "incidentTimestamp should match");
     }

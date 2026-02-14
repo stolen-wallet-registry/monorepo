@@ -11,23 +11,21 @@ interface ITransactionRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Data for a registered transaction
-    /// @dev Struct packed for gas efficiency: bytes32 fields first, then smaller types together
-    /// @param reportedChainId CAIP-2 chain ID hash where incident occurred
-    /// @param sourceChainId CAIP-2 chain ID hash where registration was submitted
-    /// @param messageId Cross-chain message ID (0 for local registrations)
-    /// @param reporter Address that reported this transaction
+    /// @notice STORAGE INVARIANT: This struct MUST fit in 1 storage slot (32 bytes max).
+    /// Current: 14 bytes (18 spare). Any new field requires a byte-count proof.
+    /// Chain IDs, reporter, message IDs are EVENTS-ONLY — see events below.
     /// @param registeredAt Block timestamp when transaction was registered
-    /// @param bridgeId Bridge protocol used (0 = local, 1 = Hyperlane, etc.)
+    /// @param batchId Batch link (0 = individual registration, max ~4.2B)
+    /// @param bridgeId Bridge protocol used (0 = local, 1 = Hyperlane, 2+ = future)
     /// @param isSponsored Whether registration was gas-sponsored
     struct TransactionEntry {
-        bytes32 reportedChainId;
-        bytes32 sourceChainId;
-        bytes32 messageId;
-        address reporter;
         uint64 registeredAt;
+        uint32 batchId;
         uint8 bridgeId;
         bool isSponsored;
     }
+
+    // Total: 8 + 4 + 1 + 1 = 14 bytes → 1 SLOT (18 bytes spare)
 
     /// @notice Acknowledgement data for pending transaction batch registration
     /// @dev Struct packed for gas efficiency: uint256/bytes32 fields first, then address+bool together

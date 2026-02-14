@@ -11,23 +11,23 @@ interface IWalletRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Data for a registered wallet
-    /// @dev Struct packed for gas efficiency: bytes32 fields first, then smaller types together
-    /// @param reportedChainId CAIP-2 chain ID hash where incident occurred
-    /// @param sourceChainId CAIP-2 chain ID hash where registration was submitted
-    /// @param messageId Cross-chain message ID (0 for local registrations)
+    /// @notice STORAGE INVARIANT: This struct MUST fit in 1 storage slot (32 bytes max).
+    /// Current: 22 bytes (10 spare). Any new field requires a byte-count proof.
+    /// Chain IDs, message IDs, and provenance data are EVENTS-ONLY — see events below.
     /// @param registeredAt Block timestamp when wallet was registered
     /// @param incidentTimestamp Unix timestamp when incident occurred (0 if unknown)
-    /// @param bridgeId Bridge protocol used (0 = local, 1 = Hyperlane, etc.)
+    /// @param batchId Operator batch link (0 = individual registration, max ~4.2B)
+    /// @param bridgeId Bridge protocol used (0 = local, 1 = Hyperlane, 2+ = future)
     /// @param isSponsored Whether registration was gas-sponsored (relay/operator)
     struct WalletEntry {
-        bytes32 reportedChainId;
-        bytes32 sourceChainId;
-        bytes32 messageId;
         uint64 registeredAt;
         uint64 incidentTimestamp;
+        uint32 batchId;
         uint8 bridgeId;
         bool isSponsored;
     }
+
+    // Total: 8 + 8 + 4 + 1 + 1 = 22 bytes → 1 SLOT (10 bytes spare)
 
     /// @notice Acknowledgement data for pending registration
     /// @dev Struct packed for gas efficiency: uint256 fields first, then address+bool together

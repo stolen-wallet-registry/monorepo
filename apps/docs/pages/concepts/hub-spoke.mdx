@@ -87,7 +87,7 @@ sequenceDiagram
     I->>I: Validate trusted source
     I->>F: registerWalletFromSpoke()
     F->>R: registerFromHub()
-    R->>R: Store entry (bridgeId=1, messageId)
+    R->>R: Store entry (bridgeId=1)<br/>Emit events with messageId, sourceChainId
 
 `} />
 
@@ -101,7 +101,9 @@ sequenceDiagram
 6. **CrossChainInbox.handle()** validates the source is trusted and the source chain ID matches
 7. **CrossChainInbox routes** to `FraudRegistryHub` based on message type
 8. **FraudRegistryHub forwards** to the appropriate registry (`WalletRegistry` or `TransactionRegistry`)
-9. **Registry stores** the entry with `bridgeId=1` (Hyperlane) and the `messageId`
+9. **Registry stores** a minimal entry (`bridgeId=1`, `registeredAt`, etc.) and emits events with the full cross-chain provenance (`sourceChainId`, `messageId`, `reportedChainId`)
+
+Cross-chain provenance fields (`sourceChainId`, `messageId`, `reportedChainId`) are not stored in the entry struct -- they are emitted in `CrossChainWalletRegistered` and `CrossChainTransactionRegistered` events. The indexer reads these events to reconstruct the full cross-chain message trail. On-chain lookups (`isWalletRegistered`, `isTransactionRegistered`) only need the storage key and minimal entry data.
 
 ## CrossChainMessage Format
 

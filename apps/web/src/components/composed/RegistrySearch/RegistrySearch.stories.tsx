@@ -37,11 +37,9 @@ const sampleForwarder = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address;
 
 // Mock registration data for stories
 const mockRegistrationData = {
-  reportedChainId: '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
-  sourceChainId: '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
-  messageId: '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
   registeredAt: 12345678n,
   incidentTimestamp: 0n,
+  batchId: 0,
   bridgeId: 0,
   isSponsored: false,
 };

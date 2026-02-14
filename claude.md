@@ -404,6 +404,44 @@ src/test/test-utils.tsx → Custom render with providers
 
 ---
 
+## 1-SLOT STORAGE INVARIANT (CRITICAL)
+
+**Every registry entry struct MUST fit in exactly 1 EVM storage slot (32 bytes max).** This is enforced by forge tests that fail CI if structs grow beyond 1 slot.
+
+### Current Struct Layouts
+
+| Struct             | Fields                                                                                            | Size     | Spare    |
+| ------------------ | ------------------------------------------------------------------------------------------------- | -------- | -------- |
+| `WalletEntry`      | `uint64 registeredAt, uint64 incidentTimestamp, uint32 batchId, uint8 bridgeId, bool isSponsored` | 22 bytes | 10 bytes |
+| `TransactionEntry` | `uint64 registeredAt, uint32 batchId, uint8 bridgeId, bool isSponsored`                           | 14 bytes | 18 bytes |
+| `ContractEntry`    | `uint64 registeredAt, uint32 batchId, uint8 threatCategory`                                       | 13 bytes | 19 bytes |
+
+### Data Separation Rules
+
+- **No `bytes32` fields in entry structs.** A single `bytes32` fills an entire slot.
+- **No chain IDs in entry structs.** Chain context is events-only. Storage keys encode identity; events encode provenance.
+- **No per-entry duplication of batch-level data.** `operatorId`, `reporter`, `dataHash` belong in batch structs or events, not entry structs.
+- **Events carry rich data; storage carries minimal data.**
+
+### Adding New Fields
+
+Any new field added to an entry struct **MUST**:
+
+1. Include a byte-count proof that the struct still fits in 32 bytes
+2. Document the proof in the PR description AND update the NatSpec comment above the struct
+3. Pass the existing `test_*EntryFitsInOneSlot` forge test
+
+### Enforcement Locations
+
+The invariant is documented in 4+ places to prevent regression:
+
+- Solidity NatSpec comments above each struct definition
+- Forge tests: `test_WalletEntryFitsInOneSlot`, `test_TransactionEntryFitsInOneSlot`, `test_ContractEntryFitsInOneSlot`
+- This CLAUDE.md section
+- `.claude/architecture/09-storage-and-events.md`
+
+---
+
 ## Identifier Terminology
 
 | Type        | Standard            | Format                      | Example                 |

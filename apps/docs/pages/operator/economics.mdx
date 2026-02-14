@@ -3,11 +3,11 @@ import { GasCalculator } from '../../components/GasCalculator';
 
 # Economics & Gas Analysis
 
-SWR stores every registration as a permanent on-chain entry - not just a hash or batch summary, but a full struct with chain ID, reporter, timestamp, and metadata. On Ethereum L1, this would be prohibitively expensive. On Base, it costs fractions of a cent.
+SWR stores every registration as a permanent on-chain entry. Each entry struct is optimized to fit in a single EVM storage slot (13-22 bytes depending on registry type), containing only the fields needed for on-chain lookups. Rich provenance data (chain IDs, reporters, message IDs) is emitted in events for indexer consumption. On Ethereum L1, even this minimal storage would add up. On Base, it costs fractions of a cent.
 
 ## L2 Storage Economics
 
-The fundamental design decision: store every entry on-chain as a full struct rather than relying on off-chain aggregation. L2 gas economics make per-entry storage practical.
+The fundamental design decision: store every entry on-chain as a single-slot struct rather than relying on off-chain aggregation. Each entry occupies exactly one storage slot (WalletEntry: 22 bytes, TransactionEntry: 14 bytes, ContractEntry: 13 bytes). L2 gas economics make per-entry storage practical.
 
 ### Base Network Specifications
 
@@ -23,11 +23,11 @@ The fundamental design decision: store every entry on-chain as a full struct rat
 
 Each entry in a batch writes one storage struct and emits one event:
 
-| Operation                 | Gas         | What it does                                     |
-| ------------------------- | ----------- | ------------------------------------------------ |
-| New storage slot (SSTORE) | ~20,000     | Write WalletEntry/TransactionEntry/ContractEntry |
-| Event emission            | ~1,500      | WalletRegistered / TransactionRegistered / etc.  |
-| **Per-entry total**       | **~21,500** |                                                  |
+| Operation                 | Gas         | What it does                                    |
+| ------------------------- | ----------- | ----------------------------------------------- |
+| New storage slot (SSTORE) | ~20,000     | Write one entry struct (1 slot per entry)       |
+| Event emission            | ~1,500      | WalletRegistered / TransactionRegistered / etc. |
+| **Per-entry total**       | **~21,500** |                                                 |
 
 Batch overhead adds ~50,000 gas for the summary event and metadata storage (one-time per batch).
 

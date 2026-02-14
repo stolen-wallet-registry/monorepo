@@ -15,12 +15,9 @@ describe('RegistrySearchResult', () => {
 
   describe('registered status', () => {
     const mockRegistrationData = {
-      reportedChainId:
-        '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
-      sourceChainId: '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
-      messageId: '0x0000000000000000000000000000000000000000000000000000000000000000' as const,
       registeredAt: 12345678n,
       incidentTimestamp: 0n,
+      batchId: 0,
       bridgeId: 0,
       isSponsored: false,
     };

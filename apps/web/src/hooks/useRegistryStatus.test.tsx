@@ -98,11 +98,9 @@ describe('useRegistryStatus', () => {
       isRegistered: true,
       isPending: false,
       registrationData: {
-        reportedChainId: '0x0000000000000000000000000000000000000000000000000000000000000000',
-        sourceChainId: '0x0000000000000000000000000000000000000000000000000000000000000000',
-        messageId: '0x0000000000000000000000000000000000000000000000000000000000000000',
         registeredAt: 12345678n,
         incidentTimestamp: 0n,
+        batchId: 0,
         bridgeId: 0,
         isSponsored: false,
       },
@@ -120,11 +118,9 @@ describe('useRegistryStatus', () => {
     expect(result.current.isRegistered).toBe(true);
     expect(result.current.isPending).toBe(false);
     expect(result.current.registrationData).toEqual({
-      reportedChainId: '0x0000000000000000000000000000000000000000000000000000000000000000',
-      sourceChainId: '0x0000000000000000000000000000000000000000000000000000000000000000',
-      messageId: '0x0000000000000000000000000000000000000000000000000000000000000000',
       registeredAt: 12345678n,
       incidentTimestamp: 0n,
+      batchId: 0,
       bridgeId: 0,
       isSponsored: false,
     });

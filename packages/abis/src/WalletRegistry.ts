@@ -359,21 +359,6 @@ export const WalletRegistryABI = [
         internalType: 'struct IWalletRegistry.WalletEntry',
         components: [
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'sourceChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'messageId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
             name: 'registeredAt',
             type: 'uint64',
             internalType: 'uint64',
@@ -382,6 +367,11 @@ export const WalletRegistryABI = [
             name: 'incidentTimestamp',
             type: 'uint64',
             internalType: 'uint64',
+          },
+          {
+            name: 'batchId',
+            type: 'uint32',
+            internalType: 'uint32',
           },
           {
             name: 'bridgeId',
@@ -415,21 +405,6 @@ export const WalletRegistryABI = [
         internalType: 'struct IWalletRegistry.WalletEntry',
         components: [
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'sourceChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'messageId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
             name: 'registeredAt',
             type: 'uint64',
             internalType: 'uint64',
@@ -438,6 +413,11 @@ export const WalletRegistryABI = [
             name: 'incidentTimestamp',
             type: 'uint64',
             internalType: 'uint64',
+          },
+          {
+            name: 'batchId',
+            type: 'uint32',
+            internalType: 'uint32',
           },
           {
             name: 'bridgeId',
