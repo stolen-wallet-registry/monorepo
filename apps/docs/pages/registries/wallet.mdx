@@ -6,6 +6,17 @@ Permanently registers stolen wallet addresses on-chain. Once registered, a walle
 
 **Who can submit:** Individuals (self-attestation with EIP-712 signatures) and DAO-approved operators (batch submissions via OperatorSubmitter).
 
+## EOA Addresses Only
+
+The Wallet Registry is designed for **externally owned accounts (EOAs)** — standard private-key-controlled addresses. Smart contract wallets (Safe, ERC-4337 accounts, etc.) are not meaningful candidates for stolen wallet registration for two reasons:
+
+1. **Key recovery exists.** Smart contract wallets typically support social recovery, guardian rotation, or owner swaps. A compromised key does not permanently compromise the account — the owner can rotate signers and regain control. Marking such an address as permanently stolen is misleading.
+2. **Signature verification is EOA-only.** The two-phase registration flow uses `ECDSA.recover` to verify that the wallet owner signed the EIP-712 messages. This only works with secp256k1 signatures (EOAs). Smart contract wallets use [EIP-1271](https://eips.ethereum.org/EIPS/eip-1271) (`isValidSignature`), which the registry does not implement — so smart contract wallets cannot complete the individual registration flow.
+
+:::info
+Operator and cross-chain registration paths bypass signature verification and could technically register any address. Operators are DAO-approved entities expected to exercise judgment about which addresses are appropriate to register.
+:::
+
 ## Storage
 
 ```solidity

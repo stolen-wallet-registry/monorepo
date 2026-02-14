@@ -11,6 +11,48 @@ SWR uses a hub-spoke model for cross-chain fraud registration. Users can registe
 
 Users interact with a SpokeRegistry on their chain. The spoke sends a cross-chain message to the hub via a bridge adapter (currently Hyperlane), where the entry is permanently stored.
 
+## Architecture Overview
+
+<Mermaid chart={`
+graph LR
+    subgraph Spoke Chains
+        S1[SpokeRegistry<br/>OP Sepolia]
+        S2[SpokeRegistry<br/>Arbitrum Sepolia]
+        S3[SpokeRegistry<br/>Future Chain]
+    end
+
+    subgraph Bridge Layer
+        A1[Hyperlane Adapter<br/>active]
+        A2[Chainlink CCIP Adapter<br/>planned]
+        A3[Wormhole Adapter<br/>planned]
+    end
+
+    subgraph Hub Chain - Base
+        I[CrossChainInbox]
+        H[FraudRegistryHub]
+        WR[WalletRegistry]
+        TR[TransactionRegistry]
+        CR[ContractRegistry]
+    end
+
+    S1 --> A1
+    S2 --> A1
+    S3 -.-> A2
+    S3 -.-> A3
+    A1 --> I
+    A2 -.-> I
+    A3 -.-> I
+    I --> H
+    H --> WR
+    H --> TR
+    H --> CR
+
+`} />
+
+Spoke registries communicate with the hub exclusively through a **bridge adapter** — an abstraction layer that decouples the registry logic from any specific bridge protocol. The adapter implements a common interface for sending cross-chain messages, so swapping or adding bridge providers requires no changes to the spoke or hub contracts.
+
+Currently only Hyperlane is active. Chainlink CCIP and Wormhole are planned future integrations — each would plug into the same adapter interface, giving the protocol bridge redundancy and the ability to select the best transport per chain.
+
 ## Contract Deployment
 
 | Contract            | Hub (Base) | Spoke Chains |

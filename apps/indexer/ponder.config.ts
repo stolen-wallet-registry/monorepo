@@ -91,13 +91,13 @@ if (PONDER_ENV !== 'development') {
     );
   }
 
-  // Check soulbound addresses
+  // Check soulbound addresses (warn instead of throw — soulbound may be deployed separately)
   const soulboundFields = ['walletSoulbound', 'supportSoulbound'] as const;
   const missingSoulbound = soulboundFields.filter((f) => !hubContracts[f]);
   if (missingSoulbound.length > 0) {
-    throw new Error(
-      `${PONDER_ENV} environment has unconfigured soulbound addresses: ${missingSoulbound.join(', ')}. ` +
-        'Deploy contracts and update network config in packages/chains.'
+    console.warn(
+      `[ponder] ${PONDER_ENV}: Soulbound addresses not configured (${missingSoulbound.join(', ')}). ` +
+        'Soulbound event indexing disabled. Deploy contracts and update @swr/chains to enable.'
     );
   }
 
@@ -154,17 +154,21 @@ export default createConfig({
       startBlock: chainConfig.startBlock,
     },
 
-    // Soulbound Tokens (from @swr/chains hubContracts)
+    // Soulbound Tokens (use dummy address when not deployed — Ponder just finds no events)
     WalletSoulbound: {
       chain: chainConfig.name,
       abi: WalletSoulboundABI,
-      address: hubContracts!.walletSoulbound!,
+      address:
+        hubContracts?.walletSoulbound ??
+        ('0x0000000000000000000000000000000000000001' as `0x${string}`),
       startBlock: chainConfig.startBlock,
     },
     SupportSoulbound: {
       chain: chainConfig.name,
       abi: SupportSoulboundABI,
-      address: hubContracts!.supportSoulbound!,
+      address:
+        hubContracts?.supportSoulbound ??
+        ('0x0000000000000000000000000000000000000001' as `0x${string}`),
       startBlock: chainConfig.startBlock,
     },
 
