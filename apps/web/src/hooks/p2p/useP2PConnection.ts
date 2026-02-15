@@ -189,8 +189,8 @@ export function useP2PConnection(options: UseP2PConnectionOptions = {}): UseP2PC
       logger.p2p.info('Disconnecting from peer');
       try {
         await connection.close();
-      } catch {
-        // Ignore close errors
+      } catch (err) {
+        logger.p2p.warn('Failed to close P2P connection', { error: (err as Error).message });
       }
       connectionRef.current = null;
     }
@@ -239,7 +239,11 @@ export function useP2PConnection(options: UseP2PConnectionOptions = {}): UseP2PC
         logger.p2p.debug('Cleaning up P2P node on unmount');
         const stopPromise = nodeRef.current.stop();
         if (stopPromise && typeof stopPromise.catch === 'function') {
-          stopPromise.catch(() => {});
+          stopPromise.catch((err: unknown) => {
+            logger.p2p.warn('Failed to stop P2P node on unmount', {
+              error: (err as Error).message,
+            });
+          });
         }
       }
     };

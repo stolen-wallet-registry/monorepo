@@ -412,9 +412,9 @@ src/test/test-utils.tsx → Custom render with providers
 
 | Struct             | Fields                                                                                            | Size     | Spare    |
 | ------------------ | ------------------------------------------------------------------------------------------------- | -------- | -------- |
-| `WalletEntry`      | `uint64 registeredAt, uint64 incidentTimestamp, uint32 batchId, uint8 bridgeId, bool isSponsored` | 22 bytes | 10 bytes |
-| `TransactionEntry` | `uint64 registeredAt, uint32 batchId, uint8 bridgeId, bool isSponsored`                           | 14 bytes | 18 bytes |
-| `ContractEntry`    | `uint64 registeredAt, uint32 batchId, uint8 threatCategory`                                       | 13 bytes | 19 bytes |
+| `WalletEntry`      | `uint64 registeredAt, uint64 incidentTimestamp, uint64 batchId, uint8 bridgeId, bool isSponsored` | 26 bytes | 6 bytes  |
+| `TransactionEntry` | `uint64 registeredAt, uint64 batchId, uint8 bridgeId, bool isSponsored`                           | 18 bytes | 14 bytes |
+| `ContractEntry`    | `uint64 registeredAt, uint64 batchId, uint8 threatCategory`                                       | 17 bytes | 15 bytes |
 
 ### Data Separation Rules
 

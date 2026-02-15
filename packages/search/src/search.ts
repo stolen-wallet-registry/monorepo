@@ -145,7 +145,7 @@ export async function searchTransaction(
     txHash: txHash.toLowerCase(),
   });
 
-  const transactions = result.transactionInBatchs?.items ?? [];
+  const transactions = result.transactionInBatches?.items ?? [];
   const firstTx = transactions[0];
 
   if (!firstTx) {

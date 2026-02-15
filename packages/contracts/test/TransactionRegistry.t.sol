@@ -1266,12 +1266,102 @@ contract TransactionRegistryTest is EIP712TestHelper {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // BATCH SIZE LIMIT
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice registerTransactionsFromOperator reverts when batch exceeds MAX_BATCH_SIZE
+    function test_RegisterFromOperator_RejectsBatchTooLarge() public {
+        uint256 tooMany = txRegistry.MAX_BATCH_SIZE() + 1;
+        bytes32[] memory txHashes = new bytes32[](tooMany);
+        bytes32[] memory chainIds = new bytes32[](tooMany);
+
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__BatchTooLarge.selector);
+        vm.prank(operatorSubmitter);
+        txRegistry.registerTransactionsFromOperator(keccak256("op"), txHashes, chainIds);
+    }
+
+    /// @notice MAX_BATCH_SIZE is 10_000
+    function test_MaxBatchSizeValue() public view {
+        assertEq(txRegistry.MAX_BATCH_SIZE(), 10_000);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CUSTOM ERROR FOR TX HASH LENGTH
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice isTransactionRegistered(string) reverts with custom error for invalid tx hash length
+    function test_IsTransactionRegistered_String_RejectsInvalidLength() public {
+        // "eip155:1:0xabc" — tx hash too short (not 66 chars)
+        string memory badRef = "eip155:1:0xabc";
+
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidTxHashLength.selector);
+        txRegistry.isTransactionRegistered(badRef);
+    }
+
+    /// @notice getTransactionEntry(string) reverts with custom error for invalid tx hash length
+    function test_GetTransactionEntry_String_RejectsInvalidLength() public {
+        string memory badRef = "eip155:1:0xabc";
+
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidTxHashLength.selector);
+        txRegistry.getTransactionEntry(badRef);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WITHDRAW TO
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice withdrawTo sends balance to specified recipient and emits FeesWithdrawn
+    function test_WithdrawTo_Success() public {
+        vm.deal(address(txRegistry), 1 ether);
+
+        address recipient = makeAddr("feeRecipient");
+        uint256 recipientBefore = recipient.balance;
+
+        vm.expectEmit(true, false, false, true);
+        emit ITransactionRegistry.FeesWithdrawn(recipient, 1 ether);
+
+        vm.prank(owner);
+        txRegistry.withdrawTo(recipient);
+
+        assertEq(address(txRegistry).balance, 0);
+        assertEq(recipient.balance - recipientBefore, 1 ether);
+    }
+
+    /// @notice withdrawTo rejects zero address
+    function test_WithdrawTo_RejectsZeroAddress() public {
+        vm.deal(address(txRegistry), 1 ether);
+
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__ZeroAddress.selector);
+        vm.prank(owner);
+        txRegistry.withdrawTo(address(0));
+    }
+
+    /// @notice withdrawTo is a no-op when balance is zero
+    function test_WithdrawTo_NoOpWhenEmpty() public {
+        address recipient = makeAddr("emptyRecipient");
+        vm.prank(owner);
+        txRegistry.withdrawTo(recipient);
+        assertEq(recipient.balance, 0);
+    }
+
+    /// @notice Non-owner cannot call withdrawTo
+    function test_WithdrawTo_RejectsNonOwner() public {
+        address nonOwner = makeAddr("nonOwner");
+        vm.deal(address(txRegistry), 1 ether);
+
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", nonOwner));
+        vm.prank(nonOwner);
+        txRegistry.withdrawTo(makeAddr("any"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // STORAGE SLOT INVARIANT — TransactionEntry MUST fit in 1 slot
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice TransactionEntry fits in exactly 1 storage slot (no overflow to next slot).
-    /// @dev Uses vm.load to read raw storage and verify the next slot is empty.
-    ///      Mapping slot for _transactions is 4 (from forge inspect TransactionRegistry storage-layout).
+    /// @dev Uses vm.record()/vm.accesses() to discover the entry's storage slot dynamically
+    ///      (no hardcoded mapping slot index). A single-slot struct triggers exactly 1 SLOAD
+    ///      in the getter; a multi-slot struct would trigger more.
     function test_TransactionEntryFitsInOneSlot() public {
         bytes32 txHash = keccak256("slotTestTx");
         bytes32 chainId = CAIP10Evm.caip2Hash(uint64(1));
@@ -1284,17 +1374,20 @@ contract TransactionRegistryTest is EIP712TestHelper {
         vm.prank(operatorSubmitter);
         txRegistry.registerTransactionsFromOperator(keccak256("op"), hashes, chainIds);
 
-        // Compute storage slot: keccak256(abi.encode(key, MAPPING_SLOT))
-        bytes32 key = CAIP10.txStorageKey(txHash, chainId);
-        uint256 TRANSACTIONS_MAPPING_SLOT = 4;
-        bytes32 slot = keccak256(abi.encode(key, TRANSACTIONS_MAPPING_SLOT));
+        // Record storage reads when fetching the entry — reveals which slot(s) the struct occupies
+        vm.record();
+        txRegistry.getTransactionEntry(txHash, chainId);
+        (bytes32[] memory reads,) = vm.accesses(address(txRegistry));
 
-        // Entry should be populated in this slot
-        bytes32 packed = vm.load(address(txRegistry), slot);
+        // A single-slot entry triggers exactly 1 SLOAD
+        assertEq(reads.length, 1, "TransactionEntry should occupy exactly 1 storage slot");
+
+        // Verify the slot is populated
+        bytes32 packed = vm.load(address(txRegistry), reads[0]);
         assertNotEq(packed, bytes32(0), "TransactionEntry should be populated");
 
         // Next slot must be empty — proves no overflow to a second slot
-        bytes32 nextSlot = bytes32(uint256(slot) + 1);
+        bytes32 nextSlot = bytes32(uint256(reads[0]) + 1);
         assertEq(vm.load(address(txRegistry), nextSlot), bytes32(0), "TransactionEntry overflowed to second slot");
     }
 }

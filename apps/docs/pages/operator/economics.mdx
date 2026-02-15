@@ -3,11 +3,11 @@ import { GasCalculator } from '../../components/GasCalculator';
 
 # Economics & Gas Analysis
 
-SWR stores every registration as a permanent on-chain entry. Each entry struct is optimized to fit in a single EVM storage slot (13-22 bytes depending on registry type), containing only the fields needed for on-chain lookups. Rich provenance data (chain IDs, reporters, message IDs) is emitted in events for indexer consumption. On Ethereum L1, even this minimal storage would add up. On Base, it costs fractions of a cent.
+SWR stores every registration as a permanent on-chain entry. Each entry struct is optimized to fit in a single EVM storage slot (17-26 bytes depending on registry type), containing only the fields needed for on-chain lookups. Rich provenance data (chain IDs, reporters, message IDs) is emitted in events for indexer consumption. On Ethereum L1, even this minimal storage would add up. On Base, it costs fractions of a cent.
 
 ## L2 Storage Economics
 
-The fundamental design decision: store every entry on-chain as a single-slot struct rather than relying on off-chain aggregation. Each entry occupies exactly one storage slot (WalletEntry: 22 bytes, TransactionEntry: 14 bytes, ContractEntry: 13 bytes). L2 gas economics make per-entry storage practical.
+The fundamental design decision: store every entry on-chain as a single-slot struct rather than relying on off-chain aggregation. Each entry occupies exactly one storage slot (WalletEntry: 26 bytes, TransactionEntry: 18 bytes, ContractEntry: 17 bytes). L2 gas economics make per-entry storage practical.
 
 ### Base Network Specifications
 

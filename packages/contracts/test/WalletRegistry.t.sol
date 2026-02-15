@@ -1018,12 +1018,85 @@ contract WalletRegistryTest is EIP712TestHelper {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // BATCH SIZE LIMIT
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice registerWalletsFromOperator reverts when batch exceeds MAX_BATCH_SIZE
+    function test_RegisterFromOperator_RejectsBatchTooLarge() public {
+        address opSubmitter = makeAddr("batchLimitSubmitter");
+        walletRegistry.setOperatorSubmitter(opSubmitter);
+
+        uint256 tooMany = walletRegistry.MAX_BATCH_SIZE() + 1;
+        bytes32[] memory identifiers = new bytes32[](tooMany);
+        bytes32[] memory chainIds = new bytes32[](tooMany);
+        uint64[] memory timestamps = new uint64[](tooMany);
+
+        // Don't need to populate — the length check fires before the loop
+        vm.expectRevert(IWalletRegistry.WalletRegistry__BatchTooLarge.selector);
+        vm.prank(opSubmitter);
+        walletRegistry.registerWalletsFromOperator(keccak256("op"), identifiers, chainIds, timestamps);
+    }
+
+    /// @notice MAX_BATCH_SIZE is 10_000
+    function test_MaxBatchSizeValue() public view {
+        assertEq(walletRegistry.MAX_BATCH_SIZE(), 10_000);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WITHDRAW TO
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice withdrawTo sends balance to specified recipient and emits FeesWithdrawn
+    function test_WithdrawTo_Success() public {
+        // Seed the registry with some ETH
+        vm.deal(address(walletRegistry), 1 ether);
+
+        address recipient = makeAddr("feeRecipient");
+        uint256 recipientBefore = recipient.balance;
+
+        vm.expectEmit(true, false, false, true);
+        emit IWalletRegistry.FeesWithdrawn(recipient, 1 ether);
+
+        walletRegistry.withdrawTo(recipient);
+
+        assertEq(address(walletRegistry).balance, 0);
+        assertEq(recipient.balance - recipientBefore, 1 ether);
+    }
+
+    /// @notice withdrawTo rejects zero address
+    function test_WithdrawTo_RejectsZeroAddress() public {
+        vm.deal(address(walletRegistry), 1 ether);
+
+        vm.expectRevert(IWalletRegistry.WalletRegistry__ZeroAddress.selector);
+        walletRegistry.withdrawTo(address(0));
+    }
+
+    /// @notice withdrawTo is a no-op when balance is zero
+    function test_WithdrawTo_NoOpWhenEmpty() public {
+        address recipient = makeAddr("emptyRecipient");
+        // Should not revert, just return
+        walletRegistry.withdrawTo(recipient);
+        assertEq(recipient.balance, 0);
+    }
+
+    /// @notice Non-owner cannot call withdrawTo
+    function test_WithdrawTo_RejectsNonOwner() public {
+        address nonOwner = makeAddr("nonOwner");
+        vm.deal(address(walletRegistry), 1 ether);
+
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", nonOwner));
+        vm.prank(nonOwner);
+        walletRegistry.withdrawTo(makeAddr("any"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // STORAGE SLOT INVARIANT — WalletEntry MUST fit in 1 slot
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice WalletEntry fits in exactly 1 storage slot (no overflow to next slot).
-    /// @dev Uses vm.load to read raw storage and verify the next slot is empty.
-    ///      Mapping slot for _wallets is 4 (from forge inspect WalletRegistry storage-layout).
+    /// @dev Uses vm.record()/vm.accesses() to discover the entry's storage slot dynamically
+    ///      (no hardcoded mapping slot index). A single-slot struct triggers exactly 1 SLOAD
+    ///      in the getter; a multi-slot struct would trigger more.
     function test_WalletEntryFitsInOneSlot() public {
         // Register a wallet via operator path
         address opSubmitter = makeAddr("slotTestSubmitter");
@@ -1040,17 +1113,20 @@ contract WalletRegistryTest is EIP712TestHelper {
         vm.prank(opSubmitter);
         walletRegistry.registerWalletsFromOperator(keccak256("op"), identifiers, reportedChainIds, timestamps);
 
-        // Compute storage slot: keccak256(abi.encode(key, MAPPING_SLOT))
-        bytes32 key = CAIP10Evm.evmWalletKey(testWallet);
-        uint256 WALLETS_MAPPING_SLOT = 4;
-        bytes32 slot = keccak256(abi.encode(key, WALLETS_MAPPING_SLOT));
+        // Record storage reads when fetching the entry — reveals which slot(s) the struct occupies
+        vm.record();
+        walletRegistry.getWalletEntry(testWallet);
+        (bytes32[] memory reads,) = vm.accesses(address(walletRegistry));
 
-        // Entry should be populated in this slot
-        bytes32 packed = vm.load(address(walletRegistry), slot);
+        // A single-slot entry triggers exactly 1 SLOAD
+        assertEq(reads.length, 1, "WalletEntry should occupy exactly 1 storage slot");
+
+        // Verify the slot is populated
+        bytes32 packed = vm.load(address(walletRegistry), reads[0]);
         assertNotEq(packed, bytes32(0), "WalletEntry should be populated");
 
         // Next slot must be empty — proves no overflow to a second slot
-        bytes32 nextSlot = bytes32(uint256(slot) + 1);
+        bytes32 nextSlot = bytes32(uint256(reads[0]) + 1);
         assertEq(vm.load(address(walletRegistry), nextSlot), bytes32(0), "WalletEntry overflowed to second slot");
     }
 }

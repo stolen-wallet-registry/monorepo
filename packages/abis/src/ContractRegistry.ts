@@ -12,6 +12,19 @@ export const ContractRegistryABI = [
   },
   {
     type: 'function',
+    name: 'MAX_BATCH_SIZE',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'acceptOwnership',
     inputs: [],
     outputs: [],
@@ -94,8 +107,8 @@ export const ContractRegistryABI = [
           },
           {
             name: 'batchId',
-            type: 'uint32',
-            internalType: 'uint32',
+            type: 'uint64',
+            internalType: 'uint64',
           },
           {
             name: 'threatCategory',
@@ -130,8 +143,8 @@ export const ContractRegistryABI = [
           },
           {
             name: 'batchId',
-            type: 'uint32',
-            internalType: 'uint32',
+            type: 'uint64',
+            internalType: 'uint64',
           },
           {
             name: 'threatCategory',
@@ -423,6 +436,11 @@ export const ContractRegistryABI = [
   {
     type: 'error',
     name: 'ContractRegistry__ArrayLengthMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'ContractRegistry__BatchTooLarge',
     inputs: [],
   },
   {

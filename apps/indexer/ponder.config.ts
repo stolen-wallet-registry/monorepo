@@ -115,6 +115,25 @@ if (PONDER_ENV !== 'development') {
 // ═══════════════════════════════════════════════════════════════════════════
 // PONDER CONFIG
 // ═══════════════════════════════════════════════════════════════════════════
+
+// Dummy address used when a contract isn't deployed yet — Ponder will simply find no events.
+// Uses EVM precompile address (ecrecover) which will never emit matching events.
+const UNDEPLOYED_DUMMY = '0x0000000000000000000000000000000000000001' as `0x${string}`;
+
+// Validate required hub contract addresses exist (they use non-null assertions below)
+if (hubContracts && !hubContracts.crossChainInbox) {
+  throw new Error(
+    `${PONDER_ENV}: crossChainInbox address missing from @swr/chains hubContracts. ` +
+      'Deploy CrossChainInbox and update network config.'
+  );
+}
+if (hubContracts && !hubContracts.operatorRegistry) {
+  throw new Error(
+    `${PONDER_ENV}: operatorRegistry address missing from @swr/chains hubContracts. ` +
+      'Deploy OperatorRegistry and update network config.'
+  );
+}
+
 export default createConfig({
   chains: {
     [chainConfig.name]: {
@@ -158,17 +177,13 @@ export default createConfig({
     WalletSoulbound: {
       chain: chainConfig.name,
       abi: WalletSoulboundABI,
-      address:
-        hubContracts?.walletSoulbound ??
-        ('0x0000000000000000000000000000000000000001' as `0x${string}`),
+      address: hubContracts?.walletSoulbound ?? UNDEPLOYED_DUMMY,
       startBlock: chainConfig.startBlock,
     },
     SupportSoulbound: {
       chain: chainConfig.name,
       abi: SupportSoulboundABI,
-      address:
-        hubContracts?.supportSoulbound ??
-        ('0x0000000000000000000000000000000000000001' as `0x${string}`),
+      address: hubContracts?.supportSoulbound ?? UNDEPLOYED_DUMMY,
       startBlock: chainConfig.startBlock,
     },
 

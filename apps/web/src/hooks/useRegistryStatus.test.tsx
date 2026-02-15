@@ -100,7 +100,7 @@ describe('useRegistryStatus', () => {
       registrationData: {
         registeredAt: 12345678n,
         incidentTimestamp: 0n,
-        batchId: 0,
+        batchId: 0n,
         bridgeId: 0,
         isSponsored: false,
       },
@@ -120,7 +120,7 @@ describe('useRegistryStatus', () => {
     expect(result.current.registrationData).toEqual({
       registeredAt: 12345678n,
       incidentTimestamp: 0n,
-      batchId: 0,
+      batchId: 0n,
       bridgeId: 0,
       isSponsored: false,
     });

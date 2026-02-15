@@ -37,6 +37,9 @@ contract CrossChainInbox is IMessageRecipient, Ownable2Step {
     /// @dev Mapping of chainId => spokeRegistry => trusted status
     mapping(uint32 => mapping(bytes32 => bool)) private _trustedSources;
 
+    /// @dev Tracks processed message payloads to prevent duplicate processing
+    mapping(bytes32 => bool) private _processedMessages;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -71,6 +74,7 @@ contract CrossChainInbox is IMessageRecipient, Ownable2Step {
     error CrossChainInbox__UntrustedSource();
     error CrossChainInbox__SourceChainMismatch();
     error CrossChainInbox__UnknownMessageType();
+    error CrossChainInbox__DuplicateMessage();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -121,6 +125,10 @@ contract CrossChainInbox is IMessageRecipient, Ownable2Step {
         // Generate payload-derived ID for idempotency and event correlation
         // Note: This is NOT Hyperlane's native message ID (see function docs)
         bytes32 messageId = keccak256(_messageBody);
+
+        // Idempotency: reject duplicate messages even if Hyperlane's dedup fails
+        if (_processedMessages[messageId]) revert CrossChainInbox__DuplicateMessage();
+        _processedMessages[messageId] = true;
 
         // Extract message type to determine routing
         bytes1 msgType = CrossChainMessage.getMessageType(_messageBody);
@@ -218,6 +226,13 @@ contract CrossChainInbox is IMessageRecipient, Ownable2Step {
     /// @return True if the source is trusted
     function isTrustedSource(uint32 chainId, bytes32 sender) external view returns (bool) {
         return _trustedSources[chainId][sender];
+    }
+
+    /// @notice Check if a message has already been processed
+    /// @param messageId The payload-derived message ID (keccak256 of message body)
+    /// @return True if the message has been processed
+    function isMessageProcessed(bytes32 messageId) external view returns (bool) {
+        return _processedMessages[messageId];
     }
 
     /// @notice Get bridge ID

@@ -25,13 +25,13 @@ The same transaction hash on different chains produces different storage keys. T
 ```solidity
 struct TransactionEntry {
     uint64  registeredAt;      // Block timestamp of registration
-    uint32  batchId;           // Batch this entry belongs to
+    uint64  batchId;           // Batch this entry belongs to
     uint8   bridgeId;          // 0 = local, 1 = Hyperlane
     bool    isSponsored;       // True if someone else paid gas
 }
 ```
 
-The struct is 14 bytes, fitting in a single EVM storage slot. Rich provenance data is emitted in events only:
+The struct is 18 bytes, fitting in a single EVM storage slot (14 bytes spare). Rich provenance data is emitted in events only:
 
 | Field             | Where it lives                                                  |
 | ----------------- | --------------------------------------------------------------- |
@@ -128,7 +128,7 @@ tx 0xabc...
   └── TransactionBatchRegistered(batchId, reporter, dataHash, count, isSponsored)
 ```
 
-The indexer joins per-entry events to their batch by matching on `transactionHash` (the on-chain tx hash, not the reported fraud tx hash). All events in the same transaction share this value. This means per-entry events carry **zero extra gas** for batch association - no batchId field needed on each entry.
+The indexer joins per-entry events to their batch by matching on `transactionHash` (the on-chain tx hash, not the reported fraud tx hash). All events in the same transaction share this value. This means per-entry **events** carry zero extra gas for batch association — no batchId field needed in each per-entry event. (Note: the `TransactionEntry` storage struct does include a `batchId` field for direct on-chain lookups.)
 
 ## Other Registration Paths
 

@@ -262,6 +262,27 @@ contract ContractRegistryTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // BATCH SIZE LIMIT
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice registerContractsFromOperator reverts when batch exceeds MAX_BATCH_SIZE
+    function test_RegisterContracts_RejectsBatchTooLarge() public {
+        uint256 tooMany = registry.MAX_BATCH_SIZE() + 1;
+        bytes32[] memory identifiers = new bytes32[](tooMany);
+        bytes32[] memory chainIds = new bytes32[](tooMany);
+        uint8[] memory threats = new uint8[](tooMany);
+
+        vm.expectRevert(IContractRegistry.ContractRegistry__BatchTooLarge.selector);
+        vm.prank(operatorSubmitter);
+        registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
+    }
+
+    /// @notice MAX_BATCH_SIZE is 10_000
+    function test_MaxBatchSizeValue() public view {
+        assertEq(registry.MAX_BATCH_SIZE(), 10_000);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // OPERATOR BATCH REGISTRATION — SKIP LOGIC
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -550,24 +571,28 @@ contract ContractRegistryTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice ContractEntry fits in exactly 1 storage slot (no overflow to next slot).
-    /// @dev Uses vm.load to read raw storage and verify the next slot is empty.
-    ///      Mapping slot for _contracts is 2 (from forge inspect ContractRegistry storage-layout).
+    /// @dev Uses vm.record()/vm.accesses() to discover the entry's storage slot dynamically
+    ///      (no hardcoded mapping slot index). A single-slot struct triggers exactly 1 SLOAD
+    ///      in the getter; a multi-slot struct would trigger more.
     function test_ContractEntryFitsInOneSlot() public {
         address testContract = makeAddr("slotTestContract");
 
         _registerContractWithThreat(testContract, 1);
 
-        // Compute storage slot: keccak256(abi.encode(key, MAPPING_SLOT))
-        bytes32 key = CAIP10.contractStorageKey(testContract, chainId);
-        uint256 CONTRACTS_MAPPING_SLOT = 2;
-        bytes32 slot = keccak256(abi.encode(key, CONTRACTS_MAPPING_SLOT));
+        // Record storage reads when fetching the entry — reveals which slot(s) the struct occupies
+        vm.record();
+        registry.getContractEntry(testContract, chainId);
+        (bytes32[] memory reads,) = vm.accesses(address(registry));
 
-        // Entry should be populated in this slot
-        bytes32 packed = vm.load(address(registry), slot);
+        // A single-slot entry triggers exactly 1 SLOAD
+        assertEq(reads.length, 1, "ContractEntry should occupy exactly 1 storage slot");
+
+        // Verify the slot is populated
+        bytes32 packed = vm.load(address(registry), reads[0]);
         assertNotEq(packed, bytes32(0), "ContractEntry should be populated");
 
         // Next slot must be empty — proves no overflow to a second slot
-        bytes32 nextSlot = bytes32(uint256(slot) + 1);
+        bytes32 nextSlot = bytes32(uint256(reads[0]) + 1);
         assertEq(vm.load(address(registry), nextSlot), bytes32(0), "ContractEntry overflowed to second slot");
     }
 }

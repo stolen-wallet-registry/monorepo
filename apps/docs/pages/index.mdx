@@ -69,7 +69,7 @@ graph TB
 
 ## Security Model
 
-Every user submission wallet and transaction registration requires **two separate signatures** with a randomized delay between them. This two-phase EIP-712 flow prevents single-transaction phishing attacks - an attacker cannot trick a victim into registering a legitimate wallet in one step.
+Every individual wallet and transaction registration requires **two separate signatures** with a randomized delay between them. This two-phase EIP-712 flow prevents single-transaction phishing attacks - an attacker cannot trick a victim into registering a legitimate wallet in one step.
 
 Operator submissions bypass the two-phase flow but are protected by a **DAO trust model** - only entities explicitly approved by governance vote (exchanges, security firms, blockchain analytics providers) can submit batch registrations. The DAO approval process is the security control that substitutes for the individual signature requirement.
 

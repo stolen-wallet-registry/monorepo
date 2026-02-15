@@ -27,6 +27,19 @@ export const WalletRegistryABI = [
   },
   {
     type: 'function',
+    name: 'MAX_BATCH_SIZE',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'acceptOwnership',
     inputs: [],
     outputs: [],
@@ -370,8 +383,8 @@ export const WalletRegistryABI = [
           },
           {
             name: 'batchId',
-            type: 'uint32',
-            internalType: 'uint32',
+            type: 'uint64',
+            internalType: 'uint64',
           },
           {
             name: 'bridgeId',
@@ -416,8 +429,8 @@ export const WalletRegistryABI = [
           },
           {
             name: 'batchId',
-            type: 'uint32',
-            internalType: 'uint32',
+            type: 'uint64',
+            internalType: 'uint64',
           },
           {
             name: 'bridgeId',
@@ -829,6 +842,19 @@ export const WalletRegistryABI = [
     stateMutability: 'nonpayable',
   },
   {
+    type: 'function',
+    name: 'withdrawTo',
+    inputs: [
+      {
+        name: 'recipient',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
     type: 'event',
     name: 'BatchCreated',
     inputs: [
@@ -1134,6 +1160,11 @@ export const WalletRegistryABI = [
   {
     type: 'error',
     name: 'WalletRegistry__ArrayLengthMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'WalletRegistry__BatchTooLarge',
     inputs: [],
   },
   {

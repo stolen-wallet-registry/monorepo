@@ -42,6 +42,9 @@ function AllProviders({ children }: WrapperProps) {
   const queryClient = createTestQueryClient();
 
   return (
+    // wagmi 2.x WagmiProvider expects the app's full Config generic. A minimal
+    // test chain created via defineChain doesn't satisfy that generic, so we cast
+    // here. This is test-only — the runtime behavior is correct.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     <WagmiProvider config={testConfig as any}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

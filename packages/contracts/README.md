@@ -28,32 +28,51 @@ forge script script/Deploy.s.sol --rpc-url localhost --broadcast
 
 ```text
 src/
-├── RegistryHub.sol                 # Fee routing + shared registry config
-├── FeeManager.sol                  # Fee quotes per registry
+├── FraudRegistryHub.sol            # Fee routing + shared registry config
+├── FeeManager.sol                  # Fee quotes per registry (Chainlink price feeds)
 ├── OperatorRegistry.sol            # DAO-approved operators + capabilities
+├── OperatorSubmitter.sol           # Operator batch submission entry point
+├── CrossChainInbox.sol             # Inbound cross-chain message handling (Hyperlane)
 ├── registries/
-│   ├── StolenWalletRegistry.sol      # Two-phase wallet registration
-│   ├── StolenTransactionRegistry.sol # Two-phase transaction batch registration
-│   └── FraudulentContractRegistry.sol# Operator-only contract batches
+│   ├── WalletRegistry.sol          # Two-phase wallet registration
+│   ├── TransactionRegistry.sol     # Two-phase transaction batch registration
+│   └── ContractRegistry.sol        # Operator-only contract batches
 ├── crosschain/
-│   ├── BridgeRouter.sol            # Outbound message routing
-│   ├── CrossChainInbox.sol         # Inbound message handling
-│   └── adapters/HyperlaneAdapter.sol
+│   └── adapters/
+│       └── HyperlaneAdapter.sol    # Hyperlane bridge adapter
 ├── spoke/
-│   ├── SpokeRegistry.sol           # Wallet registration on spoke chains
-│   ├── SpokeTransactionRegistry.sol# Transaction registration on spoke chains
+│   ├── SpokeRegistry.sol           # Wallet + transaction registration on spoke chains
 │   └── SpokeSoulboundForwarder.sol # Spoke → hub forwarding for soulbound mints
 ├── soulbound/
-│   ├── TranslationRegistry.sol     # Language metadata
+│   ├── BaseSoulbound.sol           # Shared soulbound token base (ERC-5192)
 │   ├── WalletSoulbound.sol         # Wallet attestation NFT
 │   ├── SupportSoulbound.sol        # Supporter attestation NFT
-│   └── SoulboundReceiver.sol       # Safe minting receiver
+│   ├── SoulboundReceiver.sol       # Safe minting receiver
+│   ├── TranslationRegistry.sol     # Language metadata for token URIs
+│   ├── interfaces/
+│   │   ├── IERC5192.sol            # Soulbound token interface
+│   │   └── ITranslationRegistry.sol
+│   └── libraries/
+│       └── SVGRenderer.sol         # On-chain SVG generation for token URIs
 ├── interfaces/
+│   ├── IWalletRegistry.sol
+│   ├── ITransactionRegistry.sol
+│   ├── IContractRegistry.sol
+│   ├── IFraudRegistryHub.sol
+│   ├── IFeeManager.sol
+│   ├── IOperatorRegistry.sol
+│   ├── ISpokeRegistry.sol
+│   ├── ISpokeSoulboundForwarder.sol
+│   ├── ISoulboundReceiver.sol
+│   ├── IBridgeAdapter.sol
+│   └── chainlink/
+│       └── AggregatorV3Interface.sol
 └── libraries/
     ├── TimingConfig.sol            # Grace period + deadline randomization
-    ├── MerkleRootComputation.sol   # OZ-compatible Merkle leaf hashing
-    ├── CAIP2.sol                   # CAIP-2 conversion helpers
-    ├── CrossChainMessage.sol       # Message encoding
+    ├── EIP712Constants.sol         # Shared EIP-712 domain + typehash constants
+    ├── CAIP10.sol                  # CAIP-10 multi-chain address encoding
+    ├── CAIP10Evm.sol               # EVM-specific CAIP-10 helpers
+    ├── CrossChainMessage.sol       # Cross-chain message encoding/decoding
     └── RegistryCapabilities.sol    # Operator capability flags
 ```
 

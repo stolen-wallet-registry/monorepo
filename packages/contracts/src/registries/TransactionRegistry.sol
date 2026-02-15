@@ -22,6 +22,13 @@ import { EIP712Constants } from "../libraries/EIP712Constants.sol";
 ///      - Single-phase for operator/cross-chain submissions
 contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
+    // CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Maximum number of entries in a single operator batch
+    uint256 public constant MAX_BATCH_SIZE = 10_000;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLE STATE
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -145,6 +152,19 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         if (balance == 0) return;
         (bool success,) = msg.sender.call{ value: balance }("");
         if (!success) revert TransactionRegistry__RefundFailed();
+        emit FeesWithdrawn(msg.sender, balance);
+    }
+
+    /// @notice Withdraw fees to a specific recipient
+    /// @dev Only callable by owner. Recovery path if owner address cannot receive ETH.
+    /// @param recipient Address to receive the withdrawn fees
+    function withdrawTo(address recipient) external onlyOwner {
+        if (recipient == address(0)) revert TransactionRegistry__ZeroAddress();
+        uint256 balance = address(this).balance;
+        if (balance == 0) return;
+        (bool success,) = recipient.call{ value: balance }("");
+        if (!success) revert TransactionRegistry__RefundFailed();
+        emit FeesWithdrawn(recipient, balance);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -156,7 +176,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         // Parse: namespace:chainId:txHash
         (,, uint256 txStart, uint256 txLen) = CAIP10.parse(chainQualifiedRef);
         // Validate tx hash length: 66 chars = "0x" + 64 hex chars (standard EVM tx hash)
-        require(txLen == 66, "Invalid tx hash length");
+        if (txLen != 66) revert TransactionRegistry__InvalidTxHashLength();
         bytes32 txHash = CAIP10Evm.parseHexToBytes32(chainQualifiedRef, txStart, txLen);
 
         // Compute storage key using CAIP-2 hash extracted directly from the string
@@ -170,7 +190,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     function getTransactionEntry(string calldata chainQualifiedRef) external view returns (TransactionEntry memory) {
         (,, uint256 txStart, uint256 txLen) = CAIP10.parse(chainQualifiedRef);
         // Validate tx hash length: 66 chars = "0x" + 64 hex chars (standard EVM tx hash)
-        require(txLen == 66, "Invalid tx hash length");
+        if (txLen != 66) revert TransactionRegistry__InvalidTxHashLength();
         bytes32 txHash = CAIP10Evm.parseHexToBytes32(chainQualifiedRef, txStart, txLen);
 
         bytes32 chainId = CAIP10.extractCaip2Hash(chainQualifiedRef);
@@ -463,7 +483,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
             if (_transactions[key].registeredAt > 0) continue;
 
             _transactions[key] = TransactionEntry({
-                registeredAt: uint64(block.timestamp), batchId: uint32(batchId), bridgeId: 0, isSponsored: isSponsored
+                registeredAt: uint64(block.timestamp), batchId: uint64(batchId), bridgeId: 0, isSponsored: isSponsored
             });
 
             actualCount++;
@@ -585,7 +605,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
 
             _transactions[key] = TransactionEntry({
                 registeredAt: uint64(block.timestamp),
-                batchId: uint32(batchId),
+                batchId: uint64(batchId),
                 bridgeId: params.bridgeId,
                 isSponsored: params.isSponsored
             });
@@ -647,6 +667,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
         uint256 length = transactionHashes.length;
 
         if (length == 0) revert TransactionRegistry__EmptyBatch();
+        if (length > MAX_BATCH_SIZE) revert TransactionRegistry__BatchTooLarge();
         if (length != chainIds.length) revert TransactionRegistry__ArrayLengthMismatch();
 
         // Create batch (transactionCount updated after loop with actual count)
@@ -665,7 +686,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
             if (_transactions[key].registeredAt > 0) continue;
 
             _transactions[key] = TransactionEntry({
-                registeredAt: uint64(block.timestamp), batchId: uint32(batchId), bridgeId: 0, isSponsored: false
+                registeredAt: uint64(block.timestamp), batchId: uint64(batchId), bridgeId: 0, isSponsored: false
             });
 
             actualCount++;

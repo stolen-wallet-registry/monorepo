@@ -39,7 +39,7 @@ const sampleForwarder = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address;
 const mockRegistrationData = {
   registeredAt: 12345678n,
   incidentTimestamp: 0n,
-  batchId: 0,
+  batchId: 0n,
   bridgeId: 0,
   isSponsored: false,
 };

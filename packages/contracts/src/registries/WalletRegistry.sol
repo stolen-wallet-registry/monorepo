@@ -23,6 +23,13 @@ import { EIP712Constants } from "../libraries/EIP712Constants.sol";
 ///      - Single-phase for operator/cross-chain submissions
 contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
+    // CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Maximum number of entries in a single operator batch
+    uint256 public constant MAX_BATCH_SIZE = 10_000;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLE STATE
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -146,6 +153,18 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         (bool success,) = msg.sender.call{ value: balance }("");
         if (!success) revert WalletRegistry__FeeTransferFailed();
         emit FeesWithdrawn(msg.sender, balance);
+    }
+
+    /// @notice Withdraw fees to a specific recipient
+    /// @dev Only callable by owner. Recovery path if owner address cannot receive ETH.
+    /// @param recipient Address to receive the withdrawn fees
+    function withdrawTo(address recipient) external onlyOwner {
+        if (recipient == address(0)) revert WalletRegistry__ZeroAddress();
+        uint256 balance = address(this).balance;
+        if (balance == 0) return;
+        (bool success,) = recipient.call{ value: balance }("");
+        if (!success) revert WalletRegistry__FeeTransferFailed();
+        emit FeesWithdrawn(recipient, balance);
     }
 
     /// @dev Internal helper to verify acknowledgement signature (reduces stack depth)
@@ -405,8 +424,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         // Verify EIP-712 signature from registeree (includes reportedChainId + incidentTimestamp)
         _verifyAckSignature(registeree, trustedForwarder, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
 
-        // Increment nonce after validation
-        nonces[registeree]++;
+        nonces[registeree]++; // Increment nonce after validation
 
         // Derive isSponsored: if trustedForwarder != registeree, someone else is paying
         bool isSponsored = registeree != trustedForwarder;
@@ -553,6 +571,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         uint256 length = identifiers.length;
 
         if (length == 0) revert WalletRegistry__EmptyBatch();
+        if (length > MAX_BATCH_SIZE) revert WalletRegistry__BatchTooLarge();
         if (length != reportedChainIds.length || length != incidentTimestamps.length) {
             revert WalletRegistry__ArrayLengthMismatch();
         }
@@ -576,7 +595,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
             _wallets[key] = WalletEntry({
                 registeredAt: uint64(block.timestamp),
                 incidentTimestamp: incidentTimestamps[i],
-                batchId: uint32(batchId),
+                batchId: uint64(batchId),
                 bridgeId: 0,
                 isSponsored: false
             });

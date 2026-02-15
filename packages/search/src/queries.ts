@@ -43,7 +43,7 @@ export const WALLET_BY_CAIP10_QUERY = gql`
  */
 export const TRANSACTION_QUERY = gql`
   query SearchTransaction($txHash: String!) {
-    transactionInBatchs(where: { txHash: $txHash }) {
+    transactionInBatches(where: { txHash: $txHash }) {
       items {
         id
         txHash
@@ -193,7 +193,7 @@ export const RECENT_CONTRACTS_QUERY = gql`
  */
 export const RECENT_TRANSACTIONS_QUERY = gql`
   query RecentTransactions($limit: Int!, $offset: Int) {
-    transactionBatchs(
+    transactionBatches(
       orderBy: "registeredAt"
       orderDirection: "desc"
       limit: $limit
@@ -221,7 +221,7 @@ export const RECENT_TRANSACTIONS_QUERY = gql`
  */
 export const RECENT_TRANSACTION_ENTRIES_QUERY = gql`
   query RecentTransactionEntries($limit: Int!, $offset: Int) {
-    transactionInBatchs(
+    transactionInBatches(
       orderBy: "reportedAt"
       orderDirection: "desc"
       limit: $limit
@@ -246,7 +246,7 @@ export const RECENT_TRANSACTION_ENTRIES_QUERY = gql`
  */
 export const RECENT_WALLET_BATCHES_QUERY = gql`
   query RecentWalletBatches($limit: Int!, $offset: Int) {
-    walletBatchs(orderBy: "registeredAt", orderDirection: "desc", limit: $limit, offset: $offset) {
+    walletBatches(orderBy: "registeredAt", orderDirection: "desc", limit: $limit, offset: $offset) {
       items {
         id
         operatorId
@@ -265,7 +265,7 @@ export const RECENT_WALLET_BATCHES_QUERY = gql`
  */
 export const RECENT_CONTRACT_BATCHES_QUERY = gql`
   query RecentContractBatches($limit: Int!, $offset: Int) {
-    fraudulentContractBatchs(
+    fraudulentContractBatches(
       orderBy: "registeredAt"
       orderDirection: "desc"
       limit: $limit
@@ -389,7 +389,7 @@ export const TRANSACTION_BATCH_ONLY_QUERY = gql`
  */
 export const TRANSACTION_ENTRIES_BY_TX_HASH_QUERY = gql`
   query TransactionEntriesByTxHash($txHash: String!, $limit: Int!, $offset: Int) {
-    transactionInBatchs(
+    transactionInBatches(
       where: { transactionHash: $txHash }
       orderBy: "reportedAt"
       orderDirection: "desc"
@@ -426,7 +426,7 @@ export const TRANSACTION_BATCH_DETAIL_QUERY = gql`
       registeredAt
       transactionHash
     }
-    transactionInBatchs(
+    transactionInBatches(
       where: { batchId: $batchId }
       orderBy: "reportedAt"
       orderDirection: "desc"
@@ -506,7 +506,7 @@ export interface RawWalletByCAIP10Response {
 }
 
 export interface RawTransactionResponse {
-  transactionInBatchs: {
+  transactionInBatches: {
     items: Array<{
       id: string;
       txHash: string;
@@ -615,7 +615,7 @@ export interface RawRecentContractsResponse {
 }
 
 export interface RawRecentTransactionsResponse {
-  transactionBatchs: {
+  transactionBatches: {
     items: Array<{
       id: string;
       dataHash: string;
@@ -632,7 +632,7 @@ export interface RawRecentTransactionsResponse {
 }
 
 export interface RawRecentTransactionEntriesResponse {
-  transactionInBatchs: {
+  transactionInBatches: {
     items: Array<{
       id: string;
       txHash: string;
@@ -647,7 +647,7 @@ export interface RawRecentTransactionEntriesResponse {
 }
 
 export interface RawRecentWalletBatchesResponse {
-  walletBatchs: {
+  walletBatches: {
     items: Array<{
       id: string;
       operatorId: string;
@@ -661,7 +661,7 @@ export interface RawRecentWalletBatchesResponse {
 }
 
 export interface RawRecentContractBatchesResponse {
-  fraudulentContractBatchs: {
+  fraudulentContractBatches: {
     items: Array<{
       id: string;
       operatorId: string;
@@ -739,7 +739,7 @@ export interface RawTransactionBatchOnlyResponse {
 }
 
 export interface RawTransactionEntriesByTxHashResponse {
-  transactionInBatchs: {
+  transactionInBatches: {
     items: Array<{
       id: string;
       txHash: string;
@@ -764,7 +764,7 @@ export interface RawTransactionBatchDetailResponse {
     registeredAt: string;
     transactionHash: string;
   } | null;
-  transactionInBatchs: {
+  transactionInBatches: {
     items: Array<{
       id: string;
       txHash: string;

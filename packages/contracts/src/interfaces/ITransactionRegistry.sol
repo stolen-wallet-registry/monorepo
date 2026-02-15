@@ -15,17 +15,17 @@ interface ITransactionRegistry {
     /// Current: 14 bytes (18 spare). Any new field requires a byte-count proof.
     /// Chain IDs, reporter, message IDs are EVENTS-ONLY — see events below.
     /// @param registeredAt Block timestamp when transaction was registered
-    /// @param batchId Batch link (0 = individual registration, max ~4.2B)
+    /// @param batchId Batch link (0 = individual registration)
     /// @param bridgeId Bridge protocol used (0 = local, 1 = Hyperlane, 2+ = future)
     /// @param isSponsored Whether registration was gas-sponsored
     struct TransactionEntry {
         uint64 registeredAt;
-        uint32 batchId;
+        uint64 batchId;
         uint8 bridgeId;
         bool isSponsored;
     }
 
-    // Total: 8 + 4 + 1 + 1 = 14 bytes → 1 SLOT (18 bytes spare)
+    // Total: 8 + 8 + 1 + 1 = 18 bytes → 1 SLOT (14 bytes spare)
 
     /// @notice Acknowledgement data for pending transaction batch registration
     /// @dev Struct packed for gas efficiency: uint256/bytes32 fields first, then address+bool together
@@ -80,9 +80,11 @@ interface ITransactionRegistry {
     error TransactionRegistry__OnlyHub();
     error TransactionRegistry__OnlyOperatorSubmitter();
     error TransactionRegistry__EmptyBatch();
+    error TransactionRegistry__BatchTooLarge();
     error TransactionRegistry__ArrayLengthMismatch();
     error TransactionRegistry__DataHashMismatch();
     error TransactionRegistry__InvalidStep();
+    error TransactionRegistry__InvalidTxHashLength();
     error TransactionRegistry__HubTransferFailed();
     error TransactionRegistry__RefundFailed();
 
@@ -136,6 +138,11 @@ interface ITransactionRegistry {
     /// @param operatorId The operator ID
     /// @param transactionCount Number of transactions in the batch
     event TransactionBatchCreated(uint256 indexed batchId, bytes32 indexed operatorId, uint32 transactionCount);
+
+    /// @notice Emitted when collected fees are withdrawn by the owner
+    /// @param recipient The address that received the fees
+    /// @param amount The amount of ETH withdrawn
+    event FeesWithdrawn(address indexed recipient, uint256 amount);
 
     /// @notice Emitted when hub address is updated
     /// @param oldHub The previous hub address
@@ -251,6 +258,19 @@ interface ITransactionRegistry {
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds
     ) external returns (uint256 batchId);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FEE RECOVERY (Safety Hatch)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Withdraw fees held when hub was not configured
+    /// @dev Only callable by owner. Sends entire contract balance to owner.
+    function withdrawCollectedFees() external;
+
+    /// @notice Withdraw fees to a specific recipient
+    /// @dev Only callable by owner. Recovery path if owner address cannot receive ETH.
+    /// @param recipient The address to receive the fees (must not be address(0))
+    function withdrawTo(address recipient) external;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - CAIP-10 String Interface

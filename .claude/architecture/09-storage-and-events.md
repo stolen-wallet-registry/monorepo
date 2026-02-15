@@ -52,40 +52,40 @@ key = keccak256(abi.encode(contractAddress, chainId))
 
 ## Entry Structs
 
-### WalletEntry (22 bytes -- 1 slot)
+### WalletEntry (26 bytes -- 1 slot)
 
 ```solidity
 struct WalletEntry {
     uint64  registeredAt;       // 8 bytes  - Block timestamp
     uint64  incidentTimestamp;  // 8 bytes  - Unix timestamp of incident (0 if unknown)
-    uint32  batchId;            // 4 bytes  - Batch ID (0 for individual registrations)
+    uint64  batchId;            // 8 bytes  - Batch ID (0 for individual registrations)
     uint8   bridgeId;           // 1 byte   - 0 = local, 1 = Hyperlane
     bool    isSponsored;        // 1 byte   - True if someone else paid gas
 }
-// Total: 8 + 8 + 4 + 1 + 1 = 22 bytes (10 bytes spare)
+// Total: 8 + 8 + 8 + 1 + 1 = 26 bytes (6 bytes spare)
 ```
 
-### TransactionEntry (14 bytes -- 1 slot)
+### TransactionEntry (18 bytes -- 1 slot)
 
 ```solidity
 struct TransactionEntry {
     uint64  registeredAt;       // 8 bytes  - Block timestamp
-    uint32  batchId;            // 4 bytes  - Batch ID (0 for individual registrations)
+    uint64  batchId;            // 8 bytes  - Batch ID (0 for individual registrations)
     uint8   bridgeId;           // 1 byte   - 0 = local, 1 = Hyperlane
     bool    isSponsored;        // 1 byte   - True if someone else paid gas
 }
-// Total: 8 + 4 + 1 + 1 = 14 bytes (18 bytes spare)
+// Total: 8 + 8 + 1 + 1 = 18 bytes (14 bytes spare)
 ```
 
-### ContractEntry (13 bytes -- 1 slot)
+### ContractEntry (17 bytes -- 1 slot)
 
 ```solidity
 struct ContractEntry {
     uint64  registeredAt;       // 8 bytes  - Block timestamp
-    uint32  batchId;            // 4 bytes  - Batch ID
+    uint64  batchId;            // 8 bytes  - Batch ID
     uint8   threatCategory;     // 1 byte   - Threat classification
 }
-// Total: 8 + 4 + 1 = 13 bytes (19 bytes spare)
+// Total: 8 + 8 + 1 = 17 bytes (15 bytes spare)
 ```
 
 ### TransactionBatch
@@ -116,11 +116,11 @@ The following fields were removed from entry structs to achieve single-slot pack
 
 | Added Field      | Type   | Added To         | Purpose                                       |
 | ---------------- | ------ | ---------------- | --------------------------------------------- |
-| `batchId`        | uint32 | WalletEntry      | Links wallet to its operator batch            |
-| `batchId`        | uint32 | TransactionEntry | Links transaction to its batch                |
+| `batchId`        | uint64 | WalletEntry      | Links wallet to its operator batch            |
+| `batchId`        | uint64 | TransactionEntry | Links transaction to its batch                |
 | `threatCategory` | uint8  | ContractEntry    | Threat classification for malicious contracts |
 
-**Note:** `batchId` in entry structs is `uint32` (narrowed from `uint256` in events/batch structs) to fit the single-slot constraint. This limits batch IDs to ~4.3 billion per registry, which is sufficient.
+**Note:** `batchId` in entry structs is `uint64` (narrowed from `uint256` in events/batch structs) to fit the single-slot constraint. This supports over 18 quintillion batch IDs per registry.
 
 ---
 
@@ -170,7 +170,7 @@ address(uint160(uint256(identifier)))
 | ------------------- | -------------------------- | ----------------------------------- |
 | `registeredAt`      | Yes (all entries)          | Derivable from block                |
 | `incidentTimestamp` | Yes (WalletEntry only)     | Also in signature params            |
-| `batchId`           | Yes (uint32, all entries)  | Yes (uint256 in batch events)       |
+| `batchId`           | Yes (uint64, all entries)  | Yes (uint256 in batch events)       |
 | `bridgeId`          | Yes (Wallet/Transaction)   | Yes (CrossChain events)             |
 | `isSponsored`       | Yes (Wallet/Transaction)   | Yes (registration events)           |
 | `threatCategory`    | Yes (ContractEntry)        | Not in events (struct-only)         |
@@ -208,7 +208,7 @@ tx 0xabc...
 
 ## Batch ID Assignment
 
-Batch IDs are `uint256` in events but `uint32` in entry structs. Each registry maintains its own batch counter:
+Batch IDs are `uint256` in events but `uint64` in entry structs. Each registry maintains its own batch counter:
 
 - `WalletRegistry._batchIdCounter`
 - `TransactionRegistry._batchIdCounter`
@@ -301,9 +301,10 @@ GraphQL consumers get readable chain identifiers without decoding hashes themsel
 | `packages/contracts/src/registries/WalletRegistry.sol`      | Wallet storage + events              |
 | `packages/contracts/src/registries/TransactionRegistry.sol` | Transaction storage + events         |
 | `packages/contracts/src/registries/ContractRegistry.sol`    | Contract storage + events            |
-| `packages/contracts/src/hub/FraudRegistryHub.sol`           | Hub router, cross-chain entry point  |
+| `packages/contracts/src/FraudRegistryHub.sol`               | Hub router, cross-chain entry point  |
 | `packages/contracts/src/spoke/SpokeRegistry.sol`            | Spoke chain wallet + tx registration |
-| `packages/contracts/src/libraries/CAIP2.sol`                | Chain ID encoding                    |
+| `packages/contracts/src/libraries/CAIP10.sol`               | CAIP-10 identifier encoding          |
+| `packages/contracts/src/libraries/CAIP10Evm.sol`            | EVM-specific chain ID encoding       |
 | `packages/caip/src/index.ts`                                | TypeScript CAIP-2 utilities          |
 | `packages/chains/src/index.ts`                              | Chain config, resolveChainIdHash     |
 | `apps/indexer/src/index.ts`                                 | Ponder event handlers                |

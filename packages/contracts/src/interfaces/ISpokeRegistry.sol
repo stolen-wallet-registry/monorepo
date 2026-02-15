@@ -33,16 +33,16 @@ interface ISpokeRegistry {
 
     /// @notice Acknowledgement data for pending transaction batch registrations
     /// @param trustedForwarder Address authorized to complete registration
+    /// @param transactionCount Number of transactions in batch
     /// @param dataHash Hash of (txHashes, chainIds) - signature commitment
     /// @param reportedChainId CAIP-2 hash of chain where transactions occurred
-    /// @param transactionCount Number of transactions in batch
     /// @param startBlock Block number when grace period ends
     /// @param expiryBlock Block number when registration window expires
     struct TransactionAcknowledgementData {
         address trustedForwarder;
+        uint32 transactionCount;
         bytes32 dataHash;
         bytes32 reportedChainId;
-        uint32 transactionCount;
         uint256 startBlock;
         uint256 expiryBlock;
     }

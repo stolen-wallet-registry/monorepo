@@ -80,8 +80,8 @@ export const FraudRegistryHubABI = [
           },
           {
             name: 'batchId',
-            type: 'uint32',
-            internalType: 'uint32',
+            type: 'uint64',
+            internalType: 'uint64',
           },
           {
             name: 'threatCategory',
@@ -140,8 +140,8 @@ export const FraudRegistryHubABI = [
           },
           {
             name: 'batchId',
-            type: 'uint32',
-            internalType: 'uint32',
+            type: 'uint64',
+            internalType: 'uint64',
           },
           {
             name: 'bridgeId',
@@ -186,8 +186,8 @@ export const FraudRegistryHubABI = [
           },
           {
             name: 'batchId',
-            type: 'uint32',
-            internalType: 'uint32',
+            type: 'uint64',
+            internalType: 'uint64',
           },
           {
             name: 'bridgeId',

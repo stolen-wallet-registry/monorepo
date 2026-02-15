@@ -19,16 +19,16 @@ interface IContractRegistry {
     /// Current: 13 bytes (19 spare). Any new field requires a byte-count proof.
     /// Chain IDs and operatorId are EVENTS-ONLY — see events below.
     /// @param registeredAt Block timestamp when contract was registered
-    /// @param batchId Operator batch reference (max ~4.2B)
+    /// @param batchId Operator batch reference
     /// @param threatCategory Threat type: 0=unclassified, 1=drainer/phishing, 2=rug pull,
     ///        3=honeypot, 4=ponzi, 5=fake token, 6-255=reserved for future categories
     struct ContractEntry {
         uint64 registeredAt;
-        uint32 batchId;
+        uint64 batchId;
         uint8 threatCategory;
     }
 
-    // Total: 8 + 4 + 1 = 13 bytes → 1 SLOT (19 bytes spare)
+    // Total: 8 + 8 + 1 = 17 bytes → 1 SLOT (15 bytes spare)
 
     /// @notice Batch registration data
     /// @param operatorId The operator who submitted this batch
@@ -48,6 +48,7 @@ interface IContractRegistry {
     error ContractRegistry__ZeroAddress();
     error ContractRegistry__OnlyOperatorSubmitter();
     error ContractRegistry__EmptyBatch();
+    error ContractRegistry__BatchTooLarge();
     error ContractRegistry__ArrayLengthMismatch();
 
     // ═══════════════════════════════════════════════════════════════════════════

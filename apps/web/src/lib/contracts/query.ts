@@ -20,7 +20,7 @@ const isWalletRegisteredAbi = parseAbi([
  * with the string overload getWalletEntry(string).
  */
 const getWalletEntryAbi = parseAbi([
-  'function getWalletEntry(address wallet) view returns ((uint64 registeredAt, uint64 incidentTimestamp, uint32 batchId, uint8 bridgeId, bool isSponsored))',
+  'function getWalletEntry(address wallet) view returns ((uint64 registeredAt, uint64 incidentTimestamp, uint64 batchId, uint8 bridgeId, bool isSponsored))',
 ]);
 
 /**
@@ -29,7 +29,7 @@ const getWalletEntryAbi = parseAbi([
 export interface RegistrationData {
   registeredAt: bigint;
   incidentTimestamp: bigint;
-  batchId: number;
+  batchId: bigint;
   bridgeId: number;
   isSponsored: boolean;
 }
@@ -104,7 +104,7 @@ export async function queryRegistryStatus(
     const result = results[2].result as {
       registeredAt: bigint;
       incidentTimestamp: bigint;
-      batchId: number;
+      batchId: bigint;
       bridgeId: number;
       isSponsored: boolean;
     };

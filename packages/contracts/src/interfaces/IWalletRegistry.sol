@@ -16,18 +16,18 @@ interface IWalletRegistry {
     /// Chain IDs, message IDs, and provenance data are EVENTS-ONLY — see events below.
     /// @param registeredAt Block timestamp when wallet was registered
     /// @param incidentTimestamp Unix timestamp when incident occurred (0 if unknown)
-    /// @param batchId Operator batch link (0 = individual registration, max ~4.2B)
+    /// @param batchId Operator batch link (0 = individual registration)
     /// @param bridgeId Bridge protocol used (0 = local, 1 = Hyperlane, 2+ = future)
     /// @param isSponsored Whether registration was gas-sponsored (relay/operator)
     struct WalletEntry {
         uint64 registeredAt;
         uint64 incidentTimestamp;
-        uint32 batchId;
+        uint64 batchId;
         uint8 bridgeId;
         bool isSponsored;
     }
 
-    // Total: 8 + 8 + 4 + 1 + 1 = 22 bytes → 1 SLOT (10 bytes spare)
+    // Total: 8 + 8 + 8 + 1 + 1 = 26 bytes → 1 SLOT (6 bytes spare)
 
     /// @notice Acknowledgement data for pending registration
     /// @dev Struct packed for gas efficiency: uint256 fields first, then address+bool together
@@ -79,6 +79,7 @@ interface IWalletRegistry {
     error WalletRegistry__OnlyHub();
     error WalletRegistry__OnlyOperatorSubmitter();
     error WalletRegistry__EmptyBatch();
+    error WalletRegistry__BatchTooLarge();
     error WalletRegistry__ArrayLengthMismatch();
     error WalletRegistry__InvalidStep();
 
@@ -250,6 +251,11 @@ interface IWalletRegistry {
     /// @notice Withdraw fees held when hub was not configured
     /// @dev Only callable by owner. Sends entire contract balance to owner.
     function withdrawCollectedFees() external;
+
+    /// @notice Withdraw fees to a specific recipient
+    /// @dev Only callable by owner. Recovery path if owner address cannot receive ETH.
+    /// @param recipient The address to receive the fees (must not be address(0))
+    function withdrawTo(address recipient) external;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS - CAIP-10 String Interface

@@ -36,12 +36,12 @@ The same contract address on different chains produces different keys. A scam co
 ```solidity
 struct ContractEntry {
     uint64  registeredAt;      // Block timestamp of registration
-    uint32  batchId;           // Batch this entry belongs to
+    uint64  batchId;           // Batch this entry belongs to
     uint8   threatCategory;    // Classification of malicious behavior
 }
 ```
 
-The struct is 13 bytes, fitting in a single EVM storage slot. Every entry tracks its `batchId` directly in the struct. This is different from the other registries where batch linking is done at the indexer level via transaction hash matching.
+The struct is 17 bytes, fitting in a single EVM storage slot (15 bytes spare). Every entry tracks its `batchId` directly in the struct. All three registries (`WalletEntry`, `TransactionEntry`, `ContractEntry`) store `batchId` per-entry. The Contract Registry is distinct in that it is operator-only — there is no individual two-phase registration path. The Transaction Registry also uses indexer-level transaction hash matching to link per-entry events to their batch (in addition to the struct `batchId`).
 
 Fields that were moved to events-only:
 
@@ -66,7 +66,7 @@ The `threatCategory` field classifies the type of malicious behavior:
 
 These values are currently documented conventions only — there is no on-chain enum or validation. Operators may pass any `uint8` value. Defining a formal threat category schema, adding on-chain validation, and surfacing categories in the frontend dashboard are future enhancements.
 
-Note that `batchId` changed from `uint256` to `uint32`, which is sufficient for over 4 billion batches while keeping the struct within a single storage slot.
+The `batchId` is `uint64` in entry structs (narrowed from `uint256` in events and batch structs) to keep the struct within a single storage slot while supporting over 18 quintillion batches per registry.
 
 ## Registration
 
@@ -76,7 +76,8 @@ Single function, single phase:
 function registerContractsFromOperator(
     bytes32   operatorId,
     bytes32[] identifiers,        // Contract addresses as bytes32
-    bytes32[] reportedChainIds    // CAIP-2 hash per contract
+    bytes32[] reportedChainIds,   // CAIP-2 hash per contract
+    uint8[]   threatCategories    // Threat classification per contract
 ) external onlyOperatorSubmitter returns (uint256 batchId);
 ```
 

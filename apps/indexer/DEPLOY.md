@@ -60,7 +60,7 @@ In the Railway dashboard, go to your service settings and generate a public doma
 
 Set the indexer URL in Vercel:
 
-```
+```bash
 VITE_INDEXER_URL=https://your-service.up.railway.app
 ```
 

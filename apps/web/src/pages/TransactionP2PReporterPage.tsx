@@ -11,7 +11,7 @@ import { useLocation } from 'wouter';
 import { useAccount, useChainId } from 'wagmi';
 import { ArrowLeft, Info } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
-import type { Stream } from '@libp2p/interface';
+import type { Connection, Stream } from '@libp2p/interface';
 
 import {
   Alert,
@@ -710,7 +710,7 @@ export function TransactionP2PReporterPage() {
         logger.p2p.info('Initializing P2P node for TX reporter');
 
         const streamHandler = (protocol: string) => ({
-          handler: async (stream: Stream, _connection?: unknown) => {
+          handler: async (stream: Stream, _connection?: Connection) => {
             try {
               const data = await readStreamData(stream);
               logger.p2p.info('TX Reporter received data', { protocol, data });
@@ -809,8 +809,10 @@ export function TransactionP2PReporterPage() {
       if (node) {
         const stopPromise = node.stop();
         if (stopPromise && typeof stopPromise.catch === 'function') {
-          stopPromise.catch(() => {
-            logger.p2p.debug('Error stopping P2P node');
+          stopPromise.catch((err: unknown) => {
+            logger.p2p.warn('Failed to stop P2P node on cleanup', {
+              error: (err as Error).message,
+            });
           });
         }
         if (libp2pRef.current === node) {
@@ -870,8 +872,10 @@ export function TransactionP2PReporterPage() {
     if (libp2pRef.current) {
       const stopPromise = libp2pRef.current.stop();
       if (stopPromise && typeof stopPromise.catch === 'function') {
-        stopPromise.catch(() => {
-          logger.p2p.debug('Error stopping P2P node on back');
+        stopPromise.catch((err: unknown) => {
+          logger.p2p.warn('Failed to stop P2P node on back navigation', {
+            error: (err as Error).message,
+          });
         });
       }
       libp2pRef.current = null;

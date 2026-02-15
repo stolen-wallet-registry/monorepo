@@ -139,7 +139,7 @@ export function useRecentRegistrations(
       // This resolves batchId for per-entry records that don't have it set directly.
       const txHashToBatchId = new Map<string, string>();
       if (batchesRes) {
-        for (const batch of batchesRes.transactionBatchs.items) {
+        for (const batch of batchesRes.transactionBatches.items) {
           txHashToBatchId.set(batch.transactionHash, batch.id);
         }
       }
@@ -197,7 +197,7 @@ export function useRecentRegistrations(
 
       // Process transactions (individual entries, not batches)
       if (transactionsRes) {
-        for (const raw of transactionsRes.transactionInBatchs.items) {
+        for (const raw of transactionsRes.transactionInBatches.items) {
           let txChainId = raw.caip2ChainId;
           if (!txChainId) {
             logger.contract.debug('Fallback to eip155:1 for transaction', {
@@ -235,7 +235,7 @@ export function useRecentRegistrations(
         total: limited.length,
         wallets: walletsRes?.stolenWallets.items.length ?? 0,
         contracts: contractsRes?.fraudulentContracts.items.length ?? 0,
-        transactions: transactionsRes?.transactionInBatchs.items.length ?? 0,
+        transactions: transactionsRes?.transactionInBatches.items.length ?? 0,
       });
 
       return limited;

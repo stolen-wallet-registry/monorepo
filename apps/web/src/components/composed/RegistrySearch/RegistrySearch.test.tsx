@@ -17,7 +17,7 @@ describe('RegistrySearchResult', () => {
     const mockRegistrationData = {
       registeredAt: 12345678n,
       incidentTimestamp: 0n,
-      batchId: 0,
+      batchId: 0n,
       bridgeId: 0,
       isSponsored: false,
     };
