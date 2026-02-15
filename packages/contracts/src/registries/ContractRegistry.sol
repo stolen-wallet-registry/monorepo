@@ -22,6 +22,13 @@ import { CAIP10Evm } from "../libraries/CAIP10Evm.sol";
 ///      - Operator approval process substitutes for two-phase EIP-712 protection
 contract ContractRegistry is IContractRegistry, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
+    // CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Maximum number of entries in a single operator batch
+    uint256 public constant MAX_BATCH_SIZE = 10_000;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // MUTABLE STATE
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -108,12 +115,16 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
     function registerContractsFromOperator(
         bytes32 operatorId,
         bytes32[] calldata identifiers,
-        bytes32[] calldata reportedChainIds
+        bytes32[] calldata reportedChainIds,
+        uint8[] calldata threatCategories
     ) external onlyOperatorSubmitter returns (uint256 batchId) {
         uint256 length = identifiers.length;
 
         if (length == 0) revert ContractRegistry__EmptyBatch();
-        if (length != reportedChainIds.length) revert ContractRegistry__ArrayLengthMismatch();
+        if (length > MAX_BATCH_SIZE) revert ContractRegistry__BatchTooLarge();
+        if (length != reportedChainIds.length || length != threatCategories.length) {
+            revert ContractRegistry__ArrayLengthMismatch();
+        }
 
         // Create batch (contractCount updated after loop)
         batchId = _nextBatchId++;
@@ -133,10 +144,7 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
             if (_contracts[key].registeredAt > 0) continue;
 
             _contracts[key] = ContractEntry({
-                registeredAt: uint64(block.timestamp),
-                reportedChainId: chainId,
-                operatorId: operatorId,
-                batchId: batchId
+                registeredAt: uint64(block.timestamp), batchId: uint64(batchId), threatCategory: threatCategories[i]
             });
 
             actualCount++;

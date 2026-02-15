@@ -23,6 +23,13 @@ import { EIP712Constants } from "../libraries/EIP712Constants.sol";
 ///      - Single-phase for operator/cross-chain submissions
 contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
+    // CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Maximum number of entries in a single operator batch
+    uint256 public constant MAX_BATCH_SIZE = 10_000;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLE STATE
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -146,6 +153,18 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         (bool success,) = msg.sender.call{ value: balance }("");
         if (!success) revert WalletRegistry__FeeTransferFailed();
         emit FeesWithdrawn(msg.sender, balance);
+    }
+
+    /// @notice Withdraw fees to a specific recipient
+    /// @dev Only callable by owner. Recovery path if owner address cannot receive ETH.
+    /// @param recipient Address to receive the withdrawn fees
+    function withdrawTo(address recipient) external onlyOwner {
+        if (recipient == address(0)) revert WalletRegistry__ZeroAddress();
+        uint256 balance = address(this).balance;
+        if (balance == 0) return;
+        (bool success,) = recipient.call{ value: balance }("");
+        if (!success) revert WalletRegistry__FeeTransferFailed();
+        emit FeesWithdrawn(recipient, balance);
     }
 
     /// @dev Internal helper to verify acknowledgement signature (reduces stack depth)
@@ -405,8 +424,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         // Verify EIP-712 signature from registeree (includes reportedChainId + incidentTimestamp)
         _verifyAckSignature(registeree, trustedForwarder, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
 
-        // Increment nonce after validation
-        nonces[registeree]++;
+        nonces[registeree]++; // Increment nonce after validation
 
         // Derive isSponsored: if trustedForwarder != registeree, someone else is paying
         bool isSponsored = registeree != trustedForwarder;
@@ -477,13 +495,11 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         nonces[registeree]++;
         delete _pendingAcknowledgements[registeree];
 
-        // Store wallet entry
+        // Store wallet entry (1-slot packed: 22 bytes)
         _wallets[key] = WalletEntry({
-            reportedChainId: reportedChainIdHash,
-            sourceChainId: CAIP10Evm.caip2Hash(uint64(block.chainid)),
-            messageId: bytes32(0),
             registeredAt: uint64(block.timestamp),
             incidentTimestamp: incidentTimestamp,
+            batchId: 0,
             bridgeId: 0,
             isSponsored: ack.isSponsored
         });
@@ -530,11 +546,9 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         }
 
         _wallets[key] = WalletEntry({
-            reportedChainId: reportedChainId,
-            sourceChainId: sourceChainId,
-            messageId: messageId,
             registeredAt: uint64(block.timestamp),
             incidentTimestamp: incidentTimestamp,
+            batchId: 0,
             bridgeId: bridgeId,
             isSponsored: isSponsored
         });
@@ -557,6 +571,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         uint256 length = identifiers.length;
 
         if (length == 0) revert WalletRegistry__EmptyBatch();
+        if (length > MAX_BATCH_SIZE) revert WalletRegistry__BatchTooLarge();
         if (length != reportedChainIds.length || length != incidentTimestamps.length) {
             revert WalletRegistry__ArrayLengthMismatch();
         }
@@ -565,7 +580,6 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         batchId = _nextBatchId++;
 
         // Register each wallet, counting actual registrations
-        bytes32 localSourceChainId = CAIP10Evm.caip2Hash(uint64(block.chainid));
         uint32 actualCount = 0;
 
         for (uint256 i = 0; i < length; i++) {
@@ -579,11 +593,9 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
             if (_wallets[key].registeredAt > 0) continue;
 
             _wallets[key] = WalletEntry({
-                reportedChainId: reportedChainIds[i],
-                sourceChainId: localSourceChainId,
-                messageId: bytes32(0),
                 registeredAt: uint64(block.timestamp),
                 incidentTimestamp: incidentTimestamps[i],
+                batchId: uint64(batchId),
                 bridgeId: 0,
                 isSponsored: false
             });

@@ -79,19 +79,14 @@ export const FraudRegistryHubABI = [
             internalType: 'uint64',
           },
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'operatorId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
             name: 'batchId',
-            type: 'uint256',
-            internalType: 'uint256',
+            type: 'uint64',
+            internalType: 'uint64',
+          },
+          {
+            name: 'threatCategory',
+            type: 'uint8',
+            internalType: 'uint8',
           },
         ],
       },
@@ -139,27 +134,12 @@ export const FraudRegistryHubABI = [
         internalType: 'struct ITransactionRegistry.TransactionEntry',
         components: [
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'sourceChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'messageId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'reporter',
-            type: 'address',
-            internalType: 'address',
-          },
-          {
             name: 'registeredAt',
+            type: 'uint64',
+            internalType: 'uint64',
+          },
+          {
+            name: 'batchId',
             type: 'uint64',
             internalType: 'uint64',
           },
@@ -195,27 +175,17 @@ export const FraudRegistryHubABI = [
         internalType: 'struct IWalletRegistry.WalletEntry',
         components: [
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'sourceChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'messageId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
             name: 'registeredAt',
             type: 'uint64',
             internalType: 'uint64',
           },
           {
             name: 'incidentTimestamp',
+            type: 'uint64',
+            internalType: 'uint64',
+          },
+          {
+            name: 'batchId',
             type: 'uint64',
             internalType: 'uint64',
           },

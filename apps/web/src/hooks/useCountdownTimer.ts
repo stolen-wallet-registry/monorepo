@@ -163,8 +163,8 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     }, 1000);
 
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRunning]); // totalMs intentionally excluded — setTotalMs uses functional updater
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- totalMs excluded: setTotalMs uses functional updater so current value is not needed as a dep
+  }, [isRunning]);
 
   // Block verification effect - determines actual expiration from chain data
   // This runs whenever currentBlock updates from contract polling

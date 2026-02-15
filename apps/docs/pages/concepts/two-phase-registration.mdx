@@ -12,10 +12,11 @@ Two-phase registration breaks this attack:
 
 1. The victim would need to sign **twice**, minutes apart
 2. The randomized grace period makes automation unreliable
-3. The second signature request - minutes after the first - is inherently suspicious
+3. The acknowledgement deadline expires (~10-20 minutes after acknowledgement, depending on randomization) — the attacker must trick the victim into signing a second transaction within this narrow window or the acknowledgement becomes invalid
+4. A second, unsolicited signature request minutes after the first **should** raise suspicion for any attentive user — though this is a behavioral assumption, not a technical guarantee
 
 :::warning
-Two-phase registration is an added layer of social engineering protection, not a guarantee. A sufficiently motivated attacker with sustained access to a victim could still complete both phases. The design raises the bar significantly - it does not eliminate all risk.
+Two-phase registration is an added layer of social engineering protection, not a guarantee. A sufficiently motivated attacker with sustained access to a victim could still complete both phases within the registration window. The design raises the bar significantly — it does not eliminate all risk.
 :::
 
 ## The Three Phases
@@ -28,12 +29,14 @@ sequenceDiagram
 
     U->>C: Sign ACK (EIP-712)
     C->>B: Submit acknowledge()
-    B-->>C: Grace period starts
-    Note over B: 1-4 min randomized delay<br/>(block.prevrandao)
-    B-->>C: Grace period ends
+    Note over B: Grace period begins<br/>(1-4 min randomized delay)
+    rect rgb(255, 245, 230)
+    Note over B: Registration window open<br/>(~8-10 min before expiry)
     U->>C: Sign REG (EIP-712)
     C->>B: Submit register()
     B-->>C: Wallet permanently registered
+    end
+    Note over B: If window expires:<br/>acknowledgement is invalid,<br/>must restart from Phase 1
 
 `} />
 
@@ -46,18 +49,22 @@ The user signs an EIP-712 typed message declaring their wallet stolen. The contr
 - Stores a pending acknowledgement with randomized timing
 - Emits `WalletAcknowledged` event
 
-### Phase 2: Grace Period
+### Phase 2: Grace Period & Registration Window
 
-A randomized delay using `block.prevrandao` prevents timing attacks. The user cannot proceed until the grace period ends, and must complete registration before the deadline.
+A randomized delay using `block.prevrandao` prevents timing attacks. The user cannot proceed until the grace period ends, and must complete registration before the acknowledgement expires.
 
-| Chain           | Block Time | Grace Blocks | Deadline Blocks | Grace Period | Registration Window |
-| --------------- | ---------- | ------------ | --------------- | ------------ | ------------------- |
-| Anvil (local)   | 13s        | 10           | 50              | ~2 min       | ~10 min             |
-| Base / Optimism | 2s         | 60           | 300             | ~2 min       | ~10 min             |
-| Arbitrum        | 0.25s      | 480          | 2400            | ~2 min       | ~10 min             |
-| Ethereum L1     | 12s        | 10           | 50              | ~2 min       | ~10 min             |
+The registration window is the time between the end of the grace period and the acknowledgement deadline. If the user does not complete the second signature within this window, the acknowledgement becomes invalid and the entire process must restart from Phase 1. This expiry is central to the social engineering protection — an attacker has a narrow, non-renewable window to coerce a second signature.
 
-Block counts are configured per chain to maintain consistent ~2 min grace / ~10 min window UX.
+Both the grace period and deadline include randomized jitter (up to 1x the base block count via `block.prevrandao`), so actual timing varies per registration.
+
+| Chain           | Block Time | Grace Blocks | Deadline Blocks | Grace Period | Ack Deadline (from ack) |
+| --------------- | ---------- | ------------ | --------------- | ------------ | ----------------------- |
+| Anvil (local)   | 13s        | 2            | 50              | ~30s - 1 min | ~10 - 20 min            |
+| Base / Optimism | 2s         | 60           | 300             | ~2 - 4 min   | ~10 - 20 min            |
+| Arbitrum        | 0.25s      | 480          | 2400            | ~2 - 4 min   | ~10 - 20 min            |
+| Ethereum L1     | 12s        | 10           | 50              | ~2 - 4 min   | ~10 - 20 min            |
+
+Block counts are derived from `TimingConfig.sol` and configured per chain in `DeployBase.s.sol` to maintain consistent UX across chains. The formula is: `block.number + random(0, baseBlocks) + baseBlocks`.
 
 ### Phase 3: Registration
 

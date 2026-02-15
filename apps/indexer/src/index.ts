@@ -26,6 +26,7 @@ import {
   type Environment,
 } from '@swr/chains';
 import { type Address, type Hex } from 'viem';
+import { eq } from 'ponder';
 
 // Hub chain configuration - determined by environment
 const PONDER_ENV = (process.env.PONDER_ENV ?? 'development') as Environment;
@@ -77,52 +78,22 @@ type StatsDelta = {
 
 async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) {
   const id = 'global';
-  const existing = await db.find(registryStats, { id });
+  const wallets = delta.walletRegistrations ?? 0;
+  const sponsored = delta.sponsored ?? 0;
+  const direct = wallets - sponsored;
 
-  if (existing) {
-    // Compute new totals first
-    const newTotalWalletRegistrations =
-      existing.totalWalletRegistrations + (delta.walletRegistrations ?? 0);
-    const newSponsored = existing.sponsoredRegistrations + (delta.sponsored ?? 0);
-    const newCrossChain = existing.crossChainRegistrations + (delta.crossChain ?? 0);
-    // Direct = total wallets - sponsored (cross-chain is a subset of sponsored)
-    const newDirectRegistrations = newTotalWalletRegistrations - newSponsored;
-
-    await db.update(registryStats, { id }).set({
-      totalWalletRegistrations: newTotalWalletRegistrations,
-      totalTransactionBatches: existing.totalTransactionBatches + (delta.transactionBatches ?? 0),
-      totalTransactionsReported:
-        existing.totalTransactionsReported + (delta.transactionsReported ?? 0),
-      sponsoredRegistrations: newSponsored,
-      directRegistrations: newDirectRegistrations,
-      crossChainRegistrations: newCrossChain,
-      walletSoulboundsMinted: existing.walletSoulboundsMinted + (delta.walletSoulbounds ?? 0),
-      supportSoulboundsMinted: existing.supportSoulboundsMinted + (delta.supportSoulbounds ?? 0),
-      totalSupportDonations: existing.totalSupportDonations + (delta.supportDonations ?? 0n),
-      totalOperators: existing.totalOperators + (delta.totalOperators ?? 0),
-      activeOperators: existing.activeOperators + (delta.activeOperators ?? 0),
-      totalWalletBatches: existing.totalWalletBatches + (delta.totalWalletBatches ?? 0),
-      totalOperatorTransactionBatches:
-        existing.totalOperatorTransactionBatches + (delta.totalOperatorTransactionBatches ?? 0),
-      totalContractBatches: existing.totalContractBatches + (delta.totalContractBatches ?? 0),
-      totalFraudulentContracts:
-        existing.totalFraudulentContracts + (delta.totalFraudulentContracts ?? 0),
-      lastUpdated: timestamp,
-    });
-  } else {
-    // First entry - compute initial values
-    const totalWallets = delta.walletRegistrations ?? 0;
-    const sponsored = delta.sponsored ?? 0;
-    // Direct = total - sponsored
-    const directRegistrations = totalWallets - sponsored;
-
-    await db.insert(registryStats).values({
+  // Atomic upsert: insert initial values or accumulate deltas on conflict.
+  // Uses SQL expressions for conflict path to prevent race conditions where
+  // two concurrent events both find no record and one delta is lost.
+  await db
+    .insert(registryStats)
+    .values({
       id,
-      totalWalletRegistrations: totalWallets,
+      totalWalletRegistrations: wallets,
       totalTransactionBatches: delta.transactionBatches ?? 0,
       totalTransactionsReported: delta.transactionsReported ?? 0,
       sponsoredRegistrations: sponsored,
-      directRegistrations,
+      directRegistrations: direct,
       crossChainRegistrations: delta.crossChain ?? 0,
       walletSoulboundsMinted: delta.walletSoulbounds ?? 0,
       supportSoulboundsMinted: delta.supportSoulbounds ?? 0,
@@ -134,8 +105,32 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
       totalContractBatches: delta.totalContractBatches ?? 0,
       totalFraudulentContracts: delta.totalFraudulentContracts ?? 0,
       lastUpdated: timestamp,
+    })
+    .onConflictDoUpdate((row: typeof registryStats.$inferSelect) => {
+      const newTotalWallets = row.totalWalletRegistrations + wallets;
+      const newSponsored = row.sponsoredRegistrations + sponsored;
+      return {
+        totalWalletRegistrations: newTotalWallets,
+        totalTransactionBatches: row.totalTransactionBatches + (delta.transactionBatches ?? 0),
+        totalTransactionsReported:
+          row.totalTransactionsReported + (delta.transactionsReported ?? 0),
+        sponsoredRegistrations: newSponsored,
+        directRegistrations: newTotalWallets - newSponsored,
+        crossChainRegistrations: row.crossChainRegistrations + (delta.crossChain ?? 0),
+        walletSoulboundsMinted: row.walletSoulboundsMinted + (delta.walletSoulbounds ?? 0),
+        supportSoulboundsMinted: row.supportSoulboundsMinted + (delta.supportSoulbounds ?? 0),
+        totalSupportDonations: row.totalSupportDonations + (delta.supportDonations ?? 0n),
+        totalOperators: row.totalOperators + (delta.totalOperators ?? 0),
+        activeOperators: row.activeOperators + (delta.activeOperators ?? 0),
+        totalWalletBatches: row.totalWalletBatches + (delta.totalWalletBatches ?? 0),
+        totalOperatorTransactionBatches:
+          row.totalOperatorTransactionBatches + (delta.totalOperatorTransactionBatches ?? 0),
+        totalContractBatches: row.totalContractBatches + (delta.totalContractBatches ?? 0),
+        totalFraudulentContracts:
+          row.totalFraudulentContracts + (delta.totalFraudulentContracts ?? 0),
+        lastUpdated: timestamp,
+      };
     });
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -258,6 +253,16 @@ ponder.on('WalletRegistry:BatchCreated', async ({ event, context }) => {
   const batchIdStr = batchId.toString();
   const operatorAddress = toLowerAddress(event.transaction.from);
 
+  // Derive reportedChainCAIP2 from the first wallet entry in the same tx.
+  // WalletRegistered events fire before BatchCreated in the same transaction,
+  // so entries are already in the DB by the time this handler runs.
+  const walletEntries = await db.sql
+    .select({ reportedChainCAIP2: stolenWallet.reportedChainCAIP2 })
+    .from(stolenWallet)
+    .where(eq(stolenWallet.transactionHash, event.transaction.hash))
+    .limit(1);
+  const reportedChainCAIP2 = walletEntries[0]?.reportedChainCAIP2 ?? null;
+
   // Insert batch record
   await db
     .insert(walletBatch)
@@ -265,6 +270,7 @@ ponder.on('WalletRegistry:BatchCreated', async ({ event, context }) => {
       id: batchIdStr,
       operatorId,
       operator: operatorAddress,
+      reportedChainCAIP2,
       walletCount: Number(walletCount),
       registeredAt: event.block.timestamp,
       registeredAtBlock: event.block.number,
@@ -350,12 +356,22 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
   const { batchId, reporter, dataHash, transactionCount, isSponsored } = event.args;
   const { db } = context;
 
+  // Derive reportedChainCAIP2 from the first transaction entry in the same tx.
+  // TransactionRegistered events fire before TransactionBatchRegistered in the same transaction.
+  const txEntries = await db.sql
+    .select({ caip2ChainId: transactionInBatch.caip2ChainId })
+    .from(transactionInBatch)
+    .where(eq(transactionInBatch.transactionHash, event.transaction.hash))
+    .limit(1);
+  const reportedChainCAIP2 = txEntries[0]?.caip2ChainId ?? null;
+
   await db
     .insert(transactionBatch)
     .values({
       id: batchId.toString(),
       dataHash,
       reporter: reporter.toLowerCase() as Address,
+      reportedChainCAIP2,
       transactionCount: Number(transactionCount),
       isSponsored,
       isOperator: false,
@@ -529,13 +545,15 @@ ponder.on('CrossChainInbox:TransactionBatchReceived', async ({ event, context })
   const sourceCAIP2 = hyperlaneDomainToCAIP2(origin);
   const sourceNumeric = sourceCAIP2 ? caip2ToNumericChainId(sourceCAIP2) : null;
 
+  // Note: dataHash is the committed merkle root, NOT a batchId.
+  // The actual batchId is only known when TransactionBatchRegistered fires on the hub.
+  // Leave batchId null for cross-chain entries to avoid conflating the two.
   await db
     .insert(crossChainMessage)
     .values({
       id: messageId,
       sourceChainId: sourceNumeric ?? origin,
       targetChainId: HUB_CHAIN_ID,
-      batchId: dataHash,
       spokeTxHash: event.transaction.hash,
       status: 'received',
       receivedAt: event.block.timestamp,

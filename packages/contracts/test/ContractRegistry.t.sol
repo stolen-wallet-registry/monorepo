@@ -6,6 +6,7 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 import { ContractRegistry } from "../src/registries/ContractRegistry.sol";
 import { IContractRegistry } from "../src/interfaces/IContractRegistry.sol";
+import { CAIP10 } from "../src/libraries/CAIP10.sol";
 import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
 
 /// @title ContractRegistryTest
@@ -63,13 +64,20 @@ contract ContractRegistryTest is Test {
 
     /// @dev Register a single contract via the operator path and return its identifier
     function _registerContract(address contractAddr) internal returns (bytes32) {
+        return _registerContractWithThreat(contractAddr, 0);
+    }
+
+    /// @dev Register a single contract with a specific threat category
+    function _registerContractWithThreat(address contractAddr, uint8 threat) internal returns (bytes32) {
         bytes32[] memory identifiers = new bytes32[](1);
         identifiers[0] = _toIdentifier(contractAddr);
         bytes32[] memory chainIds = new bytes32[](1);
         chainIds[0] = chainId;
+        uint8[] memory threats = new uint8[](1);
+        threats[0] = threat;
 
         vm.prank(operatorSubmitter);
-        registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
 
         return identifiers[0];
     }
@@ -138,8 +146,11 @@ contract ContractRegistryTest is Test {
         bytes32[] memory chainIds = new bytes32[](1);
         chainIds[0] = chainId;
 
+        uint8[] memory threats = new uint8[](1);
+        threats[0] = 0;
+
         vm.expectRevert(IContractRegistry.ContractRegistry__OnlyOperatorSubmitter.selector);
-        fresh.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        fresh.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
     }
 
     /// @notice Reverts when caller is not the set operatorSubmitter
@@ -150,10 +161,12 @@ contract ContractRegistryTest is Test {
         identifiers[0] = _toIdentifier(makeAddr("c1"));
         bytes32[] memory chainIds = new bytes32[](1);
         chainIds[0] = chainId;
+        uint8[] memory threats = new uint8[](1);
+        threats[0] = 0;
 
         vm.expectRevert(IContractRegistry.ContractRegistry__OnlyOperatorSubmitter.selector);
         vm.prank(randomCaller);
-        registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -176,6 +189,11 @@ contract ContractRegistryTest is Test {
         chainIds[1] = chainId;
         chainIds[2] = chainId;
 
+        uint8[] memory threats = new uint8[](3);
+        threats[0] = 1; // drainer
+        threats[1] = 2; // rug pull
+        threats[2] = 0; // unclassified
+
         // Per-entry events fire during loop, batch event fires after
         vm.expectEmit(true, true, true, true);
         emit IContractRegistry.ContractRegistered(identifiers[0], chainId, operatorId, 1);
@@ -188,16 +206,19 @@ contract ContractRegistryTest is Test {
         emit IContractRegistry.ContractBatchCreated(1, operatorId, 3);
 
         vm.prank(operatorSubmitter);
-        uint256 batchId = registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        uint256 batchId = registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
 
         assertEq(batchId, 1, "First batch should have ID 1");
 
-        // Verify entry data for c1
+        // Verify entry data for c1 (1-slot packed: registeredAt, batchId, threatCategory)
         IContractRegistry.ContractEntry memory entry = registry.getContractEntry(c1, chainId);
         assertEq(entry.registeredAt, uint64(block.timestamp));
-        assertEq(entry.reportedChainId, chainId);
-        assertEq(entry.operatorId, operatorId);
         assertEq(entry.batchId, 1);
+        assertEq(entry.threatCategory, 1); // drainer
+
+        // Verify threat categories
+        assertEq(registry.getContractEntry(c2, chainId).threatCategory, 2); // rug pull
+        assertEq(registry.getContractEntry(c3, chainId).threatCategory, 0); // unclassified
 
         // Verify batch metadata
         IContractRegistry.ContractBatch memory batch = registry.getContractBatch(1);
@@ -219,10 +240,11 @@ contract ContractRegistryTest is Test {
     function test_RegisterContracts_RejectsEmptyBatch() public {
         bytes32[] memory identifiers = new bytes32[](0);
         bytes32[] memory chainIds = new bytes32[](0);
+        uint8[] memory threats = new uint8[](0);
 
         vm.expectRevert(IContractRegistry.ContractRegistry__EmptyBatch.selector);
         vm.prank(operatorSubmitter);
-        registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
     }
 
     /// @notice Reverts when identifiers and chainIds arrays have different lengths
@@ -232,10 +254,32 @@ contract ContractRegistryTest is Test {
         identifiers[1] = _toIdentifier(makeAddr("c2"));
         bytes32[] memory chainIds = new bytes32[](1);
         chainIds[0] = chainId;
+        uint8[] memory threats = new uint8[](2);
 
         vm.expectRevert(IContractRegistry.ContractRegistry__ArrayLengthMismatch.selector);
         vm.prank(operatorSubmitter);
-        registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BATCH SIZE LIMIT
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice registerContractsFromOperator reverts when batch exceeds MAX_BATCH_SIZE
+    function test_RegisterContracts_RejectsBatchTooLarge() public {
+        uint256 tooMany = registry.MAX_BATCH_SIZE() + 1;
+        bytes32[] memory identifiers = new bytes32[](tooMany);
+        bytes32[] memory chainIds = new bytes32[](tooMany);
+        uint8[] memory threats = new uint8[](tooMany);
+
+        vm.expectRevert(IContractRegistry.ContractRegistry__BatchTooLarge.selector);
+        vm.prank(operatorSubmitter);
+        registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
+    }
+
+    /// @notice MAX_BATCH_SIZE is 10_000
+    function test_MaxBatchSizeValue() public view {
+        assertEq(registry.MAX_BATCH_SIZE(), 10_000);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -256,6 +300,8 @@ contract ContractRegistryTest is Test {
         chainIds[1] = chainId;
         chainIds[2] = chainId;
 
+        uint8[] memory threats = new uint8[](3);
+
         // Per-entry event fires before batch event (loop runs first)
         vm.expectEmit(true, true, true, true);
         emit IContractRegistry.ContractRegistered(identifiers[0], chainId, operatorId, 1);
@@ -265,7 +311,7 @@ contract ContractRegistryTest is Test {
         emit IContractRegistry.ContractBatchCreated(1, operatorId, 1);
 
         vm.prank(operatorSubmitter);
-        registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
 
         assertTrue(registry.isContractRegistered(c1, chainId));
         assertFalse(registry.isContractRegistered(address(0), chainId));
@@ -288,14 +334,15 @@ contract ContractRegistryTest is Test {
         bytes32[] memory chainIds = new bytes32[](1);
         chainIds[0] = chainId;
 
+        uint8[] memory threats = new uint8[](1);
         vm.expectRevert(IContractRegistry.ContractRegistry__EmptyBatch.selector);
         vm.prank(operatorSubmitter);
-        registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
 
         // Entry should retain original data (not overwritten)
         IContractRegistry.ContractEntry memory after_ = registry.getContractEntry(c1, chainId);
         assertEq(after_.batchId, original.batchId, "Entry should retain original batchId");
-        assertEq(after_.operatorId, original.operatorId);
+        assertEq(after_.threatCategory, original.threatCategory);
         assertEq(after_.registeredAt, original.registeredAt);
     }
 
@@ -321,6 +368,10 @@ contract ContractRegistryTest is Test {
             chainIds[i] = chainId;
         }
 
+        uint8[] memory threats = new uint8[](5);
+        threats[2] = 3; // honeypot
+        threats[4] = 4; // ponzi
+
         // Per-entry events fire before batch event (newC1 and newC2 only)
         vm.expectEmit(true, true, true, true);
         emit IContractRegistry.ContractRegistered(_toIdentifier(newC1), chainId, operatorId, 2);
@@ -330,7 +381,7 @@ contract ContractRegistryTest is Test {
         emit IContractRegistry.ContractBatchCreated(2, operatorId, 2);
 
         vm.prank(operatorSubmitter);
-        registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
 
         assertTrue(registry.isContractRegistered(newC1, chainId));
         assertTrue(registry.isContractRegistered(newC2, chainId));
@@ -357,8 +408,10 @@ contract ContractRegistryTest is Test {
         bytes32[] memory chainIds = new bytes32[](1);
         chainIds[0] = chainId;
 
+        uint8[] memory threats = new uint8[](1);
+
         vm.prank(operatorSubmitter);
-        uint256 batchId = registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        uint256 batchId = registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
 
         assertEq(batchId, 2, "Second batch should have ID 2");
         assertEq(registry.contractBatchCount(), 2);
@@ -390,16 +443,14 @@ contract ContractRegistryTest is Test {
 
         IContractRegistry.ContractEntry memory entry = registry.getContractEntry(c, chainId);
         assertEq(entry.registeredAt, uint64(block.timestamp));
-        assertEq(entry.reportedChainId, chainId);
-        assertEq(entry.operatorId, operatorId);
         assertEq(entry.batchId, 1);
+        assertEq(entry.threatCategory, 0);
 
         // Unregistered returns empty
         IContractRegistry.ContractEntry memory empty = registry.getContractEntry(makeAddr("ghost"), chainId);
         assertEq(empty.registeredAt, 0);
-        assertEq(empty.reportedChainId, bytes32(0));
-        assertEq(empty.operatorId, bytes32(0));
         assertEq(empty.batchId, 0);
+        assertEq(empty.threatCategory, 0);
     }
 
     /// @notice getContractBatch returns correct data for existing, empty for nonexistent
@@ -458,16 +509,14 @@ contract ContractRegistryTest is Test {
         IContractRegistry.ContractEntry memory entry = registry.getContractEntry(caip10);
 
         assertEq(entry.registeredAt, uint64(block.timestamp));
-        assertEq(entry.reportedChainId, chainId);
-        assertEq(entry.operatorId, operatorId);
         assertEq(entry.batchId, 1);
+        assertEq(entry.threatCategory, 0);
 
         // Cross-check: string and typed views return identical data
         IContractRegistry.ContractEntry memory typedEntry = registry.getContractEntry(c, chainId);
         assertEq(entry.registeredAt, typedEntry.registeredAt);
-        assertEq(entry.reportedChainId, typedEntry.reportedChainId);
-        assertEq(entry.operatorId, typedEntry.operatorId);
         assertEq(entry.batchId, typedEntry.batchId);
+        assertEq(entry.threatCategory, typedEntry.threatCategory);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -485,9 +534,11 @@ contract ContractRegistryTest is Test {
         identifiers[0] = _toIdentifier(c1);
         bytes32[] memory chainIds = new bytes32[](1);
         chainIds[0] = baseChainId;
+        uint8[] memory threats = new uint8[](1);
+        threats[0] = 1; // drainer
 
         vm.prank(operatorSubmitter);
-        registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
 
         // Registered on Base
         assertTrue(registry.isContractRegistered(c1, baseChainId));
@@ -496,21 +547,52 @@ contract ContractRegistryTest is Test {
 
         // Register on Optimism
         chainIds[0] = opChainId;
+        threats[0] = 2; // rug pull
         vm.prank(operatorSubmitter);
-        registry.registerContractsFromOperator(operatorId, identifiers, chainIds);
+        registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
 
         // Both chains now registered
         assertTrue(registry.isContractRegistered(c1, baseChainId));
         assertTrue(registry.isContractRegistered(c1, opChainId));
 
-        // Entries have distinct chain IDs
+        // Entries have distinct threat categories and batches
         IContractRegistry.ContractEntry memory baseEntry = registry.getContractEntry(c1, baseChainId);
         IContractRegistry.ContractEntry memory opEntry = registry.getContractEntry(c1, opChainId);
-        assertEq(baseEntry.reportedChainId, baseChainId);
-        assertEq(opEntry.reportedChainId, opChainId);
+        assertEq(baseEntry.threatCategory, 1); // drainer
+        assertEq(opEntry.threatCategory, 2); // rug pull
 
         // They reference different batches (batch 1 = Base, batch 2 = Optimism)
         assertEq(baseEntry.batchId, 1);
         assertEq(opEntry.batchId, 2);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STORAGE SLOT INVARIANT — ContractEntry MUST fit in 1 slot
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice ContractEntry fits in exactly 1 storage slot (no overflow to next slot).
+    /// @dev Uses vm.record()/vm.accesses() to discover the entry's storage slot dynamically
+    ///      (no hardcoded mapping slot index). A single-slot struct triggers exactly 1 SLOAD
+    ///      in the getter; a multi-slot struct would trigger more.
+    function test_ContractEntryFitsInOneSlot() public {
+        address testContract = makeAddr("slotTestContract");
+
+        _registerContractWithThreat(testContract, 1);
+
+        // Record storage reads when fetching the entry — reveals which slot(s) the struct occupies
+        vm.record();
+        registry.getContractEntry(testContract, chainId);
+        (bytes32[] memory reads,) = vm.accesses(address(registry));
+
+        // A single-slot entry triggers exactly 1 SLOAD
+        assertEq(reads.length, 1, "ContractEntry should occupy exactly 1 storage slot");
+
+        // Verify the slot is populated
+        bytes32 packed = vm.load(address(registry), reads[0]);
+        assertNotEq(packed, bytes32(0), "ContractEntry should be populated");
+
+        // Next slot must be empty — proves no overflow to a second slot
+        bytes32 nextSlot = bytes32(uint256(reads[0]) + 1);
+        assertEq(vm.load(address(registry), nextSlot), bytes32(0), "ContractEntry overflowed to second slot");
     }
 }

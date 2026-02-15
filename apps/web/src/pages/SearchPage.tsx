@@ -37,6 +37,7 @@ import { truncateAddress } from '@/lib/address';
 import { getChainDisplayInfo } from '@/lib/chains';
 import { logger } from '@/lib/logger';
 import { redactAddress } from '@/lib/logger/formatters';
+import { isAddress } from '@/lib/types/ethereum';
 import type { Address } from '@/lib/types/ethereum';
 
 const RECENT_SEARCHES_KEY = 'swr-recent-searches';
@@ -99,9 +100,10 @@ function normalizeRecentSearch(entry: unknown): RecentSearch | null {
 
   // Must have a valid address string
   if (typeof e.address !== 'string' || !e.address) return null;
+  if (!isAddress(e.address)) return null;
 
   return {
-    address: e.address as Address,
+    address: e.address,
     chainId: typeof e.chainId === 'number' ? e.chainId : 31337,
     type: VALID_TYPES.includes(e.type as RegistryType) ? (e.type as RegistryType) : 'wallet',
     resultStatus: VALID_STATUSES.includes(e.resultStatus as SearchResultStatus)

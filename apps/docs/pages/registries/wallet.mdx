@@ -6,6 +6,17 @@ Permanently registers stolen wallet addresses on-chain. Once registered, a walle
 
 **Who can submit:** Individuals (self-attestation with EIP-712 signatures) and DAO-approved operators (batch submissions via OperatorSubmitter).
 
+## EOA Addresses Only
+
+The Wallet Registry is designed for **externally owned accounts (EOAs)** — standard private-key-controlled addresses. Smart contract wallets (Safe, ERC-4337 accounts, etc.) are not meaningful candidates for stolen wallet registration for two reasons:
+
+1. **Key recovery exists.** Smart contract wallets typically support social recovery, guardian rotation, or owner swaps. A compromised key does not permanently compromise the account — the owner can rotate signers and regain control. Marking such an address as permanently stolen is misleading.
+2. **Signature verification is EOA-only.** The two-phase registration flow uses `ECDSA.recover` to verify that the wallet owner signed the EIP-712 messages. This only works with secp256k1 signatures (EOAs). Smart contract wallets use [EIP-1271](https://eips.ethereum.org/EIPS/eip-1271) (`isValidSignature`), which the registry does not implement — so smart contract wallets cannot complete the individual registration flow.
+
+:::info
+Operator and cross-chain registration paths bypass signature verification and could technically register any address. Operators are DAO-approved entities expected to exercise judgment about which addresses are appropriate to register.
+:::
+
 ## Storage
 
 ```solidity
@@ -24,15 +35,25 @@ The wildcard `_` means an EVM wallet registered on any chain is marked as compro
 
 ```solidity
 struct WalletEntry {
-    bytes32 reportedChainId;    // CAIP-2 hash of chain where incident occurred
-    bytes32 sourceChainId;      // CAIP-2 hash of chain where registration was submitted
-    bytes32 messageId;          // Cross-chain message ID (bytes32(0) for local)
     uint64  registeredAt;       // Block timestamp of registration
     uint64  incidentTimestamp;  // Unix timestamp of incident (0 if unknown)
+    uint64  batchId;            // Operator batch ID (0 for individual/cross-chain)
     uint8   bridgeId;           // 0 = local, 1 = Hyperlane
     bool    isSponsored;        // True if someone else paid gas
 }
 ```
+
+The struct is 26 bytes, fitting in a single EVM storage slot (6 bytes spare). This is a deliberate design choice: storage carries minimal data per entry, while events carry rich provenance data (chain IDs, message IDs, reporters, etc.).
+
+Fields that were moved to events-only:
+
+| Field             | Why events-only                                                                                          |
+| ----------------- | -------------------------------------------------------------------------------------------------------- |
+| `reportedChainId` | Emitted in `WalletRegistered` -- needed for indexing/display but not for on-chain `isRegistered` lookups |
+| `sourceChainId`   | Emitted in `CrossChainWalletRegistered` -- only relevant for cross-chain provenance tracing              |
+| `messageId`       | Emitted in `CrossChainWalletRegistered` -- only relevant for bridge explorer linking                     |
+
+The storage key already encodes identity (wallet address + chain namespace). Events encode provenance (where, when, how). The indexer reconstructs the full picture by joining both.
 
 ## Two-Phase Registration
 
@@ -133,7 +154,7 @@ function registerFromHub(
 ) external onlyHub;
 ```
 
-Called by `FraudRegistryHub` when a cross-chain message arrives from a `SpokeRegistry`. Silently succeeds if the wallet is already registered (no revert). Sets `bridgeId=1` and `messageId` for Hyperlane messages.
+Called by `FraudRegistryHub` when a cross-chain message arrives from a `SpokeRegistry`. Silently succeeds if the wallet is already registered (no revert). The entry struct stores only `registeredAt`, `incidentTimestamp`, `bridgeId`, and `isSponsored`. Cross-chain provenance fields (`reportedChainId`, `sourceChainId`, `messageId`) are emitted in events only -- they are not written to storage.
 
 Emits both `WalletRegistered` and `CrossChainWalletRegistered`.
 

@@ -91,13 +91,13 @@ if (PONDER_ENV !== 'development') {
     );
   }
 
-  // Check soulbound addresses
+  // Check soulbound addresses (warn instead of throw — soulbound may be deployed separately)
   const soulboundFields = ['walletSoulbound', 'supportSoulbound'] as const;
   const missingSoulbound = soulboundFields.filter((f) => !hubContracts[f]);
   if (missingSoulbound.length > 0) {
-    throw new Error(
-      `${PONDER_ENV} environment has unconfigured soulbound addresses: ${missingSoulbound.join(', ')}. ` +
-        'Deploy contracts and update network config in packages/chains.'
+    console.warn(
+      `[ponder] ${PONDER_ENV}: Soulbound addresses not configured (${missingSoulbound.join(', ')}). ` +
+        'Soulbound event indexing disabled. Deploy contracts and update @swr/chains to enable.'
     );
   }
 
@@ -115,6 +115,25 @@ if (PONDER_ENV !== 'development') {
 // ═══════════════════════════════════════════════════════════════════════════
 // PONDER CONFIG
 // ═══════════════════════════════════════════════════════════════════════════
+
+// Dummy address used when a contract isn't deployed yet — Ponder will simply find no events.
+// Uses EVM precompile address (ecrecover) which will never emit matching events.
+const UNDEPLOYED_DUMMY = '0x0000000000000000000000000000000000000001' as `0x${string}`;
+
+// Validate required hub contract addresses exist (they use non-null assertions below)
+if (hubContracts && !hubContracts.crossChainInbox) {
+  throw new Error(
+    `${PONDER_ENV}: crossChainInbox address missing from @swr/chains hubContracts. ` +
+      'Deploy CrossChainInbox and update network config.'
+  );
+}
+if (hubContracts && !hubContracts.operatorRegistry) {
+  throw new Error(
+    `${PONDER_ENV}: operatorRegistry address missing from @swr/chains hubContracts. ` +
+      'Deploy OperatorRegistry and update network config.'
+  );
+}
+
 export default createConfig({
   chains: {
     [chainConfig.name]: {
@@ -154,17 +173,17 @@ export default createConfig({
       startBlock: chainConfig.startBlock,
     },
 
-    // Soulbound Tokens (from @swr/chains hubContracts)
+    // Soulbound Tokens (use dummy address when not deployed — Ponder just finds no events)
     WalletSoulbound: {
       chain: chainConfig.name,
       abi: WalletSoulboundABI,
-      address: hubContracts!.walletSoulbound!,
+      address: hubContracts?.walletSoulbound ?? UNDEPLOYED_DUMMY,
       startBlock: chainConfig.startBlock,
     },
     SupportSoulbound: {
       chain: chainConfig.name,
       abi: SupportSoulboundABI,
-      address: hubContracts!.supportSoulbound!,
+      address: hubContracts?.supportSoulbound ?? UNDEPLOYED_DUMMY,
       startBlock: chainConfig.startBlock,
     },
 

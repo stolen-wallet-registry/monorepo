@@ -452,6 +452,11 @@ export const SpokeRegistryABI = [
             internalType: 'address',
           },
           {
+            name: 'transactionCount',
+            type: 'uint32',
+            internalType: 'uint32',
+          },
+          {
             name: 'dataHash',
             type: 'bytes32',
             internalType: 'bytes32',
@@ -460,11 +465,6 @@ export const SpokeRegistryABI = [
             name: 'reportedChainId',
             type: 'bytes32',
             internalType: 'bytes32',
-          },
-          {
-            name: 'transactionCount',
-            type: 'uint32',
-            internalType: 'uint32',
           },
           {
             name: 'startBlock',
@@ -652,7 +652,7 @@ export const SpokeRegistryABI = [
     name: 'quoteFeeBreakdown',
     inputs: [
       {
-        name: 'owner',
+        name: 'wallet',
         type: 'address',
         internalType: 'address',
       },
@@ -693,7 +693,7 @@ export const SpokeRegistryABI = [
     name: 'quoteRegistration',
     inputs: [
       {
-        name: 'owner',
+        name: 'wallet',
         type: 'address',
         internalType: 'address',
       },

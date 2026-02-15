@@ -27,6 +27,19 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'function',
+    name: 'MAX_BATCH_SIZE',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'acceptOwnership',
     inputs: [],
     outputs: [],
@@ -366,27 +379,12 @@ export const TransactionRegistryABI = [
         internalType: 'struct ITransactionRegistry.TransactionEntry',
         components: [
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'sourceChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'messageId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'reporter',
-            type: 'address',
-            internalType: 'address',
-          },
-          {
             name: 'registeredAt',
+            type: 'uint64',
+            internalType: 'uint64',
+          },
+          {
+            name: 'batchId',
             type: 'uint64',
             internalType: 'uint64',
           },
@@ -427,27 +425,12 @@ export const TransactionRegistryABI = [
         internalType: 'struct ITransactionRegistry.TransactionEntry',
         components: [
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'sourceChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'messageId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'reporter',
-            type: 'address',
-            internalType: 'address',
-          },
-          {
             name: 'registeredAt',
+            type: 'uint64',
+            internalType: 'uint64',
+          },
+          {
+            name: 'batchId',
             type: 'uint64',
             internalType: 'uint64',
           },
@@ -864,6 +847,19 @@ export const TransactionRegistryABI = [
     stateMutability: 'nonpayable',
   },
   {
+    type: 'function',
+    name: 'withdrawTo',
+    inputs: [
+      {
+        name: 'recipient',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
     type: 'event',
     name: 'CrossChainTransactionRegistered',
     inputs: [
@@ -898,6 +894,25 @@ export const TransactionRegistryABI = [
     type: 'event',
     name: 'EIP712DomainChanged',
     inputs: [],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'FeesWithdrawn',
+    inputs: [
+      {
+        name: 'recipient',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'amount',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
     anonymous: false,
   },
   {
@@ -1192,6 +1207,11 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TransactionRegistry__BatchTooLarge',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TransactionRegistry__DataHashMismatch',
     inputs: [],
   },
@@ -1243,6 +1263,11 @@ export const TransactionRegistryABI = [
   {
     type: 'error',
     name: 'TransactionRegistry__InvalidStep',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TransactionRegistry__InvalidTxHashLength',
     inputs: [],
   },
   {

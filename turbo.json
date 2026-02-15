@@ -24,6 +24,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
+      "inputs": ["src/**/*.{ts,tsx}", "vitest.config.*"],
       "outputs": []
     },
     "test:coverage": {
@@ -31,10 +32,12 @@
       "outputs": ["coverage/**"]
     },
     "lint": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "inputs": ["src/**/*.{ts,tsx,js,jsx}", "eslint.config.*", ".eslintrc.*"]
     },
     "typecheck": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "inputs": ["src/**/*.{ts,tsx}", "tsconfig.json", "tsconfig.*.json"]
     },
     "format": {
       "cache": false

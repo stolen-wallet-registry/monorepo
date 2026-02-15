@@ -74,12 +74,13 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
     // 5. Prepare transaction data
     const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
     const reportedChainIds = entries.map((e) => e.chainId);
+    const threatCategories = entries.map(() => 0); // default: unclassified
 
     // 6. Encode calldata for OperatorSubmitter
     const calldata = encodeFunctionData({
       abi: OperatorSubmitterABI,
       functionName: 'registerContractsAsOperator',
-      args: [identifiers, reportedChainIds],
+      args: [identifiers, reportedChainIds, threatCategories],
     });
 
     // Handle --build-only mode (for multisig/DAO workflows)
@@ -142,7 +143,7 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
       address: config.contracts.operatorSubmitter,
       abi: OperatorSubmitterABI,
       functionName: 'registerContractsAsOperator',
-      args: [identifiers, reportedChainIds],
+      args: [identifiers, reportedChainIds, threatCategories],
       value: fee,
     });
     spinner.succeed(`Transaction submitted: ${chalk.green(hash)}`);

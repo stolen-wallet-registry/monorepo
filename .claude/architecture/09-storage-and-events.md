@@ -42,34 +42,50 @@ key = keccak256(abi.encode(contractAddress, chainId))
 
 ---
 
+## Single-Slot Storage Invariant
+
+**Every entry struct fits in exactly 1 EVM storage slot (32 bytes).** This is a core architectural invariant enforced by forge tests. Rich provenance data (chain context, cross-chain metadata, reporter identity) lives in events only.
+
+**Design principle:** Storage carries minimal data for on-chain lookups (`isRegistered()`, timestamp, batch linkage). Events carry full provenance for the indexer to build rich query interfaces. Storage keys encode identity; events encode provenance.
+
+---
+
 ## Entry Structs
 
-### WalletEntry
+### WalletEntry (26 bytes -- 1 slot)
 
 ```solidity
 struct WalletEntry {
-    bytes32 reportedChainId;    // CAIP-2 hash of chain where incident occurred
-    bytes32 sourceChainId;      // CAIP-2 hash of chain where registration submitted
-    bytes32 messageId;          // Cross-chain message ID (bytes32(0) for local)
-    uint64  registeredAt;       // Block timestamp
-    uint64  incidentTimestamp;   // Unix timestamp of incident (0 if unknown)
-    uint8   bridgeId;           // 0 = local, 1 = Hyperlane
-    bool    isSponsored;        // True if someone else paid gas
+    uint64  registeredAt;       // 8 bytes  - Block timestamp
+    uint64  incidentTimestamp;  // 8 bytes  - Unix timestamp of incident (0 if unknown)
+    uint64  batchId;            // 8 bytes  - Batch ID (0 for individual registrations)
+    uint8   bridgeId;           // 1 byte   - 0 = local, 1 = Hyperlane
+    bool    isSponsored;        // 1 byte   - True if someone else paid gas
 }
+// Total: 8 + 8 + 8 + 1 + 1 = 26 bytes (6 bytes spare)
 ```
 
-### TransactionEntry
+### TransactionEntry (18 bytes -- 1 slot)
 
 ```solidity
 struct TransactionEntry {
-    bytes32 reportedChainId;
-    bytes32 sourceChainId;
-    bytes32 messageId;
-    address reporter;           // Who reported this tx
-    uint64  registeredAt;
-    uint8   bridgeId;
-    bool    isSponsored;
+    uint64  registeredAt;       // 8 bytes  - Block timestamp
+    uint64  batchId;            // 8 bytes  - Batch ID (0 for individual registrations)
+    uint8   bridgeId;           // 1 byte   - 0 = local, 1 = Hyperlane
+    bool    isSponsored;        // 1 byte   - True if someone else paid gas
 }
+// Total: 8 + 8 + 1 + 1 = 18 bytes (14 bytes spare)
+```
+
+### ContractEntry (17 bytes -- 1 slot)
+
+```solidity
+struct ContractEntry {
+    uint64  registeredAt;       // 8 bytes  - Block timestamp
+    uint64  batchId;            // 8 bytes  - Batch ID
+    uint8   threatCategory;     // 1 byte   - Threat classification
+}
+// Total: 8 + 8 + 1 = 17 bytes (15 bytes spare)
 ```
 
 ### TransactionBatch
@@ -84,9 +100,33 @@ struct TransactionBatch {
 }
 ```
 
+### What Moved to Events-Only
+
+The following fields were removed from entry structs to achieve single-slot packing. They are still emitted in events and available to the indexer:
+
+| Removed Field     | Type    | Was In           | Now In Events                                                     |
+| ----------------- | ------- | ---------------- | ----------------------------------------------------------------- |
+| `reportedChainId` | bytes32 | All entries      | `WalletRegistered`, `TransactionRegistered`, `ContractRegistered` |
+| `sourceChainId`   | bytes32 | All entries      | `CrossChainWalletRegistered`, `CrossChainTransactionRegistered`   |
+| `messageId`       | bytes32 | All entries      | `CrossChainWalletRegistered`, `CrossChainTransactionRegistered`   |
+| `reporter`        | address | TransactionEntry | `TransactionRegistered`, `TransactionBatchRegistered`             |
+| `operatorId`      | bytes32 | ContractEntry    | `ContractRegistered`, `ContractBatchCreated`                      |
+
+### What Was Added to Structs
+
+| Added Field      | Type   | Added To         | Purpose                                       |
+| ---------------- | ------ | ---------------- | --------------------------------------------- |
+| `batchId`        | uint64 | WalletEntry      | Links wallet to its operator batch            |
+| `batchId`        | uint64 | TransactionEntry | Links transaction to its batch                |
+| `threatCategory` | uint8  | ContractEntry    | Threat classification for malicious contracts |
+
+**Note:** `batchId` in entry structs is `uint64` (narrowed from `uint256` in events/batch structs) to fit the single-slot constraint. This supports over 18 quintillion batch IDs per registry.
+
 ---
 
 ## Events
+
+Events carry the rich provenance data that was removed from storage structs. The indexer reconstructs full entry context by combining storage lookups with event data.
 
 ### Wallet Registry
 
@@ -124,6 +164,29 @@ address(uint160(uint256(identifier)))
 
 ---
 
+## Storage vs Events Summary
+
+| Data                | Storage (1-slot structs)   | Events (rich provenance)            |
+| ------------------- | -------------------------- | ----------------------------------- |
+| `registeredAt`      | Yes (all entries)          | Derivable from block                |
+| `incidentTimestamp` | Yes (WalletEntry only)     | Also in signature params            |
+| `batchId`           | Yes (uint64, all entries)  | Yes (uint256 in batch events)       |
+| `bridgeId`          | Yes (Wallet/Transaction)   | Yes (CrossChain events)             |
+| `isSponsored`       | Yes (Wallet/Transaction)   | Yes (registration events)           |
+| `threatCategory`    | Yes (ContractEntry)        | Not in events (struct-only)         |
+| `reportedChainId`   | No                         | Yes (all registration events)       |
+| `sourceChainId`     | No                         | Yes (cross-chain events only)       |
+| `messageId`         | No                         | Yes (cross-chain events only)       |
+| `reporter`          | No                         | Yes (transaction events)            |
+| `operatorId`        | No                         | Yes (batch events, contract events) |
+| Gas cost            | ~20K per SSTORE            | ~375 per log topic                  |
+| Queryable on-chain  | Yes (O(1) mapping lookups) | No                                  |
+| Queryable off-chain | Via RPC                    | Via indexer (Ponder)                |
+
+**Trade-off:** Store only what's needed for on-chain verification (`isRegistered()` checks, batch linkage, basic metadata). Emit everything else for the indexer to build rich query interfaces (search, dashboard, batch details, chain context).
+
+---
+
 ## Event Ordering and Batch Linking
 
 Per-entry events fire **before** the batch summary event, all in the same transaction:
@@ -145,7 +208,7 @@ tx 0xabc...
 
 ## Batch ID Assignment
 
-Batch IDs are `uint256` (not uint32 or bytes32). Each registry maintains its own batch counter:
+Batch IDs are `uint256` in events but `uint64` in entry structs. Each registry maintains its own batch counter:
 
 - `WalletRegistry._batchIdCounter`
 - `TransactionRegistry._batchIdCounter`
@@ -184,18 +247,7 @@ When a spoke chain registration arrives at the hub via Hyperlane:
 4. Both `WalletRegistered` and `CrossChainWalletRegistered` events fire
 5. No duplicate batch event (only `TransactionBatchRegistered`, not also `TransactionBatchCreated`)
 
----
-
-## What the Contract Stores vs Emits
-
-| Aspect              | Storage                    | Events                   |
-| ------------------- | -------------------------- | ------------------------ |
-| Gas cost            | High (~20K per SSTORE)     | Low (~375 per log topic) |
-| Queryable on-chain  | Yes (O(1) mapping lookups) | No                       |
-| Queryable off-chain | Via RPC                    | Via indexer (Ponder)     |
-| Historical data     | Current state only         | Full history             |
-
-**Trade-off:** Store only what's needed for on-chain verification (`isRegistered()` checks). Emit everything else for the indexer to build rich query interfaces (search, dashboard, batch details).
+Cross-chain metadata (`sourceChainId`, `messageId`) is emitted in the `CrossChain*` events but NOT stored in the entry struct -- it is events-only provenance data.
 
 ---
 
@@ -219,6 +271,8 @@ From stress tests:
 5,000 entries per batch is the recommended production limit.
 
 **Uploading 1M fraud records costs under $1 even at 10x gas prices.**
+
+The single-slot storage design directly contributes to these economics -- each entry uses exactly one SSTORE operation regardless of how many provenance fields are emitted in events.
 
 ---
 
@@ -247,9 +301,10 @@ GraphQL consumers get readable chain identifiers without decoding hashes themsel
 | `packages/contracts/src/registries/WalletRegistry.sol`      | Wallet storage + events              |
 | `packages/contracts/src/registries/TransactionRegistry.sol` | Transaction storage + events         |
 | `packages/contracts/src/registries/ContractRegistry.sol`    | Contract storage + events            |
-| `packages/contracts/src/hub/FraudRegistryHub.sol`           | Hub router, cross-chain entry point  |
+| `packages/contracts/src/FraudRegistryHub.sol`               | Hub router, cross-chain entry point  |
 | `packages/contracts/src/spoke/SpokeRegistry.sol`            | Spoke chain wallet + tx registration |
-| `packages/contracts/src/libraries/CAIP2.sol`                | Chain ID encoding                    |
+| `packages/contracts/src/libraries/CAIP10.sol`               | CAIP-10 identifier encoding          |
+| `packages/contracts/src/libraries/CAIP10Evm.sol`            | EVM-specific chain ID encoding       |
 | `packages/caip/src/index.ts`                                | TypeScript CAIP-2 utilities          |
 | `packages/chains/src/index.ts`                              | Chain config, resolveChainIdHash     |
 | `apps/indexer/src/index.ts`                                 | Ponder event handlers                |
