@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'wouter';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, Home } from 'lucide-react';
 import { Button } from '@swr/ui';
 
 import {
@@ -68,15 +68,18 @@ export function Header() {
         <div className="flex items-center gap-6">
           <a
             href={HOMEPAGE_URL}
-            className="text-xl font-bold transition-colors hover:text-primary"
+            className="flex items-center transition-colors hover:text-primary"
             aria-label="Go to homepage"
             target="_blank"
             rel="noopener noreferrer"
           >
-            Stolen Wallet Registry
+            <Home className="h-5 w-5 lg:hidden" />
+            <span className="hidden lg:inline text-xl font-bold whitespace-nowrap">
+              Stolen Wallet Registry
+            </span>
           </a>
           {/* Desktop Navigation */}
-          <nav className="hidden sm:flex items-center gap-1">
+          <nav className="hidden md:flex items-center gap-1">
             {navItems.map((item) => (
               <Link
                 key={item.href}
@@ -94,12 +97,12 @@ export function Header() {
             ))}
           </nav>
         </div>
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
           {/* Mobile Menu Toggle */}
           <Button
             variant="ghost"
             size="sm"
-            className="sm:hidden h-9 w-9 p-0"
+            className="md:hidden h-9 w-9 p-0"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={mobileMenuOpen}
@@ -117,7 +120,7 @@ export function Header() {
 
       {/* Mobile Navigation */}
       {mobileMenuOpen && (
-        <nav className="sm:hidden border-t border-border p-2">
+        <nav className="md:hidden border-t border-border p-2">
           <div className="flex flex-col gap-1">
             {navItems.map((item) => (
               <Link
