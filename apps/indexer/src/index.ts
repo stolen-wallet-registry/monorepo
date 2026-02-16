@@ -389,7 +389,6 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
     {
       transactionBatches: 1,
       transactionsReported: Number(transactionCount),
-      sponsored: isSponsored ? 1 : 0,
     },
     event.block.timestamp
   );

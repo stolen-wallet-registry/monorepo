@@ -6,7 +6,6 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 import { ContractRegistry } from "../src/registries/ContractRegistry.sol";
 import { IContractRegistry } from "../src/interfaces/IContractRegistry.sol";
-import { CAIP10 } from "../src/libraries/CAIP10.sol";
 import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
 
 /// @title ContractRegistryTest

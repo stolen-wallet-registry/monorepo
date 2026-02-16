@@ -30,11 +30,13 @@ const typedReg = buildRegistrationTypedData(chainId, contractAddress, {
 
 ## Transaction Signatures
 
+`dataHash` is a commitment to the batch contents: `keccak256(abi.encode(txHashes, chainIds))` where `txHashes` and `chainIds` are the `bytes32[]` arrays submitted in the batch. This binds the signer's approval to a specific set of transactions, preventing the relayer from substituting different data after signing.
+
 ```ts
 import { buildTxAcknowledgementTypedData, buildTxRegistrationTypedData } from '@swr/signatures';
 
 const typedAck = buildTxAcknowledgementTypedData(chainId, contractAddress, {
-  dataHash: '0x...',
+  dataHash: '0x...', // keccak256(abi.encode(txHashes, chainIds))
   reportedChainId: '0x...',
   transactionCount: 10,
   trustedForwarder: '0x...',
@@ -43,7 +45,7 @@ const typedAck = buildTxAcknowledgementTypedData(chainId, contractAddress, {
 });
 
 const typedReg = buildTxRegistrationTypedData(chainId, contractAddress, {
-  dataHash: '0x...',
+  dataHash: '0x...', // keccak256(abi.encode(txHashes, chainIds))
   reportedChainId: '0x...',
   trustedForwarder: '0x...',
   nonce: 1n,

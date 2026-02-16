@@ -65,9 +65,9 @@ export function OperatorsSection() {
             startOnView
             once
           >
-            DAO-approved organizations that batch-submit fraud data across the wallet, transaction,
-            and contract registries. Operators bypass the individual two-phase signature flow,
-            making bulk submissions gas-efficient.
+            DAO-approved entities that batch-submit fraud data across the wallet, transaction, and
+            contract registries. Operators bypass the individual two-phase signature flow, making
+            bulk submissions gas-efficient.
           </TextAnimate>
           <a
             href="https://monorepo-docs-sepia.vercel.app/operator"

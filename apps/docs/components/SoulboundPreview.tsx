@@ -80,7 +80,7 @@ export function SoulboundI18nPreviews() {
           textAlign: 'center',
         }}
       >
-        browser configured for spanish — localized text renders below English
+        browser configured for Spanish — localized text renders below English
       </p>
       <div
         style={{

@@ -59,7 +59,7 @@ interface IContractRegistry {
     /// @param identifier The contract address identifier
     /// @param reportedChainId CAIP-2 chain ID hash where contract is deployed
     /// @param operatorId Operator that registered this contract
-    /// @param batchId Batch ID this contract was part of
+    /// @param batchId Batch ID this contract was part of (uint256 in events; truncated to uint64 in ContractEntry for 1-slot packing)
     /// @param threatCategory Threat classification (0=unclassified, 1=drainer, 2=rug pull, etc.)
     event ContractRegistered(
         bytes32 indexed identifier,

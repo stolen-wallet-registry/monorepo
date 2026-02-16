@@ -69,8 +69,8 @@ export function WhySWRSection() {
             once
           >
             SWR is an open registry. It aggregates fraud data from individuals and operators — what
-            happens with that data is up to the listeners. Exchanges, wallets, security tools, and
-            protocols each decide how to respond.
+            happens with that data is up to the listeners. Exchanges, wallets, security tools,
+            security reserachers and protocols each decide how to respond.
           </TextAnimate>
         </div>
 

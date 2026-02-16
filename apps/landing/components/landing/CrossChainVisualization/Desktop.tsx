@@ -709,7 +709,7 @@ export function CrossChainVisualizationDesktop({
               ref={operatorsClusterRef}
               rightAnchorRef={operatorsTopAnchorRef}
               label={showLabels ? 'Trusted Operators' : undefined}
-              labelTooltip="DAO-approved organizations that batch-submit fraud data directly to the registry. Operators bypass the two-phase signature flow, submitting wallets, transactions, and contracts in bulk. Each operator is permissioned for specific registries via capability bits."
+              labelTooltip="DAO-approved entities that batch-submit fraud data directly to the registry. Operators bypass the two-phase signature flow, submitting wallets, transactions, and contracts in bulk. Each operator is permissioned for specific registries via capability bits."
             >
               <div className="flex items-center gap-2">
                 <IconCircle label="Coinbase (Operator)" size="xs">
