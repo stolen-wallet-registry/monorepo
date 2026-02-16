@@ -12,7 +12,7 @@ interface ITransactionRegistry {
 
     /// @notice Data for a registered transaction
     /// @notice STORAGE INVARIANT: This struct MUST fit in 1 storage slot (32 bytes max).
-    /// Current: 14 bytes (18 spare). Any new field requires a byte-count proof.
+    /// Current: 18 bytes (14 spare). Any new field requires a byte-count proof.
     /// Chain IDs, reporter, message IDs are EVENTS-ONLY — see events below.
     /// @param registeredAt Block timestamp when transaction was registered
     /// @param batchId Batch link (0 = individual registration)

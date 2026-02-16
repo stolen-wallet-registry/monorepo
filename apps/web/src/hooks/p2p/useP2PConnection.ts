@@ -190,7 +190,9 @@ export function useP2PConnection(options: UseP2PConnectionOptions = {}): UseP2PC
       try {
         await connection.close();
       } catch (err) {
-        logger.p2p.warn('Failed to close P2P connection', { error: (err as Error).message });
+        logger.p2p.warn('Failed to close P2P connection', {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
       connectionRef.current = null;
     }
@@ -241,7 +243,7 @@ export function useP2PConnection(options: UseP2PConnectionOptions = {}): UseP2PC
         if (stopPromise && typeof stopPromise.catch === 'function') {
           stopPromise.catch((err: unknown) => {
             logger.p2p.warn('Failed to stop P2P node on unmount', {
-              error: (err as Error).message,
+              error: err instanceof Error ? (err as Error).message : String(err),
             });
           });
         }

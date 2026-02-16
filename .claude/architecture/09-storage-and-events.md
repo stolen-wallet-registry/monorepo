@@ -1,12 +1,12 @@
 # On-Chain Storage & Event Architecture
 
-How the registry contracts store data, emit events, and link batches to entries. Replaces the former merkle proof system.
+How the registry contracts store data, emit events, and link batches to entries.
 
 ---
 
 ## Storage Architecture
 
-All registries use **direct mapping storage** with CAIP-derived keys. No merkle trees -- entries are written directly to storage for O(1) on-chain lookups.
+All registries use **direct mapping storage** with CAIP-derived keys. Entries are written directly to storage for O(1) on-chain lookups.
 
 ### Wallet Registry
 
@@ -149,10 +149,10 @@ Events carry the rich provenance data that was removed from storage structs. The
 
 ### Contract Registry
 
-| Event                  | When           | Key fields                                             |
-| ---------------------- | -------------- | ------------------------------------------------------ |
-| `ContractRegistered`   | Per-entry      | `identifier`, `reportedChainId`, `batchId`, `operator` |
-| `ContractBatchCreated` | Operator batch | `batchId` (uint256), `operatorId`, `contractCount`     |
+| Event                  | When           | Key fields                                                               |
+| ---------------------- | -------------- | ------------------------------------------------------------------------ |
+| `ContractRegistered`   | Per-entry      | `identifier`, `reportedChainId`, `batchId`, `operator`, `threatCategory` |
+| `ContractBatchCreated` | Operator batch | `batchId` (uint256), `operatorId`, `contractCount`                       |
 
 ### Identifier Encoding
 
@@ -173,7 +173,7 @@ address(uint160(uint256(identifier)))
 | `batchId`           | Yes (uint64, all entries)  | Yes (uint256 in batch events)       |
 | `bridgeId`          | Yes (Wallet/Transaction)   | Yes (CrossChain events)             |
 | `isSponsored`       | Yes (Wallet/Transaction)   | Yes (registration events)           |
-| `threatCategory`    | Yes (ContractEntry)        | Not in events (struct-only)         |
+| `threatCategory`    | Yes (ContractEntry)        | Yes (`ContractRegistered` event)    |
 | `reportedChainId`   | No                         | Yes (all registration events)       |
 | `sourceChainId`     | No                         | Yes (cross-chain events only)       |
 | `messageId`         | No                         | Yes (cross-chain events only)       |
@@ -210,9 +210,9 @@ tx 0xabc...
 
 Batch IDs are `uint256` in events but `uint64` in entry structs. Each registry maintains its own batch counter:
 
-- `WalletRegistry._batchIdCounter`
-- `TransactionRegistry._batchIdCounter`
-- `ContractRegistry._batchIdCounter`
+- `WalletRegistry._nextBatchId`
+- `TransactionRegistry._nextBatchId`
+- `ContractRegistry._nextBatchId`
 
 The `walletCount`/`transactionCount`/`contractCount` in batch events reflect the **actual** count of entries stored, excluding:
 

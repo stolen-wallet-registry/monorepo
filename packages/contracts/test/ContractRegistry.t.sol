@@ -196,11 +196,11 @@ contract ContractRegistryTest is Test {
 
         // Per-entry events fire during loop, batch event fires after
         vm.expectEmit(true, true, true, true);
-        emit IContractRegistry.ContractRegistered(identifiers[0], chainId, operatorId, 1);
+        emit IContractRegistry.ContractRegistered(identifiers[0], chainId, operatorId, 1, 1);
         vm.expectEmit(true, true, true, true);
-        emit IContractRegistry.ContractRegistered(identifiers[1], chainId, operatorId, 1);
+        emit IContractRegistry.ContractRegistered(identifiers[1], chainId, operatorId, 1, 2);
         vm.expectEmit(true, true, true, true);
-        emit IContractRegistry.ContractRegistered(identifiers[2], chainId, operatorId, 1);
+        emit IContractRegistry.ContractRegistered(identifiers[2], chainId, operatorId, 1, 0);
 
         vm.expectEmit(true, true, false, true);
         emit IContractRegistry.ContractBatchCreated(1, operatorId, 3);
@@ -304,7 +304,7 @@ contract ContractRegistryTest is Test {
 
         // Per-entry event fires before batch event (loop runs first)
         vm.expectEmit(true, true, true, true);
-        emit IContractRegistry.ContractRegistered(identifiers[0], chainId, operatorId, 1);
+        emit IContractRegistry.ContractRegistered(identifiers[0], chainId, operatorId, 1, 0);
 
         // Batch event reports actualCount = 1 (only non-zero, non-duplicate entries)
         vm.expectEmit(true, true, false, true);
@@ -374,9 +374,9 @@ contract ContractRegistryTest is Test {
 
         // Per-entry events fire before batch event (newC1 and newC2 only)
         vm.expectEmit(true, true, true, true);
-        emit IContractRegistry.ContractRegistered(_toIdentifier(newC1), chainId, operatorId, 2);
+        emit IContractRegistry.ContractRegistered(_toIdentifier(newC1), chainId, operatorId, 2, 3);
         vm.expectEmit(true, true, true, true);
-        emit IContractRegistry.ContractRegistered(_toIdentifier(newC2), chainId, operatorId, 2);
+        emit IContractRegistry.ContractRegistered(_toIdentifier(newC2), chainId, operatorId, 2, 4);
         vm.expectEmit(true, true, false, true);
         emit IContractRegistry.ContractBatchCreated(2, operatorId, 2);
 
@@ -574,6 +574,9 @@ contract ContractRegistryTest is Test {
     /// @dev Uses vm.record()/vm.accesses() to discover the entry's storage slot dynamically
     ///      (no hardcoded mapping slot index). A single-slot struct triggers exactly 1 SLOAD
     ///      in the getter; a multi-slot struct would trigger more.
+    ///      NOTE: reads.length == 1 is coupled to the getter performing exactly one SLOAD
+    ///      (a simple mapping read). If the getter ever adds logic that reads additional
+    ///      storage, this assertion will need updating even if the struct still fits in one slot.
     function test_ContractEntryFitsInOneSlot() public {
         address testContract = makeAddr("slotTestContract");
 

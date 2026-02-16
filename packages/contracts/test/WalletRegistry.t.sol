@@ -1097,6 +1097,9 @@ contract WalletRegistryTest is EIP712TestHelper {
     /// @dev Uses vm.record()/vm.accesses() to discover the entry's storage slot dynamically
     ///      (no hardcoded mapping slot index). A single-slot struct triggers exactly 1 SLOAD
     ///      in the getter; a multi-slot struct would trigger more.
+    ///      NOTE: reads.length == 1 is coupled to the getter performing exactly one SLOAD
+    ///      (a simple mapping read). If the getter ever adds logic that reads additional
+    ///      storage, this assertion will need updating even if the struct still fits in one slot.
     function test_WalletEntryFitsInOneSlot() public {
         // Register a wallet via operator path
         address opSubmitter = makeAddr("slotTestSubmitter");

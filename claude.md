@@ -126,7 +126,7 @@ All registries are active and publicly searchable; submission rules differ by re
 
 2. **Stolen Transaction Registry**
    - **Who can submit:** Individuals (batch of tx hashes) + approved operators (batch)
-   - Two-phase EIP-712 registration with merkle roots
+   - Two-phase EIP-712 registration with data hash commitment
    - Used to report fraudulent transactions across chains
 
 3. **Fraudulent Contract Registry**
@@ -281,7 +281,7 @@ ThemeProvider must wrap Web3Provider so RainbowKit can access theme context at r
 | `useRegistrationStore`            | Wallet flow state, current step, tx hashes      | Yes         |
 | `useFormStore`                    | Wallet form values (registeree, relayer, flags) | Yes         |
 | `useTransactionRegistrationStore` | Transaction flow state                          | Yes         |
-| `useTransactionFormStore`         | Transaction selection + merkle data             | Yes         |
+| `useTransactionFormStore`         | Transaction selection + batch data              | Yes         |
 | `useP2PStore`                     | Peer IDs, connection status                     | Partial\*   |
 
 \*Partial persistence: peerId and partnerPeerId persist; active connection state (connectedToPeer, connectionStatus, isInitialized, errorMessage) resets on reload.

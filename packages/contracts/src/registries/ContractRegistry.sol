@@ -148,7 +148,7 @@ contract ContractRegistry is IContractRegistry, Ownable2Step {
             });
 
             actualCount++;
-            emit ContractRegistered(identifier, chainId, operatorId, batchId);
+            emit ContractRegistered(identifier, chainId, operatorId, batchId, threatCategories[i]);
         }
 
         if (actualCount == 0) revert ContractRegistry__EmptyBatch();

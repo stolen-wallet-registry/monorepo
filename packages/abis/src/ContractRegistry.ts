@@ -358,6 +358,12 @@ export const ContractRegistryABI = [
         indexed: false,
         internalType: 'uint256',
       },
+      {
+        name: 'threatCategory',
+        type: 'uint8',
+        indexed: false,
+        internalType: 'uint8',
+      },
     ],
     anonymous: false,
   },

@@ -659,6 +659,10 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc ITransactionRegistry
+    /// @dev MAX_BATCH_SIZE is enforced only on this operator entry point. The hub-controlled
+    ///      cross-chain path (registerTransactionsFromHub) and the two-phase path (which commits
+    ///      transactionCount upfront and validates matching in phase 2) operate under different
+    ///      constraints and do not need this limit.
     function registerTransactionsFromOperator(
         bytes32 operatorId,
         bytes32[] calldata transactionHashes,

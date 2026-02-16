@@ -26,7 +26,7 @@ import {
   type Environment,
 } from '@swr/chains';
 import { type Address, type Hex } from 'viem';
-import { eq } from 'ponder';
+import { eq, sql } from 'ponder';
 
 // Hub chain configuration - determined by environment
 const PONDER_ENV = (process.env.PONDER_ENV ?? 'development') as Environment;
@@ -76,6 +76,7 @@ type StatsDelta = {
   totalFraudulentContracts?: number;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Ponder's db context type is internal; using any avoids coupling to unstable Ponder internals
 async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) {
   const id = 'global';
   const wallets = delta.walletRegistrations ?? 0;
@@ -106,30 +107,23 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
       totalFraudulentContracts: delta.totalFraudulentContracts ?? 0,
       lastUpdated: timestamp,
     })
-    .onConflictDoUpdate((row: typeof registryStats.$inferSelect) => {
-      const newTotalWallets = row.totalWalletRegistrations + wallets;
-      const newSponsored = row.sponsoredRegistrations + sponsored;
-      return {
-        totalWalletRegistrations: newTotalWallets,
-        totalTransactionBatches: row.totalTransactionBatches + (delta.transactionBatches ?? 0),
-        totalTransactionsReported:
-          row.totalTransactionsReported + (delta.transactionsReported ?? 0),
-        sponsoredRegistrations: newSponsored,
-        directRegistrations: newTotalWallets - newSponsored,
-        crossChainRegistrations: row.crossChainRegistrations + (delta.crossChain ?? 0),
-        walletSoulboundsMinted: row.walletSoulboundsMinted + (delta.walletSoulbounds ?? 0),
-        supportSoulboundsMinted: row.supportSoulboundsMinted + (delta.supportSoulbounds ?? 0),
-        totalSupportDonations: row.totalSupportDonations + (delta.supportDonations ?? 0n),
-        totalOperators: row.totalOperators + (delta.totalOperators ?? 0),
-        activeOperators: row.activeOperators + (delta.activeOperators ?? 0),
-        totalWalletBatches: row.totalWalletBatches + (delta.totalWalletBatches ?? 0),
-        totalOperatorTransactionBatches:
-          row.totalOperatorTransactionBatches + (delta.totalOperatorTransactionBatches ?? 0),
-        totalContractBatches: row.totalContractBatches + (delta.totalContractBatches ?? 0),
-        totalFraudulentContracts:
-          row.totalFraudulentContracts + (delta.totalFraudulentContracts ?? 0),
-        lastUpdated: timestamp,
-      };
+    .onConflictDoUpdate({
+      totalWalletRegistrations: sql`${registryStats.totalWalletRegistrations} + ${wallets}`,
+      totalTransactionBatches: sql`${registryStats.totalTransactionBatches} + ${delta.transactionBatches ?? 0}`,
+      totalTransactionsReported: sql`${registryStats.totalTransactionsReported} + ${delta.transactionsReported ?? 0}`,
+      sponsoredRegistrations: sql`${registryStats.sponsoredRegistrations} + ${sponsored}`,
+      directRegistrations: sql`(${registryStats.totalWalletRegistrations} + ${wallets}) - (${registryStats.sponsoredRegistrations} + ${sponsored})`,
+      crossChainRegistrations: sql`${registryStats.crossChainRegistrations} + ${delta.crossChain ?? 0}`,
+      walletSoulboundsMinted: sql`${registryStats.walletSoulboundsMinted} + ${delta.walletSoulbounds ?? 0}`,
+      supportSoulboundsMinted: sql`${registryStats.supportSoulboundsMinted} + ${delta.supportSoulbounds ?? 0}`,
+      totalSupportDonations: sql`${registryStats.totalSupportDonations} + ${delta.supportDonations ?? 0n}`,
+      totalOperators: sql`${registryStats.totalOperators} + ${delta.totalOperators ?? 0}`,
+      activeOperators: sql`${registryStats.activeOperators} + ${delta.activeOperators ?? 0}`,
+      totalWalletBatches: sql`${registryStats.totalWalletBatches} + ${delta.totalWalletBatches ?? 0}`,
+      totalOperatorTransactionBatches: sql`${registryStats.totalOperatorTransactionBatches} + ${delta.totalOperatorTransactionBatches ?? 0}`,
+      totalContractBatches: sql`${registryStats.totalContractBatches} + ${delta.totalContractBatches ?? 0}`,
+      totalFraudulentContracts: sql`${registryStats.totalFraudulentContracts} + ${delta.totalFraudulentContracts ?? 0}`,
+      lastUpdated: timestamp,
     });
 }
 
@@ -425,12 +419,22 @@ ponder.on('TransactionRegistry:TransactionBatchCreated', async ({ event, context
   const batchIdStr = batchId.toString();
   const operatorAddress = toLowerAddress(event.transaction.from);
 
+  // Derive reportedChainCAIP2 from the first transaction entry in the same tx.
+  // TransactionRegistered events fire before TransactionBatchCreated in the same transaction.
+  const txEntries = await db.sql
+    .select({ caip2ChainId: transactionInBatch.caip2ChainId })
+    .from(transactionInBatch)
+    .where(eq(transactionInBatch.transactionHash, event.transaction.hash))
+    .limit(1);
+  const reportedChainCAIP2 = txEntries[0]?.caip2ChainId ?? null;
+
   await db
     .insert(transactionBatch)
     .values({
       id: batchIdStr,
       dataHash: ('0x' + '0'.repeat(64)) as Hex, // No dataHash for operator batches
       reporter: operatorAddress,
+      reportedChainCAIP2,
       transactionCount: Number(transactionCount),
       isSponsored: false,
       isOperator: true,
@@ -457,7 +461,7 @@ ponder.on('TransactionRegistry:TransactionBatchCreated', async ({ event, context
 
 // ContractRegistered — fires per contract (operator batches only)
 ponder.on('ContractRegistry:ContractRegistered', async ({ event, context }) => {
-  const { identifier, reportedChainId, operatorId, batchId } = event.args;
+  const { identifier, reportedChainId, operatorId, batchId, threatCategory } = event.args;
   const { db } = context;
 
   const contractAddress = identifierToAddress(identifier);
@@ -475,6 +479,7 @@ ponder.on('ContractRegistry:ContractRegistered', async ({ event, context }) => {
       numericChainId,
       batchId: batchId.toString(),
       operator: toLowerAddress(event.transaction.from),
+      threatCategory,
       reportedAt: event.block.timestamp,
     })
     .onConflictDoNothing();
@@ -545,7 +550,7 @@ ponder.on('CrossChainInbox:TransactionBatchReceived', async ({ event, context })
   const sourceCAIP2 = hyperlaneDomainToCAIP2(origin);
   const sourceNumeric = sourceCAIP2 ? caip2ToNumericChainId(sourceCAIP2) : null;
 
-  // Note: dataHash is the committed merkle root, NOT a batchId.
+  // Note: dataHash is the committed keccak hash, NOT a batchId.
   // The actual batchId is only known when TransactionBatchRegistered fires on the hub.
   // Leave batchId null for cross-chain entries to avoid conflating the two.
   await db

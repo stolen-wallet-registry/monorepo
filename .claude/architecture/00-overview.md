@@ -95,7 +95,7 @@ key = keccak256(abi.encode(txHash, chainId))
 key = keccak256(abi.encode(contractAddress, chainId))
 ```
 
-No merkle trees. Direct O(1) reads via `isWalletRegistered()`, `isTransactionRegistered()`, etc.
+Direct O(1) reads via `isWalletRegistered()`, `isTransactionRegistered()`, etc.
 
 ---
 

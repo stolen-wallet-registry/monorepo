@@ -120,14 +120,22 @@ if (PONDER_ENV !== 'development') {
 // Uses EVM precompile address (ecrecover) which will never emit matching events.
 const UNDEPLOYED_DUMMY = '0x0000000000000000000000000000000000000001' as `0x${string}`;
 
+// Fail fast if hub contracts aren't configured at all (catches dev misconfiguration early)
+if (!hubContracts) {
+  throw new Error(
+    `${PONDER_ENV}: No hub contracts configured in @swr/chains. ` +
+      'Deploy contracts and update network config in packages/chains.'
+  );
+}
+
 // Validate required hub contract addresses exist (they use non-null assertions below)
-if (hubContracts && !hubContracts.crossChainInbox) {
+if (!hubContracts.crossChainInbox) {
   throw new Error(
     `${PONDER_ENV}: crossChainInbox address missing from @swr/chains hubContracts. ` +
       'Deploy CrossChainInbox and update network config.'
   );
 }
-if (hubContracts && !hubContracts.operatorRegistry) {
+if (!hubContracts.operatorRegistry) {
   throw new Error(
     `${PONDER_ENV}: operatorRegistry address missing from @swr/chains hubContracts. ` +
       'Deploy OperatorRegistry and update network config.'

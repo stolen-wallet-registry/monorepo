@@ -182,7 +182,7 @@ export interface StoredSignature {
 // Storage key: swr_tx_sig_${dataHash}_${chainId}_${step}
 ```
 
-Uses `dataHash` (the keccak commitment of txHashes + chainIds), not a merkle root.
+Uses `dataHash` (the keccak commitment of txHashes + chainIds).
 
 ---
 

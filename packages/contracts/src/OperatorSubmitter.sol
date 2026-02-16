@@ -24,8 +24,11 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // solhint-disable-next-line private-vars-leading-underscore
     uint8 private constant WALLET_CAPABILITY = RegistryCapabilities.WALLET_REGISTRY;
+    // solhint-disable-next-line private-vars-leading-underscore
     uint8 private constant TX_CAPABILITY = RegistryCapabilities.TX_REGISTRY;
+    // solhint-disable-next-line private-vars-leading-underscore
     uint8 private constant CONTRACT_CAPABILITY = RegistryCapabilities.CONTRACT_REGISTRY;
 
     // ═══════════════════════════════════════════════════════════════════════════

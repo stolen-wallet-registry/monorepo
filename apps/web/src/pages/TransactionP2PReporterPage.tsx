@@ -811,7 +811,7 @@ export function TransactionP2PReporterPage() {
         if (stopPromise && typeof stopPromise.catch === 'function') {
           stopPromise.catch((err: unknown) => {
             logger.p2p.warn('Failed to stop P2P node on cleanup', {
-              error: (err as Error).message,
+              error: err instanceof Error ? err.message : String(err),
             });
           });
         }
@@ -874,7 +874,7 @@ export function TransactionP2PReporterPage() {
       if (stopPromise && typeof stopPromise.catch === 'function') {
         stopPromise.catch((err: unknown) => {
           logger.p2p.warn('Failed to stop P2P node on back navigation', {
-            error: (err as Error).message,
+            error: err instanceof Error ? err.message : String(err),
           });
         });
       }

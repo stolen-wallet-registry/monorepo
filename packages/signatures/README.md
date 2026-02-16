@@ -34,7 +34,7 @@ const typedReg = buildRegistrationTypedData(chainId, contractAddress, {
 import { buildTxAcknowledgementTypedData, buildTxRegistrationTypedData } from '@swr/signatures';
 
 const typedAck = buildTxAcknowledgementTypedData(chainId, contractAddress, {
-  merkleRoot: '0x...',
+  dataHash: '0x...',
   reportedChainId: '0x...',
   transactionCount: 10,
   trustedForwarder: '0x...',
@@ -43,7 +43,7 @@ const typedAck = buildTxAcknowledgementTypedData(chainId, contractAddress, {
 });
 
 const typedReg = buildTxRegistrationTypedData(chainId, contractAddress, {
-  merkleRoot: '0x...',
+  dataHash: '0x...',
   reportedChainId: '0x...',
   trustedForwarder: '0x...',
   nonce: 1n,

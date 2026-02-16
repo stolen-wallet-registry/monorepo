@@ -16,7 +16,7 @@ interface IContractRegistry {
 
     /// @notice Data for a registered malicious contract
     /// @notice STORAGE INVARIANT: This struct MUST fit in 1 storage slot (32 bytes max).
-    /// Current: 13 bytes (19 spare). Any new field requires a byte-count proof.
+    /// Current: 17 bytes (15 spare). Any new field requires a byte-count proof.
     /// Chain IDs and operatorId are EVENTS-ONLY — see events below.
     /// @param registeredAt Block timestamp when contract was registered
     /// @param batchId Operator batch reference
@@ -60,8 +60,13 @@ interface IContractRegistry {
     /// @param reportedChainId CAIP-2 chain ID hash where contract is deployed
     /// @param operatorId Operator that registered this contract
     /// @param batchId Batch ID this contract was part of
+    /// @param threatCategory Threat classification (0=unclassified, 1=drainer, 2=rug pull, etc.)
     event ContractRegistered(
-        bytes32 indexed identifier, bytes32 indexed reportedChainId, bytes32 indexed operatorId, uint256 batchId
+        bytes32 indexed identifier,
+        bytes32 indexed reportedChainId,
+        bytes32 indexed operatorId,
+        uint256 batchId,
+        uint8 threatCategory
     );
 
     /// @notice Emitted when an operator batch is created

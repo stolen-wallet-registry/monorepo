@@ -117,7 +117,7 @@ interface TransactionFormState {
 
 **Partial persistence:** Only `reporter`, `forwarder`, `selectedTxHashes`, `selectedTxDetails`, and `reportedChainId` are persisted via `partialize`. Derived fields (`dataHash`, `txHashesForContract`, `chainIdsForContract`) are transient and recomputed on use.
 
-Migration v1→v3 clears derived fields (renamed from merkleRoot to dataHash).
+Migration v1→v3 clears derived fields (dataHash, txHashesForContract, chainIdsForContract).
 
 ---
 

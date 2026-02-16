@@ -14,11 +14,14 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @dev Pre-computed key hashes for gas-efficient lookups
+    // solhint-disable private-vars-leading-underscore
     bytes32 private constant KEY_TITLE = keccak256("title");
     bytes32 private constant KEY_SUBTITLE = keccak256("subtitle");
     bytes32 private constant KEY_WARNING = keccak256("warning");
     bytes32 private constant KEY_SUPPORT_SUBTITLE = keccak256("supportSubtitle");
     bytes32 private constant KEY_FOOTER = keccak256("footer");
+
+    // solhint-enable private-vars-leading-underscore
 
     // ═══════════════════════════════════════════════════════════════════════════
     // STRUCTS

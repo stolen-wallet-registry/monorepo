@@ -48,7 +48,7 @@ function transformResult(raw: unknown): TxHashStructData | undefined {
 /**
  * Reads the deadline and hash struct for signing from the transaction registry contract.
  *
- * @param dataHash - Data hash (merkle root of transaction batch)
+ * @param dataHash - Data hash (keccak commitment of transaction batch)
  * @param reportedChainId - CAIP-2 chain ID as bytes32
  * @param transactionCount - Number of transactions in the batch
  * @param forwarderAddress - The trusted forwarder address (who can submit the tx)

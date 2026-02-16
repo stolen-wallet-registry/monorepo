@@ -185,7 +185,7 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
       })),
       {
         name: 'swr-transaction-form-state',
-        version: 3, // Bumped for merkle→dataHash rename
+        version: 3, // Bumped for dataHash field rename
         // Don't persist derived data - it's computed
         partialize: (state) => ({
           reporter: state.reporter,

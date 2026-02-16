@@ -408,6 +408,8 @@ export const fraudulentContract = onchainTable(
     batchId: t.text().notNull(),
     /** Operator who submitted */
     operator: t.hex().notNull(),
+    /** Threat category (0=unclassified, 1=drainer, 2=rug pull, 3=honeypot, 4=ponzi, 5=fake token) */
+    threatCategory: t.integer().notNull().default(0),
     /** When batch was registered */
     reportedAt: t.bigint().notNull(),
   }),

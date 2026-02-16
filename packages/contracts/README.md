@@ -82,7 +82,7 @@ src/
 | ---------------------------- | ----------------------- | ------------------------------------- | ---------------------------------------------------- |
 | Stolen Wallet Registry       | Individuals + operators | Two-phase EIP-712 (ACK → grace → REG) | Individuals self-attest; operators can batch-submit. |
 | Stolen Transaction Registry  | Individuals + operators | Two-phase EIP-712 (ACK → grace → REG) | Registration is for batches of tx hashes.            |
-| Fraudulent Contract Registry | Operators only          | Single-phase                          | Batch submission via Merkle roots.                   |
+| Fraudulent Contract Registry | Operators only          | Single-phase                          | Batch submission via operator arrays.                |
 
 ## Block Timing Configuration
 

@@ -150,10 +150,12 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
       };
 
       const sig = await signFn(params);
-      setSignature(sig);
+
+      // Set isSending before signature to avoid a brief "success" flash in getStatus()
+      // (signature being set while isSending is false would momentarily return 'success')
+      setIsSending(true);
 
       // Send signature to relayer
-      setIsSending(true);
       const connection = await getPeerConnection({ libp2p, remotePeerId: partnerPeerId });
 
       await passStreamData({
@@ -173,6 +175,9 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
         },
       });
 
+      // Set signature after successful send so status transitions cleanly:
+      // idle → signing → sending → success (never flickers to success during send)
+      setSignature(sig);
       logger.p2p.info(`${keyRef} signature sent to relayer`);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to sign or send';
