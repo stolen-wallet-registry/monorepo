@@ -14,6 +14,7 @@ import {
   readStreamData,
   type ProtocolHandler,
   type ParsedStreamData,
+  type StreamMessage,
   PROTOCOLS,
 } from '@/lib/p2p';
 import { useP2PStore } from '@/stores/p2pStore';
@@ -56,7 +57,7 @@ export interface UseP2PConnectionResult {
   /** Disconnect from current partner */
   disconnect: () => Promise<void>;
   /** Send data to connected partner */
-  send: (protocols: string[], data: ParsedStreamData) => Promise<void>;
+  send: (protocols: string[], data: StreamMessage) => Promise<void>;
   /** Shutdown the P2P node */
   shutdown: () => Promise<void>;
   /** Read data from a stream */
@@ -203,7 +204,7 @@ export function useP2PConnection(options: UseP2PConnectionOptions = {}): UseP2PC
   }, [setConnectionStatus, setPartnerPeerId, onDisconnected]);
 
   // Send data to connected partner
-  const send = useCallback(async (protocols: string[], data: ParsedStreamData) => {
+  const send = useCallback(async (protocols: string[], data: StreamMessage) => {
     const connection = connectionRef.current;
     if (!connection) {
       throw new Error('Not connected to a peer');

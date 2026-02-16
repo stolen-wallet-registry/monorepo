@@ -8,7 +8,7 @@ import type { Libp2p, Connection } from '@libp2p/interface';
 
 import { logger } from '@/lib/logger';
 import { passStreamData, getPeerConnection } from './libp2p';
-import type { ParsedStreamData } from './types';
+import type { StreamMessage } from './types';
 
 /** Maximum messages to queue */
 const MAX_QUEUE_SIZE = 10;
@@ -25,7 +25,7 @@ export interface QueuedMessage {
   /** Protocol(s) to send on */
   protocols: string[];
   /** Message data */
-  data: ParsedStreamData;
+  data: StreamMessage;
   /** Number of retry attempts */
   retries: number;
   /** When the message was queued */

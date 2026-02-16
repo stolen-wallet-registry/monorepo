@@ -97,7 +97,7 @@ interface ParsedStreamData {
     relayer?: Address;
   };
 
-  // EIP-712 signature (used in ACK_SIG and REG_SIG)
+  // EIP-712 signature (used in ACK_SIG, REG_SIG, TX_ACK_SIG, TX_REG_SIG)
   signature?: {
     keyRef: string; // Storage key reference
     chainId: number; // Chain ID where signature was created
@@ -109,7 +109,16 @@ interface ParsedStreamData {
     incidentTimestamp?: string; // When theft occurred (BigInt as string)
   };
 
-  // Transaction result (used in ACK_PAY and REG_PAY)
+  // Transaction batch data (used in TX_ACK_SIG and TX_REG_SIG)
+  transactionBatch?: {
+    dataHash: Hash; // keccak256(abi.encode(txHashes, chainIds))
+    reportedChainId: Hash; // CAIP-2 chain ID as bytes32 hash
+    transactionCount: number; // Number of transactions in the batch
+    transactionHashes: Hash[]; // Sorted tx hashes for contract call
+    chainIdHashes: Hash[]; // Parallel CAIP-2 chain ID hashes (one per tx)
+  };
+
+  // Transaction result (used in ACK_PAY, REG_PAY, TX_ACK_PAY, TX_REG_PAY)
   hash?: Hash;
 
   // Cross-chain fields (optional)
@@ -118,7 +127,54 @@ interface ParsedStreamData {
 }
 ```
 
+### Protocol-Specific Message Schemas
+
+The `@swr/p2p` package exports **Zod schemas** for each protocol category, with TypeScript types derived via `z.infer<>`. These provide compile-time type safety on the send side and optional runtime validation on the receive side.
+
+| Schema / Type                  | Protocols                  | Required fields                     |
+| ------------------------------ | -------------------------- | ----------------------------------- |
+| `HandshakeMessageSchema`       | `CONNECT`                  | `p2p?`, `form?`                     |
+| `WalletSignatureMessageSchema` | `ACK_SIG`, `REG_SIG`       | `signature`                         |
+| `TxSignatureMessageSchema`     | `TX_ACK_SIG`, `TX_REG_SIG` | `signature`, `transactionBatch`     |
+| `ConfirmationMessageSchema`    | `*_REC`                    | `success?`, `message?`              |
+| `PaymentMessageSchema`         | `*_PAY`                    | `hash?`, `messageId?`, `txChainId?` |
+
+The `StreamMessage` union type (`HandshakeMessage | WalletSignatureMessage | TxSignatureMessage | ConfirmationMessage | PaymentMessage`) is enforced at all send sites via `passStreamData`.
+
+The `PROTOCOL_SCHEMAS` mapping connects each protocol string to its Zod schema for receive-side validation:
+
+```typescript
+import { PROTOCOL_SCHEMAS } from '@swr/p2p';
+
+// Validate received data against the expected schema for a protocol
+const schema = PROTOCOL_SCHEMAS[protocol];
+const result = schema.safeParse(data);
+```
+
+Type guards also narrow `ParsedStreamData` at receive sites:
+
+```typescript
+import { isWalletSignatureMessage, isTxSignatureMessage, isPaymentMessage } from '@swr/p2p';
+
+const data = await readStreamData(stream);
+
+if (isWalletSignatureMessage(data)) {
+  // data.signature is guaranteed non-undefined
+  // data.transactionBatch is guaranteed undefined
+}
+
+if (isTxSignatureMessage(data)) {
+  // data.signature and data.transactionBatch both guaranteed non-undefined
+}
+
+if (isPaymentMessage(data)) {
+  // data.hash is guaranteed non-undefined
+}
+```
+
 ### What Each Protocol Sends
+
+#### Wallet Registration
 
 | Protocol  | Key fields populated                                                    |
 | --------- | ----------------------------------------------------------------------- |
@@ -129,6 +185,17 @@ interface ParsedStreamData {
 | `REG_SIG` | `signature`, `form`                                                     |
 | `REG_REC` | `success`, `message`                                                    |
 | `REG_PAY` | `hash`, `success` (optionally `messageId`, `txChainId` for cross-chain) |
+
+#### Transaction Registration
+
+| Protocol     | Key fields populated                                                    |
+| ------------ | ----------------------------------------------------------------------- |
+| `TX_ACK_SIG` | `signature`, `transactionBatch`                                         |
+| `TX_ACK_REC` | `success`, `message`                                                    |
+| `TX_ACK_PAY` | `hash`, `txChainId`, `success`                                          |
+| `TX_REG_SIG` | `signature`, `transactionBatch`                                         |
+| `TX_REG_REC` | `success`, `message`                                                    |
+| `TX_REG_PAY` | `hash`, `success` (optionally `messageId`, `txChainId` for cross-chain) |
 
 ## Validation
 
@@ -228,7 +295,7 @@ In development, Ed25519 keys are auto-generated and saved to `apps/relay/keys.js
 
 **Signature safety** - EIP-712 signatures include the `trustedForwarder` address. Even if intercepted, a signature is only usable by the designated forwarder. It cannot be replayed by a different address.
 
-**No persistence of sensitive data** - The message queue lives in memory. Peer ID keypairs are stored in `localStorage` (Ed25519 private key for identity, not wallet keys). No signatures or transaction data are written to storage.
+**No persistence of sensitive data** - The message queue lives in memory. Peer ID keypairs are stored in `localStorage` keyed by connected wallet address (Ed25519 private key for identity, not wallet keys). Same wallet + same browser = same Peer ID across sessions, enabling reconnection if the flow is interrupted. No signatures or transaction data are written to storage.
 
 **Production connection gating** - In production builds, the libp2p connection gater blocks dials to private/localhost IP ranges (RFC 1918, RFC 3927, RFC 4193, link-local). This prevents SSRF-style attacks where a malicious peer advertises a private network address.
 
@@ -243,3 +310,95 @@ Messages are serialized as JSON, then sent over libp2p streams using [length-pre
 ```
 
 The sender encodes with `lp.encode.single()`, the receiver decodes with `lp.decode()` (async iterable). Each protocol message uses a dedicated stream that is closed after the message is sent.
+
+### End-to-End Pipeline
+
+```
+Sender:                                     Receiver:
+StreamMessage (typed per protocol)
+  → JSON.stringify
+  → TextEncoder (UTF-8 bytes)
+  → lp.encode.single (varint + bytes)
+  → stream.sink ──── network ────→ stream.source
+                                     → accumulate chunks (size check ≤ 100KB)
+                                     → lp.decode (strip varint, yield message)
+                                     → TextDecoder (bytes → string)
+                                     → safeJsonParse (strip dangerous keys)
+                                     → Zod .strict() validate
+                                     → typed ParsedStreamData
+```
+
+The **varint** length prefix is the key piece — it tells the receiver exactly how many bytes constitute one complete message. A varint uses 1 byte for values 0-127, 2 bytes for 128-16383, etc. Most P2P messages are small (under 1KB of JSON), so the prefix is typically a single byte. This handles the case where TCP splits a message across multiple packets, or bundles multiple messages into one packet.
+
+### Example Payloads
+
+What actually goes over the wire for each protocol category:
+
+**Handshake** (`CONNECT`) — ~120 bytes
+
+```json
+{
+  "form": { "registeree": "0x742d...5f0bEb" },
+  "p2p": { "partnerPeerId": "12D3KooW...abc" }
+}
+```
+
+**Wallet Signature** (`ACK_SIG`, `REG_SIG`) — ~350 bytes
+
+```json
+{
+  "signature": {
+    "keyRef": "AcknowledgementOfRegistry",
+    "chainId": 8453,
+    "address": "0x742d...5f0bEb",
+    "value": "0x1a2b3c...64hex...chars",
+    "deadline": "1708099200",
+    "nonce": "0",
+    "reportedChainId": "0xabcd...bytes32",
+    "incidentTimestamp": "1707500000"
+  }
+}
+```
+
+**Transaction Signature** (`TX_ACK_SIG`, `TX_REG_SIG`) — ~500-5000 bytes depending on batch size
+
+```json
+{
+  "signature": {
+    "keyRef": "TransactionBatchAcknowledgement",
+    "chainId": 8453,
+    "address": "0x742d...5f0bEb",
+    "value": "0x1a2b3c...64hex...chars",
+    "deadline": "1708099200",
+    "nonce": "1"
+  },
+  "transactionBatch": {
+    "dataHash": "0xabc1...bytes32",
+    "reportedChainId": "0xdef2...bytes32",
+    "transactionCount": 3,
+    "transactionHashes": ["0x111...hash", "0x222...hash", "0x333...hash"],
+    "chainIdHashes": ["0xdef2...bytes32", "0xdef2...bytes32", "0xdef2...bytes32"]
+  }
+}
+```
+
+**Confirmation** (`ACK_REC`, `REG_REC`, etc.) — ~50 bytes
+
+```json
+{
+  "success": true,
+  "message": "Signature received"
+}
+```
+
+**Payment** (`ACK_PAY`, `REG_PAY`, etc.) — ~100-200 bytes
+
+```json
+{
+  "hash": "0x9f8e...txhash",
+  "txChainId": 8453,
+  "success": true
+}
+```
+
+Cross-chain payments may also include a `messageId` (Hyperlane bridge message hash) for explorer links.

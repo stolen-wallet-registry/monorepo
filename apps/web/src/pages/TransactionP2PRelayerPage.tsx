@@ -49,6 +49,7 @@ import {
   passStreamData,
   type ProtocolHandler,
   type ParsedStreamData,
+  type PaymentMessage,
 } from '@/lib/p2p';
 import {
   storeTxSignature,
@@ -454,14 +455,12 @@ export function TransactionP2PRelayerPage() {
       const connections = node.getConnections();
       const conn = connections.find((c) => c.remotePeer.toString() === partnerPeerId);
       if (conn) {
-        const streamData: ParsedStreamData = {
+        const streamData: PaymentMessage = {
           hash: regHash,
           txChainId: regChainId ?? chainId,
           success: true,
+          ...(msgId ? { messageId: msgId } : {}),
         };
-        if (msgId) {
-          streamData.messageId = msgId;
-        }
         passStreamData({
           connection: conn,
           protocols: [PROTOCOLS.TX_REG_PAY],

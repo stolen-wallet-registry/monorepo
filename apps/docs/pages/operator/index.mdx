@@ -16,13 +16,15 @@ The DAO votes to approve operators, granting them permission to batch-submit fra
 
 ## Why Operators Matter
 
-The vision:
+Individual self-attestation is important for victims. But the registry becomes a **standard** when institutional operators are contributing fraud data.
 
-1. Coinbase detects a compromised wallet through their internal fraud systems
-2. They batch-submit it (along with hundreds of others) to SWR
-3. Every other exchange, wallet, and off-ramp now knows about it - instantly, on-chain
+The model: operators accumulate fraud intelligence through their internal systems, then periodically batch-submit entries to SWR — weekly, monthly, or at whatever cadence fits their operations. A single batch can contain hundreds or thousands of entries across wallets, transactions, and contracts.
 
-Individual self-attestation is important for victims. But the registry only becomes a **standard** when institutional operators are feeding it data at scale.
+1. An exchange flags compromised wallets through internal fraud monitoring over weeks or months
+2. They batch-submit the accumulated entries to SWR on their own schedule
+3. Every other exchange, wallet, and off-ramp can query the registry for shared fraud intelligence
+
+This isn't a real-time firehose — it's a shared ledger that operators contribute to at their own pace, and everyone benefits from the aggregate data.
 
 ## OperatorRegistry Contract
 
@@ -64,7 +66,7 @@ library RegistryCapabilities {
 
 ### Write Functions (DAO Only)
 
-All write functions are `onlyOwner` - the owner should be a DAO multisig or governance contract.
+All write functions are restricted to `onlyOwner`. The contract owner is the **SWR DAO** (a multisig or governance contract). Only the DAO can approve, revoke, or update operators — operators themselves cannot modify the registry's whitelist.
 
 ```solidity
 // Approve a new operator with specified capabilities
@@ -112,8 +114,8 @@ event OperatorCapabilitiesUpdated(address indexed operator, uint8 oldCapabilitie
 
 <Mermaid
   chart={`
-flowchart LR
-    DAO[DAO Governance] -->|vote passes| Approve["approveOperator(addr, 0x07, 'Coinbase')"]
+flowchart TD
+    DAO[DAO Governance] -->|vote passes| Approve["approveOperator(addr, 0x07, 'OperatorXYZ')"]
     Approve --> Store[OperatorRegistry stores approval]
     Store --> Submit[Operator can submit to allowed registries]
     Submit --> WR[Wallet Registry]
@@ -130,7 +132,7 @@ Cross-chain registrations from individuals go through spoke chains via Hyperlane
 
 ## No Two-Phase for Operators
 
-Individual registrations require a two-phase EIP-712 flow to prevent phishing. Operators skip this entirely.
+Individual registrations require a [two-phase EIP-712 flow](/concepts/two-phase-registration) to prevent phishing. Operators skip this entirely.
 
 The DAO approval process **is** the trust mechanism. An entity approved by governance vote has already passed the bar that two-phase registration provides for individuals. Adding a grace period to operator batch submissions would slow down bulk intelligence sharing for no security benefit.
 

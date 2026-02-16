@@ -1,8 +1,8 @@
-import { SoulboundPreviews } from '../../components/SoulboundPreview';
+import { SoulboundPreviews, SoulboundI18nPreviews } from '../../components/SoulboundPreview';
 
 # Soulbound Tokens
 
-SWR issues non-transferable soulbound tokens ([ERC-5192](https://eips.ethereum.org/EIPS/eip-5192)) as on-chain attestations. Two token types serve different purposes: one marks stolen wallets, the other recognizes donors.
+SWR issues **optional** non-transferable soulbound tokens ([ERC-5192](https://eips.ethereum.org/EIPS/eip-5192)) as on-chain attestations. Both token types are opt-in — wallet registration and relay work without minting either token. Two token types serve different purposes: one marks stolen wallets, the other recognizes donors.
 
 <SoulboundPreviews />
 
@@ -102,6 +102,8 @@ Token metadata is rendered entirely on-chain via `SVGRenderer.sol` - no IPFS, no
 - Monospace font throughout
 
 ### Multilingual Support
+
+<SoulboundI18nPreviews />
 
 The SVG uses `<switch>` elements with `systemLanguage` attributes to auto-select the viewer's browser language:
 
