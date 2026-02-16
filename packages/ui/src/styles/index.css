@@ -298,4 +298,14 @@ html[data-view-transition] *::after {
   code, pre, kbd, samp {
     font-family: var(--font-mono);
   }
+
+  /*
+   * Hacker dark: code blocks need strong contrast.
+   * Page bg is oklch(0.05), muted is oklch(0.12) — nearly invisible difference.
+   * Lift code blocks to oklch(0.20) with a solid green border.
+   */
+  .hacker.dark pre {
+    background: oklch(0.20 0.07 142);
+    border: 1px solid oklch(0.45 0.16 142 / 50%);
+  }
 }

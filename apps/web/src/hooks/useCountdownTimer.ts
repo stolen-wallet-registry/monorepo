@@ -86,12 +86,37 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
 
   const expiredCallbackFired = useRef(false);
 
+  // Track previous targetBlock so we can detect when the contract sets new deadlines
+  // (e.g., user starts a second registration flow with the same reporter address).
+  // When targetBlock changes to a new value, we must reset hasExpired even if the
+  // timer previously expired — the old expiration is stale.
+  const prevTargetBlockRef = useRef(targetBlock);
+
   // Check if actual block target has been reached
   const isBlockTargetReached = useCallback((): boolean => {
     if (targetBlock === null || targetBlock === 0n || currentBlock === null || currentBlock === 0n)
       return false;
     return currentBlock >= targetBlock;
   }, [targetBlock, currentBlock]);
+
+  // Reset when targetBlock changes to a new value (new acknowledgement submitted)
+  useEffect(() => {
+    const prev = prevTargetBlockRef.current;
+    prevTargetBlockRef.current = targetBlock;
+
+    // If targetBlock changed to a genuinely new value, reset all expiration state
+    // so the timer can recalculate from fresh chain data
+    if (targetBlock !== null && targetBlock !== 0n && prev !== targetBlock) {
+      logger.registration.debug('Countdown timer: targetBlock changed, resetting', {
+        previous: prev?.toString() ?? 'null',
+        current: targetBlock.toString(),
+        wasExpired: hasExpired,
+      });
+      setHasExpired(false);
+      setIsWaitingForBlock(false);
+      expiredCallbackFired.current = false;
+    }
+  }, [targetBlock, hasExpired]);
 
   // Reset when target/current block changes
   useEffect(() => {

@@ -260,6 +260,21 @@ contract ContractRegistryTest is Test {
         registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
     }
 
+    /// @notice Reverts when identifiers and threatCategories arrays have different lengths
+    function test_RegisterContracts_RejectsThreatCategoriesLengthMismatch() public {
+        bytes32[] memory identifiers = new bytes32[](2);
+        identifiers[0] = _toIdentifier(makeAddr("c1"));
+        identifiers[1] = _toIdentifier(makeAddr("c2"));
+        bytes32[] memory chainIds = new bytes32[](2);
+        chainIds[0] = chainId;
+        chainIds[1] = chainId;
+        uint8[] memory threats = new uint8[](1);
+
+        vm.expectRevert(IContractRegistry.ContractRegistry__ArrayLengthMismatch.selector);
+        vm.prank(operatorSubmitter);
+        registry.registerContractsFromOperator(operatorId, identifiers, chainIds, threats);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // BATCH SIZE LIMIT
     // ═══════════════════════════════════════════════════════════════════════════

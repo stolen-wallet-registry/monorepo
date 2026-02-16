@@ -26,7 +26,7 @@ import {
   type Environment,
 } from '@swr/chains';
 import { type Address, type Hex } from 'viem';
-import { eq, sql } from 'ponder';
+import { eq } from 'ponder';
 
 // Hub chain configuration - determined by environment
 const PONDER_ENV = (process.env.PONDER_ENV ?? 'development') as Environment;
@@ -81,14 +81,42 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
   const id = 'global';
   const wallets = delta.walletRegistrations ?? 0;
   const sponsored = delta.sponsored ?? 0;
-  const direct = wallets - sponsored;
 
-  // Atomic upsert: insert initial values or accumulate deltas on conflict.
-  // Uses SQL expressions for conflict path to prevent race conditions where
-  // two concurrent events both find no record and one delta is lost.
-  await db
-    .insert(registryStats)
-    .values({
+  // Read-then-write: Ponder processes events sequentially per chain,
+  // so no race condition is possible within a single chain's event stream.
+  // (The previous sql`column + delta` upsert pattern caused Ponder 0.16.x's
+  // hasProxy/copy utility to hit infinite recursion on drizzle column references.)
+  const existing = await db.find(registryStats, { id });
+
+  if (existing) {
+    const newTotalWallets = existing.totalWalletRegistrations + wallets;
+    const newSponsored = existing.sponsoredRegistrations + sponsored;
+
+    await db.update(registryStats, { id }).set({
+      totalWalletRegistrations: newTotalWallets,
+      totalTransactionBatches: existing.totalTransactionBatches + (delta.transactionBatches ?? 0),
+      totalTransactionsReported:
+        existing.totalTransactionsReported + (delta.transactionsReported ?? 0),
+      sponsoredRegistrations: newSponsored,
+      directRegistrations: newTotalWallets - newSponsored,
+      crossChainRegistrations: existing.crossChainRegistrations + (delta.crossChain ?? 0),
+      walletSoulboundsMinted: existing.walletSoulboundsMinted + (delta.walletSoulbounds ?? 0),
+      supportSoulboundsMinted: existing.supportSoulboundsMinted + (delta.supportSoulbounds ?? 0),
+      totalSupportDonations: existing.totalSupportDonations + (delta.supportDonations ?? 0n),
+      totalOperators: existing.totalOperators + (delta.totalOperators ?? 0),
+      activeOperators: existing.activeOperators + (delta.activeOperators ?? 0),
+      totalWalletBatches: existing.totalWalletBatches + (delta.totalWalletBatches ?? 0),
+      totalOperatorTransactionBatches:
+        existing.totalOperatorTransactionBatches + (delta.totalOperatorTransactionBatches ?? 0),
+      totalContractBatches: existing.totalContractBatches + (delta.totalContractBatches ?? 0),
+      totalFraudulentContracts:
+        existing.totalFraudulentContracts + (delta.totalFraudulentContracts ?? 0),
+      lastUpdated: timestamp,
+    });
+  } else {
+    const direct = wallets - sponsored;
+
+    await db.insert(registryStats).values({
       id,
       totalWalletRegistrations: wallets,
       totalTransactionBatches: delta.transactionBatches ?? 0,
@@ -106,25 +134,8 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
       totalContractBatches: delta.totalContractBatches ?? 0,
       totalFraudulentContracts: delta.totalFraudulentContracts ?? 0,
       lastUpdated: timestamp,
-    })
-    .onConflictDoUpdate({
-      totalWalletRegistrations: sql`${registryStats.totalWalletRegistrations} + ${wallets}`,
-      totalTransactionBatches: sql`${registryStats.totalTransactionBatches} + ${delta.transactionBatches ?? 0}`,
-      totalTransactionsReported: sql`${registryStats.totalTransactionsReported} + ${delta.transactionsReported ?? 0}`,
-      sponsoredRegistrations: sql`${registryStats.sponsoredRegistrations} + ${sponsored}`,
-      directRegistrations: sql`(${registryStats.totalWalletRegistrations} + ${wallets}) - (${registryStats.sponsoredRegistrations} + ${sponsored})`,
-      crossChainRegistrations: sql`${registryStats.crossChainRegistrations} + ${delta.crossChain ?? 0}`,
-      walletSoulboundsMinted: sql`${registryStats.walletSoulboundsMinted} + ${delta.walletSoulbounds ?? 0}`,
-      supportSoulboundsMinted: sql`${registryStats.supportSoulboundsMinted} + ${delta.supportSoulbounds ?? 0}`,
-      totalSupportDonations: sql`${registryStats.totalSupportDonations} + ${delta.supportDonations ?? 0n}`,
-      totalOperators: sql`${registryStats.totalOperators} + ${delta.totalOperators ?? 0}`,
-      activeOperators: sql`${registryStats.activeOperators} + ${delta.activeOperators ?? 0}`,
-      totalWalletBatches: sql`${registryStats.totalWalletBatches} + ${delta.totalWalletBatches ?? 0}`,
-      totalOperatorTransactionBatches: sql`${registryStats.totalOperatorTransactionBatches} + ${delta.totalOperatorTransactionBatches ?? 0}`,
-      totalContractBatches: sql`${registryStats.totalContractBatches} + ${delta.totalContractBatches ?? 0}`,
-      totalFraudulentContracts: sql`${registryStats.totalFraudulentContracts} + ${delta.totalFraudulentContracts ?? 0}`,
-      lastUpdated: timestamp,
     });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -247,9 +258,12 @@ ponder.on('WalletRegistry:BatchCreated', async ({ event, context }) => {
   const batchIdStr = batchId.toString();
   const operatorAddress = toLowerAddress(event.transaction.from);
 
-  // Derive reportedChainCAIP2 from the first wallet entry in the same tx.
+  // Derive reportedChainCAIP2 from any wallet entry in the same tx.
   // WalletRegistered events fire before BatchCreated in the same transaction,
   // so entries are already in the DB by the time this handler runs.
+  // Note: operator batches CAN contain entries from multiple chains. This picks
+  // an arbitrary entry's chain for display/filtering purposes. Multi-chain batches
+  // will show one of possibly many chain IDs — this is acceptable for a convenience field.
   const walletEntries = await db.sql
     .select({ reportedChainCAIP2: stolenWallet.reportedChainCAIP2 })
     .from(stolenWallet)
@@ -350,8 +364,10 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
   const { batchId, reporter, dataHash, transactionCount, isSponsored } = event.args;
   const { db } = context;
 
-  // Derive reportedChainCAIP2 from the first transaction entry in the same tx.
+  // Derive reportedChainCAIP2 from any transaction entry in the same tx.
   // TransactionRegistered events fire before TransactionBatchRegistered in the same transaction.
+  // Note: batches CAN contain entries from multiple chains. This picks an arbitrary entry's
+  // chain for display/filtering. Multi-chain batches show one of many possible chain IDs.
   const txEntries = await db.sql
     .select({ caip2ChainId: transactionInBatch.caip2ChainId })
     .from(transactionInBatch)
@@ -418,8 +434,9 @@ ponder.on('TransactionRegistry:TransactionBatchCreated', async ({ event, context
   const batchIdStr = batchId.toString();
   const operatorAddress = toLowerAddress(event.transaction.from);
 
-  // Derive reportedChainCAIP2 from the first transaction entry in the same tx.
+  // Derive reportedChainCAIP2 from any transaction entry in the same tx.
   // TransactionRegistered events fire before TransactionBatchCreated in the same transaction.
+  // Note: operator batches CAN contain entries from multiple chains (see BatchCreated comment).
   const txEntries = await db.sql
     .select({ caip2ChainId: transactionInBatch.caip2ChainId })
     .from(transactionInBatch)

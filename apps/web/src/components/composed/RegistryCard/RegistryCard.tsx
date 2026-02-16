@@ -52,16 +52,16 @@ export function RegistryCard({
           : undefined
       }
       className={cn(
-        'relative overflow-hidden transition-all duration-300',
-        'border-primary/20 bg-gradient-to-br from-primary/5 to-transparent',
+        'group relative overflow-hidden transition-all duration-300',
+        'border-primary bg-gradient-to-br from-primary/5 to-transparent',
         isClickable &&
-          'cursor-pointer hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          'cursor-pointer hover:ring-2 hover:ring-primary hover:border-primary hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         className
       )}
     >
       <CardHeader className="pb-2">
         <div className="mb-3 flex items-center justify-between">
-          <div className="flex size-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <div className="flex size-12 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
             {icon}
           </div>
           {badge && (

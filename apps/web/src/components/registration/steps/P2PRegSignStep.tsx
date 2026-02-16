@@ -68,14 +68,18 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
     <div className="space-y-6">
       <Alert>
         <AlertDescription>
-          Sign the registration message with your stolen wallet. The signature will be sent securely
-          to your relayer{' '}
-          {relayer && (
-            <>
-              (<EnsExplorerLink value={relayer} type="address" truncate showDisabledIcon={false} />)
-            </>
-          )}{' '}
-          who will complete the registration.
+          <p>
+            Sign the registration message with your stolen wallet. The signature will be sent
+            securely to your relayer{' '}
+            {relayer && (
+              <>
+                (
+                <EnsExplorerLink value={relayer} type="address" truncate showDisabledIcon={false} />
+                )
+              </>
+            )}{' '}
+            who will complete the registration.
+          </p>
         </AlertDescription>
       </Alert>
 

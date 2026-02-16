@@ -68,14 +68,18 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
     <div className="space-y-6">
       <Alert>
         <AlertDescription>
-          Sign the acknowledgement message with your stolen wallet. The signature will be sent
-          securely to your relayer{' '}
-          {relayer && (
-            <>
-              (<EnsExplorerLink value={relayer} type="address" truncate showDisabledIcon={false} />)
-            </>
-          )}{' '}
-          who will submit the transaction on your behalf.
+          <p>
+            Sign the acknowledgement message with your stolen wallet. The signature will be sent
+            securely to your relayer{' '}
+            {relayer && (
+              <>
+                (
+                <EnsExplorerLink value={relayer} type="address" truncate showDisabledIcon={false} />
+                )
+              </>
+            )}{' '}
+            who will submit the transaction on your behalf.
+          </p>
         </AlertDescription>
       </Alert>
 

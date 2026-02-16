@@ -376,10 +376,6 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
         {/* Signature card */}
         {!isContractDataLoading && !hasContractError && hashStructData && nonce !== undefined && (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Sign the EIP-712 acknowledgement message to claim your intent to register the
-              connected wallet to the Stolen Wallet Registry.
-            </p>
             <SignatureCard
               type="acknowledgement"
               data={{

@@ -85,7 +85,9 @@ interface IContractRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Register multiple malicious contracts (OperatorSubmitter only)
-    /// @dev Single-phase registration - no acknowledgement required for operators
+    /// @dev Single-phase registration - no acknowledgement required for operators.
+    ///      Reverts with ContractRegistry__ArrayLengthMismatch if identifiers, reportedChainIds,
+    ///      and threatCategories arrays have different lengths.
     /// @param operatorId The operator's identifier
     /// @param identifiers Array of contract address identifiers
     /// @param reportedChainIds Array of CAIP-2 chain ID hashes where contracts are deployed
