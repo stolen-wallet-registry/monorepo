@@ -101,17 +101,17 @@ struct ContractBatch {
 
 ## Events
 
-| Event                  | When                        | Key fields                                               |
-| ---------------------- | --------------------------- | -------------------------------------------------------- |
-| `ContractRegistered`   | Per contract registered     | `identifier`, `reportedChainId`, `operatorId`, `batchId` |
-| `ContractBatchCreated` | After all entries processed | `batchId`, `operatorId`, `contractCount`                 |
+| Event                  | When                        | Key fields                                                                 |
+| ---------------------- | --------------------------- | -------------------------------------------------------------------------- |
+| `ContractRegistered`   | Per contract registered     | `identifier`, `reportedChainId`, `operatorId`, `batchId`, `threatCategory` |
+| `ContractBatchCreated` | After all entries processed | `batchId`, `operatorId`, `contractCount`                                   |
 
 Event ordering in a single transaction:
 
 ```
 tx 0xabc...
-  ├── ContractRegistered(addr1, chainId, operatorId, batchId)
-  ├── ContractRegistered(addr2, chainId, operatorId, batchId)
+  ├── ContractRegistered(addr1, chainId, operatorId, batchId, threatCategory)
+  ├── ContractRegistered(addr2, chainId, operatorId, batchId, threatCategory)
   └── ContractBatchCreated(batchId, operatorId, 2)
 ```
 

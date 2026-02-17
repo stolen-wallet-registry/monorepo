@@ -6,12 +6,12 @@ SWR charges USD-denominated registration fees converted to ETH at the current ma
 
 ## Fee Tiers
 
-| Tier                    | Amount                                     | Use Case                                        |
-| ----------------------- | ------------------------------------------ | ----------------------------------------------- |
-| Individual registration | $5.00 (`baseFeeUsdCents = 500`)            | Single wallet or transaction batch registration |
-| Operator batch          | $25.00 (`operatorBatchFeeUsdCents = 2500`) | Flat fee per batch, regardless of entry count   |
+| Tier                    | Amount                                | Use Case                                        |
+| ----------------------- | ------------------------------------- | ----------------------------------------------- |
+| Individual registration | $5.00 (`baseFeeUsdCents = 500`)       | Single wallet or transaction batch registration |
+| Operator batch          | Free (`operatorBatchFeeUsdCents = 0`) | DAO-approved operators pay only gas             |
 
-Fees are collected in ETH at the time of registration. Setting a fee to `0` disables it (free registrations).
+Fees are collected in ETH at the time of registration. Setting a fee to `0` disables it (free registrations). Operator batch fees are set to zero — DAO approval is the trust mechanism, so no additional fee is required.
 
 ## Price Resolution
 
@@ -56,12 +56,12 @@ If the constructor receives `address(0)` for the price feed, the contract operat
 feeWei = (baseFeeUsdCents * 1e18) / ethPriceUsdCents
 ```
 
-At ETH = $3,000 (`ethPriceUsdCents = 300000`):
+_Example at ETH = $3,000 — actual ETH amount varies with market price:_
 
-| Fee Tier       | USD    | Wei                   | ETH      |
-| -------------- | ------ | --------------------- | -------- |
-| Individual     | $5.00  | 1,666,666,666,666,666 | ~0.00167 |
-| Operator batch | $25.00 | 8,333,333,333,333,333 | ~0.00833 |
+| Fee Tier       | USD   | Est. ETH |
+| -------------- | ----- | -------- |
+| Individual     | $5.00 | ~0.0017  |
+| Operator batch | Free  | 0        |
 
 Chainlink ETH/USD feeds typically use 8 decimals. The `_toCents()` function normalizes to 2-decimal cents, with a minimum return of 1 cent to prevent division by zero.
 

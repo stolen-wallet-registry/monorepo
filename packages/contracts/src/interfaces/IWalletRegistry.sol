@@ -12,7 +12,7 @@ interface IWalletRegistry {
 
     /// @notice Data for a registered wallet
     /// @notice STORAGE INVARIANT: This struct MUST fit in 1 storage slot (32 bytes max).
-    /// Current: 22 bytes (10 spare). Any new field requires a byte-count proof.
+    /// Current: 26 bytes (6 spare). Any new field requires a byte-count proof.
     /// Chain IDs, message IDs, and provenance data are EVENTS-ONLY — see events below.
     /// @param registeredAt Block timestamp when wallet was registered
     /// @param incidentTimestamp Unix timestamp when incident occurred (0 if unknown)

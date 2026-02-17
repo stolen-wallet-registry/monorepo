@@ -495,7 +495,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
         nonces[registeree]++;
         delete _pendingAcknowledgements[registeree];
 
-        // Store wallet entry (1-slot packed: 22 bytes)
+        // Store wallet entry (1-slot packed: 26 bytes)
         _wallets[key] = WalletEntry({
             registeredAt: uint64(block.timestamp),
             incidentTimestamp: incidentTimestamp,
