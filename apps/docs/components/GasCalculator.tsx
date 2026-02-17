@@ -1,14 +1,16 @@
 import { useState, useMemo } from 'react';
 import type { CSSProperties } from 'react';
 
-const GAS_PER_ENTRY = 21_500;
-const BATCH_OVERHEAD = 50_000;
+const GAS_PER_ENTRY = 26_200;
+const BATCH_OVERHEAD = 65_000;
 const BLOCK_GAS_LIMIT = 375_000_000;
-const BATCH_SIZES = [50, 100, 200, 500, 1_000, 2_000, 5_000];
+const TX_GAS_LIMIT = 25_000_000;
+const MAX_ENTRIES_PER_TX = Math.floor((TX_GAS_LIMIT - BATCH_OVERHEAD) / GAS_PER_ENTRY);
+const BATCH_SIZES = [10, 50, 100, 250, 500, 750, 950];
 
 const DEFAULTS = {
-  gasPriceGwei: 0.002,
-  ethPriceUsd: 3_000,
+  gasPriceGwei: 0.005,
+  ethPriceUsd: 2_800,
 };
 
 function fmtUsd(n: number): string {
@@ -40,6 +42,7 @@ interface Row {
   costEth: number;
   costUsd: number;
   blockPercent: number;
+  exceedsTxLimit: boolean;
 }
 
 const inputStyle: CSSProperties = {
@@ -92,7 +95,8 @@ export function GasCalculator() {
         const costEth = totalGas * gasPriceGwei * 1e-9;
         const costUsd = costEth * ethPriceUsd;
         const blockPercent = (totalGas / BLOCK_GAS_LIMIT) * 100;
-        return { batchSize, entryGas, totalGas, costEth, costUsd, blockPercent };
+        const exceedsTxLimit = totalGas > TX_GAS_LIMIT;
+        return { batchSize, entryGas, totalGas, costEth, costUsd, blockPercent, exceedsTxLimit };
       }),
     [gasPriceGwei, ethPriceUsd]
   );
@@ -178,9 +182,12 @@ export function GasCalculator() {
 
       <p style={{ fontSize: '12px', color: 'var(--vocs-color_text3)', marginTop: '12px' }}>
         *Total gas includes ~{BATCH_OVERHEAD.toLocaleString()} batch overhead (summary event +
-        metadata). Gas per entry: ~{GAS_PER_ENTRY.toLocaleString()} (SSTORE + event). % Block based
-        on Base&apos;s {BLOCK_GAS_LIMIT.toLocaleString()} block gas limit. Default gas price is
-        Base&apos;s EIP-1559 floor (0.002 gwei). Check{' '}
+        metadata). Gas per entry: ~{GAS_PER_ENTRY.toLocaleString()} (measured via forge gas tests
+        &mdash; includes cold SSTORE, event emission, storage key hashing, and loop overhead). Max
+        entries per transaction: ~{MAX_ENTRIES_PER_TX.toLocaleString()} (
+        {TX_GAS_LIMIT.toLocaleString()} per-tx gas limit). % Block based on Base&apos;s{' '}
+        {BLOCK_GAS_LIMIT.toLocaleString()} block gas limit. L2 execution gas only &mdash; L1 data
+        posting fees (EIP-4844 blobs) are additional. Check{' '}
         <a
           href="https://basescan.org/gastracker"
           target="_blank"

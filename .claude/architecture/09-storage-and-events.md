@@ -253,24 +253,36 @@ Cross-chain metadata (`sourceChainId`, `messageId`) is emitted in the `CrossChai
 
 ## Batch Operation Economics (Base L2)
 
-From stress tests:
+**Gas limits (verified 2026-02-17):**
 
-| Registry    | Gas/Entry | Max Batch (25M limit) |
-| ----------- | --------- | --------------------- |
-| Wallet      | ~3,730    | ~6,700                |
-| Contract    | ~3,670    | ~6,800                |
-| Transaction | ~3,160    | ~7,900                |
+- Block gas limit: **375M** (confirmed via Base mainnet RPC)
+- Per-transaction gas limit: **~25M** (observed ceiling across multiple blocks)
+- Block time: ~2 seconds
 
-**Cost at Base L2 gas prices:**
+From forge gas measurement tests against current contracts (L2 execution gas only, 2026-02-17):
 
-| Batch Size | Gas Used | Cost @ 0.001 gwei | Cost @ 0.01 gwei |
-| ---------- | -------- | ----------------- | ---------------- |
-| 1,000      | ~3.5M    | ~$0.000035        | ~$0.00035        |
-| 5,000      | ~20M     | ~$0.0002          | ~$0.002          |
+| Registry    | Gas/Entry | Max Entries/Tx (25M limit) |
+| ----------- | --------- | -------------------------- |
+| Wallet      | ~26,200   | ~950                       |
+| Contract    | ~26,825   | ~930                       |
+| Transaction | ~26,200   | ~950                       |
 
-5,000 entries per batch is the recommended production limit.
+**Note:** Previous figures (~3,700 gas/entry) were from deleted v1 stress tests that measured merkle root-based batch registration (one SSTORE per batch). The current per-entry storage architecture requires one cold SSTORE per entry (~22,100) plus event emission and misc costs.
 
-**Uploading 1M fraud records costs under $1 even at 10x gas prices.**
+**Cost at Base L2 gas prices (USD, ETH @ $2,800):**
+
+| Batch Size | Gas Used | Cost @ 0.001 gwei | Cost @ 0.005 gwei | Cost @ 0.01 gwei |
+| ---------- | -------- | ----------------- | ----------------- | ---------------- |
+| 100        | ~2.7M    | <$0.01            | ~$0.04            | ~$0.08           |
+| 500        | ~13.2M   | ~$0.04            | ~$0.18            | ~$0.37           |
+| 800        | ~21.0M   | ~$0.06            | ~$0.29            | ~$0.59           |
+| 1,000,000  | ~26.2B   | ~$73              | ~$367             | ~$733            |
+
+~800 entries per batch transaction is the recommended production limit (headroom below 25M tx gas cap). Multiple batch transactions can be submitted per block.
+
+**Uploading 1M fraud records costs ~$367 in L2 execution gas at current Base prices (~0.005 gwei).** Cost scales linearly — 100K records costs ~$37.
+
+**Important:** These figures are L2 execution gas only (from forge stress tests on local anvil). Real on-chain costs also include **L1 data posting fees** for calldata, which can be significant for data-heavy batch transactions. Production costs should be benchmarked on Base Sepolia. See `PRPs/operator-batch-tooling-and-gas-economics.md` for full analysis.
 
 The single-slot storage design directly contributes to these economics -- each entry uses exactly one SSTORE operation regardless of how many provenance fields are emitted in events.
 
