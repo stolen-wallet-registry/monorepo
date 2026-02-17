@@ -123,6 +123,43 @@ export function libp2pDefaults(): Libp2pOptions {
   };
 }
 
+/**
+ * Check if the node has at least one circuit relay multiaddr (relay reservation is complete).
+ */
+function hasCircuitRelayAddr(libp2p: Libp2p): boolean {
+  return libp2p.getMultiaddrs().some((ma) => ma.toString().includes('/p2p-circuit/'));
+}
+
+/**
+ * Wait for the circuit relay reservation to complete before returning.
+ *
+ * The relay reservation is async — createLibp2p() resolves before it finishes.
+ * Without waiting, getPeerConnection() fires with no circuit relay multiaddrs
+ * and the dial times out.
+ */
+async function waitForRelayReservation(libp2p: Libp2p, timeoutMs = 20_000): Promise<void> {
+  if (hasCircuitRelayAddr(libp2p)) return;
+
+  logger.p2p.debug('Waiting for relay reservation...');
+
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      libp2p.removeEventListener('self:peer:update', check);
+      reject(new Error('Relay reservation timed out — is the relay server running?'));
+    }, timeoutMs);
+
+    const check = () => {
+      if (hasCircuitRelayAddr(libp2p)) {
+        clearTimeout(timer);
+        libp2p.removeEventListener('self:peer:update', check);
+        resolve();
+      }
+    };
+
+    libp2p.addEventListener('self:peer:update', check);
+  });
+}
+
 export interface SetupOptions {
   /** Protocol handlers to register */
   handlers: ProtocolHandler[];
@@ -170,10 +207,18 @@ export async function setup(
     await libp2p.handle(protocol, streamHandler.handler, streamHandler.options);
   }
 
-  logger.p2p.info('libp2p node created', {
+  logger.p2p.info('libp2p node created, waiting for relay reservation', {
     peerId: libp2p.peerId.toString(),
-    multiaddrs: libp2p.getMultiaddrs().map((ma) => ma.toString()),
     persistent: !!walletAddress,
+  });
+
+  // Wait for circuit relay reservation before returning.
+  // Without this, getPeerConnection() fires before any /p2p-circuit/ multiaddrs exist
+  // and the first dial always times out.
+  await waitForRelayReservation(libp2p);
+
+  logger.p2p.info('Relay reservation complete', {
+    multiaddrs: libp2p.getMultiaddrs().map((ma) => ma.toString()),
   });
 
   return { libp2p };
