@@ -115,9 +115,9 @@ event OperatorCapabilitiesUpdated(address indexed operator, uint8 oldCapabilitie
 <Mermaid
   chart={`
 flowchart TD
-    DAO[DAO Governance] -->|vote passes| Approve["approveOperator(addr, 0x07, 'OperatorXYZ')"]
-    Approve --> Store[OperatorRegistry stores approval]
-    Store --> Submit[Operator can submit to allowed registries]
+    DAO[DAO Governance] -->|vote passes| Approve[approveOperator]
+    Approve --> Store[Stores approval + capabilities]
+    Store --> Submit[Operator submits batches]
     Submit --> WR[Wallet Registry]
     Submit --> TR[Transaction Registry]
     Submit --> CR[Contract Registry]
