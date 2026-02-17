@@ -3,7 +3,7 @@ import { GasCalculator } from '../../components/GasCalculator';
 
 # Economics & Gas Analysis
 
-SWR stores every registration as a permanent on-chain entry. Each entry struct is optimized to fit in a single EVM storage slot (17-26 bytes depending on registry type), containing only the fields needed for on-chain lookups. Rich provenance data (chain IDs, reporters, message IDs) is emitted in events for indexer consumption. On Ethereum L1, even this minimal storage would add up. On Base, it costs fractions of a cent.
+SWR stores every registration as a permanent on-chain entry. Each entry struct is optimized to fit in a single EVM storage slot (17-26 bytes depending on registry type), containing only the fields needed for on-chain lookups. Rich provenance data (chain IDs, reporters, message IDs) is emitted in events for indexer consumption. On Ethereum L1, even this minimal storage would cost dollars per entry. On Base, the economics are orders of magnitude cheaper — and Base continues to scale toward higher gas limits and lower fees.
 
 ## L2 Storage Economics
 
@@ -13,43 +13,47 @@ The fundamental design decision: store every entry on-chain as a single-slot str
 
 _As of February 2026. Check [BaseScan](https://basescan.org) for current values._
 
-| Parameter           | Value       | Source                       |
-| ------------------- | ----------- | ---------------------------- |
-| Block gas limit     | 375,000,000 | Base specs                   |
-| Block time          | ~2 seconds  | Base specs                   |
-| Minimum base fee    | 0.002 gwei  | EIP-1559 floor               |
-| Typical L2 exec fee | Variable    | EIP-1559 base + priority fee |
-| L1 data fee         | Variable    | EIP-4844 blob posting        |
+| Parameter             | Value       | Source                |
+| --------------------- | ----------- | --------------------- |
+| Block gas limit       | 375,000,000 | Base specs            |
+| Per-transaction limit | ~25,000,000 | OP Stack config       |
+| Block time            | ~2 seconds  | Base specs            |
+| Typical gas price     | ~0.005 gwei | BaseScan Gas Tracker  |
+| Minimum base fee      | 0.002 gwei  | EIP-1559 floor        |
+| L1 data fee           | Variable    | EIP-4844 blob posting |
+
+The per-transaction gas limit constrains how many entries fit in a single batch transaction. At ~26,000 gas per entry (measured via forge gas tests), the practical maximum is **~950 entries per transaction**. Larger datasets must be split across multiple transactions. Use the calculator below to estimate costs for specific batch sizes.
 
 ### Per-Entry Gas Cost
 
-Each entry in a batch writes one storage struct and emits one event:
+Each entry in a batch writes one storage struct, emits one event, and performs skip checks. From forge gas measurements against the current contracts:
 
-| Operation                 | Gas         | What it does                                    |
-| ------------------------- | ----------- | ----------------------------------------------- |
-| New storage slot (SSTORE) | ~20,000     | Write one entry struct (1 slot per entry)       |
-| Event emission            | ~1,500      | WalletRegistered / TransactionRegistered / etc. |
-| **Per-entry total**       | **~21,500** |                                                 |
+| Operation                    | Gas         | What it does                                              |
+| ---------------------------- | ----------- | --------------------------------------------------------- |
+| Cold SSTORE (zero → nonzero) | ~22,100     | Write one entry struct (1 slot per entry)                 |
+| Event emission               | ~2,000      | WalletRegistered / TransactionRegistered / etc.           |
+| Misc (keccak, SLOAD, loop)   | ~2,100      | Storage key hash, duplicate check, array access           |
+| **Per-entry total**          | **~26,200** | Measured across wallet, transaction, and contract batches |
 
-Batch overhead adds ~50,000 gas for the summary event and metadata storage (one-time per batch).
+Batch overhead adds ~65,000 gas for the summary event, batch metadata storage, and function dispatch (one-time per batch).
 
 ### Cost Calculator
 
-Use the calculator below to estimate gas costs for different batch sizes and network conditions. Default gas price is Base's EIP-1559 floor — actual costs vary with network congestion.
+Use the calculator below to estimate L2 execution gas costs for different batch sizes and network conditions. Adjust the gas price and ETH price to match current conditions.
 
 <GasCalculator />
 
-Even large batches use only a small fraction of a single Base block. The protocol fee dominates total cost by orders of magnitude compared to gas, meaning gas cost is negligible for both individuals and operators.
+At ~26,200 gas per entry, a full 800-entry batch uses ~21M gas — well within the 25M per-transaction limit while leaving headroom. Multiple batch transactions can be submitted in the same block (up to ~15 at 25M each within the 375M block gas limit).
 
 :::info
-L1 data posting costs (EIP-4844 blobs) are not included as they vary significantly and are a secondary cost component on Base. Check [BaseScan](https://basescan.org/gastracker) for current all-in transaction costs.
+**L1 data posting costs** (EIP-4844 blobs) are not included in the calculator above — they vary with Ethereum L1 blob fees and are an additional cost component, particularly for data-heavy batch transactions. Check [BaseScan](https://basescan.org/gastracker) for current all-in transaction costs. Production costs should be benchmarked on Base Sepolia before mainnet deployment.
 :::
 
 ## Why Base?
 
 SWR uses Base as the hub chain for settlement and operator submissions. The core reason: **gas economics make single-slot on-chain storage feasible.**
 
-SWR's design stores every entry fully on-chain — one EVM storage slot per entry (17-26 bytes). On Ethereum L1, this would cost dollars per entry. On Base, it costs fractions of a cent. This makes a fully on-chain fraud registry practical at any scale, from individual self-attestations to operator batches of thousands of entries.
+SWR's design stores every entry fully on-chain — one EVM storage slot per entry (17-26 bytes). On Ethereum L1, this would cost dollars per entry. On Base, L2 gas economics make per-entry storage practical at scale — from individual self-attestations to operator batch submissions. Base is also actively scaling toward higher throughput and lower fees, which further improves the economics over time.
 
 | Factor               | Base                                                                            |
 | -------------------- | ------------------------------------------------------------------------------- |
@@ -59,37 +63,28 @@ SWR's design stores every entry fully on-chain — one EVM storage slot per entr
 | Transaction cost     | Sub-cent (varies with L1 blob fees)                                             |
 | Stack                | OP Stack (Optimism Superchain ecosystem)                                        |
 
-Single-slot storage also means the registry is **fully queryable on-chain**. Any smart contract can call `isRegistered(address)` and get a boolean back in the same transaction — enabling downstream contracts (off-ramps, bridges, DeFi protocols) to gate operations based on fraud status. Alternative approaches like merkle root storage or SSTORE2/SSTORE3 blob packing would make data available to indexers and off-chain consumers, but contracts couldn't ask "is this wallet stolen?" without off-chain proof submission. Per-entry storage on an L2 where it costs fractions of a cent is the only design that gives you both on-chain composability and practical economics.
+Single-slot storage also means the registry is **fully queryable on-chain**. Any smart contract can call `isRegistered(address)` and get a boolean back in the same transaction — enabling downstream contracts (off-ramps, bridges, DeFi protocols) to gate operations based on fraud status. Alternative approaches like merkle root storage or SSTORE2/SSTORE3 blob packing would make data available to indexers and off-chain consumers, but contracts couldn't ask "is this wallet stolen?" without off-chain proof submission. Per-entry storage on an L2 is the only design that gives you both on-chain composability and practical economics.
 
 ## Protocol Fee Structure
 
-The `FeeManager` contract defines two fee tiers, denominated in USD and converted to ETH via Chainlink oracle:
+The `FeeManager` contract manages registration fees denominated in USD and converted to ETH via Chainlink oracle:
 
-| Fee Type                | USD    | Who Pays                                           |
-| ----------------------- | ------ | -------------------------------------------------- |
-| Individual registration | $5.00  | Any user registering a wallet or transaction batch |
-| Operator batch          | $25.00 | DAO-approved operators (flat per batch, any size)  |
+| Fee Type                | USD   | Who Pays                                           |
+| ----------------------- | ----- | -------------------------------------------------- |
+| Individual registration | $5.00 | Any user registering a wallet or transaction batch |
+| Operator batch          | Free  | DAO-approved operators pay only gas                |
 
-The operator batch fee is **flat per batch**, not per entry. An operator submitting 100 wallets pays $25 total. If those 100 wallets were registered individually, the cost would be $500.
+Individual fees serve as an anti-spam mechanism — they create a cost barrier that makes mass false registrations expensive. Operators are DAO-approved entities whose trust is established through the approval process itself, so no additional fee is required.
 
 ### USD-to-ETH Conversion
 
 ```solidity
-// Individual fee
 function currentFeeWei() public view returns (uint256) {
     return (baseFeeUsdCents * 1e18) / ethPriceUsdCents;
 }
-
-// Operator batch fee
-function operatorBatchFeeWei() public view returns (uint256) {
-    return (operatorBatchFeeUsdCents * 1e18) / ethPriceUsdCents;
-}
 ```
 
-At ETH = $3,000:
-
-- Individual: `(500 * 1e18) / 300000 = 0.00167 ETH` (~$5.00)
-- Operator batch: `(2500 * 1e18) / 300000 = 0.00833 ETH` (~$25.00)
+At ETH = $3,000: `(500 * 1e18) / 300000 = 0.00167 ETH` (~$5.00)
 
 ### Price Oracle
 
@@ -103,15 +98,9 @@ The `FeeManager` uses a Chainlink ETH/USD price feed with a manual fallback:
 
 If Chainlink is stale or unreachable, the contract uses the fallback price. The fallback is opportunistically synced from Chainlink during normal operations, so it stays reasonably fresh without extra transactions.
 
-### Cost Comparison
-
-The operator batch model is significantly cheaper than equivalent individual submissions. The flat $25 batch fee means the per-entry cost decreases as batch size grows, while individual submissions pay $5 per entry regardless.
-
-Use the calculator above to compare costs for your specific batch size and current network conditions.
-
 ## Fee Distribution
 
-Fees collected by the `OperatorSubmitter` are forwarded to a configurable `feeRecipient` address. The planned distribution will use the [Splits protocol](https://splits.org/):
+Individual registration fees are forwarded to a configurable `feeRecipient` address. The planned distribution will use the [Splits protocol](https://splits.org/):
 
 <Mermaid
   chart={`
@@ -131,15 +120,15 @@ The exact split ratios are governance-controlled. The intent is to fund:
 
 ## Operator Incentives
 
-Why would an exchange pay a flat fee per batch to submit data?
+Why would an exchange or security firm contribute fraud data to a public registry?
 
-**Shared intelligence.** When one exchange reports a stolen wallet, every other exchange, wallet, and off-ramp benefits. The cost of NOT sharing — processing withdrawals to known stolen wallets — far exceeds a flat batch fee.
+**Shared intelligence.** When one exchange reports a stolen wallet, every other exchange, wallet, and off-ramp benefits. The cost of NOT sharing — processing withdrawals to known stolen wallets — far exceeds the negligible gas cost of submitting data on an L2.
 
 **Regulatory signaling.** Demonstrating active fraud prevention to regulators. Submitting to a public, verifiable registry is stronger evidence than internal-only systems.
 
 **Community trust.** Users prefer exchanges that actively contribute to ecosystem security. Operator status is public and verifiable on-chain.
 
-**Low cost.** A flat fee on an L2. For an exchange processing billions in daily volume, this is functionally free.
+**Zero protocol fees.** Operators pay only L2 gas — no protocol fees. Submit your fraud data for free, get everyone else's data in return.
 
 ## Future: Operator-as-Paymaster
 
@@ -159,7 +148,7 @@ sequenceDiagram
     EX->>U: Present second signature request
     U->>EX: Sign registration
     EX->>PM: Bundle with Paymaster sponsorship
-    PM->>SWR: Submit registration (operator pays gas + fee)
+    PM->>SWR: Submit registration (operator pays gas)
     SWR-->>U: Wallet registered. Zero cost to user.
 
 `} />
@@ -167,7 +156,7 @@ sequenceDiagram
 In this model:
 
 - Users sign EIP-712 messages on the exchange's site
-- The exchange's Paymaster contract pays gas and protocol fees
+- The exchange's Paymaster contract pays gas
 - Registration is **free for the user**
 - The exchange gets the fraud data they want, the user gets free registration
 
