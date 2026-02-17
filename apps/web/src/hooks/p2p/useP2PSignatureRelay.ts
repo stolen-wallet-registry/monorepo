@@ -19,9 +19,9 @@ import {
   passStreamData,
   readStreamData,
   getPeerConnection,
-  type ParsedStreamData,
   type SignatureOverTheWire,
   type ProtocolHandler,
+  type HandshakeMessage,
 } from '@/lib/p2p';
 import { storeSignature, type StoredSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { useFormStore } from '@/stores/formStore';
@@ -585,7 +585,7 @@ export function useP2PSignatureRelay(
       throw new Error('Cannot send connect handshake: local peer ID not available');
     }
     const connection = await getConnection();
-    const streamData: ParsedStreamData = {
+    const streamData: HandshakeMessage = {
       form: { registeree: address },
       p2p: { partnerPeerId: p2pConnection.peerId },
     };

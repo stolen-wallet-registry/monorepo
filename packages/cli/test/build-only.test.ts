@@ -43,11 +43,12 @@ describe('--build-only mode', () => {
 
       const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
       const reportedChainIds = entries.map((e) => e.chainId);
+      const threatCategories = entries.map(() => 0);
 
       const calldata = encodeFunctionData({
         abi: OperatorSubmitterABI,
         functionName: 'registerContractsAsOperator',
-        args: [identifiers, reportedChainIds],
+        args: [identifiers, reportedChainIds, threatCategories],
       });
 
       expect(calldata).toMatch(/^0x[a-fA-F0-9]+$/);
@@ -56,7 +57,7 @@ describe('--build-only mode', () => {
         encodeFunctionData({
           abi: OperatorSubmitterABI,
           functionName: 'registerContractsAsOperator',
-          args: [[], []],
+          args: [[], [], []],
         }).slice(0, 10)
       );
     });
@@ -127,11 +128,12 @@ describe('--build-only mode', () => {
 
       const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
       const reportedChainIds = entries.map((e) => e.chainId);
+      const threatCategories = entries.map(() => 0);
 
       const calldata = encodeFunctionData({
         abi: OperatorSubmitterABI,
         functionName: 'registerContractsAsOperator',
-        args: [identifiers, reportedChainIds],
+        args: [identifiers, reportedChainIds, threatCategories],
       });
 
       const txData = {

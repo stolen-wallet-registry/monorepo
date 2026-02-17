@@ -44,7 +44,7 @@ export interface UseTxGasEstimateParams {
   reporter?: Address;
   /** Trusted forwarder address (hub only, same as reporter for self-registration) */
   trustedForwarder?: Address;
-  /** Data hash (merkle root) - for acknowledgement */
+  /** Data hash (keccak commitment) - for acknowledgement */
   dataHash?: Hash;
   /** Signature deadline */
   deadline?: bigint;

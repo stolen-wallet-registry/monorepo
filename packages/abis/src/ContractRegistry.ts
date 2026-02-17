@@ -12,6 +12,19 @@ export const ContractRegistryABI = [
   },
   {
     type: 'function',
+    name: 'MAX_BATCH_SIZE',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'acceptOwnership',
     inputs: [],
     outputs: [],
@@ -93,19 +106,14 @@ export const ContractRegistryABI = [
             internalType: 'uint64',
           },
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'operatorId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
             name: 'batchId',
-            type: 'uint256',
-            internalType: 'uint256',
+            type: 'uint64',
+            internalType: 'uint64',
+          },
+          {
+            name: 'threatCategory',
+            type: 'uint8',
+            internalType: 'uint8',
           },
         ],
       },
@@ -134,19 +142,14 @@ export const ContractRegistryABI = [
             internalType: 'uint64',
           },
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'operatorId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
             name: 'batchId',
-            type: 'uint256',
-            internalType: 'uint256',
+            type: 'uint64',
+            internalType: 'uint64',
+          },
+          {
+            name: 'threatCategory',
+            type: 'uint8',
+            internalType: 'uint8',
           },
         ],
       },
@@ -254,6 +257,11 @@ export const ContractRegistryABI = [
         type: 'bytes32[]',
         internalType: 'bytes32[]',
       },
+      {
+        name: 'threatCategories',
+        type: 'uint8[]',
+        internalType: 'uint8[]',
+      },
     ],
     outputs: [
       {
@@ -350,6 +358,12 @@ export const ContractRegistryABI = [
         indexed: false,
         internalType: 'uint256',
       },
+      {
+        name: 'threatCategory',
+        type: 'uint8',
+        indexed: false,
+        internalType: 'uint8',
+      },
     ],
     anonymous: false,
   },
@@ -428,6 +442,11 @@ export const ContractRegistryABI = [
   {
     type: 'error',
     name: 'ContractRegistry__ArrayLengthMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'ContractRegistry__BatchTooLarge',
     inputs: [],
   },
   {

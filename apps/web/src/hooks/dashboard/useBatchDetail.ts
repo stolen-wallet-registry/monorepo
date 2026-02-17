@@ -205,7 +205,7 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
         // Derive chain from first entry if batch-level is missing
         const txReportedChain =
           batchRes.transactionBatch.reportedChainCAIP2 ??
-          entriesRes.transactionInBatchs.items[0]?.caip2ChainId;
+          entriesRes.transactionInBatches.items[0]?.caip2ChainId;
 
         const batch: TransactionBatchDetail = {
           id: batchRes.transactionBatch.id,
@@ -220,7 +220,7 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
           transactionHash: batchRes.transactionBatch.transactionHash as Hash,
         };
 
-        const entries = entriesRes.transactionInBatchs.items.map<TransactionBatchEntry>((raw) => ({
+        const entries = entriesRes.transactionInBatches.items.map<TransactionBatchEntry>((raw) => ({
           id: raw.id,
           txHash: raw.txHash,
           caip2ChainId: raw.caip2ChainId,

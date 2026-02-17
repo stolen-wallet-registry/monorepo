@@ -139,6 +139,11 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Invalid signing step.',
     action: 'Please restart the registration flow.',
   },
+  '0x736d30d5': {
+    name: 'WalletRegistry__BatchTooLarge',
+    message: 'Batch exceeds maximum size of 10,000 entries.',
+    action: 'Please split into smaller batches.',
+  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TransactionRegistry Errors
@@ -224,6 +229,16 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Failed to refund excess fee.',
     action: 'Please try again or contact support.',
   },
+  '0x5fa98a5a': {
+    name: 'TransactionRegistry__BatchTooLarge',
+    message: 'Batch exceeds maximum size of 10,000 entries.',
+    action: 'Please split into smaller batches.',
+  },
+  '0x351d3c29': {
+    name: 'TransactionRegistry__InvalidTxHashLength',
+    message: 'Invalid transaction hash length.',
+    action: 'Transaction hash must be 66 characters (0x + 64 hex).',
+  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ContractRegistry Errors
@@ -248,6 +263,11 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     name: 'ContractRegistry__ArrayLengthMismatch',
     message: 'Contract and chain ID arrays must have the same length.',
     action: 'Ensure each contract has a corresponding chain ID.',
+  },
+  '0x5b743ae3': {
+    name: 'ContractRegistry__BatchTooLarge',
+    message: 'Batch exceeds maximum size of 10,000 entries.',
+    action: 'Please split into smaller batches.',
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -348,6 +368,11 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     name: 'CrossChainInbox__UnknownMessageType',
     message: 'Unknown cross-chain message type.',
     action: 'Please contact support.',
+  },
+  '0x0634f9a3': {
+    name: 'CrossChainInbox__DuplicateMessage',
+    message: 'This cross-chain message was already processed.',
+    action: 'No action needed — your registration is already complete.',
   },
 
   // ═══════════════════════════════════════════════════════════════════════════

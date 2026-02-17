@@ -27,6 +27,7 @@ library CrossChainMessage {
     /// @notice Cross-chain wallet registration payload
     /// @dev Matches FraudRegistryHub.registerFromHub parameters for direct forwarding.
     ///      Uses bytes32 identifiers for cross-blockchain compatibility.
+    // solhint-disable-next-line gas-struct-packing
     struct WalletRegistrationPayload {
         // === CAIP-10 Identity (cross-blockchain) ===
         bytes32 namespaceHash; // keccak256("eip155"), keccak256("solana"), etc.
@@ -47,6 +48,7 @@ library CrossChainMessage {
     /// @dev Includes full transaction hashes for hub-side direct storage.
     ///      dataHash = keccak256(abi.encode(transactionHashes, chainIds))
     ///      Used for signature verification - binds signature to exact data.
+    // solhint-disable-next-line gas-struct-packing
     struct TransactionBatchPayload {
         bytes32 dataHash; // Hash of (txHashes, chainIds) - signature commitment
         address reporter; // Address that submitted the registration

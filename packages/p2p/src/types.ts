@@ -4,6 +4,8 @@
 
 import { z } from 'zod';
 
+import { PROTOCOLS } from './protocols';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Zod Schemas for P2P Stream Data Validation
 // ═══════════════════════════════════════════════════════════════════════════
@@ -119,8 +121,125 @@ export type P2PStateOverTheWire = z.infer<typeof P2PStateOverTheWireSchema>;
 /** Transaction batch data transmitted over P2P streams */
 export type TransactionBatchOverTheWire = z.infer<typeof TransactionBatchOverTheWireSchema>;
 
-/** Data structure for P2P stream messages */
+/** Data structure for P2P stream messages (wire format union) */
 export type ParsedStreamData = z.infer<typeof ParsedStreamDataSchema>;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Protocol-Specific Message Schemas (Zod)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Narrow schemas for what each protocol category actually sends/receives.
+// All are structurally compatible with ParsedStreamData (the wire format).
+// Types derived via z.infer<> — use StreamMessage union on send side,
+// ParsedStreamData superset on receive side.
+
+/** Handshake message exchanged during CONNECT protocol */
+export const HandshakeMessageSchema = z
+  .object({
+    success: z.boolean().optional(),
+    message: z.string().max(1000).optional(),
+    p2p: P2PStateOverTheWireSchema.optional(),
+    form: FormStateOverTheWireSchema.optional(),
+  })
+  .strict();
+
+/** Wallet signature message sent via ACK_SIG / REG_SIG */
+export const WalletSignatureMessageSchema = z
+  .object({
+    signature: SignatureOverTheWireSchema,
+    form: FormStateOverTheWireSchema.optional(),
+    success: z.boolean().optional(),
+    message: z.string().max(1000).optional(),
+  })
+  .strict();
+
+/** Transaction signature + batch data sent via TX_ACK_SIG / TX_REG_SIG */
+export const TxSignatureMessageSchema = z
+  .object({
+    signature: SignatureOverTheWireSchema,
+    transactionBatch: TransactionBatchOverTheWireSchema,
+    form: FormStateOverTheWireSchema.optional(),
+    success: z.boolean().optional(),
+    message: z.string().max(1000).optional(),
+  })
+  .strict();
+
+/** Confirmation/receipt message sent via *_REC protocols */
+export const ConfirmationMessageSchema = z
+  .object({
+    success: z.boolean().optional(),
+    message: z.string().max(1000).optional(),
+  })
+  .strict();
+
+/** Payment notification sent via *_PAY protocols */
+export const PaymentMessageSchema = z
+  .object({
+    hash: txHashSchema.optional(),
+    success: z.boolean().optional(),
+    message: z.string().max(1000).optional(),
+    messageId: txHashSchema.optional(),
+    txChainId: z.number().int().positive().optional(),
+  })
+  .strict();
+
+/** Derived types from protocol-specific schemas */
+export type HandshakeMessage = z.infer<typeof HandshakeMessageSchema>;
+export type WalletSignatureMessage = z.infer<typeof WalletSignatureMessageSchema>;
+export type TxSignatureMessage = z.infer<typeof TxSignatureMessageSchema>;
+export type ConfirmationMessage = z.infer<typeof ConfirmationMessageSchema>;
+export type PaymentMessage = z.infer<typeof PaymentMessageSchema>;
+
+/** Union of all protocol-specific message types for send-side type safety */
+export type StreamMessage =
+  | HandshakeMessage
+  | WalletSignatureMessage
+  | TxSignatureMessage
+  | ConfirmationMessage
+  | PaymentMessage;
+
+/** Protocol-to-schema mapping for validation at receive sites */
+export const PROTOCOL_SCHEMAS: Record<string, z.ZodType> = {
+  [PROTOCOLS.CONNECT]: HandshakeMessageSchema,
+  [PROTOCOLS.ACK_SIG]: WalletSignatureMessageSchema,
+  [PROTOCOLS.ACK_REC]: ConfirmationMessageSchema,
+  [PROTOCOLS.ACK_PAY]: PaymentMessageSchema,
+  [PROTOCOLS.REG_SIG]: WalletSignatureMessageSchema,
+  [PROTOCOLS.REG_REC]: ConfirmationMessageSchema,
+  [PROTOCOLS.REG_PAY]: PaymentMessageSchema,
+  [PROTOCOLS.TX_ACK_SIG]: TxSignatureMessageSchema,
+  [PROTOCOLS.TX_ACK_REC]: ConfirmationMessageSchema,
+  [PROTOCOLS.TX_ACK_PAY]: PaymentMessageSchema,
+  [PROTOCOLS.TX_REG_SIG]: TxSignatureMessageSchema,
+  [PROTOCOLS.TX_REG_REC]: ConfirmationMessageSchema,
+  [PROTOCOLS.TX_REG_PAY]: PaymentMessageSchema,
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Type Guards
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Narrow to wallet signature message (has signature, no transactionBatch) */
+export function isWalletSignatureMessage(
+  data: ParsedStreamData
+): data is ParsedStreamData & { signature: SignatureOverTheWire } {
+  return data.signature !== undefined && data.transactionBatch === undefined;
+}
+
+/** Narrow to transaction signature message (has both signature and transactionBatch) */
+export function isTxSignatureMessage(data: ParsedStreamData): data is ParsedStreamData & {
+  signature: SignatureOverTheWire;
+  transactionBatch: TransactionBatchOverTheWire;
+} {
+  return data.signature !== undefined && data.transactionBatch !== undefined;
+}
+
+/** Narrow to payment notification (has hash) */
+export function isPaymentMessage(
+  data: ParsedStreamData
+): data is ParsedStreamData & { hash: string } {
+  return data.hash !== undefined;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Relay Configuration Types

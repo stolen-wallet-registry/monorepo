@@ -20,6 +20,26 @@ export {
   type P2PStateOverTheWire,
   type TransactionBatchOverTheWire,
   type ParsedStreamData,
+  // Protocol-specific message schemas
+  HandshakeMessageSchema,
+  WalletSignatureMessageSchema,
+  TxSignatureMessageSchema,
+  ConfirmationMessageSchema,
+  PaymentMessageSchema,
+  // Protocol-specific message types
+  type HandshakeMessage,
+  type WalletSignatureMessage,
+  type TxSignatureMessage,
+  type ConfirmationMessage,
+  type PaymentMessage,
+  // Send-side union type
+  type StreamMessage,
+  // Protocol-to-schema mapping
+  PROTOCOL_SCHEMAS,
+  // Type guards
+  isWalletSignatureMessage,
+  isTxSignatureMessage,
+  isPaymentMessage,
   // Configuration types
   type RelayConfig,
   RelayConfigurationError,

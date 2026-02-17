@@ -126,7 +126,7 @@ All registries are active and publicly searchable; submission rules differ by re
 
 2. **Stolen Transaction Registry**
    - **Who can submit:** Individuals (batch of tx hashes) + approved operators (batch)
-   - Two-phase EIP-712 registration with merkle roots
+   - Two-phase EIP-712 registration with data hash commitment
    - Used to report fraudulent transactions across chains
 
 3. **Fraudulent Contract Registry**
@@ -281,7 +281,7 @@ ThemeProvider must wrap Web3Provider so RainbowKit can access theme context at r
 | `useRegistrationStore`            | Wallet flow state, current step, tx hashes      | Yes         |
 | `useFormStore`                    | Wallet form values (registeree, relayer, flags) | Yes         |
 | `useTransactionRegistrationStore` | Transaction flow state                          | Yes         |
-| `useTransactionFormStore`         | Transaction selection + merkle data             | Yes         |
+| `useTransactionFormStore`         | Transaction selection + batch data              | Yes         |
 | `useP2PStore`                     | Peer IDs, connection status                     | Partial\*   |
 
 \*Partial persistence: peerId and partnerPeerId persist; active connection state (connectedToPeer, connectionStatus, isInitialized, errorMessage) resets on reload.
@@ -401,6 +401,44 @@ src/test/test-utils.tsx → Custom render with providers
 3. **Maintain nonce tracking** - Prevents replay attacks
 4. **Never skip deadline checks** - Expired signatures must fail
 5. **Ethereum address format** - `0x` + 40 hex characters (42 chars total)
+
+---
+
+## 1-SLOT STORAGE INVARIANT (CRITICAL)
+
+**Every registry entry struct MUST fit in exactly 1 EVM storage slot (32 bytes max).** This is enforced by forge tests that fail CI if structs grow beyond 1 slot.
+
+### Current Struct Layouts
+
+| Struct             | Fields                                                                                            | Size     | Spare    |
+| ------------------ | ------------------------------------------------------------------------------------------------- | -------- | -------- |
+| `WalletEntry`      | `uint64 registeredAt, uint64 incidentTimestamp, uint64 batchId, uint8 bridgeId, bool isSponsored` | 26 bytes | 6 bytes  |
+| `TransactionEntry` | `uint64 registeredAt, uint64 batchId, uint8 bridgeId, bool isSponsored`                           | 18 bytes | 14 bytes |
+| `ContractEntry`    | `uint64 registeredAt, uint64 batchId, uint8 threatCategory`                                       | 17 bytes | 15 bytes |
+
+### Data Separation Rules
+
+- **No `bytes32` fields in entry structs.** A single `bytes32` fills an entire slot.
+- **No chain IDs in entry structs.** Chain context is events-only. Storage keys encode identity; events encode provenance.
+- **No per-entry duplication of batch-level data.** `operatorId`, `reporter`, `dataHash` belong in batch structs or events, not entry structs.
+- **Events carry rich data; storage carries minimal data.**
+
+### Adding New Fields
+
+Any new field added to an entry struct **MUST**:
+
+1. Include a byte-count proof that the struct still fits in 32 bytes
+2. Document the proof in the PR description AND update the NatSpec comment above the struct
+3. Pass the existing `test_*EntryFitsInOneSlot` forge test
+
+### Enforcement Locations
+
+The invariant is documented in 4+ places to prevent regression:
+
+- Solidity NatSpec comments above each struct definition
+- Forge tests: `test_WalletEntryFitsInOneSlot`, `test_TransactionEntryFitsInOneSlot`, `test_ContractEntryFitsInOneSlot`
+- This CLAUDE.md section
+- `.claude/architecture/09-storage-and-events.md`
 
 ---
 

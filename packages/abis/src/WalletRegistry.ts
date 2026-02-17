@@ -27,6 +27,19 @@ export const WalletRegistryABI = [
   },
   {
     type: 'function',
+    name: 'MAX_BATCH_SIZE',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'acceptOwnership',
     inputs: [],
     outputs: [],
@@ -359,27 +372,17 @@ export const WalletRegistryABI = [
         internalType: 'struct IWalletRegistry.WalletEntry',
         components: [
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'sourceChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'messageId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
             name: 'registeredAt',
             type: 'uint64',
             internalType: 'uint64',
           },
           {
             name: 'incidentTimestamp',
+            type: 'uint64',
+            internalType: 'uint64',
+          },
+          {
+            name: 'batchId',
             type: 'uint64',
             internalType: 'uint64',
           },
@@ -415,27 +418,17 @@ export const WalletRegistryABI = [
         internalType: 'struct IWalletRegistry.WalletEntry',
         components: [
           {
-            name: 'reportedChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'sourceChainId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
-            name: 'messageId',
-            type: 'bytes32',
-            internalType: 'bytes32',
-          },
-          {
             name: 'registeredAt',
             type: 'uint64',
             internalType: 'uint64',
           },
           {
             name: 'incidentTimestamp',
+            type: 'uint64',
+            internalType: 'uint64',
+          },
+          {
+            name: 'batchId',
             type: 'uint64',
             internalType: 'uint64',
           },
@@ -849,6 +842,19 @@ export const WalletRegistryABI = [
     stateMutability: 'nonpayable',
   },
   {
+    type: 'function',
+    name: 'withdrawTo',
+    inputs: [
+      {
+        name: 'recipient',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
     type: 'event',
     name: 'BatchCreated',
     inputs: [
@@ -1154,6 +1160,11 @@ export const WalletRegistryABI = [
   {
     type: 'error',
     name: 'WalletRegistry__ArrayLengthMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'WalletRegistry__BatchTooLarge',
     inputs: [],
   },
   {

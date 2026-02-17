@@ -77,7 +77,7 @@ describe('caip2ToBytes32', () => {
 
 describe('contract compatibility', () => {
   // These tests verify that our TypeScript outputs match Solidity CAIP2.fromEIP155()
-  // If these fail, merkle proofs will be invalid on-chain
+  // If these fail, on-chain storage key derivation will produce wrong keys
 
   it('Base mainnet (8453) matches Solidity', () => {
     const expected = '0x43b48883ef7be0f98fe7f98fafb2187e42caab4063697b32816f95e09d69b3ec';

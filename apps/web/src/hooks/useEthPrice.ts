@@ -111,7 +111,7 @@ async function fetchEthPrice(): Promise<EthPriceData> {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
       logger.contract.error('CoinGecko request timed out', { timeout: REQUEST_TIMEOUT });
-      throw new Error('CoinGecko request timed out');
+      throw new Error('CoinGecko request timed out', { cause: error });
     }
     throw error;
   }

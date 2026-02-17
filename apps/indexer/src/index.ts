@@ -26,6 +26,7 @@ import {
   type Environment,
 } from '@swr/chains';
 import { type Address, type Hex } from 'viem';
+import { eq } from 'ponder';
 
 // Hub chain configuration - determined by environment
 const PONDER_ENV = (process.env.PONDER_ENV ?? 'development') as Environment;
@@ -75,27 +76,30 @@ type StatsDelta = {
   totalFraudulentContracts?: number;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Ponder's db context type is internal; using any avoids coupling to unstable Ponder internals
 async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) {
   const id = 'global';
+  const wallets = delta.walletRegistrations ?? 0;
+  const sponsored = delta.sponsored ?? 0;
+
+  // Read-then-write: Ponder processes events sequentially per chain,
+  // so no race condition is possible within a single chain's event stream.
+  // (The previous sql`column + delta` upsert pattern caused Ponder 0.16.x's
+  // hasProxy/copy utility to hit infinite recursion on drizzle column references.)
   const existing = await db.find(registryStats, { id });
 
   if (existing) {
-    // Compute new totals first
-    const newTotalWalletRegistrations =
-      existing.totalWalletRegistrations + (delta.walletRegistrations ?? 0);
-    const newSponsored = existing.sponsoredRegistrations + (delta.sponsored ?? 0);
-    const newCrossChain = existing.crossChainRegistrations + (delta.crossChain ?? 0);
-    // Direct = total wallets - sponsored (cross-chain is a subset of sponsored)
-    const newDirectRegistrations = newTotalWalletRegistrations - newSponsored;
+    const newTotalWallets = existing.totalWalletRegistrations + wallets;
+    const newSponsored = existing.sponsoredRegistrations + sponsored;
 
     await db.update(registryStats, { id }).set({
-      totalWalletRegistrations: newTotalWalletRegistrations,
+      totalWalletRegistrations: newTotalWallets,
       totalTransactionBatches: existing.totalTransactionBatches + (delta.transactionBatches ?? 0),
       totalTransactionsReported:
         existing.totalTransactionsReported + (delta.transactionsReported ?? 0),
       sponsoredRegistrations: newSponsored,
-      directRegistrations: newDirectRegistrations,
-      crossChainRegistrations: newCrossChain,
+      directRegistrations: newTotalWallets - newSponsored,
+      crossChainRegistrations: existing.crossChainRegistrations + (delta.crossChain ?? 0),
       walletSoulboundsMinted: existing.walletSoulboundsMinted + (delta.walletSoulbounds ?? 0),
       supportSoulboundsMinted: existing.supportSoulboundsMinted + (delta.supportSoulbounds ?? 0),
       totalSupportDonations: existing.totalSupportDonations + (delta.supportDonations ?? 0n),
@@ -110,19 +114,15 @@ async function updateGlobalStats(db: any, delta: StatsDelta, timestamp: bigint) 
       lastUpdated: timestamp,
     });
   } else {
-    // First entry - compute initial values
-    const totalWallets = delta.walletRegistrations ?? 0;
-    const sponsored = delta.sponsored ?? 0;
-    // Direct = total - sponsored
-    const directRegistrations = totalWallets - sponsored;
+    const direct = wallets - sponsored;
 
     await db.insert(registryStats).values({
       id,
-      totalWalletRegistrations: totalWallets,
+      totalWalletRegistrations: wallets,
       totalTransactionBatches: delta.transactionBatches ?? 0,
       totalTransactionsReported: delta.transactionsReported ?? 0,
       sponsoredRegistrations: sponsored,
-      directRegistrations,
+      directRegistrations: direct,
       crossChainRegistrations: delta.crossChain ?? 0,
       walletSoulboundsMinted: delta.walletSoulbounds ?? 0,
       supportSoulboundsMinted: delta.supportSoulbounds ?? 0,
@@ -258,6 +258,19 @@ ponder.on('WalletRegistry:BatchCreated', async ({ event, context }) => {
   const batchIdStr = batchId.toString();
   const operatorAddress = toLowerAddress(event.transaction.from);
 
+  // Derive reportedChainCAIP2 from any wallet entry in the same tx.
+  // WalletRegistered events fire before BatchCreated in the same transaction,
+  // so entries are already in the DB by the time this handler runs.
+  // Note: operator batches CAN contain entries from multiple chains. This picks
+  // an arbitrary entry's chain for display/filtering purposes. Multi-chain batches
+  // will show one of possibly many chain IDs — this is acceptable for a convenience field.
+  const walletEntries = await db.sql
+    .select({ reportedChainCAIP2: stolenWallet.reportedChainCAIP2 })
+    .from(stolenWallet)
+    .where(eq(stolenWallet.transactionHash, event.transaction.hash))
+    .limit(1);
+  const reportedChainCAIP2 = walletEntries[0]?.reportedChainCAIP2 ?? null;
+
   // Insert batch record
   await db
     .insert(walletBatch)
@@ -265,6 +278,7 @@ ponder.on('WalletRegistry:BatchCreated', async ({ event, context }) => {
       id: batchIdStr,
       operatorId,
       operator: operatorAddress,
+      reportedChainCAIP2,
       walletCount: Number(walletCount),
       registeredAt: event.block.timestamp,
       registeredAtBlock: event.block.number,
@@ -350,12 +364,24 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
   const { batchId, reporter, dataHash, transactionCount, isSponsored } = event.args;
   const { db } = context;
 
+  // Derive reportedChainCAIP2 from any transaction entry in the same tx.
+  // TransactionRegistered events fire before TransactionBatchRegistered in the same transaction.
+  // Note: batches CAN contain entries from multiple chains. This picks an arbitrary entry's
+  // chain for display/filtering. Multi-chain batches show one of many possible chain IDs.
+  const txEntries = await db.sql
+    .select({ caip2ChainId: transactionInBatch.caip2ChainId })
+    .from(transactionInBatch)
+    .where(eq(transactionInBatch.transactionHash, event.transaction.hash))
+    .limit(1);
+  const reportedChainCAIP2 = txEntries[0]?.caip2ChainId ?? null;
+
   await db
     .insert(transactionBatch)
     .values({
       id: batchId.toString(),
       dataHash,
       reporter: reporter.toLowerCase() as Address,
+      reportedChainCAIP2,
       transactionCount: Number(transactionCount),
       isSponsored,
       isOperator: false,
@@ -379,7 +405,6 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
     {
       transactionBatches: 1,
       transactionsReported: Number(transactionCount),
-      sponsored: isSponsored ? 1 : 0,
     },
     event.block.timestamp
   );
@@ -409,12 +434,23 @@ ponder.on('TransactionRegistry:TransactionBatchCreated', async ({ event, context
   const batchIdStr = batchId.toString();
   const operatorAddress = toLowerAddress(event.transaction.from);
 
+  // Derive reportedChainCAIP2 from any transaction entry in the same tx.
+  // TransactionRegistered events fire before TransactionBatchCreated in the same transaction.
+  // Note: operator batches CAN contain entries from multiple chains (see BatchCreated comment).
+  const txEntries = await db.sql
+    .select({ caip2ChainId: transactionInBatch.caip2ChainId })
+    .from(transactionInBatch)
+    .where(eq(transactionInBatch.transactionHash, event.transaction.hash))
+    .limit(1);
+  const reportedChainCAIP2 = txEntries[0]?.caip2ChainId ?? null;
+
   await db
     .insert(transactionBatch)
     .values({
       id: batchIdStr,
       dataHash: ('0x' + '0'.repeat(64)) as Hex, // No dataHash for operator batches
       reporter: operatorAddress,
+      reportedChainCAIP2,
       transactionCount: Number(transactionCount),
       isSponsored: false,
       isOperator: true,
@@ -441,7 +477,7 @@ ponder.on('TransactionRegistry:TransactionBatchCreated', async ({ event, context
 
 // ContractRegistered — fires per contract (operator batches only)
 ponder.on('ContractRegistry:ContractRegistered', async ({ event, context }) => {
-  const { identifier, reportedChainId, operatorId, batchId } = event.args;
+  const { identifier, reportedChainId, operatorId, batchId, threatCategory } = event.args;
   const { db } = context;
 
   const contractAddress = identifierToAddress(identifier);
@@ -459,6 +495,7 @@ ponder.on('ContractRegistry:ContractRegistered', async ({ event, context }) => {
       numericChainId,
       batchId: batchId.toString(),
       operator: toLowerAddress(event.transaction.from),
+      threatCategory,
       reportedAt: event.block.timestamp,
     })
     .onConflictDoNothing();
@@ -529,13 +566,15 @@ ponder.on('CrossChainInbox:TransactionBatchReceived', async ({ event, context })
   const sourceCAIP2 = hyperlaneDomainToCAIP2(origin);
   const sourceNumeric = sourceCAIP2 ? caip2ToNumericChainId(sourceCAIP2) : null;
 
+  // Note: dataHash is the committed keccak hash, NOT a batchId.
+  // The actual batchId is only known when TransactionBatchRegistered fires on the hub.
+  // Leave batchId null for cross-chain entries to avoid conflating the two.
   await db
     .insert(crossChainMessage)
     .values({
       id: messageId,
       sourceChainId: sourceNumeric ?? origin,
       targetChainId: HUB_CHAIN_ID,
-      batchId: dataHash,
       spokeTxHash: event.transaction.hash,
       status: 'received',
       receivedAt: event.block.timestamp,

@@ -29,7 +29,7 @@ export interface TxAcknowledgementParamsHub {
   trustedForwarder: Address;
   /** Signature deadline */
   deadline: bigint;
-  /** Data hash (merkle root of transaction batch) */
+  /** Data hash (keccak commitment of transaction batch) */
   dataHash: Hash;
   /** CAIP-2 chain ID as bytes32 */
   reportedChainId: Hash;
@@ -43,7 +43,7 @@ export interface TxAcknowledgementParamsHub {
 export interface TxAcknowledgementParamsSpoke {
   /** Reporter address (wallet signing the registration) */
   reporter: Address;
-  /** Data hash (merkle root of transaction batch) */
+  /** Data hash (keccak commitment of transaction batch) */
   dataHash: Hash;
   /** CAIP-2 chain ID as bytes32 */
   reportedChainId: Hash;

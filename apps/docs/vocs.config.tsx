@@ -71,6 +71,7 @@ export default defineConfig({
       text: 'Developer Guide',
       items: [
         { text: 'Local Setup', link: '/dev/setup' },
+        { text: 'Testnet Deployment', link: '/dev/testnet-deployment' },
         { text: 'Deployed Contracts', link: '/dev/contracts' },
       ],
     },

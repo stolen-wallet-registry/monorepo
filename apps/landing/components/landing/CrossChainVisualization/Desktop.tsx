@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useReducer, useCallback } from 'react';
-import { Shield, Droplets, CircleDot } from 'lucide-react';
+import { Droplets, CircleDot } from 'lucide-react';
 import {
   AnimatedBeam,
   cn,
@@ -44,6 +44,7 @@ import {
   ChainalysisLogo,
   HyperlaneLogo,
   SealTeamLogo,
+  TrmLabsLogo,
   WormholeLogo,
   GroupContainer,
   RegistryHub,
@@ -287,7 +288,8 @@ function ScreenReaderDescription() {
         <li>
           <strong>Step 4 - React to Events:</strong> Exchanges (Coinbase, Kraken, Gemini, Binance),
           wallets (MetaMask, Rainbow, Coinbase Wallet), and security services (Chainalysis, SEAL
-          Team) subscribe to registry events and receive real-time alerts to protect users.
+          Team, TRM Labs) subscribe to registry events and receive real-time alerts to protect
+          users.
         </li>
       </ol>
     </div>
@@ -709,7 +711,7 @@ export function CrossChainVisualizationDesktop({
               ref={operatorsClusterRef}
               rightAnchorRef={operatorsTopAnchorRef}
               label={showLabels ? 'Trusted Operators' : undefined}
-              labelTooltip="DAO-approved organizations that batch-submit fraud data directly to the registry. Operators bypass the two-phase signature flow, submitting wallets, transactions, and contracts in bulk. Each operator is permissioned for specific registries via capability bits."
+              labelTooltip="DAO-approved entities that batch-submit fraud data directly to the registry. Operators bypass the two-phase signature flow, submitting wallets, transactions, and contracts in bulk. Each operator is permissioned for specific registries via capability bits."
             >
               <div className="flex items-center gap-2">
                 <IconCircle label="Coinbase (Operator)" size="xs">
@@ -723,6 +725,9 @@ export function CrossChainVisualizationDesktop({
                 </IconCircle>
                 <IconCircle label="SEAL Team" size="xs">
                   <SealTeamLogo className="text-red-600" />
+                </IconCircle>
+                <IconCircle label="TRM Labs" size="xs">
+                  <TrmLabsLogo className="text-[#071C2C] dark:text-white" />
                 </IconCircle>
               </div>
             </GroupContainer>
@@ -813,8 +818,8 @@ export function CrossChainVisualizationDesktop({
                 <IconCircle label="SEAL Team" size="sm" triggerPulse={state.pulseListeners}>
                   <SealTeamLogo className="text-red-600" />
                 </IconCircle>
-                <IconCircle label="Security Firm" size="sm" triggerPulse={state.pulseListeners}>
-                  <Shield className="size-5 text-green-500" />
+                <IconCircle label="TRM Labs" size="sm" triggerPulse={state.pulseListeners}>
+                  <TrmLabsLogo className="text-[#071C2C] dark:text-white" />
                 </IconCircle>
               </div>
             </GroupContainer>

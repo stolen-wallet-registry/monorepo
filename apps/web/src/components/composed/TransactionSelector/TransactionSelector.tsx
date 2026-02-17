@@ -3,7 +3,7 @@
  *
  * Allows users to view their recent transactions and select ones
  * they want to report as fraudulent. Supports batch selection
- * with Merkle tree generation.
+ * with data hash generation for batch registration.
  */
 
 import { useCallback, useMemo } from 'react';

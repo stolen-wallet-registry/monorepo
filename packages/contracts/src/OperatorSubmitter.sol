@@ -24,8 +24,11 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // solhint-disable-next-line private-vars-leading-underscore
     uint8 private constant WALLET_CAPABILITY = RegistryCapabilities.WALLET_REGISTRY;
+    // solhint-disable-next-line private-vars-leading-underscore
     uint8 private constant TX_CAPABILITY = RegistryCapabilities.TX_REGISTRY;
+    // solhint-disable-next-line private-vars-leading-underscore
     uint8 private constant CONTRACT_CAPABILITY = RegistryCapabilities.CONTRACT_REGISTRY;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -263,22 +266,22 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
     /// @notice Register malicious contracts as an approved operator
     /// @param identifiers Array of contract identifiers (address as bytes32)
     /// @param reportedChainIds Array of CAIP-2 chain ID hashes
-    function registerContractsAsOperator(bytes32[] calldata identifiers, bytes32[] calldata reportedChainIds)
-        external
-        payable
-        whenNotPaused
-        onlyApprovedOperator(CONTRACT_CAPABILITY)
-    {
+    /// @param threatCategories Array of threat category values (0=unclassified, 1-5=defined, 6-255=future)
+    function registerContractsAsOperator(
+        bytes32[] calldata identifiers,
+        bytes32[] calldata reportedChainIds,
+        uint8[] calldata threatCategories
+    ) external payable whenNotPaused onlyApprovedOperator(CONTRACT_CAPABILITY) {
         uint256 length = identifiers.length;
         if (length == 0) revert OperatorSubmitter__EmptyBatch();
-        if (length != reportedChainIds.length) {
+        if (length != reportedChainIds.length || length != threatCategories.length) {
             revert OperatorSubmitter__ArrayLengthMismatch();
         }
 
         _collectFee();
 
         uint256 batchId = IContractRegistry(contractRegistry)
-            .registerContractsFromOperator(_getOperatorId(), identifiers, reportedChainIds);
+            .registerContractsFromOperator(_getOperatorId(), identifiers, reportedChainIds, threatCategories);
 
         emit BatchSubmitted(msg.sender, contractRegistry, batchId, uint32(length));
     }

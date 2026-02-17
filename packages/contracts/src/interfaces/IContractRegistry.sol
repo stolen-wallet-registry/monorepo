@@ -15,16 +15,20 @@ interface IContractRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Data for a registered malicious contract
+    /// @notice STORAGE INVARIANT: This struct MUST fit in 1 storage slot (32 bytes max).
+    /// Current: 17 bytes (15 spare). Any new field requires a byte-count proof.
+    /// Chain IDs and operatorId are EVENTS-ONLY — see events below.
     /// @param registeredAt Block timestamp when contract was registered
-    /// @param reportedChainId CAIP-2 chain ID hash where contract is deployed
-    /// @param operatorId Operator that registered this contract
-    /// @param batchId Batch ID this contract was part of
+    /// @param batchId Operator batch reference
+    /// @param threatCategory Threat type: 0=unclassified, 1=drainer/phishing, 2=rug pull,
+    ///        3=honeypot, 4=ponzi, 5=fake token, 6-255=reserved for future categories
     struct ContractEntry {
         uint64 registeredAt;
-        bytes32 reportedChainId;
-        bytes32 operatorId;
-        uint256 batchId;
+        uint64 batchId;
+        uint8 threatCategory;
     }
+
+    // Total: 8 + 8 + 1 = 17 bytes → 1 SLOT (15 bytes spare)
 
     /// @notice Batch registration data
     /// @param operatorId The operator who submitted this batch
@@ -44,6 +48,7 @@ interface IContractRegistry {
     error ContractRegistry__ZeroAddress();
     error ContractRegistry__OnlyOperatorSubmitter();
     error ContractRegistry__EmptyBatch();
+    error ContractRegistry__BatchTooLarge();
     error ContractRegistry__ArrayLengthMismatch();
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -54,9 +59,14 @@ interface IContractRegistry {
     /// @param identifier The contract address identifier
     /// @param reportedChainId CAIP-2 chain ID hash where contract is deployed
     /// @param operatorId Operator that registered this contract
-    /// @param batchId Batch ID this contract was part of
+    /// @param batchId Batch ID this contract was part of (uint256 in events; truncated to uint64 in ContractEntry for 1-slot packing)
+    /// @param threatCategory Threat classification (0=unclassified, 1=drainer, 2=rug pull, etc.)
     event ContractRegistered(
-        bytes32 indexed identifier, bytes32 indexed reportedChainId, bytes32 indexed operatorId, uint256 batchId
+        bytes32 indexed identifier,
+        bytes32 indexed reportedChainId,
+        bytes32 indexed operatorId,
+        uint256 batchId,
+        uint8 threatCategory
     );
 
     /// @notice Emitted when an operator batch is created
@@ -75,15 +85,19 @@ interface IContractRegistry {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Register multiple malicious contracts (OperatorSubmitter only)
-    /// @dev Single-phase registration - no acknowledgement required for operators
+    /// @dev Single-phase registration - no acknowledgement required for operators.
+    ///      Reverts with ContractRegistry__ArrayLengthMismatch if identifiers, reportedChainIds,
+    ///      and threatCategories arrays have different lengths.
     /// @param operatorId The operator's identifier
     /// @param identifiers Array of contract address identifiers
     /// @param reportedChainIds Array of CAIP-2 chain ID hashes where contracts are deployed
+    /// @param threatCategories Array of threat category values (0=unclassified, 1-5=defined, 6-255=future)
     /// @return batchId The created batch ID
     function registerContractsFromOperator(
         bytes32 operatorId,
         bytes32[] calldata identifiers,
-        bytes32[] calldata reportedChainIds
+        bytes32[] calldata reportedChainIds,
+        uint8[] calldata threatCategories
     ) external returns (uint256 batchId);
 
     // ═══════════════════════════════════════════════════════════════════════════

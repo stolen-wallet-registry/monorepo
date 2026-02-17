@@ -18,6 +18,8 @@ export interface CostBreakdownTableProps {
   isLoading?: boolean;
   /** Whether there was an error loading cost data */
   isError?: boolean;
+  /** User-friendly error message when estimation fails */
+  errorMessage?: string | null;
   /** Callback to refresh cost estimate */
   onRefresh?: () => void;
   /** Whether refresh is on cooldown */
@@ -40,6 +42,7 @@ export function CostBreakdownTable({
   costEstimate,
   isLoading = false,
   isError = false,
+  errorMessage,
   onRefresh,
   isRefreshCooldown = false,
   className,
@@ -60,8 +63,9 @@ export function CostBreakdownTable({
   // Error state
   if (isError && !costEstimate) {
     return (
-      <div className={cn('rounded-lg border bg-muted/30 p-4', className)}>
+      <div className={cn('rounded-lg border bg-muted/30 p-4 space-y-1', className)}>
         <p className="text-sm text-muted-foreground text-center">Unable to estimate costs</p>
+        {errorMessage && <p className="text-xs text-destructive text-center">{errorMessage}</p>}
       </div>
     );
   }

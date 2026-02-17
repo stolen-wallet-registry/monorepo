@@ -1,0 +1,189 @@
+# Testnet Deployment
+
+Deploy the full SWR stack to Base Sepolia (hub) and Optimism Sepolia (spoke).
+
+## Overview
+
+Two pnpm commands deploy everything:
+
+```bash
+cd packages/contracts
+pnpm deploy:testnet:hub    # All hub contracts to Base Sepolia
+pnpm deploy:testnet:spoke  # Spoke contracts to Optimism Sepolia
+```
+
+After deployment, configure trust relationships via `cast send` and fill in addresses in `@swr/chains`.
+
+## Prerequisites
+
+### Get Testnet ETH
+
+You need ETH on both testnets. Use any faucet — here are reliable options:
+
+| Chain        | Faucet                                                                                                                               |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Base Sepolia | [Alchemy Faucet](https://www.alchemy.com/faucets/base-sepolia) or [Coinbase Faucet](https://portal.cdp.coinbase.com/products/faucet) |
+| OP Sepolia   | [Alchemy Faucet](https://www.alchemy.com/faucets/optimism-sepolia) or [Superchain Faucet](https://app.optimism.io/faucet)            |
+
+Most faucets require a wallet with mainnet activity or a GitHub account. Alchemy gives 0.1 ETH per day, which is more than enough.
+
+### Get API Keys
+
+| Key                  | Where                                                                        | Purpose                               |
+| -------------------- | ---------------------------------------------------------------------------- | ------------------------------------- |
+| Alchemy API key      | [alchemy.com/apps](https://dashboard.alchemy.com/apps)                       | RPC access to Base Sepolia            |
+| Basescan API key     | [basescan.org/myapikey](https://basescan.org/myapikey)                       | Contract verification on Base Sepolia |
+| OP Etherscan API key | [optimistic.etherscan.io/myapikey](https://optimistic.etherscan.io/myapikey) | Contract verification on OP Sepolia   |
+
+### Software
+
+- Foundry (`forge`, `cast`) — [install](https://book.getfoundry.sh/getting-started/installation)
+
+## Step 1: Environment Setup
+
+Create `packages/contracts/.env.testnet` (gitignored):
+
+```bash
+# Deployer wallet private key
+PRIVATE_KEY=0x...
+
+# RPC endpoints (use your Alchemy key or any provider)
+BASE_SEPOLIA_RPC=https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
+OPTIMISM_SEPOLIA_RPC=https://sepolia.optimism.io
+
+# Etherscan API keys (for contract verification)
+BASESCAN_API_KEY=...
+OPTIMISM_ETHERSCAN_API_KEY=...
+
+# Hyperlane infrastructure (official deployed addresses — don't change these)
+HUB_HYPERLANE_MAILBOX=0x6966b0E55883d49BFB24539356a2f8A673E02039
+SPOKE_HYPERLANE_MAILBOX=0x6966b0E55883d49BFB24539356a2f8A673E02039
+SPOKE_GAS_PAYMASTER=0x28B02B97a850872C4D33C3E024fab6499ad96564
+
+# Hub chain ID
+HUB_CHAIN_ID=84532
+```
+
+## Step 2: Deploy Hub (Base Sepolia)
+
+This deploys everything to the hub chain in one shot: core registries, FeeManager (with real Chainlink ETH/USD feed), operator infrastructure, cross-chain inbox, and all soulbound contracts.
+
+```bash
+cd packages/contracts
+pnpm deploy:testnet:hub
+```
+
+:::info
+First time? Do a dry run to check everything works:
+
+```bash
+source .env.testnet
+forge script script/Deploy.s.sol:Deploy \
+  --sig "deployHub()" \
+  --rpc-url $BASE_SEPOLIA_RPC -vvvv
+```
+
+:::
+
+The output will print all deployed addresses. Save them — you'll need:
+
+- **CrossChainInbox** address (for `HUB_INBOX_ADDRESS`)
+- **SoulboundReceiver** address (for `SOULBOUND_RECEIVER`)
+- **HyperlaneAdapter** address won't appear here (that's on the spoke)
+
+## Step 3: Deploy Spoke (Optimism Sepolia)
+
+Add hub addresses to `.env.testnet` from the Step 2 output:
+
+```bash
+# Convert CrossChainInbox address to bytes32:
+#   cast --to-bytes32 0x<CROSS_CHAIN_INBOX_ADDRESS>
+HUB_INBOX_ADDRESS=0x000000000000000000000000...
+
+# SoulboundReceiver address (enables cross-chain soulbound minting)
+SOULBOUND_RECEIVER=0x...
+```
+
+Then deploy:
+
+```bash
+pnpm deploy:testnet:spoke
+```
+
+This deploys HyperlaneAdapter, SpokeRegistry, and SpokeSoulboundForwarder to OP Sepolia.
+
+## Step 4: Configure Trust on Hub
+
+The hub needs to trust the spoke's HyperlaneAdapter. Replace the placeholder addresses with your actual deployed addresses:
+
+```bash
+source .env.testnet
+
+# Get the adapter's bytes32 representation
+ADAPTER_BYTES32=$(cast --to-bytes32 0x<SPOKE_HYPERLANE_ADAPTER>)
+
+# CrossChainInbox: trust the spoke's adapter
+cast send <CROSS_CHAIN_INBOX> \
+  "setTrustedSource(uint32,bytes32,bool)" \
+  11155420 $ADAPTER_BYTES32 true \
+  --rpc-url $BASE_SEPOLIA_RPC --private-key $PRIVATE_KEY
+
+# SoulboundReceiver: trust the spoke's adapter
+cast send <SOULBOUND_RECEIVER> \
+  "setTrustedForwarder(uint32,address)" \
+  11155420 0x<SPOKE_HYPERLANE_ADAPTER> \
+  --rpc-url $BASE_SEPOLIA_RPC --private-key $PRIVATE_KEY
+```
+
+## Step 5: Verify Everything Works
+
+```bash
+source .env.testnet
+
+# Hub: check registries are wired
+cast call <FRAUD_REGISTRY_HUB> "walletRegistry()(address)" --rpc-url $BASE_SEPOLIA_RPC
+
+# Spoke: check hub chain ID
+cast call <SPOKE_REGISTRY> "hubChainId()(uint32)" --rpc-url $OPTIMISM_SEPOLIA_RPC
+
+# Trust: check adapter is trusted
+cast call <CROSS_CHAIN_INBOX> "trustedSources(uint32,bytes32)(bool)" \
+  11155420 $ADAPTER_BYTES32 --rpc-url $BASE_SEPOLIA_RPC
+
+# FeeManager: check Chainlink feed is working
+cast call <FEE_MANAGER> "getLatestPrice()(int256)" --rpc-url $BASE_SEPOLIA_RPC
+```
+
+## Step 6: Update Chain Config
+
+Fill deployed addresses into `@swr/chains` so the frontend knows where the contracts live:
+
+**`packages/chains/src/networks/base-sepolia.ts`** — Fill all `hubContracts` fields.
+
+**`packages/chains/src/networks/optimism-sepolia.ts`** — Fill all `spokeContracts` fields.
+
+Then rebuild and push to trigger a Vercel redeploy:
+
+```bash
+pnpm build
+```
+
+## Verify on Block Explorers
+
+All contracts are automatically verified during deployment (the `--verify` flag). Check them:
+
+- **Base Sepolia:** https://sepolia.basescan.org
+- **OP Sepolia:** https://sepolia-optimism.etherscan.io
+- **Hyperlane:** https://explorer.hyperlane.xyz (for cross-chain message tracking)
+
+## Indexer (Optional)
+
+The indexer is not required — the web app works without it (dashboard shows fallback states). When ready to host, see `apps/indexer/DEPLOY.md` for Railway instructions (~$10-20/mo).
+
+## Troubleshooting
+
+**"PRIVATE_KEY required for non-local deployments"** — Make sure `.env.testnet` has `PRIVATE_KEY` set and you ran `source .env.testnet` before the deploy command.
+
+**"insufficient funds"** — Get more testnet ETH from the faucets above.
+
+**Verification fails** — This is non-blocking. Contracts are deployed even if verification fails. You can verify later with `forge verify-contract`.

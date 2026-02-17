@@ -30,6 +30,7 @@ import { useP2PStore } from '@/stores/p2pStore';
 import {
   getRelayServers,
   type ParsedStreamData,
+  type StreamMessage,
   MAX_STREAM_SIZE_BYTES,
   safeJsonParse,
   ParsedStreamDataSchema,
@@ -240,11 +241,11 @@ export const getPeerConnection = async ({
  * @param protocols - Protocol(s) to use for the stream
  */
 export const passStreamData = async ({
-  streamData = {},
+  streamData,
   connection,
   protocols,
 }: {
-  streamData?: ParsedStreamData;
+  streamData: StreamMessage;
   connection: Connection;
   protocols: string[];
 }): Promise<void> => {
@@ -370,4 +371,4 @@ export const readStreamData = async (stream: Stream): Promise<ParsedStreamData> 
 
 // Re-export types for convenience
 export type { Libp2p, Connection, Stream, StreamHandler };
-export type { ParsedStreamData };
+export type { ParsedStreamData, StreamMessage };

@@ -220,12 +220,21 @@ export function HowItWorksSection() {
           <CaipCycler />
 
           <p className="mt-4 text-xs text-muted-foreground">
-            Every chain has a standard identifier format. EVM wallets use a wildcard chain reference{' '}
+            Every chain has a standard identifier format. EVM wallets use a{' '}
+            <strong className="font-semibold text-foreground">wildcard</strong> chain reference{' '}
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">
               eip155:_:0x...
             </code>{' '}
             so one registration covers every EVM chain.
           </p>
+          <a
+            href="https://github.com/ChainAgnostic/CAIPs/blob/main/CAIPs/caip-363.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-block text-xs text-muted-foreground hover:text-primary hover:underline"
+          >
+            Based on CAIP-363 (draft) — Namespace-Wide Account References
+          </a>
         </div>
       </div>
     </section>

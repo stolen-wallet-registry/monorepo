@@ -196,6 +196,11 @@ export const OperatorSubmitterABI = [
         type: 'bytes32[]',
         internalType: 'bytes32[]',
       },
+      {
+        name: 'threatCategories',
+        type: 'uint8[]',
+        internalType: 'uint8[]',
+      },
     ],
     outputs: [],
     stateMutability: 'payable',

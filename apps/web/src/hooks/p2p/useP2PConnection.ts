@@ -14,6 +14,7 @@ import {
   readStreamData,
   type ProtocolHandler,
   type ParsedStreamData,
+  type StreamMessage,
   PROTOCOLS,
 } from '@/lib/p2p';
 import { useP2PStore } from '@/stores/p2pStore';
@@ -56,7 +57,7 @@ export interface UseP2PConnectionResult {
   /** Disconnect from current partner */
   disconnect: () => Promise<void>;
   /** Send data to connected partner */
-  send: (protocols: string[], data: ParsedStreamData) => Promise<void>;
+  send: (protocols: string[], data: StreamMessage) => Promise<void>;
   /** Shutdown the P2P node */
   shutdown: () => Promise<void>;
   /** Read data from a stream */
@@ -189,8 +190,10 @@ export function useP2PConnection(options: UseP2PConnectionOptions = {}): UseP2PC
       logger.p2p.info('Disconnecting from peer');
       try {
         await connection.close();
-      } catch {
-        // Ignore close errors
+      } catch (err) {
+        logger.p2p.warn('Failed to close P2P connection', {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
       connectionRef.current = null;
     }
@@ -201,7 +204,7 @@ export function useP2PConnection(options: UseP2PConnectionOptions = {}): UseP2PC
   }, [setConnectionStatus, setPartnerPeerId, onDisconnected]);
 
   // Send data to connected partner
-  const send = useCallback(async (protocols: string[], data: ParsedStreamData) => {
+  const send = useCallback(async (protocols: string[], data: StreamMessage) => {
     const connection = connectionRef.current;
     if (!connection) {
       throw new Error('Not connected to a peer');
@@ -239,7 +242,11 @@ export function useP2PConnection(options: UseP2PConnectionOptions = {}): UseP2PC
         logger.p2p.debug('Cleaning up P2P node on unmount');
         const stopPromise = nodeRef.current.stop();
         if (stopPromise && typeof stopPromise.catch === 'function') {
-          stopPromise.catch(() => {});
+          stopPromise.catch((err: unknown) => {
+            logger.p2p.warn('Failed to stop P2P node on unmount', {
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
         }
       }
     };

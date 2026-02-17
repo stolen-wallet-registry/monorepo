@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { Shield, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import {
   cn,
   TooltipProvider,
@@ -24,6 +24,7 @@ import {
   MobileSection,
   MobileRegistryHub,
   SealTeamLogo,
+  TrmLabsLogo,
 } from './shared';
 
 import type { CrossChainVisualizationProps } from './types';
@@ -148,8 +149,8 @@ export function CrossChainVisualizationMobile({
             <IconCircle label="SEAL Team" size="sm" pulse pulseDelay={0.9}>
               <SealTeamLogo className="text-red-600" />
             </IconCircle>
-            <IconCircle label="Security" size="sm" pulse pulseDelay={1.2}>
-              <Shield className="size-5 text-green-500" />
+            <IconCircle label="TRM Labs" size="sm" pulse pulseDelay={1.2}>
+              <TrmLabsLogo className="text-[#071C2C] dark:text-white" />
             </IconCircle>
           </div>
           <span className="text-[10px] text-muted-foreground">Exchanges, Wallets, Security</span>

@@ -324,4 +324,48 @@ contract CrossChainInboxTest is Test {
         vm.prank(nonOwner);
         inboxContract.setTrustedSource(SPOKE_CHAIN_ID, spokeRegistryBytes32, true);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // IDEMPOTENCY
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Duplicate wallet registration message reverts with DuplicateMessage
+    function test_HandleWalletRegistration_RejectsDuplicate() public {
+        address wallet = makeAddr("dupeWallet");
+        bytes memory encoded = _buildWalletMessage(wallet);
+
+        // First delivery succeeds
+        mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, spokeRegistryBytes32, encoded);
+        assertTrue(walletRegistry.isWalletRegistered(wallet));
+
+        // Second delivery of identical payload reverts
+        vm.expectRevert(CrossChainInbox.CrossChainInbox__DuplicateMessage.selector);
+        mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, spokeRegistryBytes32, encoded);
+    }
+
+    /// @notice Duplicate transaction batch message reverts with DuplicateMessage
+    function test_HandleTransactionBatch_RejectsDuplicate() public {
+        bytes32 txHash = keccak256("dupeTx");
+        bytes memory encoded = _buildTxBatchMessage(txHash);
+
+        // First delivery succeeds
+        mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, spokeRegistryBytes32, encoded);
+
+        // Second delivery of identical payload reverts
+        vm.expectRevert(CrossChainInbox.CrossChainInbox__DuplicateMessage.selector);
+        mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, spokeRegistryBytes32, encoded);
+    }
+
+    /// @notice isMessageProcessed returns false before processing, true after
+    function test_IsMessageProcessed() public {
+        address wallet = makeAddr("processedCheck");
+        bytes memory encoded = _buildWalletMessage(wallet);
+        bytes32 messageId = keccak256(encoded);
+
+        assertFalse(inboxContract.isMessageProcessed(messageId), "Message should not be processed yet");
+
+        mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, spokeRegistryBytes32, encoded);
+
+        assertTrue(inboxContract.isMessageProcessed(messageId), "Message should be marked as processed");
+    }
 }

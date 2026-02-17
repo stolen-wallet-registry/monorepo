@@ -56,10 +56,10 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     bytes32 public hubInbox;
 
     /// @notice Pending wallet acknowledgements
-    mapping(address => AcknowledgementData) private pendingAcknowledgements;
+    mapping(address => AcknowledgementData) private _pendingAcknowledgements;
 
     /// @notice Pending transaction batch acknowledgements
-    mapping(address => TransactionAcknowledgementData) private pendingTxAcknowledgements;
+    mapping(address => TransactionAcknowledgementData) private _pendingTxAcknowledgements;
 
     /// @notice Nonces for replay protection
     mapping(address => uint256) public nonces;
@@ -170,7 +170,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         bytes32 reportedChainIdHash = CAIP10Evm.caip2Hash(reportedChainId);
 
         // Store acknowledgement with randomized grace period
-        pendingAcknowledgements[wallet] = AcknowledgementData({
+        _pendingAcknowledgements[wallet] = AcknowledgementData({
             trustedForwarder: trustedForwarder,
             incidentTimestamp: incidentTimestamp,
             reportedChainId: reportedChainIdHash,
@@ -249,7 +249,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         if (signer == address(0) || signer != wallet) revert SpokeRegistry__InvalidSigner();
 
         // Load and validate acknowledgement (msg.sender must be the authorized forwarder)
-        AcknowledgementData memory ack = pendingAcknowledgements[wallet];
+        AcknowledgementData memory ack = _pendingAcknowledgements[wallet];
         if (ack.trustedForwarder != msg.sender) revert SpokeRegistry__InvalidForwarder();
         if (block.number < ack.startBlock) revert SpokeRegistry__GracePeriodNotStarted();
         if (block.number >= ack.expiryBlock) revert SpokeRegistry__ForwarderExpired();
@@ -295,7 +295,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
 
         // EFFECTS: State changes before external calls (CEI pattern)
         nonces[wallet]++;
-        delete pendingAcknowledgements[wallet];
+        delete _pendingAcknowledgements[wallet];
 
         // INTERACTIONS: External calls
         bytes32 messageId =
@@ -365,7 +365,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         nonces[reporter]++;
 
         // Store acknowledgement with randomized grace period
-        pendingTxAcknowledgements[reporter] = TransactionAcknowledgementData({
+        _pendingTxAcknowledgements[reporter] = TransactionAcknowledgementData({
             trustedForwarder: msg.sender,
             dataHash: dataHash,
             reportedChainId: reportedChainId,
@@ -410,18 +410,18 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
 
     /// @inheritdoc ISpokeRegistry
     function isPending(address wallet) external view returns (bool) {
-        AcknowledgementData memory ack = pendingAcknowledgements[wallet];
+        AcknowledgementData memory ack = _pendingAcknowledgements[wallet];
         return ack.trustedForwarder != address(0) && block.number < ack.expiryBlock;
     }
 
     /// @inheritdoc ISpokeRegistry
     function getAcknowledgement(address wallet) external view returns (AcknowledgementData memory) {
-        return pendingAcknowledgements[wallet];
+        return _pendingAcknowledgements[wallet];
     }
 
     /// @inheritdoc ISpokeRegistry
     function isPendingTransactionBatch(address reporter) external view returns (bool) {
-        TransactionAcknowledgementData memory ack = pendingTxAcknowledgements[reporter];
+        TransactionAcknowledgementData memory ack = _pendingTxAcknowledgements[reporter];
         return ack.trustedForwarder != address(0) && block.number < ack.expiryBlock;
     }
 
@@ -431,7 +431,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         view
         returns (TransactionAcknowledgementData memory)
     {
-        return pendingTxAcknowledgements[reporter];
+        return _pendingTxAcknowledgements[reporter];
     }
 
     /// @inheritdoc ISpokeRegistry
@@ -596,7 +596,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
             bool isExpired
         )
     {
-        AcknowledgementData memory ack = pendingAcknowledgements[session];
+        AcknowledgementData memory ack = _pendingAcknowledgements[session];
         currentBlock = block.number;
         expiryBlock = ack.expiryBlock;
         startBlock = ack.startBlock;
@@ -616,7 +616,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
             bool isExpired
         )
     {
-        TransactionAcknowledgementData memory ack = pendingTxAcknowledgements[reporter];
+        TransactionAcknowledgementData memory ack = _pendingTxAcknowledgements[reporter];
         currentBlock = block.number;
         expiryBlock = ack.expiryBlock;
         startBlock = ack.startBlock;
@@ -683,7 +683,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         if (nonce != nonces[reporter]) revert SpokeRegistry__InvalidNonce();
 
         // Load and validate acknowledgement
-        TransactionAcknowledgementData memory ack = pendingTxAcknowledgements[reporter];
+        TransactionAcknowledgementData memory ack = _pendingTxAcknowledgements[reporter];
         if (ack.trustedForwarder != msg.sender) revert SpokeRegistry__InvalidForwarder();
         if (block.number < ack.startBlock) revert SpokeRegistry__GracePeriodNotStarted();
         if (block.number >= ack.expiryBlock) revert SpokeRegistry__ForwarderExpired();
@@ -769,7 +769,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
 
         // EFFECTS: Update state after fee validation
         nonces[reporter]++;
-        delete pendingTxAcknowledgements[reporter];
+        delete _pendingTxAcknowledgements[reporter];
 
         // INTERACTIONS: Send cross-chain message
         bytes32 messageId =

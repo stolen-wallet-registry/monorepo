@@ -91,6 +91,25 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'function',
+    name: 'isMessageProcessed',
+    inputs: [
+      {
+        name: 'messageId',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'isTrustedSource',
     inputs: [
       {
@@ -313,6 +332,11 @@ export const CrossChainInboxABI = [
       },
     ],
     anonymous: false,
+  },
+  {
+    type: 'error',
+    name: 'CrossChainInbox__DuplicateMessage',
+    inputs: [],
   },
   {
     type: 'error',

@@ -238,13 +238,7 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
     function getWalletEntry(address wallet) external view returns (IWalletRegistry.WalletEntry memory) {
         if (walletRegistry == address(0)) {
             return IWalletRegistry.WalletEntry({
-                registeredAt: 0,
-                reportedChainId: bytes32(0),
-                incidentTimestamp: 0,
-                sourceChainId: bytes32(0),
-                isSponsored: false,
-                bridgeId: 0,
-                messageId: bytes32(0)
+                registeredAt: 0, incidentTimestamp: 0, batchId: 0, bridgeId: 0, isSponsored: false
             });
         }
         return IWalletRegistry(walletRegistry).getWalletEntry(wallet);
@@ -257,15 +251,8 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
         returns (ITransactionRegistry.TransactionEntry memory)
     {
         if (transactionRegistry == address(0)) {
-            return ITransactionRegistry.TransactionEntry({
-                registeredAt: 0,
-                reportedChainId: bytes32(0),
-                reporter: address(0),
-                sourceChainId: bytes32(0),
-                isSponsored: false,
-                bridgeId: 0,
-                messageId: bytes32(0)
-            });
+            return
+                ITransactionRegistry.TransactionEntry({ registeredAt: 0, batchId: 0, bridgeId: 0, isSponsored: false });
         }
         return ITransactionRegistry(transactionRegistry).getTransactionEntry(txHash, chainId);
     }
@@ -277,9 +264,7 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
         returns (IContractRegistry.ContractEntry memory)
     {
         if (contractRegistry == address(0)) {
-            return IContractRegistry.ContractEntry({
-                registeredAt: 0, reportedChainId: bytes32(0), operatorId: bytes32(0), batchId: 0
-            });
+            return IContractRegistry.ContractEntry({ registeredAt: 0, batchId: 0, threatCategory: 0 });
         }
         return IContractRegistry(contractRegistry).getContractEntry(contractAddress, chainId);
     }

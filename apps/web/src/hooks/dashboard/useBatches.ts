@@ -106,7 +106,7 @@ export function useBatches(options: UseBatchesOptions = {}): UseBatchesResult {
       ]);
 
       if (walletsRes) {
-        for (const raw of walletsRes.walletBatchs.items) {
+        for (const raw of walletsRes.walletBatches.items) {
           batches.push({
             id: raw.id,
             type: 'wallet',
@@ -121,7 +121,7 @@ export function useBatches(options: UseBatchesOptions = {}): UseBatchesResult {
       }
 
       if (transactionsRes) {
-        for (const raw of transactionsRes.transactionBatchs.items) {
+        for (const raw of transactionsRes.transactionBatches.items) {
           batches.push({
             id: raw.id,
             type: 'transaction',
@@ -138,7 +138,7 @@ export function useBatches(options: UseBatchesOptions = {}): UseBatchesResult {
       }
 
       if (contractsRes) {
-        for (const raw of contractsRes.fraudulentContractBatchs.items) {
+        for (const raw of contractsRes.fraudulentContractBatches.items) {
           batches.push({
             id: raw.id,
             type: 'contract',
@@ -160,9 +160,9 @@ export function useBatches(options: UseBatchesOptions = {}): UseBatchesResult {
 
       logger.contract.info('Batches fetched', {
         total: batches.length,
-        wallets: walletsRes?.walletBatchs.items.length ?? 0,
-        transactions: transactionsRes?.transactionBatchs.items.length ?? 0,
-        contracts: contractsRes?.fraudulentContractBatchs.items.length ?? 0,
+        wallets: walletsRes?.walletBatches.items.length ?? 0,
+        transactions: transactionsRes?.transactionBatches.items.length ?? 0,
+        contracts: contractsRes?.fraudulentContractBatches.items.length ?? 0,
       });
 
       return batches;

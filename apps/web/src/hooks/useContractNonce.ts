@@ -63,7 +63,7 @@ export function useContractNonce(
   const isSpoke = registryType === 'spoke';
   const enabled = !!ownerAddress && !!contractAddress;
 
-  // Transaction registry needs faster polling for merkle batch workflows
+  // Transaction registry needs faster polling for batch registration workflows
   const refetchInterval = variant === 'transaction' ? 5_000 : undefined;
   const staleTime = variant === 'transaction' ? undefined : 30_000;
 

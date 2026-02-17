@@ -102,6 +102,7 @@ describe('CONTRACT_ERROR_SELECTORS coverage', () => {
     '0x39f0ba50': 'WalletRegistry__EmptyBatch',
     '0x545fd576': 'WalletRegistry__ArrayLengthMismatch',
     '0x48193183': 'WalletRegistry__InvalidStep',
+    '0x736d30d5': 'WalletRegistry__BatchTooLarge',
     // TransactionRegistry
     '0x378855ef': 'TransactionRegistry__AlreadyAcknowledged',
     '0x2015cf13': 'TransactionRegistry__DeadlineExpired',
@@ -119,11 +120,14 @@ describe('CONTRACT_ERROR_SELECTORS coverage', () => {
     '0xef0b2ab3': 'TransactionRegistry__InvalidStep',
     '0xc6eb8cd2': 'TransactionRegistry__HubTransferFailed',
     '0xef7a7943': 'TransactionRegistry__RefundFailed',
+    '0x5fa98a5a': 'TransactionRegistry__BatchTooLarge',
+    '0x351d3c29': 'TransactionRegistry__InvalidTxHashLength',
     // ContractRegistry
     '0x047c1f80': 'ContractRegistry__ZeroAddress',
     '0xc00e0835': 'ContractRegistry__OnlyOperatorSubmitter',
     '0xcd74ea8c': 'ContractRegistry__EmptyBatch',
     '0x0fc15e9d': 'ContractRegistry__ArrayLengthMismatch',
+    '0x5b743ae3': 'ContractRegistry__BatchTooLarge',
     // OperatorSubmitter
     '0x13664080': 'OperatorSubmitter__ZeroAddress',
     '0xbfd711b2': 'OperatorSubmitter__NotApprovedOperator',
@@ -144,6 +148,7 @@ describe('CONTRACT_ERROR_SELECTORS coverage', () => {
     '0x7d60d71c': 'CrossChainInbox__UntrustedSource',
     '0x249d64fe': 'CrossChainInbox__SourceChainMismatch',
     '0x2f5f5948': 'CrossChainInbox__UnknownMessageType',
+    '0x0634f9a3': 'CrossChainInbox__DuplicateMessage',
     // SpokeRegistry
     '0xc718cb18': 'SpokeRegistry__ZeroAddress',
     '0xe08eb492': 'SpokeRegistry__InvalidTimingConfig',

@@ -27,6 +27,7 @@ export {
   HyperlaneLogo,
   IconCircle,
   SealTeamLogo,
+  TrmLabsLogo,
   WormholeLogo,
 } from './icons';
 

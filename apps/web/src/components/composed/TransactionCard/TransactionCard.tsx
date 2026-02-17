@@ -21,7 +21,7 @@ import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { CostBreakdownTable } from '@/components/composed/CostBreakdownTable';
 import { CrossChainRelayProgress } from '@/components/composed/CrossChainRelayProgress';
-import { cn } from '@/lib/utils';
+import { cn, sanitizeErrorMessage } from '@/lib/utils';
 import { truncateAddress } from '@/lib/address';
 import { getChainName, getChainShortName } from '@/lib/explorer';
 import {
@@ -68,6 +68,8 @@ export interface CostEstimateData {
   data: TransactionCost | null;
   isLoading: boolean;
   isError: boolean;
+  /** Raw error from cost estimation (gas estimate or fee query) */
+  error?: Error | null;
   refetch: () => void;
 }
 
@@ -354,6 +356,7 @@ export function TransactionCard({
           costEstimate={costEstimate.data}
           isLoading={costEstimate.isLoading}
           isError={costEstimate.isError}
+          errorMessage={costEstimate.error ? sanitizeErrorMessage(costEstimate.error) : null}
           onRefresh={handleRefreshCost}
           isRefreshCooldown={refreshCooldown}
         />

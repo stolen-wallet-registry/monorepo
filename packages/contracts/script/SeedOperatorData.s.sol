@@ -299,8 +299,18 @@ contract SeedOperatorData is Script {
         console2.log("    - ", SCAM_CONTRACT_4);
         console2.log("    - ", SCAM_CONTRACT_5);
 
+        // Threat categories: 1=drainer, 2=rug pull, 3=honeypot, 4=ponzi, 5=fake token
+        uint8[] memory threatCategories = new uint8[](5);
+        threatCategories[0] = 1; // drainer
+        threatCategories[1] = 2; // rug pull
+        threatCategories[2] = 3; // honeypot
+        threatCategories[3] = 4; // ponzi
+        threatCategories[4] = 5; // fake token
+
         // Submit batch with fee
-        operatorSubmitter.registerContractsAsOperator{ value: batchFee }(contractIds, reportedChainIds);
+        operatorSubmitter.registerContractsAsOperator{ value: batchFee }(
+            contractIds, reportedChainIds, threatCategories
+        );
 
         console2.log("  Status: REGISTERED");
 
@@ -328,8 +338,14 @@ contract SeedOperatorData is Script {
         console2.log("    - ", SCAM_CONTRACT_6);
         console2.log("    - ", SCAM_CONTRACT_7);
 
+        uint8[] memory threatCategories = new uint8[](2);
+        threatCategories[0] = 1; // drainer
+        threatCategories[1] = 0; // unclassified
+
         // Submit batch with fee
-        operatorSubmitter.registerContractsAsOperator{ value: batchFee }(contractIds, reportedChainIds);
+        operatorSubmitter.registerContractsAsOperator{ value: batchFee }(
+            contractIds, reportedChainIds, threatCategories
+        );
 
         console2.log("  Status: REGISTERED");
 

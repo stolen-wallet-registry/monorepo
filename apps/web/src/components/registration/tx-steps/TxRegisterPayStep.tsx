@@ -315,7 +315,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     // NOTE: crossChainConfirmation.elapsedTime intentionally excluded - it updates
     // every second and would cause this effect to re-run, canceling the setTimeout
     // before onComplete fires. Only status changes matter for completion logic.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- elapsedTime excluded: updates every second and would cancel the setTimeout before onComplete fires
   }, [
     isConfirmed,
     hash,

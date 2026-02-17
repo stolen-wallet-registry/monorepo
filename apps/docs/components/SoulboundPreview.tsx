@@ -10,10 +10,47 @@ import { SoulboundSvgPreview } from '@swr/ui';
 
 const PREVIEW_SIZE = 320;
 
+/** Base English previews — wallet and support soulbound tokens */
 export function SoulboundPreviews() {
   return (
     <div style={{ margin: '24px 0' }}>
-      {/* English (default) previews */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '24px',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+        }}
+      >
+        <div style={{ textAlign: 'center' }}>
+          <SoulboundSvgPreview type="wallet" size={PREVIEW_SIZE} />
+          <p style={{ marginTop: 8, fontSize: '0.9em', color: '#888' }}>Wallet Soulbound (SWRW)</p>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <SoulboundSvgPreview type="support" size={PREVIEW_SIZE} />
+          <p style={{ marginTop: 8, fontSize: '0.9em', color: '#888' }}>Support Soulbound (SWRS)</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Internationalized previews — English baseline + Spanish comparison side by side */
+export function SoulboundI18nPreviews() {
+  return (
+    <div style={{ margin: '24px 0' }}>
+      {/* English baseline */}
+      <p
+        style={{
+          fontSize: '0.85em',
+          color: '#888',
+          marginBottom: '12px',
+          fontStyle: 'italic',
+          textAlign: 'center',
+        }}
+      >
+        English (default)
+      </p>
       <div
         style={{
           display: 'flex',
@@ -33,7 +70,7 @@ export function SoulboundPreviews() {
         </div>
       </div>
 
-      {/* Internationalized (Spanish) previews */}
+      {/* Spanish comparison */}
       <p
         style={{
           fontSize: '0.85em',
@@ -43,7 +80,7 @@ export function SoulboundPreviews() {
           textAlign: 'center',
         }}
       >
-        Internationalized example — Spanish browser renders localized text below English
+        browser configured for Spanish — localized text renders below English
       </p>
       <div
         style={{

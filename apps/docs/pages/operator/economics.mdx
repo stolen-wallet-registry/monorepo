@@ -3,13 +3,15 @@ import { GasCalculator } from '../../components/GasCalculator';
 
 # Economics & Gas Analysis
 
-SWR stores every registration as a permanent on-chain entry - not just a hash or batch summary, but a full struct with chain ID, reporter, timestamp, and metadata. On Ethereum L1, this would be prohibitively expensive. On Base, it costs fractions of a cent.
+SWR stores every registration as a permanent on-chain entry. Each entry struct is optimized to fit in a single EVM storage slot (17-26 bytes depending on registry type), containing only the fields needed for on-chain lookups. Rich provenance data (chain IDs, reporters, message IDs) is emitted in events for indexer consumption. On Ethereum L1, even this minimal storage would add up. On Base, it costs fractions of a cent.
 
 ## L2 Storage Economics
 
-The fundamental design decision: store every entry on-chain as a full struct rather than relying on off-chain aggregation. L2 gas economics make per-entry storage practical.
+The fundamental design decision: store every entry on-chain as a single-slot struct rather than relying on off-chain aggregation. Each entry occupies exactly one storage slot (WalletEntry: 26 bytes, TransactionEntry: 18 bytes, ContractEntry: 17 bytes). L2 gas economics make per-entry storage practical.
 
 ### Base Network Specifications
+
+_As of February 2026. Check [BaseScan](https://basescan.org) for current values._
 
 | Parameter           | Value       | Source                       |
 | ------------------- | ----------- | ---------------------------- |
@@ -23,11 +25,11 @@ The fundamental design decision: store every entry on-chain as a full struct rat
 
 Each entry in a batch writes one storage struct and emits one event:
 
-| Operation                 | Gas         | What it does                                     |
-| ------------------------- | ----------- | ------------------------------------------------ |
-| New storage slot (SSTORE) | ~20,000     | Write WalletEntry/TransactionEntry/ContractEntry |
-| Event emission            | ~1,500      | WalletRegistered / TransactionRegistered / etc.  |
-| **Per-entry total**       | **~21,500** |                                                  |
+| Operation                 | Gas         | What it does                                    |
+| ------------------------- | ----------- | ----------------------------------------------- |
+| New storage slot (SSTORE) | ~20,000     | Write one entry struct (1 slot per entry)       |
+| Event emission            | ~1,500      | WalletRegistered / TransactionRegistered / etc. |
+| **Per-entry total**       | **~21,500** |                                                 |
 
 Batch overhead adds ~50,000 gas for the summary event and metadata storage (one-time per batch).
 
@@ -45,7 +47,9 @@ L1 data posting costs (EIP-4844 blobs) are not included as they vary significant
 
 ## Why Base?
 
-SWR uses Base as the hub chain for settlement and operator submissions.
+SWR uses Base as the hub chain for settlement and operator submissions. The core reason: **gas economics make single-slot on-chain storage feasible.**
+
+SWR's design stores every entry fully on-chain — one EVM storage slot per entry (17-26 bytes). On Ethereum L1, this would cost dollars per entry. On Base, it costs fractions of a cent. This makes a fully on-chain fraud registry practical at any scale, from individual self-attestations to operator batches of thousands of entries.
 
 | Factor               | Base                                                                            |
 | -------------------- | ------------------------------------------------------------------------------- |
@@ -53,9 +57,9 @@ SWR uses Base as the hub chain for settlement and operator submissions.
 | Monthly transactions | Tens of millions (check [BaseScan](https://basescan.org/chart) for current)     |
 | Block time           | ~2 seconds                                                                      |
 | Transaction cost     | Sub-cent (varies with L1 blob fees)                                             |
-| Ecosystem            | Coinbase (key operator target)                                                  |
+| Stack                | OP Stack (Optimism Superchain ecosystem)                                        |
 
-Coinbase ecosystem alignment is strategic. If Coinbase becomes an operator (the ideal scenario), their infrastructure already runs on Base. Minimizing friction for the highest-value potential operator is worth optimizing for.
+Single-slot storage also means the registry is **fully queryable on-chain**. Any smart contract can call `isRegistered(address)` and get a boolean back in the same transaction — enabling downstream contracts (off-ramps, bridges, DeFi protocols) to gate operations based on fraud status. Alternative approaches like merkle root storage or SSTORE2/SSTORE3 blob packing would make data available to indexers and off-chain consumers, but contracts couldn't ask "is this wallet stolen?" without off-chain proof submission. Per-entry storage on an L2 where it costs fractions of a cent is the only design that gives you both on-chain composability and practical economics.
 
 ## Protocol Fee Structure
 
@@ -107,7 +111,7 @@ Use the calculator above to compare costs for your specific batch size and curre
 
 ## Fee Distribution
 
-Fees collected by the `OperatorSubmitter` are forwarded to a configurable `feeRecipient` address. The planned distribution uses the Splits protocol:
+Fees collected by the `OperatorSubmitter` are forwarded to a configurable `feeRecipient` address. The planned distribution will use the [Splits protocol](https://splits.org/):
 
 <Mermaid
   chart={`
@@ -129,7 +133,7 @@ The exact split ratios are governance-controlled. The intent is to fund:
 
 Why would an exchange pay a flat fee per batch to submit data?
 
-**Shared intelligence.** When Coinbase reports a stolen wallet, Kraken and Binance benefit. When Kraken reports one, Coinbase benefits. The cost of NOT sharing - processing withdrawals to known stolen wallets - far exceeds a flat batch fee.
+**Shared intelligence.** When one exchange reports a stolen wallet, every other exchange, wallet, and off-ramp benefits. The cost of NOT sharing — processing withdrawals to known stolen wallets — far exceeds a flat batch fee.
 
 **Regulatory signaling.** Demonstrating active fraud prevention to regulators. Submitting to a public, verifiable registry is stronger evidence than internal-only systems.
 
@@ -143,19 +147,19 @@ The long-term vision is EIP-4337 Account Abstraction integration where operators
 
 <Mermaid chart={`
 sequenceDiagram
-    participant U as User on Coinbase.com
-    participant CB as Coinbase Widget
-    participant PM as Coinbase Paymaster
+    participant U as User on Exchange
+    participant EX as Exchange Widget
+    participant PM as Operator Paymaster
     participant SWR as SWR Contracts
 
-    U->>CB: "My wallet was stolen"
-    CB->>U: Present EIP-712 signature request
-    U->>CB: Sign acknowledgement
-    Note over CB: Grace period (~2 min)
-    CB->>U: Present second signature request
-    U->>CB: Sign registration
-    CB->>PM: Bundle with Paymaster sponsorship
-    PM->>SWR: Submit registration (Coinbase pays gas + fee)
+    U->>EX: "My wallet was stolen"
+    EX->>U: Present EIP-712 signature request
+    U->>EX: Sign acknowledgement
+    Note over EX: Grace period (~2 min)
+    EX->>U: Present second signature request
+    U->>EX: Sign registration
+    EX->>PM: Bundle with Paymaster sponsorship
+    PM->>SWR: Submit registration (operator pays gas + fee)
     SWR-->>U: Wallet registered. Zero cost to user.
 
 `} />
