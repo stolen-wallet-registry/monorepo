@@ -93,6 +93,21 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
         </div>
       )}
 
+      {!isLoading && !signatureData && errorMessage && (
+        <Alert variant="destructive" role="alert">
+          <AlertDescription className="flex items-center justify-between">
+            <span>{errorMessage}</span>
+            <button
+              type="button"
+              className="text-sm font-medium underline hover:no-underline"
+              onClick={handleSign}
+            >
+              Try again
+            </button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {!isLoading && signatureData && (
         <SignatureCard
           type="registration"

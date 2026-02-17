@@ -103,8 +103,15 @@ export {
   type ExplorerLinkType,
 } from './components/explorer-link';
 
-// Bridge logos
-export { HyperlaneLogo, WormholeLogo, type BridgeLogoProps } from './components/bridge-logos';
+// Logos (bridges + security firms)
+export {
+  HyperlaneLogo,
+  WormholeLogo,
+  ChainalysisLogo,
+  SealTeamLogo,
+  TrmLabsLogo,
+  type BrandLogoProps,
+} from './components/logos';
 
 // Soulbound token preview
 export {

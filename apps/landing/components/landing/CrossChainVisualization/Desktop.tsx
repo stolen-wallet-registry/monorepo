@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useReducer, useCallback } from 'react';
-import { Shield, Droplets, CircleDot } from 'lucide-react';
+import { Droplets, CircleDot } from 'lucide-react';
 import {
   AnimatedBeam,
   cn,
@@ -44,6 +44,7 @@ import {
   ChainalysisLogo,
   HyperlaneLogo,
   SealTeamLogo,
+  TrmLabsLogo,
   WormholeLogo,
   GroupContainer,
   RegistryHub,
@@ -287,7 +288,8 @@ function ScreenReaderDescription() {
         <li>
           <strong>Step 4 - React to Events:</strong> Exchanges (Coinbase, Kraken, Gemini, Binance),
           wallets (MetaMask, Rainbow, Coinbase Wallet), and security services (Chainalysis, SEAL
-          Team) subscribe to registry events and receive real-time alerts to protect users.
+          Team, TRM Labs) subscribe to registry events and receive real-time alerts to protect
+          users.
         </li>
       </ol>
     </div>
@@ -724,6 +726,9 @@ export function CrossChainVisualizationDesktop({
                 <IconCircle label="SEAL Team" size="xs">
                   <SealTeamLogo className="text-red-600" />
                 </IconCircle>
+                <IconCircle label="TRM Labs" size="xs">
+                  <TrmLabsLogo className="text-[#071C2C] dark:text-white" />
+                </IconCircle>
               </div>
             </GroupContainer>
           </div>
@@ -813,8 +818,8 @@ export function CrossChainVisualizationDesktop({
                 <IconCircle label="SEAL Team" size="sm" triggerPulse={state.pulseListeners}>
                   <SealTeamLogo className="text-red-600" />
                 </IconCircle>
-                <IconCircle label="Security Firm" size="sm" triggerPulse={state.pulseListeners}>
-                  <Shield className="size-5 text-green-500" />
+                <IconCircle label="TRM Labs" size="sm" triggerPulse={state.pulseListeners}>
+                  <TrmLabsLogo className="text-[#071C2C] dark:text-white" />
                 </IconCircle>
               </div>
             </GroupContainer>
