@@ -27,7 +27,7 @@ const OPERATOR_FEATURES = [
 
 const POTENTIAL_OPERATORS = [
   { name: 'Exchanges', examples: 'Coinbase, Kraken, Binance, Gemini' },
-  { name: 'Security Firms', examples: 'Chainalysis, SEAL Team, Elliptic, TRM Labs' },
+  { name: 'Security Firms', examples: 'Chainalysis, SEAL Team, TRM Labs, Groom Lake' },
   { name: 'Wallets', examples: 'MetaMask, Rainbow, Ledger' },
   { name: 'Protocols & DAOs', examples: 'Uniswap, Aave, MakerDAO' },
 ];

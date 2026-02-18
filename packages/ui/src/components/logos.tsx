@@ -176,3 +176,28 @@ export function TrmLabsLogo({ className, title = 'TRM Labs' }: BrandLogoProps) {
     </svg>
   );
 }
+
+/**
+ * Groom Lake Logo - angular geometric mark with three facets.
+ * Three pieces arranged upper-right with empty lower-left, separated by concave angular cuts.
+ */
+export function GroomLakeLogo({ className, title = 'Groom Lake' }: BrandLogoProps) {
+  const titleId = useId();
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      className={cn('size-5', className)}
+      fill="currentColor"
+      role="img"
+      aria-labelledby={titleId}
+    >
+      <title id={titleId}>{title}</title>
+      {/* Upper-left facet */}
+      <path d="M 15 8 L 52 8 C 49 22 43 34 36 44 C 29 47 22 50 15 53 Z" />
+      {/* Upper-right facet */}
+      <path d="M 57 8 L 88 8 L 88 48 C 72 46 56 41 41 46 C 47 36 53 24 57 8 Z" />
+      {/* Lower-right facet */}
+      <path d="M 41 54 C 57 53 76 54 88 55 L 88 92 L 35 92 C 36 76 38 62 41 54 Z" />
+    </svg>
+  );
+}

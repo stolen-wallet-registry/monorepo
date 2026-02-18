@@ -110,6 +110,7 @@ export {
   ChainalysisLogo,
   SealTeamLogo,
   TrmLabsLogo,
+  GroomLakeLogo,
   type BrandLogoProps,
 } from './components/logos';
 
@@ -141,6 +142,7 @@ export {
   NetworkLinea,
   NetworkGnosis,
   NetworkCelo,
+  NetworkInk,
   // Network icons - L1s
   NetworkBinanceSmartChain,
   NetworkSolana,

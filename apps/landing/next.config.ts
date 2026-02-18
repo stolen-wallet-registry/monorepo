@@ -7,10 +7,12 @@ const nextConfig: NextConfig = {
   // Transpile @swr packages for proper monorepo support
   transpilePackages: ['@swr/ui', '@swr/abis'],
 
-  // Experimental features disabled - optimizeCss requires 'critters' package
-  // experimental: {
-  //   optimizeCss: true,
-  // },
+  experimental: {
+    // Transform barrel re-exports into direct imports.
+    // @web3icons/react has 2,143 named exports in one barrel file — without this,
+    // Next.js resolves/parses ALL of them even though we use ~20 icons.
+    optimizePackageImports: ['@web3icons/react', '@swr/ui', 'lucide-react'],
+  },
 };
 
 export default nextConfig;
