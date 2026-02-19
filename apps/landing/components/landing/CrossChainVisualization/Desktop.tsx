@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useEffect, useState, useReducer, useCallback } from 'react';
-import { CircleDot } from 'lucide-react';
 import {
   AnimatedBeam,
   cn,
@@ -16,6 +15,7 @@ import {
   NetworkGnosis,
   NetworkCelo,
   NetworkInk,
+  NetworkWorld,
   // Network icons - L1s
   NetworkBinanceSmartChain,
   NetworkSolana,
@@ -43,7 +43,7 @@ import {
   IconCircle,
   BridgeIcon,
   ChainalysisLogo,
-  GroomLakeLogo,
+  GroomLakePngLogo,
   HyperlaneLogo,
   SealTeamLogo,
   TrmLabsLogo,
@@ -593,7 +593,7 @@ export function CrossChainVisualizationDesktop({
                   <NetworkInk variant="branded" className="size-5" />
                 </IconCircle>
                 <IconCircle ref={worldRef} label="World Chain" size="xs">
-                  <CircleDot className="size-4 text-black dark:text-white" />
+                  <NetworkWorld variant="branded" className="size-5" />
                 </IconCircle>
               </div>
               {/* Static connections inside the container */}
@@ -732,7 +732,7 @@ export function CrossChainVisualizationDesktop({
                   <TrmLabsLogo className="text-[#071C2C] dark:text-white" />
                 </IconCircle>
                 <IconCircle label="Groom Lake" size="xs">
-                  <GroomLakeLogo className="text-[#071C2C] dark:text-white" />
+                  <GroomLakePngLogo />
                 </IconCircle>
               </div>
             </GroupContainer>
@@ -827,7 +827,7 @@ export function CrossChainVisualizationDesktop({
                   <TrmLabsLogo className="text-[#071C2C] dark:text-white" />
                 </IconCircle>
                 <IconCircle label="Groom Lake" size="sm" triggerPulse={state.pulseListeners}>
-                  <GroomLakeLogo className="text-[#071C2C] dark:text-white" />
+                  <GroomLakePngLogo />
                 </IconCircle>
               </div>
             </GroupContainer>

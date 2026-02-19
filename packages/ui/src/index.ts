@@ -143,6 +143,7 @@ export {
   NetworkGnosis,
   NetworkCelo,
   NetworkInk,
+  NetworkWorld,
   // Network icons - L1s
   NetworkBinanceSmartChain,
   NetworkSolana,

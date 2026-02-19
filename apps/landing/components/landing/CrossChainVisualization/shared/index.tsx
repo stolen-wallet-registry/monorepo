@@ -24,7 +24,7 @@ export {
 export {
   BridgeIcon,
   ChainalysisLogo,
-  GroomLakeLogo,
+  GroomLakePngLogo,
   HyperlaneLogo,
   IconCircle,
   SealTeamLogo,

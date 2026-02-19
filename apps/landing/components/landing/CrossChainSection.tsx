@@ -31,19 +31,31 @@ export function CrossChainSection() {
             startOnView
             once
           >
-            Fraud data flows from any chain to a unified on-chain registry, then broadcasts to
-            exchanges, wallets, and security tools worldwide. EVM wallet entries use a wildcard key
-            so one registration covers every EVM chain.
+            The registry stores lightweight fraud records in a chain-agnostic format based on
+            CAIP-10 and the CAIP-363 draft for namespace-wide account references, giving tracing
+            tools and off-ramps a single source of truth to identify and track fraudulent funds
+            across networks.
           </TextAnimate>
-          <a
-            href="https://standards.chainagnostic.org/CAIPs/caip-10"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-          >
-            Learn about CAIP-10 address format
-            <ExternalLink className="size-3.5" />
-          </a>
+          <div className="mt-3 flex flex-col items-center gap-1.5">
+            <a
+              href="https://standards.chainagnostic.org/CAIPs/caip-10"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+            >
+              CAIP-10 address format
+              <ExternalLink className="size-3.5" />
+            </a>
+            <a
+              href="https://github.com/ChainAgnostic/CAIPs/pull/363"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+            >
+              CAIP-363 namespace-wide references (draft)
+              <ExternalLink className="size-3.5" />
+            </a>
+          </div>
         </div>
 
         {/* Visualization */}

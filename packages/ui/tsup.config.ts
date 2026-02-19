@@ -12,6 +12,13 @@ export default defineConfig({
     'tailwindcss',
     // Externalize all @radix-ui packages
     /^@radix-ui\//,
+    // Externalize large icon/animation libraries so consuming apps can
+    // tree-shake them via Next.js optimizePackageImports instead of
+    // bundling everything into a single fat @swr/ui dist file.
+    '@web3icons/react',
+    /^@web3icons\//,
+    'lucide-react',
+    'motion',
   ],
   // Banner required because tsup bundles all components into single file,
   // losing source-level "use client" directives. Next.js only recognizes

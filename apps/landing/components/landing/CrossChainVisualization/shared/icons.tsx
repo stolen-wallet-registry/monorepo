@@ -12,7 +12,6 @@ import {
   ChainalysisLogo,
   SealTeamLogo,
   TrmLabsLogo,
-  GroomLakeLogo,
 } from '@swr/ui';
 
 import { BEAM_DURATION } from './constants';
@@ -149,4 +148,5 @@ export const BridgeIcon = forwardRef<
 BridgeIcon.displayName = 'BridgeIcon';
 
 // Re-export all logos from @swr/ui for convenience
-export { HyperlaneLogo, WormholeLogo, ChainalysisLogo, SealTeamLogo, TrmLabsLogo, GroomLakeLogo };
+export { HyperlaneLogo, WormholeLogo, ChainalysisLogo, SealTeamLogo, TrmLabsLogo };
+export { GroomLakePngLogo } from './GroomLakePng';
