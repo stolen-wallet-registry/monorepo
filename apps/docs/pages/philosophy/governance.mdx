@@ -206,6 +206,42 @@ The registry uses **Ownable2Step** pattern:
 3. Prevents accidental transfers
 4. Safe for DAO transition
 
+### Timelock on Trust-Boundary Changes
+
+All contracts that control trust-critical configuration inherit from **TimelockOwnable**, which enforces a **2-day activation delay** on administrative changes after initial deployment.
+
+**Why this matters:** Without a timelock, a compromised owner key could silently swap the hub's wallet registry to a malicious contract, trust a rogue cross-chain source, or approve a sham operator — all in a single transaction. Users and monitoring systems would have no warning and no time to react.
+
+The 2-day delay creates an **exit window** — the same pattern used by Compound, Uniswap governance, and Optimism. When the owner proposes a change, it's visible on-chain immediately but cannot take effect for 48 hours. This gives:
+
+- Users time to see the pending change and stop interacting if they disagree
+- Monitoring services time to alert on unexpected proposals
+- The community time to coordinate a response
+
+**How it works:**
+
+1. **During deployment** — immediate setters wire contracts together (no delay needed since nothing is live yet)
+2. **`completeSetup()`** — irreversibly locks the immediate setters
+3. **After setup** — all trust-boundary changes require `propose` → wait 2 days → `activate`
+
+The owner can cancel a pending proposal at any time via `cancelAction()`.
+
+**What's timelocked:**
+
+| Contract          | Timelocked Functions                                |
+| ----------------- | --------------------------------------------------- |
+| FraudRegistryHub  | Changing wallet, transaction, contract registries and inbox |
+| CrossChainInbox   | Adding or removing trusted cross-chain sources      |
+| OperatorRegistry  | Approving new operators                             |
+| BaseSoulbound     | Granting or revoking minter authorization           |
+| SoulboundReceiver | Changing trusted cross-chain forwarders             |
+
+**What stays immediate (by design):**
+
+- **`revokeOperator`** — revoking a bad actor is an emergency action; delaying it helps the attacker
+- **`pause` / `unpause`** — safety mechanisms that must act instantly
+- **`setFeeRecipient`** — changing fee destination doesn't affect trust boundaries
+
 ### Emergency Powers
 
 For critical security issues:
