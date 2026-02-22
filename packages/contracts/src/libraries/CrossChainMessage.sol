@@ -127,8 +127,8 @@ library CrossChainMessage {
         pure
         returns (WalletRegistrationPayload memory payload)
     {
-        // Validate minimum length (12 fields × 32 bytes = 384 bytes)
-        if (data.length < 384) revert CrossChainMessage__InvalidMessageLength();
+        // Wallet messages are fixed-size: 12 fields × 32 bytes = 384 bytes exactly
+        if (data.length != 384) revert CrossChainMessage__InvalidMessageLength();
 
         // Validate header
         uint8 version = abi.decode(data[0:32], (uint8));

@@ -22,6 +22,19 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'function',
+    name: 'ACTIVATION_DELAY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'BRIDGE_ID',
     inputs: [],
     outputs: [
@@ -42,6 +55,29 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'function',
+    name: 'activateTrustedSource',
+    inputs: [
+      {
+        name: 'chainId',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'spokeRegistry',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'trusted',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'bridgeId',
     inputs: [],
     outputs: [
@@ -52,6 +88,26 @@ export const CrossChainInboxABI = [
       },
     ],
     stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    name: 'cancelAction',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'completeSetup',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -160,6 +216,25 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'function',
+    name: 'pendingActivations',
+    inputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'pendingOwner',
     inputs: [],
     outputs: [
@@ -170,6 +245,29 @@ export const CrossChainInboxABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'proposeTrustedSource',
+    inputs: [
+      {
+        name: 'chainId',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'spokeRegistry',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: 'trusted',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -203,6 +301,19 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'function',
+    name: 'setupComplete',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'transferOwnership',
     inputs: [
       {
@@ -213,6 +324,51 @@ export const CrossChainInboxABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'event',
+    name: 'ActionActivated',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionCancelled',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionProposed',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'activationTime',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
   },
   {
     type: 'event',
@@ -250,6 +406,12 @@ export const CrossChainInboxABI = [
         internalType: 'address',
       },
     ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'SetupCompleted',
+    inputs: [],
     anonymous: false,
   },
   {
@@ -404,5 +566,25 @@ export const CrossChainInboxABI = [
         internalType: 'address',
       },
     ],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__AlreadyPending',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__NotProposed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupAlreadyComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__TooEarly',
+    inputs: [],
   },
 ] as const;

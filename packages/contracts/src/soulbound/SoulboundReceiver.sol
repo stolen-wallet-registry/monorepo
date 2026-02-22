@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { TimelockOwnable } from "../libraries/TimelockOwnable.sol";
 import { IMessageRecipient } from "@hyperlane-xyz/core/contracts/interfaces/IMessageRecipient.sol";
 import { ISoulboundReceiver } from "../interfaces/ISoulboundReceiver.sol";
 import { WalletSoulbound } from "./WalletSoulbound.sol";
@@ -12,7 +13,7 @@ import { SupportSoulbound } from "./SupportSoulbound.sol";
 /// @notice Hub chain receiver for cross-chain soulbound mint requests
 /// @dev Implements Hyperlane's IMessageRecipient to receive messages from spoke chains.
 ///      Validates trusted forwarders and executes mints on soulbound contracts.
-contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, Ownable2Step {
+contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -79,6 +80,12 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, Ownable2Ste
         // Validate sender is trusted forwarder for this origin
         address expectedForwarder = _trustedForwarders[_origin];
         address actualSender = address(uint160(uint256(_sender)));
+
+        // Reject non-canonical sender encoding (defense-in-depth for multi-bridge support)
+        if (bytes32(uint256(uint160(actualSender))) != _sender) {
+            revert SoulboundReceiver__NonCanonicalSender();
+        }
+
         if (actualSender != expectedForwarder || expectedForwarder == address(0)) {
             revert SoulboundReceiver__UntrustedForwarder();
         }
@@ -131,7 +138,24 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, Ownable2Ste
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc ISoulboundReceiver
-    function setTrustedForwarder(uint32 domain, address forwarder) external onlyOwner {
+    /// @dev Immediate during initial setup, timelocked after completeSetup()
+    function setTrustedForwarder(uint32 domain, address forwarder) external onlyOwner onlyDuringSetup {
+        _trustedForwarders[domain] = forwarder;
+        emit TrustedForwarderUpdated(domain, forwarder);
+    }
+
+    /// @notice Propose a trusted forwarder change (2-day delay)
+    /// @param domain Hyperlane domain ID
+    /// @param forwarder Address of the forwarder contract
+    function proposeTrustedForwarder(uint32 domain, address forwarder) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setTrustedForwarder", domain, forwarder)));
+    }
+
+    /// @notice Activate a previously proposed trusted forwarder change
+    /// @param domain Hyperlane domain ID
+    /// @param forwarder Address of the forwarder contract
+    function activateTrustedForwarder(uint32 domain, address forwarder) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setTrustedForwarder", domain, forwarder)));
         _trustedForwarders[domain] = forwarder;
         emit TrustedForwarderUpdated(domain, forwarder);
     }

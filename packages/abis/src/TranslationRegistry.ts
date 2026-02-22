@@ -12,6 +12,32 @@ export const TranslationRegistryABI = [
   },
   {
     type: 'function',
+    name: 'MAX_LANGUAGES',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'MAX_STRING_LENGTH',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'acceptOwnership',
     inputs: [],
     outputs: [],
@@ -214,6 +240,19 @@ export const TranslationRegistryABI = [
   },
   {
     type: 'function',
+    name: 'removeLanguage',
+    inputs: [
+      {
+        name: 'languageCode',
+        type: 'string',
+        internalType: 'string',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'renounceOwnership',
     inputs: [],
     outputs: [],
@@ -273,6 +312,19 @@ export const TranslationRegistryABI = [
   {
     type: 'event',
     name: 'LanguageAdded',
+    inputs: [
+      {
+        name: 'languageCode',
+        type: 'string',
+        indexed: true,
+        internalType: 'string',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'LanguageRemoved',
     inputs: [
       {
         name: 'languageCode',
@@ -352,6 +404,17 @@ export const TranslationRegistryABI = [
   },
   {
     type: 'error',
+    name: 'LanguageNotFound',
+    inputs: [
+      {
+        name: 'languageCode',
+        type: 'string',
+        internalType: 'string',
+      },
+    ],
+  },
+  {
+    type: 'error',
     name: 'LanguageNotSupported',
     inputs: [
       {
@@ -360,6 +423,11 @@ export const TranslationRegistryABI = [
         internalType: 'string',
       },
     ],
+  },
+  {
+    type: 'error',
+    name: 'MaxLanguagesReached',
+    inputs: [],
   },
   {
     type: 'error',
@@ -382,5 +450,10 @@ export const TranslationRegistryABI = [
         internalType: 'address',
       },
     ],
+  },
+  {
+    type: 'error',
+    name: 'StringTooLong',
+    inputs: [],
   },
 ] as const;

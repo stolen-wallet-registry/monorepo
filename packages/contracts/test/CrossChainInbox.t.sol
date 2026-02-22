@@ -136,7 +136,8 @@ contract CrossChainInboxTest is Test {
     function test_HandleWalletRegistration_Success() public {
         address wallet = makeAddr("crossChainWallet");
         bytes memory encoded = _buildWalletMessage(wallet);
-        bytes32 expectedMessageId = keccak256(encoded);
+        // Canonical messageId: keccak256(abi.encode(struct))
+        bytes32 expectedMessageId = _canonicalWalletMessageId(wallet);
 
         vm.expectEmit(true, true, false, true);
         emit CrossChainInbox.WalletRegistrationReceived(
@@ -199,8 +200,9 @@ contract CrossChainInboxTest is Test {
     function test_HandleTransactionBatch_Success() public {
         bytes32 txHash = keccak256("crossChainTx");
         bytes memory encoded = _buildTxBatchMessage(txHash);
+        // Canonical messageId from struct
+        bytes32 expectedMessageId = _canonicalTxBatchMessageId(txHash);
 
-        bytes32 expectedMessageId = keccak256(encoded);
         address reporter = makeAddr("reporter");
 
         vm.expectEmit(true, true, false, true);
@@ -360,12 +362,56 @@ contract CrossChainInboxTest is Test {
     function test_IsMessageProcessed() public {
         address wallet = makeAddr("processedCheck");
         bytes memory encoded = _buildWalletMessage(wallet);
-        bytes32 messageId = keccak256(encoded);
+        // Canonical messageId from struct, not raw bytes
+        bytes32 messageId = _canonicalWalletMessageId(wallet);
 
         assertFalse(inboxContract.isMessageProcessed(messageId), "Message should not be processed yet");
 
         mailbox.simulateReceive(address(inboxContract), SPOKE_CHAIN_ID, spokeRegistryBytes32, encoded);
 
         assertTrue(inboxContract.isMessageProcessed(messageId), "Message should be marked as processed");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CANONICAL MESSAGE ID HELPERS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev Compute canonical messageId for a wallet registration (matches inbox logic)
+    function _canonicalWalletMessageId(address walletAddr) internal view returns (bytes32) {
+        CrossChainMessage.WalletRegistrationPayload memory wp = CrossChainMessage.WalletRegistrationPayload({
+            namespaceHash: keccak256("eip155"),
+            chainRef: bytes32(0),
+            identifier: bytes32(uint256(uint160(walletAddr))),
+            reportedChainId: CAIP10Evm.caip2Hash(uint64(1)),
+            incidentTimestamp: uint64(block.timestamp - 1 days),
+            sourceChainId: CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID)),
+            isSponsored: false,
+            nonce: 0,
+            timestamp: uint64(block.timestamp),
+            registrationHash: keccak256("dummy")
+        });
+        return keccak256(abi.encode(wp));
+    }
+
+    /// @dev Compute canonical messageId for a tx batch (matches inbox logic)
+    function _canonicalTxBatchMessageId(bytes32 txHash) internal returns (bytes32) {
+        bytes32[] memory txHashes = new bytes32[](1);
+        txHashes[0] = txHash;
+        bytes32[] memory chainIds = new bytes32[](1);
+        chainIds[0] = CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID));
+
+        CrossChainMessage.TransactionBatchPayload memory tp = CrossChainMessage.TransactionBatchPayload({
+            dataHash: keccak256(abi.encode(txHashes, chainIds)),
+            reporter: makeAddr("reporter"),
+            reportedChainId: CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID)),
+            sourceChainId: CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID)),
+            transactionCount: 1,
+            isSponsored: false,
+            nonce: 0,
+            timestamp: uint64(block.timestamp),
+            transactionHashes: txHashes,
+            chainIds: chainIds
+        });
+        return keccak256(abi.encode(tp));
     }
 }

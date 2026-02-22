@@ -163,21 +163,23 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
     }
 
     function _collectFee() internal {
-        if (feeManager == address(0)) return;
+        uint256 requiredFee = 0;
 
-        uint256 requiredFee = IFeeManager(feeManager).operatorBatchFeeWei();
-        if (msg.value < requiredFee) {
-            revert OperatorSubmitter__InsufficientFee();
-        }
+        if (feeManager != address(0)) {
+            requiredFee = IFeeManager(feeManager).operatorBatchFeeWei();
+            if (msg.value < requiredFee) {
+                revert OperatorSubmitter__InsufficientFee();
+            }
 
-        if (feeRecipient != address(0) && requiredFee > 0) {
-            (bool success,) = feeRecipient.call{ value: requiredFee }("");
-            if (!success) {
-                revert OperatorSubmitter__FeeForwardFailed();
+            if (feeRecipient != address(0) && requiredFee > 0) {
+                (bool success,) = feeRecipient.call{ value: requiredFee }("");
+                if (!success) {
+                    revert OperatorSubmitter__FeeForwardFailed();
+                }
             }
         }
 
-        // Refund excess ETH to caller (consistent with WalletRegistry, TransactionRegistry, SpokeRegistry)
+        // Refund excess ETH to caller — runs even when feeManager is disabled
         uint256 excess = msg.value - requiredFee;
         if (excess > 0) {
             (bool refundSuccess,) = msg.sender.call{ value: excess }("");

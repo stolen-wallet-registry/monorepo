@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
+import { TimelockOwnable } from "./libraries/TimelockOwnable.sol";
 
 import { IFraudRegistryHub } from "./interfaces/IFraudRegistryHub.sol";
 import { IWalletRegistry } from "./interfaces/IWalletRegistry.sol";
@@ -21,7 +22,7 @@ import { CAIP10 } from "./libraries/CAIP10.sol";
 ///
 ///      NOTE: Pause only affects cross-chain registrations.
 ///      Users can still register directly to individual registries on the hub chain.
-contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
+contract FraudRegistryHub is IFraudRegistryHub, TimelockOwnable, Pausable {
     // ═══════════════════════════════════════════════════════════════════════════
     // MUTABLE STATE
     // ═══════════════════════════════════════════════════════════════════════════
@@ -294,32 +295,97 @@ contract FraudRegistryHub is IFraudRegistryHub, Ownable2Step, Pausable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IFraudRegistryHub
-    function setWalletRegistry(address newWalletRegistry) external onlyOwner {
+    /// @dev Immediate during initial setup, timelocked after completeSetup()
+    function setWalletRegistry(address newWalletRegistry) external onlyOwner onlyDuringSetup {
         if (newWalletRegistry == address(0)) revert FraudRegistryHub__ZeroAddress();
         address old = walletRegistry;
         walletRegistry = newWalletRegistry;
         emit RegistryUpdated(RegistryType.WALLET, old, newWalletRegistry);
     }
 
+    /// @notice Propose a wallet registry change (2-day delay before activation)
+    /// @param newWalletRegistry Address of the new wallet registry
+    function proposeWalletRegistry(address newWalletRegistry) external onlyOwner {
+        if (newWalletRegistry == address(0)) revert FraudRegistryHub__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setWalletRegistry", newWalletRegistry)));
+    }
+
+    /// @notice Activate a previously proposed wallet registry change
+    /// @param newWalletRegistry Address of the new wallet registry
+    function activateWalletRegistry(address newWalletRegistry) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setWalletRegistry", newWalletRegistry)));
+        address old = walletRegistry;
+        walletRegistry = newWalletRegistry;
+        emit RegistryUpdated(RegistryType.WALLET, old, newWalletRegistry);
+    }
+
     /// @inheritdoc IFraudRegistryHub
-    function setTransactionRegistry(address newTransactionRegistry) external onlyOwner {
+    function setTransactionRegistry(address newTransactionRegistry) external onlyOwner onlyDuringSetup {
         if (newTransactionRegistry == address(0)) revert FraudRegistryHub__ZeroAddress();
         address old = transactionRegistry;
         transactionRegistry = newTransactionRegistry;
         emit RegistryUpdated(RegistryType.TRANSACTION, old, newTransactionRegistry);
     }
 
+    /// @notice Propose a transaction registry change (2-day delay before activation)
+    /// @param newTransactionRegistry Address of the new transaction registry
+    function proposeTransactionRegistry(address newTransactionRegistry) external onlyOwner {
+        if (newTransactionRegistry == address(0)) revert FraudRegistryHub__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setTransactionRegistry", newTransactionRegistry)));
+    }
+
+    /// @notice Activate a previously proposed transaction registry change
+    /// @param newTransactionRegistry Address of the new transaction registry
+    function activateTransactionRegistry(address newTransactionRegistry) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setTransactionRegistry", newTransactionRegistry)));
+        address old = transactionRegistry;
+        transactionRegistry = newTransactionRegistry;
+        emit RegistryUpdated(RegistryType.TRANSACTION, old, newTransactionRegistry);
+    }
+
     /// @inheritdoc IFraudRegistryHub
-    function setContractRegistry(address newContractRegistry) external onlyOwner {
+    function setContractRegistry(address newContractRegistry) external onlyOwner onlyDuringSetup {
         if (newContractRegistry == address(0)) revert FraudRegistryHub__ZeroAddress();
         address old = contractRegistry;
         contractRegistry = newContractRegistry;
         emit RegistryUpdated(RegistryType.CONTRACT, old, newContractRegistry);
     }
 
+    /// @notice Propose a contract registry change (2-day delay before activation)
+    /// @param newContractRegistry Address of the new contract registry
+    function proposeContractRegistry(address newContractRegistry) external onlyOwner {
+        if (newContractRegistry == address(0)) revert FraudRegistryHub__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setContractRegistry", newContractRegistry)));
+    }
+
+    /// @notice Activate a previously proposed contract registry change
+    /// @param newContractRegistry Address of the new contract registry
+    function activateContractRegistry(address newContractRegistry) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setContractRegistry", newContractRegistry)));
+        address old = contractRegistry;
+        contractRegistry = newContractRegistry;
+        emit RegistryUpdated(RegistryType.CONTRACT, old, newContractRegistry);
+    }
+
     /// @inheritdoc IFraudRegistryHub
-    function setInbox(address newInbox) external onlyOwner {
+    function setInbox(address newInbox) external onlyOwner onlyDuringSetup {
         if (newInbox == address(0)) revert FraudRegistryHub__ZeroAddress();
+        address old = inbox;
+        inbox = newInbox;
+        emit InboxUpdated(old, newInbox);
+    }
+
+    /// @notice Propose an inbox change (2-day delay before activation)
+    /// @param newInbox Address of the new cross-chain inbox
+    function proposeInbox(address newInbox) external onlyOwner {
+        if (newInbox == address(0)) revert FraudRegistryHub__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setInbox", newInbox)));
+    }
+
+    /// @notice Activate a previously proposed inbox change
+    /// @param newInbox Address of the new cross-chain inbox
+    function activateInbox(address newInbox) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setInbox", newInbox)));
         address old = inbox;
         inbox = newInbox;
         emit InboxUpdated(old, newInbox);

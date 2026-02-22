@@ -27,6 +27,19 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'function',
+    name: 'ACTIVATION_DELAY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'MSG_TYPE_SUPPORT',
     inputs: [],
     outputs: [
@@ -54,6 +67,44 @@ export const SoulboundReceiverABI = [
   {
     type: 'function',
     name: 'acceptOwnership',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateTrustedForwarder',
+    inputs: [
+      {
+        name: 'domain',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'forwarder',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'cancelAction',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'completeSetup',
     inputs: [],
     outputs: [],
     stateMutability: 'nonpayable',
@@ -109,6 +160,25 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'function',
+    name: 'pendingActivations',
+    inputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'pendingOwner',
     inputs: [],
     outputs: [
@@ -119,6 +189,24 @@ export const SoulboundReceiverABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'proposeTrustedForwarder',
+    inputs: [
+      {
+        name: 'domain',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'forwarder',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -144,6 +232,19 @@ export const SoulboundReceiverABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'setupComplete',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -202,6 +303,51 @@ export const SoulboundReceiverABI = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    name: 'ActionActivated',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionCancelled',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'ActionProposed',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+      {
+        name: 'activationTime',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
   },
   {
     type: 'event',
@@ -299,6 +445,12 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'event',
+    name: 'SetupCompleted',
+    inputs: [],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'TrustedForwarderUpdated',
     inputs: [
       {
@@ -345,6 +497,11 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'error',
+    name: 'SoulboundReceiver__NonCanonicalSender',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'SoulboundReceiver__OnlyMailbox',
     inputs: [],
   },
@@ -366,6 +523,26 @@ export const SoulboundReceiverABI = [
   {
     type: 'error',
     name: 'SoulboundReceiver__ZeroAddress',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__AlreadyPending',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__NotProposed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupAlreadyComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__TooEarly',
     inputs: [],
   },
 ] as const;

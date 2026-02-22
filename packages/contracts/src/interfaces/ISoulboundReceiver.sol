@@ -61,6 +61,9 @@ interface ISoulboundReceiver {
     /// @notice Thrown when support mint fails
     error SoulboundReceiver__SupportMintFailed();
 
+    /// @notice Thrown when sender bytes32 has non-zero upper 12 bytes (non-canonical encoding)
+    error SoulboundReceiver__NonCanonicalSender();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
