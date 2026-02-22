@@ -117,6 +117,7 @@ abstract contract TimelockOwnable is Ownable2Step {
     /// @notice Cancel a pending action proposal
     /// @param actionKey The key of the action to cancel
     function cancelAction(bytes32 actionKey) external onlyOwner {
+        if (pendingActivations[actionKey] == 0) revert TimelockOwnable__NotProposed();
         delete pendingActivations[actionKey];
         emit ActionCancelled(actionKey);
     }

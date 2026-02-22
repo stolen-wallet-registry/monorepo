@@ -178,19 +178,26 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
     }
 
     /// @notice Remove a language (owner only)
+    /// @dev Uses swap-and-pop on the _supportedLanguages array.
+    ///      The `found` flag ensures the array and mapping stay in sync — if the
+    ///      mapping says the language exists but the array entry is missing (data
+    ///      corruption), the function reverts rather than leaving orphaned state.
     /// @param languageCode ISO 639-1 code of language to remove
     function removeLanguage(string calldata languageCode) external onlyOwner {
         if (!_languages[languageCode].exists) revert LanguageNotFound(languageCode);
 
         // Remove from _supportedLanguages array (swap-and-pop)
+        bool found = false;
         uint256 len = _supportedLanguages.length;
         for (uint256 i = 0; i < len; i++) {
             if (keccak256(bytes(_supportedLanguages[i])) == keccak256(bytes(languageCode))) {
                 _supportedLanguages[i] = _supportedLanguages[len - 1];
                 _supportedLanguages.pop();
+                found = true;
                 break;
             }
         }
+        require(found, "TranslationRegistry: array/mapping desync");
 
         delete _languages[languageCode];
         emit LanguageRemoved(languageCode);

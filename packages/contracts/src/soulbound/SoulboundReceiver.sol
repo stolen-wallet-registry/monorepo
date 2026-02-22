@@ -146,15 +146,17 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
 
     /// @notice Propose a trusted forwarder change (2-day delay)
     /// @param domain Hyperlane domain ID
-    /// @param forwarder Address of the forwarder contract
+    /// @param forwarder Address of the forwarder contract (must be non-zero)
     function proposeTrustedForwarder(uint32 domain, address forwarder) external onlyOwner {
+        if (forwarder == address(0)) revert SoulboundReceiver__ZeroAddress();
         _proposeAction(keccak256(abi.encode("setTrustedForwarder", domain, forwarder)));
     }
 
     /// @notice Activate a previously proposed trusted forwarder change
     /// @param domain Hyperlane domain ID
-    /// @param forwarder Address of the forwarder contract
+    /// @param forwarder Address of the forwarder contract (must be non-zero)
     function activateTrustedForwarder(uint32 domain, address forwarder) external onlyOwner {
+        if (forwarder == address(0)) revert SoulboundReceiver__ZeroAddress();
         _activateAction(keccak256(abi.encode("setTrustedForwarder", domain, forwarder)));
         _trustedForwarders[domain] = forwarder;
         emit TrustedForwarderUpdated(domain, forwarder);

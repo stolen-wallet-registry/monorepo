@@ -180,8 +180,8 @@ abstract contract BaseSoulbound is ERC721, IERC5192, TimelockOwnable {
     /// @param minter Address of the minter
     /// @param authorized Whether the minter should be authorized
     function activateAuthorizedMinter(address minter, bool authorized) external onlyOwner {
-        _activateAction(keccak256(abi.encode("setAuthorizedMinter", minter, authorized)));
         if (minter == address(0)) revert ZeroAddress();
+        _activateAction(keccak256(abi.encode("setAuthorizedMinter", minter, authorized)));
         authorizedMinters[minter] = authorized;
         emit AuthorizedMinterUpdated(minter, authorized);
     }

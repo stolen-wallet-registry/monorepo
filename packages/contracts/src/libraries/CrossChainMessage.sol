@@ -217,7 +217,7 @@ library CrossChainMessage {
 
     /// @notice Convert an address to bytes32 (for cross-chain addressing)
     /// @param addr The address to convert
-    /// @return The address as bytes32 (right-padded)
+    /// @return The address as bytes32 (left-zero-padded, address in lower 160 bits)
     function addressToBytes32(address addr) internal pure returns (bytes32) {
         return bytes32(uint256(uint160(addr)));
     }

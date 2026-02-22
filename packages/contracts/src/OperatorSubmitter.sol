@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import { IWalletRegistry } from "./interfaces/IWalletRegistry.sol";
 import { ITransactionRegistry } from "./interfaces/ITransactionRegistry.sol";
@@ -19,7 +20,7 @@ import { RegistryCapabilities } from "./libraries/RegistryCapabilities.sol";
 ///      1. Validates operator permissions via OperatorRegistry
 ///      2. Collects fees via FeeManager
 ///      3. Forwards validated data to appropriate registry
-contract OperatorSubmitter is Ownable2Step, Pausable {
+contract OperatorSubmitter is Ownable2Step, Pausable, ReentrancyGuard {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -171,7 +172,8 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
                 revert OperatorSubmitter__InsufficientFee();
             }
 
-            if (feeRecipient != address(0) && requiredFee > 0) {
+            if (requiredFee > 0) {
+                if (feeRecipient == address(0)) revert OperatorSubmitter__InvalidFeeConfig();
                 (bool success,) = feeRecipient.call{ value: requiredFee }("");
                 if (!success) {
                     revert OperatorSubmitter__FeeForwardFailed();
@@ -227,7 +229,7 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
         bytes32[] calldata identifiers,
         bytes32[] calldata reportedChainIds,
         uint64[] calldata incidentTimestamps
-    ) external payable whenNotPaused onlyApprovedOperator(WALLET_CAPABILITY) {
+    ) external payable nonReentrant whenNotPaused onlyApprovedOperator(WALLET_CAPABILITY) {
         uint256 length = identifiers.length;
         if (length == 0) revert OperatorSubmitter__EmptyBatch();
         if (length != reportedChainIds.length || length != incidentTimestamps.length) {
@@ -248,6 +250,7 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
     function registerTransactionsAsOperator(bytes32[] calldata transactionHashes, bytes32[] calldata chainIds)
         external
         payable
+        nonReentrant
         whenNotPaused
         onlyApprovedOperator(TX_CAPABILITY)
     {
@@ -273,7 +276,7 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
         bytes32[] calldata identifiers,
         bytes32[] calldata reportedChainIds,
         uint8[] calldata threatCategories
-    ) external payable whenNotPaused onlyApprovedOperator(CONTRACT_CAPABILITY) {
+    ) external payable nonReentrant whenNotPaused onlyApprovedOperator(CONTRACT_CAPABILITY) {
         uint256 length = identifiers.length;
         if (length == 0) revert OperatorSubmitter__EmptyBatch();
         if (length != reportedChainIds.length || length != threatCategories.length) {

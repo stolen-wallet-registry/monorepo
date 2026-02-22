@@ -70,12 +70,16 @@ contract CrossChainInboxTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // HELPERS
+    // HELPERS — single source of truth for test payloads
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Build a valid wallet registration message
-    function _buildWalletMessage(address walletAddr) internal view returns (bytes memory) {
-        CrossChainMessage.WalletRegistrationPayload memory payload = CrossChainMessage.WalletRegistrationPayload({
+    /// @dev Canonical wallet payload — used by both message builder and ID helper
+    function _makeWalletPayload(address walletAddr)
+        internal
+        view
+        returns (CrossChainMessage.WalletRegistrationPayload memory)
+    {
+        return CrossChainMessage.WalletRegistrationPayload({
             namespaceHash: keccak256("eip155"),
             chainRef: bytes32(0),
             identifier: bytes32(uint256(uint160(walletAddr))),
@@ -87,18 +91,17 @@ contract CrossChainInboxTest is Test {
             timestamp: uint64(block.timestamp),
             registrationHash: keccak256("dummy")
         });
-        return CrossChainMessage.encodeWalletRegistration(payload);
     }
 
-    /// @dev Build a valid transaction batch message
-    function _buildTxBatchMessage(bytes32 txHash) internal returns (bytes memory) {
+    /// @dev Canonical tx batch payload — used by both message builder and ID helper
+    function _makeTxBatchPayload(bytes32 txHash) internal returns (CrossChainMessage.TransactionBatchPayload memory) {
         bytes32[] memory txHashes = new bytes32[](1);
         txHashes[0] = txHash;
-        bytes32[] memory chainIds = new bytes32[](1);
-        chainIds[0] = CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID));
+        bytes32[] memory chainIdArr = new bytes32[](1);
+        chainIdArr[0] = CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID));
 
-        CrossChainMessage.TransactionBatchPayload memory payload = CrossChainMessage.TransactionBatchPayload({
-            dataHash: keccak256(abi.encode(txHashes, chainIds)),
+        return CrossChainMessage.TransactionBatchPayload({
+            dataHash: keccak256(abi.encode(txHashes, chainIdArr)),
             reporter: makeAddr("reporter"),
             reportedChainId: CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID)),
             sourceChainId: CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID)),
@@ -107,9 +110,18 @@ contract CrossChainInboxTest is Test {
             nonce: 0,
             timestamp: uint64(block.timestamp),
             transactionHashes: txHashes,
-            chainIds: chainIds
+            chainIds: chainIdArr
         });
-        return CrossChainMessage.encodeTransactionBatch(payload);
+    }
+
+    /// @dev Build a valid wallet registration message
+    function _buildWalletMessage(address walletAddr) internal view returns (bytes memory) {
+        return CrossChainMessage.encodeWalletRegistration(_makeWalletPayload(walletAddr));
+    }
+
+    /// @dev Build a valid transaction batch message
+    function _buildTxBatchMessage(bytes32 txHash) internal returns (bytes memory) {
+        return CrossChainMessage.encodeTransactionBatch(_makeTxBatchPayload(txHash));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -373,45 +385,16 @@ contract CrossChainInboxTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CANONICAL MESSAGE ID HELPERS
+    // CANONICAL MESSAGE ID HELPERS (derived from shared payload builders above)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @dev Compute canonical messageId for a wallet registration (matches inbox logic)
     function _canonicalWalletMessageId(address walletAddr) internal view returns (bytes32) {
-        CrossChainMessage.WalletRegistrationPayload memory wp = CrossChainMessage.WalletRegistrationPayload({
-            namespaceHash: keccak256("eip155"),
-            chainRef: bytes32(0),
-            identifier: bytes32(uint256(uint160(walletAddr))),
-            reportedChainId: CAIP10Evm.caip2Hash(uint64(1)),
-            incidentTimestamp: uint64(block.timestamp - 1 days),
-            sourceChainId: CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID)),
-            isSponsored: false,
-            nonce: 0,
-            timestamp: uint64(block.timestamp),
-            registrationHash: keccak256("dummy")
-        });
-        return keccak256(abi.encode(wp));
+        return keccak256(abi.encode(_makeWalletPayload(walletAddr)));
     }
 
     /// @dev Compute canonical messageId for a tx batch (matches inbox logic)
     function _canonicalTxBatchMessageId(bytes32 txHash) internal returns (bytes32) {
-        bytes32[] memory txHashes = new bytes32[](1);
-        txHashes[0] = txHash;
-        bytes32[] memory chainIds = new bytes32[](1);
-        chainIds[0] = CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID));
-
-        CrossChainMessage.TransactionBatchPayload memory tp = CrossChainMessage.TransactionBatchPayload({
-            dataHash: keccak256(abi.encode(txHashes, chainIds)),
-            reporter: makeAddr("reporter"),
-            reportedChainId: CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID)),
-            sourceChainId: CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID)),
-            transactionCount: 1,
-            isSponsored: false,
-            nonce: 0,
-            timestamp: uint64(block.timestamp),
-            transactionHashes: txHashes,
-            chainIds: chainIds
-        });
-        return keccak256(abi.encode(tp));
+        return keccak256(abi.encode(_makeTxBatchPayload(txHash)));
     }
 }

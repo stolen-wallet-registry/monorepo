@@ -216,7 +216,7 @@ export function useRecentRegistrations(
             registeredAt: BigInt(raw.reportedAt),
             transactionHash: raw.txHash as Hash,
             // Resolve batchId: prefer direct value, fall back to lookup via transactionHash
-            batchId: raw.batchId || txHashToBatchId.get(raw.transactionHash),
+            batchId: raw.batchId ?? txHashToBatchId.get(raw.transactionHash),
           });
         }
       }

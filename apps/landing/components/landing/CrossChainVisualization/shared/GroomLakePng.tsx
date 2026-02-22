@@ -14,6 +14,8 @@ export function GroomLakePngLogo({ className, ...props }: ComponentProps<'img'>)
     <img
       src="/groomlake.png"
       alt="Groom Lake"
+      width={20}
+      height={20}
       className={cn('size-5 dark:invert', className)}
       {...props}
     />

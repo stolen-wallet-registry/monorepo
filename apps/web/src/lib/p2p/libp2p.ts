@@ -217,7 +217,7 @@ export async function setup(
   // and the first dial always times out.
   await waitForRelayReservation(libp2p);
 
-  logger.p2p.info('Relay reservation complete', {
+  logger.p2p.debug('Relay reservation complete', {
     multiaddrs: libp2p.getMultiaddrs().map((ma) => ma.toString()),
   });
 

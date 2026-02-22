@@ -15,7 +15,6 @@ export default defineConfig({
     // Externalize large icon/animation libraries so consuming apps can
     // tree-shake them via Next.js optimizePackageImports instead of
     // bundling everything into a single fat @swr/ui dist file.
-    '@web3icons/react',
     /^@web3icons\//,
     'lucide-react',
     'motion',

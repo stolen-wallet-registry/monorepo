@@ -161,6 +161,9 @@ contract Deploy is Script {
     /// @notice Deploy contracts to local Anvil chains with real Hyperlane
     /// @dev Mirrors DeployCrossChain.s.sol pattern for V1 contracts
     function deployCrossChain() external {
+        // _getDeployerKey() reads block.chainid, so it must be called on the
+        // first RPC target. The subsequent vm.createSelectFork() calls switch
+        // chains but the key is already captured.
         deployerPrivateKey = _getDeployerKey();
         deployer = vm.addr(deployerPrivateKey);
 
@@ -558,8 +561,6 @@ contract Deploy is Script {
     function deploySpokeLocal() external {
         deployerPrivateKey = _getDeployerKey();
         deployer = vm.addr(deployerPrivateKey);
-        hubMailbox = vm.envAddress("HUB_MAILBOX");
-        require(hubMailbox != address(0), "HUB_MAILBOX env var must be set");
         spokeMailbox = vm.envAddress("SPOKE_MAILBOX");
         require(spokeMailbox != address(0), "SPOKE_MAILBOX env var must be set");
 

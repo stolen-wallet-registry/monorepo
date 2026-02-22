@@ -47,7 +47,7 @@ export function CrossChainSection() {
               <ExternalLink className="size-3.5" />
             </a>
             <a
-              href="https://github.com/ChainAgnostic/CAIPs/pull/363"
+              href="https://github.com/ChainAgnostic/CAIPs/blob/main/CAIPs/caip-363.md"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"

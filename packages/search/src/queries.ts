@@ -1,5 +1,10 @@
 /**
  * GraphQL queries for the Ponder indexer.
+ *
+ * NOTE: Ponder auto-pluralizes table names by appending "s". For tables already
+ * ending in "s" (e.g. `transactionInBatch`, `walletBatch`) this produces
+ * `transactionInBatchs` and `walletBatchs` — grammatically odd but correct
+ * per Ponder's convention. Do NOT "fix" these to `transactionInBatches` etc.
  */
 
 import { gql } from 'graphql-request';
