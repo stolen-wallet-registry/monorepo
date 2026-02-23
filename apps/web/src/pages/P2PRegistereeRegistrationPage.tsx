@@ -112,7 +112,8 @@ function WalletP2PWaitForRegistration({ wallet, onComplete }: WalletP2PWaitForRe
       const timerId = window.setTimeout(onComplete, 1000);
       return () => clearTimeout(timerId);
     }
-  }, [crossChainConfirmation.status, crossChainConfirmation.elapsedTime, wallet, onComplete]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- elapsedTime excluded: updates every second, would cancel the setTimeout before onComplete fires
+  }, [crossChainConfirmation.status, wallet, onComplete]);
 
   const statusText =
     crossChainConfirmation.status === 'confirmed'

@@ -642,7 +642,8 @@ function TxP2PWaitForRegistration({ onComplete }: TxP2PWaitForRegistrationProps)
       const timerId = window.setTimeout(onComplete, 1000);
       return () => clearTimeout(timerId);
     }
-  }, [crossChainConfirmation.status, crossChainConfirmation.elapsedTime, sampleTxHash, onComplete]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- elapsedTime excluded: updates every second, would cancel the setTimeout before onComplete fires
+  }, [crossChainConfirmation.status, sampleTxHash, onComplete]);
 
   const statusText =
     crossChainConfirmation.status === 'confirmed'
