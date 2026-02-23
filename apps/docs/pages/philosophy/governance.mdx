@@ -214,7 +214,7 @@ All contracts that control trust-critical configuration inherit from **TimelockO
 
 **Why this matters:** Without a timelock, a compromised owner key could silently swap the hub's wallet registry to a malicious contract, trust a rogue cross-chain source, or approve a sham operator — all in a single transaction. Users and monitoring systems would have no warning and no time to react.
 
-The 2-day delay creates an **exit window** — the same pattern used by Compound, Uniswap governance, and Optimism. When the owner proposes a change, it's visible on-chain immediately but cannot take effect for 48 hours. This gives:
+The 2-day delay creates an **exit window** — the same pattern used by Compound, Uniswap, and Aave governance timelocks. When the owner proposes a change, it's visible on-chain immediately but cannot take effect for 48 hours. This gives:
 
 - Users time to see the pending change and stop interacting if they disagree
 - Monitoring services time to alert on unexpected proposals
@@ -242,7 +242,7 @@ Each contract exposes **action-specific** propose/activate functions (e.g., `pro
 
 - **`revokeOperator`** — revoking a bad actor is an emergency action; delaying it helps the attacker
 - **`pause` / `unpause`** — safety mechanisms that must act instantly
-- **`setFeeRecipient`** — doesn't affect trust boundaries (registry data integrity is unchanged), though a compromised owner key could redirect fee revenue; recommend monitoring pending proposals
+- **`setFeeRecipient`** — doesn't affect trust boundaries (registry data integrity is unchanged), though a compromised owner key could redirect fee revenue; changes take effect immediately, so monitor `FeeRecipientSet` events and owner key access
 
 ### Emergency Powers
 

@@ -383,18 +383,4 @@ contract CrossChainInboxTest is Test {
 
         assertTrue(inboxContract.isMessageProcessed(messageId), "Message should be marked as processed");
     }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // CANONICAL MESSAGE ID HELPERS (derived from shared payload builders above)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// @dev Compute canonical messageId for a wallet registration (matches inbox logic)
-    function _canonicalWalletMessageId(address walletAddr) internal view returns (bytes32) {
-        return keccak256(abi.encode(_makeWalletPayload(walletAddr)));
-    }
-
-    /// @dev Compute canonical messageId for a tx batch (matches inbox logic)
-    function _canonicalTxBatchMessageId(bytes32 txHash) internal returns (bytes32) {
-        return keccak256(abi.encode(_makeTxBatchPayload(txHash)));
-    }
 }

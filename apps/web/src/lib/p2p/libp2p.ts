@@ -137,7 +137,11 @@ function hasCircuitRelayAddr(libp2p: Libp2p): boolean {
  * Without waiting, getPeerConnection() fires with no circuit relay multiaddrs
  * and the dial times out.
  */
-async function waitForRelayReservation(libp2p: Libp2p, timeoutMs = 20_000): Promise<void> {
+/**
+ * Timeout matches reservationCompletionTimeout in libp2pDefaults() (15s).
+ * The relay transport gives up after 15s, so waiting longer here is dead time.
+ */
+async function waitForRelayReservation(libp2p: Libp2p, timeoutMs = 15_000): Promise<void> {
   if (hasCircuitRelayAddr(libp2p)) return;
 
   logger.p2p.debug('Waiting for relay reservation...');
