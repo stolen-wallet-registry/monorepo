@@ -766,6 +766,31 @@ export const SupportSoulboundABI = [
   },
   {
     type: 'event',
+    name: 'AuthorizedMinterProposed',
+    inputs: [
+      {
+        name: 'minter',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'authorized',
+        type: 'bool',
+        indexed: false,
+        internalType: 'bool',
+      },
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'AuthorizedMinterUpdated',
     inputs: [
       {

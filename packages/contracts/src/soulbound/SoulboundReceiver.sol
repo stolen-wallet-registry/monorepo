@@ -140,6 +140,7 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     /// @inheritdoc ISoulboundReceiver
     /// @dev Immediate during initial setup, timelocked after completeSetup()
     function setTrustedForwarder(uint32 domain, address forwarder) external onlyOwner onlyDuringSetup {
+        if (forwarder == address(0)) revert SoulboundReceiver__ZeroAddress();
         _trustedForwarders[domain] = forwarder;
         emit TrustedForwarderUpdated(domain, forwarder);
     }
@@ -149,7 +150,9 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     /// @param forwarder Address of the forwarder contract (must be non-zero)
     function proposeTrustedForwarder(uint32 domain, address forwarder) external onlyOwner {
         if (forwarder == address(0)) revert SoulboundReceiver__ZeroAddress();
-        _proposeAction(keccak256(abi.encode("setTrustedForwarder", domain, forwarder)));
+        bytes32 actionKey = keccak256(abi.encode("setTrustedForwarder", domain, forwarder));
+        _proposeAction(actionKey);
+        emit TrustedForwarderProposed(domain, forwarder, actionKey);
     }
 
     /// @notice Activate a previously proposed trusted forwarder change

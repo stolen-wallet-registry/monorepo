@@ -215,7 +215,17 @@ export async function setup(
   // Wait for circuit relay reservation before returning.
   // Without this, getPeerConnection() fires before any /p2p-circuit/ multiaddrs exist
   // and the first dial always times out.
-  await waitForRelayReservation(libp2p);
+  try {
+    await waitForRelayReservation(libp2p);
+  } catch (err) {
+    // Clean up the started node so we don't leak connections on timeout
+    try {
+      await libp2p.stop();
+    } catch {
+      // best-effort cleanup
+    }
+    throw err;
+  }
 
   logger.p2p.debug('Relay reservation complete', {
     multiaddrs: libp2p.getMultiaddrs().map((ma) => ma.toString()),

@@ -187,6 +187,8 @@ If a dispute against a **registry entry** succeeds:
 | Operator removal  | 10%    | 50%+1    | 24 hours |
 | Emergency action  | 5%     | 66%+1    | 0 hours  |
 
+> **Note:** These are **DAO governance proposal timelocks** (future Phase 2+). They are separate from the on-chain `TimelockOwnable` delay (48 hours) described below, which governs contract-level admin changes today. Once DAO governance is live, both layers apply: a DAO vote must pass its proposal timelock, then the resulting on-chain transaction is subject to the `TimelockOwnable` activation delay.
+
 ### Treasury
 
 - Registration fees accumulate in treasury
@@ -224,7 +226,7 @@ The 2-day delay creates an **exit window** — the same pattern used by Compound
 2. **`completeSetup()`** — irreversibly locks the immediate setters
 3. **After setup** — all trust-boundary changes require `propose` → wait 2 days → `activate`
 
-The owner can cancel a pending proposal at any time via `cancelAction()`.
+Each contract exposes **action-specific** propose/activate functions (e.g., `proposeOperator()` / `activateOperator()`, `proposeWalletRegistry()` / `activateWalletRegistry()`). These delegate to the internal `_proposeAction()` / `_activateAction()` helpers in `TimelockOwnable`. The owner can cancel a pending proposal at any time via `cancelAction()`.
 
 **What's timelocked:**
 
@@ -240,7 +242,7 @@ The owner can cancel a pending proposal at any time via `cancelAction()`.
 
 - **`revokeOperator`** — revoking a bad actor is an emergency action; delaying it helps the attacker
 - **`pause` / `unpause`** — safety mechanisms that must act instantly
-- **`setFeeRecipient`** — changing fee destination doesn't affect trust boundaries
+- **`setFeeRecipient`** — doesn't affect trust boundaries (registry data integrity is unchanged), though a compromised owner key could redirect fee revenue; recommend monitoring pending proposals
 
 ### Emergency Powers
 

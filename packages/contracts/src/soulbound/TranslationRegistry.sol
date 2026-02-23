@@ -70,7 +70,11 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
     error MaxLanguagesReached();
 
     /// @notice Thrown when a text field exceeds MAX_STRING_LENGTH bytes
-    error StringTooLong();
+    /// @param field The field name that exceeded the limit
+    error StringTooLong(string field);
+
+    /// @notice Thrown when array/mapping state is inconsistent (should never happen)
+    error ArrayMappingDesync();
 
     /// @notice Thrown when trying to remove a language that does not exist
     error LanguageNotFound(string languageCode);
@@ -197,7 +201,7 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
                 break;
             }
         }
-        require(found, "TranslationRegistry: array/mapping desync");
+        if (!found) revert ArrayMappingDesync();
 
         delete _languages[languageCode];
         emit LanguageRemoved(languageCode);
@@ -296,10 +300,10 @@ contract TranslationRegistry is ITranslationRegistry, Ownable2Step {
         string calldata warning,
         string calldata footer
     ) internal pure {
-        if (bytes(title).length > MAX_STRING_LENGTH) revert StringTooLong();
-        if (bytes(subtitle).length > MAX_STRING_LENGTH) revert StringTooLong();
-        if (bytes(supportSubtitle).length > MAX_STRING_LENGTH) revert StringTooLong();
-        if (bytes(warning).length > MAX_STRING_LENGTH) revert StringTooLong();
-        if (bytes(footer).length > MAX_STRING_LENGTH) revert StringTooLong();
+        if (bytes(title).length > MAX_STRING_LENGTH) revert StringTooLong("title");
+        if (bytes(subtitle).length > MAX_STRING_LENGTH) revert StringTooLong("subtitle");
+        if (bytes(supportSubtitle).length > MAX_STRING_LENGTH) revert StringTooLong("supportSubtitle");
+        if (bytes(warning).length > MAX_STRING_LENGTH) revert StringTooLong("warning");
+        if (bytes(footer).length > MAX_STRING_LENGTH) revert StringTooLong("footer");
     }
 }

@@ -388,6 +388,11 @@ export const TranslationRegistryABI = [
   },
   {
     type: 'error',
+    name: 'ArrayMappingDesync',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'EmptyLanguageCode',
     inputs: [],
   },
@@ -454,6 +459,12 @@ export const TranslationRegistryABI = [
   {
     type: 'error',
     name: 'StringTooLong',
-    inputs: [],
+    inputs: [
+      {
+        name: 'field',
+        type: 'string',
+        internalType: 'string',
+      },
+    ],
   },
 ] as const;

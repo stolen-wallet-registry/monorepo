@@ -147,9 +147,9 @@ contract CrossChainInboxTest is Test {
     /// @notice Wallet registration message is received, wallet stored, events emitted
     function test_HandleWalletRegistration_Success() public {
         address wallet = makeAddr("crossChainWallet");
-        bytes memory encoded = _buildWalletMessage(wallet);
-        // Canonical messageId: keccak256(abi.encode(struct))
-        bytes32 expectedMessageId = _canonicalWalletMessageId(wallet);
+        CrossChainMessage.WalletRegistrationPayload memory payload = _makeWalletPayload(wallet);
+        bytes memory encoded = CrossChainMessage.encodeWalletRegistration(payload);
+        bytes32 expectedMessageId = keccak256(abi.encode(payload));
 
         vm.expectEmit(true, true, false, true);
         emit CrossChainInbox.WalletRegistrationReceived(
@@ -211,9 +211,9 @@ contract CrossChainInboxTest is Test {
     /// @notice Transaction batch message is received and transactions stored
     function test_HandleTransactionBatch_Success() public {
         bytes32 txHash = keccak256("crossChainTx");
-        bytes memory encoded = _buildTxBatchMessage(txHash);
-        // Canonical messageId from struct
-        bytes32 expectedMessageId = _canonicalTxBatchMessageId(txHash);
+        CrossChainMessage.TransactionBatchPayload memory payload = _makeTxBatchPayload(txHash);
+        bytes memory encoded = CrossChainMessage.encodeTransactionBatch(payload);
+        bytes32 expectedMessageId = keccak256(abi.encode(payload));
 
         address reporter = makeAddr("reporter");
 
@@ -373,9 +373,9 @@ contract CrossChainInboxTest is Test {
     /// @notice isMessageProcessed returns false before processing, true after
     function test_IsMessageProcessed() public {
         address wallet = makeAddr("processedCheck");
-        bytes memory encoded = _buildWalletMessage(wallet);
-        // Canonical messageId from struct, not raw bytes
-        bytes32 messageId = _canonicalWalletMessageId(wallet);
+        CrossChainMessage.WalletRegistrationPayload memory payload = _makeWalletPayload(wallet);
+        bytes memory encoded = CrossChainMessage.encodeWalletRegistration(payload);
+        bytes32 messageId = keccak256(abi.encode(payload));
 
         assertFalse(inboxContract.isMessageProcessed(messageId), "Message should not be processed yet");
 

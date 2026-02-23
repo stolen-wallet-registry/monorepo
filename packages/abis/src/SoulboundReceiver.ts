@@ -451,6 +451,31 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'event',
+    name: 'TrustedForwarderProposed',
+    inputs: [
+      {
+        name: 'domain',
+        type: 'uint32',
+        indexed: true,
+        internalType: 'uint32',
+      },
+      {
+        name: 'forwarder',
+        type: 'address',
+        indexed: false,
+        internalType: 'address',
+      },
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        indexed: false,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'TrustedForwarderUpdated',
     inputs: [
       {

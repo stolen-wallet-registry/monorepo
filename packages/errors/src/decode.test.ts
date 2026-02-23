@@ -197,7 +197,8 @@ describe('CONTRACT_ERROR_SELECTORS coverage', () => {
     '0x564576d3': 'LanguageAlreadyExists',
     '0xecb52231': 'EmptyLanguageCode',
     '0x55ad1483': 'MaxLanguagesReached',
-    '0xb11b2ad8': 'StringTooLong',
+    '0x305a27a9': 'StringTooLong',
+    '0x40b9e958': 'ArrayMappingDesync',
     '0xf0121ff2': 'LanguageNotFound',
     // SoulboundReceiver
     '0xc48f6eed': 'SoulboundReceiver__NonCanonicalSender',

@@ -158,30 +158,35 @@ contract OperatorSubmitter is Ownable2Step, Pausable, ReentrancyGuard {
     // INTERNAL HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @dev Operator batch fees are currently DISABLED (feeManager = address(0) at deployment).
+    ///      Gas costs of batch submissions are already substantial; adding per-batch fees
+    ///      on top is prohibitive. See PRPs/operator-fee-removal.md.
+    ///      Fee infrastructure is retained for potential future use.
     function _getBatchFee() internal view returns (uint256) {
         if (feeManager == address(0)) return 0;
         return IFeeManager(feeManager).operatorBatchFeeWei();
     }
 
     function _collectFee() internal {
-        uint256 requiredFee = 0;
+        uint256 requiredFee = _getBatchFee();
 
-        if (feeManager != address(0)) {
-            requiredFee = IFeeManager(feeManager).operatorBatchFeeWei();
-            if (msg.value < requiredFee) {
-                revert OperatorSubmitter__InsufficientFee();
-            }
+        if (msg.value < requiredFee) {
+            revert OperatorSubmitter__InsufficientFee();
+        }
 
-            if (requiredFee > 0) {
-                if (feeRecipient == address(0)) revert OperatorSubmitter__InvalidFeeConfig();
-                (bool success,) = feeRecipient.call{ value: requiredFee }("");
-                if (!success) {
-                    revert OperatorSubmitter__FeeForwardFailed();
-                }
+        if (requiredFee > 0) {
+            if (feeRecipient == address(0)) revert OperatorSubmitter__InvalidFeeConfig();
+            (bool success,) = feeRecipient.call{ value: requiredFee }("");
+            if (!success) {
+                revert OperatorSubmitter__FeeForwardFailed();
             }
         }
 
-        // Refund excess ETH to caller — runs even when feeManager is disabled
+        // Push-based refund: operators must be able to receive ETH.
+        // If a smart-contract operator cannot accept refunds, the tx reverts —
+        // this is intentional. Operators should call quoteBatchFee() and send
+        // the exact amount. The contract must remain sweep-able to treasury
+        // without accounting for pending balances.
         uint256 excess = msg.value - requiredFee;
         if (excess > 0) {
             (bool refundSuccess,) = msg.sender.call{ value: excess }("");

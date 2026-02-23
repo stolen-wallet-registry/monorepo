@@ -608,10 +608,15 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Maximum number of languages reached.',
     action: 'Remove an existing language before adding a new one.',
   },
-  '0xb11b2ad8': {
+  '0x305a27a9': {
     name: 'StringTooLong',
     message: 'Translation string exceeds maximum length.',
     action: 'Keep strings under 256 bytes.',
+  },
+  '0x40b9e958': {
+    name: 'ArrayMappingDesync',
+    message: 'Internal data inconsistency detected in translation registry.',
+    action: 'This should not happen. Please report this issue.',
   },
   '0xf0121ff2': {
     name: 'LanguageNotFound',

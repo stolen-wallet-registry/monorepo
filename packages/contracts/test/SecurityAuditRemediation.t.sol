@@ -109,15 +109,15 @@ contract SecurityAuditRemediationTest is Test {
         string memory longString = string(longBytes);
 
         // addLanguage: title too long
-        vm.expectRevert(TranslationRegistry.StringTooLong.selector);
+        vm.expectRevert(abi.encodeWithSelector(TranslationRegistry.StringTooLong.selector, "title"));
         tr.addLanguage("xx", longString, "S", "SS", "W", "F");
 
         // addLanguage: subtitle too long
-        vm.expectRevert(TranslationRegistry.StringTooLong.selector);
+        vm.expectRevert(abi.encodeWithSelector(TranslationRegistry.StringTooLong.selector, "subtitle"));
         tr.addLanguage("xx", "T", longString, "SS", "W", "F");
 
         // updateLanguage: warning too long
-        vm.expectRevert(TranslationRegistry.StringTooLong.selector);
+        vm.expectRevert(abi.encodeWithSelector(TranslationRegistry.StringTooLong.selector, "warning"));
         tr.updateLanguage("en", "T", "S", "SS", longString, "F");
     }
 

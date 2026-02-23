@@ -73,6 +73,12 @@ abstract contract BaseSoulbound is ERC721, IERC5192, TimelockOwnable {
     /// @param authorized True if authorized, false if revoked
     event AuthorizedMinterUpdated(address indexed minter, bool authorized);
 
+    /// @notice Emitted when an authorized minter change is proposed (timelocked)
+    /// @param minter The minter address
+    /// @param authorized Whether authorization is being proposed
+    /// @param actionKey The timelock action key for this proposal
+    event AuthorizedMinterProposed(address indexed minter, bool authorized, bytes32 actionKey);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════
@@ -173,7 +179,9 @@ abstract contract BaseSoulbound is ERC721, IERC5192, TimelockOwnable {
     /// @param authorized Whether the minter should be authorized
     function proposeAuthorizedMinter(address minter, bool authorized) external onlyOwner {
         if (minter == address(0)) revert ZeroAddress();
-        _proposeAction(keccak256(abi.encode("setAuthorizedMinter", minter, authorized)));
+        bytes32 actionKey = keccak256(abi.encode("setAuthorizedMinter", minter, authorized));
+        _proposeAction(actionKey);
+        emit AuthorizedMinterProposed(minter, authorized, actionKey);
     }
 
     /// @notice Activate a previously proposed authorized minter change

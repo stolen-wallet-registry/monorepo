@@ -32,6 +32,12 @@ interface ISoulboundReceiver {
     /// @param forwarder SpokeSoulboundForwarder address
     event TrustedForwarderUpdated(uint32 indexed domain, address forwarder);
 
+    /// @notice Emitted when a trusted forwarder change is proposed (timelocked)
+    /// @param domain Hyperlane domain ID
+    /// @param forwarder Proposed SpokeSoulboundForwarder address
+    /// @param actionKey The timelock action key for this proposal
+    event TrustedForwarderProposed(uint32 indexed domain, address forwarder, bytes32 actionKey);
+
     /// @notice Emitted when a mint fails (for debugging cross-chain issues)
     /// @param mintType Type of token that failed to mint
     /// @param wallet Target wallet address
