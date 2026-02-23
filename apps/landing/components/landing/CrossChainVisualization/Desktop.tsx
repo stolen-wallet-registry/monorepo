@@ -37,6 +37,8 @@ import {
   TokenLINK,
 } from '@swr/ui';
 
+import { KeyRound, ShieldCheck } from 'lucide-react';
+
 import {
   BEAM_DURATION,
   CYCLE_PAUSE,
@@ -475,6 +477,12 @@ export function CrossChainVisualizationDesktop({
   const nonEvmRightAnchorRef = useRef<HTMLDivElement>(null);
   const btcRightAnchorRef = useRef<HTMLDivElement>(null);
 
+  // Spoke Registry refs (inlined on beams between chains and bridges)
+  const ethSpokeRef = useRef<HTMLDivElement>(null);
+  const evmSpokeRef = useRef<HTMLDivElement>(null);
+  const nonEvmSpokeRef = useRef<HTMLDivElement>(null);
+  const btcSpokeRef = useRef<HTMLDivElement>(null);
+
   // Bridges cluster refs
   const bridgesClusterRef = useRef<HTMLDivElement>(null);
   const bridgesLeftAnchorRef = useRef<HTMLDivElement>(null);
@@ -593,7 +601,7 @@ export function CrossChainVisualizationDesktop({
                   <NetworkInk variant="branded" className="size-5" />
                 </IconCircle>
                 <IconCircle ref={worldRef} label="World Chain" size="xs">
-                  <NetworkWorld variant="branded" className="size-5" />
+                  <NetworkWorld variant="branded" className="size-5 dark:invert" />
                 </IconCircle>
               </div>
               {/* Static connections inside the container */}
@@ -683,6 +691,38 @@ export function CrossChainVisualizationDesktop({
                 <NetworkBitcoin variant="branded" className="size-7" />
               </IconCircle>
             </GroupContainer>
+          </div>
+
+          {/* SPOKE COLUMN: Local verification waypoints on beam paths */}
+          <div className="flex flex-col items-center justify-center gap-3 md:gap-4">
+            <IconCircle
+              ref={ethSpokeRef}
+              label="Spoke Registry — Validates EIP-712 two-step signing locally before cross-chain relay"
+              size="xs"
+            >
+              <ShieldCheck className="size-4 text-blue-600 dark:text-blue-400" />
+            </IconCircle>
+            <IconCircle
+              ref={evmSpokeRef}
+              label="Spoke Registry — Validates EIP-712 two-step signing locally before cross-chain relay"
+              size="xs"
+            >
+              <ShieldCheck className="size-4 text-blue-600 dark:text-blue-400" />
+            </IconCircle>
+            <IconCircle
+              ref={nonEvmSpokeRef}
+              label="Spoke Registry — Validates native chain signatures locally before cross-chain relay"
+              size="xs"
+            >
+              <ShieldCheck className="size-4 text-blue-600 dark:text-blue-400" />
+            </IconCircle>
+            <IconCircle
+              ref={btcSpokeRef}
+              label="BIP-322 Signature — Collects Bitcoin message signature to prove wallet ownership before registering"
+              size="xs"
+            >
+              <KeyRound className="size-4 text-blue-600 dark:text-blue-400" />
+            </IconCircle>
           </div>
 
           {/* MIDDLE SECTION: Bridges + Operators stacked */}
@@ -835,14 +875,16 @@ export function CrossChainVisualizationDesktop({
 
           {/* ===== ANIMATED BEAMS (State Machine Controlled) ===== */}
 
-          {/* PHASE 1: Network containers → Bridges (one fires per cycle) - ALL TEAL */}
-          {/* NOTE: No onComplete props - timing is managed centrally via stepTimerRef */}
+          {/* PHASE 1: Network → Spoke → Bridges (one fires per cycle) */}
+          {/* Each beam is split into two segments through spoke waypoints */}
+
+          {/* ETH Ecosystem → Spoke */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={ethRightAnchorRef}
-            toRef={bridgesLeftAnchorRef}
-            curvature={-25}
-            duration={effectiveBeamDuration}
+            toRef={ethSpokeRef}
+            curvature={0}
+            duration={effectiveBeamDuration * 0.4}
             gradientStartColor="#14b8a6"
             gradientStopColor="#5eead4"
             pathColor="#14b8a6"
@@ -850,12 +892,28 @@ export function CrossChainVisualizationDesktop({
             pathWidth={3}
             isActive={state.activeBeams.has('ethEcosystem')}
           />
+          {/* ETH Spoke → Bridges */}
+          <AnimatedBeam
+            containerRef={containerRef}
+            fromRef={ethSpokeRef}
+            toRef={bridgesLeftAnchorRef}
+            curvature={-15}
+            duration={effectiveBeamDuration * 0.6}
+            gradientStartColor="#14b8a6"
+            gradientStopColor="#5eead4"
+            pathColor="#14b8a6"
+            pathOpacity={0.2}
+            pathWidth={3}
+            isActive={state.activeBeams.has('ethEcosystem')}
+          />
+
+          {/* EVM Chains → Spoke */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={evmRightAnchorRef}
-            toRef={bridgesLeftAnchorRef}
+            toRef={evmSpokeRef}
             curvature={0}
-            duration={effectiveBeamDuration}
+            duration={effectiveBeamDuration * 0.4}
             gradientStartColor="#14b8a6"
             gradientStopColor="#5eead4"
             pathColor="#14b8a6"
@@ -863,12 +921,28 @@ export function CrossChainVisualizationDesktop({
             pathWidth={3}
             isActive={state.activeBeams.has('evmChains')}
           />
+          {/* EVM Spoke → Bridges */}
+          <AnimatedBeam
+            containerRef={containerRef}
+            fromRef={evmSpokeRef}
+            toRef={bridgesLeftAnchorRef}
+            curvature={0}
+            duration={effectiveBeamDuration * 0.6}
+            gradientStartColor="#14b8a6"
+            gradientStopColor="#5eead4"
+            pathColor="#14b8a6"
+            pathOpacity={0.2}
+            pathWidth={3}
+            isActive={state.activeBeams.has('evmChains')}
+          />
+
+          {/* Non-EVM → Spoke */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={nonEvmRightAnchorRef}
-            toRef={bridgesLeftAnchorRef}
-            curvature={20}
-            duration={effectiveBeamDuration}
+            toRef={nonEvmSpokeRef}
+            curvature={0}
+            duration={effectiveBeamDuration * 0.4}
             gradientStartColor="#14b8a6"
             gradientStopColor="#5eead4"
             pathColor="#14b8a6"
@@ -876,12 +950,42 @@ export function CrossChainVisualizationDesktop({
             pathWidth={3}
             isActive={state.activeBeams.has('nonEvm')}
           />
+          {/* Non-EVM Spoke → Bridges */}
+          <AnimatedBeam
+            containerRef={containerRef}
+            fromRef={nonEvmSpokeRef}
+            toRef={bridgesLeftAnchorRef}
+            curvature={10}
+            duration={effectiveBeamDuration * 0.6}
+            gradientStartColor="#14b8a6"
+            gradientStopColor="#5eead4"
+            pathColor="#14b8a6"
+            pathOpacity={0.2}
+            pathWidth={3}
+            isActive={state.activeBeams.has('nonEvm')}
+          />
+
+          {/* Bitcoin → BIP-322 Verifier */}
           <AnimatedBeam
             containerRef={containerRef}
             fromRef={btcRightAnchorRef}
+            toRef={btcSpokeRef}
+            curvature={0}
+            duration={effectiveBeamDuration * 0.4}
+            gradientStartColor="#22c55e"
+            gradientStopColor="#4ade80"
+            pathColor="#22c55e"
+            pathOpacity={0.2}
+            pathWidth={3}
+            isActive={state.activeBeams.has('btc')}
+          />
+          {/* BIP-322 Verifier → Bridges */}
+          <AnimatedBeam
+            containerRef={containerRef}
+            fromRef={btcSpokeRef}
             toRef={bridgesLeftAnchorRef}
-            curvature={40}
-            duration={effectiveBeamDuration}
+            curvature={25}
+            duration={effectiveBeamDuration * 0.6}
             gradientStartColor="#22c55e"
             gradientStopColor="#4ade80"
             pathColor="#22c55e"

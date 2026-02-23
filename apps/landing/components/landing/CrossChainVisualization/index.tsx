@@ -18,12 +18,12 @@ const CrossChainVisualizationMobile = lazy(() =>
 export function CrossChainVisualization(props: CrossChainVisualizationProps) {
   return (
     <>
-      {/* Desktop: horizontal with animated beams (≥768px) */}
-      <div className="hidden md:block">
+      {/* Desktop: horizontal with animated beams (≥850px) */}
+      <div className="hidden min-[850px]:block">
         <CrossChainVisualizationDesktop {...props} />
       </div>
-      {/* Mobile: vertical stacked layout (<768px) */}
-      <div className="block md:hidden">
+      {/* Mobile: vertical stacked layout (<850px) */}
+      <div className="block min-[850px]:hidden">
         <CrossChainVisualizationMobile {...props} />
       </div>
     </>
