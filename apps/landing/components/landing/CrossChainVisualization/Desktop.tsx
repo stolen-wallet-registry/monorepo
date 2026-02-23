@@ -593,7 +593,7 @@ export function CrossChainVisualizationDesktop({
                   <NetworkInk variant="branded" className="size-5" />
                 </IconCircle>
                 <IconCircle ref={worldRef} label="World Chain" size="xs">
-                  <NetworkWorld variant="branded" className="size-5" />
+                  <NetworkWorld variant="branded" className="size-5 dark:invert" />
                 </IconCircle>
               </div>
               {/* Static connections inside the container */}
