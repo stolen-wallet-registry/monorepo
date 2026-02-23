@@ -127,8 +127,8 @@ library CrossChainMessage {
         pure
         returns (WalletRegistrationPayload memory payload)
     {
-        // Validate minimum length (12 fields × 32 bytes = 384 bytes)
-        if (data.length < 384) revert CrossChainMessage__InvalidMessageLength();
+        // Wallet messages are fixed-size: 12 fields × 32 bytes = 384 bytes exactly
+        if (data.length != 384) revert CrossChainMessage__InvalidMessageLength();
 
         // Validate header
         uint8 version = abi.decode(data[0:32], (uint8));
@@ -217,7 +217,7 @@ library CrossChainMessage {
 
     /// @notice Convert an address to bytes32 (for cross-chain addressing)
     /// @param addr The address to convert
-    /// @return The address as bytes32 (right-padded)
+    /// @return The address as bytes32 (left-zero-padded, address in lower 160 bits)
     function addressToBytes32(address addr) internal pure returns (bytes32) {
         return bytes32(uint256(uint160(addr)));
     }

@@ -70,12 +70,16 @@ contract CrossChainInboxTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // HELPERS
+    // HELPERS — single source of truth for test payloads
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Build a valid wallet registration message
-    function _buildWalletMessage(address walletAddr) internal view returns (bytes memory) {
-        CrossChainMessage.WalletRegistrationPayload memory payload = CrossChainMessage.WalletRegistrationPayload({
+    /// @dev Canonical wallet payload — used by both message builder and ID helper
+    function _makeWalletPayload(address walletAddr)
+        internal
+        view
+        returns (CrossChainMessage.WalletRegistrationPayload memory)
+    {
+        return CrossChainMessage.WalletRegistrationPayload({
             namespaceHash: keccak256("eip155"),
             chainRef: bytes32(0),
             identifier: bytes32(uint256(uint160(walletAddr))),
@@ -87,18 +91,17 @@ contract CrossChainInboxTest is Test {
             timestamp: uint64(block.timestamp),
             registrationHash: keccak256("dummy")
         });
-        return CrossChainMessage.encodeWalletRegistration(payload);
     }
 
-    /// @dev Build a valid transaction batch message
-    function _buildTxBatchMessage(bytes32 txHash) internal returns (bytes memory) {
+    /// @dev Canonical tx batch payload — used by both message builder and ID helper
+    function _makeTxBatchPayload(bytes32 txHash) internal returns (CrossChainMessage.TransactionBatchPayload memory) {
         bytes32[] memory txHashes = new bytes32[](1);
         txHashes[0] = txHash;
-        bytes32[] memory chainIds = new bytes32[](1);
-        chainIds[0] = CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID));
+        bytes32[] memory chainIdArr = new bytes32[](1);
+        chainIdArr[0] = CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID));
 
-        CrossChainMessage.TransactionBatchPayload memory payload = CrossChainMessage.TransactionBatchPayload({
-            dataHash: keccak256(abi.encode(txHashes, chainIds)),
+        return CrossChainMessage.TransactionBatchPayload({
+            dataHash: keccak256(abi.encode(txHashes, chainIdArr)),
             reporter: makeAddr("reporter"),
             reportedChainId: CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID)),
             sourceChainId: CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID)),
@@ -107,9 +110,18 @@ contract CrossChainInboxTest is Test {
             nonce: 0,
             timestamp: uint64(block.timestamp),
             transactionHashes: txHashes,
-            chainIds: chainIds
+            chainIds: chainIdArr
         });
-        return CrossChainMessage.encodeTransactionBatch(payload);
+    }
+
+    /// @dev Build a valid wallet registration message
+    function _buildWalletMessage(address walletAddr) internal view returns (bytes memory) {
+        return CrossChainMessage.encodeWalletRegistration(_makeWalletPayload(walletAddr));
+    }
+
+    /// @dev Build a valid transaction batch message
+    function _buildTxBatchMessage(bytes32 txHash) internal returns (bytes memory) {
+        return CrossChainMessage.encodeTransactionBatch(_makeTxBatchPayload(txHash));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -135,8 +147,9 @@ contract CrossChainInboxTest is Test {
     /// @notice Wallet registration message is received, wallet stored, events emitted
     function test_HandleWalletRegistration_Success() public {
         address wallet = makeAddr("crossChainWallet");
-        bytes memory encoded = _buildWalletMessage(wallet);
-        bytes32 expectedMessageId = keccak256(encoded);
+        CrossChainMessage.WalletRegistrationPayload memory payload = _makeWalletPayload(wallet);
+        bytes memory encoded = CrossChainMessage.encodeWalletRegistration(payload);
+        bytes32 expectedMessageId = keccak256(abi.encode(payload));
 
         vm.expectEmit(true, true, false, true);
         emit CrossChainInbox.WalletRegistrationReceived(
@@ -198,9 +211,10 @@ contract CrossChainInboxTest is Test {
     /// @notice Transaction batch message is received and transactions stored
     function test_HandleTransactionBatch_Success() public {
         bytes32 txHash = keccak256("crossChainTx");
-        bytes memory encoded = _buildTxBatchMessage(txHash);
+        CrossChainMessage.TransactionBatchPayload memory payload = _makeTxBatchPayload(txHash);
+        bytes memory encoded = CrossChainMessage.encodeTransactionBatch(payload);
+        bytes32 expectedMessageId = keccak256(abi.encode(payload));
 
-        bytes32 expectedMessageId = keccak256(encoded);
         address reporter = makeAddr("reporter");
 
         vm.expectEmit(true, true, false, true);
@@ -359,8 +373,9 @@ contract CrossChainInboxTest is Test {
     /// @notice isMessageProcessed returns false before processing, true after
     function test_IsMessageProcessed() public {
         address wallet = makeAddr("processedCheck");
-        bytes memory encoded = _buildWalletMessage(wallet);
-        bytes32 messageId = keccak256(encoded);
+        CrossChainMessage.WalletRegistrationPayload memory payload = _makeWalletPayload(wallet);
+        bytes memory encoded = CrossChainMessage.encodeWalletRegistration(payload);
+        bytes32 messageId = keccak256(abi.encode(payload));
 
         assertFalse(inboxContract.isMessageProcessed(messageId), "Message should not be processed yet");
 

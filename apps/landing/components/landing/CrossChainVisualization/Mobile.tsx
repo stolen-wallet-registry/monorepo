@@ -23,6 +23,7 @@ import {
   WormholeLogo,
   MobileSection,
   MobileRegistryHub,
+  GroomLakePngLogo,
   SealTeamLogo,
   TrmLabsLogo,
 } from './shared';
@@ -151,6 +152,9 @@ export function CrossChainVisualizationMobile({
             </IconCircle>
             <IconCircle label="TRM Labs" size="sm" pulse pulseDelay={1.2}>
               <TrmLabsLogo className="text-[#071C2C] dark:text-white" />
+            </IconCircle>
+            <IconCircle label="Groom Lake" size="sm" pulse pulseDelay={1.5}>
+              <GroomLakePngLogo />
             </IconCircle>
           </div>
           <span className="text-[10px] text-muted-foreground">Exchanges, Wallets, Security</span>

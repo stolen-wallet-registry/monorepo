@@ -31,16 +31,29 @@ import {
   GracePeriodStep,
   SuccessStep,
 } from '@/components/registration/steps';
-import { WaitingForData, ConnectionStatusBadge, ReconnectDialog } from '@/components/p2p';
+import {
+  WaitingForData,
+  ConnectionStatusBadge,
+  ReconnectDialog,
+  P2PWaitForConfirmation,
+} from '@/components/p2p';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
 import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
-import { setup, PROTOCOLS, readStreamData, type ProtocolHandler } from '@/lib/p2p';
+import {
+  setup,
+  PROTOCOLS,
+  readStreamData,
+  isStreamAbortError,
+  type ProtocolHandler,
+} from '@/lib/p2p';
+import { useCrossChainConfirmation } from '@/hooks/useCrossChainConfirmation';
 import { logger } from '@/lib/logger';
 import { isHash } from '@/lib/types/ethereum';
+import type { Address } from '@/lib/types/ethereum';
 
 /**
  * Step descriptions for P2P registeree flow.
@@ -67,6 +80,44 @@ const STEP_TITLES: Partial<Record<RegistrationStep, string>> = {
   'registration-payment': 'Relayer Completing',
   success: 'Complete',
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// P2P Wait for Registration - polls hub as fallback when P2P message lost
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface WalletP2PWaitForRegistrationProps {
+  wallet: Address | undefined;
+  onComplete: () => void;
+}
+
+/**
+ * Waits for the relayer to complete wallet registration.
+ *
+ * Dual-path confirmation:
+ * 1. P2P: REG_PAY handler advances step directly (handled in parent)
+ * 2. On-chain polling: polls hub isWalletRegistered as fallback
+ */
+function WalletP2PWaitForRegistration({ wallet, onComplete }: WalletP2PWaitForRegistrationProps) {
+  const chainId = useChainId();
+
+  const confirmation = useCrossChainConfirmation({
+    wallet,
+    spokeChainId: chainId,
+    enabled: !!wallet,
+    pollInterval: 3000,
+    maxPollingTime: 120000,
+  });
+
+  return (
+    <P2PWaitForConfirmation
+      status={confirmation.status}
+      elapsedTime={confirmation.elapsedTime}
+      onComplete={onComplete}
+      waitingFor="registration transaction"
+      logContext={{ wallet, elapsedTime: confirmation.elapsedTime }}
+    />
+  );
+}
 
 export function P2PRegistereeRegistrationPage() {
   const [, setLocation] = useLocation();
@@ -224,6 +275,12 @@ export function P2PRegistereeRegistrationPage() {
                   break;
               }
             } catch (err) {
+              if (isStreamAbortError(err)) {
+                logger.p2p.warn('Stream aborted during read, connection may be degraded', {
+                  protocol,
+                });
+                return;
+              }
               const message = err instanceof Error ? err.message : 'Protocol handling error';
               logger.p2p.error('Error handling protocol', { protocol }, err as Error);
               setProtocolError(`Error in ${protocol}: ${message}`);
@@ -381,12 +438,7 @@ export function P2PRegistereeRegistrationPage() {
         return <P2PRegSignStep getLibp2p={getLibp2p} />;
 
       case 'registration-payment':
-        return (
-          <WaitingForData
-            message="Waiting for relayer to complete registration..."
-            waitingFor="registration transaction"
-          />
-        );
+        return <WalletP2PWaitForRegistration wallet={address} onComplete={goToNextStep} />;
 
       case 'success':
         return <SuccessStep />;

@@ -5,14 +5,15 @@ import { IFraudRegistryHub } from "./interfaces/IFraudRegistryHub.sol";
 import { IMessageRecipient } from "@hyperlane-xyz/core/contracts/interfaces/IMessageRecipient.sol";
 import { CrossChainMessage } from "./libraries/CrossChainMessage.sol";
 import { CAIP10Evm } from "./libraries/CAIP10Evm.sol";
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { TimelockOwnable } from "./libraries/TimelockOwnable.sol";
 
 /// @title CrossChainInbox
 /// @author Stolen Wallet Registry Team
 /// @notice Hub chain message receiver for cross-chain registrations
 /// @dev Receives messages from Hyperlane and forwards to FraudRegistryHub.
 ///      Uses CrossChainMessage format with full CAIP-10 support.
-contract CrossChainInbox is IMessageRecipient, Ownable2Step {
+contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -109,9 +110,8 @@ contract CrossChainInbox is IMessageRecipient, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Handle incoming cross-chain message from Hyperlane
-    /// @dev The messageId emitted is a payload-derived ID (keccak256 of message body), not Hyperlane's
-    ///      native message ID. Hyperlane's native ID is computed from the full message envelope
-    ///      (version, nonce, origin, sender, destination, recipient, body) which isn't passed to handle().
+    /// @dev The messageId is computed from canonical re-encoding of decoded fields (not raw bytes).
+    ///      This prevents trailing-bytes attacks where a bridge appends extra data to bypass dedup.
     ///      To correlate with Hyperlane's native ID, index Mailbox.Dispatch events on the source chain.
     /// @param _origin Origin chain domain ID
     /// @param _sender Sender address on origin chain (bytes32)
@@ -122,34 +122,34 @@ contract CrossChainInbox is IMessageRecipient, Ownable2Step {
             revert CrossChainInbox__UntrustedSource();
         }
 
-        // Generate payload-derived ID for idempotency and event correlation
-        // Note: This is NOT Hyperlane's native message ID (see function docs)
-        bytes32 messageId = keccak256(_messageBody);
-
-        // Idempotency: reject duplicate messages even if Hyperlane's dedup fails
-        if (_processedMessages[messageId]) revert CrossChainInbox__DuplicateMessage();
-        _processedMessages[messageId] = true;
-
-        // Extract message type to determine routing
+        // Extract message type first, then decode + compute canonical messageId
         bytes1 msgType = CrossChainMessage.getMessageType(_messageBody);
 
         if (msgType == CrossChainMessage.MSG_TYPE_WALLET) {
-            _handleWalletRegistration(_origin, _messageBody, messageId);
+            CrossChainMessage.WalletRegistrationPayload memory wp =
+                CrossChainMessage.decodeWalletRegistration(_messageBody);
+            bytes32 messageId = keccak256(abi.encode(wp));
+            if (_processedMessages[messageId]) revert CrossChainInbox__DuplicateMessage();
+            _processedMessages[messageId] = true;
+            _handleWalletRegistration(_origin, wp, messageId);
         } else if (msgType == CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH) {
-            _handleTransactionBatch(_origin, _messageBody, messageId);
+            CrossChainMessage.TransactionBatchPayload memory tp = CrossChainMessage.decodeTransactionBatch(_messageBody);
+            bytes32 messageId = keccak256(abi.encode(tp));
+            if (_processedMessages[messageId]) revert CrossChainInbox__DuplicateMessage();
+            _processedMessages[messageId] = true;
+            _handleTransactionBatch(_origin, tp, messageId);
         } else {
             revert CrossChainInbox__UnknownMessageType();
         }
     }
 
-    /// @dev Handle wallet registration messages (format)
-    function _handleWalletRegistration(uint32 _origin, bytes calldata _messageBody, bytes32 messageId) internal {
-        // Decode the registration payload
-        CrossChainMessage.WalletRegistrationPayload memory payload =
-            CrossChainMessage.decodeWalletRegistration(_messageBody);
-
+    /// @dev Handle wallet registration from decoded payload
+    function _handleWalletRegistration(
+        uint32 _origin,
+        CrossChainMessage.WalletRegistrationPayload memory payload,
+        bytes32 messageId
+    ) internal {
         // Defense in depth: verify payload sourceChainId matches Hyperlane origin
-        // Convert _origin (Hyperlane domain, typically EIP-155) to CAIP-2 hash
         bytes32 expectedSourceChainId = CAIP10Evm.caip2Hash(uint64(_origin));
         if (payload.sourceChainId != expectedSourceChainId) {
             revert CrossChainInbox__SourceChainMismatch();
@@ -172,12 +172,12 @@ contract CrossChainInbox is IMessageRecipient, Ownable2Step {
         emit WalletRegistrationReceived(_origin, payload.identifier, messageId);
     }
 
-    /// @dev Handle transaction batch messages (format)
-    function _handleTransactionBatch(uint32 _origin, bytes calldata _messageBody, bytes32 messageId) internal {
-        // Decode the transaction batch payload
-        CrossChainMessage.TransactionBatchPayload memory payload =
-            CrossChainMessage.decodeTransactionBatch(_messageBody);
-
+    /// @dev Handle transaction batch from decoded payload
+    function _handleTransactionBatch(
+        uint32 _origin,
+        CrossChainMessage.TransactionBatchPayload memory payload,
+        bytes32 messageId
+    ) internal {
         // Defense in depth: verify sourceChainId matches origin
         bytes32 expectedSourceChainId = CAIP10Evm.caip2Hash(uint64(_origin));
         if (payload.sourceChainId != expectedSourceChainId) {
@@ -205,13 +205,33 @@ contract CrossChainInbox is IMessageRecipient, Ownable2Step {
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Set trusted source for a chain
+    /// @notice Set trusted source (immediate — only during initial setup)
     /// @param chainId Hyperlane domain ID
     /// @param spokeRegistry Spoke registry address (as bytes32)
     /// @param trusted Whether the source is trusted
-    function setTrustedSource(uint32 chainId, bytes32 spokeRegistry, bool trusted) external onlyOwner {
-        // Prevent trusting zero address (common misconfiguration)
+    function setTrustedSource(uint32 chainId, bytes32 spokeRegistry, bool trusted) external onlyOwner onlyDuringSetup {
         if (trusted && spokeRegistry == bytes32(0)) revert CrossChainInbox__ZeroAddress();
+        _trustedSources[chainId][spokeRegistry] = trusted;
+        emit TrustedSourceUpdated(chainId, spokeRegistry, trusted);
+    }
+
+    /// @notice Propose a trusted source change (2-day delay before activation)
+    /// @param chainId Hyperlane domain ID of the source chain
+    /// @param spokeRegistry Spoke registry address (as bytes32)
+    /// @param trusted Whether the source should be trusted
+    function proposeTrustedSource(uint32 chainId, bytes32 spokeRegistry, bool trusted) external onlyOwner {
+        if (trusted && spokeRegistry == bytes32(0)) revert CrossChainInbox__ZeroAddress();
+        bytes32 key = keccak256(abi.encode("setTrustedSource", chainId, spokeRegistry, trusted));
+        _proposeAction(key);
+    }
+
+    /// @notice Activate a previously proposed trusted source change
+    /// @param chainId Hyperlane domain ID of the source chain
+    /// @param spokeRegistry Spoke registry address (as bytes32)
+    /// @param trusted Whether the source should be trusted
+    function activateTrustedSource(uint32 chainId, bytes32 spokeRegistry, bool trusted) external onlyOwner {
+        bytes32 key = keccak256(abi.encode("setTrustedSource", chainId, spokeRegistry, trusted));
+        _activateAction(key);
         _trustedSources[chainId][spokeRegistry] = trusted;
         emit TrustedSourceUpdated(chainId, spokeRegistry, trusted);
     }

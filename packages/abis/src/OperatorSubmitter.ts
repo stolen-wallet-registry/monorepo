@@ -640,4 +640,9 @@ export const OperatorSubmitterABI = [
       },
     ],
   },
+  {
+    type: 'error',
+    name: 'ReentrancyGuardReentrantCall',
+    inputs: [],
+  },
 ] as const;

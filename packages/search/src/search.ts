@@ -145,7 +145,7 @@ export async function searchTransaction(
     txHash: txHash.toLowerCase(),
   });
 
-  const transactions = result.transactionInBatches?.items ?? [];
+  const transactions = result.transactionInBatchs?.items ?? [];
   const firstTx = transactions[0];
 
   if (!firstTx) {
@@ -161,7 +161,7 @@ export async function searchTransaction(
         caip2ChainId: t.caip2ChainId,
         chainName: getCAIP2ChainName(t.caip2ChainId),
         numericChainId: t.numericChainId,
-        batchId: t.batchId as Hash,
+        batchId: (t.batchId as Hash) ?? null,
         reporter: t.reporter as Address,
         reportedAt: BigInt(t.reportedAt),
       })),

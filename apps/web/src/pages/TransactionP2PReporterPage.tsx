@@ -36,7 +36,12 @@ import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 import { P2PDebugPanel } from '@/components/dev/P2PDebugPanel';
 import { WaitForConnectionStep } from '@/components/registration/steps';
 import { TxGracePeriodStep, TxSuccessStep } from '@/components/registration/tx-steps';
-import { WaitingForData, ConnectionStatusBadge, ReconnectDialog } from '@/components/p2p';
+import {
+  WaitingForData,
+  ConnectionStatusBadge,
+  ReconnectDialog,
+  P2PWaitForConfirmation,
+} from '@/components/p2p';
 import {
   useTransactionRegistrationStore,
   useTransactionRegistrationFlow,
@@ -51,6 +56,8 @@ import {
   useTransactionAcknowledgementHashStruct,
   useTransactionRegistrationHashStruct,
   useTxContractNonce,
+  useTxCrossChainConfirmation,
+  needsTxCrossChainConfirmation,
 } from '@/hooks/transactions';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
 import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
@@ -60,6 +67,7 @@ import {
   readStreamData,
   passStreamData,
   getPeerConnection,
+  isStreamAbortError,
   type ProtocolHandler,
 } from '@/lib/p2p';
 import { computeTransactionDataHash } from '@/lib/signatures/transactions';
@@ -589,6 +597,49 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// P2P Wait for Registration - polls hub as fallback when P2P message lost
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface TxP2PWaitForRegistrationProps {
+  onComplete: () => void;
+}
+
+/**
+ * Waits for the relayer to complete transaction registration.
+ * Polls hub chain via useTxCrossChainConfirmation; delegates
+ * rendering and auto-advance to the shared P2PWaitForConfirmation.
+ */
+function TxP2PWaitForRegistration({ onComplete }: TxP2PWaitForRegistrationProps) {
+  const chainId = useChainId();
+  const { txHashesForContract, reportedChainId } = useTransactionSelection();
+
+  const isCrossChain = needsTxCrossChainConfirmation(chainId);
+  const sampleTxHash = txHashesForContract.length > 0 ? txHashesForContract[0] : undefined;
+  const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
+
+  const confirmation = useTxCrossChainConfirmation({
+    sampleTxHash,
+    reportedChainId: reportedChainIdHash,
+    spokeChainId: chainId,
+    enabled: !!sampleTxHash && !!reportedChainIdHash,
+    pollInterval: 3000,
+    maxPollingTime: 120000,
+  });
+
+  return (
+    <P2PWaitForConfirmation
+      status={confirmation.status}
+      elapsedTime={confirmation.elapsedTime}
+      onComplete={onComplete}
+      waitingFor={
+        isCrossChain ? 'cross-chain registration confirmation' : 'registration transaction'
+      }
+      logContext={{ sampleTxHash, elapsedTime: confirmation.elapsedTime }}
+    />
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Main Page Component
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -763,6 +814,15 @@ export function TransactionP2PReporterPage() {
                   break;
               }
             } catch (err) {
+              // Stream abort errors happen when the WebRTC connection degrades
+              // (e.g., keep-alive pings failing during cross-chain wait).
+              // These are not protocol errors — log and ignore.
+              if (isStreamAbortError(err)) {
+                logger.p2p.warn('Stream aborted during read, connection may be degraded', {
+                  protocol,
+                });
+                return;
+              }
               const message = err instanceof Error ? err.message : 'Protocol handling error';
               logger.p2p.error('Error handling TX protocol', { protocol }, err as Error);
               setProtocolError(`Error in ${protocol}: ${message}`);
@@ -1058,12 +1118,7 @@ export function TransactionP2PReporterPage() {
         return <TxP2PRegSign getLibp2p={getLibp2p} />;
 
       case 'registration-payment':
-        return (
-          <WaitingForData
-            message="Waiting for relayer to complete registration..."
-            waitingFor="registration transaction"
-          />
-        );
+        return <TxP2PWaitForRegistration onComplete={goToNextStep} />;
 
       case 'success':
         return <TxSuccessStep />;

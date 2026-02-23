@@ -187,6 +187,8 @@ If a dispute against a **registry entry** succeeds:
 | Operator removal  | 10%    | 50%+1    | 24 hours |
 | Emergency action  | 5%     | 66%+1    | 0 hours  |
 
+> **Note:** These are **DAO governance proposal timelocks** (future Phase 2+). They are separate from the on-chain `TimelockOwnable` delay (48 hours) described below, which governs contract-level admin changes today. Once DAO governance is live, both layers apply: a DAO vote must pass its proposal timelock, then the resulting on-chain transaction is subject to the `TimelockOwnable` activation delay.
+
 ### Treasury
 
 - Registration fees accumulate in treasury
@@ -205,6 +207,42 @@ The registry uses **Ownable2Step** pattern:
 2. New owner must accept ownership
 3. Prevents accidental transfers
 4. Safe for DAO transition
+
+### Timelock on Trust-Boundary Changes
+
+All contracts that control trust-critical configuration inherit from **TimelockOwnable**, which enforces a **2-day activation delay** on administrative changes after initial deployment.
+
+**Why this matters:** Without a timelock, a compromised owner key could silently swap the hub's wallet registry to a malicious contract, trust a rogue cross-chain source, or approve a sham operator — all in a single transaction. Users and monitoring systems would have no warning and no time to react.
+
+The 2-day delay creates an **exit window** — the same pattern used by Compound, Uniswap, and Aave governance timelocks. When the owner proposes a change, it's visible on-chain immediately but cannot take effect for 48 hours. This gives:
+
+- Users time to see the pending change and stop interacting if they disagree
+- Monitoring services time to alert on unexpected proposals
+- The community time to coordinate a response
+
+**How it works:**
+
+1. **During deployment** — immediate setters wire contracts together (no delay needed since nothing is live yet)
+2. **`completeSetup()`** — irreversibly locks the immediate setters
+3. **After setup** — all trust-boundary changes require `propose` → wait 2 days → `activate`
+
+Each contract exposes **action-specific** propose/activate functions (e.g., `proposeOperator()` / `activateOperator()`, `proposeWalletRegistry()` / `activateWalletRegistry()`). These delegate to the internal `_proposeAction()` / `_activateAction()` helpers in `TimelockOwnable`. The owner can cancel a pending proposal at any time via `cancelAction()`.
+
+**What's timelocked:**
+
+| Contract          | Timelocked Functions                                        |
+| ----------------- | ----------------------------------------------------------- |
+| FraudRegistryHub  | Changing wallet, transaction, contract registries and inbox |
+| CrossChainInbox   | Adding or removing trusted cross-chain sources              |
+| OperatorRegistry  | Approving new operators                                     |
+| BaseSoulbound     | Granting or revoking minter authorization                   |
+| SoulboundReceiver | Changing trusted cross-chain forwarders                     |
+
+**What stays immediate (by design):**
+
+- **`revokeOperator`** — revoking a bad actor is an emergency action; delaying it helps the attacker
+- **`pause` / `unpause`** — safety mechanisms that must act instantly
+- **`setFeeRecipient`** — doesn't affect trust boundaries (registry data integrity is unchanged), though a compromised owner key could redirect fee revenue; changes take effect immediately, so monitor `FeeRecipientSet` events and owner key access
 
 ### Emergency Powers
 

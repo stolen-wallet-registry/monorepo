@@ -2,7 +2,8 @@
 pragma solidity ^0.8.24;
 
 import { ERC721 } from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { TimelockOwnable } from "../libraries/TimelockOwnable.sol";
 import { IERC5192 } from "./interfaces/IERC5192.sol";
 import { ITranslationRegistry } from "./interfaces/ITranslationRegistry.sol";
 
@@ -16,7 +17,7 @@ import { ITranslationRegistry } from "./interfaces/ITranslationRegistry.sol";
 /// function that all transfers route through.
 ///
 /// Reference: https://forum.openzeppelin.com/t/soulbound-nft-migration-from-v4-9-to-v5-0/38931
-abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
+abstract contract BaseSoulbound is ERC721, IERC5192, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
     // STATE
     // ═══════════════════════════════════════════════════════════════════════════
@@ -71,6 +72,12 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
     /// @param minter The minter address
     /// @param authorized True if authorized, false if revoked
     event AuthorizedMinterUpdated(address indexed minter, bool authorized);
+
+    /// @notice Emitted when an authorized minter change is proposed (timelocked)
+    /// @param minter The minter address
+    /// @param authorized Whether authorization is being proposed
+    /// @param actionKey The timelock action key for this proposal
+    event AuthorizedMinterProposed(address indexed minter, bool authorized, bytes32 actionKey);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -158,12 +165,31 @@ abstract contract BaseSoulbound is ERC721, IERC5192, Ownable2Step {
         emit DomainUpdated(oldDomain, _domain);
     }
 
-    /// @notice Add or remove an authorized minter (for cross-chain mints)
-    /// @dev Only owner can manage authorized minters
+    /// @notice Set authorized minter (immediate — only during initial setup)
     /// @param minter Address to authorize/deauthorize
     /// @param authorized True to authorize, false to revoke
-    function setAuthorizedMinter(address minter, bool authorized) external onlyOwner {
+    function setAuthorizedMinter(address minter, bool authorized) external onlyOwner onlyDuringSetup {
         if (minter == address(0)) revert ZeroAddress();
+        authorizedMinters[minter] = authorized;
+        emit AuthorizedMinterUpdated(minter, authorized);
+    }
+
+    /// @notice Propose an authorized minter change (2-day delay)
+    /// @param minter Address of the minter
+    /// @param authorized Whether the minter should be authorized
+    function proposeAuthorizedMinter(address minter, bool authorized) external onlyOwner {
+        if (minter == address(0)) revert ZeroAddress();
+        bytes32 actionKey = keccak256(abi.encode("setAuthorizedMinter", minter, authorized));
+        _proposeAction(actionKey);
+        emit AuthorizedMinterProposed(minter, authorized, actionKey);
+    }
+
+    /// @notice Activate a previously proposed authorized minter change
+    /// @param minter Address of the minter
+    /// @param authorized Whether the minter should be authorized
+    function activateAuthorizedMinter(address minter, bool authorized) external onlyOwner {
+        if (minter == address(0)) revert ZeroAddress();
+        _activateAction(keccak256(abi.encode("setAuthorizedMinter", minter, authorized)));
         authorizedMinters[minter] = authorized;
         emit AuthorizedMinterUpdated(minter, authorized);
     }

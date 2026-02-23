@@ -48,10 +48,8 @@ contract SeedOperatorData is Script {
     // ═══════════════════════════════════════════════════════════════════════════
     // Pre-computed: keccak256(abi.encodePacked("eip155:", chainIdString))
 
-    bytes32 constant CHAIN_ID_ETH_MAINNET = 0x38b2caf37cccf00b6fbc0feb1e534daf567950e4d48066d0e3669028fe5f83e6; // eip155:1
-    bytes32 constant CHAIN_ID_BASE = 0x43b48883ef7be0f98fe7f98fafb2187e42caab4063697b32816f95e09d69b3ec; // eip155:8453
-    bytes32 constant CHAIN_ID_ARBITRUM = 0x1fca116f439fa7af0604ced8c7a6239cdcabb5070838cbc80cdba0089733e472; // eip155:42161
-    bytes32 constant CHAIN_ID_LOCAL = 0x318e51c37247d03bad135571413b06a083591bcc680967d80bf587ac928cf369; // eip155:31337
+    bytes32 constant CHAIN_ID_HUB = 0x318e51c37247d03bad135571413b06a083591bcc680967d80bf587ac928cf369; // eip155:31337
+    bytes32 constant CHAIN_ID_SPOKE = 0x6fb84c7948e7a13a872038b4362f7a1ede72e8075ef49d57592e1888652b0443; // eip155:31338
 
     // ═══════════════════════════════════════════════════════════════════════════
     // TEST DATA - STOLEN WALLETS
@@ -82,18 +80,20 @@ contract SeedOperatorData is Script {
 
     function run() external {
         // Guard: This script uses hardcoded anvil keys - only run on local chains
-        if (block.chainid != 31_337 && block.chainid != 31_338) {
-            console2.log("ERROR: SeedOperatorData uses hardcoded anvil keys.");
-            console2.log("This script is only intended for local development (chain IDs 31337/31338).");
-            console2.log("Current chain ID:", block.chainid);
-            return;
-        }
+        require(
+            block.chainid == 31_337 || block.chainid == 31_338, "SeedOperatorData: only for local chains 31337/31338"
+        );
 
         // Load contract addresses (env vars or defaults)
         address operatorRegistryAddr = vm.envOr("OPERATOR_REGISTRY", DEFAULT_OPERATOR_REGISTRY);
         address fraudRegistryHubAddr = vm.envOr("FRAUD_REGISTRY_HUB", DEFAULT_FRAUD_REGISTRY_HUB);
         address operatorSubmitterAddr = vm.envOr("OPERATOR_SUBMITTER", DEFAULT_OPERATOR_SUBMITTER);
         address feeManagerAddr = vm.envOr("FEE_MANAGER", DEFAULT_FEE_MANAGER);
+
+        require(operatorRegistryAddr != address(0), "SeedOperatorData: OPERATOR_REGISTRY is zero");
+        require(fraudRegistryHubAddr != address(0), "SeedOperatorData: FRAUD_REGISTRY_HUB is zero");
+        require(operatorSubmitterAddr != address(0), "SeedOperatorData: OPERATOR_SUBMITTER is zero");
+        require(feeManagerAddr != address(0), "SeedOperatorData: FEE_MANAGER is zero");
 
         console2.log("");
         console2.log("==========================================");
@@ -197,31 +197,28 @@ contract SeedOperatorData is Script {
         bytes32[] memory reportedChainIds = new bytes32[](4);
         uint64[] memory incidentTimestamps = new uint64[](4);
 
-        // Wallet 1: Ethereum Mainnet
+        // Spread wallets across both hub and spoke chains
         identifiers[0] = bytes32(uint256(uint160(STOLEN_WALLET_1)));
-        reportedChainIds[0] = CHAIN_ID_ETH_MAINNET;
+        reportedChainIds[0] = CHAIN_ID_HUB;
         incidentTimestamps[0] = uint64(block.timestamp - 1 days);
 
-        // Wallet 2: Base
         identifiers[1] = bytes32(uint256(uint160(STOLEN_WALLET_2)));
-        reportedChainIds[1] = CHAIN_ID_BASE;
+        reportedChainIds[1] = CHAIN_ID_SPOKE;
         incidentTimestamps[1] = uint64(block.timestamp - 2 days);
 
-        // Wallet 3: Arbitrum
         identifiers[2] = bytes32(uint256(uint160(STOLEN_WALLET_3)));
-        reportedChainIds[2] = CHAIN_ID_ARBITRUM;
+        reportedChainIds[2] = CHAIN_ID_HUB;
         incidentTimestamps[2] = uint64(block.timestamp - 3 days);
 
-        // Wallet 4: Local (same as hub for testing)
         identifiers[3] = bytes32(uint256(uint160(STOLEN_WALLET_4)));
-        reportedChainIds[3] = CHAIN_ID_LOCAL;
+        reportedChainIds[3] = CHAIN_ID_SPOKE;
         incidentTimestamps[3] = uint64(block.timestamp - 4 days);
 
         console2.log("  Wallets: 4");
-        console2.log("    - ", STOLEN_WALLET_1, " (Ethereum)");
-        console2.log("    - ", STOLEN_WALLET_2, " (Base)");
-        console2.log("    - ", STOLEN_WALLET_3, " (Arbitrum)");
-        console2.log("    - ", STOLEN_WALLET_4, " (Local)");
+        console2.log("    - ", STOLEN_WALLET_1, " (Hub)");
+        console2.log("    - ", STOLEN_WALLET_2, " (Spoke)");
+        console2.log("    - ", STOLEN_WALLET_3, " (Hub)");
+        console2.log("    - ", STOLEN_WALLET_4, " (Spoke)");
 
         // Submit batch with fee
         operatorSubmitter.registerWalletsAsOperator{ value: batchFee }(
@@ -249,11 +246,11 @@ contract SeedOperatorData is Script {
         txHashes[2] = STOLEN_TX_3;
         txHashes[3] = STOLEN_TX_4;
 
-        // All transactions on the same chain for simplicity
-        chainIds[0] = CHAIN_ID_ETH_MAINNET;
-        chainIds[1] = CHAIN_ID_ETH_MAINNET;
-        chainIds[2] = CHAIN_ID_BASE;
-        chainIds[3] = CHAIN_ID_ARBITRUM;
+        // Spread transactions across both chains
+        chainIds[0] = CHAIN_ID_HUB;
+        chainIds[1] = CHAIN_ID_HUB;
+        chainIds[2] = CHAIN_ID_SPOKE;
+        chainIds[3] = CHAIN_ID_SPOKE;
 
         console2.log("  Transactions: 4");
         console2.log("    - ", vm.toString(STOLEN_TX_1));
@@ -286,11 +283,11 @@ contract SeedOperatorData is Script {
         contractIds[3] = bytes32(uint256(uint160(SCAM_CONTRACT_4)));
         contractIds[4] = bytes32(uint256(uint160(SCAM_CONTRACT_5)));
 
-        reportedChainIds[0] = CHAIN_ID_ETH_MAINNET;
-        reportedChainIds[1] = CHAIN_ID_ETH_MAINNET;
-        reportedChainIds[2] = CHAIN_ID_BASE;
-        reportedChainIds[3] = CHAIN_ID_BASE;
-        reportedChainIds[4] = CHAIN_ID_ARBITRUM;
+        reportedChainIds[0] = CHAIN_ID_HUB;
+        reportedChainIds[1] = CHAIN_ID_HUB;
+        reportedChainIds[2] = CHAIN_ID_SPOKE;
+        reportedChainIds[3] = CHAIN_ID_SPOKE;
+        reportedChainIds[4] = CHAIN_ID_HUB;
 
         console2.log("  Contracts: 5");
         console2.log("    - ", SCAM_CONTRACT_1);
@@ -331,8 +328,8 @@ contract SeedOperatorData is Script {
         contractIds[0] = bytes32(uint256(uint160(SCAM_CONTRACT_6)));
         contractIds[1] = bytes32(uint256(uint160(SCAM_CONTRACT_7)));
 
-        reportedChainIds[0] = CHAIN_ID_LOCAL;
-        reportedChainIds[1] = CHAIN_ID_LOCAL;
+        reportedChainIds[0] = CHAIN_ID_HUB;
+        reportedChainIds[1] = CHAIN_ID_SPOKE;
 
         console2.log("  Contracts: 2");
         console2.log("    - ", SCAM_CONTRACT_6);

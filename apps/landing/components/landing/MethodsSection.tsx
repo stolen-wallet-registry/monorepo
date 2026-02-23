@@ -16,7 +16,7 @@ const METHODS = [
   {
     title: 'Standard',
     description: 'Sign and pay from the same wallet you are registering as compromised.',
-    useCase: 'Wallet compromised but you still have temporary access',
+    useCase: 'Wallet compromised but you still have funds to pay for gas',
     icon: <UserCheck className="size-6" aria-hidden="true" />,
     highlight: false,
   },
@@ -30,7 +30,7 @@ const METHODS = [
   {
     title: 'P2P Relay',
     description: 'Sign with compromised wallet, trusted friend pays gas via libp2p relay.',
-    useCase: 'Wallet completely compromised, no funds available',
+    useCase: 'Wallet drained but you have a trusted friend who can help with gas fees',
     icon: <Users className="size-6" aria-hidden="true" />,
     highlight: false,
   },

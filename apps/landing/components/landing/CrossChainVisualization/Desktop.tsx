@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useEffect, useState, useReducer, useCallback } from 'react';
-import { Droplets, CircleDot } from 'lucide-react';
 import {
   AnimatedBeam,
   cn,
@@ -15,6 +14,8 @@ import {
   NetworkLinea,
   NetworkGnosis,
   NetworkCelo,
+  NetworkInk,
+  NetworkWorld,
   // Network icons - L1s
   NetworkBinanceSmartChain,
   NetworkSolana,
@@ -42,6 +43,7 @@ import {
   IconCircle,
   BridgeIcon,
   ChainalysisLogo,
+  GroomLakePngLogo,
   HyperlaneLogo,
   SealTeamLogo,
   TrmLabsLogo,
@@ -288,8 +290,8 @@ function ScreenReaderDescription() {
         <li>
           <strong>Step 4 - React to Events:</strong> Exchanges (Coinbase, Kraken, Gemini, Binance),
           wallets (MetaMask, Rainbow, Coinbase Wallet), and security services (Chainalysis, SEAL
-          Team, TRM Labs) subscribe to registry events and receive real-time alerts to protect
-          users.
+          Team, TRM Labs, Groom Lake) subscribe to registry events and receive real-time alerts to
+          protect users.
         </li>
       </ol>
     </div>
@@ -585,13 +587,13 @@ export function CrossChainVisualizationDesktop({
                   <NetworkGnosis variant="branded" className="size-5" />
                 </IconCircle>
                 <IconCircle ref={celoRef} label="Celo" size="xs">
-                  <NetworkCelo variant="branded" className="size-5" />
+                  <NetworkCelo variant="mono" className="size-5" />
                 </IconCircle>
                 <IconCircle ref={inkRef} label="Ink" size="xs">
-                  <Droplets className="size-4 text-pink-500" />
+                  <NetworkInk variant="branded" className="size-5" />
                 </IconCircle>
                 <IconCircle ref={worldRef} label="World Chain" size="xs">
-                  <CircleDot className="size-4 text-black dark:text-white" />
+                  <NetworkWorld variant="branded" className="size-5" />
                 </IconCircle>
               </div>
               {/* Static connections inside the container */}
@@ -729,6 +731,9 @@ export function CrossChainVisualizationDesktop({
                 <IconCircle label="TRM Labs" size="xs">
                   <TrmLabsLogo className="text-[#071C2C] dark:text-white" />
                 </IconCircle>
+                <IconCircle label="Groom Lake" size="xs">
+                  <GroomLakePngLogo />
+                </IconCircle>
               </div>
             </GroupContainer>
           </div>
@@ -820,6 +825,9 @@ export function CrossChainVisualizationDesktop({
                 </IconCircle>
                 <IconCircle label="TRM Labs" size="sm" triggerPulse={state.pulseListeners}>
                   <TrmLabsLogo className="text-[#071C2C] dark:text-white" />
+                </IconCircle>
+                <IconCircle label="Groom Lake" size="sm" triggerPulse={state.pulseListeners}>
+                  <GroomLakePngLogo />
                 </IconCircle>
               </div>
             </GroupContainer>

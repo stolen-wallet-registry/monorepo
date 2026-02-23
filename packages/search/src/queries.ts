@@ -1,5 +1,10 @@
 /**
  * GraphQL queries for the Ponder indexer.
+ *
+ * NOTE: Ponder auto-pluralizes table names by appending "s". For tables already
+ * ending in "s" (e.g. `transactionInBatch`, `walletBatch`) this produces
+ * `transactionInBatchs` and `walletBatchs` — grammatically odd but correct
+ * per Ponder's convention. Do NOT "fix" these to `transactionInBatches` etc.
  */
 
 import { gql } from 'graphql-request';
@@ -43,7 +48,7 @@ export const WALLET_BY_CAIP10_QUERY = gql`
  */
 export const TRANSACTION_QUERY = gql`
   query SearchTransaction($txHash: String!) {
-    transactionInBatches(where: { txHash: $txHash }) {
+    transactionInBatchs(where: { txHash: $txHash }) {
       items {
         id
         txHash
@@ -193,7 +198,7 @@ export const RECENT_CONTRACTS_QUERY = gql`
  */
 export const RECENT_TRANSACTIONS_QUERY = gql`
   query RecentTransactions($limit: Int!, $offset: Int) {
-    transactionBatches(
+    transactionBatchs(
       orderBy: "registeredAt"
       orderDirection: "desc"
       limit: $limit
@@ -221,7 +226,7 @@ export const RECENT_TRANSACTIONS_QUERY = gql`
  */
 export const RECENT_TRANSACTION_ENTRIES_QUERY = gql`
   query RecentTransactionEntries($limit: Int!, $offset: Int) {
-    transactionInBatches(
+    transactionInBatchs(
       orderBy: "reportedAt"
       orderDirection: "desc"
       limit: $limit
@@ -246,7 +251,7 @@ export const RECENT_TRANSACTION_ENTRIES_QUERY = gql`
  */
 export const RECENT_WALLET_BATCHES_QUERY = gql`
   query RecentWalletBatches($limit: Int!, $offset: Int) {
-    walletBatches(orderBy: "registeredAt", orderDirection: "desc", limit: $limit, offset: $offset) {
+    walletBatchs(orderBy: "registeredAt", orderDirection: "desc", limit: $limit, offset: $offset) {
       items {
         id
         operatorId
@@ -265,7 +270,7 @@ export const RECENT_WALLET_BATCHES_QUERY = gql`
  */
 export const RECENT_CONTRACT_BATCHES_QUERY = gql`
   query RecentContractBatches($limit: Int!, $offset: Int) {
-    fraudulentContractBatches(
+    fraudulentContractBatchs(
       orderBy: "registeredAt"
       orderDirection: "desc"
       limit: $limit
@@ -389,7 +394,7 @@ export const TRANSACTION_BATCH_ONLY_QUERY = gql`
  */
 export const TRANSACTION_ENTRIES_BY_TX_HASH_QUERY = gql`
   query TransactionEntriesByTxHash($txHash: String!, $limit: Int!, $offset: Int) {
-    transactionInBatches(
+    transactionInBatchs(
       where: { transactionHash: $txHash }
       orderBy: "reportedAt"
       orderDirection: "desc"
@@ -426,7 +431,7 @@ export const TRANSACTION_BATCH_DETAIL_QUERY = gql`
       registeredAt
       transactionHash
     }
-    transactionInBatches(
+    transactionInBatchs(
       where: { batchId: $batchId }
       orderBy: "reportedAt"
       orderDirection: "desc"
@@ -506,13 +511,13 @@ export interface RawWalletByCAIP10Response {
 }
 
 export interface RawTransactionResponse {
-  transactionInBatches: {
+  transactionInBatchs: {
     items: Array<{
       id: string;
       txHash: string;
       caip2ChainId: string;
       numericChainId?: number;
-      batchId: string;
+      batchId: string | null;
       reporter: string;
       reportedAt: string;
     }>;
@@ -615,7 +620,7 @@ export interface RawRecentContractsResponse {
 }
 
 export interface RawRecentTransactionsResponse {
-  transactionBatches: {
+  transactionBatchs: {
     items: Array<{
       id: string;
       dataHash: string;
@@ -632,7 +637,7 @@ export interface RawRecentTransactionsResponse {
 }
 
 export interface RawRecentTransactionEntriesResponse {
-  transactionInBatches: {
+  transactionInBatchs: {
     items: Array<{
       id: string;
       txHash: string;
@@ -647,7 +652,7 @@ export interface RawRecentTransactionEntriesResponse {
 }
 
 export interface RawRecentWalletBatchesResponse {
-  walletBatches: {
+  walletBatchs: {
     items: Array<{
       id: string;
       operatorId: string;
@@ -661,7 +666,7 @@ export interface RawRecentWalletBatchesResponse {
 }
 
 export interface RawRecentContractBatchesResponse {
-  fraudulentContractBatches: {
+  fraudulentContractBatchs: {
     items: Array<{
       id: string;
       operatorId: string;
@@ -739,7 +744,7 @@ export interface RawTransactionBatchOnlyResponse {
 }
 
 export interface RawTransactionEntriesByTxHashResponse {
-  transactionInBatches: {
+  transactionInBatchs: {
     items: Array<{
       id: string;
       txHash: string;
@@ -764,7 +769,7 @@ export interface RawTransactionBatchDetailResponse {
     registeredAt: string;
     transactionHash: string;
   } | null;
-  transactionInBatches: {
+  transactionInBatchs: {
     items: Array<{
       id: string;
       txHash: string;

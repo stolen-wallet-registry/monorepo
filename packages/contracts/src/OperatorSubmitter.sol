@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import { IWalletRegistry } from "./interfaces/IWalletRegistry.sol";
 import { ITransactionRegistry } from "./interfaces/ITransactionRegistry.sol";
@@ -19,7 +20,7 @@ import { RegistryCapabilities } from "./libraries/RegistryCapabilities.sol";
 ///      1. Validates operator permissions via OperatorRegistry
 ///      2. Collects fees via FeeManager
 ///      3. Forwards validated data to appropriate registry
-contract OperatorSubmitter is Ownable2Step, Pausable {
+contract OperatorSubmitter is Ownable2Step, Pausable, ReentrancyGuard {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -157,27 +158,35 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
     // INTERNAL HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @dev Operator batch fees are currently DISABLED (feeManager = address(0) at deployment).
+    ///      Gas costs of batch submissions are already substantial; adding per-batch fees
+    ///      on top is prohibitive. See PRPs/operator-fee-removal.md.
+    ///      Fee infrastructure is retained for potential future use.
     function _getBatchFee() internal view returns (uint256) {
         if (feeManager == address(0)) return 0;
         return IFeeManager(feeManager).operatorBatchFeeWei();
     }
 
     function _collectFee() internal {
-        if (feeManager == address(0)) return;
+        uint256 requiredFee = _getBatchFee();
 
-        uint256 requiredFee = IFeeManager(feeManager).operatorBatchFeeWei();
         if (msg.value < requiredFee) {
             revert OperatorSubmitter__InsufficientFee();
         }
 
-        if (feeRecipient != address(0) && requiredFee > 0) {
+        if (requiredFee > 0) {
+            if (feeRecipient == address(0)) revert OperatorSubmitter__InvalidFeeConfig();
             (bool success,) = feeRecipient.call{ value: requiredFee }("");
             if (!success) {
                 revert OperatorSubmitter__FeeForwardFailed();
             }
         }
 
-        // Refund excess ETH to caller (consistent with WalletRegistry, TransactionRegistry, SpokeRegistry)
+        // Push-based refund: operators must be able to receive ETH.
+        // If a smart-contract operator cannot accept refunds, the tx reverts —
+        // this is intentional. Operators should call quoteBatchFee() and send
+        // the exact amount. The contract must remain sweep-able to treasury
+        // without accounting for pending balances.
         uint256 excess = msg.value - requiredFee;
         if (excess > 0) {
             (bool refundSuccess,) = msg.sender.call{ value: excess }("");
@@ -225,7 +234,7 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
         bytes32[] calldata identifiers,
         bytes32[] calldata reportedChainIds,
         uint64[] calldata incidentTimestamps
-    ) external payable whenNotPaused onlyApprovedOperator(WALLET_CAPABILITY) {
+    ) external payable nonReentrant whenNotPaused onlyApprovedOperator(WALLET_CAPABILITY) {
         uint256 length = identifiers.length;
         if (length == 0) revert OperatorSubmitter__EmptyBatch();
         if (length != reportedChainIds.length || length != incidentTimestamps.length) {
@@ -246,6 +255,7 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
     function registerTransactionsAsOperator(bytes32[] calldata transactionHashes, bytes32[] calldata chainIds)
         external
         payable
+        nonReentrant
         whenNotPaused
         onlyApprovedOperator(TX_CAPABILITY)
     {
@@ -271,7 +281,7 @@ contract OperatorSubmitter is Ownable2Step, Pausable {
         bytes32[] calldata identifiers,
         bytes32[] calldata reportedChainIds,
         uint8[] calldata threatCategories
-    ) external payable whenNotPaused onlyApprovedOperator(CONTRACT_CAPABILITY) {
+    ) external payable nonReentrant whenNotPaused onlyApprovedOperator(CONTRACT_CAPABILITY) {
         uint256 length = identifiers.length;
         if (length == 0) revert OperatorSubmitter__EmptyBatch();
         if (length != reportedChainIds.length || length != threatCategories.length) {

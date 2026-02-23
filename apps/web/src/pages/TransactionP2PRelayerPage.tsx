@@ -47,6 +47,8 @@ import {
   PROTOCOLS,
   readStreamData,
   passStreamData,
+  getPeerConnection,
+  isStreamAbortError,
   type ProtocolHandler,
   type ParsedStreamData,
   type PaymentMessage,
@@ -325,6 +327,12 @@ export function TransactionP2PRelayerPage() {
                   break;
               }
             } catch (err) {
+              if (isStreamAbortError(err)) {
+                logger.p2p.warn('Stream aborted during read, connection may be degraded', {
+                  protocol,
+                });
+                return;
+              }
               logger.p2p.error('Error handling TX protocol', { protocol }, err as Error);
             }
           },
@@ -426,21 +434,31 @@ export function TransactionP2PRelayerPage() {
     const ackHash = useTransactionRegistrationStore.getState().acknowledgementHash;
     const ackChainId = useTransactionRegistrationStore.getState().acknowledgementChainId;
     if (node && partnerPeerId && ackHash) {
-      const connections = node.getConnections();
-      const conn = connections.find((c) => c.remotePeer.toString() === partnerPeerId);
-      if (conn) {
-        passStreamData({
-          connection: conn,
-          protocols: [PROTOCOLS.TX_ACK_PAY],
-          streamData: {
-            hash: ackHash,
-            txChainId: ackChainId ?? chainId,
-            success: true,
-          },
-        }).catch((err) => {
-          logger.p2p.error('Failed to send TX ACK_PAY', {}, err as Error);
+      // Use getPeerConnection to reconnect if the connection dropped
+      getPeerConnection({ libp2p: node, remotePeerId: partnerPeerId })
+        .then((conn) =>
+          passStreamData({
+            connection: conn,
+            protocols: [PROTOCOLS.TX_ACK_PAY],
+            streamData: {
+              hash: ackHash,
+              txChainId: ackChainId ?? chainId,
+              success: true,
+            },
+          })
+        )
+        .then(() => {
+          logger.p2p.info('TX ACK_PAY sent to reporter', { hash: ackHash });
+        })
+        .catch((err) => {
+          logger.p2p.error('Failed to send TX ACK_PAY to reporter', {}, err as Error);
         });
-      }
+    } else {
+      logger.p2p.warn('Cannot send TX ACK_PAY - missing node, peer, or hash', {
+        hasNode: !!node,
+        hasPartner: !!partnerPeerId,
+        hasHash: !!ackHash,
+      });
     }
     goToNextStep();
   }, [partnerPeerId, chainId, goToNextStep]);
@@ -452,23 +470,33 @@ export function TransactionP2PRelayerPage() {
     const regChainId = useTransactionRegistrationStore.getState().registrationChainId;
     const msgId = useTransactionRegistrationStore.getState().bridgeMessageId;
     if (node && partnerPeerId && regHash) {
-      const connections = node.getConnections();
-      const conn = connections.find((c) => c.remotePeer.toString() === partnerPeerId);
-      if (conn) {
-        const streamData: PaymentMessage = {
-          hash: regHash,
-          txChainId: regChainId ?? chainId,
-          success: true,
-          ...(msgId ? { messageId: msgId } : {}),
-        };
-        passStreamData({
-          connection: conn,
-          protocols: [PROTOCOLS.TX_REG_PAY],
-          streamData,
-        }).catch((err) => {
-          logger.p2p.error('Failed to send TX REG_PAY', {}, err as Error);
+      const streamData: PaymentMessage = {
+        hash: regHash,
+        txChainId: regChainId ?? chainId,
+        success: true,
+        ...(msgId ? { messageId: msgId } : {}),
+      };
+      // Use getPeerConnection to reconnect if the connection dropped during cross-chain wait
+      getPeerConnection({ libp2p: node, remotePeerId: partnerPeerId })
+        .then((conn) =>
+          passStreamData({
+            connection: conn,
+            protocols: [PROTOCOLS.TX_REG_PAY],
+            streamData,
+          })
+        )
+        .then(() => {
+          logger.p2p.info('TX REG_PAY sent to reporter', { hash: regHash, messageId: msgId });
+        })
+        .catch((err) => {
+          logger.p2p.error('Failed to send TX REG_PAY to reporter', {}, err as Error);
         });
-      }
+    } else {
+      logger.p2p.warn('Cannot send TX REG_PAY - missing node, peer, or hash', {
+        hasNode: !!node,
+        hasPartner: !!partnerPeerId,
+        hasHash: !!regHash,
+      });
     }
     goToNextStep();
   }, [partnerPeerId, chainId, goToNextStep]);

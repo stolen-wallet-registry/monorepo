@@ -123,6 +123,46 @@ export function libp2pDefaults(): Libp2pOptions {
   };
 }
 
+/**
+ * Check if the node has at least one circuit relay multiaddr (relay reservation is complete).
+ */
+function hasCircuitRelayAddr(libp2p: Libp2p): boolean {
+  return libp2p.getMultiaddrs().some((ma) => ma.toString().includes('/p2p-circuit/'));
+}
+
+/**
+ * Wait for the circuit relay reservation to complete before returning.
+ *
+ * The relay reservation is async — createLibp2p() resolves before it finishes.
+ * Without waiting, getPeerConnection() fires with no circuit relay multiaddrs
+ * and the dial times out.
+ *
+ * Timeout matches reservationCompletionTimeout in libp2pDefaults() (15s).
+ * The relay transport gives up after 15s, so waiting longer here is dead time.
+ */
+async function waitForRelayReservation(libp2p: Libp2p, timeoutMs = 15_000): Promise<void> {
+  if (hasCircuitRelayAddr(libp2p)) return;
+
+  logger.p2p.debug('Waiting for relay reservation...');
+
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      libp2p.removeEventListener('self:peer:update', check);
+      reject(new Error('Relay reservation timed out — is the relay server running?'));
+    }, timeoutMs);
+
+    const check = () => {
+      if (hasCircuitRelayAddr(libp2p)) {
+        clearTimeout(timer);
+        libp2p.removeEventListener('self:peer:update', check);
+        resolve();
+      }
+    };
+
+    libp2p.addEventListener('self:peer:update', check);
+  });
+}
+
 export interface SetupOptions {
   /** Protocol handlers to register */
   handlers: ProtocolHandler[];
@@ -170,10 +210,28 @@ export async function setup(
     await libp2p.handle(protocol, streamHandler.handler, streamHandler.options);
   }
 
-  logger.p2p.info('libp2p node created', {
+  logger.p2p.info('libp2p node created, waiting for relay reservation', {
     peerId: libp2p.peerId.toString(),
-    multiaddrs: libp2p.getMultiaddrs().map((ma) => ma.toString()),
     persistent: !!walletAddress,
+  });
+
+  // Wait for circuit relay reservation before returning.
+  // Without this, getPeerConnection() fires before any /p2p-circuit/ multiaddrs exist
+  // and the first dial always times out.
+  try {
+    await waitForRelayReservation(libp2p);
+  } catch (err) {
+    // Clean up the started node so we don't leak connections on timeout
+    try {
+      await libp2p.stop();
+    } catch {
+      // best-effort cleanup
+    }
+    throw err;
+  }
+
+  logger.p2p.debug('Relay reservation complete', {
+    multiaddrs: libp2p.getMultiaddrs().map((ma) => ma.toString()),
   });
 
   return { libp2p };
@@ -198,11 +256,15 @@ export const getPeerConnection = async ({
   // Parse the remote peer ID for comparison
   const peerId = peerIdFromString(remotePeerId);
 
-  // Check for existing connection using proper PeerId comparison
-  let connection = libp2p.getConnections().find((conn) => conn.remotePeer.equals(peerId));
+  // Check for existing open connection using proper PeerId comparison
+  // Filter out connections that aren't fully open — degraded connections
+  // (e.g., after keep-alive ping failures) may still appear in the list
+  let connection = libp2p
+    .getConnections()
+    .find((conn) => conn.remotePeer.equals(peerId) && conn.status === 'open');
 
   if (connection) {
-    logger.p2p.debug('Using existing connection', { remotePeerId });
+    logger.p2p.debug('Using existing open connection', { remotePeerId });
     return connection;
   }
 
@@ -284,6 +346,25 @@ export class StreamDataValidationError extends Error {
     super(message);
     this.name = 'StreamDataValidationError';
   }
+}
+
+/**
+ * Check if an error is a stream abort/reset error.
+ *
+ * These occur when the underlying WebRTC/WebSocket transport degrades
+ * (e.g., keep-alive pings failing during a long cross-chain wait).
+ * They are not protocol errors — the sender may have already written
+ * the data but the stream was torn down before the receiver finished reading.
+ */
+export function isStreamAbortError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes('signal is aborted') ||
+    msg.includes('stream reset') ||
+    msg.includes('the operation was aborted') ||
+    err.name === 'AbortError'
+  );
 }
 
 /**

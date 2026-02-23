@@ -161,8 +161,10 @@ contract Deploy is Script {
     /// @notice Deploy contracts to local Anvil chains with real Hyperlane
     /// @dev Mirrors DeployCrossChain.s.sol pattern for V1 contracts
     function deployCrossChain() external {
-        deployerPrivateKey =
-            vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
+        // _getDeployerKey() reads block.chainid, so it must be called on the
+        // first RPC target. The subsequent vm.createSelectFork() calls switch
+        // chains but the key is already captured.
+        deployerPrivateKey = _getDeployerKey();
         deployer = vm.addr(deployerPrivateKey);
 
         // Read Hyperlane Mailbox addresses from environment (REQUIRED)
@@ -442,8 +444,7 @@ contract Deploy is Script {
     /// @notice Deploy hub contracts only (single-chain mode)
     /// @dev Run with: forge script Deploy --sig 'deployHubLocal()' --rpc-url http://localhost:8545 --broadcast
     function deployHubLocal() external {
-        deployerPrivateKey =
-            vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
+        deployerPrivateKey = _getDeployerKey();
         deployer = vm.addr(deployerPrivateKey);
         hubMailbox = vm.envAddress("HUB_MAILBOX");
         require(hubMailbox != address(0), "HUB_MAILBOX env var must be set");
@@ -558,11 +559,8 @@ contract Deploy is Script {
     /// @notice Deploy spoke contracts only (single-chain mode)
     /// @dev Run with: forge script Deploy --sig 'deploySpokeLocal()' --rpc-url http://localhost:8546 --broadcast
     function deploySpokeLocal() external {
-        deployerPrivateKey =
-            vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
+        deployerPrivateKey = _getDeployerKey();
         deployer = vm.addr(deployerPrivateKey);
-        hubMailbox = vm.envAddress("HUB_MAILBOX");
-        require(hubMailbox != address(0), "HUB_MAILBOX env var must be set");
         spokeMailbox = vm.envAddress("SPOKE_MAILBOX");
         require(spokeMailbox != address(0), "SPOKE_MAILBOX env var must be set");
 
@@ -639,8 +637,7 @@ contract Deploy is Script {
     /// @notice Configure trust relationships on hub (single-chain mode)
     /// @dev Run with: forge script Deploy --sig 'configureTrustLocal()' --rpc-url http://localhost:8545 --broadcast
     function configureTrustLocal() external {
-        deployerPrivateKey =
-            vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
+        deployerPrivateKey = _getDeployerKey();
         deployer = vm.addr(deployerPrivateKey);
 
         // Read deployed addresses from env (set by deploy:crosschain script)

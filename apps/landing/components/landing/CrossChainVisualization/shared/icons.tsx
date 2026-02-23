@@ -149,3 +149,4 @@ BridgeIcon.displayName = 'BridgeIcon';
 
 // Re-export all logos from @swr/ui for convenience
 export { HyperlaneLogo, WormholeLogo, ChainalysisLogo, SealTeamLogo, TrmLabsLogo };
+export { GroomLakePngLogo } from './GroomLakePng';

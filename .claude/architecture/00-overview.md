@@ -149,6 +149,7 @@ INDEXER (Ponder) → DASHBOARD + SEARCH
 | P2P relay         | Custom protocols for wallet + transaction signature relay         | 01-libp2p-relay.md       |
 | Category logging  | wallet, contract, signature, p2p, etc.                            | 07-logger-system.md      |
 | Contract storage  | Direct mappings with CAIP-derived keys, event-based batch linking | 09-storage-and-events.md |
+| TimelockOwnable   | 2-day propose/activate delay on trust-boundary owner changes      | governance.mdx (docs)    |
 
 ---
 

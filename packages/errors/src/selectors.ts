@@ -603,6 +603,59 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     name: 'EmptyLanguageCode',
     message: 'Language code cannot be empty.',
   },
+  '0x55ad1483': {
+    name: 'MaxLanguagesReached',
+    message: 'Maximum number of languages reached.',
+    action: 'Remove an existing language before adding a new one.',
+  },
+  '0x305a27a9': {
+    name: 'StringTooLong',
+    message: 'Translation string exceeds maximum length.',
+    action: 'Keep strings under 256 bytes.',
+  },
+  '0x40b9e958': {
+    name: 'ArrayMappingDesync',
+    message: 'Internal data inconsistency detected in translation registry.',
+    action: 'This should not happen. Please report this issue.',
+  },
+  '0xf0121ff2': {
+    name: 'LanguageNotFound',
+    message: 'Language not found in the registry.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SoulboundReceiver Errors
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  '0xc48f6eed': {
+    name: 'SoulboundReceiver__NonCanonicalSender',
+    message: 'Cross-chain sender has non-canonical encoding.',
+    action: 'Please contact support.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TimelockOwnable Errors
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  '0xb23bf3de': {
+    name: 'TimelockOwnable__NotProposed',
+    message: 'This action has not been proposed.',
+    action: 'The owner must propose this change first.',
+  },
+  '0xf9fcfd17': {
+    name: 'TimelockOwnable__TooEarly',
+    message: 'Timelock delay has not elapsed.',
+    action: 'Please wait for the 2-day activation delay to pass.',
+  },
+  '0x23596adf': {
+    name: 'TimelockOwnable__AlreadyPending',
+    message: 'This action is already pending activation.',
+  },
+  '0xe5900879': {
+    name: 'TimelockOwnable__SetupAlreadyComplete',
+    message: 'Initial setup is complete. Changes require timelock.',
+    action: 'Use the propose/activate flow for this change.',
+  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // BridgeAdapter Errors

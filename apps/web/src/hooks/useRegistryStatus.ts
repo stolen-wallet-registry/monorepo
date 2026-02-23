@@ -82,27 +82,15 @@ export function useRegistryStatus({
     contractAddress = undefined;
   }
 
-  // Warn when configuration is missing for the requested chainId
-  if (!client) {
-    logger.contract.warn('useRegistryStatus: Public client unavailable for chainId', { chainId });
-  }
-  if (!contractAddress) {
-    logger.contract.warn('useRegistryStatus: Contract address not configured for chainId', {
-      chainId,
-    });
-  }
+  const enabled = !!address && !!contractAddress && !!client;
 
-  // Debug logging
   logger.contract.debug('useRegistryStatus query config', {
     address,
-    overrideChainId,
-    connectedChainId,
     resolvedChainId: chainId,
     contractAddress,
     hasClient: !!client,
+    enabled,
   });
-
-  const enabled = !!address && !!contractAddress && !!client;
 
   const {
     data,

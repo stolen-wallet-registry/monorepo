@@ -100,8 +100,6 @@ export function ConnectedWalletStatus({
     chainId: hubChainId,
   });
 
-  // Debug logging for troubleshooting
-  // Uses debug level and anonymizes address for privacy
   const shouldShowAlert =
     isConnected &&
     !!address &&
@@ -110,17 +108,15 @@ export function ConnectedWalletStatus({
     (isRegistered || isPending) &&
     (!isDismissed || alwaysShow);
 
-  logger.wallet.debug('[ConnectedWalletStatus] Registry status check', {
+  // Log at info level so it's visible during troubleshooting
+  logger.wallet.info('[ConnectedWalletStatus] Registry status check', {
     addressPrefix: address ? `${address.slice(0, 6)}...` : undefined,
-    isConnected,
     hubChainId,
-    queryEnabled: isConnected && !!address,
     isRegistered,
     isPending,
     isLoading,
     isError,
     error: error?.message,
-    isDismissed,
     shouldShowAlert,
   });
 
