@@ -361,7 +361,6 @@ export function isStreamAbortError(err: unknown): boolean {
   const msg = err.message.toLowerCase();
   return (
     msg.includes('signal is aborted') ||
-    msg.includes('abort') ||
     msg.includes('stream reset') ||
     msg.includes('the operation was aborted') ||
     err.name === 'AbortError'

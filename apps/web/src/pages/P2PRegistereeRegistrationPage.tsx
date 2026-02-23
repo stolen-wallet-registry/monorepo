@@ -31,7 +31,12 @@ import {
   GracePeriodStep,
   SuccessStep,
 } from '@/components/registration/steps';
-import { WaitingForData, ConnectionStatusBadge, ReconnectDialog } from '@/components/p2p';
+import {
+  WaitingForData,
+  ConnectionStatusBadge,
+  ReconnectDialog,
+  P2PWaitForConfirmation,
+} from '@/components/p2p';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
@@ -95,7 +100,7 @@ interface WalletP2PWaitForRegistrationProps {
 function WalletP2PWaitForRegistration({ wallet, onComplete }: WalletP2PWaitForRegistrationProps) {
   const chainId = useChainId();
 
-  const crossChainConfirmation = useCrossChainConfirmation({
+  const confirmation = useCrossChainConfirmation({
     wallet,
     spokeChainId: chainId,
     enabled: !!wallet,
@@ -103,28 +108,15 @@ function WalletP2PWaitForRegistration({ wallet, onComplete }: WalletP2PWaitForRe
     maxPollingTime: 120000,
   });
 
-  useEffect(() => {
-    if (crossChainConfirmation.status === 'confirmed') {
-      logger.registration.info('P2P registeree detected wallet registration on hub via polling', {
-        wallet,
-        elapsedTime: crossChainConfirmation.elapsedTime,
-      });
-      const timerId = window.setTimeout(onComplete, 1000);
-      return () => clearTimeout(timerId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- elapsedTime excluded: updates every second, would cancel the setTimeout before onComplete fires
-  }, [crossChainConfirmation.status, wallet, onComplete]);
-
-  const statusText =
-    crossChainConfirmation.status === 'confirmed'
-      ? 'Registration confirmed on hub!'
-      : crossChainConfirmation.status === 'polling'
-        ? `Checking hub chain... (${Math.round(crossChainConfirmation.elapsedTime / 1000)}s)`
-        : crossChainConfirmation.status === 'timeout'
-          ? 'Still checking...'
-          : 'Waiting for relayer to complete registration...';
-
-  return <WaitingForData message={statusText} waitingFor="registration transaction" />;
+  return (
+    <P2PWaitForConfirmation
+      status={confirmation.status}
+      elapsedTime={confirmation.elapsedTime}
+      onComplete={onComplete}
+      waitingFor="registration transaction"
+      logContext={{ wallet, elapsedTime: confirmation.elapsedTime }}
+    />
+  );
 }
 
 export function P2PRegistereeRegistrationPage() {

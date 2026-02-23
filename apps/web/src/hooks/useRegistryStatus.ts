@@ -84,8 +84,7 @@ export function useRegistryStatus({
 
   const enabled = !!address && !!contractAddress && !!client;
 
-  // Log config at info level for troubleshooting ConnectedWalletStatus
-  logger.contract.info('useRegistryStatus query config', {
+  logger.contract.debug('useRegistryStatus query config', {
     address,
     resolvedChainId: chainId,
     contractAddress,

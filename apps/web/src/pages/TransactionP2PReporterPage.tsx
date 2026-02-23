@@ -36,7 +36,12 @@ import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 import { P2PDebugPanel } from '@/components/dev/P2PDebugPanel';
 import { WaitForConnectionStep } from '@/components/registration/steps';
 import { TxGracePeriodStep, TxSuccessStep } from '@/components/registration/tx-steps';
-import { WaitingForData, ConnectionStatusBadge, ReconnectDialog } from '@/components/p2p';
+import {
+  WaitingForData,
+  ConnectionStatusBadge,
+  ReconnectDialog,
+  P2PWaitForConfirmation,
+} from '@/components/p2p';
 import {
   useTransactionRegistrationStore,
   useTransactionRegistrationFlow,
@@ -600,29 +605,19 @@ interface TxP2PWaitForRegistrationProps {
 }
 
 /**
- * Waits for the relayer to complete registration.
- *
- * Dual-path confirmation:
- * 1. P2P: TX_REG_PAY handler advances step directly (handled in parent)
- * 2. On-chain polling: polls hub for batch registration as fallback
- *
- * The P2P connection often degrades during the ~12-60s cross-chain wait,
- * so on-chain polling ensures the reporter isn't stuck forever.
+ * Waits for the relayer to complete transaction registration.
+ * Polls hub chain via useTxCrossChainConfirmation; delegates
+ * rendering and auto-advance to the shared P2PWaitForConfirmation.
  */
 function TxP2PWaitForRegistration({ onComplete }: TxP2PWaitForRegistrationProps) {
   const chainId = useChainId();
   const { txHashesForContract, reportedChainId } = useTransactionSelection();
 
   const isCrossChain = needsTxCrossChainConfirmation(chainId);
-
-  // Use first tx hash as sentinel for hub registration lookup
   const sampleTxHash = txHashesForContract.length > 0 ? txHashesForContract[0] : undefined;
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
 
-  // Poll hub chain for registration confirmation
-  // For hub-chain P2P relay: poll immediately (registration is local)
-  // For spoke-chain P2P relay: poll hub for cross-chain delivery
-  const crossChainConfirmation = useTxCrossChainConfirmation({
+  const confirmation = useTxCrossChainConfirmation({
     sampleTxHash,
     reportedChainId: reportedChainIdHash,
     spokeChainId: chainId,
@@ -631,35 +626,15 @@ function TxP2PWaitForRegistration({ onComplete }: TxP2PWaitForRegistrationProps)
     maxPollingTime: 120000,
   });
 
-  // Auto-advance when hub confirms the batch
-  useEffect(() => {
-    if (crossChainConfirmation.status === 'confirmed') {
-      logger.registration.info('P2P reporter detected registration on hub via polling', {
-        sampleTxHash,
-        elapsedTime: crossChainConfirmation.elapsedTime,
-      });
-      // Small delay for UX — let the user see "confirmed" briefly
-      const timerId = window.setTimeout(onComplete, 1000);
-      return () => clearTimeout(timerId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- elapsedTime excluded: updates every second, would cancel the setTimeout before onComplete fires
-  }, [crossChainConfirmation.status, sampleTxHash, onComplete]);
-
-  const statusText =
-    crossChainConfirmation.status === 'confirmed'
-      ? 'Registration confirmed on hub!'
-      : crossChainConfirmation.status === 'polling'
-        ? `Checking hub chain... (${Math.round(crossChainConfirmation.elapsedTime / 1000)}s)`
-        : crossChainConfirmation.status === 'timeout'
-          ? 'Still checking...'
-          : 'Waiting for relayer to complete registration...';
-
   return (
-    <WaitingForData
-      message={statusText}
+    <P2PWaitForConfirmation
+      status={confirmation.status}
+      elapsedTime={confirmation.elapsedTime}
+      onComplete={onComplete}
       waitingFor={
         isCrossChain ? 'cross-chain registration confirmation' : 'registration transaction'
       }
+      logContext={{ sampleTxHash, elapsedTime: confirmation.elapsedTime }}
     />
   );
 }

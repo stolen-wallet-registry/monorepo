@@ -16,7 +16,7 @@ const METHODS = [
   {
     title: 'Standard',
     description: 'Sign and pay from the same wallet you are registering as compromised.',
-    useCase: 'Wallet compromised but you still have eth to pay for gas',
+    useCase: 'Wallet compromised but you still have funds to pay for gas',
     icon: <UserCheck className="size-6" aria-hidden="true" />,
     highlight: false,
   },
