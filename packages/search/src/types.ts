@@ -71,8 +71,8 @@ export interface TransactionChainReport {
   chainName: string;
   /** Numeric chain ID (if EVM) */
   numericChainId?: number;
-  /** Batch ID this transaction belongs to */
-  batchId: Hash;
+  /** Batch ID this transaction belongs to (null when not yet linked) */
+  batchId: Hash | null;
   /** Address that reported the transaction */
   reporter: Address;
   /** Timestamp when reported (Unix seconds as bigint) */

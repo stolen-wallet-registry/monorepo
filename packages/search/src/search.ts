@@ -161,7 +161,7 @@ export async function searchTransaction(
         caip2ChainId: t.caip2ChainId,
         chainName: getCAIP2ChainName(t.caip2ChainId),
         numericChainId: t.numericChainId,
-        batchId: t.batchId as Hash,
+        batchId: (t.batchId as Hash) ?? null,
         reporter: t.reporter as Address,
         reportedAt: BigInt(t.reportedAt),
       })),

@@ -136,8 +136,7 @@ function hasCircuitRelayAddr(libp2p: Libp2p): boolean {
  * The relay reservation is async — createLibp2p() resolves before it finishes.
  * Without waiting, getPeerConnection() fires with no circuit relay multiaddrs
  * and the dial times out.
- */
-/**
+ *
  * Timeout matches reservationCompletionTimeout in libp2pDefaults() (15s).
  * The relay transport gives up after 15s, so waiting longer here is dead time.
  */
@@ -257,11 +256,15 @@ export const getPeerConnection = async ({
   // Parse the remote peer ID for comparison
   const peerId = peerIdFromString(remotePeerId);
 
-  // Check for existing connection using proper PeerId comparison
-  let connection = libp2p.getConnections().find((conn) => conn.remotePeer.equals(peerId));
+  // Check for existing open connection using proper PeerId comparison
+  // Filter out connections that aren't fully open — degraded connections
+  // (e.g., after keep-alive ping failures) may still appear in the list
+  let connection = libp2p
+    .getConnections()
+    .find((conn) => conn.remotePeer.equals(peerId) && conn.status === 'open');
 
   if (connection) {
-    logger.p2p.debug('Using existing connection', { remotePeerId });
+    logger.p2p.debug('Using existing open connection', { remotePeerId });
     return connection;
   }
 
@@ -343,6 +346,26 @@ export class StreamDataValidationError extends Error {
     super(message);
     this.name = 'StreamDataValidationError';
   }
+}
+
+/**
+ * Check if an error is a stream abort/reset error.
+ *
+ * These occur when the underlying WebRTC/WebSocket transport degrades
+ * (e.g., keep-alive pings failing during a long cross-chain wait).
+ * They are not protocol errors — the sender may have already written
+ * the data but the stream was torn down before the receiver finished reading.
+ */
+export function isStreamAbortError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes('signal is aborted') ||
+    msg.includes('abort') ||
+    msg.includes('stream reset') ||
+    msg.includes('the operation was aborted') ||
+    err.name === 'AbortError'
+  );
 }
 
 /**

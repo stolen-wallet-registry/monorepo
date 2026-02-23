@@ -42,6 +42,7 @@ import {
   PROTOCOLS,
   readStreamData,
   passStreamData,
+  isStreamAbortError,
   type ProtocolHandler,
   type ParsedStreamData,
 } from '@/lib/p2p';
@@ -279,6 +280,12 @@ export function P2PRelayerRegistrationPage() {
                   break;
               }
             } catch (err) {
+              if (isStreamAbortError(err)) {
+                logger.p2p.warn('Stream aborted during read, connection may be degraded', {
+                  protocol,
+                });
+                return;
+              }
               logger.p2p.error('Error handling protocol', { protocol }, err as Error);
             }
           },

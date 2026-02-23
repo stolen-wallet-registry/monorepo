@@ -511,12 +511,22 @@ ponder.on('ContractRegistry:ContractBatchCreated', async ({ event, context }) =>
   const batchIdStr = batchId.toString();
   const operatorAddress = toLowerAddress(event.transaction.from);
 
+  // Derive reportedChainCAIP2 from the first ContractRegistered entry in the same tx.
+  // ContractRegistered events fire before ContractBatchCreated in the same transaction.
+  const contractEntries = await db.sql
+    .select({ caip2ChainId: fraudulentContract.caip2ChainId })
+    .from(fraudulentContract)
+    .where(eq(fraudulentContract.batchId, batchIdStr))
+    .limit(1);
+  const reportedChainCAIP2 = contractEntries[0]?.caip2ChainId ?? null;
+
   await db
     .insert(fraudulentContractBatch)
     .values({
       id: batchIdStr,
       operatorId,
       operator: operatorAddress,
+      reportedChainCAIP2,
       contractCount: Number(contractCount),
       registeredAt: event.block.timestamp,
       registeredAtBlock: event.block.number,

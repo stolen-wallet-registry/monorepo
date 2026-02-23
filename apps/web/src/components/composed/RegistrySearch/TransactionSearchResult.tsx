@@ -60,9 +60,11 @@ export function TransactionSearchResult({ found, data, className }: TransactionS
                       Reporter: <ExplorerLink type="address" value={chain.reporter} />
                     </p>
                     <p>Reported: {reportedDate.toLocaleString()}</p>
-                    <p className="break-all">
-                      Batch: <code>{chain.batchId.slice(0, 18)}...</code>
-                    </p>
+                    {chain.batchId && (
+                      <p className="break-all">
+                        Batch: <code>{chain.batchId.slice(0, 18)}...</code>
+                      </p>
+                    )}
                   </div>
                 </div>
               );

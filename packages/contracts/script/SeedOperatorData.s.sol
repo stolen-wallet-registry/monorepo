@@ -48,9 +48,6 @@ contract SeedOperatorData is Script {
     // ═══════════════════════════════════════════════════════════════════════════
     // Pre-computed: keccak256(abi.encodePacked("eip155:", chainIdString))
 
-    bytes32 constant CHAIN_ID_ETH_MAINNET = 0x38b2caf37cccf00b6fbc0feb1e534daf567950e4d48066d0e3669028fe5f83e6; // eip155:1
-    bytes32 constant CHAIN_ID_BASE = 0x43b48883ef7be0f98fe7f98fafb2187e42caab4063697b32816f95e09d69b3ec; // eip155:8453
-    bytes32 constant CHAIN_ID_ARBITRUM = 0x1fca116f439fa7af0604ced8c7a6239cdcabb5070838cbc80cdba0089733e472; // eip155:42161
     bytes32 constant CHAIN_ID_LOCAL = 0x318e51c37247d03bad135571413b06a083591bcc680967d80bf587ac928cf369; // eip155:31337
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -197,30 +194,27 @@ contract SeedOperatorData is Script {
         bytes32[] memory reportedChainIds = new bytes32[](4);
         uint64[] memory incidentTimestamps = new uint64[](4);
 
-        // Wallet 1: Ethereum Mainnet
+        // All wallets use local chain ID for dev/testing
         identifiers[0] = bytes32(uint256(uint160(STOLEN_WALLET_1)));
-        reportedChainIds[0] = CHAIN_ID_ETH_MAINNET;
+        reportedChainIds[0] = CHAIN_ID_LOCAL;
         incidentTimestamps[0] = uint64(block.timestamp - 1 days);
 
-        // Wallet 2: Base
         identifiers[1] = bytes32(uint256(uint160(STOLEN_WALLET_2)));
-        reportedChainIds[1] = CHAIN_ID_BASE;
+        reportedChainIds[1] = CHAIN_ID_LOCAL;
         incidentTimestamps[1] = uint64(block.timestamp - 2 days);
 
-        // Wallet 3: Arbitrum
         identifiers[2] = bytes32(uint256(uint160(STOLEN_WALLET_3)));
-        reportedChainIds[2] = CHAIN_ID_ARBITRUM;
+        reportedChainIds[2] = CHAIN_ID_LOCAL;
         incidentTimestamps[2] = uint64(block.timestamp - 3 days);
 
-        // Wallet 4: Local (same as hub for testing)
         identifiers[3] = bytes32(uint256(uint160(STOLEN_WALLET_4)));
         reportedChainIds[3] = CHAIN_ID_LOCAL;
         incidentTimestamps[3] = uint64(block.timestamp - 4 days);
 
         console2.log("  Wallets: 4");
-        console2.log("    - ", STOLEN_WALLET_1, " (Ethereum)");
-        console2.log("    - ", STOLEN_WALLET_2, " (Base)");
-        console2.log("    - ", STOLEN_WALLET_3, " (Arbitrum)");
+        console2.log("    - ", STOLEN_WALLET_1, " (Local)");
+        console2.log("    - ", STOLEN_WALLET_2, " (Local)");
+        console2.log("    - ", STOLEN_WALLET_3, " (Local)");
         console2.log("    - ", STOLEN_WALLET_4, " (Local)");
 
         // Submit batch with fee
@@ -249,11 +243,11 @@ contract SeedOperatorData is Script {
         txHashes[2] = STOLEN_TX_3;
         txHashes[3] = STOLEN_TX_4;
 
-        // All transactions on the same chain for simplicity
-        chainIds[0] = CHAIN_ID_ETH_MAINNET;
-        chainIds[1] = CHAIN_ID_ETH_MAINNET;
-        chainIds[2] = CHAIN_ID_BASE;
-        chainIds[3] = CHAIN_ID_ARBITRUM;
+        // All transactions on local chain for dev/testing
+        chainIds[0] = CHAIN_ID_LOCAL;
+        chainIds[1] = CHAIN_ID_LOCAL;
+        chainIds[2] = CHAIN_ID_LOCAL;
+        chainIds[3] = CHAIN_ID_LOCAL;
 
         console2.log("  Transactions: 4");
         console2.log("    - ", vm.toString(STOLEN_TX_1));
@@ -286,11 +280,11 @@ contract SeedOperatorData is Script {
         contractIds[3] = bytes32(uint256(uint160(SCAM_CONTRACT_4)));
         contractIds[4] = bytes32(uint256(uint160(SCAM_CONTRACT_5)));
 
-        reportedChainIds[0] = CHAIN_ID_ETH_MAINNET;
-        reportedChainIds[1] = CHAIN_ID_ETH_MAINNET;
-        reportedChainIds[2] = CHAIN_ID_BASE;
-        reportedChainIds[3] = CHAIN_ID_BASE;
-        reportedChainIds[4] = CHAIN_ID_ARBITRUM;
+        reportedChainIds[0] = CHAIN_ID_LOCAL;
+        reportedChainIds[1] = CHAIN_ID_LOCAL;
+        reportedChainIds[2] = CHAIN_ID_LOCAL;
+        reportedChainIds[3] = CHAIN_ID_LOCAL;
+        reportedChainIds[4] = CHAIN_ID_LOCAL;
 
         console2.log("  Contracts: 5");
         console2.log("    - ", SCAM_CONTRACT_1);

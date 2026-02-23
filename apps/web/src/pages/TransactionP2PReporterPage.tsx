@@ -51,6 +51,8 @@ import {
   useTransactionAcknowledgementHashStruct,
   useTransactionRegistrationHashStruct,
   useTxContractNonce,
+  useTxCrossChainConfirmation,
+  needsTxCrossChainConfirmation,
 } from '@/hooks/transactions';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
 import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
@@ -60,6 +62,7 @@ import {
   readStreamData,
   passStreamData,
   getPeerConnection,
+  isStreamAbortError,
   type ProtocolHandler,
 } from '@/lib/p2p';
 import { computeTransactionDataHash } from '@/lib/signatures/transactions';
@@ -589,6 +592,78 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// P2P Wait for Registration - polls hub as fallback when P2P message lost
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface TxP2PWaitForRegistrationProps {
+  onComplete: () => void;
+}
+
+/**
+ * Waits for the relayer to complete registration.
+ *
+ * Dual-path confirmation:
+ * 1. P2P: TX_REG_PAY handler advances step directly (handled in parent)
+ * 2. On-chain polling: polls hub for batch registration as fallback
+ *
+ * The P2P connection often degrades during the ~12-60s cross-chain wait,
+ * so on-chain polling ensures the reporter isn't stuck forever.
+ */
+function TxP2PWaitForRegistration({ onComplete }: TxP2PWaitForRegistrationProps) {
+  const chainId = useChainId();
+  const { txHashesForContract, reportedChainId } = useTransactionSelection();
+
+  const isCrossChain = needsTxCrossChainConfirmation(chainId);
+
+  // Use first tx hash as sentinel for hub registration lookup
+  const sampleTxHash = txHashesForContract.length > 0 ? txHashesForContract[0] : undefined;
+  const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
+
+  // Poll hub chain for registration confirmation
+  // For hub-chain P2P relay: poll immediately (registration is local)
+  // For spoke-chain P2P relay: poll hub for cross-chain delivery
+  const crossChainConfirmation = useTxCrossChainConfirmation({
+    sampleTxHash,
+    reportedChainId: reportedChainIdHash,
+    spokeChainId: chainId,
+    enabled: !!sampleTxHash && !!reportedChainIdHash,
+    pollInterval: 3000,
+    maxPollingTime: 120000,
+  });
+
+  // Auto-advance when hub confirms the batch
+  useEffect(() => {
+    if (crossChainConfirmation.status === 'confirmed') {
+      logger.registration.info('P2P reporter detected registration on hub via polling', {
+        sampleTxHash,
+        elapsedTime: crossChainConfirmation.elapsedTime,
+      });
+      // Small delay for UX — let the user see "confirmed" briefly
+      const timerId = window.setTimeout(onComplete, 1000);
+      return () => clearTimeout(timerId);
+    }
+  }, [crossChainConfirmation.status, crossChainConfirmation.elapsedTime, sampleTxHash, onComplete]);
+
+  const statusText =
+    crossChainConfirmation.status === 'confirmed'
+      ? 'Registration confirmed on hub!'
+      : crossChainConfirmation.status === 'polling'
+        ? `Checking hub chain... (${Math.round(crossChainConfirmation.elapsedTime / 1000)}s)`
+        : crossChainConfirmation.status === 'timeout'
+          ? 'Still checking...'
+          : 'Waiting for relayer to complete registration...';
+
+  return (
+    <WaitingForData
+      message={statusText}
+      waitingFor={
+        isCrossChain ? 'cross-chain registration confirmation' : 'registration transaction'
+      }
+    />
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Main Page Component
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -763,6 +838,15 @@ export function TransactionP2PReporterPage() {
                   break;
               }
             } catch (err) {
+              // Stream abort errors happen when the WebRTC connection degrades
+              // (e.g., keep-alive pings failing during cross-chain wait).
+              // These are not protocol errors — log and ignore.
+              if (isStreamAbortError(err)) {
+                logger.p2p.warn('Stream aborted during read, connection may be degraded', {
+                  protocol,
+                });
+                return;
+              }
               const message = err instanceof Error ? err.message : 'Protocol handling error';
               logger.p2p.error('Error handling TX protocol', { protocol }, err as Error);
               setProtocolError(`Error in ${protocol}: ${message}`);
@@ -1058,12 +1142,7 @@ export function TransactionP2PReporterPage() {
         return <TxP2PRegSign getLibp2p={getLibp2p} />;
 
       case 'registration-payment':
-        return (
-          <WaitingForData
-            message="Waiting for relayer to complete registration..."
-            waitingFor="registration transaction"
-          />
-        );
+        return <TxP2PWaitForRegistration onComplete={goToNextStep} />;
 
       case 'success':
         return <TxSuccessStep />;

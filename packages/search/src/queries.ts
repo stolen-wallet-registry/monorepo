@@ -517,7 +517,7 @@ export interface RawTransactionResponse {
       txHash: string;
       caip2ChainId: string;
       numericChainId?: number;
-      batchId: string;
+      batchId: string | null;
       reporter: string;
       reportedAt: string;
     }>;
