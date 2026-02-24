@@ -11,7 +11,7 @@ import type { Libp2p } from 'libp2p';
 
 import { TransactionCard, type TransactionStatus } from '@/components/composed/TransactionCard';
 import { SignatureDetails } from '@/components/composed/SignatureDetails';
-import { WaitingForData } from '@/components/p2p';
+import { WaitingForData, P2PWaitForConfirmation } from '@/components/p2p';
 import { Alert, AlertDescription, Button } from '@swr/ui';
 import { useRegistration } from '@/hooks/useRegistration';
 import { useQuoteRegistration } from '@/hooks/useQuoteRegistration';
@@ -22,7 +22,12 @@ import type { Hash } from '@/lib/types/ethereum';
 import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
 import { useP2PStore } from '@/stores/p2pStore';
 import { extractBridgeMessageId } from '@/lib/bridge/messageId';
-import { needsCrossChainConfirmation } from '@/hooks/useCrossChainConfirmation';
+import {
+  useCrossChainConfirmation,
+  needsCrossChainConfirmation,
+} from '@/hooks/useCrossChainConfirmation';
+import { getHubChainId } from '@/lib/chains/config';
+import { getChainName, getBridgeMessageByIdUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 
@@ -54,8 +59,13 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
   const { address: relayerAddress } = useAccount();
   const { registeree } = useFormStore();
   const { partnerPeerId } = useP2PStore();
-  const { registrationHash, registrationChainId, setRegistrationHash, setBridgeMessageId } =
-    useRegistrationStore();
+  const {
+    registrationHash,
+    registrationChainId,
+    bridgeMessageId,
+    setRegistrationHash,
+    setBridgeMessageId,
+  } = useRegistrationStore();
   const [hasSentHash, setHasSentHash] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -80,8 +90,29 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     query: { enabled: role === 'relayer' && !!hash },
   });
 
-  // Check if cross-chain (for message ID extraction)
+  // Check if cross-chain (for message ID extraction and hub polling)
   const isCrossChain = needsCrossChainConfirmation(chainId);
+  const hubChainId = isCrossChain ? getHubChainId(chainId) : undefined;
+
+  // Relayer: Poll hub chain for cross-chain confirmation after sending hash
+  const crossChain = useCrossChainConfirmation({
+    wallet: registeree ?? undefined,
+    spokeChainId: chainId,
+    enabled: role === 'relayer' && isCrossChain && hasSentHash,
+    pollInterval: 3000,
+    maxPollingTime: 120000,
+  });
+
+  // Relayer: Advance to success when hub confirms cross-chain delivery
+  useEffect(() => {
+    if (role === 'relayer' && isCrossChain && crossChain.status === 'confirmed') {
+      logger.registration.info('Relayer cross-chain confirmation received, advancing', {
+        wallet: registeree,
+        elapsedTime: crossChain.elapsedTime,
+      });
+      onComplete();
+    }
+  }, [role, isCrossChain, crossChain.status, crossChain.elapsedTime, registeree, onComplete]);
 
   // Derive TransactionCard status
   const getStatus = (): TransactionStatus => {
@@ -209,7 +240,15 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
 
         setHasSentHash(true);
         logger.p2p.info('Sent REG tx hash to registeree', { hash, messageId });
-        onComplete();
+        // On spoke chains, don't advance yet — wait for hub confirmation
+        if (!isCrossChain) {
+          onComplete();
+        } else {
+          logger.registration.info(
+            'Spoke chain — relayer waiting for hub confirmation before advancing',
+            { chainId }
+          );
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to send hash';
         logger.p2p.error('Failed to send REG tx hash', { attempt: retryCount + 1 }, err as Error);
@@ -346,6 +385,24 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
                 </Button>
               </AlertDescription>
             </Alert>
+          )}
+          {/* Cross-chain: show Hyperlane tracking UI after hash is sent */}
+          {isCrossChain && hasSentHash && crossChain.status !== 'confirmed' && (
+            <P2PWaitForConfirmation
+              status={crossChain.status}
+              elapsedTime={crossChain.elapsedTime}
+              onComplete={() => {
+                /* handled by the useEffect above */
+              }}
+              waitingFor="cross-chain hub confirmation"
+              logContext={{ wallet: registeree, elapsedTime: crossChain.elapsedTime }}
+              crossChainProgress={{
+                hubChainName: hubChainId ? getChainName(hubChainId) : undefined,
+                bridgeName: 'Hyperlane',
+                messageId: bridgeMessageId ?? undefined,
+                explorerUrl: bridgeMessageId ? getBridgeMessageByIdUrl(bridgeMessageId) : null,
+              }}
+            />
           )}
         </>
       )}
