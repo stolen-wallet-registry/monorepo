@@ -50,7 +50,12 @@ import {
   isStreamAbortError,
   type ProtocolHandler,
 } from '@/lib/p2p';
-import { useCrossChainConfirmation } from '@/hooks/useCrossChainConfirmation';
+import {
+  useCrossChainConfirmation,
+  needsCrossChainConfirmation,
+} from '@/hooks/useCrossChainConfirmation';
+import { getHubChainId } from '@/lib/chains/config';
+import { getChainName, getBridgeMessageByIdUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
 import { isHash } from '@/lib/types/ethereum';
 import type { Address } from '@/lib/types/ethereum';
@@ -94,11 +99,24 @@ interface WalletP2PWaitForRegistrationProps {
  * Waits for the relayer to complete wallet registration.
  *
  * Dual-path confirmation:
- * 1. P2P: REG_PAY handler advances step directly (handled in parent)
- * 2. On-chain polling: polls hub isWalletRegistered as fallback
+ * 1. P2P: REG_PAY handler stores hash/messageId (handled in parent)
+ * 2. On-chain polling: polls hub isWalletRegistered, advances when confirmed
+ *
+ * On spoke chains, shows CrossChainRelayProgress with Hyperlane tracking.
  */
 function WalletP2PWaitForRegistration({ wallet, onComplete }: WalletP2PWaitForRegistrationProps) {
   const chainId = useChainId();
+  const { bridgeMessageId } = useRegistrationStore();
+
+  const isCrossChain = needsCrossChainConfirmation(chainId);
+  const hubChainId = isCrossChain ? getHubChainId(chainId) : undefined;
+
+  // Track the messageId that was present when this component mounted.
+  // Any value on mount is stale (persisted from a previous flow).
+  // Only show CrossChainRelayProgress when a NEW messageId arrives.
+  const [staleMessageId] = useState(bridgeMessageId);
+  const freshMessageId =
+    bridgeMessageId && bridgeMessageId !== staleMessageId ? bridgeMessageId : null;
 
   const confirmation = useCrossChainConfirmation({
     wallet,
@@ -113,8 +131,20 @@ function WalletP2PWaitForRegistration({ wallet, onComplete }: WalletP2PWaitForRe
       status={confirmation.status}
       elapsedTime={confirmation.elapsedTime}
       onComplete={onComplete}
-      waitingFor="registration transaction"
+      waitingFor={
+        isCrossChain ? 'cross-chain registration confirmation' : 'registration transaction'
+      }
       logContext={{ wallet, elapsedTime: confirmation.elapsedTime }}
+      crossChainProgress={
+        isCrossChain && freshMessageId
+          ? {
+              hubChainName: hubChainId ? getChainName(hubChainId) : undefined,
+              bridgeName: 'Hyperlane',
+              messageId: freshMessageId,
+              explorerUrl: getBridgeMessageByIdUrl(freshMessageId),
+            }
+          : undefined
+      }
     />
   );
 }
@@ -265,7 +295,17 @@ export function P2PRegistereeRegistrationPage() {
                         messageId: data.messageId,
                       });
                     }
-                    goToNextStepRef.current();
+                    // On spoke chains, don't advance to success yet — the cross-chain
+                    // polling in WalletP2PWaitForRegistration will advance when the
+                    // hub chain confirms delivery via Hyperlane.
+                    if (needsCrossChainConfirmation(chainIdRef.current)) {
+                      logger.registration.info(
+                        'Spoke chain — waiting for hub confirmation before advancing',
+                        { spokeChainId: chainIdRef.current }
+                      );
+                    } else {
+                      goToNextStepRef.current();
+                    }
                   } else {
                     logger.p2p.warn('REG_PAY received with invalid or missing hash', {
                       hash: data.hash,

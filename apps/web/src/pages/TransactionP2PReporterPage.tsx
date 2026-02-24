@@ -71,7 +71,8 @@ import {
   type ProtocolHandler,
 } from '@/lib/p2p';
 import { computeTransactionDataHash } from '@/lib/signatures/transactions';
-import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
+import { chainIdToBytes32, toCAIP2, getChainName, getBridgeMessageByIdUrl } from '@swr/chains';
+import { getHubChainId } from '@/lib/chains/config';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { logger } from '@/lib/logger';
@@ -608,14 +609,25 @@ interface TxP2PWaitForRegistrationProps {
  * Waits for the relayer to complete transaction registration.
  * Polls hub chain via useTxCrossChainConfirmation; delegates
  * rendering and auto-advance to the shared P2PWaitForConfirmation.
+ *
+ * On spoke chains, shows CrossChainRelayProgress with Hyperlane tracking.
  */
 function TxP2PWaitForRegistration({ onComplete }: TxP2PWaitForRegistrationProps) {
   const chainId = useChainId();
   const { txHashesForContract, reportedChainId } = useTransactionSelection();
+  const { bridgeMessageId } = useTransactionRegistrationStore();
 
   const isCrossChain = needsTxCrossChainConfirmation(chainId);
+  const hubChainId = isCrossChain ? getHubChainId(chainId) : undefined;
   const sampleTxHash = txHashesForContract.length > 0 ? txHashesForContract[0] : undefined;
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
+
+  // Track the messageId that was present when this component mounted.
+  // Any value on mount is stale (persisted from a previous flow).
+  // Only show CrossChainRelayProgress when a NEW messageId arrives.
+  const [staleMessageId] = useState(bridgeMessageId);
+  const freshMessageId =
+    bridgeMessageId && bridgeMessageId !== staleMessageId ? bridgeMessageId : null;
 
   const confirmation = useTxCrossChainConfirmation({
     sampleTxHash,
@@ -635,6 +647,16 @@ function TxP2PWaitForRegistration({ onComplete }: TxP2PWaitForRegistrationProps)
         isCrossChain ? 'cross-chain registration confirmation' : 'registration transaction'
       }
       logContext={{ sampleTxHash, elapsedTime: confirmation.elapsedTime }}
+      crossChainProgress={
+        isCrossChain && freshMessageId
+          ? {
+              hubChainName: hubChainId ? getChainName(hubChainId) : undefined,
+              bridgeName: 'Hyperlane',
+              messageId: freshMessageId,
+              explorerUrl: getBridgeMessageByIdUrl(freshMessageId),
+            }
+          : undefined
+      }
     />
   );
 }
@@ -806,7 +828,17 @@ export function TransactionP2PReporterPage() {
                     if (typeof data.messageId === 'string' && isHash(data.messageId)) {
                       setBridgeMessageId(data.messageId);
                     }
-                    goToNextStepRef.current();
+                    // On spoke chains, don't advance to success yet — the cross-chain
+                    // polling in TxP2PWaitForRegistration will advance when the
+                    // hub chain confirms delivery via Hyperlane.
+                    if (needsTxCrossChainConfirmation(chainIdRef.current)) {
+                      logger.registration.info(
+                        'Spoke chain — waiting for hub confirmation before advancing',
+                        { spokeChainId: chainIdRef.current }
+                      );
+                    } else {
+                      goToNextStepRef.current();
+                    }
                   } else {
                     logger.p2p.warn('TX_REG_PAY received with invalid hash', { hash: data.hash });
                     setProtocolError('Received invalid registration hash from relayer');
