@@ -1,10 +1,10 @@
 'use client';
 
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useCallback, useState } from 'react';
 import { Info } from 'lucide-react';
 import { cn, NetworkBase, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
 
-// Reusable info icon with tooltip - reduces duplication across components
+// Reusable info icon with tooltip - touch-friendly (opens on tap for mobile)
 const InfoTooltip = ({
   content,
   ariaLabel,
@@ -13,27 +13,38 @@ const InfoTooltip = ({
   content: string;
   ariaLabel: string;
   iconSize?: string;
-}) => (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <button
-        type="button"
-        aria-label={ariaLabel}
-        className="inline-flex items-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-      >
-        <Info
-          className={cn(
-            'cursor-help text-muted-foreground/60 transition-colors hover:text-foreground',
-            iconSize
-          )}
-        />
-      </button>
-    </TooltipTrigger>
-    <TooltipContent side="top" className="max-w-xs">
-      <p className="text-sm">{content}</p>
-    </TooltipContent>
-  </Tooltip>
-);
+}) => {
+  const [open, setOpen] = useState(false);
+  const handleTap = useCallback((e: React.MouseEvent) => {
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      e.preventDefault();
+      setOpen((prev) => !prev);
+    }
+  }, []);
+
+  return (
+    <Tooltip open={open} onOpenChange={setOpen}>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={ariaLabel}
+          className="inline-flex items-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={handleTap}
+        >
+          <Info
+            className={cn(
+              'cursor-help text-muted-foreground/60 transition-colors hover:text-foreground',
+              iconSize
+            )}
+          />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs">
+        <p className="text-sm">{content}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+};
 
 // Section title with info icon tooltip for explanations
 export const SectionTitle = ({

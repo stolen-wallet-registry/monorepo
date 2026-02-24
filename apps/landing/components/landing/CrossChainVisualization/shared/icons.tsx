@@ -1,6 +1,6 @@
 'use client';
 
-import React, { forwardRef, useEffect, useRef } from 'react';
+import React, { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { motion, useAnimate } from 'motion/react';
 import {
   cn,
@@ -15,6 +15,20 @@ import {
 } from '@swr/ui';
 
 import { BEAM_DURATION } from './constants';
+
+// Touch-friendly tooltip: opens on tap for touch devices, hover for desktop.
+// Uses coarse pointer media query to detect touch at render time.
+function useTouchTooltip() {
+  const [open, setOpen] = useState(false);
+  const handleTap = useCallback((e: React.MouseEvent | React.PointerEvent) => {
+    // Only toggle on touch devices (coarse pointer)
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      e.preventDefault();
+      setOpen((prev) => !prev);
+    }
+  }, []);
+  return { open, setOpen, handleTap };
+}
 
 // Icon with tooltip wrapper - accessibility improved
 export const IconCircle = forwardRef<
@@ -36,6 +50,7 @@ export const IconCircle = forwardRef<
   ) => {
     const [scope, animate] = useAnimate<HTMLDivElement>();
     const prevTriggerRef = useRef(triggerPulse);
+    const { open, setOpen, handleTap } = useTouchTooltip();
 
     const sizeClasses = {
       xs: 'size-8 p-1',
@@ -76,7 +91,7 @@ export const IconCircle = forwardRef<
     }, [triggerPulse, animate, scope]);
 
     return (
-      <Tooltip>
+      <Tooltip open={open} onOpenChange={setOpen}>
         <TooltipTrigger asChild>
           <motion.div
             ref={scope}
@@ -87,6 +102,7 @@ export const IconCircle = forwardRef<
             )}
             aria-label={label}
             role="img"
+            onClick={handleTap}
             animate={
               pulse
                 ? {
@@ -125,26 +141,30 @@ IconCircle.displayName = 'IconCircle';
 export const BridgeIcon = forwardRef<
   HTMLDivElement,
   { className?: string; children: React.ReactNode; label: string }
->(({ className, children, label }, ref) => (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <div
-        ref={ref}
-        className={cn(
-          'z-10 flex size-9 cursor-pointer items-center justify-center rounded-full border border-border bg-background p-1.5 shadow-sm transition-transform hover:scale-110',
-          className
-        )}
-        aria-label={label}
-        role="img"
-      >
-        {children}
-      </div>
-    </TooltipTrigger>
-    <TooltipContent>
-      <p>{label}</p>
-    </TooltipContent>
-  </Tooltip>
-));
+>(({ className, children, label }, ref) => {
+  const { open, setOpen, handleTap } = useTouchTooltip();
+  return (
+    <Tooltip open={open} onOpenChange={setOpen}>
+      <TooltipTrigger asChild>
+        <div
+          ref={ref}
+          className={cn(
+            'z-10 flex size-9 cursor-pointer items-center justify-center rounded-full border border-border bg-background p-1.5 shadow-sm transition-transform hover:scale-110',
+            className
+          )}
+          aria-label={label}
+          role="img"
+          onClick={handleTap}
+        >
+          {children}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>{label}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+});
 BridgeIcon.displayName = 'BridgeIcon';
 
 // Re-export all logos from @swr/ui for convenience
