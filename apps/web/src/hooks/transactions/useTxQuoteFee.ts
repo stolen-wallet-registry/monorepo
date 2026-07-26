@@ -1,8 +1,9 @@
 /**
  * Hook to get the registration fee for transaction batch registration.
  *
- * Calls quoteRegistration() on the transaction registry to get the required fee.
- * Supports both hub (TransactionRegistry) and spoke (SpokeRegistry) chains.
+ * Supports both hub (TransactionRegistry.quoteRegistration) and spoke
+ * (SpokeRegistry.quoteTransactionBatchRegistration) chains. The spoke quote is
+ * batch-aware because its bridge fee scales with the acknowledged entry count.
  */
 
 import { useMemo } from 'react';
@@ -72,11 +73,15 @@ export function useTxQuoteFee(reporterAddress: Address | null | undefined): UseT
     },
   });
 
+  // Spokes must use the batch-specific quote. The spoke fee includes a bridge fee whose
+  // destination gas scales with the number of entries in the message, and the generic
+  // quoteRegistration() prices a single-entry wallet message. Quoting a multi-transaction
+  // batch that way under-funds it and registerTransactionBatch reverts on the fee check.
   const spokeResult = useReadContract({
     address: contractAddress,
     abi: spokeRegistryAbi,
     chainId,
-    functionName: 'quoteRegistration',
+    functionName: 'quoteTransactionBatchRegistration',
     args: normalizedAddress ? [normalizedAddress] : undefined,
     query: {
       enabled: isSpoke && enabled,

@@ -8,7 +8,6 @@
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
 	branch = v5.5.0
 
-[submodule "packages/contracts/lib/hyperlane-monorepo"]
-	path = packages/contracts/lib/hyperlane-monorepo
-	url = https://github.com/hyperlane-xyz/hyperlane-monorepo
-	branch = v1.5.8
+# hyperlane-monorepo was removed: it was pinned to v1.5.8 (Hyperlane v2 interfaces)
+# and has no v3+ git tag to move to. The five interface files we actually import
+# are vendored at packages/contracts/src/vendor/hyperlane/ — see the README there.

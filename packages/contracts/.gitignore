@@ -5,8 +5,12 @@
 # Broadcast files (deployment records)
 /broadcast
 
-# Dependencies (restored via forge install)
-/lib
+# Dependencies live in /lib as git submodules and MUST stay tracked as gitlinks.
+# Ignoring /lib silently drops them from the index, so a fresh clone with
+# `--recurse-submodules` restores nothing and `forge build` fails on the first
+# `forge-std/` import. Anything generated inside a dependency is ignored instead.
+/lib/*/out
+/lib/*/cache
 
 # Gas snapshots (regenerate with: pnpm report:gas)
 # Keep tooling-owned to reduce noisy diffs

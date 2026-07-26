@@ -26,7 +26,6 @@ import { SoulboundReceiver } from "../src/soulbound/SoulboundReceiver.sol";
 import { SpokeSoulboundForwarder } from "../src/spoke/SpokeSoulboundForwarder.sol";
 
 // Mocks for local testing
-import { MockInterchainGasPaymaster } from "../test/mocks/MockInterchainGasPaymaster.sol";
 import { MockAggregator, Multicall3 } from "./DeployBase.s.sol";
 
 // CREATE2 deterministic deployment
@@ -146,7 +145,6 @@ contract Deploy is Script {
     address soulboundReceiverAddr;
 
     // Spoke deployed addresses
-    address spokeGasPaymaster;
     address hyperlaneAdapterAddr;
     address spokeMockAggregatorAddr;
     address spokeFeeManagerAddr;
@@ -313,20 +311,19 @@ contract Deploy is Script {
         console2.log("Timing - Deadline Blocks:", spokeDeadlineBlocks);
 
         // Spoke contracts (regular CREATE — nonce-based, bytecode-independent addresses)
-        spokeGasPaymaster = address(new MockInterchainGasPaymaster());
-        console2.log("1. MockInterchainGasPaymaster:", spokeGasPaymaster);
-
-        hyperlaneAdapterAddr = address(new HyperlaneAdapter(deployer, spokeMailbox, spokeGasPaymaster));
-        console2.log("2. HyperlaneAdapter:", hyperlaneAdapterAddr);
+        // No gas paymaster is deployed: from Hyperlane v3 the interchain gas payment is
+        // collected by the mailbox's own default post-dispatch hook during dispatch().
+        hyperlaneAdapterAddr = address(new HyperlaneAdapter(deployer, spokeMailbox));
+        console2.log("1. HyperlaneAdapter:", hyperlaneAdapterAddr);
 
         HyperlaneAdapter(hyperlaneAdapterAddr).setDomainSupport(HUB_CHAIN_ID, true);
         console2.log("   -> Hub chain", HUB_CHAIN_ID, "enabled as destination");
 
         spokeMockAggregatorAddr = address(new MockAggregator(int256(350_000_000_000)));
-        console2.log("3. MockAggregator (Spoke):", spokeMockAggregatorAddr);
+        console2.log("2. MockAggregator (Spoke):", spokeMockAggregatorAddr);
 
         spokeFeeManagerAddr = address(new FeeManager(deployer, spokeMockAggregatorAddr));
-        console2.log("4. FeeManager (Spoke):", spokeFeeManagerAddr);
+        console2.log("3. FeeManager (Spoke):", spokeFeeManagerAddr);
 
         bytes32 inboxBytes = _addressToBytes32(crossChainInboxAddr);
         spokeRegistryAddr = address(
@@ -341,7 +338,7 @@ contract Deploy is Script {
                 BRIDGE_ID_HYPERLANE
             )
         );
-        console2.log("5. SpokeRegistry:", spokeRegistryAddr);
+        console2.log("4. SpokeRegistry:", spokeRegistryAddr);
 
         bytes32 soulboundReceiverBytes = _addressToBytes32(soulboundReceiverAddr);
         spokeSoulboundForwarderAddr = address(
@@ -349,14 +346,14 @@ contract Deploy is Script {
                 deployer, hyperlaneAdapterAddr, HUB_CHAIN_ID, soulboundReceiverBytes, MIN_DONATION
             )
         );
-        console2.log("6. SpokeSoulboundForwarder:", spokeSoulboundForwarderAddr);
+        console2.log("5. SpokeSoulboundForwarder:", spokeSoulboundForwarderAddr);
 
         HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeRegistryAddr, true);
         HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeSoulboundForwarderAddr, true);
         console2.log("   -> Spoke contracts authorized to dispatch via adapter");
 
         spokeMulticall3Addr = _deployMulticall3(Salts.MULTICALL3_SPOKE);
-        console2.log("7. Multicall3 (Spoke):", spokeMulticall3Addr);
+        console2.log("6. Multicall3 (Spoke):", spokeMulticall3Addr);
 
         vm.stopBroadcast();
         console2.log("");
@@ -413,7 +410,6 @@ contract Deploy is Script {
         console2.log("  SoulboundReceiver:      ", soulboundReceiverAddr);
         console2.log("");
         console2.log("Spoke Chain (31338) - http://localhost:8546:");
-        console2.log("  MockGasPaymaster:         ", spokeGasPaymaster);
         console2.log("  HyperlaneAdapter:         ", hyperlaneAdapterAddr);
         console2.log("  MockAggregator:           ", spokeMockAggregatorAddr);
         console2.log("  FeeManager:               ", spokeFeeManagerAddr);
@@ -586,20 +582,19 @@ contract Deploy is Script {
         console2.log("Timing - Deadline Blocks:", deadlineBlocks);
 
         // Spoke contracts (regular CREATE — nonce-based, bytecode-independent addresses)
-        spokeGasPaymaster = address(new MockInterchainGasPaymaster());
-        console2.log("1. MockInterchainGasPaymaster:", spokeGasPaymaster);
-
-        hyperlaneAdapterAddr = address(new HyperlaneAdapter(deployer, spokeMailbox, spokeGasPaymaster));
-        console2.log("2. HyperlaneAdapter:", hyperlaneAdapterAddr);
+        // No gas paymaster is deployed: from Hyperlane v3 the interchain gas payment is
+        // collected by the mailbox's own default post-dispatch hook during dispatch().
+        hyperlaneAdapterAddr = address(new HyperlaneAdapter(deployer, spokeMailbox));
+        console2.log("1. HyperlaneAdapter:", hyperlaneAdapterAddr);
 
         HyperlaneAdapter(hyperlaneAdapterAddr).setDomainSupport(HUB_CHAIN_ID, true);
         console2.log("   -> Hub chain", HUB_CHAIN_ID, "enabled as destination");
 
         spokeMockAggregatorAddr = address(new MockAggregator(int256(350_000_000_000)));
-        console2.log("3. MockAggregator (Spoke):", spokeMockAggregatorAddr);
+        console2.log("2. MockAggregator (Spoke):", spokeMockAggregatorAddr);
 
         spokeFeeManagerAddr = address(new FeeManager(deployer, spokeMockAggregatorAddr));
-        console2.log("4. FeeManager (Spoke):", spokeFeeManagerAddr);
+        console2.log("3. FeeManager (Spoke):", spokeFeeManagerAddr);
 
         bytes32 inboxBytes = _addressToBytes32(crossChainInboxAddr);
         spokeRegistryAddr = address(
@@ -614,7 +609,7 @@ contract Deploy is Script {
                 BRIDGE_ID_HYPERLANE
             )
         );
-        console2.log("5. SpokeRegistry:", spokeRegistryAddr);
+        console2.log("4. SpokeRegistry:", spokeRegistryAddr);
 
         bytes32 soulboundReceiverBytes = _addressToBytes32(soulboundReceiverAddr);
         spokeSoulboundForwarderAddr = address(
@@ -622,14 +617,14 @@ contract Deploy is Script {
                 deployer, hyperlaneAdapterAddr, HUB_CHAIN_ID, soulboundReceiverBytes, MIN_DONATION
             )
         );
-        console2.log("6. SpokeSoulboundForwarder:", spokeSoulboundForwarderAddr);
+        console2.log("5. SpokeSoulboundForwarder:", spokeSoulboundForwarderAddr);
 
         HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeRegistryAddr, true);
         HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeSoulboundForwarderAddr, true);
         console2.log("   -> Spoke contracts authorized to dispatch via adapter");
 
         spokeMulticall3Addr = _deployMulticall3(Salts.MULTICALL3_SPOKE);
-        console2.log("7. Multicall3 (Spoke):", spokeMulticall3Addr);
+        console2.log("6. Multicall3 (Spoke):", spokeMulticall3Addr);
 
         vm.stopBroadcast();
 
@@ -739,13 +734,9 @@ contract Deploy is Script {
     }
 
     function _predictHyperlaneAdapter() internal view returns (address) {
-        address predictedGasPaymaster =
-            Create2Deployer.predict(Salts.MOCK_GAS_PAYMASTER, type(MockInterchainGasPaymaster).creationCode);
         return Create2Deployer.predict(
             Salts.HYPERLANE_ADAPTER,
-            abi.encodePacked(
-                type(HyperlaneAdapter).creationCode, abi.encode(deployer, spokeMailbox, predictedGasPaymaster)
-            )
+            abi.encodePacked(type(HyperlaneAdapter).creationCode, abi.encode(deployer, spokeMailbox))
         );
     }
 
@@ -958,8 +949,6 @@ contract Deploy is Script {
         // Hyperlane configuration (required for spoke)
         address mailbox = vm.envAddress("SPOKE_HYPERLANE_MAILBOX");
         require(mailbox != address(0), "SPOKE_HYPERLANE_MAILBOX required");
-        address gasPaymaster = vm.envAddress("SPOKE_GAS_PAYMASTER");
-        require(gasPaymaster != address(0), "SPOKE_GAS_PAYMASTER required");
 
         // Hub configuration (required)
         uint32 hubChainId = uint32(vm.envUint("HUB_CHAIN_ID"));
@@ -975,7 +964,6 @@ contract Deploy is Script {
         console2.log("Deployer:", _deployer);
         console2.log("FeeManager:", feeManagerAddr);
         console2.log("Hyperlane Mailbox:", mailbox);
-        console2.log("Gas Paymaster:", gasPaymaster);
         console2.log("Hub Chain ID:", hubChainId);
         console2.log("Hub Inbox Address:");
         console2.logBytes32(hubInboxAddress);
@@ -989,7 +977,7 @@ contract Deploy is Script {
         // 1. Deploy HyperlaneAdapter
         address adapterAddr = Create2Deployer.deploy(
             Salts.HYPERLANE_ADAPTER,
-            abi.encodePacked(type(HyperlaneAdapter).creationCode, abi.encode(_deployer, mailbox, gasPaymaster))
+            abi.encodePacked(type(HyperlaneAdapter).creationCode, abi.encode(_deployer, mailbox))
         );
         console2.log("1. HyperlaneAdapter:", adapterAddr);
 

@@ -61,10 +61,12 @@ import {
 } from '@/hooks/transactions';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
 import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
+import { useOnValueChange } from '@/hooks/useOnValueChange';
 import {
   setup,
   PROTOCOLS,
   readStreamData,
+  acceptStream,
   passStreamData,
   getPeerConnection,
   isStreamAbortError,
@@ -760,15 +762,21 @@ export function TransactionP2PReporterPage() {
     }
   }, [selectedTxHashes, chainId, setTransactionData]);
 
-  // Set reported chain ID when chain changes
+  // Record the reported chain ID whenever it is known, including on mount.
   useEffect(() => {
     if (chainId) {
       setReportedChainId(chainId);
-      setSelectedTxHashes([]);
-      setSelectedTxDetails([]);
-      setTransactionData(null, [], []);
     }
-  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setTransactionData]);
+  }, [chainId, setReportedChainId]);
+
+  // Clear the selection only on a real chain switch. Keying this on [chainId] instead would
+  // also fire on mount, wiping the persisted selection every reload while the step index
+  // survives — leaving the flow on a later step with no data and no way back.
+  useOnValueChange(chainId, () => {
+    setSelectedTxHashes([]);
+    setSelectedTxDetails([]);
+    setTransactionData(null, [], []);
+  });
 
   // Initialize P2P node
   useEffect(() => {
@@ -783,9 +791,15 @@ export function TransactionP2PReporterPage() {
         logger.p2p.info('Initializing P2P node for TX reporter');
 
         const streamHandler = (protocol: string) => ({
-          handler: async (stream: Stream, _connection?: Connection) => {
+          handler: async (stream: Stream, connection?: Connection) => {
             try {
               const data = await readStreamData(stream);
+
+              // Bind the stream to the agreed partner peer and to this protocol's schema
+              // before any of it is trusted. Without this an arbitrary peer that learned a
+              // displayed peer ID could inject signatures or drive the step machine.
+              if (!acceptStream(protocol, connection, data)) return;
+
               logger.p2p.info('TX Reporter received data', { protocol, data });
 
               switch (protocol) {

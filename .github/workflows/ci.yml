@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  contracts:
+    name: Contracts (forge)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Check formatting
+        working-directory: packages/contracts
+        run: forge fmt --check
+
+      - name: Build
+        working-directory: packages/contracts
+        run: forge build --sizes
+
+      - name: Test
+        working-directory: packages/contracts
+        run: forge test
+
+  node:
+    name: Node (lint / typecheck / test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint / typecheck / test
+        run: pnpm turbo lint typecheck test --filter='!@swr/contracts'
+
+      - name: Prettier check
+        run: pnpm exec prettier --check "**/*.{ts,tsx,js,json,md,mdx}"
+
+  abi-drift:
+    name: ABI drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate ABIs
+        working-directory: packages/contracts
+        run: |
+          forge build
+          pnpm export-abi
+
+      # export-abi emits raw JSON.stringify output while the committed ABIs are
+      # Prettier-formatted, so the formatter must run before diffing or every
+      # run reports a whole-tree diff.
+      - name: Format generated ABIs
+        run: pnpm exec prettier --write "packages/abis/src/*.ts"
+
+      - name: Fail if ABIs are stale
+        run: git diff --exit-code -- packages/abis/src

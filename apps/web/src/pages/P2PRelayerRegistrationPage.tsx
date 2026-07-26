@@ -6,7 +6,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'wouter';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 import type { Libp2p } from 'libp2p';
 import type { Connection, Stream } from '@libp2p/interface';
@@ -41,6 +41,7 @@ import {
   setup,
   PROTOCOLS,
   readStreamData,
+  acceptStream,
   passStreamData,
   isStreamAbortError,
   type ProtocolHandler,
@@ -48,27 +49,64 @@ import {
 } from '@/lib/p2p';
 import { storeSignature, SIGNATURE_STEP, type StoredSignature } from '@/lib/signatures';
 import { logger } from '@/lib/logger';
-import type { Hex } from '@/lib/types/ethereum';
+import { isAddress, type Hex } from '@/lib/types/ethereum';
+
+/** A 65-byte ECDSA signature: 0x + 130 hex characters. */
+const SIGNATURE_HEX = /^0x[0-9a-fA-F]{130}$/;
+
+/** A decimal integer with no sign, exponent, or padding — safe to hand to BigInt(). */
+const DECIMAL_UINT = /^(0|[1-9][0-9]{0,77})$/;
 
 /**
- * Validate and check if signature data has all required fields.
+ * Validate that received signature data is well-formed for the chain we are on.
+ *
+ * A presence check is not enough here: this data becomes the arguments of a transaction the
+ * relayer pays for. A signature of the wrong length, an address that is not an address, or a
+ * signature minted for a different chain all produce a transaction that reverts after the
+ * relayer has already spent gas.
+ *
+ * @param data - Decoded stream message
+ * @param expectedChainId - Chain the relayer is about to submit on
  */
-function isValidSignatureData(data: ParsedStreamData): data is ParsedStreamData & {
+function isValidSignatureData(
+  data: ParsedStreamData,
+  expectedChainId: number
+): data is ParsedStreamData & {
   signature: NonNullable<ParsedStreamData['signature']>;
 } {
-  if (
-    !data.signature?.value ||
-    !data.signature?.deadline ||
-    !data.signature?.nonce ||
-    !data.signature?.address ||
-    data.signature?.chainId === undefined
-  ) {
+  const sig = data.signature;
+  if (!sig) return false;
+
+  if (!isAddress(sig.address)) {
+    logger.p2p.warn('Signature rejected: address is not a valid Ethereum address', {
+      address: sig.address,
+    });
     return false;
   }
-  // Validate optional BigInt string fields are coercible if present
-  const sig = data.signature;
-  if (sig.reportedChainId != null && typeof sig.reportedChainId !== 'string') return false;
-  if (sig.incidentTimestamp != null && typeof sig.incidentTimestamp !== 'string') return false;
+
+  if (typeof sig.value !== 'string' || !SIGNATURE_HEX.test(sig.value)) {
+    logger.p2p.warn('Signature rejected: value is not a 65-byte hex signature', {
+      length: typeof sig.value === 'string' ? sig.value.length : null,
+    });
+    return false;
+  }
+
+  if (sig.chainId !== expectedChainId) {
+    logger.p2p.warn('Signature rejected: signed for a different chain', {
+      signatureChainId: sig.chainId,
+      expectedChainId,
+    });
+    return false;
+  }
+
+  // deadline and nonce are BigInt-coerced below; reject anything BigInt() would throw on.
+  if (typeof sig.deadline !== 'string' || !DECIMAL_UINT.test(sig.deadline)) return false;
+  if (typeof sig.nonce !== 'string' || !DECIMAL_UINT.test(sig.nonce)) return false;
+
+  // Optional extended fields: reportedChainId is a bytes32 hash, incidentTimestamp a uint.
+  if (sig.reportedChainId != null && !/^0x[0-9a-fA-F]{64}$/.test(sig.reportedChainId)) return false;
+  if (sig.incidentTimestamp != null && !DECIMAL_UINT.test(sig.incidentTimestamp)) return false;
+
   return true;
 }
 
@@ -78,11 +116,12 @@ function isValidSignatureData(data: ParsedStreamData): data is ParsedStreamData 
 async function processSignature(
   data: ParsedStreamData,
   connection: Connection,
+  expectedChainId: number,
   step: typeof SIGNATURE_STEP.ACKNOWLEDGEMENT | typeof SIGNATURE_STEP.REGISTRATION,
   receiptProtocol: string,
   goToNextStep: () => void
 ): Promise<boolean> {
-  if (!isValidSignatureData(data)) {
+  if (!isValidSignatureData(data, expectedChainId)) {
     logger.p2p.warn(
       `Received malformed ${step === SIGNATURE_STEP.ACKNOWLEDGEMENT ? 'ACK' : 'REG'} signature data`,
       { data }
@@ -153,6 +192,7 @@ const STEP_TITLES: Partial<Record<RegistrationStep, string>> = {
 export function P2PRelayerRegistrationPage() {
   const [, setLocation] = useLocation();
   const { isConnected, address } = useAccount();
+  const chainId = useChainId();
   const { registrationType, step, setRegistrationType } = useRegistrationStore();
   const { setFormValues } = useFormStore();
   const {
@@ -169,6 +209,9 @@ export function P2PRelayerRegistrationPage() {
   // libp2p uses a Proxy that throws when React DevTools tries to serialize it.
   // Always pass getLibp2p getter function instead.
   const libp2pRef = useRef<Libp2p | null>(null);
+  // Read inside long-lived protocol handlers, which would otherwise close over a stale chainId
+  // if the relayer switches network mid-flow.
+  const chainIdRef = useRef(chainId);
   // nodeReady triggers re-render when node initializes so components get the updated ref
   const [, setNodeReady] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -206,6 +249,10 @@ export function P2PRelayerRegistrationPage() {
     goToNextStepRef.current = goToNextStep;
   }, [goToNextStep]);
 
+  useEffect(() => {
+    chainIdRef.current = chainId;
+  }, [chainId]);
+
   // Initialize P2P node - only depends on connection state, not step navigation
   // Uses AbortController to handle React Strict Mode double-invocation cleanly
   useEffect(() => {
@@ -228,9 +275,15 @@ export function P2PRelayerRegistrationPage() {
         // Note: Uses ref for goToNextStep to avoid handler recreation
         // In libp2p 3.x, handler signature is (stream, connection) not ({stream, connection})
         const streamHandler = (protocol: string) => ({
-          handler: async (stream: Stream, connection: Connection) => {
+          handler: async (stream: Stream, connection?: Connection) => {
             try {
               const data = await readStreamData(stream);
+
+              // Bind the stream to the agreed partner peer and to this protocol's schema
+              // before any of it is trusted. Without this an arbitrary peer that learned a
+              // displayed peer ID could inject signatures or drive the step machine.
+              if (!acceptStream(protocol, connection, data)) return;
+
               logger.p2p.info('Relayer received data', { protocol, data });
 
               switch (protocol) {
@@ -239,9 +292,9 @@ export function P2PRelayerRegistrationPage() {
                   if (data.form?.registeree) {
                     setFormValues({ registeree: data.form.registeree });
                   }
-                  if (data.p2p?.partnerPeerId) {
-                    setPartnerPeerId(data.p2p.partnerPeerId);
-                  }
+                  // The partner peer ID is pinned by acceptStream from connection.remotePeer.
+                  // Deliberately NOT taken from data.p2p.partnerPeerId — a payload-supplied
+                  // peer ID is attacker-controlled and would defeat the binding.
                   setConnectedToPeer(true);
 
                   // Respond with relayer address
@@ -262,6 +315,7 @@ export function P2PRelayerRegistrationPage() {
                   await processSignature(
                     data,
                     connection,
+                    chainIdRef.current,
                     SIGNATURE_STEP.ACKNOWLEDGEMENT,
                     PROTOCOLS.ACK_REC,
                     goToNextStepRef.current
@@ -273,6 +327,7 @@ export function P2PRelayerRegistrationPage() {
                   await processSignature(
                     data,
                     connection,
+                    chainIdRef.current,
                     SIGNATURE_STEP.REGISTRATION,
                     PROTOCOLS.REG_REC,
                     goToNextStepRef.current

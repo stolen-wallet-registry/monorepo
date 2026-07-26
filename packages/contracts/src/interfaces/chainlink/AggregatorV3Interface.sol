@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// solhint-disable-next-line interface-starts-with-i
+// Chainlink's published interface name. Renaming it to IAggregatorV3Interface would diverge
+// from the ABI every integrator and tool recognises. File-scoped rather than next-line so the
+// NatSpec block stays adjacent to the declaration (solhint reads NatSpec by adjacency).
+// solhint-disable interface-starts-with-i
+
 /// @title AggregatorV3Interface
 /// @author Chainlink
 /// @notice Interface for Chainlink price feed aggregators

@@ -24,6 +24,18 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     using CrossChainMessage for CrossChainMessage.TransactionBatchPayload;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Largest transaction batch that may be acknowledged for cross-chain registration
+    /// @dev Bounded by what the hub can execute in a single destination transaction. At ~26,200 gas
+    ///      per entry a 25M-gas block tops out near 950 entries; 800 leaves headroom for the fixed
+    ///      cost of message delivery and ISM verification. Without a bound here the two-phase and
+    ///      cross-chain paths accept a batch that is quotable but not executable on arrival — the
+    ///      spoke consumes the nonce and the fee, and the registration strands.
+    uint32 public constant MAX_CROSS_CHAIN_BATCH_SIZE = 800;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLES
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -335,6 +347,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
 
         // Validate batch size
         if (transactionCount == 0) revert SpokeRegistry__EmptyBatch();
+        if (transactionCount > MAX_CROSS_CHAIN_BATCH_SIZE) revert SpokeRegistry__BatchTooLarge();
 
         // Validate signature deadline hasn't passed
         if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
@@ -453,6 +466,35 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
         bytes memory encodedPayload = payload.encodeWalletRegistration();
 
         uint256 bridgeFee = IBridgeAdapter(bridgeAdapter).quoteMessage(hubChainId, encodedPayload);
+        uint256 registrationFee = feeManager != address(0) ? IFeeManager(feeManager).currentFeeWei() : 0;
+
+        return bridgeFee + registrationFee;
+    }
+
+    /// @inheritdoc ISpokeRegistry
+    function quoteTransactionBatchRegistration(address reporter) external view returns (uint256) {
+        uint32 count = _pendingTxAcknowledgements[reporter].transactionCount;
+        if (count == 0) count = 1;
+
+        // Zero-filled arrays of the acknowledged length: the adapter prices on the declared entry
+        // count, and matching the real payload length keeps the quote correct for any bridge that
+        // also prices on message size.
+        bytes32[] memory empty = new bytes32[](count);
+
+        CrossChainMessage.TransactionBatchPayload memory payload = CrossChainMessage.TransactionBatchPayload({
+            dataHash: bytes32(0),
+            reporter: reporter,
+            reportedChainId: bytes32(0),
+            sourceChainId: sourceChainId,
+            transactionCount: count,
+            isSponsored: false,
+            nonce: nonces[reporter],
+            timestamp: uint64(block.timestamp),
+            transactionHashes: empty,
+            chainIds: empty
+        });
+
+        uint256 bridgeFee = IBridgeAdapter(bridgeAdapter).quoteMessage(hubChainId, payload.encodeTransactionBatch());
         uint256 registrationFee = feeManager != address(0) ? IFeeManager(feeManager).currentFeeWei() : 0;
 
         return bridgeFee + registrationFee;

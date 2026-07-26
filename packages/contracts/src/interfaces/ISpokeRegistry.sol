@@ -128,6 +128,8 @@ interface ISpokeRegistry {
     error SpokeRegistry__WithdrawalFailed();
     error SpokeRegistry__InvalidHubConfig();
     error SpokeRegistry__EmptyBatch();
+    /// @notice Thrown when a transaction batch exceeds what the hub can execute on delivery
+    error SpokeRegistry__BatchTooLarge();
     error SpokeRegistry__ArrayLengthMismatch();
     error SpokeRegistry__InvalidDataHash();
     error SpokeRegistry__DataMismatch();
@@ -166,7 +168,8 @@ interface ISpokeRegistry {
     /// @dev Must be called by authorized trusted forwarder within registration window.
     ///      Function signature unified with hub WalletRegistry.
     /// @param registeree Wallet address being registered
-    /// @param trustedForwarder Address authorized to complete registration (must match acknowledge phase, validated against msg.sender)
+    /// @param trustedForwarder Address authorized to complete registration (must match acknowledge
+    ///        phase, validated against msg.sender)
     /// @param reportedChainId Chain ID (must match acknowledgement, converted to CAIP-2 hash)
     /// @param incidentTimestamp Incident timestamp (must match acknowledgement)
     /// @param deadline Signature expiry timestamp
@@ -266,10 +269,21 @@ interface ISpokeRegistry {
     /// @return The current nonce value
     function nonces(address wallet) external view returns (uint256);
 
-    /// @notice Quote total registration fee
+    /// @notice Quote total registration fee for a wallet registration
+    /// @dev Wallet messages carry exactly one entry. Do NOT use this for transaction batches —
+    ///      the bridge fee scales with entry count, so a wallet-shaped quote under-funds any batch
+    ///      of more than one transaction and `registerTransactionBatch` reverts on the fee check.
     /// @param wallet The wallet address being registered
     /// @return The total fee in wei
     function quoteRegistration(address wallet) external view returns (uint256);
+
+    /// @notice Quote total registration fee for the reporter's pending transaction batch
+    /// @dev Reads the acknowledged `transactionCount`, so this is only meaningful between
+    ///      `acknowledgeTransactionBatch` and `registerTransactionBatch`. With no pending
+    ///      acknowledgement the batch is treated as a single entry.
+    /// @param reporter The address whose pending batch is being quoted
+    /// @return The total fee in wei
+    function quoteTransactionBatchRegistration(address reporter) external view returns (uint256);
 
     /// @notice Get detailed fee breakdown
     /// @param wallet The wallet address being registered

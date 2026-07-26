@@ -4,7 +4,8 @@ pnpm-lock.yaml
 *.sol
 apps/indexer/ponder-env.d.ts
 
-# Foundry dependencies (installed via forge install)
-**/lib/forge-std
-**/lib/openzeppelin-contracts
-**/lib/hyperlane-monorepo
+# Foundry dependencies — git submodules. A bare directory name did NOT stop prettier
+# from rewriting files inside them: `pnpm format` reformatted forge-std's README.md,
+# CONTRIBUTING.md and two JSON test fixtures, which then showed up as "modified content"
+# on every `git status` and got staged by `git add -A`. Match the contents explicitly.
+packages/contracts/lib/**

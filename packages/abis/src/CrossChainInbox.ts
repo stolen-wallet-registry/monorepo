@@ -130,7 +130,7 @@ export const CrossChainInboxABI = [
       },
     ],
     outputs: [],
-    stateMutability: 'nonpayable',
+    stateMutability: 'payable',
   },
   {
     type: 'function',

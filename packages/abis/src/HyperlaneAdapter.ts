@@ -12,17 +12,38 @@ export const HyperlaneAdapterABI = [
         type: 'address',
         internalType: 'address',
       },
-      {
-        name: '_gasPaymaster',
-        type: 'address',
-        internalType: 'address',
-      },
     ],
     stateMutability: 'nonpayable',
   },
   {
     type: 'function',
-    name: 'DEFAULT_GAS_AMOUNT',
+    name: 'DEFAULT_BASE_GAS',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'DEFAULT_PER_ENTRY_GAS',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'MAX_GAS_LIMIT',
     inputs: [],
     outputs: [
       {
@@ -74,20 +95,7 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
-    name: 'bridgeName',
-    inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'string',
-        internalType: 'string',
-      },
-    ],
-    stateMutability: 'pure',
-  },
-  {
-    type: 'function',
-    name: 'gasAmounts',
+    name: 'baseGasAmounts',
     inputs: [
       {
         name: '',
@@ -106,13 +114,56 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
-    name: 'gasPaymaster',
+    name: 'bridgeName',
     inputs: [],
     outputs: [
       {
         name: '',
-        type: 'address',
-        internalType: 'contract IInterchainGasPaymaster',
+        type: 'string',
+        internalType: 'string',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    name: 'entryCount',
+    inputs: [
+      {
+        name: 'payload',
+        type: 'bytes',
+        internalType: 'bytes',
+      },
+    ],
+    outputs: [
+      {
+        name: 'count',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    name: 'gasLimitFor',
+    inputs: [
+      {
+        name: 'destinationChain',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: 'payload',
+        type: 'bytes',
+        internalType: 'bytes',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
     stateMutability: 'view',
@@ -158,6 +209,25 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
+    name: 'perEntryGasAmounts',
+    inputs: [
+      {
+        name: '',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'quoteMessage',
     inputs: [
       {
@@ -166,7 +236,7 @@ export const HyperlaneAdapterABI = [
         internalType: 'uint32',
       },
       {
-        name: '',
+        name: 'payload',
         type: 'bytes',
         internalType: 'bytes',
       },
@@ -254,7 +324,7 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
-    name: 'setGasAmount',
+    name: 'setGasAmounts',
     inputs: [
       {
         name: 'domain',
@@ -262,7 +332,12 @@ export const HyperlaneAdapterABI = [
         internalType: 'uint32',
       },
       {
-        name: 'gasAmount',
+        name: 'baseGas',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'perEntryGas',
         type: 'uint256',
         internalType: 'uint256',
       },
@@ -370,7 +445,13 @@ export const HyperlaneAdapterABI = [
         internalType: 'uint32',
       },
       {
-        name: 'gasAmount',
+        name: 'baseGas',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+      {
+        name: 'perEntryGas',
         type: 'uint256',
         indexed: false,
         internalType: 'uint256',
@@ -460,6 +541,11 @@ export const HyperlaneAdapterABI = [
   {
     type: 'error',
     name: 'BridgeAdapter__UnsupportedChain',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'HyperlaneAdapter__GasLimitExceeded',
     inputs: [],
   },
   {

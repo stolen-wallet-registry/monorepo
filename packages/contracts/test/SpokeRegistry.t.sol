@@ -10,7 +10,6 @@ import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
 import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
-import { MockInterchainGasPaymaster } from "./mocks/MockInterchainGasPaymaster.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 
 /// @title SpokeRegistryTest
@@ -20,7 +19,6 @@ contract SpokeRegistryTest is Test {
     HyperlaneAdapter public bridgeAdapter;
     FeeManager public feeManager;
     MockMailbox public mailbox;
-    MockInterchainGasPaymaster public gasPaymaster;
     MockAggregator public oracle;
 
     // Test accounts
@@ -119,9 +117,8 @@ contract SpokeRegistryTest is Test {
 
         // Deploy mocks and infrastructure
         mailbox = new MockMailbox(SPOKE_CHAIN_ID);
-        gasPaymaster = new MockInterchainGasPaymaster();
 
-        bridgeAdapter = new HyperlaneAdapter(owner, address(mailbox), address(gasPaymaster));
+        bridgeAdapter = new HyperlaneAdapter(owner, address(mailbox));
         bridgeAdapter.setDomainSupport(HUB_CHAIN_ID, true);
 
         oracle = new MockAggregator(300_000_000_000); // $3000 ETH price
@@ -865,6 +862,52 @@ contract SpokeRegistryTest is Test {
         assertEq(ack.transactionCount, transactionCount);
     }
 
+    /// @dev The hub executes the whole batch in one destination transaction. A batch larger than a
+    ///      destination block can run is quotable but never executable, and because the spoke has
+    ///      already consumed the nonce, cleared the acknowledgement and kept the fee before
+    ///      dispatch, the registration strands with the user's money spent. Reject it up front.
+    function test_TxBatchAck_RejectsOversizedBatch() public {
+        bytes32 dataHash = keccak256("oversized");
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 tooMany = spoke.MAX_CROSS_CHAIN_BATCH_SIZE() + 1;
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(reporter);
+        (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
+            reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, tooMany, nonce, deadline
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__BatchTooLarge.selector);
+        spoke.acknowledgeTransactionBatch(dataHash, reportedChainId, tooMany, deadline, nonce, reporter, v, r, s);
+    }
+
+    /// @dev The bound is inclusive: exactly MAX_CROSS_CHAIN_BATCH_SIZE must still be accepted.
+    function test_TxBatchAck_AcceptsMaximumBatch() public {
+        bytes32 dataHash = keccak256("max");
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 max = spoke.MAX_CROSS_CHAIN_BATCH_SIZE();
+
+        _doTxBatchAck(forwarder, dataHash, reportedChainId, max);
+
+        assertEq(spoke.getTransactionAcknowledgement(reporter).transactionCount, max);
+    }
+
+    /// @dev The batch quote must scale with the acknowledged entry count. Quoting a batch with the
+    ///      wallet-shaped `quoteRegistration` under-funds the bridge message for any batch past one
+    ///      entry, which is what previously made large batches unrelayable.
+    function test_QuoteTransactionBatch_ScalesWithAcknowledgedCount() public {
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+
+        uint256 walletQuote = spoke.quoteRegistration(reporter);
+        _doTxBatchAck(forwarder, keccak256("batch"), reportedChainId, 50);
+        uint256 batchQuote = spoke.quoteTransactionBatchRegistration(reporter);
+
+        assertGt(batchQuote, walletQuote);
+        // 49 extra entries x 35,000 gas x 1 gwei, on top of the single-entry wallet quote.
+        assertEq(batchQuote - walletQuote, 49 * 35_000 * 1 gwei);
+    }
+
     /// @notice Transaction batch self-relay (reporter is own forwarder) works
     function test_TxBatchAck_SelfRelay() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
@@ -965,7 +1008,7 @@ contract SpokeRegistryTest is Test {
         _skipToTxBatchRegistrationWindow(reporter);
 
         // Phase 2: Register
-        uint256 fee = spoke.quoteRegistration(reporter);
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
 
         vm.expectEmit(true, false, true, true);
         emit TransactionBatchSentToHub(reporter, bytes32(0), dataHash, HUB_CHAIN_ID);
@@ -1185,7 +1228,7 @@ contract SpokeRegistryTest is Test {
             _skipToTxBatchRegistrationWindow(reporter);
             _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder);
         }
-        uint256 fee = spoke.quoteRegistration(reporter);
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
         address wrongFwd = makeAddr("wrongForwarder");
         vm.deal(wrongFwd, 10 ether);
 
@@ -1210,7 +1253,7 @@ contract SpokeRegistryTest is Test {
             // DO NOT skip to registration window
             _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder);
         }
-        uint256 fee = spoke.quoteRegistration(reporter);
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
 
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__GracePeriodNotStarted.selector);
         vm.prank(forwarder);
@@ -1234,7 +1277,7 @@ contract SpokeRegistryTest is Test {
             vm.roll(ack.expiryBlock);
             _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder);
         }
-        uint256 fee = spoke.quoteRegistration(reporter);
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
 
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__ForwarderExpired.selector);
         vm.prank(forwarder);
@@ -1265,7 +1308,7 @@ contract SpokeRegistryTest is Test {
             bytes32 wrongDataHash = _computeDataHash(wrongTxHashes, chainIds);
             _prepareTxBatchRegSig(wrongDataHash, reportedChainId, uint32(wrongTxHashes.length), forwarder);
         }
-        uint256 fee = spoke.quoteRegistration(reporter);
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
 
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidDataHash.selector);
         vm.prank(forwarder);

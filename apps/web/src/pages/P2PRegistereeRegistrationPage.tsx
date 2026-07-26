@@ -47,6 +47,7 @@ import {
   setup,
   PROTOCOLS,
   readStreamData,
+  acceptStream,
   isStreamAbortError,
   type ProtocolHandler,
 } from '@/lib/p2p';
@@ -239,9 +240,15 @@ export function P2PRegistereeRegistrationPage() {
         // Note: Uses ref for goToNextStep to avoid handler recreation
         // In libp2p 3.x, handler signature is (stream, connection) - connection unused here
         const streamHandler = (protocol: string) => ({
-          handler: async (stream: Stream, _connection?: Connection) => {
+          handler: async (stream: Stream, connection?: Connection) => {
             try {
               const data = await readStreamData(stream);
+
+              // Bind the stream to the agreed partner peer and to this protocol's schema
+              // before any of it is trusted. Without this an arbitrary peer that learned a
+              // displayed peer ID could inject signatures or drive the step machine.
+              if (!acceptStream(protocol, connection, data)) return;
+
               logger.p2p.info('Registeree received data', { protocol, data });
 
               switch (protocol) {

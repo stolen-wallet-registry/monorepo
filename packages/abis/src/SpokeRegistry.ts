@@ -51,6 +51,19 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'MAX_CROSS_CHAIN_BATCH_SIZE',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'acceptOwnership',
     inputs: [],
     outputs: [],
@@ -709,6 +722,25 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'quoteTransactionBatchRegistration',
+    inputs: [
+      {
+        name: 'reporter',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'register',
     inputs: [
       {
@@ -1138,6 +1170,11 @@ export const SpokeRegistryABI = [
   {
     type: 'error',
     name: 'SpokeRegistry__ArrayLengthMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__BatchTooLarge',
     inputs: [],
   },
   {

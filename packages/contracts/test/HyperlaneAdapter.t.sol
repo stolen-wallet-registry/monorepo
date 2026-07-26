@@ -5,12 +5,11 @@ import { Test } from "forge-std/Test.sol";
 import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
 import { IBridgeAdapter } from "../src/interfaces/IBridgeAdapter.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
-import { MockInterchainGasPaymaster } from "./mocks/MockInterchainGasPaymaster.sol";
+import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
 
 contract HyperlaneAdapterTest is Test {
     HyperlaneAdapter adapter;
     MockMailbox mailbox;
-    MockInterchainGasPaymaster gasPaymaster;
 
     address owner = address(0x1);
     address user = address(0x2);
@@ -20,10 +19,9 @@ contract HyperlaneAdapterTest is Test {
 
     function setUp() public {
         mailbox = new MockMailbox(LOCAL_DOMAIN);
-        gasPaymaster = new MockInterchainGasPaymaster();
 
         vm.prank(owner);
-        adapter = new HyperlaneAdapter(owner, address(mailbox), address(gasPaymaster));
+        adapter = new HyperlaneAdapter(owner, address(mailbox));
 
         // Configure supported domain
         vm.prank(owner);
@@ -41,9 +39,10 @@ contract HyperlaneAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function test_Constructor_SetsImmutables() public view {
-        // Constructor should store mailbox, gas paymaster, and owner.
+        // Constructor should store mailbox and owner. There is no gas paymaster argument:
+        // from Hyperlane v3 the interchain gas payment is collected by the mailbox's own
+        // default post-dispatch hook during dispatch().
         assertEq(address(adapter.mailbox()), address(mailbox));
-        assertEq(address(adapter.gasPaymaster()), address(gasPaymaster));
         assertEq(adapter.owner(), owner);
     }
 
@@ -112,21 +111,20 @@ contract HyperlaneAdapterTest is Test {
     }
 
     function test_QuoteMessage_Success() public view {
-        // quoteMessage should return the gas payment quote.
+        // A non-batch payload is one entry: base 200,000 + 1 x 35,000 per-entry, at 1 gwei.
         uint256 quote = adapter.quoteMessage(HUB_DOMAIN, "test");
 
-        // Default gas amount is 200,000, default gas price is 1 gwei
-        uint256 expected = 200_000 * 1 gwei;
+        uint256 expected = (200_000 + 35_000) * 1 gwei;
         assertEq(quote, expected);
     }
 
-    function test_QuoteMessage_CustomGasAmount() public {
-        // Custom gas amount should affect the quote.
+    function test_QuoteMessage_CustomGasAmounts() public {
+        // Per-domain overrides should replace both halves of the gas model.
         vm.prank(owner);
-        adapter.setGasAmount(HUB_DOMAIN, 500_000);
+        adapter.setGasAmounts(HUB_DOMAIN, 500_000, 10_000);
 
         uint256 quote = adapter.quoteMessage(HUB_DOMAIN, "test");
-        assertEq(quote, 500_000 * 1 gwei);
+        assertEq(quote, (500_000 + 10_000) * 1 gwei);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -241,26 +239,126 @@ contract HyperlaneAdapterTest is Test {
     // GAS AMOUNT CONFIGURATION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function test_SetGasAmount_OnlyOwner() public {
-        // setGasAmount should be owner-only.
+    function test_SetGasAmounts_OnlyOwner() public {
+        // setGasAmounts should be owner-only.
         vm.prank(user);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
-        adapter.setGasAmount(HUB_DOMAIN, 300_000);
+        adapter.setGasAmounts(HUB_DOMAIN, 300_000, 20_000);
     }
 
-    function test_SetGasAmount_Success() public {
-        // setGasAmount should update state and emit event.
+    function test_SetGasAmounts_Success() public {
+        // setGasAmounts should update state and emit event.
         vm.expectEmit(true, false, false, true);
-        emit HyperlaneAdapter.GasAmountUpdated(HUB_DOMAIN, 300_000);
+        emit HyperlaneAdapter.GasAmountUpdated(HUB_DOMAIN, 300_000, 20_000);
 
         vm.prank(owner);
-        adapter.setGasAmount(HUB_DOMAIN, 300_000);
+        adapter.setGasAmounts(HUB_DOMAIN, 300_000, 20_000);
 
-        assertEq(adapter.gasAmounts(HUB_DOMAIN), 300_000);
+        assertEq(adapter.baseGasAmounts(HUB_DOMAIN), 300_000);
+        assertEq(adapter.perEntryGasAmounts(HUB_DOMAIN), 20_000);
     }
 
-    function test_DefaultGasAmount() public view {
-        // DEFAULT_GAS_AMOUNT should match expected constant.
-        assertEq(adapter.DEFAULT_GAS_AMOUNT(), 200_000);
+    function test_DefaultGasAmounts() public view {
+        assertEq(adapter.DEFAULT_BASE_GAS(), 200_000);
+        assertEq(adapter.DEFAULT_PER_ENTRY_GAS(), 35_000);
+    }
+
+    // \u2550\u2550\u2550 PAYLOAD-AWARE GAS QUOTING \u2550\u2550\u2550
+
+    /// @dev Builds a transaction-batch payload with `count` entries, matching the encoding
+    ///      SpokeRegistry produces via CrossChainMessage.encodeTransactionBatch.
+    function _batchPayload(uint32 count) internal pure returns (bytes memory) {
+        bytes32[] memory hashes = new bytes32[](count);
+        bytes32[] memory chainIds = new bytes32[](count);
+        for (uint256 i = 0; i < count; i++) {
+            hashes[i] = bytes32(uint256(i + 1));
+            chainIds[i] = keccak256("eip155:8453");
+        }
+        return CrossChainMessage.encodeTransactionBatch(
+            CrossChainMessage.TransactionBatchPayload({
+                dataHash: keccak256("data"),
+                reporter: address(0xBEEF),
+                reportedChainId: keccak256("eip155:8453"),
+                sourceChainId: keccak256("eip155:10"),
+                transactionCount: count,
+                isSponsored: false,
+                nonce: 1,
+                timestamp: 1_700_000_000,
+                transactionHashes: hashes,
+                chainIds: chainIds
+            })
+        );
+    }
+
+    /// @dev The core of the under-funding bug: destination execution cost scales linearly with
+    ///      entry count, so a quote that ignores the payload strands every large batch on the
+    ///      spoke with the fee already spent. entryCount must read the real batch size.
+    function test_EntryCount_ReadsTransactionBatchSize() public view {
+        assertEq(adapter.entryCount(_batchPayload(1)), 1);
+        assertEq(adapter.entryCount(_batchPayload(50)), 50);
+        assertEq(adapter.entryCount(_batchPayload(800)), 800);
+    }
+
+    /// @dev Unknown or truncated payloads must degrade to a single entry rather than reverting
+    ///      the send, so a future message type cannot brick the bridge.
+    function test_EntryCount_UnknownPayloadDefaultsToOne() public view {
+        assertEq(adapter.entryCount("test"), 1);
+        assertEq(adapter.entryCount(""), 1);
+        assertEq(adapter.entryCount(hex"deadbeef"), 1);
+    }
+
+    function test_QuoteMessage_ScalesWithBatchSize() public view {
+        uint256 one = adapter.quoteMessage(HUB_DOMAIN, _batchPayload(1));
+        uint256 fifty = adapter.quoteMessage(HUB_DOMAIN, _batchPayload(50));
+
+        assertEq(one, (200_000 + 35_000) * 1 gwei);
+        assertEq(fifty, (200_000 + 50 * 35_000) * 1 gwei);
+        assertGt(fifty, one);
+    }
+
+    /// @dev quoteMessage and sendMessage must derive the identical gas limit, or a caller that
+    ///      quotes and then sends the quoted amount in the same transaction reverts.
+    function test_SendMessage_UsesQuotedGasLimit() public {
+        bytes memory payload = _batchPayload(50);
+        bytes32 recipient = bytes32(uint256(uint160(address(0x3))));
+        uint256 fee = adapter.quoteMessage(HUB_DOMAIN, payload);
+
+        vm.deal(user, fee);
+        vm.prank(user);
+        adapter.sendMessage{ value: fee }(HUB_DOMAIN, recipient, payload);
+
+        assertEq(mailbox.lastGasLimit(), 200_000 + 50 * 35_000);
+        assertEq(mailbox.lastValue(), fee);
+    }
+
+    /// @dev Overwrites the declared transactionCount without resizing the arrays, simulating a
+    ///      payload that lies about its size. Cheaper than actually encoding millions of entries.
+    function _withDeclaredCount(bytes memory payload, uint256 declared) internal pure returns (bytes memory) {
+        // transactionCount occupies bytes [192:224] of the ABI head.
+        assembly {
+            mstore(add(payload, add(0x20, 192)), declared)
+        }
+        return payload;
+    }
+
+    /// @dev A payload claiming an absurd entry count must fail with a diagnosable error at quote
+    ///      time rather than reverting on arithmetic overflow or quoting a nonsense fee.
+    function test_GasLimitExceeded_Reverts() public {
+        bytes memory payload = _withDeclaredCount(_batchPayload(1), 1_000_000);
+
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasLimitExceeded.selector);
+        adapter.quoteMessage(HUB_DOMAIN, payload);
+    }
+
+    /// @dev The same guard must hold against an overflow-sized count, not just a large one.
+    function test_GasLimitExceeded_OverflowCount_Reverts() public {
+        bytes memory payload = _withDeclaredCount(_batchPayload(1), type(uint256).max);
+
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasLimitExceeded.selector);
+        adapter.quoteMessage(HUB_DOMAIN, payload);
+    }
+
+    function test_GasLimitFor_MatchesModel() public view {
+        assertEq(adapter.gasLimitFor(HUB_DOMAIN, _batchPayload(10)), 200_000 + 10 * 35_000);
     }
 }

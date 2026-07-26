@@ -46,6 +46,7 @@ import {
   setup,
   PROTOCOLS,
   readStreamData,
+  acceptStream,
   passStreamData,
   getPeerConnection,
   isStreamAbortError,
@@ -267,9 +268,15 @@ export function TransactionP2PRelayerPage() {
         logger.p2p.info('Initializing P2P node for TX relayer');
 
         const streamHandler = (protocol: string) => ({
-          handler: async (stream: Stream, connection: Connection) => {
+          handler: async (stream: Stream, connection?: Connection) => {
             try {
               const data = await readStreamData(stream);
+
+              // Bind the stream to the agreed partner peer and to this protocol's schema
+              // before any of it is trusted. Without this an arbitrary peer that learned a
+              // displayed peer ID could inject signatures or drive the step machine.
+              if (!acceptStream(protocol, connection, data)) return;
+
               logger.p2p.info('TX Relayer received data', { protocol, data });
 
               switch (protocol) {
@@ -278,9 +285,9 @@ export function TransactionP2PRelayerPage() {
                   if (data.form?.registeree) {
                     useTransactionFormStore.getState().setReporter(data.form.registeree as Address);
                   }
-                  if (data.p2p?.partnerPeerId) {
-                    setPartnerPeerId(data.p2p.partnerPeerId);
-                  }
+                  // The partner peer ID is pinned by acceptStream from connection.remotePeer.
+                  // Deliberately NOT taken from data.p2p.partnerPeerId — a payload-supplied
+                  // peer ID is attacker-controlled and would defeat the binding.
                   setConnectedToPeer(true);
 
                   // Respond with relayer address
@@ -296,11 +303,13 @@ export function TransactionP2PRelayerPage() {
                   goToNextStepRef.current();
                   break;
 
-                case PROTOCOLS.TX_ACK_SIG:
-                  // Transaction acknowledgement signature + batch data received
+                case PROTOCOLS.TX_ACK_SIG: {
+                  // Transaction acknowledgement signature + batch data received.
                   // processTxSignature advances one step (select-transactions → acknowledge-sign)
-                  // but relayer needs to reach acknowledgement-payment, so advance again
-                  await processTxSignature(
+                  // but relayer needs to reach acknowledgement-payment, so advance again —
+                  // only if it actually accepted the payload. Advancing on a rejected payload
+                  // would move the relayer into a payment step with no stored signature.
+                  const ackAccepted = await processTxSignature(
                     data,
                     connection,
                     address,
@@ -309,13 +318,16 @@ export function TransactionP2PRelayerPage() {
                     goToNextStepRef.current,
                     (d) => updateFormStoreFromP2PRef.current(d, address)
                   );
-                  // Skip acknowledge-sign → acknowledgement-payment
-                  goToNextStepRef.current();
+                  if (ackAccepted) {
+                    // Skip acknowledge-sign → acknowledgement-payment
+                    goToNextStepRef.current();
+                  }
                   break;
+                }
 
-                case PROTOCOLS.TX_REG_SIG:
+                case PROTOCOLS.TX_REG_SIG: {
                   // Transaction registration signature + batch data received
-                  await processTxSignature(
+                  const regAccepted = await processTxSignature(
                     data,
                     connection,
                     address,
@@ -324,7 +336,11 @@ export function TransactionP2PRelayerPage() {
                     goToNextStepRef.current,
                     (d) => updateFormStoreFromP2PRef.current(d, address)
                   );
+                  if (!regAccepted) {
+                    logger.p2p.warn('Rejected TX registration signature payload', { protocol });
+                  }
                   break;
+                }
               }
             } catch (err) {
               if (isStreamAbortError(err)) {

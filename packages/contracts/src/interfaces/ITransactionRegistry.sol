@@ -33,7 +33,8 @@ interface ITransactionRegistry {
     /// @param nonce Nonce used for this acknowledgement
     /// @param gracePeriodStart Block number when grace period begins
     /// @param dataHash Hash of (txHashes, chainIds) committed in acknowledgement
-    /// @param reportedChainId CAIP-2 chain ID hash where transactions were reported (stored for register-phase validation)
+    /// @param reportedChainId CAIP-2 chain ID hash where transactions were reported (stored for
+    ///        register-phase validation)
     /// @param trustedForwarder Address authorized to submit registration
     /// @param transactionCount Number of transactions in the batch (stored for register-phase validation)
     /// @param isSponsored Whether this is a sponsored registration

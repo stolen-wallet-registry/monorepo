@@ -42,6 +42,7 @@ import {
   TxSuccessStep,
 } from '@/components/registration/tx-steps';
 import { useUserTransactions } from '@/hooks/transactions';
+import { useOnValueChange } from '@/hooks/useOnValueChange';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { computeTransactionDataHash } from '@/lib/signatures/transactions';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
@@ -171,15 +172,21 @@ export function TransactionSelfRelayRegistrationPage() {
     }
   }, [selectedTxHashes, chainId, setTransactionData]);
 
-  // Set reported chain ID when chain changes
+  // Record the reported chain ID whenever it is known, including on mount.
   useEffect(() => {
     if (chainId) {
       setReportedChainId(chainId);
-      setSelectedTxHashes([]);
-      setSelectedTxDetails([]);
-      setTransactionData(null, [], []);
     }
-  }, [chainId, setReportedChainId, setSelectedTxHashes, setSelectedTxDetails, setTransactionData]);
+  }, [chainId, setReportedChainId]);
+
+  // Clear the selection only on a real chain switch. Keying this on [chainId] instead would
+  // also fire on mount, wiping the persisted selection every reload while the step index
+  // survives — leaving the flow on a later step with no data and no way back.
+  useOnValueChange(chainId, () => {
+    setSelectedTxHashes([]);
+    setSelectedTxDetails([]);
+    setTransactionData(null, [], []);
+  });
 
   // Set reporter address when on select-transactions step
   // IMPORTANT: Only clear selection when on the initial step, not during wallet switches for payment

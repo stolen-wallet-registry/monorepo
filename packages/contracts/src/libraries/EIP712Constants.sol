@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+// EIP-712 type strings and the human-readable statements shown in the wallet are hash inputs.
+// Wrapping one changes the bytes that get keccak'd, which changes the typehash and invalidates
+// every signature ever produced against it. They stay on one line regardless of length.
+// solhint-disable max-line-length
+
 /// @title EIP712Constants
 /// @author Stolen Wallet Registry Team
 /// @notice Shared EIP-712 constants for contracts

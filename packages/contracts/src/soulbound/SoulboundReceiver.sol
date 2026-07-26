@@ -73,7 +73,9 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     /// @param _origin Origin chain domain ID
     /// @param _sender Sender address on origin chain (bytes32)
     /// @param _message Encoded payload: [msgType, wallet, supporter, donationAmount]
-    function handle(uint32 _origin, bytes32 _sender, bytes calldata _message) external {
+    /// @dev `payable` because IMessageRecipient.handle is payable from Hyperlane v3. Our dispatches
+    ///      set msgValue to 0, so no value is expected here.
+    function handle(uint32 _origin, bytes32 _sender, bytes calldata _message) external payable {
         // Only mailbox can call
         if (msg.sender != mailbox) revert SoulboundReceiver__OnlyMailbox();
 

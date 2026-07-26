@@ -179,7 +179,8 @@ interface IWalletRegistry {
     /// @dev Must be called by trusted forwarder within deadline.
     ///      reportedChainId and incidentTimestamp must match values from acknowledge phase.
     /// @param registeree The wallet address being registered
-    /// @param trustedForwarder The address authorized to complete registration (must match acknowledge phase and msg.sender)
+    /// @param trustedForwarder The address authorized to complete registration (must match
+    ///        acknowledge phase and msg.sender)
     /// @param reportedChainId Raw EVM chain ID where incident occurred (must match acknowledge phase)
     /// @param incidentTimestamp Unix timestamp when incident occurred (must match acknowledge phase)
     /// @param deadline Timestamp deadline for the signature

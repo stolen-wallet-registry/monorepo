@@ -116,7 +116,10 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     /// @param _origin Origin chain domain ID
     /// @param _sender Sender address on origin chain (bytes32)
     /// @param _messageBody Encoded payload
-    function handle(uint32 _origin, bytes32 _sender, bytes calldata _messageBody) external onlyMailbox {
+    /// @dev `payable` because IMessageRecipient.handle is payable from Hyperlane v3; the mailbox
+    ///      forwards whatever msgValue the message's hook metadata requested. Our dispatches always
+    ///      set msgValue to 0, so any value received here is unexpected and simply ignored.
+    function handle(uint32 _origin, bytes32 _sender, bytes calldata _messageBody) external payable onlyMailbox {
         // Validate source is trusted
         if (!_trustedSources[_origin][_sender]) {
             revert CrossChainInbox__UntrustedSource();

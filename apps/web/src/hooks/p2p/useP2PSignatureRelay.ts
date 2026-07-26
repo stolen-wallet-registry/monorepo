@@ -18,6 +18,7 @@ import {
   PROTOCOLS,
   passStreamData,
   readStreamData,
+  acceptStream,
   getPeerConnection,
   type SignatureOverTheWire,
   type ProtocolHandler,
@@ -288,7 +289,8 @@ export function useP2PSignatureRelay(
   // Registration store for tx hashes
   const { setAcknowledgementHash, setRegistrationHash } = useRegistrationStore();
   // P2P store for connection state
-  const { setPartnerPeerId, setConnectedToPeer } = useP2PStore();
+  // partnerPeerId is pinned by acceptStream from connection.remotePeer, never from a payload.
+  const { setConnectedToPeer } = useP2PStore();
 
   // Build protocol handlers based on role
   // In libp2p 3.x, StreamHandler signature is (stream: Stream, connection: Connection) => void
@@ -302,6 +304,10 @@ export function useP2PSignatureRelay(
         handler: async (stream: Stream, connection: Connection) => {
           try {
             const data = await readStreamData(stream);
+
+            // Bind the stream to the agreed partner peer before trusting any of it.
+            if (!acceptStream(PROTOCOLS.CONNECT, connection, data)) return;
+
             logger.p2p.info('Received CONNECT', { role, data });
 
             // Update form with partner's address
@@ -309,10 +315,9 @@ export function useP2PSignatureRelay(
               setFormValues(data.form);
             }
 
-            // Update P2P state with partner info
-            if (data.p2p?.partnerPeerId) {
-              setPartnerPeerId(data.p2p.partnerPeerId);
-            }
+            // The partner peer ID is pinned by acceptStream from connection.remotePeer.
+            // Deliberately NOT taken from data.p2p.partnerPeerId — a payload-supplied peer
+            // ID is attacker-controlled and would defeat the binding.
             setConnectedToPeer(true);
 
             // Relayer responds to CONNECT with their address (only if address is defined)
@@ -543,7 +548,6 @@ export function useP2PSignatureRelay(
     address,
     chainId,
     setFormValues,
-    setPartnerPeerId,
     setConnectedToPeer,
     setAcknowledgementHash,
     setRegistrationHash,

@@ -6,13 +6,11 @@ import { SpokeSoulboundForwarder } from "../src/spoke/SpokeSoulboundForwarder.so
 import { ISpokeSoulboundForwarder } from "../src/interfaces/ISpokeSoulboundForwarder.sol";
 import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
-import { MockInterchainGasPaymaster } from "./mocks/MockInterchainGasPaymaster.sol";
 
 contract SpokeSoulboundForwarderTest is Test {
     SpokeSoulboundForwarder forwarder;
     HyperlaneAdapter adapter;
     MockMailbox mailbox;
-    MockInterchainGasPaymaster gasPaymaster;
 
     address owner;
     address user;
@@ -31,10 +29,9 @@ contract SpokeSoulboundForwarderTest is Test {
         vm.deal(user, 10 ether);
 
         mailbox = new MockMailbox(SPOKE_CHAIN_ID);
-        gasPaymaster = new MockInterchainGasPaymaster();
 
         vm.startPrank(owner);
-        adapter = new HyperlaneAdapter(owner, address(mailbox), address(gasPaymaster));
+        adapter = new HyperlaneAdapter(owner, address(mailbox));
         adapter.setDomainSupport(HUB_DOMAIN, true);
 
         forwarder = new SpokeSoulboundForwarder(
