@@ -139,6 +139,8 @@ contract SpokeRegistryTest is Test {
             1 // bridgeId = Hyperlane
         );
 
+        bridgeAdapter.setAuthorizedSender(address(spoke), true);
+
         // Fund test accounts
         vm.deal(wallet, 10 ether);
         vm.deal(reporter, 10 ether);

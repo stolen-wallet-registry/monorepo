@@ -351,6 +351,10 @@ contract Deploy is Script {
         );
         console2.log("6. SpokeSoulboundForwarder:", spokeSoulboundForwarderAddr);
 
+        HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeRegistryAddr, true);
+        HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeSoulboundForwarderAddr, true);
+        console2.log("   -> Spoke contracts authorized to dispatch via adapter");
+
         spokeMulticall3Addr = _deployMulticall3(Salts.MULTICALL3_SPOKE);
         console2.log("7. Multicall3 (Spoke):", spokeMulticall3Addr);
 
@@ -619,6 +623,10 @@ contract Deploy is Script {
             )
         );
         console2.log("6. SpokeSoulboundForwarder:", spokeSoulboundForwarderAddr);
+
+        HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeRegistryAddr, true);
+        HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeSoulboundForwarderAddr, true);
+        console2.log("   -> Spoke contracts authorized to dispatch via adapter");
 
         spokeMulticall3Addr = _deployMulticall3(Salts.MULTICALL3_SPOKE);
         console2.log("7. Multicall3 (Spoke):", spokeMulticall3Addr);

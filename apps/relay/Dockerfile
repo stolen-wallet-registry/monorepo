@@ -15,10 +15,15 @@ COPY apps/relay/package.json ./apps/relay/
 RUN pnpm install --frozen-lockfile --filter @swr/relay
 
 # Copy the relay application
+# keys.json and .data/ are excluded via .dockerignore — the relay identity is
+# supplied at runtime through RELAY_PRIVATE_KEY.
 COPY apps/relay/ ./apps/relay/
 
 # Expose the relay port
 EXPOSE 12312
 
+# Drop root
+USER node
+
 # Command to start the relay
-CMD ["pnpm", "--filter", "@swr/relay", "start:debug"]
+CMD ["pnpm", "--filter", "@swr/relay", "start"]

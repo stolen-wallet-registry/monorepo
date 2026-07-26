@@ -722,7 +722,9 @@ ponder.on('OperatorRegistry:OperatorRevoked', async ({ event, context }) => {
 
   // Check if operator was actually approved before decrementing stats
   const existing = await db.find(operator, { id: operatorId });
-  const wasApproved = existing?.approved ?? false;
+  if (!existing) return;
+
+  const wasApproved = existing.approved ?? false;
 
   await db.update(operator, { id: operatorId }).set({
     approved: false,
@@ -746,8 +748,14 @@ ponder.on('OperatorRegistry:OperatorCapabilitiesUpdated', async ({ event, contex
   const { db } = context;
 
   const newCapsNum = Number(newCapabilities);
+  const operatorId = operatorAddress.toLowerCase() as Address;
 
-  await db.update(operator, { id: operatorAddress.toLowerCase() as Address }).set({
+  // db.update throws RecordNotFoundError and halts indexing if the approval
+  // predates the configured start block.
+  const existing = await db.find(operator, { id: operatorId });
+  if (!existing) return;
+
+  await db.update(operator, { id: operatorId }).set({
     capabilities: newCapsNum,
     canSubmitWallet: (newCapsNum & 0x01) !== 0,
     canSubmitTransaction: (newCapsNum & 0x02) !== 0,

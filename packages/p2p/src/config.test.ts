@@ -19,9 +19,20 @@ describe('getRelayServers', () => {
     }
   );
 
-  it('falls back to development for unknown modes', () => {
-    const result = getRelayServers({ mode: 'staging' });
-    expect(result).toEqual(RELAY_SERVERS.development);
+  // The development relay is a localhost multiaddr, so any deployed mode that fell back
+  // to it would point users' browsers at their own machine.
+  it('throws for non-development modes with no configured relays', () => {
+    expect(() => getRelayServers({ mode: 'staging' })).toThrow(RelayConfigurationError);
+  });
+
+  it('honours an explicit multiaddr override in staging', () => {
+    const result = getRelayServers({
+      mode: 'staging',
+      relayMultiaddr: '/dns4/relay.example.com/tcp/443/wss/p2p/QmTestPeer',
+    });
+    expect(result).toEqual([
+      { multiaddr: '/dns4/relay.example.com/tcp/443/wss/p2p/QmTestPeer', isDev: true },
+    ]);
   });
 });
 

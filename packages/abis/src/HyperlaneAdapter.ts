@@ -55,6 +55,25 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
+    name: 'authorizedSenders',
+    inputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'bridgeName',
     inputs: [],
     outputs: [
@@ -199,6 +218,24 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
+    name: 'setAuthorizedSender',
+    inputs: [
+      {
+        name: 'sender',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'authorized',
+        type: 'bool',
+        internalType: 'bool',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'setDomainSupport',
     inputs: [
       {
@@ -283,6 +320,25 @@ export const HyperlaneAdapterABI = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'event',
+    name: 'AuthorizedSenderUpdated',
+    inputs: [
+      {
+        name: 'sender',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'authorized',
+        type: 'bool',
+        indexed: false,
+        internalType: 'bool',
+      },
+    ],
+    anonymous: false,
   },
   {
     type: 'event',
@@ -414,6 +470,11 @@ export const HyperlaneAdapterABI = [
   {
     type: 'error',
     name: 'HyperlaneAdapter__TooManyDomains',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'HyperlaneAdapter__UnauthorizedSender',
     inputs: [],
   },
   {

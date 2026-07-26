@@ -70,20 +70,18 @@ export function getRelayServers(config: EnvironmentConfig): RelayConfig[] {
 
   const servers = RELAY_SERVERS[mode];
 
-  // Fail fast in production if no relay servers are configured
-  if (mode === 'production' && (!servers || servers.length === 0)) {
+  // Fail fast outside development if no relay servers are configured. The development
+  // relay is a localhost multiaddr, so falling back to it in any deployed mode points
+  // users' browsers at their own machine.
+  if (mode !== 'development' && (!servers || servers.length === 0)) {
     throw new RelayConfigurationError(
-      'Production relay servers not configured. ' +
-        'Set VITE_RELAY_MULTIADDR environment variable or add servers to RELAY_SERVERS.production. ' +
-        'Cannot fall back to development relays in production mode.'
+      `Relay servers not configured for ${mode} mode. ` +
+        `Set VITE_RELAY_MULTIADDR environment variable or add servers to RELAY_SERVERS.${mode}. ` +
+        'Cannot fall back to development relays outside development mode.'
     );
   }
 
-  // For non-production, fall back to development servers
   if (!servers || servers.length === 0) {
-    if (mode !== 'development') {
-      console.warn(`No relay servers configured for ${mode}; falling back to development relays.`);
-    }
     return RELAY_SERVERS.development;
   }
   return servers;

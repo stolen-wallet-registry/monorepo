@@ -27,6 +27,20 @@
       "inputs": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}", "vitest.config.*"],
       "outputs": []
     },
+    "@swr/contracts#test": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "test/**", "script/**", "foundry.toml", "remappings.txt"],
+      "outputs": []
+    },
+    "@swr/contracts#lint": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "test/**", "script/**", "foundry.toml", ".solhint.json"]
+    },
+    "@swr/contracts#build": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "test/**", "script/**", "foundry.toml", "remappings.txt"],
+      "outputs": ["out/**"]
+    },
     "test:coverage": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]

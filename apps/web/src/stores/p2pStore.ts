@@ -96,27 +96,25 @@ export const useP2PStore = create<P2PState & P2PActions>()(
       {
         name: 'swr-p2p-state',
         version: 1,
-        migrate: (persisted) => {
-          // Validate basic shape
+        // Only the durable peer identities are persisted. connectedToPeer, connectionStatus,
+        // errorMessage and isInitialized describe the current session's libp2p node, which does
+        // not survive a reload — persisting them would rehydrate a connected-looking store with
+        // no node behind it. Excluding them here means they always come from initialState.
+        partialize: (state) => ({
+          peerId: state.peerId,
+          partnerPeerId: state.partnerPeerId,
+        }),
+        merge: (persisted, current) => {
           if (!persisted || typeof persisted !== 'object') {
-            return initialState;
+            return current;
           }
 
           const state = persisted as Partial<P2PState>;
 
-          // Ensure all required fields exist with fallbacks
-          // Note: connectionStatus, errorMessage, isInitialized, and connectedToPeer are
-          // intentionally reset to initial values on reload. These are ephemeral states
-          // that reflect the current session's P2P connection status and should not persist
-          // across browser refreshes. The libp2p node needs to be re-initialized each session,
-          // so preserving these values would be misleading.
           return {
+            ...current,
             peerId: state.peerId ?? initialState.peerId,
             partnerPeerId: state.partnerPeerId ?? initialState.partnerPeerId,
-            connectedToPeer: initialState.connectedToPeer, // Reset on reload
-            connectionStatus: initialState.connectionStatus,
-            errorMessage: initialState.errorMessage,
-            isInitialized: initialState.isInitialized,
           };
         },
       }

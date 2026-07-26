@@ -1,9 +1,36 @@
 import { describe, it, expect } from 'vitest';
+import type { Hex } from 'viem';
 import {
   isSignatureExpired,
   isWithinRegistrationWindow,
   isValidSignatureFormat,
+  parseSignature,
 } from './validation';
+
+describe('parseSignature', () => {
+  const r = '11'.repeat(32);
+  const s = '22'.repeat(32);
+  const sigWithTrailingByte = (byte: string) => `0x${r}${s}${byte}` as Hex;
+
+  it('parses signatures using the 27/28 v convention', () => {
+    expect(parseSignature(sigWithTrailingByte('1b')).v).toBe(27);
+    expect(parseSignature(sigWithTrailingByte('1c')).v).toBe(28);
+  });
+
+  // viem omits `v` for yParity-style signatures, which some hardware wallets and
+  // smart-account signers emit. Without normalization v is NaN and the contract call
+  // throws when encoding the uint8 v argument.
+  it('normalizes yParity 0/1 signatures to v 27/28', () => {
+    expect(parseSignature(sigWithTrailingByte('00')).v).toBe(27);
+    expect(parseSignature(sigWithTrailingByte('01')).v).toBe(28);
+  });
+
+  it('never returns NaN for any valid trailing byte', () => {
+    for (const byte of ['00', '01', '1b', '1c']) {
+      expect(Number.isNaN(parseSignature(sigWithTrailingByte(byte)).v)).toBe(false);
+    }
+  });
+});
 
 describe('isSignatureExpired', () => {
   it('returns false when current block is before deadline', () => {

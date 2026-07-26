@@ -1,0 +1,30 @@
+# Never bake the relay's persistent libp2p identity into an image.
+# Supply it at runtime via the RELAY_PRIVATE_KEY env var instead.
+apps/relay/keys.json
+apps/relay/.data/
+
+**/node_modules
+**/dist
+**/out
+**/.turbo
+**/.next
+**/coverage
+**/storybook-static
+
+.git
+.github
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/.DS_Store
+
+# Nothing outside apps/relay is needed for the relay image
+apps/web
+apps/docs
+apps/landing
+apps/indexer
+packages/contracts/out
+packages/contracts/cache
+packages/contracts/lib
+.anvil-state

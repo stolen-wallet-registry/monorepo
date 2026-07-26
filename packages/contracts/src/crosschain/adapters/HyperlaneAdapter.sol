@@ -40,6 +40,13 @@ contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
     /// @notice Custom gas amount per destination domain (0 = use DEFAULT_GAS_AMOUNT)
     mapping(uint32 => uint256) public gasAmounts;
 
+    /// @notice Contracts permitted to dispatch messages through this adapter
+    /// @dev The destination-side CrossChainInbox and SoulboundReceiver trust this adapter as the
+    ///      origin sender, because Hyperlane records the adapter (not its caller) as the dispatcher.
+    ///      Without this allowlist any address could dispatch a forged payload that the destination
+    ///      would accept as a legitimate spoke message.
+    mapping(address => bool) public authorizedSenders;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -52,6 +59,9 @@ contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
 
     /// @notice Thrown when too many domains are provided in batch operation
     error HyperlaneAdapter__TooManyDomains();
+
+    /// @notice Thrown when a caller that is not on the allowlist attempts to dispatch a message
+    error HyperlaneAdapter__UnauthorizedSender();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -66,6 +76,11 @@ contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
     /// @param domain Hyperlane domain ID for which gas was updated
     /// @param gasAmount New gas amount (0 = use DEFAULT_GAS_AMOUNT)
     event GasAmountUpdated(uint32 indexed domain, uint256 gasAmount);
+
+    /// @notice Emitted when a sender is added to or removed from the dispatch allowlist
+    /// @param sender Address whose authorization changed
+    /// @param authorized True if the sender may now dispatch, false if revoked
+    event AuthorizedSenderUpdated(address indexed sender, bool authorized);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -92,6 +107,10 @@ contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
         payable
         returns (bytes32 messageId)
     {
+        if (!authorizedSenders[msg.sender]) {
+            revert HyperlaneAdapter__UnauthorizedSender();
+        }
+
         if (!supportedDomains[destinationChain]) {
             revert BridgeAdapter__UnsupportedChain();
         }
@@ -152,6 +171,15 @@ contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
     function setDomainSupport(uint32 domain, bool supported) external onlyOwner {
         supportedDomains[domain] = supported;
         emit DomainSupportUpdated(domain, supported);
+    }
+
+    /// @notice Add or remove a contract permitted to dispatch messages through this adapter
+    /// @param sender Address to authorize (SpokeRegistry, SpokeSoulboundForwarder)
+    /// @param authorized True to enable, false to revoke
+    function setAuthorizedSender(address sender, bool authorized) external onlyOwner {
+        if (sender == address(0)) revert HyperlaneAdapter__ZeroAddress();
+        authorizedSenders[sender] = authorized;
+        emit AuthorizedSenderUpdated(sender, authorized);
     }
 
     /// @notice Set custom gas amount for a destination domain

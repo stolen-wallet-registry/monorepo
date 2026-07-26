@@ -28,6 +28,12 @@ contract HyperlaneAdapterTest is Test {
         // Configure supported domain
         vm.prank(owner);
         adapter.setDomainSupport(HUB_DOMAIN, true);
+
+        // The test contract and `user` stand in for the spoke contracts that dispatch through the adapter
+        vm.startPrank(owner);
+        adapter.setAuthorizedSender(address(this), true);
+        adapter.setAuthorizedSender(user, true);
+        vm.stopPrank();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -131,6 +137,57 @@ contract HyperlaneAdapterTest is Test {
         // sendMessage should revert for unsupported chains.
         vm.expectRevert(IBridgeAdapter.BridgeAdapter__UnsupportedChain.selector);
         adapter.sendMessage(999, bytes32(uint256(1)), "test");
+    }
+
+    /// @dev The adapter is the address the destination CrossChainInbox and SoulboundReceiver trust
+    ///      as the origin sender, because Hyperlane records the dispatcher rather than its caller.
+    ///      An unauthorized caller therefore must not be able to dispatch anything at all — otherwise
+    ///      any EOA could forge a payload the hub accepts as a legitimate spoke message and register
+    ///      an arbitrary wallet as stolen with no EIP-712 signature, grace period, or fee.
+    function test_SendMessage_UnauthorizedSender_Reverts() public {
+        address attacker = makeAddr("attacker");
+        vm.deal(attacker, 1 ether);
+        bytes32 recipient = bytes32(uint256(uint160(address(0x3))));
+
+        vm.prank(attacker);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__UnauthorizedSender.selector);
+        adapter.sendMessage{ value: 1 ether }(HUB_DOMAIN, recipient, "forged payload");
+    }
+
+    /// @dev Authorization must be revocable, so a compromised spoke contract can be cut off.
+    function test_SendMessage_RevokedSender_Reverts() public {
+        bytes32 recipient = bytes32(uint256(uint160(address(0x3))));
+
+        vm.prank(owner);
+        adapter.setAuthorizedSender(address(this), false);
+
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__UnauthorizedSender.selector);
+        adapter.sendMessage{ value: 1 ether }(HUB_DOMAIN, recipient, "test");
+    }
+
+    function test_SetAuthorizedSender_OnlyOwner() public {
+        address attacker = makeAddr("attacker");
+
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", attacker));
+        adapter.setAuthorizedSender(attacker, true);
+    }
+
+    function test_SetAuthorizedSender_RejectsZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__ZeroAddress.selector);
+        adapter.setAuthorizedSender(address(0), true);
+    }
+
+    function test_SetAuthorizedSender_EmitsEvent() public {
+        address spoke = makeAddr("spoke");
+
+        vm.expectEmit(true, false, false, true);
+        emit HyperlaneAdapter.AuthorizedSenderUpdated(spoke, true);
+
+        vm.prank(owner);
+        adapter.setAuthorizedSender(spoke, true);
+        assertTrue(adapter.authorizedSenders(spoke));
     }
 
     function test_SendMessage_InsufficientFee_Reverts() public {

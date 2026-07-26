@@ -40,6 +40,7 @@ contract SpokeSoulboundForwarderTest is Test {
         forwarder = new SpokeSoulboundForwarder(
             owner, address(adapter), HUB_DOMAIN, bytes32(uint256(uint160(hubReceiver))), MIN_DONATION
         );
+        adapter.setAuthorizedSender(address(forwarder), true);
         vm.stopPrank();
     }
 
