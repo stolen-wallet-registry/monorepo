@@ -204,6 +204,59 @@ function Caip10Entry({
   );
 }
 
+/**
+ * Renders the chain badge for a batch row.
+ *
+ * Module scope, not a closure inside BatchDetailContent: it depends only on its
+ * arguments, so defining it per render allocated a new function for nothing.
+ */
+function renderChainBadge(caip2?: string, showCaip2Detail = false, chainIdHash?: string) {
+  const chain = getChainDisplayFromCaip2(caip2);
+  const showNetworkIcon = chain.isKnown && !chain.isLocal;
+  const icon = showNetworkIcon ? (
+    chain.chainId ? (
+      <NetworkIcon chainId={chain.chainId} variant="branded" size={12} />
+    ) : chain.caip2 ? (
+      <NetworkIcon caip2id={chain.caip2} variant="branded" size={12} />
+    ) : (
+      <Globe className="h-3 w-3" />
+    )
+  ) : (
+    <Globe className="h-3 w-3" />
+  );
+
+  if (showCaip2Detail && caip2) {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <Badge variant="outline" className="text-xs inline-flex items-center gap-1 w-fit">
+          {icon}
+          {chain.shortName}
+        </Badge>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-xs text-muted-foreground">
+              {caip2}
+              {chainIdHash && ` (${truncateHash(chainIdHash, 4, 4)})`}
+            </span>
+          </TooltipTrigger>
+          {chainIdHash && (
+            <TooltipContent side="bottom">
+              <p className="text-xs font-mono break-all">{chainIdHash}</p>
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </div>
+    );
+  }
+
+  return (
+    <Badge variant="outline" className="text-xs inline-flex items-center gap-1">
+      {icon}
+      {chain.shortName}
+    </Badge>
+  );
+}
+
 function BatchDetailContent({
   batchId,
   batchType,
@@ -255,53 +308,6 @@ function BatchDetailContent({
     }
     return name ?? truncateHash(address, 6, 4);
   }, [data, operatorNames]);
-
-  const renderChainBadge = (caip2?: string, showCaip2Detail = false, chainIdHash?: string) => {
-    const chain = getChainDisplayFromCaip2(caip2);
-    const showNetworkIcon = chain.isKnown && !chain.isLocal;
-    const icon = showNetworkIcon ? (
-      chain.chainId ? (
-        <NetworkIcon chainId={chain.chainId} variant="branded" size={12} />
-      ) : chain.caip2 ? (
-        <NetworkIcon caip2id={chain.caip2} variant="branded" size={12} />
-      ) : (
-        <Globe className="h-3 w-3" />
-      )
-    ) : (
-      <Globe className="h-3 w-3" />
-    );
-
-    if (showCaip2Detail && caip2) {
-      return (
-        <div className="flex flex-col gap-0.5">
-          <Badge variant="outline" className="text-xs inline-flex items-center gap-1 w-fit">
-            {icon}
-            {chain.shortName}
-          </Badge>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-xs text-muted-foreground">
-                {caip2}
-                {chainIdHash && ` (${truncateHash(chainIdHash, 4, 4)})`}
-              </span>
-            </TooltipTrigger>
-            {chainIdHash && (
-              <TooltipContent side="bottom">
-                <p className="text-xs font-mono break-all">{chainIdHash}</p>
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </div>
-      );
-    }
-
-    return (
-      <Badge variant="outline" className="text-xs inline-flex items-center gap-1">
-        {icon}
-        {chain.shortName}
-      </Badge>
-    );
-  };
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-6">

@@ -397,24 +397,29 @@ export function SearchPage() {
                 const ResultIcon = resultInfo.icon;
 
                 return (
-                  <li key={search.address}>
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleRecentClick(search)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleRecentClick(search);
-                        }
-                      }}
-                      className="w-full flex items-center justify-between p-3 rounded-md border border-border hover:bg-muted transition-colors text-left group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      <div className="flex items-center gap-3">
+                  <li key={search.address} className="relative">
+                    <div className="w-full flex items-center justify-between p-3 rounded-md border border-border hover:bg-muted transition-colors text-left group focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                      {/*
+                        Stretched-link pattern: the row-activating control is an
+                        absolutely-positioned button *behind* the content rather
+                        than a role="button" wrapper. Nesting the address link
+                        and the remove button inside an interactive ancestor is
+                        invalid HTML and makes the row unusable with a screen
+                        reader. Content is pointer-events-none so clicks fall
+                        through to the overlay; the two real controls re-enable
+                        pointer events and sit above it via z-index.
+                      */}
+                      <button
+                        type="button"
+                        onClick={() => handleRecentClick(search)}
+                        className="absolute inset-0 z-0 rounded-md cursor-pointer focus:outline-none"
+                        aria-label={`Search ${truncateAddress(search.address)}`}
+                      />
+                      <div className="relative z-10 flex items-center gap-3 pointer-events-none">
                         {/* Result status icon */}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help">
+                            <span className="cursor-help pointer-events-auto">
                               <ResultIcon className={`h-4 w-4 ${resultInfo.color}`} />
                             </span>
                           </TooltipTrigger>
@@ -424,7 +429,7 @@ export function SearchPage() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <div
-                              className={`w-2 h-2 rounded-full ${chainInfo.color} cursor-help`}
+                              className={`w-2 h-2 rounded-full ${chainInfo.color} cursor-help pointer-events-auto`}
                             />
                           </TooltipTrigger>
                           <TooltipContent>{chainInfo.name}</TooltipContent>
@@ -432,31 +437,27 @@ export function SearchPage() {
                         {/* Type icon */}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help">
+                            <span className="cursor-help pointer-events-auto">
                               <TypeIcon className="h-4 w-4 text-muted-foreground" />
                             </span>
                           </TooltipTrigger>
                           <TooltipContent>{typeInfo.label}</TooltipContent>
                         </Tooltip>
                         {/* Address with copy button */}
-                        <ExplorerLink
-                          value={search.address}
-                          type="address"
-                          showDisabledIcon={false}
-                        />
+                        <span className="pointer-events-auto">
+                          <ExplorerLink
+                            value={search.address}
+                            type="address"
+                            showDisabledIcon={false}
+                          />
+                        </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="relative z-10 flex items-center gap-2 pointer-events-none">
                         <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                         <button
                           type="button"
                           onClick={(e) => handleRemoveRecent(search.address, e)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              handleRemoveRecent(search.address, e);
-                            }
-                          }}
-                          className="h-6 w-6 flex items-center justify-center rounded-sm hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                          className="h-6 w-6 flex items-center justify-center rounded-sm hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer pointer-events-auto"
                           aria-label="Remove from recent searches"
                         >
                           <X className="h-3 w-3" />

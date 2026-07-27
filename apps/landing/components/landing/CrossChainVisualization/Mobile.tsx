@@ -16,17 +16,17 @@ import {
   TokenLINK,
 } from '@swr/ui';
 
+// Direct module imports rather than './shared' — see the note in Desktop.tsx.
 import {
-  IconCircle,
   BridgeIcon,
-  HyperlaneLogo,
-  WormholeLogo,
-  MobileSection,
-  MobileRegistryHub,
   GroomLakePngLogo,
+  HyperlaneLogo,
+  IconCircle,
   SealTeamLogo,
   TrmLabsLogo,
-} from './shared';
+  WormholeLogo,
+} from './shared/icons';
+import { MobileRegistryHub, MobileSection } from './shared/containers';
 
 import type { CrossChainVisualizationProps } from './types';
 

@@ -19,6 +19,17 @@ import { useTheme } from '@/providers/useTheme';
  */
 const HOMEPAGE_URL = import.meta.env.VITE_HOMEPAGE_URL ?? 'http://localhost:3000';
 
+/**
+ * Primary navigation. Static, so it lives at module scope rather than being
+ * rebuilt (along with every nested array) on each Header render.
+ */
+const navItems = [
+  { href: '/', label: 'Register', matchPaths: ['/', '/register', '/registration'] },
+  { href: '/search', label: 'Search', matchPaths: ['/search'] },
+  { href: '/dashboard', label: 'Dashboard', matchPaths: ['/dashboard'] },
+  { href: '/soulbound', label: 'Support SWR', matchPaths: ['/soulbound'] },
+];
+
 export function Header() {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -50,13 +61,6 @@ export function Header() {
       setTriggerThemeAnimation(null);
     };
   }, [setTriggerThemeAnimation]);
-
-  const navItems = [
-    { href: '/', label: 'Register', matchPaths: ['/', '/register', '/registration'] },
-    { href: '/search', label: 'Search', matchPaths: ['/search'] },
-    { href: '/dashboard', label: 'Dashboard', matchPaths: ['/dashboard'] },
-    { href: '/soulbound', label: 'Support SWR', matchPaths: ['/soulbound'] },
-  ];
 
   // Check if current location matches any of the paths for a nav item
   const isActive = (matchPaths: string[]) =>

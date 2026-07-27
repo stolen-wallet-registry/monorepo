@@ -108,12 +108,11 @@ export function useP2PConnection(options: UseP2PConnectionOptions = {}): UseP2PC
     const allProtocols = Object.values(PROTOCOLS);
     const userProtocols = new Set(handlers.map((h) => h.protocol));
 
-    const defaultHandlers: ProtocolHandler[] = allProtocols
-      .filter((p) => !userProtocols.has(p))
-      .map((protocol) => ({
-        protocol,
-        streamHandler: defaultHandler(protocol),
-      }));
+    // Single pass: filter-then-map walked the protocol list twice and allocated
+    // an intermediate array for no benefit.
+    const defaultHandlers: ProtocolHandler[] = allProtocols.flatMap((protocol) =>
+      userProtocols.has(protocol) ? [] : [{ protocol, streamHandler: defaultHandler(protocol) }]
+    );
 
     return [...handlers, ...defaultHandlers];
   }, [handlers, onData]);

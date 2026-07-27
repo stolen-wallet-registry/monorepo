@@ -5,7 +5,7 @@
  * Follows the same pattern as wallet self-relay but for transaction batches.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount, useChainId } from 'wagmi';
 import { isAddress } from 'viem';
@@ -45,6 +45,7 @@ import { useUserTransactions } from '@/hooks/transactions';
 import { useOnValueChange } from '@/hooks/useOnValueChange';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { computeTransactionDataHash } from '@/lib/signatures/transactions';
+import { selectStoredTransactionDetails } from '@/lib/transactions/selection';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import {
@@ -208,6 +209,13 @@ export function TransactionSelfRelayRegistrationPage() {
     }
   }, [isConnected, setLocation]);
 
+  // Memoized so the summary table doesn't re-derive (and re-render) on every
+  // unrelated render of this page.
+  const selectedTransactionRows = useMemo(
+    () => selectStoredTransactionDetails(transactions, selectedTxHashes),
+    [transactions, selectedTxHashes]
+  );
+
   if (!isConnected) {
     return null;
   }
@@ -220,16 +228,7 @@ export function TransactionSelfRelayRegistrationPage() {
 
   const handleSelectionChange = (hashes: Hash[]) => {
     setSelectedTxHashes(hashes);
-    const selectedDetails = transactions
-      .filter((tx) => hashes.includes(tx.hash))
-      .map((tx) => ({
-        hash: tx.hash,
-        to: tx.to,
-        value: tx.value.toString(),
-        blockNumber: tx.blockNumber.toString(),
-        timestamp: tx.timestamp,
-      }));
-    setSelectedTxDetails(selectedDetails);
+    setSelectedTxDetails(selectStoredTransactionDetails(transactions, hashes));
   };
 
   const handleContinue = () => {
@@ -451,15 +450,7 @@ export function TransactionSelfRelayRegistrationPage() {
 
                 {/* Selected Transactions Table */}
                 <SelectedTransactionsTable
-                  transactions={transactions
-                    .filter((tx) => selectedTxHashes.includes(tx.hash))
-                    .map((tx) => ({
-                      hash: tx.hash,
-                      to: tx.to,
-                      value: tx.value.toString(),
-                      blockNumber: tx.blockNumber.toString(),
-                      timestamp: tx.timestamp,
-                    }))}
+                  transactions={selectedTransactionRows}
                   reportedChainId={chainId}
                 />
               </div>

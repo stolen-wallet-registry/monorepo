@@ -33,8 +33,12 @@ const FormField = <
 >({
   ...props
 }: ControllerProps<TFieldValues, TName>) => {
+  // Memoized: a fresh object literal here would change context identity on every
+  // render of FormField, forcing every useFormField consumer to re-render.
+  const contextValue = React.useMemo(() => ({ name: props.name }), [props.name]);
+
   return (
-    <FormFieldContext.Provider value={{ name: props.name }}>
+    <FormFieldContext.Provider value={contextValue}>
       <Controller {...props} />
     </FormFieldContext.Provider>
   );
@@ -76,9 +80,12 @@ const FormItemContext = React.createContext<FormItemContextValue>({} as FormItem
 
 function FormItem({ className, ...props }: React.ComponentProps<'div'>) {
   const id = React.useId();
+  // Memoized for the same reason as FormField above; `id` is stable for the
+  // component's lifetime, so this never recomputes.
+  const contextValue = React.useMemo(() => ({ id }), [id]);
 
   return (
-    <FormItemContext.Provider value={{ id }}>
+    <FormItemContext.Provider value={contextValue}>
       <div data-slot="form-item" className={cn('grid gap-2', className)} {...props} />
     </FormItemContext.Provider>
   );

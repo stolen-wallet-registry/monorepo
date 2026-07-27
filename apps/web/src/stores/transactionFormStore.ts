@@ -10,6 +10,9 @@ import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { useShallow } from 'zustand/shallow';
 import { logger } from '@/lib/logger';
+// Note: selection.ts imports `StoredTransactionDetail` from this module, but only
+// as `import type`, so that edge is erased at compile time — no runtime cycle.
+import { toStoredTransactionDetail } from '@/lib/transactions/selection';
 import type { Address, Hash } from '@/lib/types/ethereum';
 import type { UserTransaction } from '@/hooks/transactions/useUserTransactions';
 
@@ -111,13 +114,7 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
           set((state) => {
             // Convert UserTransaction array to hashes and stored details
             const hashes = transactions.map((tx) => tx.hash);
-            const details: StoredTransactionDetail[] = transactions.map((tx) => ({
-              hash: tx.hash,
-              to: tx.to,
-              value: tx.value.toString(),
-              blockNumber: tx.blockNumber.toString(),
-              timestamp: tx.timestamp,
-            }));
+            const details: StoredTransactionDetail[] = transactions.map(toStoredTransactionDetail);
 
             logger.store.debug('Transaction form transactions updated', {
               count: transactions.length,

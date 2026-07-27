@@ -73,6 +73,7 @@ import {
   type ProtocolHandler,
 } from '@/lib/p2p';
 import { computeTransactionDataHash } from '@/lib/signatures/transactions';
+import { selectStoredTransactionDetails } from '@/lib/transactions/selection';
 import { chainIdToBytes32, toCAIP2, getChainName, getBridgeMessageByIdUrl } from '@swr/chains';
 import { getHubChainId } from '@/lib/chains/config';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
@@ -989,19 +990,17 @@ export function TransactionP2PReporterPage() {
     setLocation('/registration/transactions/p2p-relay');
   }, [resetTxReg, resetP2P, setLocation]);
 
+  // Memoized so the summary table doesn't re-derive (and re-render) on every
+  // unrelated render of this page.
+  const selectedTransactionRows = useMemo(
+    () => selectStoredTransactionDetails(transactions, selectedTxHashes),
+    [transactions, selectedTxHashes]
+  );
+
   const handleSelectionChange = useCallback(
     (hashes: Hash[]) => {
       setSelectedTxHashes(hashes);
-      const selectedDetails = transactions
-        .filter((tx) => hashes.includes(tx.hash))
-        .map((tx) => ({
-          hash: tx.hash,
-          to: tx.to,
-          value: tx.value.toString(),
-          blockNumber: tx.blockNumber.toString(),
-          timestamp: tx.timestamp,
-        }));
-      setSelectedTxDetails(selectedDetails);
+      setSelectedTxDetails(selectStoredTransactionDetails(transactions, hashes));
     },
     [transactions, setSelectedTxHashes, setSelectedTxDetails]
   );
@@ -1120,15 +1119,7 @@ export function TransactionP2PReporterPage() {
                 </div>
 
                 <SelectedTransactionsTable
-                  transactions={transactions
-                    .filter((tx) => selectedTxHashes.includes(tx.hash))
-                    .map((tx) => ({
-                      hash: tx.hash,
-                      to: tx.to,
-                      value: tx.value.toString(),
-                      blockNumber: tx.blockNumber.toString(),
-                      timestamp: tx.timestamp,
-                    }))}
+                  transactions={selectedTransactionRows}
                   reportedChainId={chainId}
                 />
 

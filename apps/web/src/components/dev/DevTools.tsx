@@ -9,6 +9,8 @@ import { SoulboundSvgPreview } from '@swr/ui';
 type DevToolsTab = 'theme' | 'tests' | 'soulbound' | 'wallet';
 
 const DEVTOOLS_TABS: DevToolsTab[] = ['theme', 'tests', 'soulbound', 'wallet'];
+const COLOR_SCHEME_OPTIONS: ColorScheme[] = ['light', 'dark', 'system'];
+const VARIANT_OPTIONS: ThemeVariant[] = ['base', 'hacker'];
 
 /**
  * Component that throws an error on mount.
@@ -95,9 +97,6 @@ export function DevTools() {
   if (import.meta.env.PROD) {
     return null;
   }
-
-  const colorSchemeOptions: ColorScheme[] = ['light', 'dark', 'system'];
-  const variantOptions: ThemeVariant[] = ['base', 'hacker'];
 
   return (
     <div ref={containerRef} className="fixed bottom-4 left-4 z-50" data-no-transition>
@@ -219,7 +218,7 @@ export function DevTools() {
                     Theme Variant
                   </span>
                   <div role="group" aria-labelledby="devtools-theme-variant" className="flex gap-2">
-                    {variantOptions.map((variant) => (
+                    {VARIANT_OPTIONS.map((variant) => (
                       <button
                         key={variant}
                         type="button"
@@ -247,7 +246,7 @@ export function DevTools() {
                     Color Scheme
                   </span>
                   <div role="group" aria-labelledby="devtools-color-scheme" className="flex gap-2">
-                    {colorSchemeOptions.map((scheme) => (
+                    {COLOR_SCHEME_OPTIONS.map((scheme) => (
                       <button
                         key={scheme}
                         type="button"

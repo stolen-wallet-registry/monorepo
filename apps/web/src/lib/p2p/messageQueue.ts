@@ -181,6 +181,12 @@ class MessageQueue {
 
       for (const message of messages) {
         try {
+          // Sequential by design — do NOT parallelize. Queued messages are
+          // protocol steps that must reach the peer in order (e.g. an
+          // acknowledgement signature before its payment notification), and they
+          // share a single connection. Firing them concurrently would reorder
+          // the P2P handshake.
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop
           await passStreamData({
             connection,
             protocols: message.protocols,

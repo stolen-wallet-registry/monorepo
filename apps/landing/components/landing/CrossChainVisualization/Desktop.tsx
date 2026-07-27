@@ -39,22 +39,22 @@ import {
 
 import { KeyRound, ShieldCheck } from 'lucide-react';
 
+// Imported from the concrete modules rather than './shared' so pulling in a
+// constant doesn't drag every icon, container and the emission component into
+// this module's evaluation graph.
+import { BEAM_DURATION, CYCLE_PAUSE } from './shared/constants';
 import {
-  BEAM_DURATION,
-  CYCLE_PAUSE,
-  IconCircle,
   BridgeIcon,
   ChainalysisLogo,
   GroomLakePngLogo,
   HyperlaneLogo,
+  IconCircle,
   SealTeamLogo,
   TrmLabsLogo,
   WormholeLogo,
-  GroupContainer,
-  RegistryHub,
-  SectionTitle,
-  Caip10Emission,
-} from './shared';
+} from './shared/icons';
+import { GroupContainer, RegistryHub, SectionTitle } from './shared/containers';
+import { Caip10Emission } from './shared/emission';
 
 import type { CrossChainVisualizationProps } from './types';
 
@@ -317,8 +317,11 @@ export function CrossChainVisualizationDesktop({
 
   // Animation timing ref - moved from module scope for Fast Refresh safety
   const cycleStartTimeRef = useRef(0);
-  // Memoize logger to prevent infinite loops from dependency array changes
-  const timedLogRef = useRef(createTimedLogger(cycleStartTimeRef));
+  // Memoize logger to prevent infinite loops from dependency array changes.
+  // Lazily initialized: `useRef(createTimedLogger(...))` evaluates the argument
+  // on *every* render and throws all but the first result away.
+  const timedLogRef = useRef<ReturnType<typeof createTimedLogger> | null>(null);
+  timedLogRef.current ??= createTimedLogger(cycleStartTimeRef);
   const timedLog = timedLogRef.current;
 
   // Animation state machine

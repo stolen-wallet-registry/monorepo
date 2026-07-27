@@ -203,12 +203,15 @@ export async function setup(
 
   const libp2p = await createLibp2p(config);
 
-  for (const h of handlers) {
-    const { protocol, streamHandler } = h;
-    logger.p2p.debug('Registering protocol handler', { protocol });
-    // In libp2p 3.x, StreamHandler signature is (stream, connection) => void
-    await libp2p.handle(protocol, streamHandler.handler, streamHandler.options);
-  }
+  // Registrations are independent (one per distinct protocol) and none depends on
+  // a previous one's result, so they register concurrently rather than serially.
+  await Promise.all(
+    handlers.map(({ protocol, streamHandler }) => {
+      logger.p2p.debug('Registering protocol handler', { protocol });
+      // In libp2p 3.x, StreamHandler signature is (stream, connection) => void
+      return libp2p.handle(protocol, streamHandler.handler, streamHandler.options);
+    })
+  );
 
   logger.p2p.info('libp2p node created, waiting for relay reservation', {
     peerId: libp2p.peerId.toString(),

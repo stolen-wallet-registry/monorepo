@@ -21,7 +21,7 @@ interface RoleCardProps {
 
 function RoleCard({ title, description, icon, details, onClick }: RoleCardProps) {
   return (
-    <Card className="transition-all hover:border-primary hover:shadow-md">
+    <Card className="transition-[border-color,box-shadow] hover:border-primary hover:shadow-md">
       <CardHeader className="text-center">
         <div className="mx-auto mb-4 p-4 rounded-full bg-muted">{icon}</div>
         <CardTitle>{title}</CardTitle>

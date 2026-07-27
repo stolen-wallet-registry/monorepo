@@ -39,6 +39,14 @@ function useTouchTooltip() {
   return { open, setOpen, handleTap, handleKeyDown };
 }
 
+/** Static lookup — hoisted so it isn't rebuilt on every IconCircle render. */
+const ICON_SIZE_CLASSES = {
+  xs: 'size-8 p-1',
+  sm: 'size-10 p-1.5',
+  md: 'size-12 p-2',
+  lg: 'size-14 p-2.5',
+};
+
 // Icon with tooltip wrapper - accessibility improved
 export const IconCircle = forwardRef<
   HTMLDivElement,
@@ -60,13 +68,6 @@ export const IconCircle = forwardRef<
     const [scope, animate] = useAnimate<HTMLDivElement>();
     const prevTriggerRef = useRef(triggerPulse);
     const { open, setOpen, handleTap, handleKeyDown } = useTouchTooltip();
-
-    const sizeClasses = {
-      xs: 'size-8 p-1',
-      sm: 'size-10 p-1.5',
-      md: 'size-12 p-2',
-      lg: 'size-14 p-2.5',
-    };
 
     // Sync forwardRef with internal scope ref
     useEffect(() => {
@@ -106,7 +107,7 @@ export const IconCircle = forwardRef<
             ref={scope}
             className={cn(
               'relative z-10 flex cursor-pointer items-center justify-center rounded-full border-2 border-border bg-background shadow-md transition-transform hover:scale-110',
-              sizeClasses[size],
+              ICON_SIZE_CLASSES[size],
               className
             )}
             aria-label={label}

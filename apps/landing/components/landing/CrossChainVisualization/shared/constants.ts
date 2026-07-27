@@ -33,8 +33,9 @@ export const PHASE_1_END = BEAM_DURATION;
 export const PHASE_2_START = PHASE_1_END + PHASE_GAP; // Bridges → Hub
 export const PHASE_2_END = PHASE_2_START + BEAM_DURATION;
 
-export const PHASE_3_START = PHASE_2_END + PHASE_GAP; // Hub → ALL Listeners (simultaneous)
-export const PHASE_3_END = PHASE_3_START + BEAM_DURATION;
+// Phase 3 (Hub → ALL Listeners, simultaneous) runs from PHASE_2_END + PHASE_GAP
+// for BEAM_DURATION. It has no constants of its own: it is the last phase, so
+// nothing is scheduled off its start or end.
 
 // CAIP-10 emission appears when data reaches the hub
 export const EMIT_DELAY = PHASE_2_END; // When beam reaches hub
