@@ -14,3 +14,31 @@ html {
 :target {
   scroll-margin-top: 80px;
 }
+
+/*
+ * Respect the OS "reduce motion" setting (WCAG 2.3.3).
+ *
+ * This landing page animates heavily — the motion library, the rotating globe, marquees,
+ * and Tailwind transitions — and none of it carried a reduced-motion path. Vestibular
+ * disorders, migraine and motion sensitivity make large or continuous movement actively
+ * painful, so the preference has to be honoured.
+ *
+ * Animations are reduced to a single near-instant pass rather than `animation: none`:
+ * removing them outright can leave elements stuck in an animation's starting state
+ * (opacity 0, translated off-screen) and hide content entirely. `scroll-behavior: auto`
+ * overrides the smooth scroll declared above.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -54,19 +54,20 @@ function LiveCountdown({ initialSeconds = 30 }: { initialSeconds?: number }) {
     if (!isRunning || totalMs <= 0) return;
 
     const interval = setInterval(() => {
-      setTotalMs((prev) => {
-        const next = prev - 1000;
-        if (next <= 0) {
-          setIsRunning(false);
-          return 0;
-        }
-        return next;
-      });
+      // Pure updater: decrement only. Stopping the timer is handled by the effect below,
+      // because a state updater can run more than once for a single update.
+      setTotalMs((prev) => Math.max(0, prev - 1000));
     }, 1000);
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- totalMs checked in early return, functional updater handles state
   }, [isRunning]);
+
+  useEffect(() => {
+    if (isRunning && totalMs <= 0) {
+      setIsRunning(false);
+    }
+  }, [isRunning, totalMs]);
 
   const timeRemaining = formatTimeRemaining(totalMs);
   const isExpired = totalMs <= 0;

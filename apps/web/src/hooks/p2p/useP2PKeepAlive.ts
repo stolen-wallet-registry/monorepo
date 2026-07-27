@@ -72,17 +72,19 @@ export function useP2PKeepAlive({
   const prevRemotePeerIdRef = useRef<string | null>(null);
   const connectionLostFiredRef = useRef(false);
 
-  // Use ref for callback to avoid effect re-runs when caller doesn't memoize
+  // Latest-ref syncs run after every render with no dependency array. Callers pass inline
+  // arrows for these, so listing them as dependencies makes the dependency itself churn
+  // every render — which static analysis flags at every call site, for no benefit: the
+  // effect only assigns a ref.
   const onConnectionLostRef = useRef(onConnectionLost);
   useEffect(() => {
     onConnectionLostRef.current = onConnectionLost;
-  }, [onConnectionLost]);
+  });
 
-  // Use ref for getter to avoid effect re-runs
   const getLibp2pRef = useRef(getLibp2p);
   useEffect(() => {
     getLibp2pRef.current = getLibp2p;
-  }, [getLibp2p]);
+  });
 
   // Use state for values returned during render
   const [lastPingLatency, setLastPingLatency] = useState<number | null>(null);
@@ -164,7 +166,7 @@ export function useP2PKeepAlive({
   const pingRef = useRef(ping);
   useEffect(() => {
     pingRef.current = ping;
-  }, [ping]);
+  });
 
   // Set up periodic pinging
   useEffect(() => {
@@ -194,7 +196,14 @@ export function useP2PKeepAlive({
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      return;
+      // Still return a cleanup: the remotePeerId-change branch above may have just
+      // scheduled resetStateTimeout, and this early return would otherwise leave it
+      // pending — firing setState after the hook is disabled or unmounted.
+      return () => {
+        if (resetStateTimeout) {
+          clearTimeout(resetStateTimeout);
+        }
+      };
     }
 
     logger.p2p.info('Starting P2P keep-alive', {

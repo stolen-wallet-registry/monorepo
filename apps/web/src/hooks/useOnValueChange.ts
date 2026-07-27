@@ -20,9 +20,14 @@ export function useOnValueChange<T>(value: T, onChange: (next: T, previous: T) =
   const isFirstRunRef = useRef(true);
   const onChangeRef = useRef(onChange);
 
+  // No dependency array on purpose. Callers pass an inline arrow, so `onChange` is a new
+  // function every render; listing it as a dependency makes the dependency itself churn,
+  // which is both pointless (the effect only assigns a ref) and something static analysis
+  // rightly flags at every call site. Running this after every render is the standard
+  // latest-ref idiom and is exactly equivalent here.
   useEffect(() => {
     onChangeRef.current = onChange;
-  }, [onChange]);
+  });
 
   useEffect(() => {
     if (isFirstRunRef.current) {

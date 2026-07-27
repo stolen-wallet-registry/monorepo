@@ -108,6 +108,10 @@ export function useP2PConnectionHealth({
   });
   const [isChecking, setIsChecking] = useState(false);
 
+  // Mirrors `health` so checkHealth can read the previous value without a state updater.
+  // See the comment in checkHealth for why the transition is not computed inside setHealth.
+  const healthRef = useRef(health);
+
   // Subscribe to store's connectedToPeer - set when passStreamData/readStreamData succeeds
   // This is authoritative evidence of connectivity that overrides ping-based checks
   const storeConnectedToPeer = useP2PStore((s) => s.connectedToPeer);
@@ -116,8 +120,6 @@ export function useP2PConnectionHealth({
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const relayDisconnectedFiredRef = useRef(false);
   const peerDisconnectedFiredRef = useRef(false);
-  // Track if store update is needed after setState (to avoid side effects inside updater)
-  const pendingStoreUpdateRef = useRef(false);
   // Guard against concurrent health checks (use ref, not state, to avoid dep cycles)
   const isCheckingRef = useRef(false);
   // Track disconnect callback timeouts for cleanup on unmount
@@ -127,17 +129,17 @@ export function useP2PConnectionHealth({
   const getLibp2pRef = useRef(getLibp2p);
   useEffect(() => {
     getLibp2pRef.current = getLibp2p;
-  }, [getLibp2p]);
+  });
 
   // Use refs for callbacks to avoid effect re-runs
   const onRelayDisconnectedRef = useRef(onRelayDisconnected);
   useEffect(() => {
     onRelayDisconnectedRef.current = onRelayDisconnected;
-  }, [onRelayDisconnected]);
+  });
   const onPeerDisconnectedRef = useRef(onPeerDisconnected);
   useEffect(() => {
     onPeerDisconnectedRef.current = onPeerDisconnected;
-  }, [onPeerDisconnected]);
+  });
 
   // Get relay peer IDs for connection checks
   const relayPeerIds = useMemo(() => {
@@ -154,7 +156,7 @@ export function useP2PConnectionHealth({
   const relayIdsRef = useRef(relayPeerIds);
   useEffect(() => {
     relayIdsRef.current = relayPeerIds;
-  }, [relayPeerIds]);
+  });
 
   // Main health check function
   const checkHealth = useCallback(async (): Promise<void> => {
@@ -183,78 +185,84 @@ export function useP2PConnectionHealth({
         peerResult = await checkPeerConnection(libp2p, remotePeerId);
       }
 
-      // Update health state
+      // Update health state.
+      //
+      // The transition is computed here rather than inside a setHealth(prev => ...) updater.
+      // State updaters must be pure: React may invoke them more than once for a single
+      // update (StrictMode double-invocation, or a render that gets discarded and replayed
+      // under concurrent rendering). This block mutates `*FiredRef` latches and schedules
+      // timeouts that call the caller's disconnect handlers, so running it twice fired the
+      // "relay disconnected" / "peer disconnected" callbacks twice and leaked the duplicate
+      // timeouts. `healthRef` gives us the previous value outside the updater; `isCheckingRef`
+      // guarantees only one check is in flight, so it cannot be stale here.
+      //
       // Note: storeConnectedToPeer is captured at render time and reflects the latest
       // store value. If passStreamData/readStreamData succeeded, this will be true.
-      // Reset pending store update flag before setState
-      pendingStoreUpdateRef.current = false;
-
-      setHealth((prev) => {
-        const update = computeHealthUpdate({
-          prev,
-          relay: relayResult,
-          peer: peerResult,
-          storeConnectedToPeer,
-          hasRemotePeer: !!remotePeerId,
-          now: Date.now(),
-          maxFailuresBeforeDisconnect: MAX_FAILURES_BEFORE_DISCONNECT,
-          degradedLatencyMs: DEGRADED_LATENCY_MS,
-        });
-
-        // Fire callbacks once per disconnection event (only if we had a connection before)
-        // Note: Using setTimeout to defer side effects outside the updater
-        // Timeouts are tracked in disconnectTimeoutsRef for cleanup on unmount
-        if (
-          update.relayDisconnected &&
-          !relayDisconnectedFiredRef.current &&
-          prev.lastCheckAt !== null
-        ) {
-          relayDisconnectedFiredRef.current = true;
-          logger.p2p.info('Relay disconnect detected', {
-            relayFailures: update.next.relayFailures,
-          });
-          const timeoutId = setTimeout(() => {
-            disconnectTimeoutsRef.current.delete(timeoutId);
-            onRelayDisconnectedRef.current?.();
-          }, 0);
-          disconnectTimeoutsRef.current.add(timeoutId);
-        }
-        if (
-          update.peerDisconnected &&
-          !peerDisconnectedFiredRef.current &&
-          prev.lastCheckAt !== null
-        ) {
-          peerDisconnectedFiredRef.current = true;
-          logger.p2p.info('Peer disconnect detected after consecutive ping failures', {
-            peerFailures: update.next.peerFailures,
-            remotePeerId,
-          });
-          const timeoutId = setTimeout(() => {
-            disconnectTimeoutsRef.current.delete(timeoutId);
-            onPeerDisconnectedRef.current?.();
-          }, 0);
-          disconnectTimeoutsRef.current.add(timeoutId);
-          // Mark that we need to update store after setState completes
-          pendingStoreUpdateRef.current = true;
-        }
-
-        // Reset fired flags if reconnected
-        if (update.resetRelayDisconnectedFlag) {
-          relayDisconnectedFiredRef.current = false;
-        }
-        if (update.resetPeerDisconnectedFlag) {
-          peerDisconnectedFiredRef.current = false;
-        }
-
-        return update.next;
+      const prev = healthRef.current;
+      const update = computeHealthUpdate({
+        prev,
+        relay: relayResult,
+        peer: peerResult,
+        storeConnectedToPeer,
+        hasRemotePeer: !!remotePeerId,
+        now: Date.now(),
+        maxFailuresBeforeDisconnect: MAX_FAILURES_BEFORE_DISCONNECT,
+        degradedLatencyMs: DEGRADED_LATENCY_MS,
       });
 
-      // Execute store update after setState completes.
-      // pendingStoreUpdateRef is set inside the setState updater (synchronous), so by
-      // the time we reach here the flag reliably reflects whether a disconnect was detected.
-      // We update the external Zustand store outside the updater to avoid side-effects
-      // during React's state computation phase.
-      if (pendingStoreUpdateRef.current) {
+      // Commit the new state, and keep healthRef in step immediately so a check that starts
+      // before React re-renders still sees the value this one produced.
+      healthRef.current = update.next;
+      setHealth(update.next);
+
+      // Fire callbacks once per disconnection event (only if we had a connection before).
+      // Timeouts are tracked in disconnectTimeoutsRef for cleanup on unmount.
+      let peerDisconnectDetected = false;
+
+      if (
+        update.relayDisconnected &&
+        !relayDisconnectedFiredRef.current &&
+        prev.lastCheckAt !== null
+      ) {
+        relayDisconnectedFiredRef.current = true;
+        logger.p2p.info('Relay disconnect detected', {
+          relayFailures: update.next.relayFailures,
+        });
+        const timeoutId = setTimeout(() => {
+          disconnectTimeoutsRef.current.delete(timeoutId);
+          onRelayDisconnectedRef.current?.();
+        }, 0);
+        disconnectTimeoutsRef.current.add(timeoutId);
+      }
+
+      if (
+        update.peerDisconnected &&
+        !peerDisconnectedFiredRef.current &&
+        prev.lastCheckAt !== null
+      ) {
+        peerDisconnectedFiredRef.current = true;
+        logger.p2p.info('Peer disconnect detected after consecutive ping failures', {
+          peerFailures: update.next.peerFailures,
+          remotePeerId,
+        });
+        const timeoutId = setTimeout(() => {
+          disconnectTimeoutsRef.current.delete(timeoutId);
+          onPeerDisconnectedRef.current?.();
+        }, 0);
+        disconnectTimeoutsRef.current.add(timeoutId);
+        peerDisconnectDetected = true;
+      }
+
+      // Reset fired flags if reconnected
+      if (update.resetRelayDisconnectedFlag) {
+        relayDisconnectedFiredRef.current = false;
+      }
+      if (update.resetPeerDisconnectedFlag) {
+        peerDisconnectedFiredRef.current = false;
+      }
+
+      // Update the external Zustand store outside of React's state computation.
+      if (peerDisconnectDetected) {
         useP2PStore.getState().setConnectedToPeer(false);
       }
 
@@ -270,9 +278,14 @@ export function useP2PConnectionHealth({
     }
   }, [remotePeerId, storeConnectedToPeer]);
 
-  // Use ref for checkHealth to avoid effect re-runs
+  // Use ref for checkHealth to avoid effect re-runs. Assigned in an effect, not during
+  // render: writing to a ref while rendering is a side effect, and under StrictMode /
+  // concurrent rendering a render can be thrown away, leaving the ref pointing at a
+  // closure that was never committed.
   const checkHealthRef = useRef(checkHealth);
-  checkHealthRef.current = checkHealth;
+  useEffect(() => {
+    checkHealthRef.current = checkHealth;
+  });
 
   // Set up periodic health checks
   // Note: libp2p might not be ready when this effect first runs,

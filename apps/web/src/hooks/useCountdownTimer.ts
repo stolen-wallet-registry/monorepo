@@ -81,8 +81,14 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
   const [hasExpired, setHasExpired] = useState<boolean>(false);
   const [isWaitingForBlock, setIsWaitingForBlock] = useState<boolean>(false);
 
+  // Assigned in an effect, not during render: writing a ref while rendering is a side
+  // effect, and a render that React discards would otherwise leave this pointing at a
+  // callback from a render that never committed. No dependency array — callers pass an
+  // inline function, so listing it would just make the dependency churn every render.
   const onExpireRef = useRef(onExpire);
-  onExpireRef.current = onExpire;
+  useEffect(() => {
+    onExpireRef.current = onExpire;
+  });
 
   const expiredCallbackFired = useRef(false);
 
@@ -173,23 +179,28 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
     }
 
     const interval = setInterval(() => {
-      setTotalMs((prev) => {
-        const next = prev - 1000;
-        if (next <= 0) {
-          // Timer estimate hit 0, but DON'T set hasExpired yet
-          // Instead, wait for actual block confirmation
-          setIsRunning(false);
-          setIsWaitingForBlock(true);
-          logger.registration.info('Timer estimate reached 0, waiting for block confirmation');
-          return 0;
-        }
-        return next;
-      });
+      // Pure updater: decrement only. The "reached zero" transition is handled by the
+      // effect below. State updaters may run more than once per update (StrictMode,
+      // discarded concurrent renders), so setting other state and logging from inside
+      // one produced duplicate log lines and duplicated work.
+      setTotalMs((prev) => Math.max(0, prev - 1000));
     }, 1000);
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- totalMs excluded: setTotalMs uses functional updater so current value is not needed as a dep
   }, [isRunning]);
+
+  // The countdown estimate reaching zero does NOT mean expiry — expiry is decided by the
+  // block-verification effect below from real chain data. Reaching zero only stops the
+  // display timer and switches the UI into "waiting for block confirmation".
+  useEffect(() => {
+    if (!isRunning || totalMs > 0) {
+      return;
+    }
+    setIsRunning(false);
+    setIsWaitingForBlock(true);
+    logger.registration.info('Timer estimate reached 0, waiting for block confirmation');
+  }, [isRunning, totalMs]);
 
   // Block verification effect - determines actual expiration from chain data
   // This runs whenever currentBlock updates from contract polling

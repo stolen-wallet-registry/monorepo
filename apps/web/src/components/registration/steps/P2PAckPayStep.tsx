@@ -120,15 +120,6 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     });
   }, [storedSig, registeree, relayerAddress, chainId, submitAcknowledgement]);
 
-  // Cleanup retry timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-      }
-    };
-  }, []);
-
   // Relayer: Store acknowledgement hash when confirmed (for grace period display)
   useEffect(() => {
     if (role === 'relayer' && isConfirmed && hash && !acknowledgementHash) {
@@ -180,6 +171,19 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     };
 
     sendHash();
+
+    // Cleanup belongs to the effect that allocates the timer. Previously a separate
+    // unmount-only effect cleared it, which left a window: if this effect re-ran for any
+    // other reason (a new `hash`, a new `partnerPeerId`, a fresh `onComplete` identity)
+    // while a backoff retry was pending, the old timer survived and incremented retryCount
+    // a second time. Clearing an already-fired timer is a no-op, so the normal
+    // retry -> setRetryCount -> re-run path is unaffected.
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+    };
   }, [
     role,
     isConfirmed,
