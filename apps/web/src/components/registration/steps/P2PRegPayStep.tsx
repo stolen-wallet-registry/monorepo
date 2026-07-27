@@ -187,6 +187,11 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
 
   // Relayer: Send tx hash (and bridge message ID if cross-chain) to registeree after confirmation
   useEffect(() => {
+    // Extracting the bridge message id, dialing the peer, and writing the stream are all
+    // slow. If this effect re-runs or the step unmounts mid-flight, the continuation must
+    // not write state belonging to a superseded attempt.
+    let cancelled = false;
+
     const sendHash = async () => {
       const libp2p = getLibp2p();
       if (role !== 'relayer' || !isConfirmed || !hash || !libp2p || !partnerPeerId || hasSentHash) {
@@ -207,6 +212,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
         let messageId: Hash | null = null;
         if (isCrossChain && receipt?.logs) {
           messageId = await extractBridgeMessageId(receipt.logs);
+          if (cancelled) return;
           if (messageId) {
             logger.p2p.info('Extracted bridge message ID for P2P', { messageId });
             // Store locally for relayer's success step too
@@ -221,6 +227,8 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
         });
 
         const connection = await getPeerConnection({ libp2p, remotePeerId: partnerPeerId });
+        if (cancelled) return;
+
         await passStreamData({
           connection,
           protocols: [PROTOCOLS.REG_PAY],
@@ -228,6 +236,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
           // Convert null to undefined for optional fields
           streamData: { hash, messageId: messageId ?? undefined, txChainId: chainId },
         });
+        if (cancelled) return;
 
         setHasSentHash(true);
         logger.p2p.info('Sent REG tx hash to registeree', { hash, messageId });
@@ -241,6 +250,8 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
           );
         }
       } catch (err) {
+        if (cancelled) return;
+
         const message = err instanceof Error ? err.message : 'Failed to send hash';
         logger.p2p.error('Failed to send REG tx hash', { attempt: retryCount + 1 }, err as Error);
 
@@ -268,6 +279,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     // a second time. Clearing an already-fired timer is a no-op, so the normal
     // retry -> setRetryCount -> re-run path is unaffected.
     return () => {
+      cancelled = true;
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;

@@ -57,13 +57,24 @@ function CopyableAddress({ address, chainId }: { address: string; chainId: numbe
 
   return (
     <td style={monoTdStyle}>
-      <span
+      <button
+        type="button"
         onClick={handleCopy}
         title="Click to copy"
-        style={{ cursor: 'pointer', userSelect: 'all' }}
+        aria-label={`Copy address ${address}`}
+        style={{
+          cursor: 'pointer',
+          userSelect: 'all',
+          // Strip the UA button chrome so this still reads as inline monospace text.
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          font: 'inherit',
+          color: 'inherit',
+        }}
       >
         {address}
-      </span>
+      </button>
       {copied && <span style={{ color: '#22c55e', marginLeft: 6, fontSize: '0.8em' }}>copied</span>}
       {url && (
         <>

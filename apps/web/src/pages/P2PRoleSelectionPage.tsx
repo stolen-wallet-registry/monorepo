@@ -42,8 +42,8 @@ function RoleCard({
       </CardHeader>
       <CardContent>
         <ul className="space-y-2 text-sm text-muted-foreground">
-          {details.map((detail, i) => (
-            <li key={i} className="flex items-start gap-2">
+          {details.map((detail) => (
+            <li key={detail} className="flex items-start gap-2">
               <span className="text-primary">•</span>
               {detail}
             </li>

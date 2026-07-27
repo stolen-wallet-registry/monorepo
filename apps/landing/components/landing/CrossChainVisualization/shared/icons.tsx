@@ -27,7 +27,16 @@ function useTouchTooltip() {
       setOpen((prev) => !prev);
     }
   }, []);
-  return { open, setOpen, handleTap };
+  // These icons carry an onClick, so they are interactive and must be reachable and
+  // operable from the keyboard, not just by pointer. Radix opens the tooltip on focus once
+  // the trigger is focusable; Enter/Space toggle it the same way a tap does.
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setOpen((prev) => !prev);
+    }
+  }, []);
+  return { open, setOpen, handleTap, handleKeyDown };
 }
 
 // Icon with tooltip wrapper - accessibility improved
@@ -50,7 +59,7 @@ export const IconCircle = forwardRef<
   ) => {
     const [scope, animate] = useAnimate<HTMLDivElement>();
     const prevTriggerRef = useRef(triggerPulse);
-    const { open, setOpen, handleTap } = useTouchTooltip();
+    const { open, setOpen, handleTap, handleKeyDown } = useTouchTooltip();
 
     const sizeClasses = {
       xs: 'size-8 p-1',
@@ -101,8 +110,10 @@ export const IconCircle = forwardRef<
               className
             )}
             aria-label={label}
-            role="img"
+            role="button"
+            tabIndex={0}
             onClick={handleTap}
+            onKeyDown={handleKeyDown}
             animate={
               pulse
                 ? {
@@ -139,25 +150,26 @@ IconCircle.displayName = 'IconCircle';
 
 // Bridge icon (smaller, subtle) - accessibility improved
 export const BridgeIcon = forwardRef<
-  HTMLDivElement,
+  HTMLElement,
   { className?: string; children: React.ReactNode; label: string }
 >(({ className, children, label }, ref) => {
-  const { open, setOpen, handleTap } = useTouchTooltip();
+  const { open, setOpen, handleTap, handleKeyDown } = useTouchTooltip();
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
       <TooltipTrigger asChild>
-        <div
-          ref={ref}
+        <button
+          type="button"
+          ref={ref as React.Ref<HTMLButtonElement>}
           className={cn(
             'z-10 flex size-9 cursor-pointer items-center justify-center rounded-full border border-border bg-background p-1.5 shadow-sm transition-transform hover:scale-110',
             className
           )}
           aria-label={label}
-          role="img"
           onClick={handleTap}
+          onKeyDown={handleKeyDown}
         >
           {children}
-        </div>
+        </button>
       </TooltipTrigger>
       <TooltipContent>
         <p>{label}</p>

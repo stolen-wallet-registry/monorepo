@@ -16,7 +16,9 @@ import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 
-const DISMISS_KEY = 'swr-wallet-status-dismissed';
+// Versioned key — see the note on RECENT_SEARCHES_KEY in SearchPage. Bump the suffix if the
+// stored shape (currently a string[] of lowercased addresses) ever changes.
+const DISMISS_KEY = 'swr-wallet-status-dismissed-v1';
 
 export interface ConnectedWalletStatusProps {
   /** Show even if previously dismissed */

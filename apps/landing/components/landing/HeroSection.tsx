@@ -97,7 +97,9 @@ export function HeroSection(): React.JSX.Element {
             </a>
           </Button>
           <Button variant="outline" size="lg" asChild className="min-w-[140px]">
-            <a href="#cross-chain">Learn More</a>
+            <a href="#cross-chain" aria-label="Learn more about cross-chain fraud reporting">
+              Learn More
+            </a>
           </Button>
         </div>
       </div>

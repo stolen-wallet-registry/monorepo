@@ -152,6 +152,11 @@ export function HyperText({
       {...props}
     >
       <AnimatePresence>
+        {/* Index is the correct key here: displayText is a fixed-length character array
+            mutated in place every animation frame, and characters repeat. Keying by the
+            letter would collide on duplicates and remount every span each frame, which
+            destroys the scramble animation. */}
+        {/* react-doctor-disable-next-line react-doctor/no-array-index-as-key */}
         {displayText.map((letter, index) => (
           <motion.span key={index} className={cn('font-mono', letter === ' ' ? 'w-3' : '')}>
             {letter.toUpperCase()}

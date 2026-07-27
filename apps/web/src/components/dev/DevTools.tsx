@@ -212,10 +212,13 @@ export function DevTools() {
               <>
                 {/* Theme Variant Toggle */}
                 <div className="mb-4">
-                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                  <span
+                    id="devtools-theme-variant"
+                    className="mb-2 block text-xs font-medium text-muted-foreground"
+                  >
                     Theme Variant
-                  </label>
-                  <div className="flex gap-2">
+                  </span>
+                  <div role="group" aria-labelledby="devtools-theme-variant" className="flex gap-2">
                     {variantOptions.map((variant) => (
                       <button
                         key={variant}
@@ -237,10 +240,13 @@ export function DevTools() {
 
                 {/* Color Scheme Toggle */}
                 <div className="mb-4">
-                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                  <span
+                    id="devtools-color-scheme"
+                    className="mb-2 block text-xs font-medium text-muted-foreground"
+                  >
                     Color Scheme
-                  </label>
-                  <div className="flex gap-2">
+                  </span>
+                  <div role="group" aria-labelledby="devtools-color-scheme" className="flex gap-2">
                     {colorSchemeOptions.map((scheme) => (
                       <button
                         key={scheme}
@@ -389,10 +395,13 @@ export function DevTools() {
               <>
                 {/* Token Type Toggle */}
                 <div className="mb-3">
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  <span
+                    id="devtools-preview-type"
+                    className="mb-1 block text-xs font-medium text-muted-foreground"
+                  >
                     Preview Type
-                  </label>
-                  <div className="flex gap-2">
+                  </span>
+                  <div role="group" aria-labelledby="devtools-preview-type" className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => setPreviewType('wallet')}
@@ -485,26 +494,26 @@ export function DevTools() {
                   <>
                     {/* Connected Wallet Info */}
                     <div className="mb-4">
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                      <span className="mb-1 block text-xs font-medium text-muted-foreground">
                         Connected Wallet
-                      </label>
+                      </span>
                       <p className="font-mono text-xs text-foreground break-all">{address}</p>
                     </div>
 
                     {/* Chain ID */}
                     <div className="mb-4">
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                      <span className="mb-1 block text-xs font-medium text-muted-foreground">
                         Chain ID
-                      </label>
+                      </span>
                       <p className="font-mono text-sm text-foreground">{chainId}</p>
                     </div>
 
                     {/* Blockchain Nonce */}
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-medium text-muted-foreground">
+                        <span className="text-xs font-medium text-muted-foreground">
                           Blockchain Nonce
-                        </label>
+                        </span>
                         <button
                           type="button"
                           onClick={() => {

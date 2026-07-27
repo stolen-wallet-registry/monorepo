@@ -40,7 +40,11 @@ import { redactAddress } from '@/lib/logger/formatters';
 import { isAddress } from '@/lib/types/ethereum';
 import type { Address } from '@/lib/types/ethereum';
 
-const RECENT_SEARCHES_KEY = 'swr-recent-searches';
+// Versioned key. This value is persisted user data with no migration path, so the schema
+// version lives in the key itself: changing the stored shape means bumping the suffix, and
+// data written by an older shape is simply never read instead of being fed to new code that
+// does not understand it. Bump to -v2 if the RecentSearch shape ever changes.
+const RECENT_SEARCHES_KEY = 'swr-recent-searches-v1';
 const MAX_RECENT_SEARCHES = 5;
 
 /** Registry entry types */
@@ -444,6 +448,7 @@ export function SearchPage() {
                       <div className="flex items-center gap-2">
                         <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                         <button
+                          type="button"
                           onClick={(e) => handleRemoveRecent(search.address, e)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {

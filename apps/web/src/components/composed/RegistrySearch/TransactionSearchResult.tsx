@@ -43,11 +43,11 @@ export function TransactionSearchResult({ found, data, className }: TransactionS
           {/* Chain reports */}
           <div className="space-y-2 mt-3 pt-3 border-t border-destructive/20">
             <p className="text-xs text-muted-foreground font-medium">Reported on:</p>
-            {data.chains.map((chain, index) => {
+            {data.chains.map((chain) => {
               const reportedDate = new Date(Number(chain.reportedAt) * 1000);
               return (
                 <div
-                  key={`${chain.caip2ChainId}-${chain.batchId}-${index}`}
+                  key={`${chain.caip2ChainId}-${chain.batchId}`}
                   className="text-xs space-y-1 p-2 rounded bg-destructive/5"
                 >
                   <div className="flex items-center gap-2">

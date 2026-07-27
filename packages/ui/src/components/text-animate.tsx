@@ -424,6 +424,10 @@ const TextAnimateBase = ({
         {...props}
       >
         {accessible && <span className="sr-only">{children}</span>}
+        {/* Segments (characters/words/lines) repeat within a string, so the index is what
+            disambiguates them; it is combined with the segment text rather than used alone.
+            The list is a fixed split of `children` and never reorders. */}
+        {/* react-doctor-disable-next-line react-doctor/no-array-index-as-key */}
         {segments.map((segment, i) => (
           <motion.span
             key={`${by}-${segment}-${i}`}

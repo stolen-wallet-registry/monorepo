@@ -340,8 +340,8 @@ export function P2PDebugPanel({
                 </h4>
                 {multiaddrs.length > 0 ? (
                   <div className="mt-1 max-h-20 overflow-y-auto space-y-1">
-                    {multiaddrs.map((ma, i) => (
-                      <p key={i} className="font-mono text-[10px] text-muted-foreground break-all">
+                    {multiaddrs.map((ma) => (
+                      <p key={ma} className="font-mono text-[10px] text-muted-foreground break-all">
                         {ma}
                       </p>
                     ))}
@@ -358,9 +358,9 @@ export function P2PDebugPanel({
                 </h4>
                 {protocols.length > 0 ? (
                   <div className="mt-1 flex flex-wrap gap-1">
-                    {protocols.map((p, i) => (
+                    {protocols.map((p) => (
                       <span
-                        key={i}
+                        key={p}
                         className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
                       >
                         {p}

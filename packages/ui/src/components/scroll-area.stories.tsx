@@ -125,8 +125,8 @@ export const TransactionHistory: Story = {
           { type: 'Registration', hash: '0xfed...cba', status: 'Failed' },
           { type: 'Acknowledgement', hash: '0x456...789', status: 'Confirmed' },
           { type: 'Registration', hash: '0x012...345', status: 'Confirmed' },
-        ].map((tx, i) => (
-          <div key={i} className="flex items-center justify-between text-sm">
+        ].map((tx) => (
+          <div key={tx.hash} className="flex items-center justify-between text-sm">
             <div>
               <div className="font-medium">{tx.type}</div>
               <code className="text-xs text-muted-foreground">{tx.hash}</code>

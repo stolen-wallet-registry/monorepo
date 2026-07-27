@@ -217,8 +217,8 @@ export function RegistrationMethodSelector({
                   Requirements
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1">
-                  {method.requirements.map((req, i) => (
-                    <li key={i} className="flex items-center gap-2">
+                  {method.requirements.map((req) => (
+                    <li key={req} className="flex items-center gap-2">
                       <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
                       {req}
                     </li>

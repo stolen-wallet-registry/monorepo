@@ -130,6 +130,12 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
 
   // Relayer: Send tx hash to registeree after confirmation with retry logic
   useEffect(() => {
+    // Dialing a peer and writing a stream are slow. If this effect re-runs or the step
+    // unmounts while that is in flight, the continuation must not write state belonging to
+    // a superseded attempt — two overlapping sends could otherwise resolve out of order and
+    // leave hasSentHash/sendError describing the wrong one.
+    let cancelled = false;
+
     const sendHash = async () => {
       const libp2p = getLibp2p();
       if (role !== 'relayer' || !isConfirmed || !hash || !libp2p || !partnerPeerId || hasSentHash) {
@@ -141,17 +147,22 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
         logger.p2p.info('Attempting to send ACK tx hash', { hash, attempt: retryCount + 1 });
 
         const connection = await getPeerConnection({ libp2p, remotePeerId: partnerPeerId });
+        if (cancelled) return;
+
         await passStreamData({
           connection,
           protocols: [PROTOCOLS.ACK_PAY],
           // Include chainId so registeree uses correct explorer links
           streamData: { hash, txChainId: chainId },
         });
+        if (cancelled) return;
 
         setHasSentHash(true);
         logger.p2p.info('Sent ACK tx hash to registeree', { hash });
         onComplete();
       } catch (err) {
+        if (cancelled) return;
+
         const message = err instanceof Error ? err.message : 'Failed to send hash';
         logger.p2p.error('Failed to send ACK tx hash', { attempt: retryCount + 1 }, err as Error);
 
@@ -179,6 +190,7 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     // a second time. Clearing an already-fired timer is a no-op, so the normal
     // retry -> setRetryCount -> re-run path is unaffected.
     return () => {
+      cancelled = true;
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;

@@ -126,9 +126,15 @@ export function useCrossChainSoulboundConfirmation({
   useEffect(() => {
     if (!enabled || !spokeHash || !spokeClient || messageId) return;
 
+    // The receipt fetch is a network round trip. If spokeHash changes or the hook
+    // unmounts while it is in flight, the resolved receipt belongs to a superseded run and
+    // must not set messageId.
+    let cancelled = false;
+
     const extractMessageId = async () => {
       try {
         const receipt = await spokeClient.getTransactionReceipt({ hash: spokeHash });
+        if (cancelled) return;
 
         // Find MintRequestForwarded event
         for (const log of receipt.logs) {
@@ -155,6 +161,7 @@ export function useCrossChainSoulboundConfirmation({
 
         logger.contract.warn('MintRequestForwarded event not found in receipt', { spokeHash });
       } catch (err) {
+        if (cancelled) return;
         logger.contract.error('Failed to extract messageId from receipt', {
           spokeHash,
           error: err instanceof Error ? err.message : String(err),
@@ -163,6 +170,10 @@ export function useCrossChainSoulboundConfirmation({
     };
 
     void extractMessageId();
+
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, spokeHash, spokeClient, messageId]);
 
   // Calculate Hyperlane explorer URL

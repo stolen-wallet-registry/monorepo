@@ -507,9 +507,10 @@ export function CrossChainVisualizationDesktop({
 
   return (
     <TooltipProvider delayDuration={100}>
-      <div
-        className={cn('flex flex-col items-center gap-6', className)}
-        role="figure"
+      {/* A real <figure> instead of role="figure": native semantics are better supported by
+          assistive tech. m-0 cancels the UA default margin so layout is unchanged. */}
+      <figure
+        className={cn('m-0 flex flex-col items-center gap-6', className)}
         aria-label="Cross-chain fraud reporting visualization"
         aria-describedby="cross-chain-viz-description"
       >
@@ -1119,7 +1120,7 @@ export function CrossChainVisualizationDesktop({
             </label>
           </div>
         )}
-      </div>
+      </figure>
     </TooltipProvider>
   );
 }
