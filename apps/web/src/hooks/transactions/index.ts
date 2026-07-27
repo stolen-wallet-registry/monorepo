@@ -51,8 +51,6 @@ export {
   type UseTxContractDeadlinesResult,
 } from '../useContractDeadlines';
 
-export { useTxQuoteFee, type TxQuoteFeeData, type UseTxQuoteFeeResult } from './useTxQuoteFee';
-
 // Re-export from merged hook file
 export { useTxQuoteFeeBreakdown, type UseTxQuoteFeeBreakdownResult } from '../useQuoteFeeBreakdown';
 

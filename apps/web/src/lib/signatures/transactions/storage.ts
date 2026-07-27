@@ -3,7 +3,7 @@
 // NOTE: This file stays in web app (browser-specific, uses sessionStorage)
 
 import { isHex, isAddress, size } from 'viem';
-import { TX_SIGNATURE_STEP, type TxSignatureStep } from '@swr/signatures';
+import type { TxSignatureStep } from '@swr/signatures';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 /** Signature session TTL in milliseconds (30 minutes) */
@@ -122,20 +122,6 @@ export function getTxSignature(
     // Invalid stored data, remove it
     sessionStorage.removeItem(key);
     return null;
-  }
-}
-
-// Remove a signature
-export function removeTxSignature(dataHash: Hash, chainId: number, step: TxSignatureStep): void {
-  const key = getStorageKey(dataHash, chainId, step);
-  sessionStorage.removeItem(key);
-}
-
-// Clear all signatures for a dataHash on a chain
-export function clearTxSignatures(dataHash: Hash, chainId: number): void {
-  const steps = Object.values(TX_SIGNATURE_STEP);
-  for (const step of steps) {
-    removeTxSignature(dataHash, chainId, step);
   }
 }
 

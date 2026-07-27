@@ -908,6 +908,23 @@ contract SpokeRegistryTest is Test {
         assertEq(batchQuote - walletQuote, 49 * 35_000 * 1 gwei);
     }
 
+    /// @dev The breakdown quote is what the UI actually calls. It must agree with the total
+    ///      quote and must scale with the batch, or the payment step under-funds the bridge.
+    function test_QuoteTransactionBatchFeeBreakdown_MatchesTotalAndScales() public {
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        _doTxBatchAck(forwarder, keccak256("batch"), reportedChainId, 50);
+
+        ISpokeRegistry.FeeBreakdown memory breakdown = spoke.quoteTransactionBatchFeeBreakdown(reporter);
+
+        assertEq(breakdown.total, spoke.quoteTransactionBatchRegistration(reporter));
+        assertEq(breakdown.total, breakdown.bridgeFee + breakdown.registrationFee);
+        assertEq(breakdown.bridgeName, "Hyperlane");
+
+        // Wallet-shaped breakdown prices one entry; the batch one prices fifty.
+        uint256 walletBridgeFee = spoke.quoteFeeBreakdown(reporter).bridgeFee;
+        assertEq(breakdown.bridgeFee - walletBridgeFee, 49 * 35_000 * 1 gwei);
+    }
+
     /// @notice Transaction batch self-relay (reporter is own forwarder) works
     function test_TxBatchAck_SelfRelay() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();

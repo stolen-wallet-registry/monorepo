@@ -473,6 +473,28 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
 
     /// @inheritdoc ISpokeRegistry
     function quoteTransactionBatchRegistration(address reporter) external view returns (uint256) {
+        uint256 bridgeFee = _quoteTransactionBatchBridgeFee(reporter);
+        uint256 registrationFee = feeManager != address(0) ? IFeeManager(feeManager).currentFeeWei() : 0;
+
+        return bridgeFee + registrationFee;
+    }
+
+    /// @inheritdoc ISpokeRegistry
+    function quoteTransactionBatchFeeBreakdown(address reporter) external view returns (FeeBreakdown memory) {
+        uint256 bridgeFee = _quoteTransactionBatchBridgeFee(reporter);
+        uint256 registrationFee = feeManager != address(0) ? IFeeManager(feeManager).currentFeeWei() : 0;
+
+        return FeeBreakdown({
+            bridgeFee: bridgeFee,
+            registrationFee: registrationFee,
+            total: bridgeFee + registrationFee,
+            bridgeName: IBridgeAdapter(bridgeAdapter).bridgeName()
+        });
+    }
+
+    /// @dev Bridge fee for the reporter's pending transaction batch, priced on the acknowledged
+    ///      entry count. Shared by the total and breakdown quotes so the two can never disagree.
+    function _quoteTransactionBatchBridgeFee(address reporter) internal view returns (uint256) {
         uint32 count = _pendingTxAcknowledgements[reporter].transactionCount;
         if (count == 0) count = 1;
 
@@ -494,10 +516,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
             chainIds: empty
         });
 
-        uint256 bridgeFee = IBridgeAdapter(bridgeAdapter).quoteMessage(hubChainId, payload.encodeTransactionBatch());
-        uint256 registrationFee = feeManager != address(0) ? IFeeManager(feeManager).currentFeeWei() : 0;
-
-        return bridgeFee + registrationFee;
+        return IBridgeAdapter(bridgeAdapter).quoteMessage(hubChainId, payload.encodeTransactionBatch());
     }
 
     /// @inheritdoc ISpokeRegistry

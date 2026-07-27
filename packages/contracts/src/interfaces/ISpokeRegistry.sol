@@ -285,6 +285,13 @@ interface ISpokeRegistry {
     /// @return The total fee in wei
     function quoteTransactionBatchRegistration(address reporter) external view returns (uint256);
 
+    /// @notice Detailed fee breakdown for the reporter's pending transaction batch
+    /// @dev Batch-aware counterpart to `quoteFeeBreakdown`, which prices a single-entry wallet
+    ///      message. Use this one for transaction batches or the bridge fee is under-quoted.
+    /// @param reporter The address whose pending batch is being quoted
+    /// @return The fee breakdown struct
+    function quoteTransactionBatchFeeBreakdown(address reporter) external view returns (FeeBreakdown memory);
+
     /// @notice Get detailed fee breakdown
     /// @param wallet The wallet address being registered
     /// @return The fee breakdown struct

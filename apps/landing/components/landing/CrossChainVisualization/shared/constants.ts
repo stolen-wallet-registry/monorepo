@@ -28,7 +28,6 @@ export const PHASE_GAP = 0; // No gap between phases - immediate trigger on comp
 export const CYCLE_PAUSE = 0.5; // Brief pause between cycles (0.5s)
 
 // Phase timing (sequential, triggered by onComplete - not time-based)
-export const PHASE_1_START = 0; // Networks → Bridges (or Operators → Hub)
 export const PHASE_1_END = BEAM_DURATION;
 
 export const PHASE_2_START = PHASE_1_END + PHASE_GAP; // Bridges → Hub
@@ -36,12 +35,6 @@ export const PHASE_2_END = PHASE_2_START + BEAM_DURATION;
 
 export const PHASE_3_START = PHASE_2_END + PHASE_GAP; // Hub → ALL Listeners (simultaneous)
 export const PHASE_3_END = PHASE_3_START + BEAM_DURATION;
-
-// Total cycle = animation time + pause
-export const TOTAL_CYCLE = PHASE_3_END + CYCLE_PAUSE;
-
-// Helper: calculate repeatDelay so all beams restart together
-export const getRepeatDelay = (phaseStart: number) => TOTAL_CYCLE - phaseStart - BEAM_DURATION;
 
 // CAIP-10 emission appears when data reaches the hub
 export const EMIT_DELAY = PHASE_2_END; // When beam reaches hub

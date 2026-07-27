@@ -22,19 +22,3 @@ export const initialFormSchema = z.object({
  * Input type for the form (before validation transforms).
  */
 export type InitialFormInput = z.input<typeof initialFormSchema>;
-
-/**
- * Output type for validated form values.
- */
-export type InitialFormValues = z.output<typeof initialFormSchema>;
-
-/**
- * Schema for self-relay form validation.
- *
- * Extends initial form with stricter relayer validation.
- */
-export const selfRelayFormSchema = initialFormSchema.extend({
-  relayer: ethereumAddressSchema, // Required in self-relay mode
-});
-
-export type SelfRelayFormValues = z.output<typeof selfRelayFormSchema>;

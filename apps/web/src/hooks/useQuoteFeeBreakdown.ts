@@ -204,11 +204,15 @@ export function useTxQuoteFeeBreakdown(
     },
   });
 
+  // Spokes must use the batch-aware breakdown. The spoke total includes a bridge fee whose
+  // destination gas scales with the number of entries in the message, and the generic
+  // quoteFeeBreakdown() prices a single-entry wallet message — quoting a multi-transaction
+  // batch that way under-funds it and registerTransactionBatch reverts on the fee check.
   const spokeResult = useReadContract({
     address: contractAddress,
     abi: spokeRegistryAbi,
     chainId,
-    functionName: 'quoteFeeBreakdown',
+    functionName: 'quoteTransactionBatchFeeBreakdown',
     args: reporter ? [reporter] : undefined,
     query: {
       enabled: isSpoke && enabled,
