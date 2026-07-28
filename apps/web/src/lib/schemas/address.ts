@@ -26,8 +26,3 @@ export const ethereumAddressSchema = z
  * Use for optional fields like relayer in self-relay mode.
  */
 export const optionalEthereumAddressSchema = z.union([z.literal(''), ethereumAddressSchema]);
-
-/**
- * Type for a validated Ethereum address.
- */
-export type EthereumAddress = z.output<typeof ethereumAddressSchema>;

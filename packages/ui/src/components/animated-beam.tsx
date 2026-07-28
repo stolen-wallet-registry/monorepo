@@ -1,7 +1,7 @@
 'use client';
 
 import { type RefObject, useEffect, useId, useState, useRef } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { domAnimation, LazyMotion, m, useReducedMotion } from 'motion/react';
 
 import { cn } from '../lib/utils';
 
@@ -129,89 +129,100 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   }, [containerRef, fromRef, toRef, curvature, startXOffset, startYOffset, endXOffset, endYOffset]);
 
   return (
-    <svg
-      fill="none"
-      width={svgDimensions.width}
-      height={svgDimensions.height}
-      xmlns="http://www.w3.org/2000/svg"
-      className={cn('pointer-events-none absolute top-0 left-0 transform-gpu stroke-2', className)}
-      viewBox={`0 0 ${svgDimensions.width} ${svgDimensions.height}`}
-      aria-hidden="true"
-    >
-      {/* Static path (track) - always visible */}
-      <path
-        d={pathD}
-        stroke={pathColor}
-        strokeWidth={pathWidth}
-        strokeOpacity={pathOpacity}
-        strokeLinecap="round"
-      />
-      {/* Animated gradient path - only visible when active */}
-      {isActive && (
+    // `m` ships without animation features baked in, so every subtree that renders an `m.*`
+    // element needs a LazyMotion above it or the element renders inert. This component is
+    // exported standalone and consumers are not required to provide a provider, so it carries
+    // its own. `domAnimation` (not `domMax`) is enough: the only feature used here is the
+    // `animate` prop on a gradient — no layout projection, no drag. LazyMotion renders a
+    // context provider and no DOM node, so the SVG structure is unchanged.
+    <LazyMotion features={domAnimation}>
+      <svg
+        fill="none"
+        width={svgDimensions.width}
+        height={svgDimensions.height}
+        xmlns="http://www.w3.org/2000/svg"
+        className={cn(
+          'pointer-events-none absolute top-0 left-0 transform-gpu stroke-2',
+          className
+        )}
+        viewBox={`0 0 ${svgDimensions.width} ${svgDimensions.height}`}
+        aria-hidden="true"
+      >
+        {/* Static path (track) - always visible */}
         <path
           d={pathD}
+          stroke={pathColor}
           strokeWidth={pathWidth}
-          stroke={`url(#${id})`}
-          strokeOpacity="1"
+          strokeOpacity={pathOpacity}
           strokeLinecap="round"
         />
-      )}
-      <defs>
-        {shouldReduceMotion ? (
-          // Static gradient for users who prefer reduced motion
-          // Matches animated gradient's appearance: respects reverse prop, uses 4-stop fade pattern
-          <linearGradient
-            id={id}
-            gradientUnits="userSpaceOnUse"
-            x1={reverse ? '90%' : '10%'}
-            y1="0%"
-            x2={reverse ? '100%' : '0%'}
-            y2="0%"
-          >
-            <stop stopColor={gradientStartColor} stopOpacity="0" />
-            <stop stopColor={gradientStartColor} />
-            <stop offset="32.5%" stopColor={gradientStopColor} />
-            <stop offset="100%" stopColor={gradientStopColor} stopOpacity="0" />
-          </linearGradient>
-        ) : (
-          <motion.linearGradient
-            key={activationCount}
-            className="transform-gpu"
-            id={id}
-            gradientUnits={'userSpaceOnUse'}
-            initial={{
-              // Match first keyframe position so animation starts immediately visible
-              x1: reverse ? '100%' : '0%',
-              x2: reverse ? '110%' : '10%',
-              y1: '0%',
-              y2: '0%',
-            }}
-            animate={
-              isActive
-                ? {
-                    x1: gradientCoordinates.x1,
-                    x2: gradientCoordinates.x2,
-                    y1: gradientCoordinates.y1,
-                    y2: gradientCoordinates.y2,
-                  }
-                : undefined
-            }
-            transition={{
-              delay,
-              duration,
-              // Linear easing - beam moves at constant speed, immediately visible
-              ease: 'linear',
-              // Animation plays once per activation cycle. Parent manages timing externally.
-              repeat: 0,
-            }}
-          >
-            <stop stopColor={gradientStartColor} stopOpacity="0"></stop>
-            <stop stopColor={gradientStartColor}></stop>
-            <stop offset="32.5%" stopColor={gradientStopColor}></stop>
-            <stop offset="100%" stopColor={gradientStopColor} stopOpacity="0"></stop>
-          </motion.linearGradient>
+        {/* Animated gradient path - only visible when active */}
+        {isActive && (
+          <path
+            d={pathD}
+            strokeWidth={pathWidth}
+            stroke={`url(#${id})`}
+            strokeOpacity="1"
+            strokeLinecap="round"
+          />
         )}
-      </defs>
-    </svg>
+        <defs>
+          {shouldReduceMotion ? (
+            // Static gradient for users who prefer reduced motion
+            // Matches animated gradient's appearance: respects reverse prop, uses 4-stop fade pattern
+            <linearGradient
+              id={id}
+              gradientUnits="userSpaceOnUse"
+              x1={reverse ? '90%' : '10%'}
+              y1="0%"
+              x2={reverse ? '100%' : '0%'}
+              y2="0%"
+            >
+              <stop stopColor={gradientStartColor} stopOpacity="0" />
+              <stop stopColor={gradientStartColor} />
+              <stop offset="32.5%" stopColor={gradientStopColor} />
+              <stop offset="100%" stopColor={gradientStopColor} stopOpacity="0" />
+            </linearGradient>
+          ) : (
+            <m.linearGradient
+              key={activationCount}
+              className="transform-gpu"
+              id={id}
+              gradientUnits={'userSpaceOnUse'}
+              initial={{
+                // Match first keyframe position so animation starts immediately visible
+                x1: reverse ? '100%' : '0%',
+                x2: reverse ? '110%' : '10%',
+                y1: '0%',
+                y2: '0%',
+              }}
+              animate={
+                isActive
+                  ? {
+                      x1: gradientCoordinates.x1,
+                      x2: gradientCoordinates.x2,
+                      y1: gradientCoordinates.y1,
+                      y2: gradientCoordinates.y2,
+                    }
+                  : undefined
+              }
+              transition={{
+                delay,
+                duration,
+                // Linear easing - beam moves at constant speed, immediately visible
+                ease: 'linear',
+                // Animation plays once per activation cycle. Parent manages timing externally.
+                repeat: 0,
+              }}
+            >
+              <stop stopColor={gradientStartColor} stopOpacity="0"></stop>
+              <stop stopColor={gradientStartColor}></stop>
+              <stop offset="32.5%" stopColor={gradientStopColor}></stop>
+              <stop offset="100%" stopColor={gradientStopColor} stopOpacity="0"></stop>
+            </m.linearGradient>
+          )}
+        </defs>
+      </svg>
+    </LazyMotion>
   );
 };

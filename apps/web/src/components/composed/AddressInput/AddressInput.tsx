@@ -9,14 +9,13 @@
  */
 
 import * as React from 'react';
-import { forwardRef, useMemo, useEffect, useCallback } from 'react';
+import { forwardRef, useMemo, useCallback } from 'react';
 import { Check, AlertCircle, Loader2 } from 'lucide-react';
 import { isAddress } from 'viem';
 import { Input } from '@swr/ui';
 import { cn } from '@/lib/utils';
 import { useEnsResolve } from '@/hooks/ens';
 import { isEnsName } from '@/lib/ens';
-import type { Address } from '@/lib/types/ethereum';
 
 export type AddressType = 'ethereum' | 'solana' | 'bitcoin' | 'auto';
 
@@ -52,10 +51,14 @@ export interface AddressInputProps extends Omit<
    * Must be provided along with onChange for the component to work correctly.
    */
   value?: string;
-  /** Called when value changes (raw input, may be ENS or address) */
+  /**
+   * Called when value changes (raw input, may be ENS or address).
+   *
+   * The parent already owns the raw value, so it can derive the resolved
+   * address itself with `useEnsResolve` — this component deliberately does not
+   * push resolution results back up through a callback.
+   */
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  /** Called when a valid address is resolved (either direct input or ENS resolution) */
-  onAddressResolved?: (address: Address | null) => void;
   /** Whether to enable ENS resolution (default: true for ethereum type) */
   enableEns?: boolean;
 }
@@ -117,7 +120,6 @@ export const AddressInput = forwardRef<HTMLInputElement, AddressInputProps>(
       validate,
       value,
       onChange,
-      onAddressResolved,
       enableEns = true,
       className,
       placeholder,
@@ -140,22 +142,6 @@ export const AddressInput = forwardRef<HTMLInputElement, AddressInputProps>(
       isLoading: isEnsLoading,
       isError: isEnsError,
     } = useEnsResolve(ensInput);
-
-    // Determine the effective address
-    const effectiveAddress = useMemo(() => {
-      if (isEnsInput && resolvedAddress) {
-        return resolvedAddress;
-      }
-      if (isAddress(stringValue)) {
-        return stringValue as Address;
-      }
-      return null;
-    }, [stringValue, isEnsInput, resolvedAddress]);
-
-    // Notify parent of resolved address
-    useEffect(() => {
-      onAddressResolved?.(effectiveAddress);
-    }, [effectiveAddress, onAddressResolved]);
 
     // Validation state
     const validationState: ValidationState = useMemo(() => {

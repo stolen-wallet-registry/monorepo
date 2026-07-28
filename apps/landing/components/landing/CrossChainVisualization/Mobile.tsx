@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'motion/react';
+import { domAnimation, LazyMotion, m } from 'motion/react';
 import { ChevronDown } from 'lucide-react';
 import {
   cn,
@@ -33,14 +33,19 @@ import type { CrossChainVisualizationProps } from './types';
 // Animated arrow connector for mobile layout (purely decorative)
 function ArrowConnector() {
   return (
-    <motion.div
-      className="flex flex-col items-center py-1"
-      aria-hidden="true"
-      animate={{ opacity: [0.4, 1, 0.4] }}
-      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-    >
-      <ChevronDown className="size-5 text-muted-foreground" />
-    </motion.div>
+    // The LazyMotion sits here rather than around the whole page section so its scope is
+    // exactly the `m.*` subtree it feeds. `domAnimation` covers the keyframed `animate` used
+    // below; the extra drag/layout code in `domMax` would be dead weight.
+    <LazyMotion features={domAnimation}>
+      <m.div
+        className="flex flex-col items-center py-1"
+        aria-hidden="true"
+        animate={{ opacity: [0.4, 1, 0.4] }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        <ChevronDown className="size-5 text-muted-foreground" />
+      </m.div>
+    </LazyMotion>
   );
 }
 

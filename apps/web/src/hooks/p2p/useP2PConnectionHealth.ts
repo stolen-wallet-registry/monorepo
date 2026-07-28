@@ -5,6 +5,26 @@
  * - Connection to relay server (via multiaddr check)
  * - Connection to partner peer (via ping)
  * - Overall health status
+ *
+ * DESIGN NOTE — peer-scoped vs. relay-scoped health
+ * --------------------------------------------------
+ * `ConnectionHealth` mixes two lifetimes. Relay-scoped fields (relayConnected,
+ * lastRelayPing, relayFailures, lastCheckAt) live as long as the node does.
+ * Peer-scoped fields (peerConnected, lastPeerPing, peerFailures) belong to one
+ * specific `remotePeerId` and are meaningless once it changes.
+ *
+ * So the stored health is tagged with the peer it was measured against, and the
+ * peer-scoped fields are cleared during render whenever the tag no longer
+ * matches the current `remotePeerId`. That replaces the effect that used to
+ * reset them, and — more importantly — closes a real hole: that effect wrote
+ * through `setHealth`, which never updated `healthRef`, so the health check it
+ * triggered in the same commit read the *previous* peer's failure count and
+ * immediately re-fired `onPeerDisconnected` for a peer that had only been
+ * checked once. Deriving from the tag means every reader, ref included, sees
+ * the cleared value from the very first render of the new peer.
+ *
+ * `peerDisconnectedFiredForRef` follows the same idea: it records the peer it
+ * fired for instead of a boolean that has to be reset.
  */
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
@@ -70,6 +90,41 @@ export interface UseP2PConnectionHealthResult {
   isChecking: boolean;
 }
 
+const INITIAL_HEALTH: ConnectionHealth = {
+  relayConnected: false,
+  peerConnected: false,
+  lastRelayPing: null,
+  lastPeerPing: null,
+  status: 'unknown',
+  relayFailures: 0,
+  peerFailures: 0,
+  lastCheckAt: null,
+};
+
+/** Health measurements together with the peer they were measured against. */
+interface TaggedHealth {
+  peerScope: string | null;
+  value: ConnectionHealth;
+}
+
+/**
+ * Health as it applies to `peerScope`. When the tag matches, that is the stored
+ * value verbatim; when it does not, the peer-scoped measurements belong to a
+ * peer we are no longer monitoring and are cleared.
+ *
+ * `status` is deliberately carried over rather than reset to 'unknown': the
+ * scheduled check will recompute it, and blanking it flickers the UI.
+ */
+function forPeerScope(stored: TaggedHealth, peerScope: string | null): ConnectionHealth {
+  if (stored.peerScope === peerScope) return stored.value;
+  return {
+    ...stored.value,
+    peerConnected: false,
+    lastPeerPing: null,
+    peerFailures: 0,
+  };
+}
+
 /**
  * Monitors P2P connection health for both relay server and peer.
  *
@@ -96,21 +151,23 @@ export function useP2PConnectionHealth({
   onRelayDisconnected,
   onPeerDisconnected,
 }: UseP2PConnectionHealthOptions): UseP2PConnectionHealthResult {
-  const [health, setHealth] = useState<ConnectionHealth>({
-    relayConnected: false,
-    peerConnected: false,
-    lastRelayPing: null,
-    lastPeerPing: null,
-    status: 'unknown',
-    relayFailures: 0,
-    peerFailures: 0,
-    lastCheckAt: null,
-  });
+  // Normalized peer identity used as the health tag (undefined and null are the
+  // same thing here: "no peer").
+  const peerScope = remotePeerId ?? null;
+
+  const [healthState, setHealthState] = useState<TaggedHealth>(() => ({
+    peerScope,
+    value: INITIAL_HEALTH,
+  }));
   const [isChecking, setIsChecking] = useState(false);
 
-  // Mirrors `health` so checkHealth can read the previous value without a state updater.
-  // See the comment in checkHealth for why the transition is not computed inside setHealth.
-  const healthRef = useRef(health);
+  // Mirrors `healthState` so checkHealth can read the previous value without a state
+  // updater. See the comment in checkHealth for why the transition is not computed
+  // inside setHealth.
+  const healthRef = useRef(healthState);
+
+  /** The health to present/build on, with stale peer-scoped fields cleared. */
+  const health = useMemo(() => forPeerScope(healthState, peerScope), [healthState, peerScope]);
 
   // Subscribe to store's connectedToPeer - set when passStreamData/readStreamData succeeds
   // This is authoritative evidence of connectivity that overrides ping-based checks
@@ -119,7 +176,9 @@ export function useP2PConnectionHealth({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const relayDisconnectedFiredRef = useRef(false);
-  const peerDisconnectedFiredRef = useRef(false);
+  // The peer we already fired onPeerDisconnected for; null means "not fired".
+  // Unambiguous because a disconnect is only ever reported when a peer is set.
+  const peerDisconnectedFiredForRef = useRef<string | null>(null);
   // Guard against concurrent health checks (use ref, not state, to avoid dep cycles)
   const isCheckingRef = useRef(false);
   // Track disconnect callback timeouts for cleanup on unmount
@@ -198,7 +257,12 @@ export function useP2PConnectionHealth({
       //
       // Note: storeConnectedToPeer is captured at render time and reflects the latest
       // store value. If passStreamData/readStreamData succeeded, this will be true.
-      const prev = healthRef.current;
+      //
+      // `prev` goes through forPeerScope for the same reason the render does: a
+      // check triggered by a peer change runs in that very commit, before any
+      // effect could have re-synced the ref, so reading it raw would inherit the
+      // previous peer's failure streak.
+      const prev = forPeerScope(healthRef.current, peerScope);
       const update = computeHealthUpdate({
         prev,
         relay: relayResult,
@@ -212,8 +276,8 @@ export function useP2PConnectionHealth({
 
       // Commit the new state, and keep healthRef in step immediately so a check that starts
       // before React re-renders still sees the value this one produced.
-      healthRef.current = update.next;
-      setHealth(update.next);
+      healthRef.current = { peerScope, value: update.next };
+      setHealthState(healthRef.current);
 
       // Fire callbacks once per disconnection event (only if we had a connection before).
       // Timeouts are tracked in disconnectTimeoutsRef for cleanup on unmount.
@@ -237,10 +301,10 @@ export function useP2PConnectionHealth({
 
       if (
         update.peerDisconnected &&
-        !peerDisconnectedFiredRef.current &&
+        peerDisconnectedFiredForRef.current !== peerScope &&
         prev.lastCheckAt !== null
       ) {
-        peerDisconnectedFiredRef.current = true;
+        peerDisconnectedFiredForRef.current = peerScope;
         logger.p2p.info('Peer disconnect detected after consecutive ping failures', {
           peerFailures: update.next.peerFailures,
           remotePeerId,
@@ -258,7 +322,7 @@ export function useP2PConnectionHealth({
         relayDisconnectedFiredRef.current = false;
       }
       if (update.resetPeerDisconnectedFlag) {
-        peerDisconnectedFiredRef.current = false;
+        peerDisconnectedFiredForRef.current = null;
       }
 
       // Update the external Zustand store outside of React's state computation.
@@ -276,7 +340,7 @@ export function useP2PConnectionHealth({
       isCheckingRef.current = false;
       setIsChecking(false);
     }
-  }, [remotePeerId, storeConnectedToPeer]);
+  }, [remotePeerId, peerScope, storeConnectedToPeer]);
 
   // Use ref for checkHealth to avoid effect re-runs. Assigned in an effect, not during
   // render: writing to a ref while rendering is a side effect, and under StrictMode /
@@ -358,19 +422,11 @@ export function useP2PConnectionHealth({
     // Note: getLibp2p excluded from deps - accessed via ref
   }, [enabled, intervalMs, remotePeerId]);
 
-  // Reset peer-specific state when peer changes, but keep relay status
-  // Don't reset to 'unknown' - trigger immediate check instead
+  // Get fresh numbers for a new peer as soon as it appears. No state is reset
+  // here: peer-scoped health is derived from the tag (see forPeerScope), so it
+  // is already cleared in the render that introduced the new peer — including
+  // for this check, which reads through the same helper.
   useEffect(() => {
-    peerDisconnectedFiredRef.current = false;
-    setHealth((prev) => ({
-      ...prev,
-      peerConnected: false,
-      lastPeerPing: null,
-      peerFailures: 0,
-      // Keep current status - the scheduled check will update it
-      // This prevents flicker to 'unknown' or 'disconnected'
-    }));
-    // Trigger immediate health check when peer changes
     if (remotePeerId) {
       checkHealthRef.current();
     }

@@ -4,7 +4,9 @@
 import { memo, useMemo, type ElementType } from 'react';
 import {
   AnimatePresence,
-  motion,
+  domAnimation,
+  LazyMotion,
+  m,
   useReducedMotion,
   type MotionProps,
   type Variants,
@@ -335,7 +337,9 @@ const TextAnimateBase = ({
   ...props
 }: TextAnimateProps) => {
   const shouldReduceMotion = useReducedMotion();
-  const MotionComponent = useMemo(() => motion.create(Component), [Component]);
+  // `m.create` mirrors `motion.create` but resolves features from the surrounding LazyMotion
+  // rather than embedding them, so the produced component is only valid inside one.
+  const MotionComponent = useMemo(() => m.create(Component), [Component]);
 
   // Respect prefers-reduced-motion: plain text is naturally accessible without
   // the aria-label/sr-only workarounds needed for animated segmented content
@@ -411,40 +415,48 @@ const TextAnimateBase = ({
       : { container: defaultContainerVariants, item: defaultItemVariants };
 
   return (
-    <AnimatePresence mode="popLayout">
-      <MotionComponent
-        variants={finalVariants.container as Variants}
-        initial="hidden"
-        whileInView={startOnView ? 'show' : undefined}
-        animate={startOnView ? undefined : 'show'}
-        exit="exit"
-        className={cn('whitespace-pre-wrap', className)}
-        viewport={{ once }}
-        aria-label={accessible ? children : undefined}
-        {...props}
-      >
-        {accessible && <span className="sr-only">{children}</span>}
-        {/* Segments (characters/words/lines) repeat within a string, so the index is what
+    // LazyMotion must enclose every `m.*` descendant, hence it wraps AnimatePresence too.
+    // `domAnimation` is the right bundle: this component uses `animate`, `whileInView` (the
+    // `inView` feature) and `exit`, all of which it provides. `mode="popLayout"` is handled by
+    // AnimatePresence itself, not by the layout-projection feature, so `domMax` is not needed.
+    <LazyMotion features={domAnimation}>
+      <AnimatePresence mode="popLayout">
+        <MotionComponent
+          variants={finalVariants.container as Variants}
+          initial="hidden"
+          whileInView={startOnView ? 'show' : undefined}
+          animate={startOnView ? undefined : 'show'}
+          exit="exit"
+          className={cn('whitespace-pre-wrap', className)}
+          viewport={{ once }}
+          aria-label={accessible ? children : undefined}
+          {...props}
+        >
+          {accessible && <span className="sr-only">{children}</span>}
+          {/* Segments (characters/words/lines) repeat within a string, so the index is what
             disambiguates them; it is combined with the segment text rather than used alone.
-            The list is a fixed split of `children` and never reorders. */}
-        {/* react-doctor-disable-next-line react-doctor/no-array-index-as-key */}
-        {segments.map((segment, i) => (
-          <motion.span
-            key={`${by}-${segment}-${i}`}
-            variants={finalVariants.item}
-            custom={i * staggerTimings[by]}
-            className={cn(
-              by === 'line' ? 'block' : 'inline-block whitespace-pre',
-              by === 'character' && '',
-              segmentClassName
-            )}
-            aria-hidden={accessible ? true : undefined}
-          >
-            {segment}
-          </motion.span>
-        ))}
-      </MotionComponent>
-    </AnimatePresence>
+            The list is a fixed split of `children` and never reorders. The suppression below
+            has to be the line immediately above the `key` expression — react-doctor drops it
+            if anything intervenes — so this rationale lives above the `.map` instead. */}
+          {segments.map((segment, i) => (
+            <m.span
+              // react-doctor-disable-next-line react-doctor/no-array-index-as-key
+              key={`${by}-${segment}-${i}`}
+              variants={finalVariants.item}
+              custom={i * staggerTimings[by]}
+              className={cn(
+                by === 'line' ? 'block' : 'inline-block whitespace-pre',
+                by === 'character' && '',
+                segmentClassName
+              )}
+              aria-hidden={accessible ? true : undefined}
+            >
+              {segment}
+            </m.span>
+          ))}
+        </MotionComponent>
+      </AnimatePresence>
+    </LazyMotion>
   );
 };
 

@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion, type MotionProps, useInView } from 'motion/react';
+import { domAnimation, LazyMotion, m, type MotionProps, useInView } from 'motion/react';
 
 import { cn } from '../lib/utils';
 
@@ -40,8 +40,10 @@ export function TypingAnimation({
   cursorStyle = 'line',
   ...props
 }: TypingAnimationProps) {
+  // `m.create` is `motion.create` minus the embedded feature bundle — the component reads its
+  // features from the LazyMotion below, so it must never be rendered outside one.
   const MotionComponent = useMemo(
-    () => motion.create(Component, { forwardMotionProps: true }),
+    () => m.create(Component, { forwardMotionProps: true }),
     [Component]
   );
 
@@ -152,22 +154,28 @@ export function TypingAnimation({
   };
 
   return (
-    <MotionComponent
-      ref={elementRef}
-      className={cn('leading-[5rem] tracking-[-0.02em]', className)}
-      aria-live="polite"
-      aria-atomic="true"
-      {...props}
-    >
-      {displayedText}
-      {shouldShowCursor && (
-        <span
-          className={cn('inline-block', blinkCursor && 'animate-blink-cursor')}
-          aria-hidden="true"
-        >
-          {getCursorChar()}
-        </span>
-      )}
-    </MotionComponent>
+    // `useInView` is a standalone hook and needs no feature bundle, but MotionComponent does:
+    // any `m.*` element without a LazyMotion ancestor renders without animation support.
+    // `domAnimation` suffices — this component only forwards motion props from callers and
+    // never uses drag or layout projection, which are the only extras `domMax` adds.
+    <LazyMotion features={domAnimation}>
+      <MotionComponent
+        ref={elementRef}
+        className={cn('leading-[5rem] tracking-[-0.02em]', className)}
+        aria-live="polite"
+        aria-atomic="true"
+        {...props}
+      >
+        {displayedText}
+        {shouldShowCursor && (
+          <span
+            className={cn('inline-block', blinkCursor && 'animate-blink-cursor')}
+            aria-hidden="true"
+          >
+            {getCursorChar()}
+          </span>
+        )}
+      </MotionComponent>
+    </LazyMotion>
   );
 }

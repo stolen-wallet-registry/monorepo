@@ -89,6 +89,14 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
 
   // Sync registeree with connected wallet for ALL registration types before form submission
   // Once showSignature is true, the registeree is locked
+  //
+  // This is external-store synchronisation, not a stand-in for an event handler:
+  // `address` changes inside the wallet extension, so there is no event in this
+  // component to hang the update on. It cannot collapse into `useOnValueChange`
+  // either, because it must also re-run when `showSignature` returns to false
+  // (the user backing out of signing after switching accounts) — keying on
+  // `address` alone would leave a stale registeree in that path.
+  // react-doctor-disable-next-line react-doctor/no-event-handler
   useEffect(() => {
     if (!showSignature && address) {
       const previousRegisteree = getValues('registeree');

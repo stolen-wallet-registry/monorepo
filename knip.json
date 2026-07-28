@@ -14,7 +14,7 @@
       "project": ["src/**/*.ts", "*.ts"]
     },
     "apps/docs": {
-      "entry": ["vocs.config.ts", "docs/**/*.mdx", "sidebar.ts"],
+      "entry": ["vocs.config.tsx", "pages/**/*.mdx", "components/**/*.{ts,tsx}"],
       "project": ["**/*.{ts,tsx}"]
     },
     "packages/contracts": {
@@ -25,13 +25,14 @@
       "project": ["src/**/*.{ts,tsx}"]
     }
   },
+  "entry": ["doctor.config.ts"],
   "ignore": [
     "**/*.stories.{ts,tsx}",
     "**/*.test.{ts,tsx}",
     "**/*.d.ts",
     "apps/web/src/**/index.{ts,tsx}"
   ],
-  "ignoreDependencies": ["alchemy-sdk", "@hyperlane-xyz/utils"],
-  "ignoreBinaries": ["anvil", "eslint", "forge", "psql", "sleep", "hyperlane", "python3"],
+  "ignoreDependencies": ["alchemy-sdk"],
+  "ignoreBinaries": ["anvil", "eslint", "export-abi", "forge", "psql", "sleep", "hyperlane"],
   "ignoreExportsUsedInFile": true
 }

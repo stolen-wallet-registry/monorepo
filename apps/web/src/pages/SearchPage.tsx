@@ -5,7 +5,7 @@
  * Includes recent searches stored in localStorage with chain and type info.
  */
 
-import { useState, useCallback, useSyncExternalStore } from 'react';
+import { useState, useCallback, useEffect, useSyncExternalStore } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount, useChainId } from 'wagmi';
 import {
@@ -20,7 +20,7 @@ import {
   TooltipContent,
 } from '@swr/ui';
 import { RegistrySearch } from '@/components/composed/RegistrySearch';
-import type { SearchResult as IndexerSearchResult, SearchType } from '@/hooks';
+import { useRegistrySearch, type SearchType } from '@/hooks';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import {
   ArrowRight,
@@ -289,8 +289,16 @@ export function SearchPage() {
     [chainId]
   );
 
-  // Handle search result - update the recent search with actual result status
-  const handleResult = useCallback((result: IndexerSearchResult) => {
+  // Read the result straight from the indexer cache rather than having
+  // RegistrySearch hand it back up: the child searches for exactly this query
+  // (it reports the ENS-resolved address via onSearch), so this hook resolves
+  // from the same TanStack Query entry without a second request.
+  const { data: result } = useRegistrySearch(searchQuery);
+
+  // Backfill the recent-search entry once its real status is known.
+  useEffect(() => {
+    if (!result) return;
+
     if (result.type === 'address' && result.data) {
       const resultStatus: SearchResultStatus = result.found ? 'registered' : 'clean';
       logger.ui.info('Address search result received', {
@@ -308,7 +316,7 @@ export function SearchPage() {
         chains: result.data?.chains.length ?? 0,
       });
     }
-  }, []);
+  }, [result]);
 
   // Handle clicking "Check your wallet" quick action
   const handleQuickCheckWallet = useCallback(
@@ -371,7 +379,6 @@ export function SearchPage() {
             key={searchQuery} // Force re-render when query changes
             defaultQuery={searchQuery}
             onSearch={handleSearch}
-            onResult={handleResult}
           />
         </CardContent>
       </Card>

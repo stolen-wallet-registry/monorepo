@@ -25,6 +25,9 @@ export {
   CAPABILITY_WALLET,
   CAPABILITY_TX,
   CAPABILITY_CONTRACT,
+  canSubmitWallet,
+  canSubmitTransaction,
+  canSubmitContract,
 } from './useOperators';
 export {
   useRecentRegistrations,

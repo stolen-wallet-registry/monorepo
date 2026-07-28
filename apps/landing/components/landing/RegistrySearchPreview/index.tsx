@@ -60,8 +60,11 @@ const searchConfig: SearchConfig = {
 
 /**
  * Get background color class based on status.
+ *
+ * Module-private: nothing outside this file consumes it, and exporting a
+ * non-component alongside components breaks Fast Refresh for the whole module.
  */
-export function getResultBgClass(status: ResultStatus): string {
+function getResultBgClass(status: ResultStatus): string {
   switch (status) {
     case 'registered':
       return 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900';
@@ -261,8 +264,15 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
       setError('Failed to search registry. Please try again.');
       setResult(null);
     } finally {
-      // Only clear loading if this is still the latest query
+      // Only clear loading if this is still the latest query.
+      //
+      // The reset IS in a finally and is reached from both the success and the
+      // catch path, so the flag cannot stick. The rule fires on the guard, but
+      // the guard is the point: when a newer search has superseded this one,
+      // that newer run owns the spinner. Clearing it here unconditionally would
+      // stop the spinner while a search is still in flight.
       if (latestQueryRef.current === trimmed) {
+        // react-doctor-disable-next-line react-doctor/no-loading-flag-reset-outside-finally
         setIsLoading(false);
       }
     }

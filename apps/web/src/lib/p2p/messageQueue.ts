@@ -34,15 +34,6 @@ export interface QueuedMessage {
   lastError?: string;
 }
 
-export interface MessageQueueState {
-  /** Queued messages */
-  messages: QueuedMessage[];
-  /** Whether currently processing the queue */
-  isProcessing: boolean;
-  /** Last processing error */
-  lastError: string | null;
-}
-
 /**
  * Simple in-memory message queue.
  * Persisting to localStorage is avoided because messages contain sensitive data.

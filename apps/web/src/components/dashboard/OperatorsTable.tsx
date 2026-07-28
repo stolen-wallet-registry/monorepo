@@ -56,6 +56,9 @@ import {
   CAPABILITY_WALLET,
   CAPABILITY_TX,
   CAPABILITY_CONTRACT,
+  canSubmitWallet,
+  canSubmitTransaction,
+  canSubmitContract,
 } from '@/hooks/dashboard';
 import { useWalletType } from '@/hooks/useWalletType';
 import { operatorRegistryAbi } from '@/lib/contracts/abis';
@@ -380,14 +383,22 @@ function EditCapabilitiesDialog({
 // ADD OPERATOR FORM
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Where the form is in the submit lifecycle. These were separate booleans that
+ * only ever mattered in this precedence order, and the form is busy in every
+ * state but `idle` — a union says that, four booleans did not.
+ *
+ * `isEOA` stays a boolean: it selects what the action does (send a tx vs.
+ * generate Safe calldata), which is an independent axis from progress.
+ */
+type AddOperatorStatus = 'detecting-wallet' | 'awaiting-signature' | 'confirming' | 'idle';
+
 interface AddOperatorFormProps {
   contractAddress: Address | undefined;
   onGenerate: (tx: TransactionData) => void;
   onExecute: (operatorAddress: Address, capabilities: number, name: string) => Promise<void>;
   isEOA: boolean;
-  isWalletTypeLoading: boolean;
-  isPending: boolean;
-  isConfirming: boolean;
+  status: AddOperatorStatus;
 }
 
 function AddOperatorForm({
@@ -395,9 +406,7 @@ function AddOperatorForm({
   onGenerate,
   onExecute,
   isEOA,
-  isWalletTypeLoading,
-  isPending,
-  isConfirming,
+  status,
 }: AddOperatorFormProps) {
   const [address, setAddress] = useState('');
   const [name, setName] = useState('');
@@ -407,7 +416,7 @@ function AddOperatorForm({
 
   const hasCapability = canWallet || canTx || canContract;
   const isValid = isAddress(address) && name.trim().length > 0 && hasCapability && contractAddress;
-  const isBusy = isPending || isConfirming || isWalletTypeLoading;
+  const isBusy = status !== 'idle';
 
   const handleAction = async () => {
     if (!isValid || !contractAddress) return;
@@ -449,27 +458,22 @@ function AddOperatorForm({
   };
 
   const getButtonContent = () => {
-    if (isWalletTypeLoading)
+    const busyLabel = {
+      'detecting-wallet': 'Detecting...',
+      'awaiting-signature': 'Confirm in Wallet...',
+      confirming: 'Confirming...',
+      idle: null,
+    }[status];
+
+    if (busyLabel) {
       return (
         <>
           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          Detecting...
+          {busyLabel}
         </>
       );
-    if (isPending)
-      return (
-        <>
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          Confirm in Wallet...
-        </>
-      );
-    if (isConfirming)
-      return (
-        <>
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          Confirming...
-        </>
-      );
+    }
+
     return (
       <>
         <Plus className="h-4 w-4 mr-2" />
@@ -633,9 +637,9 @@ export function OperatorsTable({
           identifier: name,
           capabilities,
           approved: true,
-          canSubmitWallet: (capabilities & CAPABILITY_WALLET) !== 0,
-          canSubmitTransaction: (capabilities & CAPABILITY_TX) !== 0,
-          canSubmitContract: (capabilities & CAPABILITY_CONTRACT) !== 0,
+          canSubmitWallet: canSubmitWallet(capabilities),
+          canSubmitTransaction: canSubmitTransaction(capabilities),
+          canSubmitContract: canSubmitContract(capabilities),
           approvedAt: BigInt(receipt.blockNumber),
         };
 
@@ -689,9 +693,9 @@ export function OperatorsTable({
                   ? {
                       ...op,
                       capabilities,
-                      canSubmitWallet: (capabilities & CAPABILITY_WALLET) !== 0,
-                      canSubmitTransaction: (capabilities & CAPABILITY_TX) !== 0,
-                      canSubmitContract: (capabilities & CAPABILITY_CONTRACT) !== 0,
+                      canSubmitWallet: canSubmitWallet(capabilities),
+                      canSubmitTransaction: canSubmitTransaction(capabilities),
+                      canSubmitContract: canSubmitContract(capabilities),
                     }
                   : op
               )
@@ -816,9 +820,15 @@ export function OperatorsTable({
           onGenerate={setTransaction}
           onExecute={handleExecuteApprove}
           isEOA={isEOA}
-          isWalletTypeLoading={isWalletTypeLoading}
-          isPending={isApprovePending}
-          isConfirming={isApproveConfirming}
+          status={
+            isWalletTypeLoading
+              ? 'detecting-wallet'
+              : isApprovePending
+                ? 'awaiting-signature'
+                : isApproveConfirming
+                  ? 'confirming'
+                  : 'idle'
+          }
         />
       )}
 

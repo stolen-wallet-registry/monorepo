@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { GracePeriodTimer } from './GracePeriodTimer';
+import { getGracePeriodStatus } from './status';
 
 describe('GracePeriodTimer', () => {
   const defaultProps = {
@@ -13,8 +14,7 @@ describe('GracePeriodTimer', () => {
     },
     totalMs: 222_000,
     blocksLeft: 19n,
-    isExpired: false,
-    isRunning: true,
+    status: 'running' as const,
     initialTotalMs: 300_000,
   };
 
@@ -42,7 +42,7 @@ describe('GracePeriodTimer', () => {
 
   describe('loading state', () => {
     it('renders skeletons when loading', () => {
-      render(<GracePeriodTimer {...defaultProps} isLoading={true} />);
+      render(<GracePeriodTimer {...defaultProps} status="loading" />);
 
       // Should not show time or blocks
       expect(screen.queryByText('03:42')).not.toBeInTheDocument();
@@ -52,30 +52,14 @@ describe('GracePeriodTimer', () => {
 
   describe('expired state', () => {
     it('shows ready message when expired', () => {
-      render(
-        <GracePeriodTimer
-          {...defaultProps}
-          totalMs={0}
-          blocksLeft={0n}
-          isExpired={true}
-          isRunning={false}
-        />
-      );
+      render(<GracePeriodTimer {...defaultProps} totalMs={0} blocksLeft={0n} status="expired" />);
 
       expect(screen.getByText('Ready to Continue')).toBeInTheDocument();
       expect(screen.getByText(/Grace period complete/)).toBeInTheDocument();
     });
 
     it('does not show time when expired', () => {
-      render(
-        <GracePeriodTimer
-          {...defaultProps}
-          totalMs={0}
-          blocksLeft={0n}
-          isExpired={true}
-          isRunning={false}
-        />
-      );
+      render(<GracePeriodTimer {...defaultProps} totalMs={0} blocksLeft={0n} status="expired" />);
 
       expect(screen.queryByText('00:00')).not.toBeInTheDocument();
     });
@@ -136,6 +120,35 @@ describe('GracePeriodTimer', () => {
 
       // Should still render without crashing
       expect(screen.getByText('03:42')).toBeInTheDocument();
+    });
+  });
+
+  describe('getGracePeriodStatus', () => {
+    // The hook keeps isRunning true after the estimate runs out (a later block
+    // poll raises it above zero again), so the UI must not flick back to a
+    // ticking countdown while the target block is still pending.
+    it('prefers waiting-for-block over a still-running timer', () => {
+      expect(
+        getGracePeriodStatus({ isExpired: false, isRunning: true, isWaitingForBlock: true })
+      ).toBe('waiting-for-block');
+    });
+
+    it('reports expired regardless of the other flags', () => {
+      expect(
+        getGracePeriodStatus({ isExpired: true, isRunning: false, isWaitingForBlock: false })
+      ).toBe('expired');
+    });
+
+    it('reports loading before any timer state', () => {
+      expect(
+        getGracePeriodStatus({ isExpired: true, isRunning: false, isWaitingForBlock: false }, true)
+      ).toBe('loading');
+    });
+
+    it('reports paused when time remains but nothing is ticking', () => {
+      expect(
+        getGracePeriodStatus({ isExpired: false, isRunning: false, isWaitingForBlock: false })
+      ).toBe('paused');
     });
   });
 });

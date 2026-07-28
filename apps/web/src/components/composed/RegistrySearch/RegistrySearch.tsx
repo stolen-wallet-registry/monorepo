@@ -6,7 +6,7 @@
  * Uses InputGroup for a composable search input with loading states.
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   InputGroup,
   InputGroupAddon,
@@ -16,12 +16,7 @@ import {
   Button,
 } from '@swr/ui';
 import { Search, X, Loader2, Wallet, FileText, AlertCircle, AtSign } from 'lucide-react';
-import {
-  useRegistrySearch as useIndexerSearch,
-  useEnsResolve,
-  type SearchResult as IndexerSearchResult,
-  type SearchType,
-} from '@/hooks';
+import { useRegistrySearch as useIndexerSearch, useEnsResolve, type SearchType } from '@/hooks';
 import { detectSearchTypeWithEns, type SearchTypeWithEns } from '@/lib/ens';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
@@ -31,10 +26,14 @@ import { TransactionSearchResult } from './TransactionSearchResult';
 export interface RegistrySearchProps {
   /** Pre-fill query (optional) */
   defaultQuery?: string;
-  /** Called when a search is initiated */
+  /**
+   * Called when a search is initiated, with the query actually sent to the
+   * indexer (ENS names are reported as their resolved address).
+   *
+   * Results are deliberately not handed back: a parent that needs them calls
+   * `useRegistrySearch` with this same query and reads them from the cache.
+   */
   onSearch?: (query: string, type: SearchType) => void;
-  /** Called when search completes with result */
-  onResult?: (result: IndexerSearchResult) => void;
   /** Compact mode for header/navbar */
   compact?: boolean;
   /** Additional class names */
@@ -66,23 +65,19 @@ function getSearchTypeIndicator(type: SearchTypeWithEns) {
  * @example
  * ```tsx
  * <RegistrySearch
- *   onResult={(result) => console.log('Search result:', result)}
+ *   onSearch={(query, type) => console.log('Searching', type, query)}
  * />
  * ```
  */
 export function RegistrySearch({
   defaultQuery = '',
   onSearch,
-  onResult,
   compact = false,
   className,
 }: RegistrySearchProps) {
   const [inputValue, setInputValue] = useState(defaultQuery);
   const [searchQuery, setSearchQuery] = useState(defaultQuery);
   const [hasSearched, setHasSearched] = useState(!!defaultQuery);
-
-  // Track which query we've notified for to prevent duplicate callbacks
-  const lastNotifiedQueryRef = useRef<string | null>(null);
 
   // Real-time input type detection (with ENS support)
   const inputType = useMemo(() => detectSearchTypeWithEns(inputValue), [inputValue]);
@@ -108,20 +103,6 @@ export function RegistrySearch({
   // Query the indexer with effective query (empty string when not searching - hook disables itself)
   const indexerQuery = hasSearched ? effectiveSearchQuery : '';
   const { data, isLoading, error } = useIndexerSearch(indexerQuery);
-
-  // Notify parent when result changes (only when user has initiated search)
-  useEffect(() => {
-    if (!hasSearched || !onResult || !data || !effectiveSearchQuery) return;
-    if (lastNotifiedQueryRef.current === effectiveSearchQuery) return;
-
-    lastNotifiedQueryRef.current = effectiveSearchQuery;
-    logger.ui.info('Search result ready', {
-      query: effectiveSearchQuery,
-      type: data.type,
-      found: data.found,
-    });
-    onResult(data);
-  }, [hasSearched, onResult, effectiveSearchQuery, data]);
 
   const handleSearch = useCallback(() => {
     const trimmed = inputValue.trim();
@@ -153,7 +134,6 @@ export function RegistrySearch({
       });
       setSearchQuery(resolvedAddress);
       setHasSearched(true);
-      lastNotifiedQueryRef.current = null;
       onSearch?.(resolvedAddress, 'address');
       return;
     }
@@ -161,7 +141,6 @@ export function RegistrySearch({
     logger.ui.info('Search started', { query: trimmed, type });
     setSearchQuery(trimmed);
     setHasSearched(true);
-    lastNotifiedQueryRef.current = null;
     // Map SearchTypeWithEns to SearchType for callback
     const callbackType: SearchType = type === 'caip10' ? 'caip10' : type;
     onSearch?.(trimmed, callbackType);

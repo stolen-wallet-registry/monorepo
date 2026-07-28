@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, domMax, LazyMotion, m } from 'motion/react';
 import { cn } from '@swr/ui';
 
 import {
@@ -116,45 +116,51 @@ export function Caip10Emission({ triggerEmission, triggerBatchEmission }: Caip10
   }, [isControlled, addEmission]);
 
   return (
-    <div
-      className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end gap-2"
-      aria-hidden="true"
-    >
-      <AnimatePresence mode="popLayout">
-        {/* Render oldest first so newest appears at bottom (closer to hub) */}
-        {[...emissions].reverse().map((emission) => {
-          const chainConfig = getChainConfig(emission.value);
-          return (
-            <motion.div
-              key={emission.id}
-              layout
-              initial={{ opacity: 0, y: 30, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.8 }}
-              transition={{ duration: 0.4, ease: 'easeOut' }}
-              className="whitespace-nowrap text-center"
-            >
-              <span
-                className={cn(
-                  'inline-flex w-[260px] items-center justify-center gap-1.5 rounded-md px-3 py-1 font-mono text-xs shadow-sm',
-                  chainConfig.bg,
-                  chainConfig.text
-                )}
+    // `domMax`, not `domAnimation`, on purpose: the emissions below carry the `layout` prop so
+    // the stack reflows smoothly as entries are added and expire, and layout projection only
+    // ships in the max bundle. With `domAnimation` the `layout` prop would silently do nothing
+    // and the stack would jump. Drag comes along for the ride — it is part of the same bundle.
+    <LazyMotion features={domMax}>
+      <div
+        className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end gap-2"
+        aria-hidden="true"
+      >
+        <AnimatePresence mode="popLayout">
+          {/* Render oldest first so newest appears at bottom (closer to hub) */}
+          {[...emissions].reverse().map((emission) => {
+            const chainConfig = getChainConfig(emission.value);
+            return (
+              <m.div
+                key={emission.id}
+                layout
+                initial={{ opacity: 0, y: 30, scale: 0.8 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -20, scale: 0.8 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
+                className="whitespace-nowrap text-center"
               >
-                <span className="text-sm">{chainConfig.icon}</span>
-                <span>{truncateCaip(emission.value)}</span>
-                {emission.type === 'transaction' && (
-                  <span className="text-[10px] opacity-70">(tx)</span>
-                )}
-                {emission.type === 'contract' && (
-                  <span className="text-[10px] opacity-70">(contract)</span>
-                )}
-                {emission.isWildcard && <span className="text-[10px] opacity-70">(all EVM)</span>}
-              </span>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
-    </div>
+                <span
+                  className={cn(
+                    'inline-flex w-[260px] items-center justify-center gap-1.5 rounded-md px-3 py-1 font-mono text-xs shadow-sm',
+                    chainConfig.bg,
+                    chainConfig.text
+                  )}
+                >
+                  <span className="text-sm">{chainConfig.icon}</span>
+                  <span>{truncateCaip(emission.value)}</span>
+                  {emission.type === 'transaction' && (
+                    <span className="text-[10px] opacity-70">(tx)</span>
+                  )}
+                  {emission.type === 'contract' && (
+                    <span className="text-[10px] opacity-70">(contract)</span>
+                  )}
+                  {emission.isWildcard && <span className="text-[10px] opacity-70">(all EVM)</span>}
+                </span>
+              </m.div>
+            );
+          })}
+        </AnimatePresence>
+      </div>
+    </LazyMotion>
   );
 }

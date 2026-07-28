@@ -57,6 +57,28 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
   const [retryCount, setRetryCount] = useState(0);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Latest-ref for the step-advance callback. Assigned in an effect rather than during
+  // render: writing a ref while rendering is a side effect, and a render React discards
+  // would leave this pointing at a callback from a render that never committed. No
+  // dependency array — parents pass an inline arrow, so listing it would make the
+  // dependency churn every render and re-arm every effect that advances the step.
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  });
+
+  // Latch recording that the step already advanced. Advancing a registration step twice
+  // skips a step of the two-phase flow, so single-firing is made structurally impossible
+  // here rather than relying on every call site's guard conditions staying mutually
+  // exclusive. `logAdvance` runs only on the firing call so retries don't spam the log.
+  const hasAdvancedRef = useRef(false);
+  const advanceOnce = useCallback((logAdvance: () => void) => {
+    if (hasAdvancedRef.current) return;
+    hasAdvancedRef.current = true;
+    logAdvance();
+    onCompleteRef.current();
+  }, []);
+
   // Get stored signature (relayer only)
   const storedSig =
     role === 'relayer' && registeree
@@ -158,8 +180,7 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
         if (cancelled) return;
 
         setHasSentHash(true);
-        logger.p2p.info('Sent ACK tx hash to registeree', { hash });
-        onComplete();
+        advanceOnce(() => logger.p2p.info('Sent ACK tx hash to registeree', { hash }));
       } catch (err) {
         if (cancelled) return;
 
@@ -185,10 +206,10 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
 
     // Cleanup belongs to the effect that allocates the timer. Previously a separate
     // unmount-only effect cleared it, which left a window: if this effect re-ran for any
-    // other reason (a new `hash`, a new `partnerPeerId`, a fresh `onComplete` identity)
-    // while a backoff retry was pending, the old timer survived and incremented retryCount
-    // a second time. Clearing an already-fired timer is a no-op, so the normal
-    // retry -> setRetryCount -> re-run path is unaffected.
+    // other reason (a new `hash`, a new `partnerPeerId`) while a backoff retry was
+    // pending, the old timer survived and incremented retryCount a second time. Clearing
+    // an already-fired timer is a no-op, so the normal retry -> setRetryCount -> re-run
+    // path is unaffected.
     return () => {
       cancelled = true;
       if (retryTimeoutRef.current) {
@@ -205,7 +226,7 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     partnerPeerId,
     hasSentHash,
     retryCount,
-    onComplete,
+    advanceOnce,
   ]);
 
   // Manual retry handler for user-initiated resend
@@ -219,13 +240,17 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     setRetryCount((prev) => prev + 1);
   }, []);
 
-  // Registeree: Wait for hash and auto-advance
+  // Registeree: Wait for hash and auto-advance.
+  // This one genuinely reacts to state converging rather than to an event: the hash
+  // arrives on a libp2p stream handler that writes the store, so there is no local
+  // handler to hang the advance off. The advance is routed through `advanceOnce`, so a
+  // re-run (a relayer resend writing a different hash, StrictMode's double invoke) can
+  // no longer advance the flow a second time.
   useEffect(() => {
     if (role === 'registeree' && acknowledgementHash) {
-      logger.p2p.info('Registeree received ACK tx hash, advancing');
-      onComplete();
+      advanceOnce(() => logger.p2p.info('Registeree received ACK tx hash, advancing'));
     }
-  }, [role, acknowledgementHash, onComplete]);
+  }, [role, acknowledgementHash, advanceOnce]);
 
   // Registeree view - waiting for relayer
   if (role === 'registeree') {

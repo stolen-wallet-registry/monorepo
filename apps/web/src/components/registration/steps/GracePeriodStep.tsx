@@ -9,7 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react
 import { useChainId } from 'wagmi';
 
 import { Alert, AlertDescription, Skeleton } from '@swr/ui';
-import { GracePeriodTimer } from '@/components/composed/GracePeriodTimer';
+import { GracePeriodTimer, getGracePeriodStatus } from '@/components/composed/GracePeriodTimer';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { useFormStore } from '@/stores/formStore';
@@ -247,9 +247,7 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
         timeRemaining={timeRemaining}
         totalMs={totalMs}
         blocksLeft={blocksLeft}
-        isExpired={isExpired}
-        isRunning={isRunning}
-        isWaitingForBlock={isWaitingForBlock}
+        status={getGracePeriodStatus({ isExpired, isRunning, isWaitingForBlock })}
         initialTotalMs={initialTotalMs}
       />
 

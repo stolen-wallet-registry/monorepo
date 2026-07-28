@@ -71,6 +71,30 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
   const [retryCount, setRetryCount] = useState(0);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Latest-ref for the step-advance callback. Assigned in an effect rather than during
+  // render: writing a ref while rendering is a side effect, and a render React discards
+  // would leave this pointing at a callback from a render that never committed. No
+  // dependency array — parents pass an inline arrow, so listing it would make the
+  // dependency churn every render and re-arm every effect that advances the step.
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  });
+
+  // Latch recording that the step already advanced. Three separate paths can advance this
+  // step (local-chain send completing, hub confirming a cross-chain delivery, registeree
+  // receiving the hash) and they are only mutually exclusive by role and chain kind.
+  // Advancing a registration step twice skips a step of the two-phase flow, so the latch
+  // makes single-firing structural instead of a property of those guard conditions.
+  // `logAdvance` runs only on the firing call so retries don't spam the log.
+  const hasAdvancedRef = useRef(false);
+  const advanceOnce = useCallback((logAdvance: () => void) => {
+    if (hasAdvancedRef.current) return;
+    hasAdvancedRef.current = true;
+    logAdvance();
+    onCompleteRef.current();
+  }, []);
+
   // Get stored signature (relayer only)
   const storedSig =
     role === 'relayer' && registeree
@@ -103,16 +127,21 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     maxPollingTime: 120000,
   });
 
-  // Relayer: Advance to success when hub confirms cross-chain delivery
+  // Relayer: Advance to success when hub confirms cross-chain delivery.
+  // The confirmation arrives from a poll inside useCrossChainConfirmation, so there is no
+  // handler to hang the advance off — this genuinely reacts to polled state converging.
+  // Routing through `advanceOnce` matters here in particular: `crossChain.elapsedTime`
+  // keeps ticking, so the effect re-runs while the status stays 'confirmed'.
   useEffect(() => {
     if (role === 'relayer' && isCrossChain && crossChain.status === 'confirmed') {
-      logger.registration.info('Relayer cross-chain confirmation received, advancing', {
-        wallet: registeree,
-        elapsedTime: crossChain.elapsedTime,
-      });
-      onComplete();
+      advanceOnce(() =>
+        logger.registration.info('Relayer cross-chain confirmation received, advancing', {
+          wallet: registeree,
+          elapsedTime: crossChain.elapsedTime,
+        })
+      );
     }
-  }, [role, isCrossChain, crossChain.status, crossChain.elapsedTime, registeree, onComplete]);
+  }, [role, isCrossChain, crossChain.status, crossChain.elapsedTime, registeree, advanceOnce]);
 
   // Derive TransactionCard status
   const getStatus = (): TransactionStatus => {
@@ -242,7 +271,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
         logger.p2p.info('Sent REG tx hash to registeree', { hash, messageId });
         // On spoke chains, don't advance yet — wait for hub confirmation
         if (!isCrossChain) {
-          onComplete();
+          advanceOnce(() => logger.registration.info('Local chain — relayer advancing', { hash }));
         } else {
           logger.registration.info(
             'Spoke chain — relayer waiting for hub confirmation before advancing',
@@ -274,9 +303,9 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
 
     // Cleanup belongs to the effect that allocates the timer. Previously a separate
     // unmount-only effect cleared it, which left a window: if this effect re-ran for any
-    // other reason (a new `hash`, a new `partnerPeerId`, a fresh `onComplete` identity)
-    // while a backoff retry was pending, the old timer survived and incremented retryCount
-    // a second time. Clearing an already-fired timer is a no-op, so the normal
+    // other reason (a new `hash`, a new `partnerPeerId`, a new `receipt`) while a backoff
+    // retry was pending, the old timer survived and incremented retryCount a second time.
+    // Clearing an already-fired timer is a no-op, so the normal
     // retry -> setRetryCount -> re-run path is unaffected.
     return () => {
       cancelled = true;
@@ -296,7 +325,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     partnerPeerId,
     hasSentHash,
     retryCount,
-    onComplete,
+    advanceOnce,
     setBridgeMessageId,
   ]);
 
@@ -311,13 +340,17 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     setRetryCount((prev) => prev + 1);
   }, []);
 
-  // Registeree: Wait for hash and auto-advance
+  // Registeree: Wait for hash and auto-advance.
+  // This one genuinely reacts to state converging rather than to an event: the hash
+  // arrives on a libp2p stream handler that writes the store, so there is no local
+  // handler to hang the advance off. The advance is routed through `advanceOnce`, so a
+  // re-run (a relayer resend writing a different hash, StrictMode's double invoke) can
+  // no longer advance the flow a second time.
   useEffect(() => {
     if (role === 'registeree' && registrationHash) {
-      logger.p2p.info('Registeree received REG tx hash, advancing');
-      onComplete();
+      advanceOnce(() => logger.p2p.info('Registeree received REG tx hash, advancing'));
     }
-  }, [role, registrationHash, onComplete]);
+  }, [role, registrationHash, advanceOnce]);
 
   // Registeree view - waiting for relayer
   if (role === 'registeree') {

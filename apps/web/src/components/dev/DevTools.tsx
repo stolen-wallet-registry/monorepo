@@ -1,16 +1,16 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { toast } from 'sonner';
 import { useAccount, useChainId, usePublicClient } from 'wagmi';
 
-import { useTheme, type ColorScheme, type ThemeVariant } from '@/providers';
+import { useTheme } from '@/providers';
 import { cn } from '@/lib/utils';
-import { SoulboundSvgPreview } from '@swr/ui';
+import { ThemeTab } from './devtools/ThemeTab';
+import { TestsTab } from './devtools/TestsTab';
+import { SoulboundTab } from './devtools/SoulboundTab';
+import { WalletTab } from './devtools/WalletTab';
 
 type DevToolsTab = 'theme' | 'tests' | 'soulbound' | 'wallet';
 
 const DEVTOOLS_TABS: DevToolsTab[] = ['theme', 'tests', 'soulbound', 'wallet'];
-const COLOR_SCHEME_OPTIONS: ColorScheme[] = ['light', 'dark', 'system'];
-const VARIANT_OPTIONS: ThemeVariant[] = ['base', 'hacker'];
 
 /**
  * Component that throws an error on mount.
@@ -62,6 +62,13 @@ export function DevTools() {
       setNonceLoading(false);
     }
   }, [address, publicClient]);
+
+  // Wallet tab refresh: clear the stale value first so the UI shows the placeholder
+  // while the new count is in flight.
+  const handleRefreshNonce = useCallback(() => {
+    setBlockchainNonce(null);
+    fetchNonce();
+  }, [fetchNonce]);
 
   // Auto-fetch nonce when wallet tab is active and connected
   useEffect(() => {
@@ -208,357 +215,33 @@ export function DevTools() {
           >
             {/* Theme Tab */}
             {activeTab === 'theme' && (
-              <>
-                {/* Theme Variant Toggle */}
-                <div className="mb-4">
-                  <span
-                    id="devtools-theme-variant"
-                    className="mb-2 block text-xs font-medium text-muted-foreground"
-                  >
-                    Theme Variant
-                  </span>
-                  <div role="group" aria-labelledby="devtools-theme-variant" className="flex gap-2">
-                    {VARIANT_OPTIONS.map((variant) => (
-                      <button
-                        key={variant}
-                        type="button"
-                        onClick={() => setThemeVariant(variant)}
-                        className={cn(
-                          'rounded-md px-3 py-1.5 text-sm font-medium capitalize',
-                          'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
-                          themeVariant === variant
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        )}
-                      >
-                        {variant}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Color Scheme Toggle */}
-                <div className="mb-4">
-                  <span
-                    id="devtools-color-scheme"
-                    className="mb-2 block text-xs font-medium text-muted-foreground"
-                  >
-                    Color Scheme
-                  </span>
-                  <div role="group" aria-labelledby="devtools-color-scheme" className="flex gap-2">
-                    {COLOR_SCHEME_OPTIONS.map((scheme) => (
-                      <button
-                        key={scheme}
-                        type="button"
-                        onClick={() => setColorScheme(scheme)}
-                        className={cn(
-                          'rounded-md px-3 py-1.5 text-sm font-medium capitalize',
-                          'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
-                          colorScheme === scheme
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        )}
-                      >
-                        {scheme}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Current State Display */}
-                <div className="border-t border-border pt-3">
-                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Current State</h4>
-                  <div className="space-y-1 font-mono text-xs text-muted-foreground">
-                    <p>
-                      <span className="text-foreground">colorScheme:</span> {colorScheme}
-                    </p>
-                    <p>
-                      <span className="text-foreground">resolved:</span> {resolvedColorScheme}
-                    </p>
-                    <p>
-                      <span className="text-foreground">variant:</span> {themeVariant}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Quick Actions */}
-                <div className="mt-4 border-t border-border pt-3">
-                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Quick Actions</h4>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setThemeVariant('hacker');
-                        setColorScheme('dark');
-                      }}
-                      className="rounded bg-green-900 px-2 py-1 text-xs text-green-400 hover:bg-green-800"
-                    >
-                      Hacker Dark
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setThemeVariant('base');
-                        setColorScheme('dark');
-                      }}
-                      className="rounded bg-neutral-900 px-2 py-1 text-xs text-white hover:bg-neutral-800"
-                    >
-                      Base Dark
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setThemeVariant('base');
-                        setColorScheme('light');
-                      }}
-                      className="rounded bg-white px-2 py-1 text-xs text-black hover:bg-neutral-100"
-                    >
-                      Base Light
-                    </button>
-                  </div>
-                </div>
-              </>
+              <ThemeTab
+                colorScheme={colorScheme}
+                setColorScheme={setColorScheme}
+                themeVariant={themeVariant}
+                setThemeVariant={setThemeVariant}
+                resolvedColorScheme={resolvedColorScheme}
+              />
             )}
 
             {/* Tests Tab */}
-            {activeTab === 'tests' && (
-              <>
-                {/* Toast Tests */}
-                <div className="mb-4">
-                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">Toast Tests</h4>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => toast.success('Success! Operation completed.')}
-                      className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700"
-                    >
-                      Success
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toast.error('Error! Something went wrong.')}
-                      className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700"
-                    >
-                      Error
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toast.warning('Warning! Check this out.')}
-                      className="rounded bg-yellow-600 px-2 py-1 text-xs text-white hover:bg-yellow-700"
-                    >
-                      Warning
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toast.info('Info: Here is some information.')}
-                      className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
-                    >
-                      Info
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const id = toast.loading('Loading... (auto-completes in 2s)');
-                        setTimeout(() => {
-                          toast.success('Loading complete!', { id });
-                        }, 2000);
-                      }}
-                      className="rounded bg-gray-600 px-2 py-1 text-xs text-white hover:bg-gray-700"
-                    >
-                      Loading
-                    </button>
-                  </div>
-                </div>
-
-                {/* Error Boundary Test */}
-                <div className="border-t border-border pt-3">
-                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">
-                    Error Boundary Test
-                  </h4>
-                  <button
-                    type="button"
-                    onClick={() => setErrorKey(Date.now())}
-                    className="rounded bg-red-900 px-2 py-1 text-xs text-red-300 hover:bg-red-800"
-                  >
-                    Trigger Error
-                  </button>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Throws an error to test the ErrorBoundary UI
-                  </p>
-                </div>
-              </>
-            )}
+            {activeTab === 'tests' && <TestsTab onTriggerError={() => setErrorKey(Date.now())} />}
 
             {/* Soulbound Tab */}
             {activeTab === 'soulbound' && (
-              <>
-                {/* Token Type Toggle */}
-                <div className="mb-3">
-                  <span
-                    id="devtools-preview-type"
-                    className="mb-1 block text-xs font-medium text-muted-foreground"
-                  >
-                    Preview Type
-                  </span>
-                  <div role="group" aria-labelledby="devtools-preview-type" className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewType('wallet')}
-                      className={cn(
-                        'rounded-md px-3 py-1 text-xs font-medium',
-                        'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
-                        previewType === 'wallet'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      )}
-                    >
-                      Wallet
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewType('support')}
-                      className={cn(
-                        'rounded-md px-3 py-1 text-xs font-medium',
-                        'transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
-                        previewType === 'support'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      )}
-                    >
-                      Support
-                    </button>
-                  </div>
-                </div>
-
-                {/* SVG Preview */}
-                <div className="flex justify-center rounded-lg bg-muted/50 p-2">
-                  <SoulboundSvgPreview type={previewType} size={200} />
-                </div>
-
-                {/* Testing Translations - Instructions */}
-                <div className="mt-3 border-t border-border pt-3">
-                  <h4 className="mb-2 text-xs font-medium text-muted-foreground">
-                    Testing Minted SVG Translations
-                  </h4>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    On-chain SVGs embed all translations via{' '}
-                    <code className="bg-muted px-1 rounded">&lt;switch&gt;</code> elements with{' '}
-                    <code className="bg-muted px-1 rounded">systemLanguage</code> attributes. The
-                    browser selects which translation to display based on its language settings.
-                  </p>
-                  <div className="mb-2 text-xs text-muted-foreground">
-                    <p className="font-medium text-foreground mb-1">Contract files:</p>
-                    <ul className="list-disc list-inside space-y-0.5 text-[10px]">
-                      <li>
-                        <code className="bg-muted px-1 rounded">
-                          contracts/src/soulbound/TranslationRegistry.sol
-                        </code>
-                      </li>
-                      <li>
-                        <code className="bg-muted px-1 rounded">
-                          contracts/src/soulbound/libraries/SVGRenderer.sol
-                        </code>
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="space-y-1.5 text-xs text-muted-foreground">
-                    <p className="font-medium text-foreground">To test:</p>
-                    <p>
-                      <strong className="text-foreground">Chrome:</strong> Settings → Languages →
-                      drag to top → reload
-                    </p>
-                    <p>
-                      <strong className="text-foreground">Firefox:</strong> Settings → Language →
-                      move to top → reload
-                    </p>
-                    <p>
-                      <strong className="text-foreground">Safari:</strong> System Settings →
-                      Language & Region → reload
-                    </p>
-                  </div>
-                </div>
-              </>
+              <SoulboundTab previewType={previewType} setPreviewType={setPreviewType} />
             )}
 
             {/* Wallet Tab */}
             {activeTab === 'wallet' && (
-              <>
-                {!isConnected ? (
-                  <div className="text-center py-4">
-                    <p className="text-sm text-muted-foreground">
-                      Connect wallet to view nonce info
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Connected Wallet Info */}
-                    <div className="mb-4">
-                      <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                        Connected Wallet
-                      </span>
-                      <p className="font-mono text-xs text-foreground break-all">{address}</p>
-                    </div>
-
-                    {/* Chain ID */}
-                    <div className="mb-4">
-                      <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                        Chain ID
-                      </span>
-                      <p className="font-mono text-sm text-foreground">{chainId}</p>
-                    </div>
-
-                    {/* Blockchain Nonce */}
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-medium text-muted-foreground">
-                          Blockchain Nonce
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setBlockchainNonce(null);
-                            fetchNonce();
-                          }}
-                          disabled={nonceLoading}
-                          className={cn(
-                            'rounded px-2 py-0.5 text-xs',
-                            'bg-muted text-muted-foreground hover:bg-muted/80',
-                            'disabled:opacity-50 disabled:cursor-not-allowed'
-                          )}
-                        >
-                          {nonceLoading ? 'Loading...' : 'Refresh'}
-                        </button>
-                      </div>
-                      <p className="font-mono text-2xl font-bold text-foreground">
-                        {blockchainNonce !== null ? blockchainNonce.toString() : '—'}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        This is the next nonce the blockchain expects for your wallet.
-                      </p>
-                    </div>
-
-                    {/* MetaMask Reset Instructions */}
-                    <div className="border-t border-border pt-3">
-                      <h4 className="mb-2 text-xs font-medium text-muted-foreground">
-                        MetaMask Nonce Sync
-                      </h4>
-                      <p className="text-xs text-muted-foreground mb-2">
-                        If MetaMask shows "Internal JSON-RPC error", your local nonce may be stale.
-                        Reset MetaMask's account nonce:
-                      </p>
-                      <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                        <li>Open MetaMask → click account icon</li>
-                        <li>Settings → Advanced</li>
-                        <li>Click "Clear activity tab data"</li>
-                        <li>Confirm and retry the transaction</li>
-                      </ol>
-                      <p className="mt-2 text-xs text-yellow-600 dark:text-yellow-400">
-                        Note: This only affects local history, not your on-chain balance.
-                      </p>
-                    </div>
-                  </>
-                )}
-              </>
+              <WalletTab
+                isConnected={isConnected}
+                address={address}
+                chainId={chainId}
+                blockchainNonce={blockchainNonce}
+                nonceLoading={nonceLoading}
+                onRefreshNonce={handleRefreshNonce}
+              />
             )}
           </div>
         </div>

@@ -9,6 +9,7 @@ import { Progress, Skeleton } from '@swr/ui';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { cn } from '@/lib/utils';
 import { formatTimeString, type TimeRemaining } from '@/lib/blocks';
+import type { GracePeriodStatus } from './status';
 
 export interface GracePeriodTimerProps {
   /** Time breakdown from useCountdownTimer */
@@ -17,16 +18,10 @@ export interface GracePeriodTimerProps {
   totalMs: number;
   /** Blocks remaining until target */
   blocksLeft: bigint;
-  /** Whether the timer has expired */
-  isExpired: boolean;
-  /** Whether the timer is currently running */
-  isRunning: boolean;
-  /** Whether waiting for block confirmation after timer estimate hit 0 */
-  isWaitingForBlock?: boolean;
+  /** Current timer state (see `getGracePeriodStatus`) */
+  status: GracePeriodStatus;
   /** Initial total time in ms (for progress calculation) */
   initialTotalMs?: number;
-  /** Whether data is still loading */
-  isLoading?: boolean;
   /** Additional class names */
   className?: string;
 }
@@ -38,15 +33,12 @@ export function GracePeriodTimer({
   timeRemaining,
   totalMs,
   blocksLeft,
-  isExpired,
-  isRunning,
-  isWaitingForBlock = false,
+  status,
   initialTotalMs,
-  isLoading = false,
   className,
 }: GracePeriodTimerProps) {
   // Loading state
-  if (isLoading) {
+  if (status === 'loading') {
     return (
       <div className={cn('space-y-3', className)}>
         <Skeleton className="h-12 w-48 mx-auto" />
@@ -63,7 +55,7 @@ export function GracePeriodTimer({
       : 0;
 
   // Determine urgency level
-  const isUrgent = !isExpired && totalMs > 0 && totalMs < 60_000; // Less than 1 minute
+  const isUrgent = status !== 'expired' && totalMs > 0 && totalMs < 60_000; // Less than 1 minute
 
   // Format the time display
   const timeDisplay = formatTimeString(totalMs, {
@@ -73,7 +65,7 @@ export function GracePeriodTimer({
   });
 
   // Waiting for block confirmation state
-  if (isWaitingForBlock) {
+  if (status === 'waiting-for-block') {
     return (
       <div className={cn('space-y-3 text-center', className)}>
         <div className="text-2xl font-semibold text-amber-600 dark:text-amber-400 animate-pulse motion-reduce:animate-none">
@@ -91,7 +83,7 @@ export function GracePeriodTimer({
   }
 
   // Expired state
-  if (isExpired) {
+  if (status === 'expired') {
     return (
       <div className={cn('space-y-3 text-center', className)}>
         <div className="text-2xl font-semibold text-green-600 dark:text-green-400">
@@ -138,7 +130,7 @@ export function GracePeriodTimer({
       />
 
       {/* Status indicator */}
-      {isRunning && (
+      {status === 'running' && (
         <p className="text-xs text-muted-foreground">
           {isUrgent ? 'Almost ready!' : 'Please wait during the grace period...'}
         </p>

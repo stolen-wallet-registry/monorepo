@@ -1,7 +1,7 @@
 'use client';
 
 import React, { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
-import { motion, useAnimate } from 'motion/react';
+import { domAnimation, LazyMotion, m, useAnimate } from 'motion/react';
 import {
   cn,
   Tooltip,
@@ -65,28 +65,37 @@ export const IconCircle = forwardRef<
     { className, children, label, size = 'md', pulse = false, pulseDelay = 0, triggerPulse },
     ref
   ) => {
-    const [scope, animate] = useAnimate<HTMLDivElement>();
+    const [scopeRef, animate] = useAnimate<HTMLDivElement>();
     const prevTriggerRef = useRef(triggerPulse);
     const { open, setOpen, handleTap, handleKeyDown } = useTouchTooltip();
 
-    // Sync forwardRef with internal scope ref
-    useEffect(() => {
-      if (scope.current) {
+    // Compose the forwarded ref with useAnimate's scope ref at attach time instead of syncing
+    // them from an effect. Writing the parent's ref inside an effect is what makes this look
+    // like a child pushing data upwards: the parent only learns about the node one commit
+    // late, and it never learns about detach at all, so an unmount leaves the parent holding a
+    // stale node. A ref callback runs during commit for both attach (node) and detach (null),
+    // which is exactly the contract React already gives callers of `ref`.
+    const attachRefs = useCallback(
+      (node: HTMLDivElement | null) => {
+        // `scopeRef` is a normal ref object that useAnimate reads to resolve animation targets;
+        // its `current` is typed non-null, hence the cast for the detach case.
+        (scopeRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
         if (typeof ref === 'function') {
-          ref(scope.current);
+          ref(node);
         } else if (ref) {
-          (ref as React.MutableRefObject<HTMLDivElement | null>).current = scope.current;
+          (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
         }
-      }
-    }, [ref, scope]);
+      },
+      [ref, scopeRef]
+    );
 
     // Handle event-driven pulse trigger
     useEffect(() => {
       // Only trigger when transitioning from false to true
-      if (triggerPulse && !prevTriggerRef.current && scope.current) {
+      if (triggerPulse && !prevTriggerRef.current && scopeRef.current) {
         // Delay pulse until beam reaches the icon (BEAM_DURATION seconds)
         animate(
-          scope.current,
+          scopeRef.current,
           {
             boxShadow: [
               '0 0 0 0 rgba(34, 197, 94, 0)',
@@ -98,52 +107,59 @@ export const IconCircle = forwardRef<
         );
       }
       prevTriggerRef.current = triggerPulse;
-    }, [triggerPulse, animate, scope]);
+    }, [triggerPulse, animate, scopeRef]);
 
     return (
-      <Tooltip open={open} onOpenChange={setOpen}>
-        <TooltipTrigger asChild>
-          <motion.div
-            ref={scope}
-            className={cn(
-              'relative z-10 flex cursor-pointer items-center justify-center rounded-full border-2 border-border bg-background shadow-md transition-transform hover:scale-110',
-              ICON_SIZE_CLASSES[size],
-              className
-            )}
-            aria-label={label}
-            role="button"
-            tabIndex={0}
-            onClick={handleTap}
-            onKeyDown={handleKeyDown}
-            animate={
-              pulse
-                ? {
-                    boxShadow: [
-                      '0 0 0 0 rgba(34, 197, 94, 0)',
-                      '0 0 0 8px rgba(34, 197, 94, 0.3)',
-                      '0 0 0 0 rgba(34, 197, 94, 0)',
-                    ],
-                  }
-                : {}
-            }
-            transition={
-              pulse
-                ? {
-                    duration: 1.5,
-                    repeat: Infinity,
-                    delay: pulseDelay,
-                    repeatDelay: BEAM_DURATION - 1.5,
-                  }
-                : {}
-            }
-          >
-            {children}
-          </motion.div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{label}</p>
-        </TooltipContent>
-      </Tooltip>
+      // LazyMotion wraps the whole Tooltip rather than sitting directly around the `m.div`:
+      // TooltipTrigger uses Radix `asChild`, which clones its single child and forwards props
+      // and a ref to it. A LazyMotion in that slot would swallow both — it renders no DOM node
+      // and accepts no ref — and the tooltip would stop working. `domAnimation` is enough here;
+      // the pulse is a plain `animate` keyframe sequence with no layout projection or drag.
+      <LazyMotion features={domAnimation}>
+        <Tooltip open={open} onOpenChange={setOpen}>
+          <TooltipTrigger asChild>
+            <m.div
+              ref={attachRefs}
+              className={cn(
+                'relative z-10 flex cursor-pointer items-center justify-center rounded-full border-2 border-border bg-background shadow-md transition-transform hover:scale-110',
+                ICON_SIZE_CLASSES[size],
+                className
+              )}
+              aria-label={label}
+              role="button"
+              tabIndex={0}
+              onClick={handleTap}
+              onKeyDown={handleKeyDown}
+              animate={
+                pulse
+                  ? {
+                      boxShadow: [
+                        '0 0 0 0 rgba(34, 197, 94, 0)',
+                        '0 0 0 8px rgba(34, 197, 94, 0.3)',
+                        '0 0 0 0 rgba(34, 197, 94, 0)',
+                      ],
+                    }
+                  : {}
+              }
+              transition={
+                pulse
+                  ? {
+                      duration: 1.5,
+                      repeat: Infinity,
+                      delay: pulseDelay,
+                      repeatDelay: BEAM_DURATION - 1.5,
+                    }
+                  : {}
+              }
+            >
+              {children}
+            </m.div>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{label}</p>
+          </TooltipContent>
+        </Tooltip>
+      </LazyMotion>
     );
   }
 );

@@ -255,6 +255,11 @@ export function P2PRelayerRegistrationPage() {
 
   // Initialize P2P node - only depends on connection state, not step navigation
   // Uses AbortController to handle React Strict Mode double-invocation cleanly
+  // Every setState below an await in this effect is already gated on
+  // `abortController.signal.aborted` (including inside catch blocks), so a
+  // superseded or unmounted run cannot write state. The rule cannot see the
+  // guard through the async helper calls.
+  // react-doctor-disable-next-line react-doctor/no-set-state-after-await-in-effect
   useEffect(() => {
     const abortController = new AbortController();
     let node: Libp2p | null = null;
