@@ -1,9 +1,28 @@
 name: CI
 
+# CI is OPT-IN to avoid burning Actions minutes on a pre-release, local-only project.
+#
+# It runs only when you ask for it, in one of two ways:
+#   1. Add the `ci` label to a pull request (remove and re-add to re-run)
+#   2. Actions tab -> CI -> "Run workflow" (workflow_dispatch), any branch
+#
+# There is deliberately NO `push` trigger. A same-repo PR fires both `push` and
+# `pull_request`, so every job ran twice for the same commit — the duplicate
+# "(push)" and "(pull_request)" checks were pure waste.
+#
+# Everything here is runnable locally and costs nothing:
+#   pnpm check                    # lint + typecheck + test + format + syncpack + knip
+#   pnpm turbo lint typecheck test
+#   cd packages/contracts && forge test
+#
+# To make CI run on every push again, add back:
+#   push:
+#     branches: [main]
+# and drop the `if:` guard on each job below.
 on:
-  push:
-    branches: [main, staging]
   pull_request:
+    # `labeled` is required so adding the `ci` label starts a run on an existing PR.
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 concurrency:
@@ -17,6 +36,10 @@ jobs:
   contracts:
     name: Contracts (forge)
     runs-on: ubuntu-latest
+    # Opt-in: runs only on manual dispatch, or when the PR carries the `ci` label.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'ci')
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,6 +65,10 @@ jobs:
   node:
     name: Node (lint / typecheck / test)
     runs-on: ubuntu-latest
+    # Opt-in: runs only on manual dispatch, or when the PR carries the `ci` label.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'ci')
     steps:
       - uses: actions/checkout@v4
 
@@ -64,6 +91,10 @@ jobs:
   abi-drift:
     name: ABI drift
     runs-on: ubuntu-latest
+    # Opt-in: runs only on manual dispatch, or when the PR carries the `ci` label.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'ci')
     steps:
       - uses: actions/checkout@v4
         with:
