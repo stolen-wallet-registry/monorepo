@@ -40,6 +40,9 @@ contract OperatorSubmitterTest is Test {
     uint8 constant ALL_REGISTRIES = 0x07;
     int256 constant ORACLE_PRICE_3000 = 300_000_000_000; // $3,000 with 8 decimals
 
+    /// @dev Batch fee used ONLY by the fee-mechanism tests. The shipped default is 0.
+    uint256 constant OPERATOR_BATCH_FEE_USD_CENTS = 2500; // $25.00
+
     // Events (mirrored from OperatorSubmitter for vm.expectEmit)
     event BatchSubmitted(address indexed operator, address indexed registry, uint256 batchId, uint32 entryCount);
     event WalletRegistrySet(address indexed walletRegistry);
@@ -151,13 +154,20 @@ contract OperatorSubmitterTest is Test {
         }
     }
 
-    /// @dev Deploy a FeeManager + OperatorSubmitter with fee config.
+    /// @dev Deploy a FeeManager + OperatorSubmitter with a NON-ZERO operator batch fee.
+    ///
+    /// The shipped default for `operatorBatchFeeUsdCents` is 0 (operator batches are free —
+    /// see PRPs/operator-fee-removal.md), so the fee must be enabled explicitly here. These
+    /// tests exercise the retained fee *mechanism*, which the DAO can switch on later; they
+    /// are deliberately independent of whatever the default happens to be.
+    ///
     /// NOTE: Does NOT wire the submitter to registries — each test must separately call
     /// registry.setOperatorSubmitter(address(feeSubmitter)) for the relevant registry.
     function _deployFeeSubmitter() internal returns (OperatorSubmitter feeSubmitter, FeeManager fm) {
         MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
         vm.startPrank(owner);
         fm = new FeeManager(owner, address(oracle));
+        fm.setOperatorBatchFee(OPERATOR_BATCH_FEE_USD_CENTS);
         feeSubmitter = new OperatorSubmitter(
             owner,
             address(walletRegistry),
@@ -623,6 +633,122 @@ contract OperatorSubmitterTest is Test {
         assertEq(submitter.quoteBatchFee(), 0);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ZERO-FEE DEFAULT (operator batches are free)
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // Operator batches ship free: FeeManager.operatorBatchFeeUsdCents defaults to 0.
+    // These tests pin that default so it cannot be raised back by accident — a non-zero
+    // default would make large operator submissions economically irrational, since a flat
+    // per-batch fee scales with batch COUNT rather than data volume.
+    // See PRPs/operator-fee-removal.md.
+
+    /// @notice A freshly deployed FeeManager charges nothing for operator batches.
+    function test_ZeroFee_IsTheShippedDefault() public {
+        MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
+        vm.prank(owner);
+        FeeManager fm = new FeeManager(owner, address(oracle));
+
+        assertEq(fm.operatorBatchFeeUsdCents(), 0, "operator batch fee must default to 0");
+        assertEq(fm.operatorBatchFeeWei(), 0, "operator batch fee in wei must default to 0");
+    }
+
+    /// @notice quoteBatchFee reports 0 even when a real FeeManager IS wired up.
+    /// @dev Batches are free because the fee is zero, NOT because feeManager is unset —
+    ///      the deploy scripts always wire a FeeManager.
+    function test_ZeroFee_QuoteIsZeroWithFeeManagerWired() public {
+        MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
+        vm.startPrank(owner);
+        FeeManager fm = new FeeManager(owner, address(oracle));
+        OperatorSubmitter freeSubmitter = new OperatorSubmitter(
+            owner,
+            address(walletRegistry),
+            address(transactionRegistry),
+            address(contractRegistry),
+            address(operatorRegistry),
+            address(fm),
+            feeRecipientAddr
+        );
+        vm.stopPrank();
+
+        assertEq(freeSubmitter.quoteBatchFee(), 0);
+    }
+
+    /// @notice An operator can submit a batch with msg.value = 0 and pay only gas.
+    function test_ZeroFee_BatchSucceedsWithNoValue() public {
+        MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
+        vm.startPrank(owner);
+        FeeManager fm = new FeeManager(owner, address(oracle));
+        OperatorSubmitter freeSubmitter = new OperatorSubmitter(
+            owner,
+            address(walletRegistry),
+            address(transactionRegistry),
+            address(contractRegistry),
+            address(operatorRegistry),
+            address(fm),
+            feeRecipientAddr
+        );
+        walletRegistry.setOperatorSubmitter(address(freeSubmitter));
+        vm.stopPrank();
+
+        (bytes32[] memory ids, bytes32[] memory chainIds, uint64[] memory timestamps) = _buildWalletBatch(3);
+
+        uint256 recipientBefore = feeRecipientAddr.balance;
+
+        vm.prank(approvedOperator);
+        freeSubmitter.registerWalletsAsOperator{ value: 0 }(ids, chainIds, timestamps);
+
+        for (uint256 i = 0; i < 3; i++) {
+            assertTrue(walletRegistry.isWalletRegistered(address(uint160(uint256(ids[i])))));
+        }
+        assertEq(feeRecipientAddr.balance, recipientBefore, "no fee should be forwarded");
+    }
+
+    /// @notice Value sent alongside a zero-fee batch is refunded, not captured.
+    /// @dev Guards the refund arithmetic in _collectFee when requiredFee is 0.
+    function test_ZeroFee_ExcessValueIsRefunded() public {
+        MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
+        vm.startPrank(owner);
+        FeeManager fm = new FeeManager(owner, address(oracle));
+        OperatorSubmitter freeSubmitter = new OperatorSubmitter(
+            owner,
+            address(walletRegistry),
+            address(transactionRegistry),
+            address(contractRegistry),
+            address(operatorRegistry),
+            address(fm),
+            feeRecipientAddr
+        );
+        walletRegistry.setOperatorSubmitter(address(freeSubmitter));
+        vm.stopPrank();
+
+        vm.deal(approvedOperator, 10 ether);
+        uint256 operatorBefore = approvedOperator.balance;
+        uint256 recipientBefore = feeRecipientAddr.balance;
+
+        (bytes32[] memory ids, bytes32[] memory chainIds, uint64[] memory timestamps) = _buildWalletBatch(1);
+
+        vm.prank(approvedOperator);
+        freeSubmitter.registerWalletsAsOperator{ value: 1 ether }(ids, chainIds, timestamps);
+
+        assertEq(approvedOperator.balance, operatorBefore, "full amount should be refunded");
+        assertEq(feeRecipientAddr.balance, recipientBefore, "recipient should receive nothing");
+        assertEq(address(freeSubmitter).balance, 0, "submitter should retain nothing");
+    }
+
+    /// @notice The DAO can still enable a batch fee later — the mechanism is retained.
+    function test_ZeroFee_CanBeReEnabledByOwner() public {
+        MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
+        vm.startPrank(owner);
+        FeeManager fm = new FeeManager(owner, address(oracle));
+        assertEq(fm.operatorBatchFeeWei(), 0);
+
+        fm.setOperatorBatchFee(OPERATOR_BATCH_FEE_USD_CENTS);
+        vm.stopPrank();
+
+        assertGt(fm.operatorBatchFeeWei(), 0, "fee mechanism must remain usable");
+    }
+
     /// @notice quoteBatchFee returns the FeeManager's operatorBatchFeeWei when configured.
     function test_QuoteBatchFee_ReturnsCorrectFee() public {
         (OperatorSubmitter feeSubmitter, FeeManager fm) = _deployFeeSubmitter();
@@ -750,6 +876,9 @@ contract OperatorSubmitterTest is Test {
         MockAggregator oracle = new MockAggregator(ORACLE_PRICE_3000);
         vm.startPrank(owner);
         FeeManager fm = new FeeManager(owner, address(oracle));
+        // Fee must be enabled explicitly — the shipped default is 0, and with a zero fee
+        // `_collectFee` skips the forward entirely, so there would be nothing to fail.
+        fm.setOperatorBatchFee(OPERATOR_BATCH_FEE_USD_CENTS);
         OperatorSubmitter feeSubmitter = new OperatorSubmitter(
             owner,
             address(walletRegistry),

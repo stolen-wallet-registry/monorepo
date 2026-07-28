@@ -19,7 +19,26 @@ contract FeeManager is IFeeManager, Ownable2Step {
     uint256 public baseFeeUsdCents = 500;
 
     /// @notice Operator batch fee in USD cents (2500 = $25.00)
-    uint256 public operatorBatchFeeUsdCents = 2500;
+    /// @notice Flat protocol fee per operator batch, in USD cents. Default: 0 (free).
+    /// @dev Operator batches are FREE by design.
+    ///
+    ///      Rationale (see PRPs/operator-fee-removal.md and the operator economics docs for
+    ///      the worked figures):
+    ///
+    ///      - A flat per-batch fee scales with the NUMBER OF BATCHES, not with data volume.
+    ///        Large operator datasets require many batch transactions, so the protocol fee
+    ///        comes to dominate the actual gas cost by orders of magnitude — enough that
+    ///        submitting at scale stops being rational.
+    ///      - The fee buys no security here. DAO approval is the trust mechanism for
+    ///        operators: they are vetted entities with on-chain identities and reputational
+    ///        stake. The individual registration fee still exists and still matters, because
+    ///        it deters anonymous sybil spam — a threat operators do not present.
+    ///      - Charging for data contribution works against the network effect the registry
+    ///        depends on.
+    ///
+    ///      The fee mechanism is retained (not deleted) so the DAO can enable it later via
+    ///      {setOperatorBatchFee} without a redeployment.
+    uint256 public operatorBatchFeeUsdCents = 0;
 
     /// @notice Fallback ETH price in USD cents (300000 = $3,000.00)
     /// @dev Used when Chainlink is unavailable, stale, or not configured

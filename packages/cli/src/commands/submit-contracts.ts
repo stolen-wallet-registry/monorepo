@@ -1,18 +1,11 @@
-import {
-  formatEther,
-  zeroAddress,
-  encodeFunctionData,
-  createPublicClient,
-  http,
-  pad,
-  type Hex,
-} from 'viem';
+import { zeroAddress, encodeFunctionData, createPublicClient, http, pad, type Hex } from 'viem';
 import chalk from 'chalk';
 import ora from 'ora';
 import { parseContractFile } from '../lib/files.js';
 import { createClients } from '../lib/client.js';
 import { getConfig } from '../lib/config.js';
-import { OperatorSubmitterABI, FeeManagerABI } from '@swr/abis';
+import { formatBatchFee } from '../lib/format.js';
+import { OperatorSubmitterABI } from '@swr/abis';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
@@ -63,13 +56,19 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
     });
 
     // 4. Quote fee
-    spinner.start('Fetching fee quote...');
+    //
+    // Must be OperatorSubmitter.quoteBatchFee(), NOT FeeManager.currentFeeWei().
+    // These are two unrelated prices: quoteBatchFee is the flat per-BATCH operator fee
+    // (free by default), while currentFeeWei is the per-REGISTRATION fee charged to
+    // individual users. Quoting the latter under-funds the call whenever a batch fee is
+    // enabled, reverting with OperatorSubmitter__InsufficientFee.
+    spinner.start('Fetching batch fee quote...');
     const fee = await publicClient.readContract({
-      address: config.contracts.feeManager,
-      abi: FeeManagerABI,
-      functionName: 'currentFeeWei',
+      address: config.contracts.operatorSubmitter,
+      abi: OperatorSubmitterABI,
+      functionName: 'quoteBatchFee',
     });
-    spinner.succeed(`Fee: ${chalk.yellow(formatEther(fee))} ETH`);
+    spinner.succeed(`Batch fee: ${formatBatchFee(fee)}`);
 
     // 5. Prepare transaction data
     const identifiers = entries.map((e) => pad(e.address, { size: 32 }));
@@ -120,7 +119,7 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
       console.log(chalk.yellow('\n--- DRY RUN ---'));
       console.log('Would submit:');
       console.log(`  Contracts: ${entries.length}`);
-      console.log(`  Fee: ${formatEther(fee)} ETH`);
+      console.log(`  Batch fee: ${formatBatchFee(fee)}`);
       return;
     }
 

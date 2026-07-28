@@ -87,13 +87,31 @@ export function isValidCAIP2(value: string): boolean {
  *
  * @example
  * ```ts
- * caip2ToNumericChainId("eip155:8453")  // => 8453
- * caip2ToNumericChainId("eip155:1")     // => 1
- * caip2ToNumericChainId("solana:mainnet") // => null
+ * caip2ToNumericChainId("eip155:8453")     // => 8453
+ * caip2ToNumericChainId("eip155:1")        // => 1
+ * caip2ToNumericChainId("solana:mainnet")  // => null
+ * caip2ToNumericChainId("eip155:8453abc")  // => null (not a pure integer)
  * ```
+ *
+ * @remarks
+ * The reference must be a pure decimal integer. This previously used bare `parseInt`, which
+ * stops at the first non-digit — `"eip155:8453abc"` returned `8453` instead of null. That
+ * mattered because {@link caip2ToBytes32} uses this function as its ONLY validation and then
+ * hashes the original string, so a malformed reference produced
+ * `keccak256("eip155:8453abc")` — a bytes32 matching no real chain, written to permanent
+ * on-chain storage.
+ *
+ * `isValidCAIP2` is not sufficient here: the CAIP-2 spec allows alphanumeric references
+ * (`solana:mainnet` is valid), so the generic format check accepts `"eip155:8453abc"`. The
+ * eip155 namespace specifically requires a numeric reference.
  */
 export function caip2ToNumericChainId(caip2: string): number | null {
-  if (!caip2.startsWith('eip155:')) return null;
-  const chainId = parseInt(caip2.split(':')[1], 10);
-  return isNaN(chainId) ? null : chainId;
+  const parsed = parseCAIP2(caip2);
+  if (!parsed || parsed.namespace !== 'eip155') return null;
+
+  // Reject anything that is not a pure run of digits (no sign, no whitespace, no suffix).
+  if (!/^\d+$/.test(parsed.chainId)) return null;
+
+  const chainId = Number(parsed.chainId);
+  return Number.isSafeInteger(chainId) ? chainId : null;
 }

@@ -159,10 +159,18 @@ contract OperatorSubmitter is TimelockOwnable, Pausable, ReentrancyGuard {
     // INTERNAL HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Operator batch fees are currently DISABLED (feeManager = address(0) at deployment).
-    ///      Gas costs of batch submissions are already substantial; adding per-batch fees
-    ///      on top is prohibitive. See PRPs/operator-fee-removal.md.
-    ///      Fee infrastructure is retained for potential future use.
+    /// @dev Operator batch fees are free by default: `FeeManager.operatorBatchFeeUsdCents`
+    ///      ships as 0, so this returns 0 unless the DAO explicitly enables a fee. See the
+    ///      rationale on that field, and PRPs/operator-fee-removal.md.
+    ///
+    ///      Note the fee is NOT disabled by leaving `feeManager` unset — the deploy scripts
+    ///      always wire a real FeeManager. The zero default is what makes batches free, and
+    ///      the mechanism here stays live so a future fee needs no redeployment.
+    ///
+    ///      Callers must quote via {quoteBatchFee} and send that amount. Quoting
+    ///      `FeeManager.currentFeeWei()` (the per-REGISTRATION fee charged to individuals) is
+    ///      a different, unrelated price and will under-fund the call whenever a batch fee is
+    ///      enabled, reverting with OperatorSubmitter__InsufficientFee.
     function _getBatchFee() internal view returns (uint256) {
         if (feeManager == address(0)) return 0;
         return IFeeManager(feeManager).operatorBatchFeeWei();
