@@ -2,14 +2,60 @@
  * Contract error decoding utilities.
  */
 
-import { BaseError } from 'viem';
-import { CONTRACT_ERROR_MAP, type ContractErrorInfo } from './selectors';
+import { BaseError, ContractFunctionRevertedError } from 'viem';
+import { CONTRACT_ERROR_BY_NAME, CONTRACT_ERROR_MAP, type ContractErrorInfo } from './selectors';
+
+/** Render an error info entry as the single string shown to the user. */
+function formatErrorInfo(info: ContractErrorInfo): string {
+  return info.action ? `${info.message} ${info.action}` : info.message;
+}
+
+/**
+ * Decode a contract custom error structurally from a thrown viem error.
+ *
+ * This is the primary decoding path. viem never emits the Hardhat/ethers phrasing
+ * `"custom error 0x…"` that {@link decodeContractError} matches; it instead throws a
+ * nested `ContractFunctionRevertedError` carrying either the ABI-decoded error name
+ * (`cause.data.errorName`) or, when the error is absent from the ABI, the raw selector
+ * (`cause.signature` / `cause.raw`). Matching on the error object rather than on its
+ * rendered message is therefore the only reliable approach.
+ *
+ * @param error - The error thrown by viem/wagmi (any type; non-viem values return null)
+ * @returns User-friendly message, or null if this is not a recognized contract revert
+ */
+export function decodeContractErrorFromError(error: unknown): string | null {
+  if (!(error instanceof BaseError)) return null;
+
+  const revert = error.walk((e) => e instanceof ContractFunctionRevertedError);
+  if (!(revert instanceof ContractFunctionRevertedError)) return null;
+
+  // Preferred: viem decoded the revert against the ABI and gave us the Solidity error name.
+  const errorName = revert.data?.errorName;
+  if (errorName) {
+    const byName = CONTRACT_ERROR_BY_NAME[errorName];
+    if (byName) return formatErrorInfo(byName);
+  }
+
+  // Fallback: the error was not in the ABI, so viem only surfaces the raw selector.
+  // `signature` is already the 4-byte selector; `raw` is the full revert data.
+  const selector = revert.signature ?? revert.raw?.slice(0, 10);
+  if (selector) {
+    const bySelector = CONTRACT_ERROR_MAP[selector.toLowerCase()];
+    if (bySelector) return formatErrorInfo(bySelector);
+  }
+
+  return null;
+}
 
 /**
  * Decode a contract custom error from an error message containing a hex selector.
  *
  * Extracts the 4-byte selector from patterns like "custom error 0xec5c97a6"
  * and returns a user-friendly message if the error is recognized.
+ *
+ * NOTE: this phrasing comes from Hardhat/ethers. viem does not produce it, so this is a
+ * compatibility fallback only — prefer {@link decodeContractErrorFromError}, which matches
+ * on the error object and is what actually fires for viem/wagmi reverts.
  *
  * @param errorMessage - The raw error message from viem/wagmi
  * @returns User-friendly error message, or null if not a recognized contract error
@@ -60,6 +106,12 @@ export function getContractErrorInfo(selector: string): ContractErrorInfo | unde
 export function sanitizeErrorMessage(error: unknown, logError?: (error: unknown) => void): string {
   // Allow caller to handle logging (e.g., console.error in dev)
   logError?.(error);
+
+  // A decoded contract revert is the most specific thing we can say, so try it first.
+  const structuralError = decodeContractErrorFromError(error);
+  if (structuralError) {
+    return structuralError;
+  }
 
   // Check for known viem error types
   if (error instanceof BaseError) {

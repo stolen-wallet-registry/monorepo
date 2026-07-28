@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { TimelockOwnable } from "./libraries/TimelockOwnable.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -20,7 +21,7 @@ import { RegistryCapabilities } from "./libraries/RegistryCapabilities.sol";
 ///      1. Validates operator permissions via OperatorRegistry
 ///      2. Collects fees via FeeManager
 ///      3. Forwards validated data to appropriate registry
-contract OperatorSubmitter is Ownable2Step, Pausable, ReentrancyGuard {
+contract OperatorSubmitter is TimelockOwnable, Pausable, ReentrancyGuard {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -325,9 +326,30 @@ contract OperatorSubmitter is Ownable2Step, Pausable, ReentrancyGuard {
     }
 
     /// @notice Set operator registry address
+    /// @dev Immediate during initial setup, timelocked after completeSetup().
+    ///      The operator registry decides who may submit batches, so swapping it is a
+    ///      trust-boundary change — post-setup it goes through propose → 2 days → activate.
     /// @param _operatorRegistry The new operator registry address
-    function setOperatorRegistry(address _operatorRegistry) external onlyOwner {
+    function setOperatorRegistry(address _operatorRegistry) external onlyOwner onlyDuringSetup {
         if (_operatorRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _setOperatorRegistry(_operatorRegistry);
+    }
+
+    /// @notice Propose an operator registry change (2-day delay before activation)
+    /// @param _operatorRegistry The new operator registry address
+    function proposeOperatorRegistry(address _operatorRegistry) external onlyOwner {
+        if (_operatorRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setOperatorRegistry", _operatorRegistry)));
+    }
+
+    /// @notice Activate a previously proposed operator registry change
+    /// @param _operatorRegistry The new operator registry address
+    function activateOperatorRegistry(address _operatorRegistry) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setOperatorRegistry", _operatorRegistry)));
+        _setOperatorRegistry(_operatorRegistry);
+    }
+
+    function _setOperatorRegistry(address _operatorRegistry) internal {
         operatorRegistry = _operatorRegistry;
         emit OperatorRegistrySet(_operatorRegistry);
     }

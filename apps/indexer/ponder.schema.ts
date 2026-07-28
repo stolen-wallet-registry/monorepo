@@ -230,16 +230,19 @@ export const crossChainMessage = onchainTable(
     targetChainId: t.integer().notNull(),
     /** Wallet address (for wallet registrations) */
     wallet: t.hex(),
-    /** Batch ID (for transaction registrations) */
-    batchId: t.hex(),
-    /** Transaction hash on spoke chain */
-    spokeTxHash: t.hex(),
-    /** Transaction hash on hub chain */
+    /**
+     * Batch ID (for transaction registrations), uint256 as string.
+     *
+     * `t.text()` to match `transactionBatch.id` and `transactionInBatch.batchId`. Not yet
+     * written on this table: the hub only learns the real batchId when
+     * TransactionBatchRegistered fires, and the inbox's dataHash is a content commitment,
+     * not a batch ID.
+     */
+    batchId: t.text(),
+    /** Transaction hash on hub chain (inbox delivery and registration are the same tx) */
     hubTxHash: t.hex(),
-    /** Status: sent, received, registered */
+    /** Status: received, registered */
     status: t.text().notNull(),
-    /** When sent from spoke */
-    sentAt: t.bigint(),
     /** When received on hub */
     receivedAt: t.bigint(),
     /** When registration completed */

@@ -25,6 +25,8 @@
     "seed:transactions": "forge script script/SeedTransactions.s.sol --multi --broadcast --slow",
     "deploy:testnet:hub": "source .env.testnet && forge script script/Deploy.s.sol:Deploy --sig 'deployHub()' --rpc-url $BASE_SEPOLIA_RPC --broadcast --verify --etherscan-api-key $BASESCAN_API_KEY",
     "deploy:testnet:spoke": "source .env.testnet && forge script script/Deploy.s.sol:Deploy --sig 'deploySpoke()' --rpc-url $OPTIMISM_SEPOLIA_RPC --broadcast --verify --etherscan-api-key $OPTIMISM_ETHERSCAN_API_KEY",
+    "finalize:testnet:hub": "source .env.testnet && forge script script/Deploy.s.sol:Deploy --sig 'finalizeSetup()' --rpc-url $BASE_SEPOLIA_RPC --broadcast",
+    "verify:setup:testnet:hub": "source .env.testnet && forge script script/Deploy.s.sol:Deploy --sig 'verifySetup()' --rpc-url $BASE_SEPOLIA_RPC",
     "export-abi": "node scripts/export-abi.js",
     "slither": "slither . --config-file slither.config.json --fail-none",
     "slither:summary": "slither . --config-file slither.config.json --print human-summary --fail-none",

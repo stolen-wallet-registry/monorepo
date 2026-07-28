@@ -6,9 +6,11 @@
  */
 
 export {
+  CONTRACT_ERROR_BY_NAME,
   CONTRACT_ERROR_MAP,
   CONTRACT_ERROR_SELECTORS,
   decodeContractError,
+  decodeContractErrorFromError,
   getContractErrorInfo,
   type ContractErrorInfo,
 } from '@swr/errors';

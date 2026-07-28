@@ -54,16 +54,18 @@ export const useFormStore = create<FormState & FormActions>()(
       {
         name: 'swr-form-state',
         version: 1,
-        migrate: (persisted) => {
-          // Validate basic shape
+        // Validation lives in `merge`, not `migrate`: zustand only calls `migrate` when the
+        // persisted version differs from `version`, so validation placed there never runs on
+        // the normal rehydrate path. `merge` runs on every rehydrate.
+        merge: (persisted, current) => {
           if (!persisted || typeof persisted !== 'object') {
-            return initialState;
+            return current;
           }
 
           const state = persisted as Partial<FormState>;
 
-          // Validate addresses are properly formatted before restoring
-          // Corrupted localStorage data could cause type safety issues
+          // Validate addresses are properly formatted before restoring.
+          // Corrupted localStorage data could cause type safety issues.
           const validRegisteree =
             state.registeree && isAddress(state.registeree)
               ? (state.registeree as Address)
@@ -73,8 +75,8 @@ export const useFormStore = create<FormState & FormActions>()(
               ? (state.relayer as Address)
               : initialState.relayer;
 
-          // Ensure all required fields exist with fallbacks
           return {
+            ...current,
             registeree: validRegisteree,
             relayer: validRelayer,
           };

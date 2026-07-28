@@ -133,6 +133,7 @@ export function useRegistration(): UseRegistrationResult {
         ? await writeContractAsync({
             address: contractAddress,
             abi: spokeRegistryAbi,
+            chainId,
             functionName: 'register',
             args,
             value: feeWei ?? 0n,
@@ -140,6 +141,7 @@ export function useRegistration(): UseRegistrationResult {
         : await writeContractAsync({
             address: contractAddress,
             abi: walletRegistryAbi,
+            chainId,
             functionName: 'register',
             args,
             value: feeWei ?? 0n,

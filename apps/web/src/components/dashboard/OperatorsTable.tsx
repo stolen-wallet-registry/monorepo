@@ -623,6 +623,7 @@ export function OperatorsTable({
         const hash = await writeContractAsync({
           address: contractAddress,
           abi: operatorRegistryAbi,
+          chainId,
           functionName: 'approveOperator',
           args: [operatorAddress, capabilities, name],
         });
@@ -665,7 +666,7 @@ export function OperatorsTable({
         setIsApproveConfirming(false);
       }
     },
-    [contractAddress, publicClient, writeContractAsync, queryClient, showRevoked, refetch]
+    [contractAddress, chainId, publicClient, writeContractAsync, queryClient, showRevoked, refetch]
   );
 
   // Handle edit capabilities with optimistic update
@@ -679,6 +680,7 @@ export function OperatorsTable({
           const hash = await writeContractAsync({
             address: contractAddress,
             abi: operatorRegistryAbi,
+            chainId,
             functionName: 'updateCapabilities',
             args: [operator.address as Address, capabilities],
           });
@@ -732,7 +734,16 @@ export function OperatorsTable({
         setEditingOperator(null);
       }
     },
-    [contractAddress, publicClient, isEOA, writeContractAsync, queryClient, showRevoked, refetch]
+    [
+      contractAddress,
+      chainId,
+      publicClient,
+      isEOA,
+      writeContractAsync,
+      queryClient,
+      showRevoked,
+      refetch,
+    ]
   );
 
   // Handle revoke operator (called from confirmation dialog) with optimistic update
@@ -746,6 +757,7 @@ export function OperatorsTable({
           const hash = await writeContractAsync({
             address: contractAddress,
             abi: operatorRegistryAbi,
+            chainId,
             functionName: 'revokeOperator',
             args: [operator.address as Address],
           });
@@ -798,7 +810,16 @@ export function OperatorsTable({
         setDeletingOperator(null);
       }
     },
-    [contractAddress, publicClient, isEOA, writeContractAsync, queryClient, showRevoked, refetch]
+    [
+      contractAddress,
+      chainId,
+      publicClient,
+      isEOA,
+      writeContractAsync,
+      queryClient,
+      showRevoked,
+      refetch,
+    ]
   );
 
   if (isError) {

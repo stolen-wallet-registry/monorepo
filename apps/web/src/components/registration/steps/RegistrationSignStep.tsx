@@ -15,7 +15,7 @@ import { useFormStore } from '@/stores/formStore';
 import { useSignEIP712 } from '@/hooks/useSignEIP712';
 import { useGenerateHashStruct } from '@/hooks/useGenerateHashStruct';
 import { useContractNonce } from '@/hooks/useContractNonce';
-import { storeSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { storeSignature, removeSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
@@ -74,6 +74,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
     nonce,
     isLoading: nonceLoading,
     isError: nonceError,
+    refetch: refetchNonce,
   } = useContractNonce(registeree ?? undefined);
   const {
     data: hashStructData,
@@ -133,9 +134,25 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
       return;
     }
 
-    // Refetch to get fresh deadline
-    logger.contract.debug('Refetching hash struct for fresh registration deadline');
-    const refetchResult = await refetchHashStruct();
+    // Refetch nonce and deadline together - do not use stale data.
+    // CRITICAL: acknowledge() increments nonces[registeree], so the nonce cached by
+    // useContractNonce (staleTime 30s) is one behind by the time we reach this step.
+    // Signing with it produces a signature that reverts with WalletRegistry__InvalidNonce.
+    logger.contract.debug('Refetching nonce and hash struct for fresh registration data');
+    const [nonceResult, refetchResult] = await Promise.all([refetchNonce(), refetchHashStruct()]);
+
+    const freshNonce = nonceResult.status === 'success' ? (nonceResult.data as bigint) : undefined;
+
+    if (freshNonce === undefined) {
+      logger.signature.error('Failed to get fresh nonce', {
+        nonceStatus: nonceResult.status,
+        nonceError: nonceResult.error?.message,
+      });
+      setSignatureError('Failed to load fresh nonce. Please try again.');
+      setSignatureStatus('error');
+      return;
+    }
+
     // Refetch returns raw contract data [deadline, hashStruct], transform if present
     const rawData = refetchResult?.data as [bigint, Hex] | undefined;
     const freshDeadline = rawData?.[0] ?? hashStructData?.deadline;
@@ -159,7 +176,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         forwarder,
         reportedChainId: reportedChainId.toString(),
         incidentTimestamp: incidentTimestamp.toString(),
-        nonce: nonce.toString(),
+        nonce: freshNonce.toString(),
         deadline: freshDeadline.toString(),
         chainId,
       });
@@ -169,7 +186,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         trustedForwarder: forwarder,
         reportedChainId,
         incidentTimestamp,
-        nonce,
+        nonce: freshNonce,
         deadline: freshDeadline,
       });
 
@@ -181,7 +198,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
       storeSignature({
         signature: sig,
         deadline: freshDeadline,
-        nonce,
+        nonce: freshNonce,
         address: registeree,
         chainId,
         step: SIGNATURE_STEP.REGISTRATION,
@@ -214,7 +231,14 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
    * Handle retry after signing error.
    */
   const handleRetry = () => {
+    // Discard any stored signature before retrying. A signature that failed (typically a
+    // stale nonce) is permanently unusable, and leaving it in sessionStorage means the
+    // payment step can pick the bad one up again instead of the freshly signed replacement.
+    if (registeree) {
+      removeSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION);
+    }
     resetSigning();
+    setSignature(null);
     setSignatureStatus('idle');
     setSignatureError(null);
   };

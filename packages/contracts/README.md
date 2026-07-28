@@ -156,9 +156,41 @@ pnpm deploy:testnet:hub
 # 2. Deploy spoke contracts to Optimism Sepolia
 #    (set HUB_INBOX_ADDRESS and SOULBOUND_RECEIVER in .env.testnet from step 1 output)
 pnpm deploy:testnet:spoke
+
+# 3. Configure trust relationships (see the guide), THEN lock the timelock:
+pnpm finalize:testnet:hub
+
+# 4. Gate: reverts if anything still has setupComplete == false
+pnpm verify:setup:testnet:hub
 ```
 
 After deployment, configure trust relationships via `cast send` and update `@swr/chains` with deployed addresses. See the [Testnet Deployment guide](/dev/testnet-deployment) in the docs for the full walkthrough.
+
+### Finalizing setup (required)
+
+Every `TimelockOwnable` contract starts with `setupComplete == false`, which leaves its
+`onlyDuringSetup` setters — `setWalletRegistry`, `setInbox`, `setTrustedSource`,
+`setHub`, `setOperatorSubmitter`, `setOperatorRegistry`, `setAuthorizedMinter` — callable
+by the owner in a single transaction. **Until `finalizeSetup()` runs, the 2-day timelock
+provides no protection at all**: the propose/activate path exists but is optional.
+
+`finalizeSetup()` is a separate step rather than a tail call inside the deploy functions
+because the inbox's trusted sources can only be wired after the spoke exists. Completing
+setup inside `deployHub()` would permanently lock out `setTrustedSource` before it was
+ever called.
+
+Run it **last**, after all cross-chain trust wiring, then run `verifySetup()` as a gate so
+a forgotten finalize fails loudly instead of shipping an open deployment. Both read the
+deployed addresses from `.env.testnet` (`FRAUD_REGISTRY_HUB`, `CROSS_CHAIN_INBOX`,
+`OPERATOR_REGISTRY`, `SOULBOUND_RECEIVER`, `WALLET_SOULBOUND`, `SUPPORT_SOULBOUND`,
+`WALLET_REGISTRY`, `TRANSACTION_REGISTRY`, `CONTRACT_REGISTRY`, `OPERATOR_SUBMITTER`);
+unset addresses are skipped.
+
+`completeSetup()` is irreversible. Afterwards, trust-boundary changes require
+`propose*` → wait 2 days → `activate*`.
+
+Local deploy scripts deliberately do **not** call it — the dashboard's operator-approval
+flow uses the immediate `approveOperator` path, which locks after setup.
 
 ## Testing
 

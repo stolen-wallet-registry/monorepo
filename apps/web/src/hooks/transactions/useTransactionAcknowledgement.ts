@@ -162,9 +162,13 @@ export function useTransactionAcknowledgement(): UseTxAcknowledgementResult {
         // isSponsored is derived on-chain as (reporter != trustedForwarder)
         const { trustedForwarder, reportedChainId, transactionCount } = params;
 
+        // Pin the transaction to the chain the contract address was resolved for. Without this,
+        // wagmi submits to whatever chain the connector currently sits on, so a mid-flow chain
+        // switch would send the write to the wrong chain against a stale address.
         txHash = await writeContractAsync({
           address: contractAddress,
           abi: transactionRegistryAbi,
+          chainId,
           functionName: 'acknowledgeTransactions',
           args: [
             reporter,
@@ -185,6 +189,7 @@ export function useTransactionAcknowledgement(): UseTxAcknowledgementResult {
         txHash = await writeContractAsync({
           address: contractAddress,
           abi: spokeRegistryAbi,
+          chainId,
           functionName: 'acknowledgeTransactionBatch',
           args: [
             dataHash,

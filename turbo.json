@@ -41,6 +41,11 @@
       "inputs": ["src/**", "test/**", "script/**", "foundry.toml", "remappings.txt"],
       "outputs": ["out/**"]
     },
+    "@swr/contracts#export-abi": {
+      "dependsOn": ["@swr/contracts#build"],
+      "inputs": ["src/**", "foundry.toml", "remappings.txt", "scripts/export-abi.js"],
+      "outputs": []
+    },
     "test:coverage": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
@@ -93,14 +98,14 @@
     "@swr/indexer#dev": {
       "cache": false,
       "persistent": true,
-      "dependsOn": ["@swr/abis#build"]
+      "dependsOn": ["^build"]
     },
     "@swr/indexer#start": {
-      "dependsOn": ["@swr/abis#build"]
+      "dependsOn": ["^build"]
     },
     "@swr/indexer#codegen": {
       "outputs": ["src/**/*.gen.ts"],
-      "dependsOn": ["@swr/abis#build"]
+      "dependsOn": ["^build"]
     }
   }
 }

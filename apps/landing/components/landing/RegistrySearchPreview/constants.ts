@@ -44,6 +44,17 @@ export const EXAMPLE_CLEAN_CONTRACT = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488
 // For development, it defaults to localhost
 export const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL ?? 'http://localhost:42069';
 
+// A production build that silently falls back to localhost gives every visitor a hero search
+// that can never return a result — the requests go to the visitor's own machine. Next.js
+// inlines NEXT_PUBLIC_* at build time, so this fires during the build (where it is visible in
+// deploy logs) rather than only in the visitor's console.
+if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_INDEXER_URL) {
+  console.warn(
+    '[landing] NEXT_PUBLIC_INDEXER_URL is not set — the registry search preview will point at ' +
+      'http://localhost:42069 and return nothing for visitors. Set it in the deployment environment.'
+  );
+}
+
 // Hub chain ID for explorer links
 // Prefer explicit env var, fall back to mode-based selection
 // Base mainnet (8453) for production, Base Sepolia (84532) for development/staging

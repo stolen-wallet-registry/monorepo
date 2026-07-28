@@ -93,7 +93,7 @@ contract FeeManager is IFeeManager, Ownable2Step {
         // Try to read from Chainlink
         try _priceFeed.latestRoundData() returns (uint80, int256 price, uint256, uint256 updatedAt, uint80) {
             // Check staleness (>4 hours old by default)
-            if (block.timestamp - updatedAt > stalePriceThreshold) {
+            if (_isStale(updatedAt)) {
                 return fallbackEthPriceUsdCents;
             }
             // Check for invalid price
@@ -127,13 +127,29 @@ contract FeeManager is IFeeManager, Ownable2Step {
         }
 
         try _priceFeed.latestRoundData() returns (uint80, int256 price, uint256, uint256 updatedAt, uint80) {
-            if (block.timestamp - updatedAt > stalePriceThreshold || price <= 0) {
+            if (_isStale(updatedAt) || price <= 0) {
                 return fallbackEthPriceUsdCents;
             }
             return _toCents(price);
         } catch {
             return fallbackEthPriceUsdCents;
         }
+    }
+
+    /// @dev Is the feed's last update too old to trust?
+    ///
+    ///      Written as an explicit comparison rather than `block.timestamp - updatedAt >
+    ///      threshold` because that subtraction underflows when a malfunctioning feed reports
+    ///      a FUTURE `updatedAt`. The underflow panic happens inside the try's SUCCESS branch,
+    ///      so the surrounding `catch` does not catch it — the panic propagates and every fee
+    ///      quote reverts, which bricks every registration path that collects a fee.
+    ///
+    ///      A future or zero timestamp means the feed is misbehaving, so both are treated as
+    ///      stale: fall back to the last known-good price instead of reverting.
+    function _isStale(uint256 updatedAt) internal view returns (bool) {
+        if (updatedAt == 0) return true; // incomplete round
+        if (updatedAt > block.timestamp) return true; // future timestamp - feed is broken
+        return block.timestamp - updatedAt > stalePriceThreshold;
     }
 
     /// @inheritdoc IFeeManager
@@ -183,7 +199,9 @@ contract FeeManager is IFeeManager, Ownable2Step {
         (, int256 price,, uint256 updatedAt,) = _priceFeed.latestRoundData();
 
         if (price <= 0) revert Fee__InvalidPrice();
-        if (block.timestamp - updatedAt > stalePriceThreshold) revert Fee__StalePrice();
+        // _isStale, not raw subtraction: a future updatedAt would otherwise panic instead of
+        // reverting with the intended Fee__StalePrice.
+        if (_isStale(updatedAt)) revert Fee__StalePrice();
 
         uint256 newPrice = _toCents(price);
         fallbackEthPriceUsdCents = newPrice;

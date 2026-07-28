@@ -153,22 +153,23 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
       {
         name: 'swr-registration-state',
         storage: bigintStorage, // BigInt-safe serialization for incidentTimestamp
-        version: 2, // Bumped for incident fields
-        migrate: (persisted, version) => {
+        version: 1,
+        // No `migrate`: there is no released version of this app, so no persisted state in the
+        // wild needs a version transform. `merge` below runs on EVERY rehydrate and supplies a
+        // default for every field, which covers any stale local state a developer may have.
+        // (Validation must live here, not in `migrate` — zustand only calls `migrate` on a
+        // version mismatch, so validation placed there never runs on a normal reload.)
+        merge: (persisted, current) => {
           // Validate basic shape
           if (!persisted || typeof persisted !== 'object') {
-            return initialState;
+            return current;
           }
 
           const state = persisted as Partial<RegistrationState>;
 
-          // Migration from v1 to v2: add incident fields
-          if (version < 2) {
-            logger.registration.info('Migrating registration state from v1 to v2');
-          }
-
           // Ensure all required fields exist with fallbacks
           return {
+            ...current,
             registrationType: state.registrationType ?? initialState.registrationType,
             step: state.step ?? initialState.step,
             acknowledgementHash: state.acknowledgementHash ?? initialState.acknowledgementHash,

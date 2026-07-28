@@ -28,6 +28,9 @@ import { SpokeSoulboundForwarder } from "../src/spoke/SpokeSoulboundForwarder.so
 // Mocks for local testing
 import { MockAggregator, Multicall3 } from "./DeployBase.s.sol";
 
+// Timelock base (used by finalizeSetup/verifySetup to lock immediate setters)
+import { TimelockOwnable } from "../src/libraries/TimelockOwnable.sol";
+
 // CREATE2 deterministic deployment
 import { Create2Deployer } from "./Create2Deployer.sol";
 import { Salts } from "./Salts.sol";
@@ -672,6 +675,97 @@ contract Deploy is Script {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // TIMELOCK FINALIZATION
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Lock every TimelockOwnable contract's immediate setters, activating the timelock
+    /// @dev MUST be the last deployment step. Until this runs, every `onlyDuringSetup` setter
+    ///      (setWalletRegistry, setInbox, setTrustedSource, setAuthorizedMinter, …) is a
+    ///      one-transaction owner call and the 2-day propose/activate path is optional — the
+    ///      timelock provides no protection at all.
+    ///
+    ///      This is deliberately a separate entry point rather than a tail call inside the
+    ///      deploy functions: on a hub/spoke deployment the inbox's trusted sources are wired
+    ///      only after the spoke exists, so completing setup inside `deployHub()` would
+    ///      permanently lock out `setTrustedSource` before it was ever called.
+    ///
+    ///      Irreversible. After this, trust-boundary changes require propose → 2 days → activate.
+    ///
+    ///      Usage:
+    ///        forge script script/Deploy.s.sol:Deploy --sig "finalizeSetup()" \
+    ///          --rpc-url $RPC --broadcast
+    ///
+    ///      Reads (all optional — a zero/unset address is skipped):
+    ///        FRAUD_REGISTRY_HUB, CROSS_CHAIN_INBOX, OPERATOR_REGISTRY,
+    ///        SOULBOUND_RECEIVER, WALLET_SOULBOUND, SUPPORT_SOULBOUND,
+    ///        WALLET_REGISTRY, TRANSACTION_REGISTRY, CONTRACT_REGISTRY, OPERATOR_SUBMITTER
+    function finalizeSetup() external {
+        deployerPrivateKey = _getDeployerKey();
+        deployer = vm.addr(deployerPrivateKey);
+
+        console2.log("=== FINALIZING SETUP (activating timelock) ===");
+
+        vm.startBroadcast(deployerPrivateKey);
+
+        _completeSetupIfNeeded(vm.envOr("FRAUD_REGISTRY_HUB", address(0)), "FraudRegistryHub");
+        _completeSetupIfNeeded(vm.envOr("CROSS_CHAIN_INBOX", address(0)), "CrossChainInbox");
+        _completeSetupIfNeeded(vm.envOr("OPERATOR_REGISTRY", address(0)), "OperatorRegistry");
+        _completeSetupIfNeeded(vm.envOr("SOULBOUND_RECEIVER", address(0)), "SoulboundReceiver");
+        _completeSetupIfNeeded(vm.envOr("WALLET_SOULBOUND", address(0)), "WalletSoulbound");
+        _completeSetupIfNeeded(vm.envOr("SUPPORT_SOULBOUND", address(0)), "SupportSoulbound");
+        _completeSetupIfNeeded(vm.envOr("WALLET_REGISTRY", address(0)), "WalletRegistry");
+        _completeSetupIfNeeded(vm.envOr("TRANSACTION_REGISTRY", address(0)), "TransactionRegistry");
+        _completeSetupIfNeeded(vm.envOr("CONTRACT_REGISTRY", address(0)), "ContractRegistry");
+        _completeSetupIfNeeded(vm.envOr("OPERATOR_SUBMITTER", address(0)), "OperatorSubmitter");
+
+        vm.stopBroadcast();
+
+        console2.log("");
+        console2.log("=== SETUP FINALIZED - timelock is now enforced ===");
+    }
+
+    /// @notice Assert every configured TimelockOwnable contract has setupComplete == true
+    /// @dev Run as a post-deploy gate. Reverts if any contract still has immediate setters open,
+    ///      so a forgotten `finalizeSetup()` fails the deployment instead of shipping silently.
+    ///      Same env vars as {finalizeSetup}.
+    function verifySetup() external view {
+        _requireSetupComplete(vm.envOr("FRAUD_REGISTRY_HUB", address(0)), "FraudRegistryHub");
+        _requireSetupComplete(vm.envOr("CROSS_CHAIN_INBOX", address(0)), "CrossChainInbox");
+        _requireSetupComplete(vm.envOr("OPERATOR_REGISTRY", address(0)), "OperatorRegistry");
+        _requireSetupComplete(vm.envOr("SOULBOUND_RECEIVER", address(0)), "SoulboundReceiver");
+        _requireSetupComplete(vm.envOr("WALLET_SOULBOUND", address(0)), "WalletSoulbound");
+        _requireSetupComplete(vm.envOr("SUPPORT_SOULBOUND", address(0)), "SupportSoulbound");
+        _requireSetupComplete(vm.envOr("WALLET_REGISTRY", address(0)), "WalletRegistry");
+        _requireSetupComplete(vm.envOr("TRANSACTION_REGISTRY", address(0)), "TransactionRegistry");
+        _requireSetupComplete(vm.envOr("CONTRACT_REGISTRY", address(0)), "ContractRegistry");
+        _requireSetupComplete(vm.envOr("OPERATOR_SUBMITTER", address(0)), "OperatorSubmitter");
+        console2.log("=== All configured contracts have setupComplete == true ===");
+    }
+
+    /// @dev Call completeSetup() unless the address is unset or already complete
+    function _completeSetupIfNeeded(address target, string memory label) internal {
+        if (target == address(0)) {
+            console2.log("  skipped (not configured):", label);
+            return;
+        }
+        if (TimelockOwnable(target).setupComplete()) {
+            console2.log("  already complete:", label);
+            return;
+        }
+        TimelockOwnable(target).completeSetup();
+        console2.log("  setup completed:", label, target);
+    }
+
+    /// @dev Revert unless the target has completed setup (unset addresses are skipped)
+    function _requireSetupComplete(address target, string memory label) internal view {
+        if (target == address(0)) return;
+        require(
+            TimelockOwnable(target).setupComplete(),
+            string.concat(label, ": setupComplete is false - run finalizeSetup()")
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // CREATE2 ADDRESS PREDICTION HELPERS (for split deployment)
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1112,6 +1206,16 @@ contract Deploy is Script {
     /// @notice Ensure the canonical CREATE2 factory exists (fresh Anvil instances lack it)
     function _ensureCreate2Factory() internal {
         if (Create2Deployer.FACTORY.code.length > 0) return;
+
+        // `vm.etch` only writes to the local simulation EVM — it cannot put code on a real
+        // chain. Etching unconditionally meant that on a live chain WITHOUT the factory, the
+        // dry run would succeed against the etched code while the actual broadcast had no
+        // factory to call: a failed deployment that reports success. Fail loudly instead.
+        require(
+            block.chainid == 31_337 || block.chainid == 31_338,
+            "CREATE2 factory (0x4e59b44847b379578588920cA78FbF26c0B4956C) is not deployed on this chain - deploy it first"
+        );
+
         // Nick Johnson's keyless-deployment factory runtime bytecode
         bytes memory factoryCode =
             hex"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3";

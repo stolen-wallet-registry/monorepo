@@ -352,6 +352,133 @@ contract SecurityAuditRemediationTest is Test {
         inbox.activateTrustedSource(31_338, spokeBytes, false);
         assertFalse(inbox.isTrustedSource(31_338, spokeBytes));
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FOLLOW-UP: registries and OperatorSubmitter moved onto TimelockOwnable
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // setHub / setOperatorSubmitter / setOperatorRegistry are the same class of
+    // trust-boundary change the hub and inbox already protect: whoever holds those
+    // addresses can write registry entries directly, with no signature and no fee. They
+    // used to be one-transaction owner setters with no delay and no removal mechanism,
+    // so a compromised owner key could swap the operatorSubmitter and immediately
+    // register arbitrary identifiers. These tests pin the timelock in place.
+
+    /// @notice WalletRegistry.setHub is locked after completeSetup and only movable via timelock
+    function test_Timelock_WalletRegistry_SetHubLockedAfterSetup() public {
+        WalletRegistry reg = new WalletRegistry(owner, address(0), 2, 50);
+        reg.setHub(makeAddr("hub1"));
+        reg.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        reg.setHub(makeAddr("hub2"));
+
+        address newHub = makeAddr("hub2");
+        reg.proposeHub(newHub);
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__TooEarly.selector);
+        reg.activateHub(newHub);
+
+        vm.warp(block.timestamp + 2 days + 1);
+        reg.activateHub(newHub);
+        assertEq(reg.hub(), newHub, "hub should be updated after the delay");
+    }
+
+    /// @notice WalletRegistry.setOperatorSubmitter follows the same propose/activate path
+    function test_Timelock_WalletRegistry_OperatorSubmitter() public {
+        WalletRegistry reg = new WalletRegistry(owner, address(0), 2, 50);
+        reg.setOperatorSubmitter(makeAddr("submitter1"));
+        reg.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        reg.setOperatorSubmitter(makeAddr("submitter2"));
+
+        address newSubmitter = makeAddr("submitter2");
+        reg.proposeOperatorSubmitter(newSubmitter);
+        vm.warp(block.timestamp + 2 days + 1);
+        reg.activateOperatorSubmitter(newSubmitter);
+        assertEq(reg.operatorSubmitter(), newSubmitter);
+    }
+
+    /// @notice TransactionRegistry gets the same protection
+    function test_Timelock_TransactionRegistry_SetHubLockedAfterSetup() public {
+        TransactionRegistry reg = new TransactionRegistry(owner, address(0), 2, 50);
+        reg.setHub(makeAddr("hub1"));
+        reg.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        reg.setHub(makeAddr("hub2"));
+
+        address newHub = makeAddr("hub2");
+        reg.proposeHub(newHub);
+        vm.warp(block.timestamp + 2 days + 1);
+        reg.activateHub(newHub);
+        assertEq(reg.hub(), newHub);
+    }
+
+    /// @notice ContractRegistry's operatorSubmitter is the only write path into it, so it
+    ///         is the most sensitive of the three — operator-only registry, no user signatures.
+    function test_Timelock_ContractRegistry_OperatorSubmitterLockedAfterSetup() public {
+        ContractRegistry reg = new ContractRegistry(owner);
+        reg.setOperatorSubmitter(makeAddr("submitter1"));
+        reg.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        reg.setOperatorSubmitter(makeAddr("submitter2"));
+
+        address newSubmitter = makeAddr("submitter2");
+        reg.proposeOperatorSubmitter(newSubmitter);
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__TooEarly.selector);
+        reg.activateOperatorSubmitter(newSubmitter);
+
+        vm.warp(block.timestamp + 2 days + 1);
+        reg.activateOperatorSubmitter(newSubmitter);
+        assertEq(reg.operatorSubmitter(), newSubmitter);
+    }
+
+    /// @notice OperatorSubmitter.setOperatorRegistry decides who may submit batches at all
+    function test_Timelock_OperatorSubmitter_SetOperatorRegistryLockedAfterSetup() public {
+        WalletRegistry walletReg = new WalletRegistry(owner, address(0), 2, 50);
+        TransactionRegistry txReg = new TransactionRegistry(owner, address(0), 2, 50);
+        ContractRegistry contractReg = new ContractRegistry(owner);
+        OperatorRegistry operatorReg = new OperatorRegistry(owner);
+
+        OperatorSubmitter submitter = new OperatorSubmitter(
+            owner,
+            address(walletReg),
+            address(txReg),
+            address(contractReg),
+            address(operatorReg),
+            address(0),
+            address(0)
+        );
+
+        submitter.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        submitter.setOperatorRegistry(makeAddr("registry2"));
+
+        address newRegistry = makeAddr("registry2");
+        submitter.proposeOperatorRegistry(newRegistry);
+        vm.warp(block.timestamp + 2 days + 1);
+        submitter.activateOperatorRegistry(newRegistry);
+        assertEq(submitter.operatorRegistry(), newRegistry);
+    }
+
+    /// @notice A cancelled proposal cannot later be activated on the registries either
+    function test_Timelock_WalletRegistry_CancelBlocksActivation() public {
+        WalletRegistry reg = new WalletRegistry(owner, address(0), 2, 50);
+        reg.completeSetup();
+
+        address newHub = makeAddr("hub2");
+        reg.proposeHub(newHub);
+        reg.cancelAction(keccak256(abi.encode("setHub", newHub)));
+
+        vm.warp(block.timestamp + 2 days + 1);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__NotProposed.selector);
+        reg.activateHub(newHub);
+    }
 }
 
 /// @dev Helper to test calldata-taking library functions from memory

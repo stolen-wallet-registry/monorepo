@@ -182,7 +182,7 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
       })),
       {
         name: 'swr-transaction-form-state',
-        version: 3, // Bumped for dataHash field rename
+        version: 1,
         // Don't persist derived data - it's computed
         partialize: (state) => ({
           reporter: state.reporter,
@@ -191,31 +191,19 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
           selectedTxDetails: state.selectedTxDetails,
           reportedChainId: state.reportedChainId,
         }),
-        migrate: (persisted, version) => {
+        // Validation runs in `merge`, not `migrate`: zustand only calls `migrate` on a version
+        // mismatch, so validation placed there would never run on a normal rehydrate. There is
+        // no released version of this app, so no `migrate` is needed at all — `merge` supplies
+        // a default for every field, which covers any stale local state a developer may have.
+        merge: (persisted, current) => {
           if (!persisted || typeof persisted !== 'object') {
-            return initialState;
+            return current;
           }
 
           const state = persisted as Partial<TransactionFormState>;
 
-          if (version < 3) {
-            return {
-              reporter: state.reporter ?? initialState.reporter,
-              forwarder: state.forwarder ?? initialState.forwarder,
-              selectedTxHashes: Array.isArray(state.selectedTxHashes)
-                ? state.selectedTxHashes
-                : initialState.selectedTxHashes,
-              selectedTxDetails: Array.isArray(state.selectedTxDetails)
-                ? state.selectedTxDetails
-                : initialState.selectedTxDetails,
-              reportedChainId: state.reportedChainId ?? initialState.reportedChainId,
-              dataHash: null,
-              txHashesForContract: [],
-              chainIdsForContract: [],
-            };
-          }
-
           return {
+            ...current,
             reporter: state.reporter ?? initialState.reporter,
             forwarder: state.forwarder ?? initialState.forwarder,
             selectedTxHashes: Array.isArray(state.selectedTxHashes)
@@ -225,6 +213,7 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
               ? state.selectedTxDetails
               : initialState.selectedTxDetails,
             reportedChainId: state.reportedChainId ?? initialState.reportedChainId,
+            // Derived data is recomputed, never restored.
             dataHash: null,
             txHashesForContract: [],
             chainIdsForContract: [],

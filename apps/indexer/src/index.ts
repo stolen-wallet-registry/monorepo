@@ -235,15 +235,31 @@ ponder.on('WalletRegistry:CrossChainWalletRegistered', async ({ event, context }
     messageId,
   });
 
-  // Update cross-chain message tracking
-  const existing = await db.find(crossChainMessage, { id: messageId });
-  if (existing) {
-    await db.update(crossChainMessage, { id: messageId }).set({
+  // Cross-chain message tracking — insert-or-update, NOT find-then-update.
+  //
+  // CrossChainInbox emits WalletRegistrationReceived only AFTER it has delegated to the
+  // registries, so this handler runs first and the row does not exist yet. The previous
+  // find-then-update therefore always found nothing: status never advanced past 'received'
+  // and hubTxHash/registeredAt stayed NULL for every cross-chain registration.
+  await db
+    .insert(crossChainMessage)
+    .values({
+      id: messageId,
+      sourceChainId: sourceNumeric ?? 0,
+      targetChainId: HUB_CHAIN_ID,
+      wallet: walletAddress,
       status: 'registered',
       registeredAt: event.block.timestamp,
       hubTxHash: event.transaction.hash,
+      bridgeId,
+    })
+    .onConflictDoUpdate({
+      status: 'registered',
+      registeredAt: event.block.timestamp,
+      hubTxHash: event.transaction.hash,
+      wallet: walletAddress,
+      bridgeId,
     });
-  }
 
   await updateGlobalStats(db, { crossChain: 1 }, event.block.timestamp);
 });
@@ -335,7 +351,7 @@ ponder.on('TransactionRegistry:TransactionBatchAcknowledged', async ({ event, co
 // (TransactionBatchRegistered or TransactionBatchCreated) fires in the same tx.
 // Batch detail queries join on transactionHash.
 ponder.on('TransactionRegistry:TransactionRegistered', async ({ event, context }) => {
-  const { identifier, reportedChainId, reporter, isSponsored } = event.args;
+  const { identifier, reportedChainId, reporter } = event.args;
   const { db } = context;
 
   const txHash = identifier; // bytes32 tx hash
@@ -412,18 +428,32 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
 
 // CrossChainTransactionRegistered — fires per tx alongside TransactionRegistered for cross-chain
 ponder.on('TransactionRegistry:CrossChainTransactionRegistered', async ({ event, context }) => {
-  const { identifier, sourceChainId, bridgeId, messageId } = event.args;
+  const { sourceChainId, bridgeId, messageId } = event.args;
   const { db } = context;
 
-  // Cross-chain message tracking
-  const existing = await db.find(crossChainMessage, { id: messageId });
-  if (existing) {
-    await db.update(crossChainMessage, { id: messageId }).set({
+  const sourceCAIP2 = resolveChainIdHash(sourceChainId);
+  const sourceNumeric = sourceCAIP2 ? caip2ToNumericChainId(sourceCAIP2) : null;
+
+  // Insert-or-update for the same reason as the wallet path above: CrossChainInbox emits
+  // TransactionBatchReceived only after delegating, so this handler runs first and the row
+  // does not exist yet.
+  await db
+    .insert(crossChainMessage)
+    .values({
+      id: messageId,
+      sourceChainId: sourceNumeric ?? 0,
+      targetChainId: HUB_CHAIN_ID,
       status: 'registered',
       registeredAt: event.block.timestamp,
       hubTxHash: event.transaction.hash,
+      bridgeId,
+    })
+    .onConflictDoUpdate({
+      status: 'registered',
+      registeredAt: event.block.timestamp,
+      hubTxHash: event.transaction.hash,
+      bridgeId,
     });
-  }
 });
 
 // TransactionBatchCreated — operator batch summary
@@ -477,7 +507,7 @@ ponder.on('TransactionRegistry:TransactionBatchCreated', async ({ event, context
 
 // ContractRegistered — fires per contract (operator batches only)
 ponder.on('ContractRegistry:ContractRegistered', async ({ event, context }) => {
-  const { identifier, reportedChainId, operatorId, batchId, threatCategory } = event.args;
+  const { identifier, reportedChainId, batchId, threatCategory } = event.args;
   const { db } = context;
 
   const contractAddress = identifierToAddress(identifier);
@@ -557,20 +587,24 @@ ponder.on('CrossChainInbox:WalletRegistrationReceived', async ({ event, context 
       sourceChainId: sourceNumeric ?? origin,
       targetChainId: HUB_CHAIN_ID,
       wallet: walletAddress,
-      spokeTxHash: event.transaction.hash,
+      hubTxHash: event.transaction.hash,
       status: 'received',
       receivedAt: event.block.timestamp,
     })
-    .onConflictDoUpdate({
-      status: 'received',
+    // Never downgrade. The registry handlers run BEFORE this one (the inbox emits after it
+    // has delegated), so by the time we get here the row is normally already 'registered'.
+    // A flat `status: 'received'` would overwrite that and the message would look stuck.
+    .onConflictDoUpdate((row) => ({
+      status: row.status === 'registered' ? 'registered' : 'received',
       receivedAt: event.block.timestamp,
-      spokeTxHash: event.transaction.hash,
-    });
+      hubTxHash: event.transaction.hash,
+      wallet: walletAddress,
+    }));
 });
 
 // TransactionBatchReceived — message received from spoke chain
 ponder.on('CrossChainInbox:TransactionBatchReceived', async ({ event, context }) => {
-  const { origin, reporter, dataHash, messageId } = event.args;
+  const { origin, messageId } = event.args;
   const { db } = context;
 
   const sourceCAIP2 = hyperlaneDomainToCAIP2(origin);
@@ -585,15 +619,16 @@ ponder.on('CrossChainInbox:TransactionBatchReceived', async ({ event, context })
       id: messageId,
       sourceChainId: sourceNumeric ?? origin,
       targetChainId: HUB_CHAIN_ID,
-      spokeTxHash: event.transaction.hash,
+      hubTxHash: event.transaction.hash,
       status: 'received',
       receivedAt: event.block.timestamp,
     })
-    .onConflictDoUpdate({
-      status: 'received',
+    // Never downgrade — see the wallet handler above.
+    .onConflictDoUpdate((row) => ({
+      status: row.status === 'registered' ? 'registered' : 'received',
       receivedAt: event.block.timestamp,
-      spokeTxHash: event.transaction.hash,
-    });
+      hubTxHash: event.transaction.hash,
+    }));
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

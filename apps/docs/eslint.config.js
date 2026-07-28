@@ -22,7 +22,11 @@ export default [
     },
     rules: {
       ...js.configs.recommended.rules,
-      ...tseslint.configs.recommended[0]?.rules,
+      // `tseslint.configs.recommended` is an ARRAY of three configs: [base, eslint-recommended,
+      // recommended]. Entry [0] is the base config and carries ZERO rules, so the previous
+      // `...tseslint.configs.recommended[0]?.rules` spread silently applied nothing and this
+      // package ran with no typescript-eslint rules at all. Merge the rules from every entry.
+      ...Object.assign({}, ...tseslint.configs.recommended.map((config) => config.rules)),
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },

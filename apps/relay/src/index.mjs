@@ -149,6 +149,18 @@ const server = await createLibp2p({
       reservations: {
         maxReservations: 15,
         reservationTtl: 30 * 60 * 1000, // 30 minutes
+        // Circuit relay v2 caps each relayed CONNECTION independently of the reservation.
+        // The libp2p defaults are 2 minutes and 128 KiB, and the connection is torn down when
+        // either is hit — pings do NOT reset them. Two minutes is shorter than our 1-4 minute
+        // randomized grace period, so a P2P registration that waits out a long grace period
+        // would lose its relayed connection mid-flow, right before the registration signature
+        // needs to be sent.
+        //
+        // 30 minutes matches reservationTtl and comfortably covers the worst-case grace period
+        // plus the registration window. The data limit is raised to 1 MiB — signatures and
+        // batch payloads are small, so this is headroom, not an expected volume.
+        defaultDurationLimit: 30 * 60 * 1000, // 30 minutes (default: 2 minutes)
+        defaultDataLimit: 1024n * 1024n, // 1 MiB (default: 128 KiB)
       },
     }),
   },

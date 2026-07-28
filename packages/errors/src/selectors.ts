@@ -685,3 +685,17 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
 export const CONTRACT_ERROR_MAP: Record<string, ContractErrorInfo> = Object.fromEntries(
   Object.entries(CONTRACT_ERROR_SELECTORS).map(([selector, info]) => [selector.toLowerCase(), info])
 );
+
+/**
+ * Map of Solidity error names to user-friendly error info.
+ *
+ * viem decodes reverts against the ABI and reports the error *name*, not the selector,
+ * whenever the error is present in the ABI passed to the call — which is always the case
+ * for our contracts. Name lookup is therefore the primary path; the selector map is the
+ * fallback for reverts whose error is absent from the ABI.
+ *
+ * Derived from `CONTRACT_ERROR_SELECTORS` so there is exactly one source of truth.
+ */
+export const CONTRACT_ERROR_BY_NAME: Record<string, ContractErrorInfo> = Object.fromEntries(
+  Object.values(CONTRACT_ERROR_SELECTORS).map((info) => [info.name, info])
+);

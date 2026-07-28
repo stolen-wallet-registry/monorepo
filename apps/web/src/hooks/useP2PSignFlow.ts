@@ -94,12 +94,14 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
     data: hashData,
     isLoading: isLoadingHash,
     error: hashError,
+    refetch: refetchHashStruct,
   } = useGenerateHashStruct(relayer || undefined, signatureStep);
 
   const {
     nonce,
     isLoading: isLoadingNonce,
     error: nonceError,
+    refetch: refetchNonce,
   } = useContractNonce(registeree || undefined);
 
   const {
@@ -138,6 +140,28 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
       setSendError(null);
       resetSign();
 
+      // Refetch nonce and deadline before signing - never sign with cached values.
+      // acknowledge() increments nonces[registeree], so a registration signed with the
+      // cached nonce reverts. In this flow the revert surfaces on the RELAYER's machine
+      // after the signature has already shipped over libp2p, with no way for the
+      // registeree to learn what went wrong — so failing here, before sending, is the
+      // only recoverable point.
+      const [nonceResult, hashResult] = await Promise.all([refetchNonce(), refetchHashStruct()]);
+
+      const freshNonce =
+        nonceResult.status === 'success' ? (nonceResult.data as bigint) : undefined;
+      const rawHash = hashResult?.data as [bigint, string] | undefined;
+      const freshDeadline = rawHash?.[0] ?? hashData.deadline;
+
+      if (freshNonce === undefined) {
+        logger.p2p.error('Failed to refetch nonce before signing', {
+          keyRef,
+          nonceStatus: nonceResult.status,
+        });
+        setSendError('Failed to load fresh signing data. Please try again.');
+        return;
+      }
+
       const { reportedChainId, incidentTimestamp } = stableFields;
 
       const params: SignParams = {
@@ -145,8 +169,8 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
         trustedForwarder: relayer,
         reportedChainId,
         incidentTimestamp,
-        nonce,
-        deadline: hashData.deadline,
+        nonce: freshNonce,
+        deadline: freshDeadline,
       };
 
       const sig = await signFn(params);
@@ -165,8 +189,8 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
           signature: {
             keyRef,
             value: sig,
-            deadline: hashData.deadline.toString(),
-            nonce: nonce.toString(),
+            deadline: freshDeadline.toString(),
+            nonce: freshNonce.toString(),
             address: registeree,
             chainId,
             reportedChainId: reportedChainId.toString(),
@@ -199,6 +223,8 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
     resetSign,
     protocol,
     keyRef,
+    refetchNonce,
+    refetchHashStruct,
   ]);
 
   const isLoading = isLoadingHash || isLoadingNonce;

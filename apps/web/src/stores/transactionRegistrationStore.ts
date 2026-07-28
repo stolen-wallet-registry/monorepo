@@ -119,9 +119,11 @@ export const useTransactionRegistrationStore = create<
       {
         name: 'swr-transaction-registration-state',
         version: 1,
-        migrate: (persisted) => {
+        // Validation runs in `merge`, not `migrate`: zustand only calls `migrate` on a version
+        // mismatch, so validation placed there would never run on a normal rehydrate.
+        merge: (persisted, current) => {
           if (!persisted || typeof persisted !== 'object') {
-            return initialState;
+            return current;
           }
           const state = persisted as Partial<TransactionRegistrationState>;
           const isValidRegistrationType =
@@ -137,6 +139,7 @@ export const useTransactionRegistrationStore = create<
             state.step === null ||
             (state.step && validSteps.includes(state.step as TransactionRegistrationStep));
           return {
+            ...current,
             registrationType: finalRegistrationType,
             step: isValidStep
               ? (state.step as TransactionRegistrationStep | null)

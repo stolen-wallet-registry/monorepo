@@ -20,16 +20,29 @@ const CHECK_TIMEOUT_MS = 3000;
 /**
  * Extract a WebSocket URL from a libp2p multiaddr.
  *
- * Parses `/ip4/{ip}/tcp/{port}/ws/...` → `ws://{ip}:{port}`
+ * Handles the host component as `/ip4/`, `/ip6/`, `/dns4/`, `/dns6/` or `/dns/`, and picks
+ * the scheme from the multiaddr's own transport segment: `/wss` or `/tls/ws` → `wss://`,
+ * plain `/ws` → `ws://`.
  *
- * TODO: Only handles /ip4/ multiaddrs. Add /ip6/ and /dns4/ support
- * if relay servers are ever configured with non-IPv4 addresses.
+ * Scheme selection matters: a page served over HTTPS cannot open a `ws://` socket — browsers
+ * block the mixed content outright. Hard-coding `ws://` (as this did) meant every HTTPS
+ * deployment probed a URL it could never open and reported P2P as permanently unavailable,
+ * regardless of whether the relay was actually running.
  */
-function extractWsUrl(multiaddr: string): string | null {
-  const ipMatch = multiaddr.match(/\/ip4\/([^/]+)/);
+export function extractWsUrl(multiaddr: string): string | null {
+  const hostMatch = multiaddr.match(/\/(?:ip4|ip6|dns4|dns6|dns)\/([^/]+)/);
   const portMatch = multiaddr.match(/\/tcp\/(\d+)/);
-  if (!ipMatch || !portMatch) return null;
-  return `ws://${ipMatch[1]}:${portMatch[1]}`;
+  if (!hostMatch || !portMatch) return null;
+
+  const host = hostMatch[1];
+  if (!host) return null;
+  // IPv6 literals must be bracketed in a URL authority
+  const authority = host.includes(':') ? `[${host}]` : host;
+
+  const isSecure = /\/wss(\/|$)/.test(multiaddr) || /\/tls\/ws(\/|$)/.test(multiaddr);
+  const scheme = isSecure ? 'wss' : 'ws';
+
+  return `${scheme}://${authority}:${portMatch[1]}`;
 }
 
 /**

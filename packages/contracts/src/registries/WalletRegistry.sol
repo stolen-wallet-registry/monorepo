@@ -3,7 +3,8 @@ pragma solidity ^0.8.24;
 
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { TimelockOwnable } from "../libraries/TimelockOwnable.sol";
 
 import { IWalletRegistry } from "../interfaces/IWalletRegistry.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
@@ -21,7 +22,7 @@ import { EIP712Constants } from "../libraries/EIP712Constants.sol";
 ///      - CAIP-363 wildcard keys for EVM wallets
 ///      - Two-phase registration (acknowledge → grace period → register)
 ///      - Single-phase for operator/cross-chain submissions
-contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
+contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -615,16 +616,57 @@ contract WalletRegistry is IWalletRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IWalletRegistry
-    function setHub(address newHub) external onlyOwner {
+    /// @dev Immediate during initial setup, timelocked after completeSetup().
+    ///      `hub` and `operatorSubmitter` are trust boundaries: whoever holds them can write
+    ///      registry entries directly, so post-setup changes go through propose → 2 days →
+    ///      activate, matching FraudRegistryHub and CrossChainInbox.
+    function setHub(address newHub) external onlyOwner onlyDuringSetup {
         if (newHub == address(0)) revert WalletRegistry__ZeroAddress();
+        _setHub(newHub);
+    }
+
+    /// @notice Propose a hub change (2-day delay before activation)
+    /// @param newHub Address of the new hub
+    function proposeHub(address newHub) external onlyOwner {
+        if (newHub == address(0)) revert WalletRegistry__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setHub", newHub)));
+    }
+
+    /// @notice Activate a previously proposed hub change
+    /// @param newHub Address of the new hub
+    function activateHub(address newHub) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setHub", newHub)));
+        _setHub(newHub);
+    }
+
+    /// @inheritdoc IWalletRegistry
+    /// @dev Immediate during initial setup, timelocked after completeSetup()
+    function setOperatorSubmitter(address newOperatorSubmitter) external onlyOwner onlyDuringSetup {
+        if (newOperatorSubmitter == address(0)) revert WalletRegistry__ZeroAddress();
+        _setOperatorSubmitter(newOperatorSubmitter);
+    }
+
+    /// @notice Propose an operator submitter change (2-day delay before activation)
+    /// @param newOperatorSubmitter Address of the new operator submitter
+    function proposeOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
+        if (newOperatorSubmitter == address(0)) revert WalletRegistry__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setOperatorSubmitter", newOperatorSubmitter)));
+    }
+
+    /// @notice Activate a previously proposed operator submitter change
+    /// @param newOperatorSubmitter Address of the new operator submitter
+    function activateOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setOperatorSubmitter", newOperatorSubmitter)));
+        _setOperatorSubmitter(newOperatorSubmitter);
+    }
+
+    function _setHub(address newHub) internal {
         address oldHub = hub;
         hub = newHub;
         emit HubUpdated(oldHub, newHub);
     }
 
-    /// @inheritdoc IWalletRegistry
-    function setOperatorSubmitter(address newOperatorSubmitter) external onlyOwner {
-        if (newOperatorSubmitter == address(0)) revert WalletRegistry__ZeroAddress();
+    function _setOperatorSubmitter(address newOperatorSubmitter) internal {
         address oldOperatorSubmitter = operatorSubmitter;
         operatorSubmitter = newOperatorSubmitter;
         emit OperatorSubmitterUpdated(oldOperatorSubmitter, newOperatorSubmitter);

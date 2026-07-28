@@ -534,4 +534,51 @@ contract FeeManagerTest is Test {
             assertEq(feeManager.baseFeeUsdCents(), baseFee);
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ORACLE TIMESTAMP SANITY (regression)
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // The staleness check used to be `block.timestamp - updatedAt > stalePriceThreshold`.
+    // A feed reporting a FUTURE updatedAt makes that subtraction underflow, and because the
+    // check runs inside the try's SUCCESS branch the surrounding catch does not catch the
+    // panic — it propagates, so every fee quote reverts and every fee-collecting
+    // registration path is bricked for as long as the feed misbehaves.
+
+    // A future updatedAt must fall back to the last known-good price, never revert.
+    function test_FutureUpdatedAt_FallsBackInsteadOfReverting() public {
+        mockOracle.setUpdatedAt(block.timestamp + 1 hours);
+
+        // Would panic (0x11 arithmetic underflow) before the fix
+        assertEq(feeManager.getEthPriceUsdCentsView(), DEFAULT_FALLBACK_PRICE);
+        assertEq(feeManager.syncAndGetEthPriceUsdCents(), DEFAULT_FALLBACK_PRICE);
+    }
+
+    // The fee quotes that gate every registration must survive a future-timestamped feed.
+    function test_FutureUpdatedAt_FeeQuotesStillWork() public {
+        mockOracle.setUpdatedAt(block.timestamp + 1 days);
+
+        uint256 expected = (DEFAULT_BASE_FEE * 1e18) / DEFAULT_FALLBACK_PRICE;
+        assertEq(feeManager.currentFeeWei(), expected);
+        assertTrue(feeManager.validateFee(expected));
+    }
+
+    // refreshFallbackPrice should surface the intended error, not an arithmetic panic.
+    function test_FutureUpdatedAt_RefreshRevertsWithStalePrice() public {
+        mockOracle.setUpdatedAt(block.timestamp + 1 hours);
+
+        vm.expectRevert(IFeeManager.Fee__StalePrice.selector);
+        feeManager.refreshFallbackPrice();
+    }
+
+    // updatedAt == 0 means an incomplete round; treat it as stale rather than as
+    // "block.timestamp seconds old", which would pass the threshold check on a young chain.
+    function test_ZeroUpdatedAt_TreatedAsStale() public {
+        mockOracle.setUpdatedAt(0);
+
+        assertEq(feeManager.getEthPriceUsdCentsView(), DEFAULT_FALLBACK_PRICE);
+
+        vm.expectRevert(IFeeManager.Fee__StalePrice.selector);
+        feeManager.refreshFallbackPrice();
+    }
 }
