@@ -599,6 +599,10 @@ ponder.on('CrossChainInbox:WalletRegistrationReceived', async ({ event, context 
       receivedAt: event.block.timestamp,
       hubTxHash: event.transaction.hash,
       wallet: walletAddress,
+      // The registry handler creates the row first but only has the bytes32 chain hash — an
+      // unknown spoke resolves to 0 there. This handler has the Hyperlane origin domain, a
+      // strictly better fallback; repair a zero rather than leaving it wrong forever.
+      sourceChainId: row.sourceChainId === 0 ? (sourceNumeric ?? origin) : row.sourceChainId,
     }));
 });
 
@@ -628,6 +632,8 @@ ponder.on('CrossChainInbox:TransactionBatchReceived', async ({ event, context })
       status: row.status === 'registered' ? 'registered' : 'received',
       receivedAt: event.block.timestamp,
       hubTxHash: event.transaction.hash,
+      // Repair a zero sourceChainId left by the registry handler — see the wallet handler.
+      sourceChainId: row.sourceChainId === 0 ? (sourceNumeric ?? origin) : row.sourceChainId,
     }));
 });
 

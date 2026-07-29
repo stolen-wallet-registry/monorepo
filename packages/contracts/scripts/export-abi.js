@@ -32,6 +32,9 @@ const contracts = [
 mkdirSync(abiDir, { recursive: true });
 
 const exportStatements = [];
+// A missing/renamed artifact must FAIL the export, not silently drop the ABI — a silent
+// skip degrades to a confusing compile error (or worse, a stale committed ABI) downstream.
+const failures = [];
 
 for (const contract of contracts) {
   const artifactPath = join(outDir, contract);
@@ -40,7 +43,8 @@ for (const contract of contracts) {
 
   // Check if artifact file exists
   if (!existsSync(artifactPath)) {
-    console.error(`Artifact not found: ${contract} - skipping`);
+    console.error(`Artifact not found: ${contract}`);
+    failures.push(contract);
     continue;
   }
 
@@ -49,7 +53,8 @@ for (const contract of contracts) {
     const artifact = JSON.parse(artifactContent);
 
     if (!artifact.abi) {
-      console.error(`No ABI found in artifact ${contract} - skipping`);
+      console.error(`No ABI found in artifact ${contract}`);
+      failures.push(contract);
       continue;
     }
 
@@ -61,8 +66,18 @@ for (const contract of contracts) {
     console.log(`Exported: ${name}`);
   } catch (err) {
     console.error(`Failed to load artifact ${contract}:`, err.message);
+    failures.push(contract);
     continue;
   }
+}
+
+if (failures.length > 0) {
+  console.error(
+    `\nexport-abi FAILED: ${failures.length} artifact(s) missing or unreadable:\n` +
+      failures.map((f) => `  - ${f}`).join('\n') +
+      `\nDid a contract get renamed? Update the list in scripts/export-abi.js and re-run forge build.`
+  );
+  process.exit(1);
 }
 
 // Regenerate index.ts with all exports

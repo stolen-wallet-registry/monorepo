@@ -83,4 +83,77 @@ describe('persisted store validation runs on rehydrate', () => {
     expect(state.acknowledgementHash).toBeNull();
     expect(state.registrationHash).toBeNull();
   });
+
+  // Non-vacuous coverage for registrationStore: an unknown step must be rejected, not
+  // rehydrated verbatim. StepRenderer indexes a Record<RegistrationStep, ReactNode> by this
+  // value — a bogus step renders a blank page with no recovery control.
+  it('registrationStore rejects an unknown persisted step', async () => {
+    seedPersistedState(
+      'swr-registration-state',
+      { registrationType: 'standard', step: 'totally-bogus-step' },
+      1
+    );
+
+    const { useRegistrationStore } = await import('./registrationStore');
+
+    expect(useRegistrationStore.getState().step).toBeNull();
+  });
+
+  // A step that is valid for a DIFFERENT registration type must also be rejected —
+  // 'wait-for-connection' only exists in the p2pRelay sequence.
+  it('registrationStore rejects a step from another registration type', async () => {
+    seedPersistedState(
+      'swr-registration-state',
+      { registrationType: 'standard', step: 'wait-for-connection' },
+      1
+    );
+
+    const { useRegistrationStore } = await import('./registrationStore');
+
+    expect(useRegistrationStore.getState().step).toBeNull();
+  });
+
+  it('registrationStore rejects an unknown persisted registrationType', async () => {
+    seedPersistedState(
+      'swr-registration-state',
+      { registrationType: 'bogusType', step: 'grace-period' },
+      1
+    );
+
+    const { useRegistrationStore } = await import('./registrationStore');
+
+    expect(useRegistrationStore.getState().registrationType).toBe('standard');
+  });
+
+  // TDZ regression guards: zustand persist hydrates synchronously for localStorage, so
+  // `merge` runs during module evaluation. When merge referenced the step-sequence consts
+  // declared LATER in the file, it threw a temporal-dead-zone ReferenceError that zustand
+  // silently swallowed — the store never rehydrated persisted state at all, and the
+  // rejection tests above passed vacuously (default state also lacks the bad value).
+  // These two tests assert the positive path: VALID persisted state must actually restore.
+  it('transactionRegistrationStore restores a valid persisted step (TDZ regression)', async () => {
+    seedPersistedState(
+      'swr-transaction-registration-state',
+      { registrationType: 'standard', step: 'grace-period' },
+      1
+    );
+
+    const { useTransactionRegistrationStore } = await import('./transactionRegistrationStore');
+
+    expect(useTransactionRegistrationStore.getState().step).toBe('grace-period');
+    expect(useTransactionRegistrationStore.getState().registrationType).toBe('standard');
+  });
+
+  it('registrationStore restores a valid persisted step (TDZ regression)', async () => {
+    seedPersistedState(
+      'swr-registration-state',
+      { registrationType: 'selfRelay', step: 'register-and-sign' },
+      1
+    );
+
+    const { useRegistrationStore } = await import('./registrationStore');
+
+    expect(useRegistrationStore.getState().step).toBe('register-and-sign');
+    expect(useRegistrationStore.getState().registrationType).toBe('selfRelay');
+  });
 });

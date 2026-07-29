@@ -4,7 +4,9 @@ import tseslint from 'typescript-eslint';
 
 export default [
   {
-    ignores: ['dist/**', '.vocs/**'],
+    // '**/dist/**' (not 'dist/**'): vocs emits a second build tree at docs/dist/, and the
+    // config-relative single-level glob leaves eslint linting those minified assets.
+    ignores: ['**/dist/**', '.vocs/**'],
   },
   {
     files: ['**/*.{ts,tsx}'],

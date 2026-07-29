@@ -581,4 +581,50 @@ contract FeeManagerTest is Test {
         vm.expectRevert(IFeeManager.Fee__StalePrice.selector);
         feeManager.refreshFallbackPrice();
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ORACLE DECIMALS SANITY (regression)
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // decimals() used to be called unguarded inside _toCents, which runs inside the try's
+    // SUCCESS branch — the same panic-escapes-catch shape as the updatedAt underflow above.
+    // A feed whose decimals() reverts (or returns a value making 10**(d-2) overflow) would
+    // brick every fee quote instead of falling back.
+
+    // A reverting decimals() must fall back to the last known-good price, never revert.
+    function test_RevertingDecimals_FallsBackInsteadOfReverting() public {
+        mockOracle.setDecimalsShouldRevert(true);
+
+        // Would propagate OracleCallFailed past the catch before the fix
+        assertEq(feeManager.getEthPriceUsdCentsView(), DEFAULT_FALLBACK_PRICE);
+        assertEq(feeManager.syncAndGetEthPriceUsdCents(), DEFAULT_FALLBACK_PRICE);
+
+        uint256 expected = (DEFAULT_BASE_FEE * 1e18) / DEFAULT_FALLBACK_PRICE;
+        assertEq(feeManager.currentFeeWei(), expected);
+    }
+
+    // A decimals() value large enough to overflow 10**(d-2) must fall back, not panic.
+    function test_HugeDecimals_FallsBackInsteadOfPanicking() public {
+        mockOracle.setDecimals(100);
+
+        // Would panic (0x11 overflow computing 10**98) before the fix
+        assertEq(feeManager.getEthPriceUsdCentsView(), DEFAULT_FALLBACK_PRICE);
+        assertEq(feeManager.syncAndGetEthPriceUsdCents(), DEFAULT_FALLBACK_PRICE);
+    }
+
+    // The manual refresh path should surface a clean error for an unusable feed.
+    function test_RevertingDecimals_RefreshRevertsWithInvalidPrice() public {
+        mockOracle.setDecimalsShouldRevert(true);
+
+        vm.expectRevert(IFeeManager.Fee__InvalidPrice.selector);
+        feeManager.refreshFallbackPrice();
+    }
+
+    // Non-standard but valid decimals still price correctly (18-decimal feed).
+    function test_EighteenDecimals_PricesCorrectly() public {
+        mockOracle.setDecimals(18);
+        mockOracle.setPrice(3000e18); // $3,000 with 18 decimals
+
+        assertEq(feeManager.getEthPriceUsdCentsView(), 300_000); // $3,000.00 in cents
+    }
 }

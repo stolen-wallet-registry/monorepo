@@ -29,7 +29,7 @@
     },
     "@swr/contracts#test": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "test/**", "script/**", "foundry.toml", "remappings.txt"],
+      "inputs": ["src/**", "test/**", "script/**", "lib/**", "foundry.toml", "remappings.txt"],
       "outputs": []
     },
     "@swr/contracts#lint": {
@@ -38,7 +38,7 @@
     },
     "@swr/contracts#build": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "test/**", "script/**", "foundry.toml", "remappings.txt"],
+      "inputs": ["src/**", "test/**", "script/**", "lib/**", "foundry.toml", "remappings.txt"],
       "outputs": ["out/**"]
     },
     "@swr/contracts#export-abi": {

@@ -25,6 +25,7 @@ import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 import { ChainIcon } from '@/components/composed/ChainIcon';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
+import { useP2PStore } from '@/stores/p2pStore';
 import { clearAllSignatures } from '@/lib/signatures';
 import {
   getExplorerTxUrl,
@@ -76,6 +77,10 @@ export function SuccessStep() {
     });
     resetRegistration();
     resetForm();
+    // Clear persisted P2P state too. partnerPeerId is persisted and the peer guard pins on
+    // it — a stale pin from a completed flow silently rejects the NEXT partner's CONNECT,
+    // leaving both sides stuck with no error surfaced.
+    useP2PStore.getState().reset();
     clearAllSignatures();
     setLocation('/');
   };
@@ -89,6 +94,7 @@ export function SuccessStep() {
     });
     resetRegistration();
     resetForm();
+    useP2PStore.getState().reset();
     clearAllSignatures();
     // Stay on registration, will redirect to method selection
     setLocation('/');

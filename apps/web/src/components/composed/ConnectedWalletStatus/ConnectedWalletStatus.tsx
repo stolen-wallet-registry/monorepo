@@ -16,9 +16,11 @@ import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 
-// Versioned key — see the note on RECENT_SEARCHES_KEY in SearchPage. Bump the suffix if the
-// stored shape (currently a string[] of lowercased addresses) ever changes.
-const DISMISS_KEY = 'swr-wallet-status-dismissed-v1';
+// Unversioned key: this is existing users' persisted data, and renaming the key orphans it
+// (their dismissal comes back). The stored shape is a string[] of lowercased addresses —
+// only rename (e.g. add a -v2 suffix) if that shape actually changes, and read the old key
+// through once if the data matters.
+const DISMISS_KEY = 'swr-wallet-status-dismissed';
 
 export interface ConnectedWalletStatusProps {
   /** Show even if previously dismissed */

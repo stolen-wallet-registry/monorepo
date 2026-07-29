@@ -76,6 +76,11 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   const hasNoPendingAck =
     deadlines !== undefined && deadlines.start === 0n && deadlines.expiry === 0n;
 
+  // Registration window already closed on-chain (a real ack exists but its expiry block has
+  // passed). Must be checked AFTER hasNoPendingAck: the contract reports isExpired=true for a
+  // nonexistent acknowledgement too (deadline 0 <= block.number).
+  const windowClosed = deadlines !== undefined && !hasNoPendingAck && deadlines.isExpired;
+
   useEffect(() => {
     if (hasNoPendingAck && !hasLoggedNoPendingAck.current) {
       hasLoggedNoPendingAck.current = true;
@@ -130,9 +135,13 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   // The hook is designed to handle null values gracefully (returns 0 time remaining),
   // and this pattern follows React's rules of hooks (always call hooks in the same order).
   // The early return for loading state above prevents invalid UI while data loads.
-  // Pass null when no pending ack to prevent timer from firing immediately on zeroed data
-  const timerTargetBlock = hasNoPendingAck ? null : (deadlines?.start ?? null);
-  const timerCurrentBlock = hasNoPendingAck ? null : (deadlines?.currentBlock ?? null);
+  // Pass null when no pending ack OR when the on-chain window has already closed. The timer
+  // targets the START block, so on a closed window it would see the target in the past, fire
+  // onExpire immediately, and auto-advance the user into a guaranteed registration revert
+  // after signing a second EIP-712 message.
+  const timerDisabled = hasNoPendingAck || windowClosed;
+  const timerTargetBlock = timerDisabled ? null : (deadlines?.start ?? null);
+  const timerCurrentBlock = timerDisabled ? null : (deadlines?.currentBlock ?? null);
 
   const { timeRemaining, totalMs, blocksLeft, isExpired, isRunning, isWaitingForBlock } =
     useCountdownTimer({
@@ -208,6 +217,20 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
         <AlertDescription>
           No pending acknowledgement found. The registration window may have expired. Please go back
           and submit the acknowledgement again.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  // Registration window closed on-chain — advancing would only produce a revert
+  if (windowClosed) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          The registration window has expired (closed at block {deadlines.expiry.toString()},
+          current block {deadlines.currentBlock.toString()}). Please go back and submit the
+          acknowledgement again to restart the process.
         </AlertDescription>
       </Alert>
     );

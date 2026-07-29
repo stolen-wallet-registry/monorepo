@@ -1031,7 +1031,7 @@ contract Deploy is Script {
 
     /// @notice Deploy spoke contracts for testnet/mainnet
     /// @dev Use for Optimism Sepolia, Arbitrum Sepolia, etc.
-    ///      Required env vars: PRIVATE_KEY, SPOKE_HYPERLANE_MAILBOX, SPOKE_GAS_PAYMASTER,
+    ///      Required env vars: PRIVATE_KEY, SPOKE_HYPERLANE_MAILBOX,
     ///                         HUB_CHAIN_ID, HUB_INBOX_ADDRESS
     function deploySpoke() external {
         uint256 privKey = _getDeployerKey();
@@ -1098,6 +1098,13 @@ contract Deploy is Script {
         );
         console2.log("2. SpokeRegistry:", spokeAddr);
 
+        // Authorize SpokeRegistry on the adapter. Without this every cross-chain
+        // registration reverts with HyperlaneAdapter__UnauthorizedSender — the adapter's
+        // sendMessage allowlist (the fix for the forged-registration vulnerability) gates
+        // ALL dispatches, including legitimate ones.
+        HyperlaneAdapter(adapterAddr).setAuthorizedSender(spokeAddr, true);
+        console2.log("   -> SpokeRegistry authorized on adapter");
+
         // 4. Optionally deploy SpokeSoulboundForwarder (for cross-chain soulbound minting)
         address soulboundReceiver = vm.envOr("SOULBOUND_RECEIVER", address(0));
         if (soulboundReceiver != address(0)) {
@@ -1110,9 +1117,19 @@ contract Deploy is Script {
                 )
             );
             console2.log("3. SpokeSoulboundForwarder:", forwarderAddr);
+
+            HyperlaneAdapter(adapterAddr).setAuthorizedSender(forwarderAddr, true);
+            console2.log("   -> SpokeSoulboundForwarder authorized on adapter");
         }
 
         vm.stopBroadcast();
+
+        // Fail loudly if the authorization did not land — an unauthorized SpokeRegistry
+        // means every cross-chain registration on this deployment is dead.
+        require(
+            HyperlaneAdapter(adapterAddr).authorizedSenders(spokeAddr),
+            "SpokeRegistry not authorized on HyperlaneAdapter"
+        );
 
         // Output for frontend config
         console2.log("");

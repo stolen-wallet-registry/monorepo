@@ -29,6 +29,11 @@ export async function quote(options: QuoteOptions): Promise<void> {
     // Operator batch fees are quoted differently from individual registration fees, and are
     // free by default — rendered via formatBatchFee so a 0 quote reads as intentional.
     let isOperatorBatch = false;
+    // For wallet/transaction the individual and operator prices are DIFFERENT figures:
+    // individuals pay the registry's quoteRegistration() per entry, operators pay
+    // OperatorSubmitter.quoteBatchFee() per batch (what submit-wallets/submit-transactions
+    // actually send). Show both so an operator is never quoted the individual price.
+    let batchFee: bigint | null = null;
 
     switch (options.type) {
       case 'wallet':
@@ -81,16 +86,30 @@ export async function quote(options: QuoteOptions): Promise<void> {
         throw new Error(`Unknown registry type: ${options.type}`);
     }
 
+    // Wallet/transaction also have an operator batch path — quote it alongside
+    if (!isOperatorBatch && config.contracts.operatorSubmitter !== zeroAddress) {
+      batchFee = await publicClient.readContract({
+        address: config.contracts.operatorSubmitter,
+        abi: OperatorSubmitterABI,
+        functionName: 'quoteBatchFee',
+      });
+    }
+
     spinner.succeed('Fee retrieved');
 
     console.log(`\n${chalk.bold(registryName)}`);
     console.log(`  Environment: ${chalk.cyan(options.env)}`);
     if (isOperatorBatch) {
       console.log(`  Batch fee: ${formatBatchFee(fee)}`);
+      console.log(`  Fee (wei): ${fee.toString()}`);
     } else {
-      console.log(`  Fee: ${chalk.yellow(formatEther(fee))} ETH`);
+      console.log(`  Individual registration fee: ${chalk.yellow(formatEther(fee))} ETH`);
+      console.log(`  Individual fee (wei): ${fee.toString()}`);
+      if (batchFee !== null) {
+        console.log(`  Operator batch fee (per batch): ${formatBatchFee(batchFee)}`);
+        console.log(`  Operator batch fee (wei): ${batchFee.toString()}`);
+      }
     }
-    console.log(`  Fee (wei): ${fee.toString()}`);
   } catch (error) {
     spinner.fail('Failed to get quote');
     throw error;

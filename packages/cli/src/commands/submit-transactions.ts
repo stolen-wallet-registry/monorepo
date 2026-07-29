@@ -1,17 +1,11 @@
-import {
-  formatEther,
-  zeroAddress,
-  encodeFunctionData,
-  createPublicClient,
-  http,
-  type Hex,
-} from 'viem';
+import { zeroAddress, encodeFunctionData, createPublicClient, http, type Hex } from 'viem';
 import chalk from 'chalk';
 import ora from 'ora';
 import { parseTransactionFile } from '../lib/files.js';
 import { createClients } from '../lib/client.js';
 import { getConfig } from '../lib/config.js';
-import { OperatorSubmitterABI, TransactionRegistryABI } from '@swr/abis';
+import { formatBatchFee } from '../lib/format.js';
+import { OperatorSubmitterABI } from '@swr/abis';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
@@ -62,14 +56,22 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
     });
 
     // 4. Quote fee
-    spinner.start('Fetching fee quote...');
+    //
+    // Must be OperatorSubmitter.quoteBatchFee(), NOT TransactionRegistry.quoteRegistration().
+    // These are two unrelated prices: quoteBatchFee is the flat per-BATCH operator fee
+    // (free by default) collected by OperatorSubmitter._collectFee, while quoteRegistration
+    // is the per-REGISTRATION fee charged to individual users — the registry's
+    // registerTransactionsFromOperator path collects nothing. Quoting the individual fee
+    // overpays today (relying on the push refund, which reverts for a Safe that cannot
+    // receive ETH) and under-funds the call the moment a batch fee is enabled, reverting
+    // with OperatorSubmitter__InsufficientFee.
+    spinner.start('Fetching batch fee quote...');
     const fee = await publicClient.readContract({
-      address: config.contracts.stolenTransactionRegistry,
-      abi: TransactionRegistryABI,
-      functionName: 'quoteRegistration',
-      args: [zeroAddress],
+      address: config.contracts.operatorSubmitter,
+      abi: OperatorSubmitterABI,
+      functionName: 'quoteBatchFee',
     });
-    spinner.succeed(`Fee: ${chalk.yellow(formatEther(fee))} ETH`);
+    spinner.succeed(`Batch fee: ${formatBatchFee(fee)}`);
 
     // 5. Prepare transaction data
     const txHashes = entries.map((e) => e.txHash);
@@ -119,7 +121,7 @@ export async function submitTransactions(options: SubmitTransactionsOptions): Pr
       console.log(chalk.yellow('\n--- DRY RUN ---'));
       console.log('Would submit:');
       console.log(`  Transactions: ${entries.length}`);
-      console.log(`  Fee: ${formatEther(fee)} ETH`);
+      console.log(`  Batch fee: ${formatBatchFee(fee)}`);
       return;
     }
 

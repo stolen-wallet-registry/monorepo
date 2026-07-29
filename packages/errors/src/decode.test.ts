@@ -312,4 +312,12 @@ describe('CONTRACT_ERROR_SELECTORS coverage', () => {
     const expectedKeys = Object.keys(expectedSelectors);
     expect(actualSelectors.sort()).toEqual(expectedKeys.sort());
   });
+
+  // CONTRACT_ERROR_BY_NAME is built with Object.fromEntries, which silently keeps the LAST
+  // entry on a name collision — a duplicated error name would render the wrong curated
+  // message with no test failure. Zero collisions exist today; this pins that invariant.
+  it('error names are unique (by-name map cannot silently drop entries)', () => {
+    const names = Object.values(CONTRACT_ERROR_SELECTORS).map((info) => info.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
 });

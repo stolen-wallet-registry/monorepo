@@ -40,11 +40,10 @@ import { redactAddress } from '@/lib/logger/formatters';
 import { isAddress } from '@/lib/types/ethereum';
 import type { Address } from '@/lib/types/ethereum';
 
-// Versioned key. This value is persisted user data with no migration path, so the schema
-// version lives in the key itself: changing the stored shape means bumping the suffix, and
-// data written by an older shape is simply never read instead of being fed to new code that
-// does not understand it. Bump to -v2 if the RecentSearch shape ever changes.
-const RECENT_SEARCHES_KEY = 'swr-recent-searches-v1';
+// Unversioned key: this is existing users' persisted data, and renaming the key orphans it
+// (their recent searches vanish). If the RecentSearch shape ever changes, add a version
+// suffix (-v2) at THAT point and read the old key through once — do not bump preemptively.
+const RECENT_SEARCHES_KEY = 'swr-recent-searches';
 const MAX_RECENT_SEARCHES = 5;
 
 /** Registry entry types */

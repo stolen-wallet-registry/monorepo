@@ -60,6 +60,40 @@ const initialState: RegistrationState = {
   incidentTimestamp: null,
 };
 
+const VALID_REGISTRATION_TYPES: RegistrationType[] = ['standard', 'selfRelay', 'p2pRelay'];
+
+// MUST be declared BEFORE the create() call below. zustand's persist middleware hydrates
+// synchronously for localStorage, so `merge` runs during module evaluation — a reference to
+// a `const` declared later in the file throws a temporal-dead-zone ReferenceError, which
+// zustand silently swallows, and the store NEVER rehydrates persisted state.
+export const STEP_SEQUENCES: Record<RegistrationType, RegistrationStep[]> = {
+  standard: [
+    'acknowledge-and-sign',
+    'acknowledge-and-pay',
+    'grace-period',
+    'register-and-sign',
+    'register-and-pay',
+    'success',
+  ],
+  selfRelay: [
+    'acknowledge-and-sign',
+    'switch-and-pay-one',
+    'grace-period',
+    'register-and-sign',
+    'switch-and-pay-two',
+    'success',
+  ],
+  p2pRelay: [
+    'wait-for-connection',
+    'acknowledge-and-sign',
+    'acknowledgement-payment',
+    'grace-period',
+    'register-and-sign',
+    'registration-payment',
+    'success',
+  ],
+};
+
 export const useRegistrationStore = create<RegistrationState & RegistrationActions>()(
   devtools(
     persist(
@@ -167,11 +201,25 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
 
           const state = persisted as Partial<RegistrationState>;
 
+          // Validate registrationType and step against the known sequences (mirrors
+          // transactionRegistrationStore). An unknown step would otherwise flow into
+          // StepRenderer's Record lookup and render a blank page with no recovery control.
+          const isValidRegistrationType =
+            state.registrationType &&
+            VALID_REGISTRATION_TYPES.includes(state.registrationType as RegistrationType);
+          const finalRegistrationType = isValidRegistrationType
+            ? (state.registrationType as RegistrationType)
+            : initialState.registrationType;
+          const validSteps = STEP_SEQUENCES[finalRegistrationType];
+          const isValidStep =
+            state.step === null ||
+            (state.step && validSteps.includes(state.step as RegistrationStep));
+
           // Ensure all required fields exist with fallbacks
           return {
             ...current,
-            registrationType: state.registrationType ?? initialState.registrationType,
-            step: state.step ?? initialState.step,
+            registrationType: finalRegistrationType,
+            step: isValidStep ? (state.step as RegistrationStep | null) : initialState.step,
             acknowledgementHash: state.acknowledgementHash ?? initialState.acknowledgementHash,
             acknowledgementChainId:
               state.acknowledgementChainId ?? initialState.acknowledgementChainId,
@@ -198,35 +246,6 @@ function getInitialStep(type: RegistrationType): RegistrationStep {
       return 'wait-for-connection';
   }
 }
-
-// Step sequences for each registration type
-export const STEP_SEQUENCES: Record<RegistrationType, RegistrationStep[]> = {
-  standard: [
-    'acknowledge-and-sign',
-    'acknowledge-and-pay',
-    'grace-period',
-    'register-and-sign',
-    'register-and-pay',
-    'success',
-  ],
-  selfRelay: [
-    'acknowledge-and-sign',
-    'switch-and-pay-one',
-    'grace-period',
-    'register-and-sign',
-    'switch-and-pay-two',
-    'success',
-  ],
-  p2pRelay: [
-    'wait-for-connection',
-    'acknowledge-and-sign',
-    'acknowledgement-payment',
-    'grace-period',
-    'register-and-sign',
-    'registration-payment',
-    'success',
-  ],
-};
 
 // Helper to get next step
 export function getNextStep(

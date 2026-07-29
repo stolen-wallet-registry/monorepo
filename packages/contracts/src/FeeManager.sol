@@ -18,7 +18,6 @@ contract FeeManager is IFeeManager, Ownable2Step {
     /// @notice Base fee in USD cents (500 = $5.00)
     uint256 public baseFeeUsdCents = 500;
 
-    /// @notice Operator batch fee in USD cents (2500 = $25.00)
     /// @notice Flat protocol fee per operator batch, in USD cents. Default: 0 (free).
     /// @dev Operator batches are FREE by design.
     ///
@@ -76,27 +75,46 @@ contract FeeManager is IFeeManager, Ownable2Step {
     // PRICE RESOLUTION
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Converts Chainlink price to USD cents based on feed decimals
+    /// @dev Attempts to convert a Chainlink price to USD cents based on feed decimals.
     /// @notice Assumes standard Chainlink ETH/USD feeds (8 decimals, price ~3×10¹¹)
     ///         For exotic feeds with high decimals and small values, result may truncate to 0
-    /// @param price Raw price from Chainlink (int256)
-    /// @return Price in USD cents (minimum 1 cent to prevent division by zero)
-    function _toCents(int256 price) internal view returns (uint256) {
+    ///
+    ///      Returns ok=false instead of reverting when the feed's decimals() call fails or
+    ///      returns a value that would make the conversion overflow. Like the _isStale
+    ///      underflow, a decimals() revert or an arithmetic panic here would execute inside
+    ///      the caller's try SUCCESS branch, where the catch cannot catch it — the panic
+    ///      would propagate and brick every fee-collecting registration path. A broken feed
+    ///      must degrade to the fallback price, not revert.
+    /// @param price Raw price from Chainlink (int256), must be positive (caller checks)
+    /// @return ok Whether the conversion succeeded
+    /// @return cents Price in USD cents (minimum 1 cent to prevent division by zero)
+    function _tryToCents(int256 price) internal view returns (bool ok, uint256 cents) {
+        uint8 feedDecimals;
+        try _priceFeed.decimals() returns (uint8 d) {
+            feedDecimals = d;
+        } catch {
+            return (false, 0);
+        }
+
         // Chainlink ETH/USD typically returns 8 decimals
         // To convert to cents (2 decimals), divide by 10^(decimals-2) = 10^6
-        uint8 feedDecimals = _priceFeed.decimals();
-        uint256 result;
         if (feedDecimals <= 2) {
-            // casting to 'uint256' is safe because Chainlink ETH/USD price is always positive
+            // casting to 'uint256' is safe because caller has checked price > 0
             // forge-lint: disable-next-line(unsafe-typecast)
-            result = uint256(price) * 10 ** (2 - feedDecimals);
+            uint256 p = uint256(price);
+            // Guard the multiplication: an absurd price would panic past the caller's catch
+            if (p > type(uint256).max / 100) return (false, 0);
+            cents = p * 10 ** (2 - feedDecimals);
         } else {
-            // casting to 'uint256' is safe because Chainlink ETH/USD price is always positive
+            // 10 ** (feedDecimals - 2) overflows uint256 for feedDecimals > 79; treat any
+            // such feed as broken rather than panicking
+            if (feedDecimals > 77) return (false, 0);
+            // casting to 'uint256' is safe because caller has checked price > 0
             // forge-lint: disable-next-line(unsafe-typecast)
-            result = uint256(price) / 10 ** (feedDecimals - 2);
+            cents = uint256(price) / 10 ** (feedDecimals - 2);
         }
         // Ensure minimum 1 cent to prevent division by zero in fee calculation
-        return result > 0 ? result : 1;
+        return (true, cents > 0 ? cents : 1);
     }
 
     /// @inheritdoc IFeeManager
@@ -120,8 +138,11 @@ contract FeeManager is IFeeManager, Ownable2Step {
                 return fallbackEthPriceUsdCents;
             }
 
-            // Convert to cents using feed's decimals
-            uint256 livePrice = _toCents(price);
+            // Convert to cents using feed's decimals; a broken decimals() falls back
+            (bool ok, uint256 livePrice) = _tryToCents(price);
+            if (!ok) {
+                return fallbackEthPriceUsdCents;
+            }
 
             // Opportunistic sync: update fallback if interval has passed
             // Cost: ~100 gas for read + ~10k gas for write (only when triggered)
@@ -149,7 +170,8 @@ contract FeeManager is IFeeManager, Ownable2Step {
             if (_isStale(updatedAt) || price <= 0) {
                 return fallbackEthPriceUsdCents;
             }
-            return _toCents(price);
+            (bool ok, uint256 livePrice) = _tryToCents(price);
+            return ok ? livePrice : fallbackEthPriceUsdCents;
         } catch {
             return fallbackEthPriceUsdCents;
         }
@@ -222,7 +244,8 @@ contract FeeManager is IFeeManager, Ownable2Step {
         // reverting with the intended Fee__StalePrice.
         if (_isStale(updatedAt)) revert Fee__StalePrice();
 
-        uint256 newPrice = _toCents(price);
+        (bool ok, uint256 newPrice) = _tryToCents(price);
+        if (!ok) revert Fee__InvalidPrice();
         fallbackEthPriceUsdCents = newPrice;
         lastFallbackSync = block.timestamp;
         emit FallbackPriceRefreshed(newPrice);
