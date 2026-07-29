@@ -32,9 +32,14 @@ export type SearchType = 'address' | 'transaction' | 'caip10' | 'invalid';
  * Data for a stolen wallet from the indexer.
  */
 export interface WalletSearchData {
-  /** Wallet address (lowercase) */
+  /** Wallet address (lowercase). Falls back to the raw bytes32 identifier for non-EVM entries. */
   address: Address;
-  /** CAIP-10 identifier (e.g., "eip155:8453:0x...") */
+  /**
+   * CAIP-10 identifier. EVM wallets use the wildcard chain reference
+   * ("eip155:*:0x…") because the registry's wallet key is chain-wildcarded — a wallet
+   * marked stolen is stolen on every EVM chain. See `reportedChainCAIP2` for the chain the
+   * incident was reported on.
+   */
   caip10: string;
   /** Timestamp when registered (Unix seconds as bigint) */
   registeredAt: bigint;
@@ -46,6 +51,10 @@ export interface WalletSearchData {
   sourceChainCAIP2?: string;
   /** Human-readable source chain name */
   sourceChainName?: string;
+  /** CAIP-2 chain the incident was reported on */
+  reportedChainCAIP2?: string;
+  /** Human-readable reported chain name */
+  reportedChainName?: string;
 }
 
 /**

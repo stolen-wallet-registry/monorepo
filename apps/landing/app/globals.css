@@ -27,6 +27,14 @@ html {
  * removing them outright can leave elements stuck in an animation's starting state
  * (opacity 0, translated off-screen) and hide content entirely. `scroll-behavior: auto`
  * overrides the smooth scroll declared above.
+ *
+ * SCOPE: this deliberately does NOT kill every transition on the page. The earlier version
+ * of this block also forced `transition-duration: 0.01ms !important` on `*`, which removed
+ * every shadcn/Radix state fade (hover, focus ring, dropdown open, theme switch) along with
+ * the marquee. Reduced-motion guidance targets large, continuous or unexpected movement —
+ * a 150ms colour or opacity fade is not that, and stripping it makes the whole UI feel
+ * broken. Transform-based motion IS the vestibular trigger, so that is what is frozen
+ * below, via the two Tailwind utilities the page uses to declare it.
  */
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -38,7 +46,21 @@ html {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  /*
+   * Freeze movement, keep feedback. Tailwind's `transition-transform` / `transition-all`
+   * are what animate `hover:scale-110`, slide-ins and translate effects here; narrowing
+   * their transition-property to non-motion properties makes those changes apply instantly
+   * while colour/opacity/shadow feedback still animates. CSS cannot select "elements whose
+   * transition-property includes transform", so keying off the utility classes is the only
+   * way to scope this — if a new motion utility is introduced, add it here.
+   */
+  .transition-transform,
+  .transition-all {
+    transition-property:
+      color, background-color, border-color, text-decoration-color, fill, stroke, opacity,
+      box-shadow !important;
   }
 }

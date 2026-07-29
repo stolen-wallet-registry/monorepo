@@ -39,7 +39,7 @@ import {
   type TransactionRegistrationStep,
 } from '@/stores/transactionRegistrationStore';
 import { useTransactionFormStore } from '@/stores/transactionFormStore';
-import { useP2PStore } from '@/stores/p2pStore';
+import { useP2PStore, isPreConnectionStep } from '@/stores/p2pStore';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
 import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
 import {
@@ -50,6 +50,7 @@ import {
   passStreamData,
   getPeerConnection,
   isStreamAbortError,
+  isValidTxSignatureData,
   type ProtocolHandler,
   type ParsedStreamData,
   type PaymentMessage,
@@ -63,25 +64,6 @@ import { logger } from '@/lib/logger';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 /**
- * Validate and check if signature data has all required fields for transaction registration.
- */
-function isValidTxSignatureData(data: ParsedStreamData): boolean {
-  return !!(
-    data.signature?.value &&
-    data.signature?.deadline &&
-    data.signature?.nonce &&
-    data.signature?.address &&
-    data.signature?.chainId !== undefined &&
-    data.transactionBatch?.dataHash &&
-    data.transactionBatch?.reportedChainId &&
-    data.transactionBatch?.transactionCount &&
-    data.transactionBatch?.transactionHashes?.length &&
-    data.transactionBatch?.chainIdHashes?.length &&
-    data.transactionBatch.transactionHashes.length === data.transactionBatch.chainIdHashes.length
-  );
-}
-
-/**
  * Process a received transaction signature: validate, store in signature storage
  * and form store, confirm receipt, and advance step.
  */
@@ -89,12 +71,13 @@ async function processTxSignature(
   data: ParsedStreamData,
   connection: Connection,
   relayerAddress: Address,
+  expectedChainId: number,
   step: typeof TX_SIGNATURE_STEP.ACKNOWLEDGEMENT | typeof TX_SIGNATURE_STEP.REGISTRATION,
   receiptProtocol: string,
   goToNextStep: () => void,
   updateFormStore: (data: ParsedStreamData) => void
 ): Promise<boolean> {
-  if (!isValidTxSignatureData(data)) {
+  if (!isValidTxSignatureData(data, expectedChainId)) {
     logger.p2p.warn(
       `Received malformed TX ${step === TX_SIGNATURE_STEP.ACKNOWLEDGEMENT ? 'ACK' : 'REG'} signature data`,
       { data }
@@ -251,6 +234,14 @@ export function TransactionP2PRelayerPage() {
     );
   });
 
+  // Read inside long-lived protocol handlers, which would otherwise close over a stale
+  // chainId if the relayer switches network mid-flow. The received signature is checked
+  // against this value before the relayer pays to submit it.
+  const chainIdRef = useRef(chainId);
+  useEffect(() => {
+    chainIdRef.current = chainId;
+  }, [chainId]);
+
   // Initialize P2P node
   // Every setState below an await in this effect is already gated on
   // `abortController.signal.aborted` (including inside catch blocks), so a
@@ -272,6 +263,16 @@ export function TransactionP2PRelayerPage() {
       try {
         logger.p2p.info('Initializing P2P node for TX relayer');
 
+        // A fresh flow must never inherit a pin from an abandoned session. `partnerPeerId` is
+        // persisted so a mid-flow reload keeps its partner, but a user who closed the tab from
+        // the success screen would otherwise start their next flow already pinned to the old
+        // partner — and the guard would silently reject the new one. Reading the step from
+        // getState() rather than a dependency keeps this out of the effect's deps, which would
+        // otherwise tear down and rebuild the libp2p node on every step change.
+        if (isPreConnectionStep(useTransactionRegistrationStore.getState().step)) {
+          useP2PStore.getState().clearPartnerPeerId();
+        }
+
         const streamHandler = (protocol: string) => ({
           handler: async (stream: Stream, connection?: Connection) => {
             try {
@@ -280,7 +281,7 @@ export function TransactionP2PRelayerPage() {
               // Bind the stream to the agreed partner peer and to this protocol's schema
               // before any of it is trusted. Without this an arbitrary peer that learned a
               // displayed peer ID could inject signatures or drive the step machine.
-              if (!acceptStream(protocol, connection, data)) return;
+              if (!acceptStream(protocol, connection, data, 'relayer')) return;
 
               logger.p2p.info('TX Relayer received data', { protocol, data });
 
@@ -318,6 +319,7 @@ export function TransactionP2PRelayerPage() {
                     data,
                     connection,
                     address,
+                    chainIdRef.current,
                     TX_SIGNATURE_STEP.ACKNOWLEDGEMENT,
                     PROTOCOLS.TX_ACK_REC,
                     goToNextStepRef.current,
@@ -336,6 +338,7 @@ export function TransactionP2PRelayerPage() {
                     data,
                     connection,
                     address,
+                    chainIdRef.current,
                     TX_SIGNATURE_STEP.REGISTRATION,
                     PROTOCOLS.TX_REG_REC,
                     goToNextStepRef.current,

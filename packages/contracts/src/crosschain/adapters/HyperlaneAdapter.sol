@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { TimelockOwnable } from "../../libraries/TimelockOwnable.sol";
 import { IBridgeAdapter } from "../../interfaces/IBridgeAdapter.sol";
 import { CrossChainMessage } from "../../libraries/CrossChainMessage.sol";
 import { IMailbox } from "@hyperlane-xyz/core/contracts/interfaces/IMailbox.sol";
@@ -21,7 +22,13 @@ import { StandardHookMetadata } from "@hyperlane-xyz/core/contracts/hooks/libs/S
 ///      every batch past a handful of entries and the Hyperlane relayer silently declines to
 ///      execute it — while the spoke has already consumed the nonce, cleared the acknowledgement,
 ///      and kept the fee.
-contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
+///
+///      Owner powers are timelocked (TimelockOwnable), because the destination trusts THIS
+///      CONTRACT as the origin sender: an owner who can grant dispatch rights can mint a
+///      universal forgery oracle for the hub in one transaction. Grants therefore go through
+///      propose → 2 days → activate once setup is complete, while revocations stay immediate so
+///      a compromised spoke contract can be cut off without waiting out the delay.
+contract HyperlaneAdapter is IBridgeAdapter, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -230,23 +237,61 @@ contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Add or remove a supported destination domain
+    /// @dev Enabling a domain is timelocked after setup (it widens where this adapter can
+    ///      dispatch); disabling stays immediate so a compromised destination can be cut off.
     /// @param domain Hyperlane domain ID
     /// @param supported True to enable, false to disable
     function setDomainSupport(uint32 domain, bool supported) external onlyOwner {
-        supportedDomains[domain] = supported;
-        emit DomainSupportUpdated(domain, supported);
+        if (supported && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
+        _setDomainSupport(domain, supported);
+    }
+
+    /// @notice Propose enabling a destination domain (2-day delay before activation)
+    /// @param domain Hyperlane domain ID to enable
+    function proposeDomainSupport(uint32 domain) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setDomainSupport", domain)));
+    }
+
+    /// @notice Activate a previously proposed domain enablement
+    /// @param domain Hyperlane domain ID to enable
+    function activateDomainSupport(uint32 domain) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setDomainSupport", domain)));
+        _setDomainSupport(domain, true);
     }
 
     /// @notice Add or remove a contract permitted to dispatch messages through this adapter
+    /// @dev THE trust boundary of this contract. The destination's CrossChainInbox and
+    ///      SoulboundReceiver accept anything this adapter dispatches, so granting dispatch
+    ///      rights post-setup requires propose → 2 days → activate. Revoking is immediate:
+    ///      it only ever narrows what can be sent, and is the emergency response to a
+    ///      compromised spoke contract.
     /// @param sender Address to authorize (SpokeRegistry, SpokeSoulboundForwarder)
     /// @param authorized True to enable, false to revoke
     function setAuthorizedSender(address sender, bool authorized) external onlyOwner {
         if (sender == address(0)) revert HyperlaneAdapter__ZeroAddress();
-        authorizedSenders[sender] = authorized;
-        emit AuthorizedSenderUpdated(sender, authorized);
+        if (authorized && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
+        _setAuthorizedSender(sender, authorized);
+    }
+
+    /// @notice Propose authorizing a dispatcher (2-day delay before activation)
+    /// @param sender Address to authorize
+    function proposeAuthorizedSender(address sender) external onlyOwner {
+        if (sender == address(0)) revert HyperlaneAdapter__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setAuthorizedSender", sender)));
+    }
+
+    /// @notice Activate a previously proposed dispatcher authorization
+    /// @param sender Address to authorize
+    function activateAuthorizedSender(address sender) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setAuthorizedSender", sender)));
+        _setAuthorizedSender(sender, true);
     }
 
     /// @notice Set the destination gas model for a domain
+    /// @dev NOT timelocked: this only affects how much destination gas is purchased, and it is
+    ///      the operational lever for responding to a destination gas-schedule change. It cannot
+    ///      authorize a sender or widen what may be dispatched. Note the coupling documented on
+    ///      MAX_GAS_LIMIT — see `test_GasModel_SupportsMaxCrossChainBatch`.
     /// @param domain Hyperlane domain ID
     /// @param baseGas Fixed gas amount (0 = use DEFAULT_BASE_GAS)
     /// @param perEntryGas Per-entry gas amount (0 = use DEFAULT_PER_ENTRY_GAS)
@@ -257,13 +302,13 @@ contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
     }
 
     /// @notice Batch add supported domains
-    /// @dev Limited to 100 domains per call to prevent DoS via gas exhaustion
+    /// @dev Setup-only convenience. After completeSetup(), enable domains one at a time through
+    ///      proposeDomainSupport/activateDomainSupport so each addition carries its own delay.
     /// @param domains Array of Hyperlane domain IDs to enable (max 100)
-    function addDomains(uint32[] calldata domains) external onlyOwner {
+    function addDomains(uint32[] calldata domains) external onlyOwner onlyDuringSetup {
         if (domains.length > 100) revert HyperlaneAdapter__TooManyDomains();
         for (uint256 i = 0; i < domains.length; i++) {
-            supportedDomains[domains[i]] = true;
-            emit DomainSupportUpdated(domains[i], true);
+            _setDomainSupport(domains[i], true);
         }
     }
 
@@ -294,5 +339,15 @@ contract HyperlaneAdapter is IBridgeAdapter, Ownable2Step {
     ///      `msgValue` is zero — we never forward native value to the recipient.
     function _hookMetadata(uint32 destinationChain, bytes calldata payload) internal view returns (bytes memory) {
         return StandardHookMetadata.formatMetadata(0, _gasLimit(destinationChain, payload), msg.sender, "");
+    }
+
+    function _setDomainSupport(uint32 domain, bool supported) internal {
+        supportedDomains[domain] = supported;
+        emit DomainSupportUpdated(domain, supported);
+    }
+
+    function _setAuthorizedSender(address sender, bool authorized) internal {
+        authorizedSenders[sender] = authorized;
+        emit AuthorizedSenderUpdated(sender, authorized);
     }
 }

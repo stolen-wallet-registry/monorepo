@@ -14,13 +14,17 @@ import { gql } from 'graphql-request';
  */
 export const WALLET_QUERY = gql`
   query SearchWallet($address: String!) {
-    stolenWallet(id: $address) {
-      id
-      caip10
-      registeredAt
-      transactionHash
-      isSponsored
-      sourceChainCAIP2
+    stolenWallets(where: { walletAddress: $address }, limit: 1) {
+      items {
+        id
+        walletAddress
+        caip10
+        registeredAt
+        transactionHash
+        isSponsored
+        sourceChainCAIP2
+        reportedChainCAIP2
+      }
     }
   }
 `;
@@ -33,11 +37,13 @@ export const WALLET_BY_CAIP10_QUERY = gql`
     stolenWallets(where: { caip10: $caip10 }, limit: 1) {
       items {
         id
+        walletAddress
         caip10
         registeredAt
         transactionHash
         isSponsored
         sourceChainCAIP2
+        reportedChainCAIP2
       }
     }
   }
@@ -157,12 +163,14 @@ export const RECENT_WALLETS_QUERY = gql`
     stolenWallets(orderBy: "registeredAt", orderDirection: "desc", limit: $limit, offset: $offset) {
       items {
         id
+        walletAddress
         caip10
         registeredAt
         transactionHash
         isSponsored
         operator
         sourceChainCAIP2
+        reportedChainCAIP2
         batchId
       }
     }
@@ -290,9 +298,6 @@ export const RECENT_CONTRACT_BATCHES_QUERY = gql`
 `;
 
 /**
- * Query wallet batch detail + entries.
- */
-/**
  * Query wallet batch only (no entries). Used as step 1 of two-step fetch.
  */
 export const WALLET_BATCH_ONLY_QUERY = gql`
@@ -323,41 +328,7 @@ export const WALLET_ENTRIES_BY_TX_HASH_QUERY = gql`
     ) {
       items {
         id
-        caip10
-        registeredAt
-        transactionHash
-        operator
-        sourceChainCAIP2
-        reportedChainCAIP2
-      }
-    }
-  }
-`;
-
-/**
- * Query wallet batch detail + entries (legacy single-query, kept for reference).
- * @deprecated Use WALLET_BATCH_ONLY_QUERY + WALLET_ENTRIES_BY_TX_HASH_QUERY instead.
- */
-export const WALLET_BATCH_DETAIL_QUERY = gql`
-  query WalletBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
-    walletBatch(id: $batchId) {
-      id
-      operatorId
-      operator
-      reportedChainCAIP2
-      walletCount
-      registeredAt
-      transactionHash
-    }
-    stolenWallets(
-      where: { batchId: $batchId }
-      orderBy: "registeredAt"
-      orderDirection: "desc"
-      limit: $limit
-      offset: $offset
-    ) {
-      items {
-        id
+        walletAddress
         caip10
         registeredAt
         transactionHash
@@ -414,43 +385,6 @@ export const TRANSACTION_ENTRIES_BY_TX_HASH_QUERY = gql`
 `;
 
 /**
- * Query transaction batch detail + entries (legacy single-query, kept for reference).
- * @deprecated Use TRANSACTION_BATCH_ONLY_QUERY + TRANSACTION_ENTRIES_BY_TX_HASH_QUERY instead.
- */
-export const TRANSACTION_BATCH_DETAIL_QUERY = gql`
-  query TransactionBatchDetail($batchId: String!, $limit: Int!, $offset: Int) {
-    transactionBatch(id: $batchId) {
-      id
-      dataHash
-      reporter
-      reportedChainCAIP2
-      transactionCount
-      isSponsored
-      isOperator
-      operatorId
-      registeredAt
-      transactionHash
-    }
-    transactionInBatchs(
-      where: { batchId: $batchId }
-      orderBy: "reportedAt"
-      orderDirection: "desc"
-      limit: $limit
-      offset: $offset
-    ) {
-      items {
-        id
-        txHash
-        caip2ChainId
-        numericChainId
-        reporter
-        reportedAt
-      }
-    }
-  }
-`;
-
-/**
  * Query contract batch detail + entries.
  */
 export const CONTRACT_BATCH_DETAIL_QUERY = gql`
@@ -486,27 +420,36 @@ export const CONTRACT_BATCH_DETAIL_QUERY = gql`
 // RAW RESPONSE TYPES (from Ponder indexer)
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * A stolen wallet row.
+ *
+ * `id` is the FULL bytes32 identifier from the contract event, NOT an address — non-EVM
+ * namespaces use all 32 bytes. Use `walletAddress` (null for non-EVM) for the address.
+ *
+ * `caip10` uses the wildcard chain reference for EVM wallets ("eip155:*:0x…") because the
+ * registry's wallet key is chain-wildcarded. Use `reportedChainCAIP2` for the chain the
+ * incident was reported on.
+ */
+export interface RawWalletItem {
+  id: string;
+  walletAddress: string | null;
+  caip10: string;
+  registeredAt: string;
+  transactionHash: string;
+  isSponsored: boolean;
+  sourceChainCAIP2?: string | null;
+  reportedChainCAIP2?: string | null;
+}
+
 export interface RawWalletResponse {
-  stolenWallet: {
-    id: string;
-    caip10: string;
-    registeredAt: string;
-    transactionHash: string;
-    isSponsored: boolean;
-    sourceChainCAIP2?: string;
-  } | null;
+  stolenWallets: {
+    items: RawWalletItem[];
+  };
 }
 
 export interface RawWalletByCAIP10Response {
   stolenWallets: {
-    items: Array<{
-      id: string;
-      caip10: string;
-      registeredAt: string;
-      transactionHash: string;
-      isSponsored: boolean;
-      sourceChainCAIP2?: string;
-    }>;
+    items: RawWalletItem[];
   };
 }
 
@@ -594,13 +537,17 @@ export interface RawRegistryStatsResponse {
 export interface RawRecentWalletsResponse {
   stolenWallets: {
     items: Array<{
+      /** FULL bytes32 identifier — see RawWalletItem. Use `walletAddress` for the address. */
       id: string;
+      walletAddress: string | null;
+      /** Wildcard for EVM wallets ("eip155:*:0x…") — use `reportedChainCAIP2` for the chain */
       caip10: string;
       registeredAt: string;
       transactionHash: string;
       isSponsored: boolean;
       operator?: string;
       sourceChainCAIP2?: string;
+      reportedChainCAIP2?: string;
       batchId?: string;
     }>;
   };
@@ -694,30 +641,9 @@ export interface RawWalletBatchOnlyResponse {
 export interface RawWalletEntriesByTxHashResponse {
   stolenWallets: {
     items: Array<{
+      /** FULL bytes32 identifier — see RawWalletItem. Use `walletAddress` for the address. */
       id: string;
-      caip10: string;
-      registeredAt: string;
-      transactionHash: string;
-      operator?: string;
-      sourceChainCAIP2?: string;
-      reportedChainCAIP2?: string;
-    }>;
-  };
-}
-
-export interface RawWalletBatchDetailResponse {
-  walletBatch: {
-    id: string;
-    operatorId: string;
-    operator: string;
-    reportedChainCAIP2?: string;
-    walletCount: number;
-    registeredAt: string;
-    transactionHash: string;
-  } | null;
-  stolenWallets: {
-    items: Array<{
-      id: string;
+      walletAddress: string | null;
       caip10: string;
       registeredAt: string;
       transactionHash: string;
@@ -744,31 +670,6 @@ export interface RawTransactionBatchOnlyResponse {
 }
 
 export interface RawTransactionEntriesByTxHashResponse {
-  transactionInBatchs: {
-    items: Array<{
-      id: string;
-      txHash: string;
-      caip2ChainId: string;
-      numericChainId?: number;
-      reporter: string;
-      reportedAt: string;
-    }>;
-  };
-}
-
-export interface RawTransactionBatchDetailResponse {
-  transactionBatch: {
-    id: string;
-    dataHash: string;
-    reporter: string;
-    reportedChainCAIP2?: string;
-    transactionCount: number;
-    isSponsored: boolean;
-    isOperator: boolean;
-    operatorId?: string;
-    registeredAt: string;
-    transactionHash: string;
-  } | null;
   transactionInBatchs: {
     items: Array<{
       id: string;

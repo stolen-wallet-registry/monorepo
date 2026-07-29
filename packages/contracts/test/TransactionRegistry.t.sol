@@ -1106,6 +1106,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
     }
 
     /// @notice Operator batch skips already-registered transactions silently
+    /// @notice Already-registered entries are skipped, and the batch counts only what landed.
     function test_TxRegFromOperator_SkipsDuplicates() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
 
@@ -1113,12 +1114,36 @@ contract TransactionRegistryTest is EIP712TestHelper {
         vm.prank(operatorSubmitter);
         txRegistry.registerTransactionsFromOperator(keccak256("op1"), txHashes, chainIds);
 
-        // Second batch: same txHashes, should all be skipped
+        // Second batch: the same 3 duplicates plus one genuinely new entry
+        bytes32[] memory mixedHashes = new bytes32[](4);
+        bytes32[] memory mixedChainIds = new bytes32[](4);
+        for (uint256 i = 0; i < 3; i++) {
+            mixedHashes[i] = txHashes[i];
+            mixedChainIds[i] = chainIds[i];
+        }
+        mixedHashes[3] = keccak256("txBrandNew");
+        mixedChainIds[3] = chainIds[0];
+
         vm.prank(operatorSubmitter);
-        uint256 batchId2 = txRegistry.registerTransactionsFromOperator(keccak256("op2"), txHashes, chainIds);
+        uint256 batchId2 = txRegistry.registerTransactionsFromOperator(keccak256("op2"), mixedHashes, mixedChainIds);
 
         ITransactionRegistry.TransactionBatch memory batch2 = txRegistry.getTransactionBatch(batchId2);
-        assertEq(batch2.transactionCount, 0, "All duplicates should be skipped");
+        assertEq(batch2.transactionCount, 1, "Only the one new entry should be counted");
+    }
+
+    /// @notice A batch where EVERY entry is a duplicate reverts rather than burning a batch ID.
+    /// @dev Matches ContractRegistry and WalletRegistry. Previously this silently succeeded:
+    ///      the operator paid full gas for a no-op, a batch ID was consumed, and the indexer
+    ///      materialised a phantom zero-entry batch with no per-entry events to join against.
+    function test_TxRegFromOperator_RevertsWhenEveryEntryIsDuplicate() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        vm.prank(operatorSubmitter);
+        txRegistry.registerTransactionsFromOperator(keccak256("op1"), txHashes, chainIds);
+
+        vm.prank(operatorSubmitter);
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__EmptyBatch.selector);
+        txRegistry.registerTransactionsFromOperator(keccak256("op2"), txHashes, chainIds);
     }
 
     /// @notice Two-phase registration skips zero hashes in the txHashes array

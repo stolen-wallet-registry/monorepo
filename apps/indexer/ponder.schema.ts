@@ -8,9 +8,23 @@ import { index, onchainTable } from 'ponder';
 export const stolenWallet = onchainTable(
   'stolen_wallet',
   (t) => ({
-    /** Wallet address (lowercase) */
+    /**
+     * The FULL bytes32 identifier from the event (lowercase, zero-padded).
+     *
+     * NOT the address: `CAIP10.walletKey` supports non-eip155 namespaces whose
+     * identifiers use all 32 bytes, so truncating to 20 bytes would let two distinct
+     * non-EVM accounts collide onto one row (and `.onConflictDoNothing()` would silently
+     * drop the second registration). Use `walletAddress` for EVM display/lookup.
+     */
     id: t.hex().primaryKey(),
-    /** CAIP-10 format: "eip155:31337:0x..." */
+    /** EVM address (lowercase) when the identifier is EVM-shaped, else null */
+    walletAddress: t.hex(),
+    /**
+     * Display CAIP-10. EVM wallets use the wildcard chain reference "eip155:*:0x..."
+     * because the contract's wallet storage key is deliberately chain-wildcarded — a
+     * stolen wallet is stolen on every EVM chain. Use `reportedChainCAIP2` for the chain
+     * the incident was reported on.
+     */
     caip10: t.text().notNull(),
     /** Block timestamp when registered */
     registeredAt: t.bigint().notNull(),
@@ -20,7 +34,7 @@ export const stolenWallet = onchainTable(
     transactionHash: t.hex().notNull(),
     /** Was gas sponsored (relay)? */
     isSponsored: t.boolean().notNull(),
-    /** If from operator batch, the operator address */
+    /** If from operator batch, the operator address (back-filled by the BatchCreated handler) */
     operator: t.hex(),
     /** If cross-chain, source chain ID (numeric) */
     sourceChainId: t.integer(),
@@ -36,10 +50,15 @@ export const stolenWallet = onchainTable(
     incidentTimestamp: t.bigint(),
     /** 0=local, 1=Hyperlane */
     bridgeId: t.integer(),
-    /** If from operator batch, the batch ID (uint256 as string) */
+    /**
+     * If from operator batch, the batch ID (uint256 as string).
+     * `WalletRegistered` carries no batchId (zero per-entry gas), so this is back-filled
+     * by the `BatchCreated` handler via the shared transactionHash.
+     */
     batchId: t.text(),
   }),
   (table) => ({
+    walletAddressIdx: index().on(table.walletAddress),
     caip10Idx: index().on(table.caip10),
     registeredAtIdx: index().on(table.registeredAt),
     batchIdIdx: index().on(table.batchId),
@@ -54,9 +73,9 @@ export const walletBatch = onchainTable(
   (t) => ({
     /** uint256 batchId as string */
     id: t.text().primaryKey(),
-    /** Operator ID (bytes32 hash of operator name) */
+    /** Operator ID: bytes32(uint256(uint160(operatorAddress))) — see OperatorSubmitter._getOperatorId */
     operatorId: t.hex().notNull(),
-    /** Operator address (from event.transaction.from) */
+    /** Operator address, decoded from operatorId (NOT event.transaction.from) */
     operator: t.hex().notNull(),
     /** Reported chain CAIP-2 (resolved from first wallet in batch) */
     reportedChainCAIP2: t.text(),
@@ -91,11 +110,17 @@ export const walletAcknowledgement = onchainTable(
     transactionHash: t.hex().notNull(),
     /** Was gas sponsored? */
     isSponsored: t.boolean().notNull(),
-    /** Calculated grace period start block */
-    gracePeriodStart: t.bigint().notNull(),
-    /** Calculated grace period end block */
-    gracePeriodEnd: t.bigint().notNull(),
-    /** Status: pending, registered, expired */
+    /**
+     * Status: pending | registered.
+     *
+     * There is deliberately no grace-period window here. The contract derives it from
+     * `TimingConfig` with a per-acknowledgement random component and does NOT put the
+     * result on `WalletAcknowledged`, so the indexer cannot know it — the columns that
+     * used to be here served fabricated `block.number + 5 / + 20` constants to clients.
+     * There is also no 'expired' status: expiry is a function of the current block, so
+     * clients must evaluate it against the contract (`deadlines.isExpired`) rather than
+     * against a value the indexer would have to guess.
+     */
     status: t.text().notNull(),
   }),
   (table) => ({
@@ -127,7 +152,7 @@ export const transactionBatch = onchainTable(
     isSponsored: t.boolean().notNull(),
     /** Is from operator batch (TransactionBatchCreated vs TransactionBatchRegistered) */
     isOperator: t.boolean().notNull(),
-    /** Operator ID (bytes32, only for operator batches) */
+    /** Operator ID (only for operator batches): bytes32(uint256(uint160(operatorAddress))) */
     operatorId: t.hex(),
     /** Block timestamp when registered */
     registeredAt: t.bigint().notNull(),
@@ -171,7 +196,11 @@ export const transactionInBatch = onchainTable(
     reporter: t.hex().notNull(),
     /** When batch was registered */
     reportedAt: t.bigint().notNull(),
-    /** Reference to parent batch (populated by batch summary handler or at query time) */
+    /**
+     * Parent batch ID. `TransactionRegistered` carries no batchId (zero per-entry gas),
+     * so this is back-filled by the batch summary handler (TransactionBatchRegistered /
+     * TransactionBatchCreated) via the shared transactionHash.
+     */
     batchId: t.text(),
   }),
   (table) => ({
@@ -202,11 +231,7 @@ export const transactionBatchAcknowledgement = onchainTable(
     acknowledgedAtBlock: t.bigint().notNull(),
     /** Acknowledgement transaction hash */
     transactionHash: t.hex().notNull(),
-    /** Calculated grace period start block */
-    gracePeriodStart: t.bigint().notNull(),
-    /** Calculated grace period end block */
-    gracePeriodEnd: t.bigint().notNull(),
-    /** Status: pending, registered, expired */
+    /** Status: pending | registered — see walletAcknowledgement.status for why there is no window */
     status: t.text().notNull(),
   }),
   (table) => ({
@@ -372,9 +397,9 @@ export const fraudulentContractBatch = onchainTable(
   (t) => ({
     /** uint256 batchId as string */
     id: t.text().primaryKey(),
-    /** Operator ID (bytes32 hash of operator name) */
+    /** Operator ID: bytes32(uint256(uint160(operatorAddress))) — see OperatorSubmitter._getOperatorId */
     operatorId: t.hex().notNull(),
-    /** Operator address (from event.transaction.from) */
+    /** Operator address, decoded from operatorId (NOT event.transaction.from) */
     operator: t.hex().notNull(),
     /** Reported chain CAIP-2 (resolved from first contract in batch) */
     reportedChainCAIP2: t.text(),
@@ -397,9 +422,21 @@ export const fraudulentContractBatch = onchainTable(
 export const fraudulentContract = onchainTable(
   'fraudulent_contract',
   (t) => ({
-    /** contractAddress-chainIdHash composite */
+    /**
+     * identifier-chainIdHash composite, where `identifier` is the FULL bytes32 from the
+     * event. Keyed on the full identifier (not the truncated address) so two non-EVM
+     * contract identifiers sharing a 20-byte suffix cannot collide onto one row.
+     */
     id: t.text().primaryKey(),
-    /** Contract address */
+    /** Raw bytes32 identifier from ContractRegistered */
+    identifier: t.hex().notNull(),
+    /**
+     * Contract address (lowercase), the low 20 bytes of `identifier`.
+     *
+     * Always populated and always truncated, because ContractRegistry's only registration
+     * entrypoint truncates unconditionally too — the truncated address IS the on-chain
+     * identity for contract entries. `identifier` preserves the full emitted value.
+     */
     contractAddress: t.hex().notNull(),
     /** Chain ID hash (bytes32) */
     chainIdHash: t.hex().notNull(),
@@ -409,7 +446,7 @@ export const fraudulentContract = onchainTable(
     numericChainId: t.integer(),
     /** Parent batch ID (uint256 as string) */
     batchId: t.text().notNull(),
-    /** Operator who submitted */
+    /** Operator address, decoded from the event's operatorId (NOT event.transaction.from) */
     operator: t.hex().notNull(),
     /** Threat category (0=unclassified, 1=drainer, 2=rug pull, 3=honeypot, 4=ponzi, 5=fake token) */
     threatCategory: t.integer().notNull().default(0),
@@ -434,7 +471,7 @@ export const registryStats = onchainTable('registry_stats', (t) => ({
   id: t.text().primaryKey(),
   /** Total wallet registrations */
   totalWalletRegistrations: t.integer().notNull(),
-  /** Total transaction batches */
+  /** Total transaction batches — individual AND operator (superset of totalOperatorTransactionBatches) */
   totalTransactionBatches: t.integer().notNull(),
   /** Sum of all tx counts in batches */
   totalTransactionsReported: t.integer().notNull(),
@@ -456,7 +493,7 @@ export const registryStats = onchainTable('registry_stats', (t) => ({
   activeOperators: t.integer().notNull(),
   /** Total operator wallet batches */
   totalWalletBatches: t.integer().notNull(),
-  /** Total operator transaction batches */
+  /** Operator-submitted transaction batches (subset of totalTransactionBatches) */
   totalOperatorTransactionBatches: t.integer().notNull(),
   /** Total fraudulent contract batches */
   totalContractBatches: t.integer().notNull(),

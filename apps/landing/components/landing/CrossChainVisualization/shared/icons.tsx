@@ -1,6 +1,6 @@
 'use client';
 
-import React, { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useRef } from 'react';
 import { domAnimation, LazyMotion, m, useAnimate } from 'motion/react';
 import {
   cn,
@@ -16,28 +16,33 @@ import {
 
 import { BEAM_DURATION } from './constants';
 
-// Touch-friendly tooltip: opens on tap for touch devices, hover for desktop.
-// Uses coarse pointer media query to detect touch at render time.
-function useTouchTooltip() {
-  const [open, setOpen] = useState(false);
-  const handleTap = useCallback((e: React.MouseEvent | React.PointerEvent) => {
-    // Only toggle on touch devices (coarse pointer)
-    if (window.matchMedia('(pointer: coarse)').matches) {
-      e.preventDefault();
-      setOpen((prev) => !prev);
-    }
-  }, []);
-  // These icons carry an onClick, so they are interactive and must be reachable and
-  // operable from the keyboard, not just by pointer. Radix opens the tooltip on focus once
-  // the trigger is focusable; Enter/Space toggle it the same way a tap does.
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      setOpen((prev) => !prev);
-    }
-  }, []);
-  return { open, setOpen, handleTap, handleKeyDown };
-}
+/*
+ * ACCESSIBILITY CONTRACT FOR THIS FILE
+ *
+ * `IconCircle` and `BridgeIcon` are decorative nodes in an illustration. There are ~40 of
+ * them on the desktop diagram and ~30 on mobile. Neither navigates, filters, toggles or
+ * submits anything: the only thing either one "does" is display its own brand name in a
+ * tooltip on hover, and that name is already on the element as `aria-label`, so assistive
+ * technology reads the whole diagram without ever needing to reach the tooltip.
+ *
+ * Therefore: NO click handlers, NO tabIndex, `role="img"` + `aria-label`, and out of the tab
+ * order. Two earlier passes pulled in opposite directions and neither was right —
+ *
+ *   - `role="button" tabIndex={0}` on IconCircle and a native `<button>` on BridgeIcon put
+ *     ~40 tab stops between the hero and the footer, each popping a tooltip on focus. That is
+ *     strictly worse for keyboard and screen-reader users than decorative treatment, and it
+ *     bought them nothing they did not already have from `aria-label`.
+ *   - A tap-to-open-tooltip `onClick` (coarse-pointer only) made them clickable-without-
+ *     keyboard-equivalent, which is the thing every a11y linter correctly flags. The tooltip
+ *     it enabled is a nicety on touch — the nodes are brand logos sitting inside labelled
+ *     sections — not the only route to the information.
+ *
+ * Consequence: on touch devices the tooltips no longer open. That is the accepted cost of
+ * these being decorations rather than controls.
+ *
+ * If they ever gain real behaviour, they must become genuine controls again — and then as ONE
+ * escapable group (a single tab stop into the diagram with roving tabindex), not 40 stops.
+ */
 
 /** Static lookup — hoisted so it isn't rebuilt on every IconCircle render. */
 const ICON_SIZE_CLASSES = {
@@ -67,7 +72,6 @@ export const IconCircle = forwardRef<
   ) => {
     const [scopeRef, animate] = useAnimate<HTMLDivElement>();
     const prevTriggerRef = useRef(triggerPulse);
-    const { open, setOpen, handleTap, handleKeyDown } = useTouchTooltip();
 
     // Compose the forwarded ref with useAnimate's scope ref at attach time instead of syncing
     // them from an effect. Writing the parent's ref inside an effect is what makes this look
@@ -116,20 +120,20 @@ export const IconCircle = forwardRef<
       // and accepts no ref — and the tooltip would stop working. `domAnimation` is enough here;
       // the pulse is a plain `animate` keyframe sequence with no layout projection or drag.
       <LazyMotion features={domAnimation}>
-        <Tooltip open={open} onOpenChange={setOpen}>
+        <Tooltip>
           <TooltipTrigger asChild>
             <m.div
               ref={attachRefs}
               className={cn(
-                'relative z-10 flex cursor-pointer items-center justify-center rounded-full border-2 border-border bg-background shadow-md transition-transform hover:scale-110',
+                'relative z-10 flex items-center justify-center rounded-full border-2 border-border bg-background shadow-md transition-transform hover:scale-110',
                 ICON_SIZE_CLASSES[size],
                 className
               )}
               aria-label={label}
-              role="button"
-              tabIndex={0}
-              onClick={handleTap}
-              onKeyDown={handleKeyDown}
+              // Decorative diagram node — see the accessibility contract at the top of this
+              // file. `role="img"` + aria-label is the whole accessible payload: no tabIndex,
+              // no click handler, not a tab stop.
+              role="img"
               animate={
                 pulse
                   ? {
@@ -170,23 +174,27 @@ export const BridgeIcon = forwardRef<
   HTMLElement,
   { className?: string; children: React.ReactNode; label: string }
 >(({ className, children, label }, ref) => {
-  const { open, setOpen, handleTap, handleKeyDown } = useTouchTooltip();
   return (
-    <Tooltip open={open} onOpenChange={setOpen}>
+    <Tooltip>
+      {/*
+       * A div, not a <button>: this is a decorative bridge marker in the diagram, and making
+       * it a button added a tab stop per bridge for no behaviour (see the accessibility
+       * contract at the top of this file). Its label is exposed via role="img" + aria-label.
+       * The hand-rolled Enter/Space handler that lived here was also redundant on a native
+       * <button>, which synthesises a click from those keys itself.
+       */}
       <TooltipTrigger asChild>
-        <button
-          type="button"
-          ref={ref as React.Ref<HTMLButtonElement>}
+        <div
+          ref={ref as React.Ref<HTMLDivElement>}
+          role="img"
           className={cn(
-            'z-10 flex size-9 cursor-pointer items-center justify-center rounded-full border border-border bg-background p-1.5 shadow-sm transition-transform hover:scale-110',
+            'z-10 flex size-9 items-center justify-center rounded-full border border-border bg-background p-1.5 shadow-sm transition-transform hover:scale-110',
             className
           )}
           aria-label={label}
-          onClick={handleTap}
-          onKeyDown={handleKeyDown}
         >
           {children}
-        </button>
+        </div>
       </TooltipTrigger>
       <TooltipContent>
         <p>{label}</p>

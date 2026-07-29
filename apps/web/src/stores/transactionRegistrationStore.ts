@@ -217,6 +217,24 @@ export function getTxNextStep(
   return sequence[currentIndex + 1] ?? null;
 }
 
+/**
+ * Previous step in the sequence, or null at the start.
+ *
+ * Used by the pay steps to send the user back to sign after a revert that invalidated the
+ * stored signature — retrying such a transaction resubmits identical bytes forever.
+ */
+export function getTxPreviousStep(
+  type: TransactionRegistrationType,
+  currentStep: TransactionRegistrationStep
+): TransactionRegistrationStep | null {
+  const sequence = TX_STEP_SEQUENCES[type];
+  const currentIndex = sequence.indexOf(currentStep);
+  if (currentIndex <= 0) {
+    return null;
+  }
+  return sequence[currentIndex - 1] ?? null;
+}
+
 // Selectors
 export const useTransactionRegistrationType = () =>
   useTransactionRegistrationStore(

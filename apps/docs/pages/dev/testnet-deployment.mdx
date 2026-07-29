@@ -12,7 +12,9 @@ pnpm deploy:testnet:hub    # All hub contracts to Base Sepolia
 pnpm deploy:testnet:spoke  # Spoke contracts to Optimism Sepolia
 ```
 
-After deployment, configure trust relationships via `cast send` and fill in addresses in `@swr/chains`.
+After deployment, configure trust relationships via `cast send`, finalize setup mode on **both**
+chains (Step 5 — the spoke finalize is easy to miss and leaves the adapter allowlist
+unprotected if skipped), and fill in addresses in `@swr/chains`.
 
 ## Prerequisites
 
@@ -134,7 +136,37 @@ cast send <SOULBOUND_RECEIVER> \
   --rpc-url $BASE_SEPOLIA_RPC --private-key $PRIVATE_KEY
 ```
 
-## Step 5: Verify Everything Works
+## Step 5: Finalize Setup (both chains) — required
+
+Several contracts use `TimelockOwnable`, which starts in a **setup mode** where the owner can
+configure them with immediate one-transaction calls. Finalizing ends setup mode and puts every
+subsequent privileged change behind the propose/activate timelock. **A deployment that is
+never finalized keeps its owner key as a single-transaction kill switch** — on the spoke that
+means the HyperlaneAdapter's dispatch allowlist (the control that stops an arbitrary caller
+forging cross-chain registrations) can be reopened instantly and forever.
+
+There are two finalize steps, because the timelocked contracts live on **both** chains — the
+hub registries and operator infrastructure on Base Sepolia, and HyperlaneAdapter +
+SpokeRegistry on OP Sepolia. Running only the hub one leaves the spoke unprotected.
+
+Check what would change first, then finalize:
+
+```bash
+cd packages/contracts
+
+pnpm verify:setup:testnet:hub     # dry read of hub setup state
+pnpm finalize:testnet:hub         # ends setup mode on Base Sepolia
+
+pnpm verify:setup:testnet:spoke   # dry read of spoke setup state
+pnpm finalize:testnet:spoke       # ends setup mode on OP Sepolia
+```
+
+:::warning
+Run this **after** Step 4. Once setup mode is closed, the trust-configuration calls above are
+timelocked, so wiring anything you forgot means waiting out the delay.
+:::
+
+## Step 6: Verify Everything Works
 
 ```bash
 source .env.testnet
@@ -153,7 +185,7 @@ cast call <CROSS_CHAIN_INBOX> "trustedSources(uint32,bytes32)(bool)" \
 cast call <FEE_MANAGER> "getLatestPrice()(int256)" --rpc-url $BASE_SEPOLIA_RPC
 ```
 
-## Step 6: Update Chain Config
+## Step 7: Update Chain Config
 
 Fill deployed addresses into `@swr/chains` so the frontend knows where the contracts live:
 

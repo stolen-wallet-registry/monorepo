@@ -30,8 +30,31 @@ beforeEach(() => {
 });
 
 describe('authorizeStreamPeer', () => {
-  it('pins the partner from the connection on first CONNECT', () => {
-    expect(authorizeStreamPeer(PROTOCOLS.CONNECT, conn(PARTNER))).toBe(PARTNER);
+  it('pins the partner from the connection on first CONNECT when the role may pin', () => {
+    expect(authorizeStreamPeer(PROTOCOLS.CONNECT, conn(PARTNER), true)).toBe(PARTNER);
+    expect(useP2PStore.getState().partnerPeerId).toBe(PARTNER);
+  });
+
+  // The TOFU race: with both sides pinning, whoever CONNECTed first won. An attacker who
+  // read the relayer's displayed peer ID could CONNECT to the registeree before the real
+  // relayer did and be adopted as the partner. The registeree always dials out first and
+  // therefore already knows its partner, so it must never adopt one from an inbound stream.
+  it('rejects an inbound CONNECT from an unknown peer when the role may not pin', () => {
+    expect(authorizeStreamPeer(PROTOCOLS.CONNECT, conn(ATTACKER), false)).toBeNull();
+    expect(useP2PStore.getState().partnerPeerId).toBeNull();
+  });
+
+  it('defaults to not pinning when the flag is omitted', () => {
+    expect(authorizeStreamPeer(PROTOCOLS.CONNECT, conn(ATTACKER))).toBeNull();
+    expect(useP2PStore.getState().partnerPeerId).toBeNull();
+  });
+
+  // Positive path for the non-pinning role: once it has pinned its partner itself (at dial
+  // time), the partner's CONNECT reply is accepted normally.
+  it('accepts the pinned partner CONNECT even when the role may not pin', () => {
+    useP2PStore.setState({ partnerPeerId: PARTNER });
+
+    expect(authorizeStreamPeer(PROTOCOLS.CONNECT, conn(PARTNER), false)).toBe(PARTNER);
     expect(useP2PStore.getState().partnerPeerId).toBe(PARTNER);
   });
 
@@ -40,7 +63,7 @@ describe('authorizeStreamPeer', () => {
   it('rejects CONNECT from a peer other than the already-pinned partner', () => {
     useP2PStore.setState({ partnerPeerId: PARTNER });
 
-    expect(authorizeStreamPeer(PROTOCOLS.CONNECT, conn(ATTACKER))).toBeNull();
+    expect(authorizeStreamPeer(PROTOCOLS.CONNECT, conn(ATTACKER), true)).toBeNull();
     expect(useP2PStore.getState().partnerPeerId).toBe(PARTNER);
   });
 
@@ -106,18 +129,35 @@ describe('acceptStream', () => {
   it('accepts a schema-valid message from the bound partner', () => {
     useP2PStore.setState({ partnerPeerId: PARTNER });
 
-    expect(acceptStream(PROTOCOLS.ACK_SIG, conn(PARTNER), signatureMessage)).toBe(true);
+    expect(acceptStream(PROTOCOLS.ACK_SIG, conn(PARTNER), signatureMessage, 'relayer')).toBe(true);
+    expect(acceptStream(PROTOCOLS.ACK_SIG, conn(PARTNER), signatureMessage, 'registeree')).toBe(
+      true
+    );
   });
 
   it('rejects a schema-valid message from an unbound peer', () => {
     useP2PStore.setState({ partnerPeerId: PARTNER });
 
-    expect(acceptStream(PROTOCOLS.ACK_SIG, conn(ATTACKER), signatureMessage)).toBe(false);
+    expect(acceptStream(PROTOCOLS.ACK_SIG, conn(ATTACKER), signatureMessage, 'relayer')).toBe(
+      false
+    );
   });
 
   it('rejects a schema-invalid message from the bound partner', () => {
     useP2PStore.setState({ partnerPeerId: PARTNER });
 
-    expect(acceptStream(PROTOCOLS.ACK_SIG, conn(PARTNER), { success: true })).toBe(false);
+    expect(acceptStream(PROTOCOLS.ACK_SIG, conn(PARTNER), { success: true }, 'relayer')).toBe(
+      false
+    );
+  });
+
+  // Role wiring: the relayer waits to be dialed and learns its partner from the inbound
+  // CONNECT; the registeree/reporter dials out and must not.
+  it('lets only the relayer role adopt a partner from an inbound CONNECT', () => {
+    expect(acceptStream(PROTOCOLS.CONNECT, conn(ATTACKER), handshake, 'registeree')).toBe(false);
+    expect(useP2PStore.getState().partnerPeerId).toBeNull();
+
+    expect(acceptStream(PROTOCOLS.CONNECT, conn(PARTNER), handshake, 'relayer')).toBe(true);
+    expect(useP2PStore.getState().partnerPeerId).toBe(PARTNER);
   });
 });

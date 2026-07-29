@@ -369,11 +369,6 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Unknown cross-chain message type.',
     action: 'Please contact support.',
   },
-  '0x0634f9a3': {
-    name: 'CrossChainInbox__DuplicateMessage',
-    message: 'This cross-chain message was already processed.',
-    action: 'No action needed — your registration is already complete.',
-  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SpokeRegistry Errors
@@ -483,11 +478,6 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     name: 'CAIP10__InvalidFormat',
     message: 'Invalid CAIP-10 identifier format.',
     action: 'Use namespace:chainId:address (eip155:8453:0x...).',
-  },
-  '0x96c95b05': {
-    name: 'CAIP10__UnsupportedNamespace',
-    message: 'Unsupported chain namespace.',
-    action: 'Currently only eip155 is supported.',
   },
   '0x31d8ad42': {
     name: 'CAIP10Evm__InvalidAddress',
@@ -675,6 +665,186 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     name: 'BridgeAdapter__PayloadTooLarge',
     message: 'Registration data exceeds bridge limits.',
     action: 'Please contact support.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HyperlaneAdapter Errors
+  // ═══════════════════════════════════════════════════════════════════════════
+  '0xfc021e00': {
+    name: 'HyperlaneAdapter__UnauthorizedSender',
+    message: 'This contract is not authorized to send cross-chain messages.',
+    action: 'The spoke deployment is misconfigured — please contact support.',
+  },
+  '0x045d5bd1': {
+    name: 'HyperlaneAdapter__GasLimitExceeded',
+    message: 'This batch is too large to execute on the destination chain.',
+    action: 'Please split it into smaller batches and try again.',
+  },
+  '0x829e4d6e': {
+    name: 'HyperlaneAdapter__RefundFailed',
+    message: 'Your excess bridge payment could not be refunded.',
+    action: 'Please try again, sending closer to the quoted fee.',
+  },
+  '0x86c6331f': {
+    name: 'HyperlaneAdapter__ZeroAddress',
+    message: 'A required address was missing.',
+    action: 'Please contact support.',
+  },
+  '0x73c15155': {
+    name: 'HyperlaneAdapter__TooManyDomains',
+    message: 'Too many chains were submitted at once.',
+    action: 'Please contact support.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SpokeRegistry Errors (added 2026-07-29 — user-reachable, previously unmapped)
+  // ═══════════════════════════════════════════════════════════════════════════
+  '0x4303372f': {
+    name: 'SpokeRegistry__AlreadyAcknowledged',
+    message: 'You already have a registration in progress for this wallet.',
+    action: 'Please finish it, or wait for it to expire before starting again.',
+  },
+  '0x62281563': {
+    name: 'SpokeRegistry__BatchTooLarge',
+    message: 'This batch has too many transactions to register cross-chain.',
+    action: 'Please select fewer transactions and try again.',
+  },
+  '0x67d914a1': {
+    name: 'SpokeRegistry__InvalidIncidentTimestamp',
+    message: 'The incident date cannot be in the future.',
+    action: 'Please choose when the theft actually happened.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // WalletRegistry / TransactionRegistry / ContractRegistry (previously unmapped)
+  // ═══════════════════════════════════════════════════════════════════════════
+  '0xecc2382d': {
+    name: 'WalletRegistry__InvalidIncidentTimestamp',
+    message: 'The incident date cannot be in the future.',
+    action: 'Please choose when the theft actually happened.',
+  },
+  '0x4cd2cf7c': {
+    name: 'WalletRegistry__InvalidSigner',
+    message: 'The signature did not come from the wallet being registered.',
+    action: 'Please sign with the wallet you are reporting as stolen.',
+  },
+  '0x4da4c90e': {
+    name: 'WalletRegistry__NotAcknowledged',
+    message: 'This wallet has no registration in progress.',
+    action: 'Please start again from the first step.',
+  },
+  '0xd37e23c3': {
+    name: 'TransactionRegistry__AlreadyRegistered',
+    message: 'These transactions are already reported.',
+    action: 'No action needed.',
+  },
+  '0x2f6ed989': {
+    name: 'TransactionRegistry__InvalidSigner',
+    message: 'The signature did not come from the reporting wallet.',
+    action: 'Please sign with the wallet that started this report.',
+  },
+  '0xe72eb6fd': {
+    name: 'TransactionRegistry__NotAcknowledged',
+    message: 'This report has no registration in progress.',
+    action: 'Please start again from the first step.',
+  },
+  '0x5b6ca878': {
+    name: 'ContractRegistry__AlreadyRegistered',
+    message: 'This contract is already in the registry.',
+    action: 'No action needed.',
+  },
+  '0x00472d32': {
+    name: 'FraudRegistryHub__UnknownRegistryType',
+    message: 'Unknown registry type.',
+    action: 'Please contact support.',
+  },
+  '0x0790c247': {
+    name: 'OperatorRegistry__NotAuthorizedForRegistry',
+    message: 'Your operator account is not approved for this registry.',
+    action: 'Request the capability from the DAO before submitting.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Soulbound Errors
+  // ═══════════════════════════════════════════════════════════════════════════
+  '0xcd2e8e80': {
+    name: 'NotAuthorizedMinter',
+    message: 'This account is not allowed to mint.',
+    action: 'Please contact support.',
+  },
+  '0x237c11a2': {
+    name: 'SpokeSoulboundForwarder__DonationBelowMinimum',
+    message: 'Your donation is below the minimum.',
+    action: 'Please increase the amount and try again.',
+  },
+  '0x3ecec4b1': {
+    name: 'SpokeSoulboundForwarder__InsufficientPayment',
+    message: 'The amount sent does not cover the donation plus the bridge fee.',
+    action: 'Please try again with the quoted total.',
+  },
+  '0xbb226891': {
+    name: 'SpokeSoulboundForwarder__HubNotConfigured',
+    message: 'Cross-chain minting is not configured on this network.',
+    action: 'Please switch to a supported network.',
+  },
+  '0xe1d8051d': {
+    name: 'SpokeSoulboundForwarder__RefundFailed',
+    message: 'Your excess payment could not be refunded.',
+    action: 'Please try again, sending closer to the quoted amount.',
+  },
+  '0x060d4ef1': {
+    name: 'SoulboundReceiver__UntrustedForwarder',
+    message: 'This cross-chain mint came from an untrusted source.',
+    action: 'Please contact support.',
+  },
+  '0x5749f41b': {
+    name: 'SoulboundReceiver__WalletMintFailed',
+    message: 'The token could not be minted on the hub chain.',
+    action: 'Please confirm the wallet is fully registered, then try again.',
+  },
+  '0x776f5444': {
+    name: 'SoulboundReceiver__SupportMintFailed',
+    message: 'The support token could not be minted on the hub chain.',
+    action: 'Please contact support — your donation was received.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OpenZeppelin Errors reachable from user flows
+  // ═══════════════════════════════════════════════════════════════════════════
+  '0x118cdaa7': {
+    name: 'OwnableUnauthorizedAccount',
+    message: 'This action requires the contract owner.',
+    action: 'Please connect the owner account.',
+  },
+  '0xd93c0665': {
+    name: 'EnforcedPause',
+    message: 'This action is paused.',
+    action: 'Please try again later.',
+  },
+  '0xf645eedf': {
+    name: 'ECDSAInvalidSignature',
+    message: 'The signature is not valid.',
+    action: 'Please sign again.',
+  },
+  '0xfce698f7': {
+    name: 'ECDSAInvalidSignatureLength',
+    message: 'The signature is malformed.',
+    action: 'Please sign again.',
+  },
+  '0xd78bce0c': {
+    name: 'ECDSAInvalidSignatureS',
+    message: 'The signature is malformed.',
+    action: 'Please sign again.',
+  },
+  '0x7e273289': {
+    name: 'ERC721NonexistentToken',
+    message: 'That token does not exist.',
+    action: 'Please refresh and try again.',
+  },
+  '0x3ee5aeb5': {
+    name: 'ReentrancyGuardReentrantCall',
+    message: 'This action cannot be re-entered.',
+    action: 'Please try again.',
   },
 };
 

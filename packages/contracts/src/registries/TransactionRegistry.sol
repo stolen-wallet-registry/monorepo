@@ -27,7 +27,20 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Maximum number of entries in a single operator batch
+    /// @dev A structural ceiling only. At the measured ~26,200 gas/entry a 10,000-entry batch
+    ///      would need ~262M gas, far beyond any block, so operator tooling must chunk well
+    ///      below this. The practical per-transaction limit is {MAX_TWO_PHASE_BATCH_SIZE}.
     uint256 public constant MAX_BATCH_SIZE = 10_000;
+
+    /// @notice Maximum number of transactions in a single two-phase (user) batch
+    /// @dev Grounded in the measured ~26,200 gas/entry: 800 entries ≈ 21M gas, which fits a
+    ///      25M-gas block with headroom. Deliberately equal to
+    ///      `SpokeRegistry.MAX_CROSS_CHAIN_BATCH_SIZE` so a batch that is acceptable on a spoke
+    ///      is always executable here after bridging — see
+    ///      `test_TwoPhaseBoundMatchesSpokeCrossChainBound` and
+    ///      `test_GasModel_SupportsMaxCrossChainBatch`, which pin that relationship and its
+    ///      interaction with `HyperlaneAdapter.MAX_GAS_LIMIT`.
+    uint256 public constant MAX_TWO_PHASE_BATCH_SIZE = 800;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLE STATE
@@ -395,6 +408,10 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         if (trustedForwarder == address(0)) revert TransactionRegistry__ZeroAddress();
         if (dataHash == bytes32(0)) revert TransactionRegistry__DataHashMismatch();
         if (transactionCount == 0) revert TransactionRegistry__EmptyBatch();
+        // Bound phase 1. Committing a count is not a bound: without this a user could
+        // acknowledge a count too large for phase 2 to fit in a block, then be unable to
+        // complete registration until the acknowledgement expires — having already paid.
+        if (transactionCount > MAX_TWO_PHASE_BATCH_SIZE) revert TransactionRegistry__BatchTooLarge();
         if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
 
         // Check not already acknowledged
@@ -536,6 +553,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
     ) external payable {
         if (reporter == address(0)) revert TransactionRegistry__ZeroAddress();
         if (transactionHashes.length == 0) revert TransactionRegistry__EmptyBatch();
+        if (transactionHashes.length > MAX_TWO_PHASE_BATCH_SIZE) revert TransactionRegistry__BatchTooLarge();
         if (transactionHashes.length != chainIds.length) revert TransactionRegistry__ArrayLengthMismatch();
         if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
 
@@ -660,10 +678,16 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc ITransactionRegistry
-    /// @dev MAX_BATCH_SIZE is enforced only on this operator entry point. The hub-controlled
-    ///      cross-chain path (registerTransactionsFromHub) and the two-phase path (which commits
-    ///      transactionCount upfront and validates matching in phase 2) operate under different
-    ///      constraints and do not need this limit.
+    /// @dev MAX_BATCH_SIZE (the large structural ceiling) is enforced only on this operator
+    ///      entry point, where the submitter is a DAO-approved operator running tooling that
+    ///      chunks the work. The two-phase user path is bounded separately and much lower by
+    ///      MAX_TWO_PHASE_BATCH_SIZE — committing a transactionCount upfront is NOT a bound,
+    ///      which is what an earlier version of this comment incorrectly claimed.
+    ///
+    ///      `registerTransactionsFromHub` is deliberately left unbounded: the spoke enforces
+    ///      `MAX_CROSS_CHAIN_BATCH_SIZE` before the user pays any bridge fee, and a hub-side
+    ///      revert on an already-bridged message would make it permanently undeliverable
+    ///      (Hyperlane retries the identical body forever) rather than merely rejected.
     function registerTransactionsFromOperator(
         bytes32 operatorId,
         bytes32[] calldata transactionHashes,
@@ -697,6 +721,12 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
             actualCount++;
             emit TransactionRegistered(txHash, chainId, address(0), false);
         }
+
+        // Reject a batch in which nothing was actually registered (every entry was a zero hash
+        // or already registered), matching ContractRegistry and WalletRegistry. Otherwise the
+        // operator pays full gas for a no-op, a batch ID is burned, and the indexer
+        // materialises a phantom zero-entry batch with no per-entry events to join against.
+        if (actualCount == 0) revert TransactionRegistry__EmptyBatch();
 
         _batches[batchId] = TransactionBatch({
             operatorId: operatorId,

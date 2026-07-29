@@ -310,25 +310,86 @@ contract OperatorSubmitter is TimelockOwnable, Pausable, ReentrancyGuard {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Set wallet registry address
+    /// @dev Immediate during initial setup, timelocked after completeSetup(). Repointing a
+    ///      registry silently redirects every operator batch: submissions appear to succeed,
+    ///      land nowhere the indexer reads, and nobody gets a delay in which to notice.
     /// @param _walletRegistry The new wallet registry address
-    function setWalletRegistry(address _walletRegistry) external onlyOwner {
+    function setWalletRegistry(address _walletRegistry) external onlyOwner onlyDuringSetup {
         if (_walletRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _setWalletRegistry(_walletRegistry);
+    }
+
+    /// @notice Propose a wallet registry change (2-day delay before activation)
+    /// @param _walletRegistry The new wallet registry address
+    function proposeWalletRegistry(address _walletRegistry) external onlyOwner {
+        if (_walletRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setWalletRegistry", _walletRegistry)));
+    }
+
+    /// @notice Activate a previously proposed wallet registry change
+    /// @param _walletRegistry The new wallet registry address
+    function activateWalletRegistry(address _walletRegistry) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setWalletRegistry", _walletRegistry)));
+        _setWalletRegistry(_walletRegistry);
+    }
+
+    /// @notice Set transaction registry address
+    /// @dev Immediate during initial setup, timelocked after completeSetup() — see
+    ///      {setWalletRegistry} for the rationale.
+    /// @param _transactionRegistry The new transaction registry address
+    function setTransactionRegistry(address _transactionRegistry) external onlyOwner onlyDuringSetup {
+        if (_transactionRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _setTransactionRegistry(_transactionRegistry);
+    }
+
+    /// @notice Propose a transaction registry change (2-day delay before activation)
+    /// @param _transactionRegistry The new transaction registry address
+    function proposeTransactionRegistry(address _transactionRegistry) external onlyOwner {
+        if (_transactionRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setTransactionRegistry", _transactionRegistry)));
+    }
+
+    /// @notice Activate a previously proposed transaction registry change
+    /// @param _transactionRegistry The new transaction registry address
+    function activateTransactionRegistry(address _transactionRegistry) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setTransactionRegistry", _transactionRegistry)));
+        _setTransactionRegistry(_transactionRegistry);
+    }
+
+    /// @notice Set contract registry address
+    /// @dev Immediate during initial setup, timelocked after completeSetup() — see
+    ///      {setWalletRegistry} for the rationale.
+    /// @param _contractRegistry The new contract registry address
+    function setContractRegistry(address _contractRegistry) external onlyOwner onlyDuringSetup {
+        if (_contractRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _setContractRegistry(_contractRegistry);
+    }
+
+    /// @notice Propose a contract registry change (2-day delay before activation)
+    /// @param _contractRegistry The new contract registry address
+    function proposeContractRegistry(address _contractRegistry) external onlyOwner {
+        if (_contractRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+        _proposeAction(keccak256(abi.encode("setContractRegistry", _contractRegistry)));
+    }
+
+    /// @notice Activate a previously proposed contract registry change
+    /// @param _contractRegistry The new contract registry address
+    function activateContractRegistry(address _contractRegistry) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setContractRegistry", _contractRegistry)));
+        _setContractRegistry(_contractRegistry);
+    }
+
+    function _setWalletRegistry(address _walletRegistry) internal {
         walletRegistry = _walletRegistry;
         emit WalletRegistrySet(_walletRegistry);
     }
 
-    /// @notice Set transaction registry address
-    /// @param _transactionRegistry The new transaction registry address
-    function setTransactionRegistry(address _transactionRegistry) external onlyOwner {
-        if (_transactionRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+    function _setTransactionRegistry(address _transactionRegistry) internal {
         transactionRegistry = _transactionRegistry;
         emit TransactionRegistrySet(_transactionRegistry);
     }
 
-    /// @notice Set contract registry address
-    /// @param _contractRegistry The new contract registry address
-    function setContractRegistry(address _contractRegistry) external onlyOwner {
-        if (_contractRegistry == address(0)) revert OperatorSubmitter__ZeroAddress();
+    function _setContractRegistry(address _contractRegistry) internal {
         contractRegistry = _contractRegistry;
         emit ContractRegistrySet(_contractRegistry);
     }

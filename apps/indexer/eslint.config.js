@@ -6,7 +6,7 @@ export default defineConfig([
   // `generated/` is ponder codegen output; `.ponder/` is its local database/build cache.
   globalIgnores(['generated', '.ponder', 'ponder-env.d.ts']),
   {
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'test/**/*.ts'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     languageOptions: {
       ecmaVersion: 2022,

@@ -1,5 +1,25 @@
 name: CI
 
+# ╔══════════════════════════════════════════════════════════════════════════════════════╗
+# ║  READ THIS BEFORE TRUSTING A GREEN PR.                                               ║
+# ║                                                                                      ║
+# ║  Almost everything in this workflow is OPT-IN. On an ordinary pull request with no    ║
+# ║  `ci` label, the contracts / node / abi-drift jobs DO NOT RUN — they report           ║
+# ║  "skipped", and GitHub renders a skipped required check the same shade of green as a  ║
+# ║  passing one. A PR can be fully green and have had zero tests run against it.         ║
+# ║                                                                                      ║
+# ║  To actually check a PR: add the `ci` label (remove + re-add to re-run).              ║
+# ║                                                                                      ║
+# ║  The one exception is `abi-freshness`, which runs on every PR WITHOUT the             ║
+# ║  `abi-unchanged` label, because it is seconds of pure git and needs no toolchain.     ║
+# ║  It only proves that packages/abis/src was touched alongside a Solidity change — NOT  ║
+# ║  that the committed ABIs are correct. Only the (label-gated) `abi-drift` job, which   ║
+# ║  actually regenerates them with Foundry, proves that.                                 ║
+# ║                                                                                      ║
+# ║  If these jobs are ever promoted to REQUIRED status checks, the label gate must go    ║
+# ║  first — otherwise "required" means "required to be skipped".                         ║
+# ╚══════════════════════════════════════════════════════════════════════════════════════╝
+#
 # CI is OPT-IN to avoid burning Actions minutes on a pre-release, local-only project.
 #
 # It runs only when you ask for it, in one of two ways:
@@ -88,6 +108,22 @@ jobs:
       - name: Prettier check
         run: pnpm exec prettier --check "**/*.{ts,tsx,js,json,md,mdx}"
 
+      # The remaining two thirds of `pnpm check`. Without these, a labelled CI run was still
+      # weaker than running `pnpm check` locally.
+      - name: Dependency version consistency
+        run: pnpm syncpack:check
+
+      # NOT `pnpm knip` — the root script passes `--no-exit-code`, which makes it advisory by
+      # construction and unable to fail anything. That form is right for a local script and
+      # useless as a gate, so CI invokes knip directly.
+      #
+      # `--exclude unresolved` drops one known false-positive class: knip parses Tailwind v4
+      # `@source "../components/**/*.tsx"` directives in packages/ui/src/styles/index.css as
+      # CSS imports and reports the globs as unresolved. Delete this flag once knip.json
+      # carries an `ignoreUnresolved` entry for them; every other issue class still fails.
+      - name: Unused files, exports and dependencies
+        run: pnpm exec knip --exclude unresolved
+
   abi-drift:
     name: ABI drift
     runs-on: ubuntu-latest
@@ -129,3 +165,51 @@ jobs:
 
       - name: Fail if ABIs are stale
         run: git diff --exit-code -- packages/abis/src
+
+  # The only job WITHOUT the `ci` label gate, deliberately.
+  #
+  # `packages/abis` is a source-only package: the TypeScript ABI constants are committed, it
+  # has no build step, and nothing in the turbo graph depends on `@swr/contracts#export-abi`.
+  # That is on purpose — wiring export-abi into the frontend build would make every
+  # `turbo build` (including host builds with no Foundry installed) require the Solidity
+  # toolchain. The cost is that `turbo build` will happily bundle apps/web against ABIs
+  # generated from an arbitrarily old contract commit, and the authoritative check for that
+  # (the abi-drift job above) is label-gated, so by default nothing catches it.
+  #
+  # This job closes that hole with the only check that is cheap enough to run unconditionally:
+  # pure git, no toolchain, a few seconds. It cannot tell whether a Solidity change altered
+  # the ABI — it only asserts that if `packages/contracts/src` changed, the generated ABIs
+  # were regenerated alongside it. False positives (comment-only or implementation-only
+  # edits) are expected and are cleared by regenerating anyway (the diff will be empty) or by
+  # labelling the PR `abi-unchanged`.
+  abi-freshness:
+    name: ABI freshness (no label needed)
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'pull_request' &&
+      !contains(github.event.pull_request.labels.*.name, 'abi-unchanged')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Contracts changed without regenerating ABIs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+
+          if ! grep -qE '^packages/contracts/src/.*\.sol$' <<<"$changed"; then
+            echo "No Solidity source changes — nothing to check."
+            exit 0
+          fi
+
+          if grep -qE '^packages/abis/src/' <<<"$changed"; then
+            echo "Solidity changed and packages/abis/src was regenerated alongside it."
+            exit 0
+          fi
+
+          echo "::error::Solidity sources under packages/contracts/src changed but packages/abis/src was not regenerated. Run 'cd packages/contracts && forge build && pnpm export-abi' then 'pnpm exec prettier --write \"packages/abis/src/*.ts\"' and commit the result. If the change genuinely cannot affect the ABI, label the PR 'abi-unchanged'."
+          exit 1

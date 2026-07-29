@@ -125,6 +125,17 @@ export function getTxSignature(
   }
 }
 
+/**
+ * Remove a single stored transaction-batch signature.
+ *
+ * Needed by the pay steps: a revert that invalidates the signature (expired deadline,
+ * consumed nonce, expired forwarder) must discard it, or Retry rebuilds the identical
+ * transaction from the identical cached bytes and reverts identically forever.
+ */
+export function removeTxSignature(dataHash: Hash, chainId: number, step: TxSignatureStep): void {
+  sessionStorage.removeItem(getStorageKey(dataHash, chainId, step));
+}
+
 // Clear all SWR transaction signatures from sessionStorage
 export function clearAllTxSignatures(): void {
   const keysToRemove: string[] = [];

@@ -36,7 +36,17 @@ contract HyperlaneForkedTest is Test {
 
     function setUp() public {
         string memory rpc = vm.envOr("OPTIMISM_SEPOLIA_RPC", string(""));
-        if (bytes(rpc).length == 0) return;
+        if (bytes(rpc).length == 0) {
+            // Announce the skip loudly. These are the ONLY tests that exercise the adapter
+            // against a real Hyperlane v3 Mailbox rather than MockMailbox — the integration the
+            // v2→v3 migration was written for. Silently returning made them count as passing in
+            // the suite total, which reads as "the real integration is covered" when it is not.
+            console2.log(
+                unicode"⚠ HyperlaneForked: SKIPPED - set OPTIMISM_SEPOLIA_RPC to run against a real v3 Mailbox."
+            );
+            console2.log("  Without it, nothing in this suite validates the live Hyperlane integration.");
+            return;
+        }
 
         vm.createSelectFork(rpc);
         forked = true;

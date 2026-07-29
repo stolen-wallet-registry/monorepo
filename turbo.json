@@ -44,6 +44,12 @@
     "@swr/contracts#export-abi": {
       "dependsOn": ["@swr/contracts#build"],
       "inputs": ["src/**", "foundry.toml", "remappings.txt", "scripts/export-abi.js"],
+      // This task's real output is packages/abis/src/*.ts — OUTSIDE this package, so turbo
+      // cannot track it (`outputs` are package-relative). With `outputs: []` a cache hit
+      // replays the logs and skips the run entirely, so `pnpm export-abi` would print
+      // success while writing nothing — e.g. after the generated files were reverted or
+      // hand-edited. Never cache it: the task is a few hundred ms of file writes.
+      "cache": false,
       "outputs": []
     },
     "test:coverage": {

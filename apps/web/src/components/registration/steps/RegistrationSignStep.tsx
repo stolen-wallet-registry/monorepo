@@ -203,6 +203,9 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         chainId,
         step: SIGNATURE_STEP.REGISTRATION,
         storedAt: Date.now(),
+        // Bind the cached signature to the forwarder it was signed over, so editing the gas
+        // wallet afterwards invalidates it here instead of on-chain.
+        trustedForwarder: forwarder,
         reportedChainId,
         incidentTimestamp,
       });

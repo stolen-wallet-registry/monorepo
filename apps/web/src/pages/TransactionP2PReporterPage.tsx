@@ -49,7 +49,7 @@ import {
   type TransactionRegistrationStep,
 } from '@/stores/transactionRegistrationStore';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
-import { useP2PStore } from '@/stores/p2pStore';
+import { useP2PStore, isPreConnectionStep } from '@/stores/p2pStore';
 import {
   useUserTransactions,
   useSignTxEIP712,
@@ -796,6 +796,16 @@ export function TransactionP2PReporterPage() {
       try {
         logger.p2p.info('Initializing P2P node for TX reporter');
 
+        // A fresh flow must never inherit a pin from an abandoned session. `partnerPeerId` is
+        // persisted so a mid-flow reload keeps its partner, but a user who closed the tab from
+        // the success screen would otherwise start their next flow already pinned to the old
+        // partner — and the guard would silently reject the new one. Reading the step from
+        // getState() rather than a dependency keeps this out of the effect's deps, which would
+        // otherwise tear down and rebuild the libp2p node on every step change.
+        if (isPreConnectionStep(useTransactionRegistrationStore.getState().step)) {
+          useP2PStore.getState().clearPartnerPeerId();
+        }
+
         const streamHandler = (protocol: string) => ({
           handler: async (stream: Stream, connection?: Connection) => {
             try {
@@ -804,7 +814,7 @@ export function TransactionP2PReporterPage() {
               // Bind the stream to the agreed partner peer and to this protocol's schema
               // before any of it is trusted. Without this an arbitrary peer that learned a
               // displayed peer ID could inject signatures or drive the step machine.
-              if (!acceptStream(protocol, connection, data)) return;
+              if (!acceptStream(protocol, connection, data, 'registeree')) return;
 
               logger.p2p.info('TX Reporter received data', { protocol, data });
 

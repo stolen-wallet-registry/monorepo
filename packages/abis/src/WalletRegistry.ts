@@ -1392,6 +1392,11 @@ export const WalletRegistryABI = [
   },
   {
     type: 'error',
+    name: 'WalletRegistry__InvalidIncidentTimestamp',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'WalletRegistry__InvalidNonce',
     inputs: [],
   },

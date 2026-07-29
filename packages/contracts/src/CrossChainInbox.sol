@@ -66,6 +66,13 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     /// @param trusted Whether the source is now trusted
     event TrustedSourceUpdated(uint32 indexed chainId, bytes32 indexed spokeRegistry, bool trusted);
 
+    /// @notice Emitted when an already-processed message is delivered again and skipped
+    /// @dev Not an error: a bridge retry or a second bridge delivering the same logical event is
+    ///      expected, and the correct response is to no-op so the message stops being retried.
+    /// @param origin The origin chain domain ID
+    /// @param messageId The canonical message ID that was already processed
+    event DuplicateMessageIgnored(uint32 indexed origin, bytes32 indexed messageId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -75,7 +82,6 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     error CrossChainInbox__UntrustedSource();
     error CrossChainInbox__SourceChainMismatch();
     error CrossChainInbox__UnknownMessageType();
-    error CrossChainInbox__DuplicateMessage();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -110,9 +116,22 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Handle incoming cross-chain message from Hyperlane
-    /// @dev The messageId is computed from canonical re-encoding of decoded fields (not raw bytes).
-    ///      This prevents trailing-bytes attacks where a bridge appends extra data to bypass dedup.
-    ///      To correlate with Hyperlane's native ID, index Mailbox.Dispatch events on the source chain.
+    /// @dev The messageId is computed from a canonical re-encoding of the decoded fields (not the
+    ///      raw bytes). This prevents trailing-bytes attacks where a bridge appends extra data to
+    ///      bypass dedup. To correlate with Hyperlane's native ID, index Mailbox.Dispatch events
+    ///      on the source chain.
+    ///
+    ///      `_origin` and `_sender` are part of the preimage. Without them the ID is a pure
+    ///      function of publicly-predictable payload contents, so anyone able to get ANY trusted
+    ///      source to deliver the same logical payload first could burn the ID and permanently
+    ///      strand the genuine message. Including the route also keeps the same logical event
+    ///      delivered by two different bridges from colliding.
+    ///
+    ///      A duplicate is a NO-OP, not a revert. Registration is idempotent by nature (the
+    ///      registries skip already-registered entries), and Hyperlane retries a failed delivery
+    ///      with the identical message body forever — so reverting turns an ordinary retry, or a
+    ///      second bridge delivering the same event, into a permanently undeliverable message
+    ///      with the user's bridge fee already spent.
     /// @param _origin Origin chain domain ID
     /// @param _sender Sender address on origin chain (bytes32)
     /// @param _messageBody Encoded payload
@@ -131,14 +150,20 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
         if (msgType == CrossChainMessage.MSG_TYPE_WALLET) {
             CrossChainMessage.WalletRegistrationPayload memory wp =
                 CrossChainMessage.decodeWalletRegistration(_messageBody);
-            bytes32 messageId = keccak256(abi.encode(wp));
-            if (_processedMessages[messageId]) revert CrossChainInbox__DuplicateMessage();
+            bytes32 messageId = keccak256(abi.encode(_origin, _sender, wp));
+            if (_processedMessages[messageId]) {
+                emit DuplicateMessageIgnored(_origin, messageId);
+                return;
+            }
             _processedMessages[messageId] = true;
             _handleWalletRegistration(_origin, wp, messageId);
         } else if (msgType == CrossChainMessage.MSG_TYPE_TRANSACTION_BATCH) {
             CrossChainMessage.TransactionBatchPayload memory tp = CrossChainMessage.decodeTransactionBatch(_messageBody);
-            bytes32 messageId = keccak256(abi.encode(tp));
-            if (_processedMessages[messageId]) revert CrossChainInbox__DuplicateMessage();
+            bytes32 messageId = keccak256(abi.encode(_origin, _sender, tp));
+            if (_processedMessages[messageId]) {
+                emit DuplicateMessageIgnored(_origin, messageId);
+                return;
+            }
             _processedMessages[messageId] = true;
             _handleTransactionBatch(_origin, tp, messageId);
         } else {

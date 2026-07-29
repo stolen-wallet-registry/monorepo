@@ -187,4 +187,14 @@ contract SpokeSoulboundForwarder is ISpokeSoulboundForwarder, Ownable2Step {
     function _bytes32ToAddress(bytes32 b) internal pure returns (address) {
         return address(uint160(uint256(b)));
     }
+
+    /// @notice Accept plain ETH transfers
+    /// @dev Required because this contract is the refund recipient for the bridge adapter's
+    ///      interchain gas payment: HyperlaneAdapter passes `msg.sender` as the refund address
+    ///      in the hook metadata, and Hyperlane's IGP `require`s that refund transfer to
+    ///      succeed. On the normal path we pay exactly `quoteDispatch` so the refund is zero,
+    ///      but any hook that over-estimates its own postDispatch cost would otherwise turn
+    ///      every cross-chain soulbound mint into a revert. SpokeRegistry already has one.
+    ///      Anything received here is withdrawable via {withdrawDonations}.
+    receive() external payable { }
 }

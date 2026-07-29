@@ -724,10 +724,55 @@ contract Deploy is Script {
         console2.log("=== SETUP FINALIZED - timelock is now enforced ===");
     }
 
+    /// @notice Lock the SPOKE-side TimelockOwnable contracts (run on the spoke chain)
+    /// @dev {finalizeSetup} covers hub-chain contracts only. HyperlaneAdapter, SpokeRegistry and
+    ///      SpokeSoulboundForwarder live on the SPOKE chain, so they need their own finalization
+    ///      transaction against the spoke RPC — a hub-only finalize would leave the adapter's
+    ///      `setAuthorizedSender` (the allowlist that closes the forged-registration
+    ///      vulnerability) as a one-transaction owner call forever.
+    ///
+    ///      MUST run after the hub has been told to trust this spoke's adapter, for the same
+    ///      ordering reason {finalizeSetup} documents.
+    ///
+    ///      Usage:
+    ///        forge script script/Deploy.s.sol:Deploy --sig "finalizeSpokeSetup()" \
+    ///          --rpc-url $SPOKE_RPC --broadcast
+    ///
+    ///      Reads (all optional — a zero/unset address is skipped):
+    ///        HYPERLANE_ADAPTER, SPOKE_REGISTRY
+    ///
+    ///      SpokeSoulboundForwarder is deliberately absent: it is still plain Ownable2Step, so
+    ///      it has no completeSetup() to call. Its owner powers are limited to withdrawing
+    ///      donations it holds; it cannot authorize a dispatcher or repoint a registry.
+    function finalizeSpokeSetup() external {
+        deployerPrivateKey = _getDeployerKey();
+        deployer = vm.addr(deployerPrivateKey);
+
+        console2.log("=== FINALIZING SPOKE SETUP (activating timelock) ===");
+
+        vm.startBroadcast(deployerPrivateKey);
+
+        _completeSetupIfNeeded(vm.envOr("HYPERLANE_ADAPTER", address(0)), "HyperlaneAdapter");
+        _completeSetupIfNeeded(vm.envOr("SPOKE_REGISTRY", address(0)), "SpokeRegistry");
+
+        vm.stopBroadcast();
+
+        console2.log("");
+        console2.log("=== SPOKE SETUP FINALIZED - timelock is now enforced ===");
+    }
+
+    /// @notice Assert every configured spoke-side TimelockOwnable contract is locked
+    /// @dev Same env vars as {finalizeSpokeSetup}. Run against the spoke RPC.
+    function verifySpokeSetup() external view {
+        _requireSetupComplete(vm.envOr("HYPERLANE_ADAPTER", address(0)), "HyperlaneAdapter");
+        _requireSetupComplete(vm.envOr("SPOKE_REGISTRY", address(0)), "SpokeRegistry");
+        console2.log("=== All configured spoke contracts have setupComplete == true ===");
+    }
+
     /// @notice Assert every configured TimelockOwnable contract has setupComplete == true
     /// @dev Run as a post-deploy gate. Reverts if any contract still has immediate setters open,
     ///      so a forgotten `finalizeSetup()` fails the deployment instead of shipping silently.
-    ///      Same env vars as {finalizeSetup}.
+    ///      Same env vars as {finalizeSetup}. Hub-side only — see {verifySpokeSetup}.
     function verifySetup() external view {
         _requireSetupComplete(vm.envOr("FRAUD_REGISTRY_HUB", address(0)), "FraudRegistryHub");
         _requireSetupComplete(vm.envOr("CROSS_CHAIN_INBOX", address(0)), "CrossChainInbox");
@@ -1143,6 +1188,10 @@ contract Deploy is Script {
         console2.log("  inbox.setTrustedSource(", block.chainid, ", adapterBytes32, true)");
         console2.log("  adapterBytes32:");
         console2.logBytes32(_addressToBytes32(adapterAddr));
+        console2.log("");
+        console2.log("=== THEN: lock the spoke timelock (LAST step, after hub trust is wired) ===");
+        console2.log("  pnpm finalize:testnet:spoke   # then verify:setup:testnet:spoke");
+        console2.log("  Until this runs, setAuthorizedSender is a one-transaction owner call.");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

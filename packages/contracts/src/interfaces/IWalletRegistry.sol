@@ -82,6 +82,12 @@ interface IWalletRegistry {
     error WalletRegistry__BatchTooLarge();
     error WalletRegistry__ArrayLengthMismatch();
     error WalletRegistry__InvalidStep();
+    /// @notice Thrown when a reported incident timestamp is in the future
+    /// @dev `0` is the accepted sentinel for "incident time unknown" and is deliberately
+    ///      still allowed — it is what the app and operator CLI submit today. Only a
+    ///      future-dated value is rejected, since it is unfalsifiable at write time and
+    ///      permanently poisons time-based analytics for every downstream consumer.
+    error WalletRegistry__InvalidIncidentTimestamp();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS

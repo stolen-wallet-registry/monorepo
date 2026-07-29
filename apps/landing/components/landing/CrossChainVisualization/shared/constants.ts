@@ -27,11 +27,13 @@ export const BEAM_DURATION = 3; // Animation duration in seconds
 export const PHASE_GAP = 0; // No gap between phases - immediate trigger on completion
 export const CYCLE_PAUSE = 0.5; // Brief pause between cycles (0.5s)
 
-// Phase timing (sequential, triggered by onComplete - not time-based)
-export const PHASE_1_END = BEAM_DURATION;
-
-export const PHASE_2_START = PHASE_1_END + PHASE_GAP; // Bridges → Hub
-export const PHASE_2_END = PHASE_2_START + BEAM_DURATION;
+// Phase timing (sequential, triggered by onComplete - not time-based).
+// Module-local: these are intermediate steps in deriving EMIT_DELAY, not part of the shared
+// surface — nothing outside this file imports them, and exporting aliases that are merely
+// equal to BEAM_DURATION / EMIT_DELAY made them read as two names for the same public value.
+const PHASE_1_END = BEAM_DURATION;
+const PHASE_2_START = PHASE_1_END + PHASE_GAP; // Bridges → Hub
+const PHASE_2_END = PHASE_2_START + BEAM_DURATION;
 
 // Phase 3 (Hub → ALL Listeners, simultaneous) runs from PHASE_2_END + PHASE_GAP
 // for BEAM_DURATION. It has no constants of its own: it is the last phase, so

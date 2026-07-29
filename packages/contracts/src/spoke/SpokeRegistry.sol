@@ -3,8 +3,9 @@ pragma solidity ^0.8.24;
 
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
+import { TimelockOwnable } from "../libraries/TimelockOwnable.sol";
 import { ISpokeRegistry } from "../interfaces/ISpokeRegistry.sol";
 import { IBridgeAdapter } from "../interfaces/IBridgeAdapter.sol";
 import { IFeeManager } from "../interfaces/IFeeManager.sol";
@@ -19,7 +20,12 @@ import { EIP712Constants } from "../libraries/EIP712Constants.sol";
 /// @notice Spoke chain registration contract for cross-chain stolen wallet registry
 /// @dev Includes incidentTimestamp and reportedChainId in user signatures.
 ///      Sends messages to FraudRegistryHub on hub chain via bridge adapter.
-contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
+///
+///      Owner powers are timelocked (TimelockOwnable): `hubInbox` is where every registration
+///      this contract accepts ultimately lands, so repointing it in one transaction would
+///      silently divert users' paid registrations. Post-setup it requires propose → 2 days →
+///      activate, matching the hub-side registries.
+contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     using CrossChainMessage for CrossChainMessage.WalletRegistrationPayload;
     using CrossChainMessage for CrossChainMessage.TransactionBatchPayload;
 
@@ -148,6 +154,20 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
 
         // Validate signature deadline hasn't passed
         if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
+
+        // 0 means "unknown" and is allowed; a future incident is not physically possible.
+        // Mirrors the hub's check so the two phases cannot disagree about validity.
+        if (incidentTimestamp > block.timestamp) revert SpokeRegistry__InvalidIncidentTimestamp();
+
+        // Reject re-acknowledgement while a prior one is still live, matching
+        // WalletRegistry.acknowledge on the hub. Overwriting would restart the grace period and
+        // strand the registration signature the user produced against the first acknowledgement.
+        // (There is deliberately no already-registered check: registrations live on the hub, so
+        // the spoke has no local registry state to consult.)
+        AcknowledgementData memory existing = _pendingAcknowledgements[wallet];
+        if (existing.trustedForwarder != address(0) && block.number < existing.expiryBlock) {
+            revert SpokeRegistry__AlreadyAcknowledged();
+        }
 
         // Validate nonce matches expected value
         if (nonce != nonces[wallet]) revert SpokeRegistry__InvalidNonce();
@@ -689,10 +709,30 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Update hub chain configuration
-    /// @dev Both values must be set together, or both must be zero (unconfigured)
+    /// @dev Both values must be set together, or both must be zero (unconfigured).
+    ///      Immediate during initial setup, timelocked after completeSetup().
     /// @param _hubChainId Hub chain domain ID
     /// @param _hubInbox Hub inbox address
-    function setHubConfig(uint32 _hubChainId, bytes32 _hubInbox) external onlyOwner {
+    function setHubConfig(uint32 _hubChainId, bytes32 _hubInbox) external onlyOwner onlyDuringSetup {
+        _setHubConfig(_hubChainId, _hubInbox);
+    }
+
+    /// @notice Propose a hub configuration change (2-day delay before activation)
+    /// @param _hubChainId Hub chain domain ID
+    /// @param _hubInbox Hub inbox address
+    function proposeHubConfig(uint32 _hubChainId, bytes32 _hubInbox) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setHubConfig", _hubChainId, _hubInbox)));
+    }
+
+    /// @notice Activate a previously proposed hub configuration change
+    /// @param _hubChainId Hub chain domain ID
+    /// @param _hubInbox Hub inbox address
+    function activateHubConfig(uint32 _hubChainId, bytes32 _hubInbox) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setHubConfig", _hubChainId, _hubInbox)));
+        _setHubConfig(_hubChainId, _hubInbox);
+    }
+
+    function _setHubConfig(uint32 _hubChainId, bytes32 _hubInbox) internal {
         // Enforce "both set or both zero" invariant
         bool hubChainIdSet = _hubChainId != 0;
         bool hubInboxSet = _hubInbox != bytes32(0);

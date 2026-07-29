@@ -2,14 +2,18 @@ import { createConfig } from 'ponder';
 import {
   WalletRegistryABI,
   TransactionRegistryABI,
-  FraudRegistryHubABI,
   CrossChainInboxABI,
   WalletSoulboundABI,
   SupportSoulboundABI,
-  FeeManagerABI,
   OperatorRegistryABI,
   ContractRegistryABI,
 } from '@swr/abis';
+
+// NOTE: FraudRegistryHub and FeeManager are intentionally NOT registered.
+// They were configured but had zero indexing handlers, so ponder created log filters and
+// fetched + decoded their logs every block for no output. Re-add them together with
+// handlers if their config events (RegistryUpdated / InboxUpdated / FeeRecipientUpdated,
+// BaseFeeUpdated / OperatorBatchFeeUpdated / FallbackPriceUpdated) are ever needed.
 import { anvilHub, baseSepolia, base, type Environment, type HubContracts } from '@swr/chains';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -166,13 +170,6 @@ export default createConfig({
       address: hubContracts!.stolenTransactionRegistry,
       startBlock: chainConfig.startBlock,
     },
-    FraudRegistryHub: {
-      chain: chainConfig.name,
-      abi: FraudRegistryHubABI,
-      address: hubContracts!.registryHub,
-      startBlock: chainConfig.startBlock,
-    },
-
     // Cross-Chain (from @swr/chains hubContracts)
     CrossChainInbox: {
       chain: chainConfig.name,
@@ -192,14 +189,6 @@ export default createConfig({
       chain: chainConfig.name,
       abi: SupportSoulboundABI,
       address: hubContracts?.supportSoulbound ?? UNDEPLOYED_DUMMY,
-      startBlock: chainConfig.startBlock,
-    },
-
-    // Fee Management (from @swr/chains hubContracts)
-    FeeManager: {
-      chain: chainConfig.name,
-      abi: FeeManagerABI,
-      address: hubContracts!.feeManager,
       startBlock: chainConfig.startBlock,
     },
 

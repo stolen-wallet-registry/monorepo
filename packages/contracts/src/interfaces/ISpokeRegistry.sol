@@ -134,6 +134,14 @@ interface ISpokeRegistry {
     error SpokeRegistry__InvalidDataHash();
     error SpokeRegistry__DataMismatch();
     error SpokeRegistry__InvalidStep();
+    /// @notice Thrown when acknowledging while a prior acknowledgement is still live
+    /// @dev Mirrors WalletRegistry__AlreadyAcknowledged on the hub. Without it the spoke
+    ///      silently overwrote a live acknowledgement, restarting the grace period and
+    ///      orphaning the signature the user had already produced for the first one.
+    error SpokeRegistry__AlreadyAcknowledged();
+    /// @notice Thrown when a reported incident timestamp is in the future
+    /// @dev Mirrors WalletRegistry__InvalidIncidentTimestamp. `0` ("unknown") stays valid.
+    error SpokeRegistry__InvalidIncidentTimestamp();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS

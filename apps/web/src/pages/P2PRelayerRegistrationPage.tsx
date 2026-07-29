@@ -33,7 +33,7 @@ import {
 import { WaitingForData, ConnectionStatusBadge, ReconnectDialog } from '@/components/p2p';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
-import { useP2PStore } from '@/stores/p2pStore';
+import { useP2PStore, isPreConnectionStep } from '@/stores/p2pStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
 import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
@@ -44,71 +44,13 @@ import {
   acceptStream,
   passStreamData,
   isStreamAbortError,
+  isValidSignatureData,
   type ProtocolHandler,
   type ParsedStreamData,
 } from '@/lib/p2p';
 import { storeSignature, SIGNATURE_STEP, type StoredSignature } from '@/lib/signatures';
 import { logger } from '@/lib/logger';
-import { isAddress, type Hex } from '@/lib/types/ethereum';
-
-/** A 65-byte ECDSA signature: 0x + 130 hex characters. */
-const SIGNATURE_HEX = /^0x[0-9a-fA-F]{130}$/;
-
-/** A decimal integer with no sign, exponent, or padding — safe to hand to BigInt(). */
-const DECIMAL_UINT = /^(0|[1-9][0-9]{0,77})$/;
-
-/**
- * Validate that received signature data is well-formed for the chain we are on.
- *
- * A presence check is not enough here: this data becomes the arguments of a transaction the
- * relayer pays for. A signature of the wrong length, an address that is not an address, or a
- * signature minted for a different chain all produce a transaction that reverts after the
- * relayer has already spent gas.
- *
- * @param data - Decoded stream message
- * @param expectedChainId - Chain the relayer is about to submit on
- */
-function isValidSignatureData(
-  data: ParsedStreamData,
-  expectedChainId: number
-): data is ParsedStreamData & {
-  signature: NonNullable<ParsedStreamData['signature']>;
-} {
-  const sig = data.signature;
-  if (!sig) return false;
-
-  if (!isAddress(sig.address)) {
-    logger.p2p.warn('Signature rejected: address is not a valid Ethereum address', {
-      address: sig.address,
-    });
-    return false;
-  }
-
-  if (typeof sig.value !== 'string' || !SIGNATURE_HEX.test(sig.value)) {
-    logger.p2p.warn('Signature rejected: value is not a 65-byte hex signature', {
-      length: typeof sig.value === 'string' ? sig.value.length : null,
-    });
-    return false;
-  }
-
-  if (sig.chainId !== expectedChainId) {
-    logger.p2p.warn('Signature rejected: signed for a different chain', {
-      signatureChainId: sig.chainId,
-      expectedChainId,
-    });
-    return false;
-  }
-
-  // deadline and nonce are BigInt-coerced below; reject anything BigInt() would throw on.
-  if (typeof sig.deadline !== 'string' || !DECIMAL_UINT.test(sig.deadline)) return false;
-  if (typeof sig.nonce !== 'string' || !DECIMAL_UINT.test(sig.nonce)) return false;
-
-  // Optional extended fields: reportedChainId is a bytes32 hash, incidentTimestamp a uint.
-  if (sig.reportedChainId != null && !/^0x[0-9a-fA-F]{64}$/.test(sig.reportedChainId)) return false;
-  if (sig.incidentTimestamp != null && !DECIMAL_UINT.test(sig.incidentTimestamp)) return false;
-
-  return true;
-}
+import type { Hex } from '@/lib/types/ethereum';
 
 /**
  * Process a received signature: validate, store, confirm receipt, and advance step.
@@ -276,6 +218,16 @@ export function P2PRelayerRegistrationPage() {
       try {
         logger.p2p.info('Initializing P2P node for relayer');
 
+        // A fresh flow must never inherit a pin from an abandoned session. `partnerPeerId` is
+        // persisted so a mid-flow reload keeps its partner, but a user who closed the tab from
+        // the success screen would otherwise start their next flow already pinned to the old
+        // partner — and the guard would silently reject the new one. Reading the step from
+        // getState() rather than a dependency keeps this out of the effect's deps, which would
+        // otherwise tear down and rebuild the libp2p node on every step change.
+        if (isPreConnectionStep(useRegistrationStore.getState().step)) {
+          useP2PStore.getState().clearPartnerPeerId();
+        }
+
         // Build protocol handlers for relayer
         // Note: Uses ref for goToNextStep to avoid handler recreation
         // In libp2p 3.x, handler signature is (stream, connection) not ({stream, connection})
@@ -287,7 +239,7 @@ export function P2PRelayerRegistrationPage() {
               // Bind the stream to the agreed partner peer and to this protocol's schema
               // before any of it is trusted. Without this an arbitrary peer that learned a
               // displayed peer ID could inject signatures or drive the step machine.
-              if (!acceptStream(protocol, connection, data)) return;
+              if (!acceptStream(protocol, connection, data, 'relayer')) return;
 
               logger.p2p.info('Relayer received data', { protocol, data });
 

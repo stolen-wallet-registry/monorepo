@@ -372,6 +372,25 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'event',
+    name: 'DuplicateMessageIgnored',
+    inputs: [
+      {
+        name: 'origin',
+        type: 'uint32',
+        indexed: true,
+        internalType: 'uint32',
+      },
+      {
+        name: 'messageId',
+        type: 'bytes32',
+        indexed: true,
+        internalType: 'bytes32',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'OwnershipTransferStarted',
     inputs: [
       {
@@ -494,11 +513,6 @@ export const CrossChainInboxABI = [
       },
     ],
     anonymous: false,
-  },
-  {
-    type: 'error',
-    name: 'CrossChainInbox__DuplicateMessage',
-    inputs: [],
   },
   {
     type: 'error',

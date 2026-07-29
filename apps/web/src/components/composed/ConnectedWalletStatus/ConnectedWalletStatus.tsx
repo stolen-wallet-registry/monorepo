@@ -16,11 +16,17 @@ import { getHubChainIdForEnvironment } from '@/lib/chains/config';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 
-// Unversioned key: this is existing users' persisted data, and renaming the key orphans it
-// (their dismissal comes back). The stored shape is a string[] of lowercased addresses —
-// only rename (e.g. add a -v2 suffix) if that shape actually changes, and read the old key
-// through once if the data matters.
-const DISMISS_KEY = 'swr-wallet-status-dismissed';
+// Stored shape: string[] of lowercased addresses.
+//
+// The `:v1` suffix exists so that a future change to THAT SHAPE bumps to `:v2` and the old
+// data is simply ignored, rather than being fed to code that can no longer read it. The rule
+// is "bump when the shape changes", not "bump on principle" — a version bump with an
+// unchanged shape only discards data for no benefit.
+//
+// No migration from an earlier key name is provided, and none should be added: the app has
+// never been deployed (local only — no mainnet, no testnet), so there is no stored data
+// anywhere to migrate.
+const DISMISS_KEY = 'swr-wallet-status-dismissed:v1';
 
 export interface ConnectedWalletStatusProps {
   /** Show even if previously dismissed */

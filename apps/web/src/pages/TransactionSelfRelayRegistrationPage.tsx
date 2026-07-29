@@ -189,18 +189,26 @@ export function TransactionSelfRelayRegistrationPage() {
     setTransactionData(null, [], []);
   });
 
-  // Set reporter address when on select-transactions step
-  // IMPORTANT: Only clear selection when on the initial step, not during wallet switches for payment
+  // Record the reporter while the user is choosing transactions. In self-relay the connected
+  // wallet during selection is the reporter; the forwarder is set when they switch wallets to
+  // pay. Recording is idempotent, so it is safe to run on mount.
   useEffect(() => {
     if (address && step === 'select-transactions') {
-      // In self-relay, connected wallet during selection is the reporter
-      // Forwarder is set when user switches wallet for payment
       setReporter(address);
-      setSelectedTxHashes([]);
-      setSelectedTxDetails([]);
-      setTransactionData(null, [], []);
     }
-  }, [address, step, setReporter, setSelectedTxHashes, setSelectedTxDetails, setTransactionData]);
+  }, [address, step, setReporter]);
+
+  // Clear the selection only when the user actually switches wallets, and only while they are
+  // still on the selection step. Keying a wipe on [address, step] instead — as this did — made
+  // it fire on every mount of the selection step and every time the user navigated BACK to it,
+  // silently discarding picks the user had just made. Same defect the chain-switch effect above
+  // already had; same fix.
+  useOnValueChange(address, () => {
+    if (step !== 'select-transactions') return;
+    setSelectedTxHashes([]);
+    setSelectedTxDetails([]);
+    setTransactionData(null, [], []);
+  });
 
   // Redirect if not connected
   useEffect(() => {

@@ -53,6 +53,19 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'function',
+    name: 'MAX_TWO_PHASE_BATCH_SIZE',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'acceptOwnership',
     inputs: [],
     outputs: [],

@@ -22,6 +22,21 @@ export interface StoredSignature {
   chainId: number;
   step: SignatureStep;
   storedAt: number; // timestamp
+  /**
+   * The forwarder the signature was signed over.
+   *
+   * Part of the EIP-712 struct and verified on-chain, but NOT part of the storage key
+   * (`swr_sig_{address}_{chainId}_{step}`). In self-relay the user can go back and edit the
+   * gas wallet after signing; without this field the cached signature was still returned and
+   * submitted against the NEW forwarder, producing an opaque signature-verification revert
+   * instead of a "please re-sign" prompt. Pay steps compare it and treat a mismatch as
+   * "signature not found" — see `getSignature`'s `expectedForwarder`.
+   *
+   * Optional for backward compatibility with signatures stored before this field existed;
+   * `getSignature` treats a missing value as unverifiable and therefore a mismatch whenever
+   * an expected forwarder is supplied.
+   */
+  trustedForwarder?: Address;
   /** Raw EVM chain ID where incident occurred (e.g., 1 for mainnet, 8453 for Base) */
   reportedChainId?: bigint;
   /** Unix timestamp when incident occurred */
@@ -38,6 +53,7 @@ interface SerializedSignature {
   step: number;
   storedAt: number;
   // Optional fields for incident context
+  trustedForwarder?: string;
   reportedChainId?: string;
   incidentTimestamp?: string;
 }
@@ -54,17 +70,31 @@ export function storeSignature(sig: StoredSignature): void {
     step: sig.step,
     storedAt: sig.storedAt,
     // Optional fields (backward compatible)
+    trustedForwarder: sig.trustedForwarder,
     reportedChainId: sig.reportedChainId?.toString(),
     incidentTimestamp: sig.incidentTimestamp?.toString(),
   };
   sessionStorage.setItem(key, JSON.stringify(serialized));
 }
 
-// Retrieve a signature (returns null if not found or expired)
+/**
+ * Retrieve a signature (returns null if not found, expired, or bound to another forwarder).
+ *
+ * @param address - Wallet the signature is for
+ * @param chainId - Chain the signature was made on
+ * @param step - Acknowledgement or registration
+ * @param expectedForwarder - When supplied, the signature is only returned if it was signed
+ *   over this exact forwarder. The forwarder is part of the EIP-712 struct and verified
+ *   on-chain but is NOT part of the storage key, so without this check a signature made for
+ *   an earlier gas wallet would be handed to the pay step and revert on-chain. A signature
+ *   stored before this field existed has no forwarder to compare and is likewise rejected —
+ *   re-signing is cheap, an unexplained revert is not.
+ */
 export function getSignature(
   address: Address,
   chainId: number,
-  step: SignatureStep
+  step: SignatureStep,
+  expectedForwarder?: Address
 ): StoredSignature | null {
   const key = getStorageKey(address, chainId, step);
   const stored = sessionStorage.getItem(key);
@@ -126,6 +156,25 @@ export function getSignature(
       }
     }
 
+    // strict:false — the forwarder may have been stored lowercased (form input, P2P payload)
+    // rather than checksummed, and rejecting it on casing alone would silently force a
+    // needless re-sign. Comparison below is case-insensitive for the same reason.
+    const trustedForwarder =
+      parsed.trustedForwarder !== undefined && isAddress(parsed.trustedForwarder, { strict: false })
+        ? (parsed.trustedForwarder as Address)
+        : undefined;
+
+    // Forwarder binding: a signature is only valid for the forwarder it was signed over.
+    // Not removed from storage — the user may switch back to the original gas wallet, in
+    // which case this same signature becomes usable again.
+    if (
+      expectedForwarder !== undefined &&
+      (trustedForwarder === undefined ||
+        trustedForwarder.toLowerCase() !== expectedForwarder.toLowerCase())
+    ) {
+      return null;
+    }
+
     const signature: StoredSignature = {
       signature: parsed.signature as Hex,
       deadline: BigInt(parsed.deadline),
@@ -135,6 +184,7 @@ export function getSignature(
       step: parsed.step as SignatureStep,
       storedAt: parsed.storedAt,
       // Optional fields (validated above)
+      trustedForwarder,
       reportedChainId,
       incidentTimestamp,
     };

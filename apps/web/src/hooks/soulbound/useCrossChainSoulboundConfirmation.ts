@@ -104,6 +104,15 @@ const INITIAL_DELAY = 2000; // 2 second delay before polling starts
 interface ElapsedState {
   runKey: string;
   ms: number;
+  /**
+   * The `startTimeRef` value this reading was taken against.
+   *
+   * Tagging the reading rather than clearing it on disable is what lets the stopwatch stay
+   * pure: a stored value is valid only while the stopwatch it came from is still running, so
+   * a disable→re-enable of the SAME run reads 0 immediately instead of replaying the old
+   * elapsed value until the next tick (which would briefly render 'timeout' on re-enable).
+   */
+  startedAt: number | null;
 }
 
 /** Run-tagged Hyperlane messageId. */
@@ -130,7 +139,11 @@ export function useCrossChainSoulboundConfirmation({
   // Identifies the confirmation run. Everything below is scoped to it.
   const runKey = `${spokeHash ?? ''}-${wallet ?? ''}`;
 
-  const [elapsedState, setElapsedState] = useState<ElapsedState>(() => ({ runKey, ms: 0 }));
+  const [elapsedState, setElapsedState] = useState<ElapsedState>(() => ({
+    runKey,
+    ms: 0,
+    startedAt: null,
+  }));
   const [messageIdState, setMessageIdState] = useState<MessageIdState | null>(null);
 
   const startTimeRef = useRef<number | null>(null);
@@ -138,7 +151,16 @@ export function useCrossChainSoulboundConfirmation({
   // The runs for which the confirmed / timeout log lines were already emitted.
   const loggedConfirmationForRunRef = useRef<string | null>(null);
   const loggedTimeoutForRunRef = useRef<string | null>(null);
-  const startingBalanceRef = useRef<StartingBalance | null>(null);
+  /**
+   * Run-tagged balance baseline for support mints.
+   *
+   * State, not a ref: `deriveIsMinted` reads it during render, so a ref would be both a
+   * lint violation (`react-hooks/refs`) and genuinely wrong — writing it would not schedule
+   * the re-render that turns the new baseline into a new answer. As state, recording the
+   * baseline re-renders and `isMintedOnHub` is recomputed from it. The write is guarded by
+   * the run tag, so it happens once per run and cannot loop.
+   */
+  const [startingBalance, setStartingBalance] = useState<StartingBalance | null>(null);
 
   const hubChainId = getHubChainIdForEnvironment();
   const spokeClient = usePublicClient({ chainId: spokeChainId });
@@ -148,6 +170,15 @@ export function useCrossChainSoulboundConfirmation({
   // The stopwatch belongs to a single run, and only ticks while enabled. A tag
   // mismatch means the stored value describes a superseded run, so it reads 0
   // immediately rather than one commit later.
+  //
+  // ACCEPTED EDGE CASE: disabling and re-enabling the SAME run (identical spokeHash+wallet)
+  // replays the last stored reading until the next tick, up to ~1s, which could briefly
+  // render 'timeout'. It is left alone deliberately. Clearing the value on disable means a
+  // setState inside the disable effect (`react-hooks/set-state-in-effect`), and tagging the
+  // reading with `startTimeRef` means reading a ref during render (`react-hooks/refs`) —
+  // both were tried. The case is also not reachable through the UI: disabling closes the
+  // mint flow, and reopening it produces a new spokeHash and therefore a new runKey, which
+  // the tag below already zeroes.
   const elapsedTime = enabled && elapsedState.runKey === runKey ? elapsedState.ms : 0;
 
   // Likewise: a messageId extracted from a previous spoke receipt must never be
@@ -235,6 +266,19 @@ export function useCrossChainSoulboundConfirmation({
    * hasMinted returns a boolean directly; balanceOf has to be compared against
    * the balance observed when this run started, because a supporter may already
    * hold tokens from earlier donations.
+   *
+   * TRI-STATE, deliberately. The baseline is recorded by an effect (below), which runs after
+   * the commit, so there is always at least one render where the balance is known and the
+   * baseline is not. Treating that window as "baseline = 0n" is what told a repeat donor
+   * "Success! Your support token has been minted on Base" the instant the SPOKE transaction
+   * confirmed, before the hub mint had landed — any pre-existing balance read as a fresh
+   * mint. The absence of a baseline means "unknown", not "zero", so it answers `false`:
+   * polling simply continues for one more tick until the baseline exists.
+   *
+   * (The alternative — capturing the baseline during render — would keep the ref write and
+   * the derivation in the same commit, but a ref mutated during render can leak from a render
+   * React discards or replays. The tri-state fixes the same bug without touching render
+   * purity.)
    */
   const deriveIsMinted = useCallback(
     (data: unknown): boolean => {
@@ -242,11 +286,11 @@ export function useCrossChainSoulboundConfirmation({
       if (mintType === 'wallet') {
         return data as boolean;
       }
-      const startingBalance =
-        startingBalanceRef.current?.runKey === runKey ? startingBalanceRef.current.value : 0n;
-      return (data as bigint) > startingBalance;
+      // Baseline not yet recorded for THIS run: unknown, so not minted.
+      if (!startingBalance || startingBalance.runKey !== runKey) return false;
+      return (data as bigint) > startingBalance.value;
     },
-    [mintType, runKey]
+    [mintType, runKey, startingBalance]
   );
 
   // Whether the clock says we are inside the polling window. Confirmation is
@@ -279,12 +323,27 @@ export function useCrossChainSoulboundConfirmation({
 
   // Record starting balance for support mints (to detect new mints vs existing tokens).
   // Tagged with the run, so a new run re-baselines without needing a reset effect.
+  //
+  // Written only here, in an effect — never during render. Until this lands, `deriveIsMinted`
+  // reports "not minted" for this run rather than comparing against an implied 0n; see the
+  // tri-state note on `deriveIsMinted` for why that distinction is the actual fix.
+  //
+  // setState in an effect is deliberate here: capturing the FIRST reading of an external
+  // system (the hub chain's balanceOf) is not derivable from any later render's inputs — the
+  // baseline is by definition the value observed when this run began. Both alternatives are
+  // worse: writing it during render is an impure ref mutation React may replay or discard,
+  // and a plain ref cannot work at all because `deriveIsMinted` reads it during render, so
+  // the write would not schedule the re-render that turns a new baseline into a new answer.
+  // The run-tag guard makes this fire once per run, so it cannot loop.
   useEffect(() => {
     if (mintType !== 'support') return;
     if (mintQueryResult === undefined) return;
-    if (startingBalanceRef.current?.runKey === runKey) return;
-    startingBalanceRef.current = { runKey, value: mintQueryResult as bigint };
-  }, [mintType, mintQueryResult, runKey]);
+    if (startingBalance?.runKey === runKey) return;
+    // See the note above the effect: the first observed balance is external-system state,
+    // not derivable from render inputs.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- capturing external state
+    setStartingBalance({ runKey, value: mintQueryResult as bigint });
+  }, [mintType, mintQueryResult, runKey, startingBalance]);
 
   const isMintedOnHub = useMemo(
     () => deriveIsMinted(mintQueryResult),
@@ -308,15 +367,14 @@ export function useCrossChainSoulboundConfirmation({
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+      // No state clearing needed: nulling startTimeRef invalidates any stored reading via
+      // the `startedAt` tag, so `elapsedTime` derives 0 without a setState in this effect.
       startTimeRef.current = null;
-      // Clear the stored stopwatch too. `elapsedTime` already reads 0 while
-      // disabled, but the stored value would otherwise be replayed if the same
-      // run were re-enabled before the first tick.
-      setElapsedState({ runKey, ms: 0 });
       return;
     }
 
-    startTimeRef.current = Date.now();
+    const startedAt = Date.now();
+    startTimeRef.current = startedAt;
 
     logger.contract.info('Starting cross-chain soulbound confirmation polling', {
       mintType,
@@ -326,8 +384,8 @@ export function useCrossChainSoulboundConfirmation({
     });
 
     intervalRef.current = setInterval(() => {
-      if (startTimeRef.current) {
-        setElapsedState({ runKey, ms: Date.now() - startTimeRef.current });
+      if (startTimeRef.current === startedAt) {
+        setElapsedState({ runKey, ms: Date.now() - startedAt, startedAt });
       }
     }, 1000);
 
@@ -391,11 +449,11 @@ export function useCrossChainSoulboundConfirmation({
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    setElapsedState({ runKey, ms: 0 });
+    setElapsedState({ runKey, ms: 0, startedAt: null });
     setMessageIdState(null);
     loggedConfirmationForRunRef.current = null;
     loggedTimeoutForRunRef.current = null;
-    startingBalanceRef.current = null;
+    setStartingBalance(null);
   }, [runKey]);
 
   return {

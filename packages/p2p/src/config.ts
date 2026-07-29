@@ -81,9 +81,10 @@ export function getRelayServers(config: EnvironmentConfig): RelayConfig[] {
     );
   }
 
-  if (!servers || servers.length === 0) {
-    return RELAY_SERVERS.development;
-  }
+  // Past the guard above, an empty list is only possible in development mode, where the
+  // list IS the development list — there is nothing to fall back to. Returning `servers`
+  // directly avoids a branch that reads as a fallback but can only return what it just
+  // tested.
   return servers;
 }
 

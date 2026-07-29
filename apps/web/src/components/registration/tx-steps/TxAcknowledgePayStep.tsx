@@ -15,6 +15,8 @@ import {
   type SignedMessageData,
 } from '@/components/composed/TransactionCard';
 import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
+import { RelayedSignatureReview } from '@/components/composed/RelayedSignatureReview';
+import { useRelayedTxSignatureReview } from '@/hooks/p2p/useRelayedSignatureReview';
 import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
 import { areAddressesEqual } from '@/lib/address';
@@ -31,14 +33,19 @@ import type { TransactionCost } from '@/hooks/useTransactionCost';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import {
   getTxSignature,
+  removeTxSignature,
   TX_SIGNATURE_STEP,
   computeTransactionDataHash,
 } from '@/lib/signatures/transactions';
+import { isSignatureInvalidatingError } from '@/lib/errors/signatureInvalidation';
+import { getTxPreviousStep } from '@/stores/transactionRegistrationStore';
 import type { Hash } from '@/lib/types/ethereum';
 import { parseSignature } from '@/lib/signatures';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { getExplorerTxUrl } from '@/lib/explorer';
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateRegistryQueries } from '@/lib/contracts/queryKeys';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -54,7 +61,8 @@ export interface TxAcknowledgePayStepProps {
 export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
-  const { registrationType, setAcknowledgementHash } = useTransactionRegistrationStore();
+  const { registrationType, step, setStep, setAcknowledgementHash } =
+    useTransactionRegistrationStore();
   const {
     selectedTxHashes,
     selectedTxDetails,
@@ -92,6 +100,10 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
+  // See handleRetry: some reverts make the stored signature permanently unusable, so Retry
+  // has to mean "sign again", not "submit the same bytes again".
+  const needsResign = isError && isSignatureInvalidatingError(error);
+
   // SSR-safe signature retrieval - sessionStorage not available during SSR
   // Use undefined for "not yet loaded" vs null for "loaded but not found"
   const [storedSignature, setStoredSignature] = useState<
@@ -120,6 +132,23 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   const isCorrectWallet = Boolean(
     address && expectedWallet && areAddressesEqual(address, expectedWallet)
   );
+
+  // P2P relay only: the signature arrived from a peer over the network, so before the
+  // relayer pays for it, recover the signer from the EIP-712 digest, re-read the nonce from
+  // the contract, and check the deadline. Self-relay and standard skip this — the connected
+  // wallet signed it itself, there is no peer to distrust.
+  const isP2PRelayed = registrationType === 'p2pRelay';
+  const { review: signatureReview, isChecking: isReviewingSignature } = useRelayedTxSignatureReview(
+    {
+      enabled: isP2PRelayed && !!storedSignature,
+      step: TX_SIGNATURE_STEP.ACKNOWLEDGEMENT,
+      storedSignature,
+      expectedSigner: storedSignature?.reporter,
+      trustedForwarder: storedSignature?.trustedForwarder,
+    }
+  );
+  // Only blocks the P2P path; elsewhere there is nothing to verify against.
+  const isSignatureReviewBlocking = isP2PRelayed && !signatureReview?.ok;
 
   // Convert reported chain ID to CAIP-2 format - cache both for display and contract use
   // Guard against invalid chain IDs (must be positive safe integer)
@@ -170,6 +199,16 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     enabled: !!storedSignature && !!dataHash && !!reportedChainIdHash && isCorrectWallet && !hash, // Stop polling once tx is submitted
   });
 
+  // Refresh every registry-derived cache the moment the transaction confirms. Without this
+  // the nonce, deadlines and registration status keep serving pre-transaction values to the
+  // next step — the root cause of the stale-nonce bugs that sign-time refetches only papered
+  // over. Broad by design: after a confirmation, all of those reads are suspect.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!isConfirmed || !hash) return;
+    invalidateRegistryQueries(queryClient, { step: 'transaction-acknowledgement', hash });
+  }, [isConfirmed, hash, queryClient]);
+
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
     if (isConfirmed) return 'confirmed';
@@ -218,6 +257,16 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
       expectedWallet,
       isCorrectWallet,
     });
+
+    if (isSignatureReviewBlocking) {
+      logger.contract.warn('Blocked ACK submission: relayed signature did not pass verification', {
+        issues: signatureReview?.issues,
+      });
+      setLocalError(
+        'The signature you received could not be verified. See the details above before paying.'
+      );
+      return;
+    }
 
     if (!storedSignature || !dataHash || !reportedChainIdHash) {
       logger.contract.error('Cannot submit transaction acknowledgement - missing data', {
@@ -342,12 +391,33 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     isCorrectWallet,
     isHub,
     isSpoke,
+    isSignatureReviewBlocking,
+    signatureReview,
   ]);
 
   /**
    * Handle retry after failure.
+   *
+   * Plain retry for anything a resubmit can fix. For a signature-invalidating revert the
+   * stored signature is discarded and the user is sent back to sign — retrying it would
+   * resubmit identical bytes forever.
    */
   const handleRetry = () => {
+    if (needsResign) {
+      logger.contract.warn(
+        'Transaction acknowledgement signature invalidated by revert, returning to sign',
+        { dataHash, error: error?.message }
+      );
+      if (dataHash) {
+        removeTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
+      }
+      reset();
+      setLocalError(null);
+      const previous = step ? getTxPreviousStep(registrationType, step) : null;
+      if (previous) setStep(previous);
+      return;
+    }
+
     reset();
     setLocalError(null);
   };
@@ -503,6 +573,26 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         />
       )}
 
+      {/* A signature-invalidating revert cannot be retried — say so before they press it */}
+      {needsResign && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            This signature can no longer be used. Retry will take you back to sign a new one.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* P2P relay: review before you pay */}
+      {isP2PRelayed && storedSignature && (
+        <RelayedSignatureReview
+          review={signatureReview}
+          isChecking={isReviewingSignature}
+          expectedSigner={storedSignature.reporter}
+          deadline={storedSignature.deadline}
+        />
+      )}
+
       {/* Transaction card with cost estimate */}
       <TransactionCard
         type="acknowledgement"
@@ -550,7 +640,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         }}
         onSubmit={handleSubmit}
         onRetry={handleRetry}
-        disabled={!isCorrectWallet}
+        disabled={!isCorrectWallet || isSignatureReviewBlocking}
       />
 
       {/* Disabled state message when wrong wallet connected */}

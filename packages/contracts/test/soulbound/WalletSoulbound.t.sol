@@ -119,13 +119,30 @@ contract WalletSoulboundTest is Test {
         assertTrue(soulbound.hasMinted(registeredWallet));
     }
 
-    /// @notice Can mint to a pending wallet (during grace period)
-    function test_mintTo_success_pending() public {
+    /// @notice A merely PENDING wallet cannot be minted for.
+    /// @dev Security-critical: mintTo is permissionless and sets `hasMinted` unconditionally.
+    ///      When pending wallets were eligible, any third party could mint an irrevocable,
+    ///      non-transferable token asserting "this wallet has been registered as stolen"
+    ///      during the ~1-13 minute acknowledgement window — for a registration that may never
+    ///      complete — and simultaneously burn the wallet's only mint so it could never mint
+    ///      after legitimately registering. A pending wallet has completed one of the two
+    ///      EIP-712 phases; the whole point of the two-phase design is that one signature is
+    ///      not a registration.
+    function test_mintTo_rejectsPendingWallet() public {
         vm.prank(minter);
+        vm.expectRevert(WalletSoulbound.NotRegisteredOrPending.selector);
         soulbound.mintTo(pendingWallet);
 
-        assertEq(soulbound.balanceOf(pendingWallet), 1);
-        assertEq(soulbound.ownerOf(1), pendingWallet);
+        assertEq(soulbound.balanceOf(pendingWallet), 0);
+        assertFalse(soulbound.hasMinted(pendingWallet), "A rejected mint must not burn the wallet's mint slot");
+    }
+
+    /// @notice canMint mirrors mintTo for a pending wallet, so the UI cannot offer a mint
+    ///         that the transaction would then reject.
+    function test_canMint_rejectsPendingWallet() public view {
+        (bool eligible, string memory reason) = soulbound.canMint(pendingWallet);
+        assertFalse(eligible);
+        assertEq(reason, "Registration is not complete yet");
     }
 
     /// @notice Token is minted to wallet, not to msg.sender
@@ -320,8 +337,13 @@ contract WalletSoulboundTest is Test {
         soulbound.mintTo(registeredWallet);
         assertEq(soulbound.totalSupply(), 1);
 
+        // Second registered wallet — pending wallets are not mintable (see
+        // test_mintTo_rejectsPendingWallet), so this uses a second REGISTERED wallet.
+        address secondRegistered = makeAddr("secondRegistered");
+        mockRegistry.setRegistered(secondRegistered, true);
+
         vm.prank(minter);
-        soulbound.mintTo(pendingWallet);
+        soulbound.mintTo(secondRegistered);
         assertEq(soulbound.totalSupply(), 2);
     }
 

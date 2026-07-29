@@ -340,3 +340,66 @@ describe('signature storage', () => {
     });
   });
 });
+
+describe('forwarder binding', () => {
+  const ADDRESS = `0x${'a'.repeat(40)}` as Address;
+  const FORWARDER = `0x${'b'.repeat(40)}` as Address;
+  const OTHER_FORWARDER = `0x${'c'.repeat(40)}` as Address;
+
+  function store(trustedForwarder?: Address) {
+    storeSignature({
+      signature: `0x${'d'.repeat(130)}`,
+      deadline: 1_900_000_000n,
+      nonce: 1n,
+      address: ADDRESS,
+      chainId: 8453,
+      step: SIGNATURE_STEP.REGISTRATION,
+      storedAt: Date.now(),
+      trustedForwarder,
+      reportedChainId: 8453n,
+      incidentTimestamp: 0n,
+    });
+  }
+
+  // The storage key is address+chainId+step, so a self-relay user who backs out and edits the
+  // gas wallet after signing used to get the SAME cached signature handed back and submitted
+  // against the NEW forwarder — an opaque signature-verification revert instead of "re-sign".
+  it('does not return a signature signed for a different forwarder', () => {
+    store(FORWARDER);
+
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, OTHER_FORWARDER)).toBeNull();
+  });
+
+  // Positive path: the matching forwarder still gets its signature, so the check above is not
+  // simply rejecting everything.
+  it('returns the signature when the forwarder matches', () => {
+    store(FORWARDER);
+
+    const found = getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER);
+    expect(found).not.toBeNull();
+    expect(found?.trustedForwarder?.toLowerCase()).toBe(FORWARDER.toLowerCase());
+  });
+
+  it('matches case-insensitively', () => {
+    store(FORWARDER.toUpperCase().replace('0X', '0x') as Address);
+
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER)).not.toBeNull();
+  });
+
+  // A signature stored before this field existed cannot be checked, so it is treated as a
+  // miss when a forwarder is expected — re-signing is cheap, an unexplained revert is not.
+  it('rejects a legacy signature with no stored forwarder when one is expected', () => {
+    store(undefined);
+
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER)).toBeNull();
+    // ...but callers that do not care still get it.
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION)).not.toBeNull();
+  });
+
+  it('leaves the mismatched signature in storage so switching back recovers it', () => {
+    store(FORWARDER);
+
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, OTHER_FORWARDER)).toBeNull();
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER)).not.toBeNull();
+  });
+});

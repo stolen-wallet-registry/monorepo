@@ -19,6 +19,13 @@ interface GroomLakePngLogoProps {
  * either nothing or a class, and accepting the full ComponentProps<'img'> set
  * would let callers pass attributes next/image handles differently (src,
  * srcSet, loading).
+ *
+ * `loading="eager"` restores the behaviour of the <img> this replaced. next/image lazy-loads
+ * by default, which made the logo pop in after the rest of the diagram had painted while the
+ * inline SVG logos beside it were already there. Eager, not `priority`: the visualization is
+ * the second section of the page, below the initial viewport, so a preload hint would be
+ * wrong (and Next warns about preloaded-but-unused images). The asset is 20px — loading it
+ * with the section costs nothing.
  */
 export function GroomLakePngLogo({ className }: GroomLakePngLogoProps) {
   return (
@@ -27,6 +34,7 @@ export function GroomLakePngLogo({ className }: GroomLakePngLogoProps) {
       alt="Groom Lake"
       width={20}
       height={20}
+      loading="eager"
       className={cn('size-5 dark:invert', className)}
     />
   );

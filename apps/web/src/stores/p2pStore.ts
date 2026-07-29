@@ -23,6 +23,8 @@ export interface P2PState {
 export interface P2PActions {
   setPeerId: (peerId: string) => void;
   setPartnerPeerId: (peerId: string) => void;
+  /** Drop the pinned partner without touching the rest of the P2P state. */
+  clearPartnerPeerId: () => void;
   setConnectedToPeer: (connected: boolean) => void;
   setConnectionStatus: (status: P2PConnectionStatus, errorMessage?: string) => void;
   setInitialized: (initialized: boolean) => void;
@@ -55,6 +57,16 @@ export const useP2PStore = create<P2PState & P2PActions>()(
           set((state) => {
             logger.p2p.debug('P2P partner peerId set', { peerId });
             state.partnerPeerId = peerId;
+          }),
+
+        clearPartnerPeerId: () =>
+          set((state) => {
+            if (state.partnerPeerId) {
+              logger.p2p.info('Cleared pinned partner peer', {
+                partnerPeerId: state.partnerPeerId,
+              });
+            }
+            state.partnerPeerId = null;
           }),
 
         setConnectedToPeer: (connected) =>
@@ -96,6 +108,15 @@ export const useP2PStore = create<P2PState & P2PActions>()(
       {
         name: 'swr-p2p-state',
         version: 1,
+        // partnerPeerId stays persisted on purpose: a mid-flow reload (grace period, payment
+        // step) has to come back with its partner still pinned, and the pin is the only thing
+        // that survives losing the libp2p node. The cost is that a user who closes the tab from
+        // the success screen carries the pin into their NEXT flow, where the guard would then
+        // silently reject the new partner's CONNECT. That is handled at the other end instead:
+        // each P2P page clears the pin when its node initialises while the flow is still at the
+        // pre-connection step (see `isPreConnectionStep`), which is true exactly when no partner
+        // has been agreed yet and therefore never true for a mid-flow reload.
+        //
         // Only the durable peer identities are persisted. connectedToPeer, connectionStatus,
         // errorMessage and isInitialized describe the current session's libp2p node, which does
         // not survive a reload — persisting them would rehydrate a connected-looking store with
@@ -122,3 +143,14 @@ export const useP2PStore = create<P2PState & P2PActions>()(
     { name: 'P2PStore', enabled: process.env.NODE_ENV === 'development' }
   )
 );
+
+/**
+ * True at the steps where no partner has been agreed yet, so any persisted `partnerPeerId`
+ * is a leftover from an abandoned session rather than something to restore.
+ *
+ * Both the wallet and transaction P2P flows call their pre-connection step
+ * 'wait-for-connection'; a null step means the flow has not started at all.
+ */
+export function isPreConnectionStep(step: string | null | undefined): boolean {
+  return !step || step === 'wait-for-connection';
+}

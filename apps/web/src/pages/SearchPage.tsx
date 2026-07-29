@@ -40,10 +40,17 @@ import { redactAddress } from '@/lib/logger/formatters';
 import { isAddress } from '@/lib/types/ethereum';
 import type { Address } from '@/lib/types/ethereum';
 
-// Unversioned key: this is existing users' persisted data, and renaming the key orphans it
-// (their recent searches vanish). If the RecentSearch shape ever changes, add a version
-// suffix (-v2) at THAT point and read the old key through once — do not bump preemptively.
-const RECENT_SEARCHES_KEY = 'swr-recent-searches';
+// Stored shape: RecentSearch[] (see the type below).
+//
+// The `:v1` suffix exists so that a future change to THAT SHAPE bumps to `:v2` and the old
+// data is simply ignored, rather than being fed to code that can no longer read it. The rule
+// is "bump when the shape changes", not "bump on principle" — a version bump with an
+// unchanged shape only discards data for no benefit.
+//
+// No migration from an earlier key name is provided, and none should be added: the app has
+// never been deployed (local only — no mainnet, no testnet), so there is no stored data
+// anywhere to migrate. Every read/write below goes through this one constant.
+const RECENT_SEARCHES_KEY = 'swr-recent-searches:v1';
 const MAX_RECENT_SEARCHES = 5;
 
 /** Registry entry types */

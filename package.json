@@ -48,6 +48,8 @@
     "deploy:testnet:spoke": "pnpm --filter @swr/contracts deploy:testnet:spoke",
     "finalize:testnet:hub": "pnpm --filter @swr/contracts finalize:testnet:hub",
     "verify:setup:testnet:hub": "pnpm --filter @swr/contracts verify:setup:testnet:hub",
+    "finalize:testnet:spoke": "pnpm --filter @swr/contracts finalize:testnet:spoke",
+    "verify:setup:testnet:spoke": "pnpm --filter @swr/contracts verify:setup:testnet:spoke",
     "dev:crosschain": "cross-env VITE_CROSSCHAIN=true pnpm dev:web",
     "dev:testnet": "cross-env VITE_TESTNET=true pnpm dev:web",
     "relay": "pnpm --filter @swr/relay dev",

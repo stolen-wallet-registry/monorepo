@@ -18,6 +18,7 @@ export {
   TX_SIGNATURE_TTL_MS,
   storeTxSignature,
   getTxSignature,
+  removeTxSignature,
   clearAllTxSignatures,
   type StoredTxSignature,
 } from './storage';

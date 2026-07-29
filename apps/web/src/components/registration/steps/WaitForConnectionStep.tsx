@@ -51,6 +51,12 @@ export function WaitForConnectionStep({ onComplete, role, getLibp2p }: WaitForCo
         // Get connection to remote peer
         const connection = await getPeerConnection({ libp2p, remotePeerId });
 
+        // Pin BEFORE speaking. The relayer answers the handshake by opening a CONNECT stream
+        // back on this same connection, and the registeree's guard never adopts a partner from
+        // an inbound stream (see peerGuard's `mayPin`) — so if the pin landed after the write,
+        // the relayer's reply could arrive first and be rejected as coming from a stranger.
+        setPartnerPeerId(remotePeerId);
+
         // Send connect handshake with registeree address
         await passStreamData({
           connection,
@@ -61,7 +67,6 @@ export function WaitForConnectionStep({ onComplete, role, getLibp2p }: WaitForCo
           },
         });
 
-        setPartnerPeerId(remotePeerId);
         setConnectedToPeer(true);
 
         logger.p2p.info('Connected to relayer successfully');

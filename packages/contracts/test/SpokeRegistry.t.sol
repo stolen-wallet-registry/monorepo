@@ -468,6 +468,75 @@ contract SpokeRegistryTest is Test {
         assertEq(ack.incidentTimestamp, incidentTimestamp);
     }
 
+    /// @notice Re-acknowledging while a prior acknowledgement is still live is rejected.
+    /// @dev Hub/spoke parity: WalletRegistry.acknowledge has always reverted with
+    ///      WalletRegistry__AlreadyAcknowledged here, but the spoke silently overwrote the
+    ///      stored acknowledgement — restarting the randomized grace period and orphaning the
+    ///      registration signature the user had already produced against the first one. This is
+    ///      exactly the hub/spoke drift the Feb-2026 signature unification set out to end.
+    function test_Acknowledge_RejectsWhileLiveAcknowledgementExists() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        _doAck(forwarder, reportedChainId, incidentTimestamp);
+        ISpokeRegistry.AcknowledgementData memory first = spoke.getAcknowledgement(wallet);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAck(walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__AlreadyAcknowledged.selector);
+        spoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+
+        // The original acknowledgement must be untouched
+        ISpokeRegistry.AcknowledgementData memory afterAck = spoke.getAcknowledgement(wallet);
+        assertEq(afterAck.startBlock, first.startBlock, "Grace period must not restart");
+        assertEq(afterAck.expiryBlock, first.expiryBlock);
+    }
+
+    /// @notice Once the prior acknowledgement has expired, acknowledging again is allowed.
+    /// @dev The guard must not permanently lock a wallet out after an abandoned attempt.
+    function test_Acknowledge_AllowedAfterPriorExpired() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        _doAck(forwarder, reportedChainId, incidentTimestamp);
+        ISpokeRegistry.AcknowledgementData memory first = spoke.getAcknowledgement(wallet);
+
+        vm.roll(first.expiryBlock + 1);
+        _doAck(forwarder, reportedChainId, incidentTimestamp);
+
+        assertTrue(spoke.isPending(wallet));
+        assertEq(spoke.nonces(wallet), 2, "Second acknowledgement should have consumed another nonce");
+    }
+
+    /// @notice A future incident timestamp is rejected; 0 ("unknown") is still accepted.
+    /// @dev incidentTimestamp is trusted into permanent storage and feeds the indexer and any
+    ///      downstream fraud scoring. A future value is unfalsifiable at write time. 0 stays
+    ///      valid because it is the sentinel the app and CLI submit today.
+    function test_Acknowledge_RejectsFutureIncidentTimestamp() public {
+        uint64 reportedChainId = 1;
+        uint64 futureIncident = uint64(block.timestamp + 1 days);
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(wallet);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAck(walletPrivateKey, wallet, forwarder, reportedChainId, futureIncident, nonce, deadline);
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidIncidentTimestamp.selector);
+        spoke.acknowledge(wallet, forwarder, reportedChainId, futureIncident, deadline, nonce, v, r, s);
+    }
+
+    function test_Acknowledge_AcceptsZeroIncidentTimestamp() public {
+        _doAck(forwarder, 1, 0);
+
+        assertTrue(spoke.isPending(wallet));
+        assertEq(spoke.getAcknowledgement(wallet).incidentTimestamp, 0);
+    }
+
     /// @notice Self-relay (wallet is own forwarder) works
     function test_Acknowledge_SelfRelay() public {
         uint64 reportedChainId = 1; // Mainnet

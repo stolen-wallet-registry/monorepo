@@ -45,10 +45,19 @@ export const EXAMPLE_CLEAN_CONTRACT = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488
 export const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL ?? 'http://localhost:42069';
 
 // A production build that silently falls back to localhost gives every visitor a hero search
-// that can never return a result — the requests go to the visitor's own machine. Next.js
-// inlines NEXT_PUBLIC_* at build time, so this fires during the build (where it is visible in
-// deploy logs) rather than only in the visitor's console.
-if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_INDEXER_URL) {
+// that can never return a result — the requests go to the visitor's own machine.
+//
+// The `typeof window === 'undefined'` guard is load-bearing. This module lives in a
+// `'use client'` tree, and Next inlines both NEXT_PUBLIC_* and NODE_ENV into the CLIENT
+// bundle as well as the server one — so without the guard this warning is evaluated in every
+// visitor's browser on every page load, printing to their console instead of the deploy log.
+// The guard restricts it to the build/SSR pass, which is where a misconfigured deploy is
+// actually actionable.
+if (
+  typeof window === 'undefined' &&
+  process.env.NODE_ENV === 'production' &&
+  !process.env.NEXT_PUBLIC_INDEXER_URL
+) {
   console.warn(
     '[landing] NEXT_PUBLIC_INDEXER_URL is not set — the registry search preview will point at ' +
       'http://localhost:42069 and return nothing for visitors. Set it in the deployment environment.'

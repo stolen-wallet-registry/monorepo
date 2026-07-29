@@ -24,12 +24,16 @@ import {
   useCrossChainConfirmation,
   needsCrossChainConfirmation,
 } from '@/hooks/useCrossChainConfirmation';
-import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { getSignature, removeSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { isSignatureInvalidatingError } from '@/lib/errors/signatureInvalidation';
+import { useStepNavigation } from '@/hooks/useStepNavigation';
 import type { WalletRegistrationArgs } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl, getChainName, getBridgeMessageByIdUrl } from '@/lib/explorer';
 import { getHubChainId } from '@/lib/chains/config';
 import { extractBridgeMessageId } from '@/lib/bridge/messageId';
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateRegistryQueries } from '@/lib/contracts/queryKeys';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -77,13 +81,12 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  // Get stored signature
-  const storedSignature = registeree
-    ? getSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION)
-    : null;
-
-  // Parse signature once for reuse (avoid calling parseSignature 4 times)
-  const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
+  // Some reverts invalidate the signature itself (expired deadline, consumed nonce, expired
+  // forwarder). Retrying those rebuilds the SAME transaction from the SAME cached signature
+  // and reverts identically — the user could press Retry forever with no way to re-sign. Those
+  // are routed to a re-sign instead of a resubmit.
+  const { goToPreviousStep } = useStepNavigation();
+  const needsResign = isError && isSignatureInvalidatingError(error);
 
   // Determine forwarder based on registration type:
   // - Standard: registeree pays and forwards (registeree == forwarder)
@@ -91,6 +94,18 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // - P2P relay: handled by P2PRegPayStep (not this component)
   // - Future meta-tx: trusted 3rd party would be set as relayer
   const forwarder = isSelfRelay ? relayer : registeree;
+
+  // Get stored signature, bound to the forwarder it was signed over. If the user went back
+  // and edited the gas wallet after signing, the cached signature no longer matches the
+  // struct the contract will verify, so it is treated as absent and the user is sent back to
+  // sign rather than being shown an opaque on-chain revert.
+  const storedSignature =
+    registeree && forwarder
+      ? getSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION, forwarder)
+      : null;
+
+  // Parse signature once for reuse (avoid calling parseSignature 4 times)
+  const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
 
   // Build transaction args for gas estimation (needs to be before early returns)
   // Unified: register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
@@ -152,6 +167,16 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     };
     void extractMessage();
   }, [isCrossChain, receipt, setBridgeMessageId]);
+
+  // Refresh every registry-derived cache the moment the transaction confirms. Without this
+  // the nonce, deadlines and registration status keep serving pre-transaction values to the
+  // next step — the root cause of the stale-nonce bugs that sign-time refetches only papered
+  // over. Broad by design: after a confirmation, all of those reads are suspect.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!isConfirmed || !hash) return;
+    invalidateRegistryQueries(queryClient, { step: 'registration', hash });
+  }, [isConfirmed, hash, queryClient]);
 
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
@@ -348,8 +373,26 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
 
   /**
    * Handle retry after failure.
+   *
+   * Plain retry for anything a resubmit can fix (gas, RPC, nonce-of-the-EOA). For a
+   * signature-invalidating revert, the stored signature is discarded and the user is sent
+   * back to the sign step — otherwise the same bytes get resubmitted forever.
    */
   const handleRetry = () => {
+    if (needsResign) {
+      logger.registration.warn('Registration signature invalidated by revert, returning to sign', {
+        registeree,
+        error: error?.message,
+      });
+      if (registeree) {
+        removeSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION);
+      }
+      reset();
+      setLocalError(null);
+      goToPreviousStep();
+      return;
+    }
+
     reset();
     setLocalError(null);
   };
@@ -416,6 +459,16 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
           expectedLabel="Gas Wallet"
           currentLabel="Stolen Wallet"
         />
+      )}
+
+      {/* A signature-invalidating revert cannot be retried — say so before they press it */}
+      {needsResign && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            This signature can no longer be used. Retry will take you back to sign a new one.
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Transaction card with integrated cost estimate */}

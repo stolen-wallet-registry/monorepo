@@ -408,6 +408,9 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
         if (registeree == address(0)) revert WalletRegistry__ZeroAddress();
         if (trustedForwarder == address(0)) revert WalletRegistry__ZeroAddress();
         if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
+        // 0 means "unknown" and is allowed; a future incident is not physically possible and
+        // would permanently poison time-based analytics for every downstream consumer.
+        if (incidentTimestamp > block.timestamp) revert WalletRegistry__InvalidIncidentTimestamp();
 
         // Check not already registered
         bytes32 key = CAIP10Evm.evmWalletKey(registeree);
@@ -587,6 +590,12 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
             bytes32 identifier = identifiers[i];
             if (identifier == bytes32(0)) continue;
 
+            // Same rule as the individual path: 0 is "unknown", the future is not allowed.
+            // Rejects the whole batch rather than skipping the entry — a future-dated incident
+            // is a fixable mistake in the operator's input file, and silently dropping entries
+            // would leave the operator believing data landed when it did not.
+            if (incidentTimestamps[i] > block.timestamp) revert WalletRegistry__InvalidIncidentTimestamp();
+
             // Assume EVM addresses for operator submissions
             address wallet = address(uint160(uint256(identifier)));
             bytes32 key = CAIP10Evm.evmWalletKey(wallet);
@@ -604,6 +613,12 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
             actualCount++;
             emit WalletRegistered(identifier, reportedChainIds[i], incidentTimestamps[i], false);
         }
+
+        // Reject a batch in which nothing was actually registered (every entry was a zero
+        // identifier or already registered), matching ContractRegistry. Otherwise the operator
+        // pays full gas for a no-op, a batch ID is burned, and the indexer materialises a
+        // phantom zero-entry batch with no per-entry events to join against.
+        if (actualCount == 0) revert WalletRegistry__EmptyBatch();
 
         _batches[batchId] =
             Batch({ operatorId: operatorId, timestamp: uint64(block.timestamp), walletCount: actualCount });

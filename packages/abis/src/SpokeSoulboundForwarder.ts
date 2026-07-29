@@ -31,6 +31,10 @@ export const SpokeSoulboundForwarderABI = [
     stateMutability: 'nonpayable',
   },
   {
+    type: 'receive',
+    stateMutability: 'payable',
+  },
+  {
     type: 'function',
     name: 'MSG_TYPE_SUPPORT',
     inputs: [],

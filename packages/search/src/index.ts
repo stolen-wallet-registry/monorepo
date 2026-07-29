@@ -99,12 +99,11 @@ export {
   RECENT_CONTRACT_BATCHES_QUERY,
   WALLET_BATCH_ONLY_QUERY,
   WALLET_ENTRIES_BY_TX_HASH_QUERY,
-  WALLET_BATCH_DETAIL_QUERY,
   TRANSACTION_BATCH_ONLY_QUERY,
   TRANSACTION_ENTRIES_BY_TX_HASH_QUERY,
-  TRANSACTION_BATCH_DETAIL_QUERY,
   CONTRACT_BATCH_DETAIL_QUERY,
   // Response types
+  type RawWalletItem,
   type RawOperatorsListResponse,
   // Dashboard response types
   type RawRegistryStatsResponse,
@@ -116,9 +115,7 @@ export {
   type RawRecentContractBatchesResponse,
   type RawWalletBatchOnlyResponse,
   type RawWalletEntriesByTxHashResponse,
-  type RawWalletBatchDetailResponse,
   type RawTransactionBatchOnlyResponse,
   type RawTransactionEntriesByTxHashResponse,
-  type RawTransactionBatchDetailResponse,
   type RawContractBatchDetailResponse,
 } from './queries';

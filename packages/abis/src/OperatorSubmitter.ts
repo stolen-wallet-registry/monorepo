@@ -62,10 +62,49 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'function',
+    name: 'activateContractRegistry',
+    inputs: [
+      {
+        name: '_contractRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'activateOperatorRegistry',
     inputs: [
       {
         name: '_operatorRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateTransactionRegistry',
+    inputs: [
+      {
+        name: '_transactionRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'activateWalletRegistry',
+    inputs: [
+      {
+        name: '_walletRegistry',
         type: 'address',
         internalType: 'address',
       },
@@ -236,10 +275,49 @@ export const OperatorSubmitterABI = [
   },
   {
     type: 'function',
+    name: 'proposeContractRegistry',
+    inputs: [
+      {
+        name: '_contractRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'proposeOperatorRegistry',
     inputs: [
       {
         name: '_operatorRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeTransactionRegistry',
+    inputs: [
+      {
+        name: '_transactionRegistry',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeWalletRegistry',
+    inputs: [
+      {
+        name: '_walletRegistry',
         type: 'address',
         internalType: 'address',
       },

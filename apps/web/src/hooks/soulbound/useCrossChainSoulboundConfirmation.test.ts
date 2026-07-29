@@ -71,6 +71,7 @@ vi.mock('@/lib/chains/config', async () => {
 });
 
 import { useCrossChainSoulboundConfirmation } from './useCrossChainSoulboundConfirmation';
+import { logger } from '@/lib/logger';
 
 const WALLET = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Address;
 const SPOKE_HASH = ('0x' + 'ab'.repeat(32)) as Hash;
@@ -240,9 +241,16 @@ describe('useCrossChainSoulboundConfirmation', () => {
       expect(result.current.status).toBe('extracting');
     });
 
-    it('does not apply a receipt that resolves after spokeHash moved on', async () => {
-      // The receipt fetch is a network round trip. A result belonging to a
-      // superseded run must never become the current messageId.
+    // The receipt fetch is a network round trip. A result belonging to a superseded run must
+    // not be processed at all.
+    //
+    // Asserting only on `result.current.messageId` here would be vacuous: the run tag on
+    // messageIdState already makes a superseded value invisible, so that assertion passes
+    // with the `cancelled` guard deleted. What the guard uniquely prevents is the superseded
+    // continuation RUNNING — setting state and logging for a run that no longer exists — so
+    // that is what is asserted.
+    it('abandons a receipt that resolves after spokeHash moved on', async () => {
+      const infoSpy = vi.spyOn(logger.contract, 'info');
       let release: ((v: { logs: unknown[] }) => void) | undefined;
       let call = 0;
       h.getTransactionReceipt = vi.fn(() => {
@@ -257,12 +265,37 @@ describe('useCrossChainSoulboundConfirmation', () => {
       const { result, rerender } = render();
 
       rerender({ spokeHash: SPOKE_HASH_2, wallet: WALLET, enabled: true, mintType: 'wallet' });
+      infoSpy.mockClear();
       await act(async () => {
         release?.({ logs: [{ data: '0x', topics: [] }] });
         await Promise.resolve();
       });
 
       expect(result.current.messageId).not.toBe(MESSAGE_ID);
+      // The superseded continuation extracted nothing — it returned before touching state.
+      expect(
+        infoSpy.mock.calls.filter(
+          ([message]) => message === 'Extracted Hyperlane messageId from receipt'
+        )
+      ).toHaveLength(0);
+      infoSpy.mockRestore();
+    });
+
+    // Positive path for the same code: a receipt that resolves for the CURRENT run is applied
+    // and logged. Without this, the assertion above would also hold if extraction were simply
+    // broken.
+    it('applies a receipt that resolves for the current run', async () => {
+      const infoSpy = vi.spyOn(logger.contract, 'info');
+      const { result } = render();
+      await flush();
+
+      expect(result.current.messageId).toBe(MESSAGE_ID);
+      expect(
+        infoSpy.mock.calls.filter(
+          ([message]) => message === 'Extracted Hyperlane messageId from receipt'
+        ).length
+      ).toBeGreaterThan(0);
+      infoSpy.mockRestore();
     });
   });
 
@@ -388,15 +421,38 @@ describe('useCrossChainSoulboundConfirmation', () => {
       expect(result.current.status).toBe('confirmed');
     });
 
-    it('treats any non-zero balance seen before the baseline is recorded as minted', async () => {
-      // NOTE: documents current behaviour, not necessarily desired behaviour.
-      // The baseline is recorded in an effect, so the first render that sees a
-      // balance compares against 0n. A supporter who already holds tokens is
-      // therefore reported as confirmed immediately.
+    // A repeat donor already holds tokens. The first balance this run observes is the
+    // BASELINE, not evidence of a new mint — reporting it as minted told them "Success! Your
+    // support token has been minted on Base" the instant the SPOKE tx confirmed, before the
+    // hub mint had landed. The baseline is now captured in the same commit the derivation
+    // reads it in, so a pre-existing balance is not a mint.
+    it('does not report a pre-existing balance as a fresh mint', async () => {
       const { result, rerender } = render({ mintType: 'support' });
       await flush();
 
       h.readData = 5n;
+      await act(async () => {
+        rerender({ spokeHash: SPOKE_HASH, wallet: WALLET, enabled: true, mintType: 'support' });
+      });
+
+      expect(result.current.isMintedOnHub).toBe(false);
+      expect(result.current.status).not.toBe('confirmed');
+    });
+
+    // Positive path for the same code: once the balance rises ABOVE the baseline, the mint
+    // is confirmed. Without this, the assertion above would also pass if the hook simply
+    // never confirmed anything.
+    it('confirms once the balance rises above a non-zero baseline', async () => {
+      const { result, rerender } = render({ mintType: 'support' });
+      await flush();
+
+      h.readData = 5n;
+      await act(async () => {
+        rerender({ spokeHash: SPOKE_HASH, wallet: WALLET, enabled: true, mintType: 'support' });
+      });
+      expect(result.current.isMintedOnHub).toBe(false);
+
+      h.readData = 6n;
       await act(async () => {
         rerender({ spokeHash: SPOKE_HASH, wallet: WALLET, enabled: true, mintType: 'support' });
       });

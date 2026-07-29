@@ -7,7 +7,7 @@
 
 import { request } from 'graphql-request';
 import { getCAIP2ChainName } from '@swr/chains';
-import { detectSearchType } from './detect';
+import { detectSearchType, parseCAIP10 } from './detect';
 import {
   WALLET_QUERY,
   WALLET_BY_CAIP10_QUERY,
@@ -15,6 +15,7 @@ import {
   CONTRACT_QUERY,
   OPERATOR_QUERY,
   OPERATORS_LIST_QUERY,
+  type RawWalletItem,
   type RawWalletResponse,
   type RawWalletByCAIP10Response,
   type RawTransactionResponse,
@@ -43,25 +44,23 @@ import type {
  * Map raw wallet response to WalletSearchData.
  * Shared between searchWallet and searchWalletByCAIP10.
  */
-function mapWalletData(wallet: {
-  id: string;
-  caip10: string;
-  registeredAt: string;
-  transactionHash: string;
-  isSponsored: boolean;
-  sourceChainCAIP2?: string | null;
-}): WalletSearchData {
+function mapWalletData(wallet: RawWalletItem): WalletSearchData {
   // Normalize null to undefined for consistent API
   const sourceChainCAIP2 = wallet.sourceChainCAIP2 ?? undefined;
+  const reportedChainCAIP2 = wallet.reportedChainCAIP2 ?? undefined;
 
   return {
-    address: wallet.id as Address,
+    // `id` is the full bytes32 identifier; `walletAddress` is the EVM address (null for
+    // non-EVM identifiers, which have no address form).
+    address: (wallet.walletAddress ?? wallet.id) as Address,
     caip10: wallet.caip10,
     registeredAt: BigInt(wallet.registeredAt),
     transactionHash: wallet.transactionHash as Hash,
     isSponsored: wallet.isSponsored,
     sourceChainCAIP2,
     sourceChainName: sourceChainCAIP2 ? getCAIP2ChainName(sourceChainCAIP2) : undefined,
+    reportedChainCAIP2,
+    reportedChainName: reportedChainCAIP2 ? getCAIP2ChainName(reportedChainCAIP2) : undefined,
   };
 }
 
@@ -83,7 +82,7 @@ export async function searchWallet(
     address: address.toLowerCase(),
   });
 
-  const wallet = result.stolenWallet;
+  const wallet = result.stolenWallets?.items?.[0];
 
   if (!wallet) {
     return { type: 'wallet', found: false, data: null };
@@ -106,6 +105,17 @@ export async function searchWalletByCAIP10(
   config: SearchConfig,
   caip10: string
 ): Promise<WalletSearchResult> {
+  // A wallet marked stolen is stolen on EVERY EVM chain: the registry's wallet storage key
+  // uses a wildcard chain reference for eip155 (CAIP10.walletKey), and the indexer stores
+  // the matching wildcard form. An exact string match on "eip155:1:0x…" would therefore
+  // report "not found" for a wallet that IS registered, so normalize any eip155 CAIP-10 to
+  // a plain address lookup regardless of the chain the user typed.
+  const evm = parseCAIP10(caip10);
+  if (evm && evm.namespace === 'eip155') {
+    return searchWallet(config, evm.address);
+  }
+
+  // Non-EVM namespaces keep chain-specific keys, so exact match is correct there.
   const result = await request<RawWalletByCAIP10Response>(
     config.indexerUrl,
     WALLET_BY_CAIP10_QUERY,
