@@ -764,21 +764,32 @@ export function TransactionP2PReporterPage() {
     }
   }, [selectedTxHashes, chainId, setTransactionData]);
 
-  // Record the reported chain ID whenever it is known, including on mount.
-  useEffect(() => {
-    if (chainId) {
-      setReportedChainId(chainId);
-    }
-  }, [chainId, setReportedChainId]);
-
   // Clear the selection only on a real chain switch. Keying this on [chainId] instead would
   // also fire on mount, wiping the persisted selection every reload while the step index
-  // survives — leaving the flow on a later step with no data and no way back.
-  useOnValueChange(chainId, () => {
+  // survives — leaving the flow on a later step with no data and no way back. Two hydration
+  // artifacts must be filtered out: wagmi reports undefined while reconnecting (the
+  // undefined guard), and it can move from the config's default chain to the restored
+  // connector's chain — a defined→defined transition that is not a user switch. The
+  // persisted selection records which chain it was made for (reportedChainId), so a
+  // transition ONTO that chain is a restore, not a switch. This must stay declared ABOVE
+  // the recording effect below: on a real switch both fire in declaration order, and
+  // recording first would make the comparison always match, skipping every wipe.
+  useOnValueChange(chainId, (next, previous) => {
+    if (previous === undefined || next === undefined) return;
+    if (useTransactionFormStore.getState().reportedChainId === next) return;
     setSelectedTxHashes([]);
     setSelectedTxDetails([]);
     setTransactionData(null, [], []);
   });
+
+  // Record the reported chain ID once the connection is settled. Recording while wagmi is
+  // still reconnecting would overwrite the persisted value with the config's default chain
+  // and defeat the hydration comparison in the wipe above.
+  useEffect(() => {
+    if (chainId && isConnected) {
+      setReportedChainId(chainId);
+    }
+  }, [chainId, isConnected, setReportedChainId]);
 
   // Initialize P2P node
   // Every setState below an await in this effect is already gated on

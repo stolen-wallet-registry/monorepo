@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
   // Mirrors wagmi's real states: 'reconnecting' has isConnected=false and address=undefined
   // on reload, which is exactly the transition the page must NOT treat as a wallet switch.
   status: 'connected' as 'connected' | 'reconnecting' | 'disconnected',
+  chainId: 8453,
 }));
 
 vi.mock('wagmi', async (importOriginal) => ({
@@ -27,7 +28,7 @@ vi.mock('wagmi', async (importOriginal) => ({
     isConnected: h.status === 'connected' && !!h.address,
     status: h.status,
   }),
-  useChainId: () => 8453,
+  useChainId: () => h.chainId,
 }));
 
 vi.mock('wouter', () => ({
@@ -82,6 +83,7 @@ const selected = () => useTransactionFormStore.getState().selectedTxHashes;
 beforeEach(() => {
   h.address = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Address;
   h.status = 'connected';
+  h.chainId = 8453;
   useTransactionFormStore.getState().reset();
   useTransactionRegistrationStore.getState().reset();
   useTransactionRegistrationStore.getState().setRegistrationType('selfRelay');
@@ -150,5 +152,42 @@ describe('TransactionSelfRelayRegistrationPage selection persistence', () => {
     rerender(<TransactionSelfRelayRegistrationPage />);
 
     expect(selected()).toEqual([TX_A, TX_B]);
+  });
+
+  // During hydration wagmi can also move chainId from the config's default chain to the
+  // restored connector's chain — a defined→defined transition with no user action behind
+  // it. The persisted selection records which chain it was made for; settling ONTO that
+  // chain is a restore, not a switch, and must not wipe.
+  it('keeps a selection made on a non-default chain when chainId settles after a reload', () => {
+    seedSelection();
+    useTransactionFormStore.getState().setReportedChainId(10); // selection was made on OP
+    h.address = undefined;
+    h.status = 'reconnecting';
+    h.chainId = 8453; // config default reported while reconnecting
+
+    const { rerender } = render(<TransactionSelfRelayRegistrationPage />);
+    expect(selected()).toEqual([TX_A, TX_B]);
+
+    h.address = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Address;
+    h.status = 'connected';
+    h.chainId = 10; // connector restores the chain the selection was made on
+    rerender(<TransactionSelfRelayRegistrationPage />);
+
+    expect(selected()).toEqual([TX_A, TX_B]);
+    expect(useTransactionFormStore.getState().reportedChainId).toBe(10);
+  });
+
+  // The behaviour the chain wipe exists for: selections are chain-specific, so a real
+  // switch away from the chain they were made on must discard them.
+  it('clears the selection when the user switches chains during selection', () => {
+    seedSelection();
+
+    const { rerender } = render(<TransactionSelfRelayRegistrationPage />);
+    expect(selected()).toEqual([TX_A, TX_B]); // recorded chain is now 8453
+
+    h.chainId = 10;
+    rerender(<TransactionSelfRelayRegistrationPage />);
+
+    expect(selected()).toEqual([]);
   });
 });

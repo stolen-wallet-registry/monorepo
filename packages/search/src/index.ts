@@ -55,6 +55,7 @@ export {
   parseCAIP10,
   parseWildcardCAIP10,
   EVM_WILDCARD_CHAIN_REF,
+  EVM_WILDCARD_CHAIN_REFS,
 } from './detect';
 
 // Core search functions

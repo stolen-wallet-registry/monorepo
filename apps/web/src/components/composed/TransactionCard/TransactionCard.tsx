@@ -37,7 +37,7 @@ export interface SignedMessageData {
   trustedForwarder: Address;
   /** Signature nonce */
   nonce: bigint;
-  /** Block deadline for signature validity */
+  /** Unix timestamp (seconds) after which the signature expires */
   deadline: bigint;
   /** The actual signature */
   signature: Hex;

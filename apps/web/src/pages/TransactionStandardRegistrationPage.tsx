@@ -99,7 +99,7 @@ const STEP_TOOLTIPS: Partial<Record<TransactionRegistrationStep, string>> = {
 
 export function TransactionStandardRegistrationPage() {
   const [, setLocation] = useLocation();
-  const { address } = useAccount();
+  const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { registrationType, step, setStep, reset: resetFlow } = useTransactionRegistrationFlow();
   const {
@@ -152,24 +152,32 @@ export function TransactionStandardRegistrationPage() {
     }
   }, [selectedTxHashes, chainId, setTransactionData]);
 
-  // Record the reported chain ID whenever it is known, including on mount.
-  useEffect(() => {
-    if (chainId) {
-      setReportedChainId(chainId);
-    }
-  }, [chainId, setReportedChainId]);
-
   // Clear the selection only on a real chain switch. Keying this on [chainId] instead would
   // also fire on mount, wiping the persisted selection every reload while the step index
-  // survives — leaving the flow on a later step with no data and no way back. The
-  // undefined-transition guard matters for the same reason: on reload wagmi reports
-  // undefined while reconnecting, then the restored value — a transition, but not a switch.
+  // survives — leaving the flow on a later step with no data and no way back. Two hydration
+  // artifacts must be filtered out: wagmi reports undefined while reconnecting (the
+  // undefined guard), and it can move from the config's default chain to the restored
+  // connector's chain — a defined→defined transition that is not a user switch. The
+  // persisted selection records which chain it was made for (reportedChainId), so a
+  // transition ONTO that chain is a restore, not a switch. This must stay declared ABOVE
+  // the recording effect below: on a real switch both fire in declaration order, and
+  // recording first would make the comparison always match, skipping every wipe.
   useOnValueChange(chainId, (next, previous) => {
     if (previous === undefined || next === undefined) return;
+    if (useTransactionFormStore.getState().reportedChainId === next) return;
     setSelectedTxHashes([]);
     setSelectedTxDetails([]);
     setTransactionData(null, [], []);
   });
+
+  // Record the reported chain ID once the connection is settled. Recording while wagmi is
+  // still reconnecting would overwrite the persisted value with the config's default chain
+  // and defeat the hydration comparison in the wipe above.
+  useEffect(() => {
+    if (chainId && isConnected) {
+      setReportedChainId(chainId);
+    }
+  }, [chainId, isConnected, setReportedChainId]);
 
   // Record the reporter whenever a wallet is connected, including on mount.
   useEffect(() => {

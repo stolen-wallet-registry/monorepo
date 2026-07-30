@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { formatTimestamp } from '@swr/search';
 import { render, screen, userEvent } from '@/test/test-utils';
 import { SignatureCard, type SignatureData } from './SignatureCard';
 import { SIGNATURE_TTL_MS } from '@/lib/signatures';
@@ -46,7 +47,8 @@ describe('SignatureCard', () => {
       expect(screen.getByText('Nonce:')).toBeInTheDocument();
       expect(screen.getByText('Deadline:')).toBeInTheDocument();
       expect(screen.getByText('0')).toBeInTheDocument(); // nonce
-      expect(screen.getByText('Block 12345678')).toBeInTheDocument();
+      // Rendered as a locale-formatted time (the deadline is a Unix timestamp, not a block)
+      expect(screen.getByText(formatTimestamp(sampleData.deadline))).toBeInTheDocument();
     });
   });
 

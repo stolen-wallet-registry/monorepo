@@ -11,14 +11,20 @@ describe('isCAIP10', () => {
 
   // The registry stores eip155 wallets under a wildcard key and the UI renders that value
   // verbatim, so a user copying what they were just shown must get a lookup, not "invalid".
-  it('accepts the wildcard chain reference the registry actually stores', () => {
+  // Both dialects exist: `*` (indexer/dashboard) and `_` (contracts/landing page).
+  it('accepts both wildcard chain reference dialects', () => {
     expect(isCAIP10(`eip155:*:${ADDRESS}`)).toBe(true);
+    expect(isCAIP10(`eip155:_:${ADDRESS}`)).toBe(true);
   });
 
   it('rejects a non-eip155 namespace, a bad chain reference, and a bad address', () => {
     expect(isCAIP10(`solana:mainnet:${ADDRESS}`)).toBe(false);
     expect(isCAIP10(`eip155:not-a-chain:${ADDRESS}`)).toBe(false);
     expect(isCAIP10('eip155:8453:0xnope')).toBe(false);
+  });
+
+  it('rejects trailing segments beyond namespace:chainId:address', () => {
+    expect(isCAIP10(`eip155:8453:${ADDRESS}:junk`)).toBe(false);
   });
 });
 
@@ -36,6 +42,13 @@ describe('parseWildcardCAIP10', () => {
   it('extracts the address from a wildcard identifier, preserving casing', () => {
     const mixedCase = '0xAbC0000000000000000000000000000000000123';
     expect(parseWildcardCAIP10(`eip155:*:${mixedCase}`)).toEqual({ address: mixedCase });
+  });
+
+  // The landing page displays the contract dialect (`eip155:_:0x…`, from CAIP10Evm.sol /
+  // toCAIP10Wildcard) and feeds its search box through this same package.
+  it('accepts the underscore wildcard dialect the contracts and landing page use', () => {
+    expect(parseWildcardCAIP10(`eip155:_:${ADDRESS}`)).toEqual({ address: ADDRESS });
+    expect(detectSearchType(`eip155:_:${ADDRESS}`)).toBe('caip10');
   });
 
   it('returns null for numeric chain references and malformed input', () => {
