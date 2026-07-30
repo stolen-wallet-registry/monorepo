@@ -30,6 +30,7 @@ import {
   useTxQuoteFeeBreakdown,
   useTxGasEstimate,
   useTxCrossChainConfirmation,
+  useTxContractDeadlines,
   needsTxCrossChainConfirmation,
   type TxRegistrationParams,
   type TxRegistrationParamsHub,
@@ -175,6 +176,15 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   // See handleRetry: some reverts make the stored signature permanently unusable, so Retry
   // has to mean "sign again", not "submit the same bytes again".
   const needsResign = isError && isSignatureInvalidatingError(error);
+
+  // The contract reuses DeadlineExpired for a stale signature timestamp (fixable by
+  // re-signing) AND a registration window that closed on-chain (unfixable by any new
+  // signature). Distinguish via on-chain deadlines so Retry doesn't loop sign → revert →
+  // sign forever. Zeroed deadlines mean no pending acknowledgement, not a closed window.
+  const { data: ackDeadlines } = useTxContractDeadlines(storedSignatureState?.reporter);
+  const hasNoPendingAck =
+    ackDeadlines !== undefined && ackDeadlines.start === 0n && ackDeadlines.expiry === 0n;
+  const windowClosed = ackDeadlines !== undefined && !hasNoPendingAck && ackDeadlines.isExpired;
 
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
@@ -503,15 +513,31 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     // stored signature is discarded and the user is sent back to sign — retrying it would
     // resubmit identical bytes forever.
     if (needsResign) {
-      logger.contract.warn(
-        'Transaction registration signature invalidated by revert, returning to sign',
-        { dataHash, error: error?.message }
-      );
       if (dataHash) {
         removeTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.REGISTRATION);
       }
       reset();
       setLocalError(null);
+
+      // Window closed on-chain: a fresh registration signature reverts identically, so the
+      // flow must restart from acknowledgement. The old ACK signature's nonce is consumed,
+      // so it is discarded too.
+      if (windowClosed) {
+        logger.contract.warn(
+          'Transaction registration window closed on-chain, restarting from acknowledgement',
+          { dataHash, error: error?.message }
+        );
+        if (dataHash) {
+          removeTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
+        }
+        setStep('acknowledge-sign');
+        return;
+      }
+
+      logger.contract.warn(
+        'Transaction registration signature invalidated by revert, returning to sign',
+        { dataHash, error: error?.message }
+      );
       const previous = step ? getTxPreviousStep(registrationType, step) : null;
       if (previous) setStep(previous);
       return;
@@ -688,7 +714,9 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            This signature can no longer be used. Retry will take you back to sign a new one.
+            {windowClosed
+              ? 'The registration window has closed. Retry will restart the process from the acknowledgement step.'
+              : 'This signature can no longer be used. Retry will take you back to sign a new one.'}
           </AlertDescription>
         </Alert>
       )}

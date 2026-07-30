@@ -240,4 +240,31 @@ contract SoulboundReceiverTest is Test {
         vm.expectRevert(ISoulboundReceiver.SoulboundReceiver__InvalidMintType.selector);
         mailbox.simulateReceive(address(receiver), SPOKE_DOMAIN, bytes32(uint256(uint160(spokeForwarder))), payload);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SWEEP TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Owner can recover ETH a misbehaving hook forwarded with a message.
+    /// @dev handle() is payable (Hyperlane v3 interface) but our dispatches send 0 value;
+    ///      without sweep(), anything forwarded anyway would be locked forever.
+    function test_Sweep_RecoversHeldEth() public {
+        vm.deal(address(receiver), 1 ether);
+        uint256 before = owner.balance;
+
+        vm.prank(owner);
+        receiver.sweep();
+
+        assertEq(address(receiver).balance, 0);
+        assertEq(owner.balance, before + 1 ether);
+    }
+
+    /// @notice Non-owner cannot sweep
+    function test_Sweep_OnlyOwner() public {
+        address attacker = makeAddr("attacker");
+
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", attacker));
+        vm.prank(attacker);
+        receiver.sweep();
+    }
 }

@@ -261,6 +261,13 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'function',
+    name: 'sweep',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'transferOwnership',
     inputs: [
       {
@@ -533,6 +540,11 @@ export const SoulboundReceiverABI = [
   {
     type: 'error',
     name: 'SoulboundReceiver__SupportMintFailed',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SoulboundReceiver__SweepFailed',
     inputs: [],
   },
   {

@@ -1087,7 +1087,7 @@ export const WalletSoulboundABI = [
   },
   {
     type: 'error',
-    name: 'NotRegisteredOrPending',
+    name: 'NotRegistered',
     inputs: [],
   },
   {

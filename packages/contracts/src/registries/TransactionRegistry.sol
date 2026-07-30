@@ -12,6 +12,7 @@ import { TimingConfig } from "../libraries/TimingConfig.sol";
 import { CAIP10 } from "../libraries/CAIP10.sol";
 import { CAIP10Evm } from "../libraries/CAIP10Evm.sol";
 import { EIP712Constants } from "../libraries/EIP712Constants.sol";
+import { BatchLimits } from "../libraries/BatchLimits.sol";
 
 /// @title TransactionRegistry
 /// @author Stolen Wallet Registry Team
@@ -34,13 +35,11 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
 
     /// @notice Maximum number of transactions in a single two-phase (user) batch
     /// @dev Grounded in the measured ~26,200 gas/entry: 800 entries ≈ 21M gas, which fits a
-    ///      25M-gas block with headroom. Deliberately equal to
-    ///      `SpokeRegistry.MAX_CROSS_CHAIN_BATCH_SIZE` so a batch that is acceptable on a spoke
-    ///      is always executable here after bridging — see
-    ///      `test_TwoPhaseBoundMatchesSpokeCrossChainBound` and
-    ///      `test_GasModel_SupportsMaxCrossChainBatch`, which pin that relationship and its
+    ///      25M-gas block with headroom. Shares `BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE` with
+    ///      `SpokeRegistry` so a batch that is acceptable on a spoke is always executable here
+    ///      after bridging — see `test_GasModel_SupportsMaxCrossChainBatch`, which pins the
     ///      interaction with `HyperlaneAdapter.MAX_GAS_LIMIT`.
-    uint256 public constant MAX_TWO_PHASE_BATCH_SIZE = 800;
+    uint256 public constant MAX_TWO_PHASE_BATCH_SIZE = BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLE STATE
@@ -553,6 +552,10 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
     ) external payable {
         if (reporter == address(0)) revert TransactionRegistry__ZeroAddress();
         if (transactionHashes.length == 0) revert TransactionRegistry__EmptyBatch();
+        // Fail-fast only, not a load-bearing bound: phase 1 already enforces
+        // `transactionCount <= MAX_TWO_PHASE_BATCH_SIZE`, and the count-equality check below
+        // means an oversized array could never match. This just gives it a clear error before
+        // hashing the arrays.
         if (transactionHashes.length > MAX_TWO_PHASE_BATCH_SIZE) revert TransactionRegistry__BatchTooLarge();
         if (transactionHashes.length != chainIds.length) revert TransactionRegistry__ArrayLengthMismatch();
         if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();

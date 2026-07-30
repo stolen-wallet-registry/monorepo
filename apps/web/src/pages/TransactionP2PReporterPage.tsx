@@ -60,6 +60,7 @@ import {
   needsTxCrossChainConfirmation,
 } from '@/hooks/transactions';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
+import { useRequireWallet } from '@/hooks/useRequireWallet';
 import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
 import { useOnValueChange } from '@/hooks/useOnValueChange';
 import {
@@ -976,12 +977,8 @@ export function TransactionP2PReporterPage() {
     }
   }, [address]);
 
-  // Redirect if not connected
-  useEffect(() => {
-    if (!isConnected) {
-      setLocation('/');
-    }
-  }, [isConnected, setLocation]);
+  // Redirect home only when genuinely disconnected (not while wagmi reconnects on reload)
+  const { isReady } = useRequireWallet();
 
   const goToNextStep = useCallback(() => {
     goToNextStepRef.current();
@@ -1038,7 +1035,7 @@ export function TransactionP2PReporterPage() {
     [selectedTxHashes, chainId]
   );
 
-  if (!isConnected) {
+  if (!isReady) {
     return null;
   }
 

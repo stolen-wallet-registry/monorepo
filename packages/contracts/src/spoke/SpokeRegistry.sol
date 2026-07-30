@@ -14,6 +14,7 @@ import { CAIP10 } from "../libraries/CAIP10.sol";
 import { CAIP10Evm } from "../libraries/CAIP10Evm.sol";
 import { CrossChainMessage } from "../libraries/CrossChainMessage.sol";
 import { EIP712Constants } from "../libraries/EIP712Constants.sol";
+import { BatchLimits } from "../libraries/BatchLimits.sol";
 
 /// @title SpokeRegistry
 /// @author Stolen Wallet Registry Team
@@ -39,7 +40,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     ///      cost of message delivery and ISM verification. Without a bound here the two-phase and
     ///      cross-chain paths accept a batch that is quotable but not executable on arrival — the
     ///      spoke consumes the nonce and the fee, and the registration strands.
-    uint32 public constant MAX_CROSS_CHAIN_BATCH_SIZE = 800;
+    uint32 public constant MAX_CROSS_CHAIN_BATCH_SIZE = uint32(BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLES
@@ -371,6 +372,17 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
 
         // Validate signature deadline hasn't passed
         if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
+
+        // Reject re-acknowledgement while a prior one is still live, matching
+        // TransactionRegistry.acknowledgeTransactions on the hub (and the wallet path above).
+        // Overwriting would restart the grace period and strand the registration signature the
+        // reporter produced against the first acknowledgement.
+        {
+            TransactionAcknowledgementData memory existing = _pendingTxAcknowledgements[reporter];
+            if (existing.trustedForwarder != address(0) && block.number < existing.expiryBlock) {
+                revert SpokeRegistry__AlreadyAcknowledged();
+            }
+        }
 
         // Validate nonce matches expected value
         if (nonce != nonces[reporter]) revert SpokeRegistry__InvalidNonce();

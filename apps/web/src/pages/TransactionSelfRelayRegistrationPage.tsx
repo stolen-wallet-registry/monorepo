@@ -43,6 +43,7 @@ import {
 } from '@/components/registration/tx-steps';
 import { useUserTransactions } from '@/hooks/transactions';
 import { useOnValueChange } from '@/hooks/useOnValueChange';
+import { useRequireWallet } from '@/hooks/useRequireWallet';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { computeTransactionDataHash } from '@/lib/signatures/transactions';
 import { selectStoredTransactionDetails } from '@/lib/transactions/selection';
@@ -103,7 +104,7 @@ const STEP_TOOLTIPS: Partial<Record<TransactionRegistrationStep, string>> = {
 
 export function TransactionSelfRelayRegistrationPage() {
   const [, setLocation] = useLocation();
-  const { isConnected, address } = useAccount();
+  const { address } = useAccount();
   const chainId = useChainId();
   const { registrationType, step, setStep, reset: resetFlow } = useTransactionRegistrationFlow();
   const { setRegistrationType } = useTransactionRegistrationType();
@@ -182,8 +183,11 @@ export function TransactionSelfRelayRegistrationPage() {
 
   // Clear the selection only on a real chain switch. Keying this on [chainId] instead would
   // also fire on mount, wiping the persisted selection every reload while the step index
-  // survives — leaving the flow on a later step with no data and no way back.
-  useOnValueChange(chainId, () => {
+  // survives — leaving the flow on a later step with no data and no way back. The
+  // undefined-transition guard matters for the same reason: on reload wagmi reports
+  // undefined while reconnecting, then the restored value — a transition, but not a switch.
+  useOnValueChange(chainId, (next, previous) => {
+    if (previous === undefined || next === undefined) return;
     setSelectedTxHashes([]);
     setSelectedTxDetails([]);
     setTransactionData(null, [], []);
@@ -203,19 +207,16 @@ export function TransactionSelfRelayRegistrationPage() {
   // it fire on every mount of the selection step and every time the user navigated BACK to it,
   // silently discarding picks the user had just made. Same defect the chain-switch effect above
   // already had; same fix.
-  useOnValueChange(address, () => {
+  useOnValueChange(address, (next, previous) => {
+    if (previous === undefined || next === undefined) return;
     if (step !== 'select-transactions') return;
     setSelectedTxHashes([]);
     setSelectedTxDetails([]);
     setTransactionData(null, [], []);
   });
 
-  // Redirect if not connected
-  useEffect(() => {
-    if (!isConnected) {
-      setLocation('/');
-    }
-  }, [isConnected, setLocation]);
+  // Redirect home only when genuinely disconnected (not while wagmi reconnects on reload)
+  const { isReady } = useRequireWallet();
 
   // Memoized so the summary table doesn't re-derive (and re-render) on every
   // unrelated render of this page.
@@ -224,7 +225,7 @@ export function TransactionSelfRelayRegistrationPage() {
     [transactions, selectedTxHashes]
   );
 
-  if (!isConnected) {
+  if (!isReady) {
     return null;
   }
 

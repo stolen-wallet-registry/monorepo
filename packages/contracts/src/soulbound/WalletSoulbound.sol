@@ -42,8 +42,9 @@ contract WalletSoulbound is BaseSoulbound {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Thrown when wallet is not registered or pending in the registry
-    error NotRegisteredOrPending();
+    /// @notice Thrown when wallet has not completed registration in the registry
+    /// @dev A merely pending wallet is deliberately NOT eligible — see the note on `mintTo`.
+    error NotRegistered();
 
     /// @notice Thrown when wallet has already minted its soulbound token
     error AlreadyMinted();
@@ -104,7 +105,7 @@ contract WalletSoulbound is BaseSoulbound {
     function mintTo(address wallet) external payable {
         // Registered only — see the note above on why pending is deliberately excluded.
         if (!registry.isWalletRegistered(wallet)) {
-            revert NotRegisteredOrPending();
+            revert NotRegistered();
         }
 
         // Enforce one per wallet

@@ -41,6 +41,7 @@ import {
 import { useTransactionFormStore } from '@/stores/transactionFormStore';
 import { useP2PStore, isPreConnectionStep } from '@/stores/p2pStore';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
+import { useRequireWallet } from '@/hooks/useRequireWallet';
 import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
 import {
   setup,
@@ -425,12 +426,8 @@ export function TransactionP2PRelayerPage() {
     }
   }, [step, setStep]);
 
-  // Redirect if not connected
-  useEffect(() => {
-    if (!isConnected) {
-      setLocation('/');
-    }
-  }, [isConnected, setLocation]);
+  // Redirect home only when genuinely disconnected (not while wagmi reconnects on reload)
+  const { isReady } = useRequireWallet();
 
   const goToNextStep = useCallback(() => {
     goToNextStepRef.current();
@@ -525,7 +522,7 @@ export function TransactionP2PRelayerPage() {
     goToNextStep();
   }, [partnerPeerId, chainId, goToNextStep]);
 
-  if (!isConnected) {
+  if (!isReady) {
     return null;
   }
 

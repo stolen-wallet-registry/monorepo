@@ -5,6 +5,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { TimelockOwnable } from "../../libraries/TimelockOwnable.sol";
 import { IBridgeAdapter } from "../../interfaces/IBridgeAdapter.sol";
 import { CrossChainMessage } from "../../libraries/CrossChainMessage.sol";
+import { BatchLimits } from "../../libraries/BatchLimits.sol";
 import { IMailbox } from "@hyperlane-xyz/core/contracts/interfaces/IMailbox.sol";
 import { StandardHookMetadata } from "@hyperlane-xyz/core/contracts/hooks/libs/StandardHookMetadata.sol";
 
@@ -94,6 +95,9 @@ contract HyperlaneAdapter is IBridgeAdapter, TimelockOwnable {
 
     /// @notice Thrown when the payload's entry count would require more destination gas than MAX_GAS_LIMIT
     error HyperlaneAdapter__GasLimitExceeded();
+
+    /// @notice Thrown when a proposed gas model would make a maximum-size batch exceed MAX_GAS_LIMIT
+    error HyperlaneAdapter__GasConfigExceedsLimit();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -290,12 +294,19 @@ contract HyperlaneAdapter is IBridgeAdapter, TimelockOwnable {
     /// @notice Set the destination gas model for a domain
     /// @dev NOT timelocked: this only affects how much destination gas is purchased, and it is
     ///      the operational lever for responding to a destination gas-schedule change. It cannot
-    ///      authorize a sender or widen what may be dispatched. Note the coupling documented on
-    ///      MAX_GAS_LIMIT — see `test_GasModel_SupportsMaxCrossChainBatch`.
+    ///      authorize a sender or widen what may be dispatched. The effective (post-default)
+    ///      values are validated so a maximum-size batch stays quotable under MAX_GAS_LIMIT —
+    ///      without this, a plausible perEntryGas bump would make every large batch revert on
+    ///      quoteMessage, stranding already-acknowledged batches whose reporters burned a nonce.
     /// @param domain Hyperlane domain ID
     /// @param baseGas Fixed gas amount (0 = use DEFAULT_BASE_GAS)
     /// @param perEntryGas Per-entry gas amount (0 = use DEFAULT_PER_ENTRY_GAS)
     function setGasAmounts(uint32 domain, uint256 baseGas, uint256 perEntryGas) external onlyOwner {
+        uint256 effectiveBase = baseGas == 0 ? DEFAULT_BASE_GAS : baseGas;
+        uint256 effectivePerEntry = perEntryGas == 0 ? DEFAULT_PER_ENTRY_GAS : perEntryGas;
+        if (effectiveBase + effectivePerEntry * BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE > MAX_GAS_LIMIT) {
+            revert HyperlaneAdapter__GasConfigExceedsLimit();
+        }
         baseGasAmounts[domain] = baseGas;
         perEntryGasAmounts[domain] = perEntryGas;
         emit GasAmountUpdated(domain, baseGas, perEntryGas);

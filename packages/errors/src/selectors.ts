@@ -556,10 +556,10 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Invalid translations registry address.',
     action: 'Please contact support.',
   },
-  '0x2ef38faa': {
-    name: 'NotRegisteredOrPending',
+  '0xaba47339': {
+    name: 'NotRegistered',
     message: 'Wallet is not registered in the Stolen Wallet Registry.',
-    action: 'Only wallets that have been registered as stolen can mint.',
+    action: 'Only wallets that have completed registration can mint.',
   },
   '0xddefae28': {
     name: 'AlreadyMinted',

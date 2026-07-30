@@ -167,6 +167,15 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
         emit TrustedForwarderUpdated(domain, forwarder);
     }
 
+    /// @notice Recover ETH held by this contract
+    /// @dev `handle` is payable (Hyperlane v3), but our dispatches always set msgValue to 0 —
+    ///      any balance here arrived unexpectedly (e.g. a misbehaving hook) and would otherwise
+    ///      be locked forever.
+    function sweep() external onlyOwner {
+        (bool success,) = msg.sender.call{ value: address(this).balance }("");
+        if (!success) revert SoulboundReceiver__SweepFailed();
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -176,6 +185,6 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
         return _trustedForwarders[domain];
     }
 
-    // Note: No receive() function - this contract doesn't need to accept ETH.
-    // Cross-chain support mints use mintTo() which doesn't transfer ETH (donations stay on spoke).
+    // Note: No receive() function — ETH is not expected here. `handle` is payable only because
+    // Hyperlane v3 requires it; anything a hook does forward can be recovered via sweep().
 }

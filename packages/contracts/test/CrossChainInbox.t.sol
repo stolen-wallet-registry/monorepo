@@ -343,6 +343,31 @@ contract CrossChainInboxTest is Test {
         inboxContract.setTrustedSource(SPOKE_CHAIN_ID, spokeRegistryBytes32, true);
     }
 
+    /// @notice Owner can recover ETH a misbehaving hook forwarded with a message.
+    /// @dev handle() is payable (Hyperlane v3 interface) but our dispatches send 0 value;
+    ///      without sweep(), anything forwarded anyway would be locked forever.
+    function test_Sweep_RecoversHeldEth() public {
+        vm.deal(address(inboxContract), 1 ether);
+        uint256 before = address(this).balance;
+
+        inboxContract.sweep();
+
+        assertEq(address(inboxContract).balance, 0);
+        assertEq(address(this).balance, before + 1 ether);
+    }
+
+    /// @notice Non-owner cannot sweep
+    function test_Sweep_RejectsNonOwner() public {
+        address nonOwner = makeAddr("nonOwner");
+
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", nonOwner));
+        vm.prank(nonOwner);
+        inboxContract.sweep();
+    }
+
+    /// @dev Lets this test contract (the inbox owner) receive swept ETH.
+    receive() external payable { }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // IDEMPOTENCY
     // ═══════════════════════════════════════════════════════════════════════════

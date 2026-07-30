@@ -41,6 +41,7 @@ import { useRegistrationStore, type RegistrationStep } from '@/stores/registrati
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore, isPreConnectionStep } from '@/stores/p2pStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { useRequireWallet } from '@/hooks/useRequireWallet';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
 import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
 import {
@@ -428,12 +429,8 @@ export function P2PRegistereeRegistrationPage() {
     }
   }, [registrationType, setRegistrationType]);
 
-  // Redirect if not connected
-  useEffect(() => {
-    if (!isConnected) {
-      setLocation('/');
-    }
-  }, [isConnected, setLocation]);
+  // Redirect home only when genuinely disconnected (not while wagmi reconnects on reload)
+  const { isReady } = useRequireWallet();
 
   const handleBack = useCallback(() => {
     resetFlow();
@@ -452,7 +449,7 @@ export function P2PRegistereeRegistrationPage() {
     setLocation('/');
   }, [resetFlow, resetP2P, setLocation]);
 
-  if (!isConnected) {
+  if (!isReady) {
     return null;
   }
 

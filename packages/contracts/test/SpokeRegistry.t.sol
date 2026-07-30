@@ -931,6 +931,57 @@ contract SpokeRegistryTest is Test {
         assertEq(ack.transactionCount, transactionCount);
     }
 
+    /// @notice Re-acknowledging a transaction batch while a prior one is still live is rejected.
+    /// @dev Hub/spoke parity: TransactionRegistry.acknowledgeTransactions reverts with
+    ///      AlreadyAcknowledged here, but the spoke silently overwrote the stored
+    ///      acknowledgement — restarting the randomized grace period and orphaning the
+    ///      registration signature the reporter had already produced against the first one.
+    ///      Mirrors test_Acknowledge_RejectsWhileLiveAcknowledgementExists on the wallet path.
+    function test_TxBatchAck_RejectsWhileLiveAcknowledgementExists() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 transactionCount = uint32(txHashes.length);
+
+        _doTxBatchAck(forwarder, dataHash, reportedChainId, transactionCount);
+        ISpokeRegistry.TransactionAcknowledgementData memory first = spoke.getTransactionAcknowledgement(reporter);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(reporter);
+        (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
+            reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, transactionCount, nonce, deadline
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__AlreadyAcknowledged.selector);
+        spoke.acknowledgeTransactionBatch(
+            dataHash, reportedChainId, transactionCount, deadline, nonce, reporter, v, r, s
+        );
+
+        // The original acknowledgement must be untouched
+        ISpokeRegistry.TransactionAcknowledgementData memory afterAck = spoke.getTransactionAcknowledgement(reporter);
+        assertEq(afterAck.startBlock, first.startBlock, "Grace period must not restart");
+        assertEq(afterAck.expiryBlock, first.expiryBlock);
+    }
+
+    /// @notice Once the prior batch acknowledgement has expired, acknowledging again is allowed.
+    /// @dev The guard must not permanently lock a reporter out after an abandoned attempt.
+    function test_TxBatchAck_AllowedAfterPriorExpired() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 transactionCount = uint32(txHashes.length);
+
+        _doTxBatchAck(forwarder, dataHash, reportedChainId, transactionCount);
+        ISpokeRegistry.TransactionAcknowledgementData memory first = spoke.getTransactionAcknowledgement(reporter);
+
+        vm.roll(first.expiryBlock + 1);
+        _doTxBatchAck(forwarder, dataHash, reportedChainId, transactionCount);
+
+        assertTrue(spoke.isPendingTransactionBatch(reporter));
+        assertEq(spoke.nonces(reporter), 2, "Second acknowledgement should have consumed another nonce");
+    }
+
     /// @dev The hub executes the whole batch in one destination transaction. A batch larger than a
     ///      destination block can run is quotable but never executable, and because the spoke has
     ///      already consumed the nonce, cleared the acknowledgement and kept the fee before

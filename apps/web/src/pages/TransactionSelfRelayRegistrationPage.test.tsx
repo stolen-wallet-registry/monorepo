@@ -14,13 +14,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Address, Hash } from '@/lib/types/ethereum';
 
 const h = vi.hoisted(() => ({
-  address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Address,
-  isConnected: true,
+  address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Address | undefined,
+  // Mirrors wagmi's real states: 'reconnecting' has isConnected=false and address=undefined
+  // on reload, which is exactly the transition the page must NOT treat as a wallet switch.
+  status: 'connected' as 'connected' | 'reconnecting' | 'disconnected',
 }));
 
 vi.mock('wagmi', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  useAccount: () => ({ address: h.address, isConnected: h.isConnected }),
+  useAccount: () => ({
+    address: h.address,
+    isConnected: h.status === 'connected' && !!h.address,
+    status: h.status,
+  }),
   useChainId: () => 8453,
 }));
 
@@ -75,7 +81,7 @@ const selected = () => useTransactionFormStore.getState().selectedTxHashes;
 
 beforeEach(() => {
   h.address = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Address;
-  h.isConnected = true;
+  h.status = 'connected';
   useTransactionFormStore.getState().reset();
   useTransactionRegistrationStore.getState().reset();
   useTransactionRegistrationStore.getState().setRegistrationType('selfRelay');
@@ -126,5 +132,23 @@ describe('TransactionSelfRelayRegistrationPage selection persistence', () => {
     rerender(<TransactionSelfRelayRegistrationPage />);
 
     expect(selected()).toEqual([]);
+  });
+
+  // On reload wagmi mounts as 'reconnecting' with address undefined, then flips to
+  // 'connected' with the restored address. That undefined → address transition is not a
+  // wallet switch and must not wipe the persisted selection.
+  it('keeps the selection while wagmi reconnects after a reload', () => {
+    seedSelection();
+    h.address = undefined;
+    h.status = 'reconnecting';
+
+    const { rerender } = render(<TransactionSelfRelayRegistrationPage />);
+    expect(selected()).toEqual([TX_A, TX_B]);
+
+    h.address = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Address;
+    h.status = 'connected';
+    rerender(<TransactionSelfRelayRegistrationPage />);
+
+    expect(selected()).toEqual([TX_A, TX_B]);
   });
 });

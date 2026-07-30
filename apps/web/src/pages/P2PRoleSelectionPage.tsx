@@ -4,13 +4,14 @@
  * Users choose whether they are the registeree (wallet owner) or relayer (gas payer).
  */
 
-import { useEffect, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { useLocation } from 'wouter';
 import { useAccount } from 'wagmi';
 import { ArrowLeft, User, HandHelping } from 'lucide-react';
 
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@swr/ui';
 import { useRegistrySearch } from '@/hooks/indexer';
+import { useRequireWallet } from '@/hooks/useRequireWallet';
 
 interface RoleCardProps {
   title: string;
@@ -64,18 +65,15 @@ function RoleCard({
 
 export function P2PRoleSelectionPage() {
   const [, setLocation] = useLocation();
-  const { isConnected, address } = useAccount();
+  const { address } = useAccount();
+  // Redirect home only when genuinely disconnected (not while wagmi reconnects on reload)
+  const { isReady } = useRequireWallet();
 
   const { data: searchResult } = useRegistrySearch(address ?? '');
   const connectedWalletRegistered =
     searchResult?.type === 'address' && searchResult.foundInWalletRegistry;
 
-  // Redirect if not connected
-  useEffect(() => {
-    if (!isConnected) setLocation('/');
-  }, [isConnected, setLocation]);
-
-  if (!isConnected) return null;
+  if (!isReady) return null;
 
   const handleBack = () => {
     setLocation('/');

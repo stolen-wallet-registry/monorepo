@@ -263,6 +263,33 @@ contract HyperlaneAdapterTest is Test {
         assertEq(adapter.DEFAULT_PER_ENTRY_GAS(), 35_000);
     }
 
+    /// @notice A gas model that would make a maximum-size batch exceed MAX_GAS_LIMIT is rejected.
+    /// @dev Without this bound, a plausible perEntryGas bump (e.g. 40k after a destination
+    ///      gas-schedule change) would make every large batch revert on quoteMessage —
+    ///      including already-acknowledged batches whose reporters burned a nonce and cannot
+    ///      re-acknowledge until expiry. 40_000 × 800 + 200_000 = 32.2M > 30M.
+    function test_SetGasAmounts_RejectsConfigThatBreaksMaxBatch() public {
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigExceedsLimit.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, 0, 40_000);
+    }
+
+    /// @notice The bound validates the effective values: 0 means "use default", not "no gas".
+    /// @dev baseGas = 0 falls back to DEFAULT_BASE_GAS (200k), so a perEntryGas at exactly the
+    ///      ceiling for a zero base must still be rejected once the default base is added.
+    function test_SetGasAmounts_ValidatesEffectiveDefaults() public {
+        // 37_500 × 800 = 30M exactly — fits with zero base, but not with the 200k default base.
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigExceedsLimit.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, 0, 37_500);
+
+        // The largest per-entry value that fits alongside the default base is accepted.
+        uint256 maxPerEntry = (adapter.MAX_GAS_LIMIT() - adapter.DEFAULT_BASE_GAS()) / 800;
+        vm.prank(owner);
+        adapter.setGasAmounts(HUB_DOMAIN, 0, maxPerEntry);
+        assertEq(adapter.perEntryGasAmounts(HUB_DOMAIN), maxPerEntry);
+    }
+
     // \u2550\u2550\u2550 PAYLOAD-AWARE GAS QUOTING \u2550\u2550\u2550
 
     /// @dev Builds a transaction-batch payload with `count` entries, matching the encoding

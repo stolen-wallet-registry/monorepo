@@ -26,6 +26,7 @@ import {
 } from '@/hooks/useCrossChainConfirmation';
 import { getSignature, removeSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { isSignatureInvalidatingError } from '@/lib/errors/signatureInvalidation';
+import { useContractDeadlines } from '@/hooks/useContractDeadlines';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
 import type { WalletRegistrationArgs } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
@@ -85,8 +86,19 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // forwarder). Retrying those rebuilds the SAME transaction from the SAME cached signature
   // and reverts identically — the user could press Retry forever with no way to re-sign. Those
   // are routed to a re-sign instead of a resubmit.
-  const { goToPreviousStep } = useStepNavigation();
+  const { goToPreviousStep, goToStep } = useStepNavigation();
   const needsResign = isError && isSignatureInvalidatingError(error);
+
+  // The contract reuses DeadlineExpired for two distinct failures: a stale signature
+  // timestamp (fixable by re-signing) and a registration window that closed on-chain
+  // (block.number past the acknowledgement's expiry — no new signature can fix it).
+  // Without checking the on-chain deadlines, "Retry → re-sign" loops sign → revert → sign
+  // forever once the window is closed. Zeroed deadlines mean no pending acknowledgement
+  // (the contract reports isExpired for those too), so they don't count as closed.
+  const { data: deadlines } = useContractDeadlines(registeree ?? undefined);
+  const hasNoPendingAck =
+    deadlines !== undefined && deadlines.start === 0n && deadlines.expiry === 0n;
+  const windowClosed = deadlines !== undefined && !hasNoPendingAck && deadlines.isExpired;
 
   // Determine forwarder based on registration type:
   // - Standard: registeree pays and forwards (registeree == forwarder)
@@ -380,15 +392,31 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
    */
   const handleRetry = () => {
     if (needsResign) {
-      logger.registration.warn('Registration signature invalidated by revert, returning to sign', {
-        registeree,
-        error: error?.message,
-      });
       if (registeree) {
         removeSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION);
       }
       reset();
       setLocalError(null);
+
+      // Window closed on-chain: a fresh registration signature reverts identically, so the
+      // flow must restart from acknowledgement. The old ACK signature's nonce is consumed,
+      // so it is discarded too.
+      if (windowClosed) {
+        logger.registration.warn(
+          'Registration window closed on-chain, restarting from acknowledgement',
+          { registeree, error: error?.message }
+        );
+        if (registeree) {
+          removeSignature(registeree, chainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+        }
+        goToStep('acknowledge-and-sign');
+        return;
+      }
+
+      logger.registration.warn('Registration signature invalidated by revert, returning to sign', {
+        registeree,
+        error: error?.message,
+      });
       goToPreviousStep();
       return;
     }
@@ -466,7 +494,9 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            This signature can no longer be used. Retry will take you back to sign a new one.
+            {windowClosed
+              ? 'The registration window has closed. Retry will restart the process from the acknowledgement step.'
+              : 'This signature can no longer be used. Retry will take you back to sign a new one.'}
           </AlertDescription>
         </Alert>
       )}

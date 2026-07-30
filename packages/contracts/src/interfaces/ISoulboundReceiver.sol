@@ -70,6 +70,9 @@ interface ISoulboundReceiver {
     /// @notice Thrown when sender bytes32 has non-zero upper 12 bytes (non-canonical encoding)
     error SoulboundReceiver__NonCanonicalSender();
 
+    /// @notice Thrown when sweeping held ETH to the owner fails
+    error SoulboundReceiver__SweepFailed();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════

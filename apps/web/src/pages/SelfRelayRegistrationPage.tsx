@@ -6,7 +6,6 @@
 
 import { useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { useAccount } from 'wagmi';
 import { ArrowLeft } from 'lucide-react';
 
 import {
@@ -24,6 +23,7 @@ import { StepRenderer } from '@/components/registration';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { useRequireWallet } from '@/hooks/useRequireWallet';
 import { useRegistrySearch } from '@/hooks/indexer';
 
 /**
@@ -52,7 +52,8 @@ const STEP_TITLES: Partial<Record<RegistrationStep, string>> = {
 
 export function SelfRelayRegistrationPage() {
   const [, setLocation] = useLocation();
-  const { isConnected } = useAccount();
+  // Redirect home only when genuinely disconnected (not while wagmi reconnects on reload)
+  const { isReady } = useRequireWallet();
   const { registrationType, step, setRegistrationType } = useRegistrationStore();
   const registeree = useFormStore((s) => s.registeree);
   const { goToNextStep, resetFlow } = useStepNavigation();
@@ -75,13 +76,6 @@ export function SelfRelayRegistrationPage() {
     }
   }, [registrationType, setRegistrationType]);
 
-  // Redirect if not connected (side effect in useEffect, not during render)
-  useEffect(() => {
-    if (!isConnected) {
-      setLocation('/');
-    }
-  }, [isConnected, setLocation]);
-
   // Redirect if registeree is already registered (can't register same wallet twice)
   useEffect(() => {
     if (!isCheckingRegistration && registereeAlreadyRegistered && step !== 'success') {
@@ -89,7 +83,7 @@ export function SelfRelayRegistrationPage() {
     }
   }, [isCheckingRegistration, registereeAlreadyRegistered, step, setLocation]);
 
-  if (!isConnected) {
+  if (!isReady) {
     return null;
   }
 

@@ -713,6 +713,11 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'error',
+    name: 'HyperlaneAdapter__GasConfigExceedsLimit',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'HyperlaneAdapter__GasLimitExceeded',
     inputs: [],
   },

@@ -130,7 +130,7 @@ contract WalletSoulboundTest is Test {
     ///      not a registration.
     function test_mintTo_rejectsPendingWallet() public {
         vm.prank(minter);
-        vm.expectRevert(WalletSoulbound.NotRegisteredOrPending.selector);
+        vm.expectRevert(WalletSoulbound.NotRegistered.selector);
         soulbound.mintTo(pendingWallet);
 
         assertEq(soulbound.balanceOf(pendingWallet), 0);
@@ -167,7 +167,7 @@ contract WalletSoulboundTest is Test {
     /// @notice Cannot mint to unregistered wallet
     function test_mintTo_revert_notRegistered() public {
         vm.prank(minter);
-        vm.expectRevert(WalletSoulbound.NotRegisteredOrPending.selector);
+        vm.expectRevert(WalletSoulbound.NotRegistered.selector);
         soulbound.mintTo(unregisteredWallet);
     }
 

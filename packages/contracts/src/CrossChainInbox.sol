@@ -82,6 +82,7 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     error CrossChainInbox__UntrustedSource();
     error CrossChainInbox__SourceChainMismatch();
     error CrossChainInbox__UnknownMessageType();
+    error CrossChainInbox__SweepFailed();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -262,6 +263,15 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
         _activateAction(key);
         _trustedSources[chainId][spokeRegistry] = trusted;
         emit TrustedSourceUpdated(chainId, spokeRegistry, trusted);
+    }
+
+    /// @notice Recover ETH held by this contract
+    /// @dev `handle` is payable (Hyperlane v3), but our dispatches always set msgValue to 0 —
+    ///      any balance here arrived unexpectedly (e.g. a misbehaving hook) and would otherwise
+    ///      be locked forever.
+    function sweep() external onlyOwner {
+        (bool success,) = msg.sender.call{ value: address(this).balance }("");
+        if (!success) revert CrossChainInbox__SweepFailed();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

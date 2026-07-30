@@ -314,6 +314,13 @@ export const CrossChainInboxABI = [
   },
   {
     type: 'function',
+    name: 'sweep',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'transferOwnership',
     inputs: [
       {
@@ -522,6 +529,11 @@ export const CrossChainInboxABI = [
   {
     type: 'error',
     name: 'CrossChainInbox__SourceChainMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'CrossChainInbox__SweepFailed',
     inputs: [],
   },
   {
