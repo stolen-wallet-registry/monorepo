@@ -120,7 +120,8 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
 
   // Build transaction args for gas estimation (needs to be before early returns)
-  // Unified: register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s)
+  // Unified: register(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce,
+  //                   windowBlock, v, r, s)
   const transactionArgs: WalletRegistrationArgs | undefined =
     storedSignature &&
     registeree &&
@@ -128,7 +129,8 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     parsedSig &&
     storedSignature.reportedChainId !== undefined &&
     storedSignature.incidentTimestamp !== undefined &&
-    storedSignature.nonce !== undefined
+    storedSignature.nonce !== undefined &&
+    storedSignature.windowBlock !== undefined
       ? ([
           registeree,
           forwarder,
@@ -136,6 +138,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
           storedSignature.incidentTimestamp,
           storedSignature.deadline,
           storedSignature.nonce,
+          storedSignature.windowBlock,
           parsedSig.v,
           parsedSig.r,
           parsedSig.s,
@@ -312,12 +315,15 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     if (
       storedSignature.reportedChainId === undefined ||
       storedSignature.incidentTimestamp === undefined ||
-      storedSignature.nonce === undefined
+      storedSignature.nonce === undefined ||
+      // Signed over blockhash(windowBlock); without the number the contract cannot recompute it.
+      storedSignature.windowBlock === undefined
     ) {
       logger.contract.error('Cannot submit registration - missing required fields', {
         hasReportedChainId: storedSignature.reportedChainId !== undefined,
         hasIncidentTimestamp: storedSignature.incidentTimestamp !== undefined,
         hasNonce: storedSignature.nonce !== undefined,
+        hasWindowBlock: storedSignature.windowBlock !== undefined,
       });
       setLocalError('Signature is missing required data. Please go back and sign again.');
       return;
@@ -355,6 +361,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         incidentTimestamp,
         deadline: storedSignature.deadline,
         nonce: storedSignature.nonce,
+        windowBlock: storedSignature.windowBlock,
         signature: parsedSig,
         feeWei,
       });

@@ -92,6 +92,8 @@ export function useRelayedWalletSignatureReview({
   const nonce = storedSignature?.nonce;
   const deadline = storedSignature?.deadline;
   const wallet = storedSignature?.address;
+  // Part of the registration struct; recovery without it yields a different digest.
+  const windowBlockHash = storedSignature?.windowBlockHash;
 
   useEffect(() => {
     if (
@@ -129,6 +131,7 @@ export function useRelayedWalletSignatureReview({
       incidentTimestamp,
       nonce,
       deadline,
+      windowBlockHash,
     })
       .then((recovered) => {
         if (cancelled) return;
@@ -176,6 +179,7 @@ export function useRelayedWalletSignatureReview({
     incidentTimestamp,
     nonce,
     deadline,
+    windowBlockHash,
   ]);
 
   const review = useMemo(() => {
@@ -242,6 +246,8 @@ export function useRelayedTxSignatureReview({
   const nonce = storedSignature?.nonce;
   const deadline = storedSignature?.deadline;
   const reporter = storedSignature?.reporter;
+  // Part of the registration struct; recovery without it yields a different digest.
+  const windowBlockHash = storedSignature?.windowBlockHash;
 
   useEffect(() => {
     if (
@@ -282,6 +288,7 @@ export function useRelayedTxSignatureReview({
       transactionCount,
       nonce,
       deadline,
+      windowBlockHash,
     })
       .then((recovered) => {
         if (cancelled) return;
@@ -325,6 +332,7 @@ export function useRelayedTxSignatureReview({
     transactionCount,
     nonce,
     deadline,
+    windowBlockHash,
   ]);
 
   const review = useMemo(() => {

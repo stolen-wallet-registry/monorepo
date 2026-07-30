@@ -74,6 +74,26 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Signature deadline is in the past.',
     action: 'Please generate a new signature.',
   },
+  '0x82cec44b': {
+    name: 'WalletRegistry__DeadlineTooFarInFuture',
+    message: 'Signature expiry is too far in the future.',
+    action: 'Please sign again from this app.',
+  },
+  '0xe5784882': {
+    name: 'TimingConfig__WindowBlockBeforeGracePeriod',
+    message: 'This signature was created before the waiting period ended.',
+    action: 'Please sign again now that the waiting period is over.',
+  },
+  '0xb9adaf66': {
+    name: 'TimingConfig__WindowBlockNotMined',
+    message: 'This signature references a block that does not exist yet.',
+    action: 'Please sign again.',
+  },
+  '0x86a7f1b3': {
+    name: 'TimingConfig__WindowBlockTooOld',
+    message: 'This signature is too old to submit.',
+    action: 'Please sign again.',
+  },
   '0x3214c145': {
     name: 'WalletRegistry__GracePeriodNotStarted',
     message: 'The grace period has not ended yet.',
@@ -158,6 +178,11 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     name: 'TransactionRegistry__DeadlineExpired',
     message: 'Your signature has expired.',
     action: 'Please sign again.',
+  },
+  '0xe1a14317': {
+    name: 'TransactionRegistry__DeadlineTooFarInFuture',
+    message: 'Signature expiry is too far in the future.',
+    action: 'Please sign again from this app.',
   },
   '0x98de1e59': {
     name: 'TransactionRegistry__DeadlineInPast',
@@ -393,6 +418,11 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     name: 'SpokeRegistry__SignatureExpired',
     message: 'Your signature has expired.',
     action: 'Please sign again.',
+  },
+  '0x1df452a2': {
+    name: 'SpokeRegistry__DeadlineTooFarInFuture',
+    message: 'Signature expiry is too far in the future.',
+    action: 'Please sign again from this app.',
   },
   '0x8a2ee99e': {
     name: 'SpokeRegistry__InvalidNonce',

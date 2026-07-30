@@ -100,6 +100,38 @@ describe('isValidSignatureData (wallet flow)', () => {
       false
     );
   });
+
+  // The relayer submits windowBlock as calldata and rebuilds the digest from windowBlockHash;
+  // a malformed pair is gas spent on a guaranteed revert. Registration payloads carry both,
+  // acknowledgement payloads carry neither — one without the other is a broken sender.
+  it('accepts a registration payload carrying the freshness commitment', () => {
+    expect(
+      isValidSignatureData(
+        walletMessage({ windowBlock: '4242', windowBlockHash: BYTES32 }),
+        CHAIN_ID
+      )
+    ).toBe(true);
+  });
+
+  it('rejects a malformed windowBlock or windowBlockHash', () => {
+    expect(
+      isValidSignatureData(
+        walletMessage({ windowBlock: '0x1092', windowBlockHash: BYTES32 }),
+        CHAIN_ID
+      )
+    ).toBe(false);
+    expect(
+      isValidSignatureData(
+        walletMessage({ windowBlock: '4242', windowBlockHash: '0xdeadbeef' }),
+        CHAIN_ID
+      )
+    ).toBe(false);
+  });
+
+  it('rejects a windowBlock without its hash, and vice versa', () => {
+    expect(isValidSignatureData(walletMessage({ windowBlock: '4242' }), CHAIN_ID)).toBe(false);
+    expect(isValidSignatureData(walletMessage({ windowBlockHash: BYTES32 }), CHAIN_ID)).toBe(false);
+  });
 });
 
 describe('isValidTxSignatureData (transaction flow)', () => {

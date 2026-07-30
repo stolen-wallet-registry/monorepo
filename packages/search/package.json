@@ -20,8 +20,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "test:watch": "echo 'No tests yet'"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@swr/chains": "workspace:*",

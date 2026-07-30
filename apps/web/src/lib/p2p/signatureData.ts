@@ -73,6 +73,25 @@ function hasValidSignatureEnvelope(
     return false;
   }
 
+  // Registration-only anti-phishing commitment. Optional on the wire because acknowledgement
+  // signatures carry none, but if either half is present both must be well-formed: the relayer
+  // submits `windowBlock` as calldata and rebuilds the digest from `windowBlockHash`, so a
+  // malformed pair is a transaction that reverts after the gas is spent.
+  if (sig.windowBlock != null && !DECIMAL_UINT.test(sig.windowBlock)) {
+    logger.p2p.warn('Signature rejected: windowBlock is not a plain decimal integer', {
+      windowBlock: sig.windowBlock,
+    });
+    return false;
+  }
+  if (sig.windowBlockHash != null && !BYTES32_HEX.test(sig.windowBlockHash)) {
+    logger.p2p.warn('Signature rejected: windowBlockHash is not bytes32');
+    return false;
+  }
+  if ((sig.windowBlock == null) !== (sig.windowBlockHash == null)) {
+    logger.p2p.warn('Signature rejected: windowBlock and windowBlockHash must travel together');
+    return false;
+  }
+
   return true;
 }
 

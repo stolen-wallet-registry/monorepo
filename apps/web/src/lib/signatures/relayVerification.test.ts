@@ -4,6 +4,7 @@ import {
   buildAcknowledgementTypedData,
   buildRegistrationTypedData,
   buildTxAcknowledgementTypedData,
+  buildTxRegistrationTypedData,
   SIGNATURE_STEP,
   TX_SIGNATURE_STEP,
 } from '@swr/signatures';
@@ -21,6 +22,8 @@ const RELAYER = `0x${'33'.repeat(20)}` as Address;
 const CONTRACT = `0x${'44'.repeat(20)}` as Address;
 const CHAIN_ID = 8453;
 const BYTES32 = `0x${'cc'.repeat(32)}` as Hash;
+const WINDOW_BLOCK_HASH = `0x${'ab'.repeat(32)}` as Hash;
+const OTHER_WINDOW_BLOCK_HASH = `0x${'ba'.repeat(32)}` as Hash;
 
 const walletMessage = {
   wallet: VICTIM.address as Address,
@@ -81,7 +84,10 @@ describe('recoverWalletSignatureSigner', () => {
   // A registration signature is not an acknowledgement signature: recovering one against the
   // other's typehash yields a stranger, which the review step then rejects.
   it('does not recover the signer when the struct differs from what was signed', async () => {
-    const typedData = buildRegistrationTypedData(CHAIN_ID, CONTRACT, true, walletMessage);
+    const typedData = buildRegistrationTypedData(CHAIN_ID, CONTRACT, true, {
+      ...walletMessage,
+      windowBlockHash: WINDOW_BLOCK_HASH,
+    });
     const signature = (await VICTIM.signTypedData(typedData)) as Hex;
 
     const recovered = await recoverWalletSignatureSigner({
@@ -94,6 +100,70 @@ describe('recoverWalletSignatureSigner', () => {
     });
 
     expect(recovered?.toLowerCase()).not.toBe(VICTIM.address.toLowerCase());
+  });
+
+  it('recovers the signer of a registration when the window block hash matches', async () => {
+    const typedData = buildRegistrationTypedData(CHAIN_ID, CONTRACT, true, {
+      ...walletMessage,
+      windowBlockHash: WINDOW_BLOCK_HASH,
+    });
+    const signature = (await VICTIM.signTypedData(typedData)) as Hex;
+
+    const recovered = await recoverWalletSignatureSigner({
+      step: SIGNATURE_STEP.REGISTRATION,
+      signature,
+      chainId: CHAIN_ID,
+      verifyingContract: CONTRACT,
+      isHub: true,
+      ...walletMessage,
+      windowBlockHash: WINDOW_BLOCK_HASH,
+    });
+
+    expect(recovered?.toLowerCase()).toBe(VICTIM.address.toLowerCase());
+  });
+
+  // The whole point of the freshness commitment: the signature is bound to ONE block. Swapping
+  // the hash produces a different digest, so the signature no longer belongs to the signer and
+  // cannot be replayed against a window the victim never agreed to.
+  it('does not verify a registration against a different window block hash', async () => {
+    const typedData = buildRegistrationTypedData(CHAIN_ID, CONTRACT, true, {
+      ...walletMessage,
+      windowBlockHash: WINDOW_BLOCK_HASH,
+    });
+    const signature = (await VICTIM.signTypedData(typedData)) as Hex;
+
+    const recovered = await recoverWalletSignatureSigner({
+      step: SIGNATURE_STEP.REGISTRATION,
+      signature,
+      chainId: CHAIN_ID,
+      verifyingContract: CONTRACT,
+      isHub: true,
+      ...walletMessage,
+      windowBlockHash: OTHER_WINDOW_BLOCK_HASH,
+    });
+
+    expect(recovered?.toLowerCase()).not.toBe(VICTIM.address.toLowerCase());
+  });
+
+  // Without the hash there is no digest to rebuild. Returning null (rather than recovering
+  // some unrelated address) keeps "field missing" from being reported to the relayer as fraud.
+  it('returns null for a registration with no window block hash supplied', async () => {
+    const typedData = buildRegistrationTypedData(CHAIN_ID, CONTRACT, true, {
+      ...walletMessage,
+      windowBlockHash: WINDOW_BLOCK_HASH,
+    });
+    const signature = (await VICTIM.signTypedData(typedData)) as Hex;
+
+    const recovered = await recoverWalletSignatureSigner({
+      step: SIGNATURE_STEP.REGISTRATION,
+      signature,
+      chainId: CHAIN_ID,
+      verifyingContract: CONTRACT,
+      isHub: true,
+      ...walletMessage,
+    });
+
+    expect(recovered).toBeNull();
   });
 
   it('returns null for a malformed signature instead of throwing', async () => {
@@ -141,6 +211,38 @@ describe('recoverTxSignatureSigner', () => {
     });
 
     expect(recovered?.toLowerCase()).toBe(ATTACKER.address.toLowerCase());
+  });
+
+  // Same freshness property as the wallet flow — the batch registration signature is bound to
+  // one block, so a substituted hash must not verify.
+  it('does not verify a batch registration against a different window block hash', async () => {
+    const typedData = buildTxRegistrationTypedData(CHAIN_ID, CONTRACT, true, {
+      ...txMessage,
+      windowBlockHash: WINDOW_BLOCK_HASH,
+    });
+    const signature = (await VICTIM.signTypedData(typedData)) as Hex;
+
+    const matching = await recoverTxSignatureSigner({
+      step: TX_SIGNATURE_STEP.REGISTRATION,
+      signature,
+      chainId: CHAIN_ID,
+      verifyingContract: CONTRACT,
+      isHub: true,
+      ...txMessage,
+      windowBlockHash: WINDOW_BLOCK_HASH,
+    });
+    const swapped = await recoverTxSignatureSigner({
+      step: TX_SIGNATURE_STEP.REGISTRATION,
+      signature,
+      chainId: CHAIN_ID,
+      verifyingContract: CONTRACT,
+      isHub: true,
+      ...txMessage,
+      windowBlockHash: OTHER_WINDOW_BLOCK_HASH,
+    });
+
+    expect(matching?.toLowerCase()).toBe(VICTIM.address.toLowerCase());
+    expect(swapped?.toLowerCase()).not.toBe(VICTIM.address.toLowerCase());
   });
 });
 

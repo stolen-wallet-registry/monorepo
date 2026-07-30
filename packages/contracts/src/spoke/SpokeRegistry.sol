@@ -152,9 +152,15 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         // Fail fast: reject zero address
         if (wallet == address(0)) revert SpokeRegistry__InvalidOwner();
         if (trustedForwarder == address(0)) revert SpokeRegistry__ZeroAddress();
+        // Only the forwarder named in the signature may open the window — hub parity.
+        // See {WalletRegistry.acknowledge} for why (timing grind + nonce-burn griefing).
+        if (msg.sender != trustedForwarder) revert SpokeRegistry__InvalidForwarder();
 
-        // Validate signature deadline hasn't passed
+        // Validate signature deadline is neither expired nor unbounded
         if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
+        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+            revert SpokeRegistry__DeadlineTooFarInFuture();
+        }
 
         // 0 means "unknown" and is allowed; a future incident is not physically possible.
         // Mirrors the hub's check so the two phases cannot disagree about validity.
@@ -222,14 +228,30 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         uint64 incidentTimestamp,
         uint256 deadline,
         uint256 nonce,
+        uint256 windowBlock,
         uint8 v,
         bytes32 r,
         bytes32 s
     ) external payable {
+        // Collapsed into a memory struct before validation: with `windowBlock` added, passing
+        // these flat exceeded the EVM's 16-slot stack limit (this project builds without
+        // via-ir). A memory struct costs one stack slot instead of ten. The EXTERNAL signature
+        // stays flat and byte-identical to the hub's — the unification is preserved.
+        WalletRegParams memory p = WalletRegParams({
+            wallet: wallet,
+            trustedForwarder: trustedForwarder,
+            reportedChainId: reportedChainId,
+            incidentTimestamp: incidentTimestamp,
+            deadline: deadline,
+            nonce: nonce,
+            windowBlock: windowBlock,
+            v: v,
+            r: r,
+            s: s
+        });
+
         // Validate inputs and signature, get data needed for payload
-        (bytes32 digest, bytes32 reportedChainIdHash) = _validateWalletRegistration(
-            wallet, trustedForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s
-        );
+        (bytes32 digest, bytes32 reportedChainIdHash) = _validateWalletRegistration(p);
 
         // Determine sponsorship
         bool isSponsored = wallet != trustedForwarder;
@@ -238,18 +260,41 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         _executeWalletRegistration(wallet, reportedChainIdHash, incidentTimestamp, nonce, isSponsored, digest);
     }
 
+    /// @dev Internal-only carrier for {register}'s arguments. Exists purely to keep the
+    ///      validation path within the stack limit; never appears in the external ABI.
+    ///
+    ///      Field order deliberately mirrors the external `register` parameter order for
+    ///      reviewability. solhint's `gas-struct-packing` flags this as inefficiently packed —
+    ///      that warning does not apply: this struct is only ever instantiated in MEMORY and is
+    ///      never written to storage, so slot packing has no gas consequence. Reordering fields
+    ///      to silence the linter would obscure the mapping to the function signature for zero
+    ///      benefit. Do NOT add packed fields here on the assumption it is a storage struct —
+    ///      the 1-slot storage invariant applies to entry structs, not this carrier.
+    struct WalletRegParams {
+        address wallet;
+        address trustedForwarder;
+        uint64 reportedChainId;
+        uint64 incidentTimestamp;
+        uint256 deadline;
+        uint256 nonce;
+        uint256 windowBlock;
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+    }
+
     /// @dev Validate wallet registration inputs and signature (reduces stack pressure in main function)
-    function _validateWalletRegistration(
-        address wallet,
-        address trustedForwarder,
-        uint64 reportedChainId,
-        uint64 incidentTimestamp,
-        uint256 deadline,
-        uint256 nonce,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) internal view returns (bytes32 digest, bytes32 reportedChainIdHash) {
+    function _validateWalletRegistration(WalletRegParams memory p)
+        internal
+        view
+        returns (bytes32 digest, bytes32 reportedChainIdHash)
+    {
+        address wallet = p.wallet;
+        address trustedForwarder = p.trustedForwarder;
+        uint64 reportedChainId = p.reportedChainId;
+        uint64 incidentTimestamp = p.incidentTimestamp;
+        uint256 deadline = p.deadline;
+        uint256 nonce = p.nonce;
         // Fail fast: reject zero address and trusted forwarder mismatch
         if (wallet == address(0)) revert SpokeRegistry__InvalidOwner();
         if (trustedForwarder != msg.sender) revert SpokeRegistry__InvalidForwarder();
@@ -257,11 +302,26 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         // Validate hub is configured
         if (hubInbox == bytes32(0)) revert SpokeRegistry__HubNotConfigured();
 
-        // Validate signature deadline hasn't passed
+        // Validate signature deadline is neither expired nor unbounded
         if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
+        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+            revert SpokeRegistry__DeadlineTooFarInFuture();
+        }
 
         // Validate nonce matches expected value
         if (nonce != nonces[wallet]) revert SpokeRegistry__InvalidNonce();
+
+        // Load and validate acknowledgement BEFORE signature verification: the digest now
+        // commits to a block hash bounded by `ack.startBlock`, so the acknowledgement must be
+        // read first. (Ordering differs from the pre-V1 code for exactly this reason.)
+        AcknowledgementData memory ack = _pendingAcknowledgements[wallet];
+        if (ack.trustedForwarder != msg.sender) revert SpokeRegistry__InvalidForwarder();
+        if (block.number < ack.startBlock) revert SpokeRegistry__GracePeriodNotStarted();
+        if (block.number >= ack.expiryBlock) revert SpokeRegistry__ForwarderExpired();
+
+        // ANTI-PHISHING: see {WalletRegistry.register}. Kept byte-identical to the hub so a
+        // single frontend code path serves both, per the hub/spoke signature unification.
+        bytes32 windowBlockHash = TimingConfig.resolveWindowBlockHash(p.windowBlock, ack.startBlock);
 
         // Compute digest and verify signature (uses trustedForwarder param)
         digest = _hashTypedDataV4(
@@ -274,18 +334,13 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
                     reportedChainId,
                     incidentTimestamp,
                     nonce,
-                    deadline
+                    deadline,
+                    windowBlockHash
                 )
             )
         );
-        address signer = ECDSA.recover(digest, v, r, s);
+        address signer = ECDSA.recover(digest, p.v, p.r, p.s);
         if (signer == address(0) || signer != wallet) revert SpokeRegistry__InvalidSigner();
-
-        // Load and validate acknowledgement (msg.sender must be the authorized forwarder)
-        AcknowledgementData memory ack = _pendingAcknowledgements[wallet];
-        if (ack.trustedForwarder != msg.sender) revert SpokeRegistry__InvalidForwarder();
-        if (block.number < ack.startBlock) revert SpokeRegistry__GracePeriodNotStarted();
-        if (block.number >= ack.expiryBlock) revert SpokeRegistry__ForwarderExpired();
 
         // Convert uint64 to bytes32 hash for comparison and return
         reportedChainIdHash = CAIP10Evm.caip2Hash(reportedChainId);

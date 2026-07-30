@@ -67,6 +67,9 @@ interface IWalletRegistry {
     error WalletRegistry__NotAcknowledged();
     error WalletRegistry__DeadlineExpired();
     error WalletRegistry__DeadlineInPast();
+    /// @notice Signature deadline exceeds {TimingConfig.MAX_SIGNATURE_LIFETIME}
+    /// @dev Blocks a hostile frontend from minting effectively non-expiring signatures.
+    error WalletRegistry__DeadlineTooFarInFuture();
     error WalletRegistry__GracePeriodNotStarted();
     error WalletRegistry__InvalidSignature();
     error WalletRegistry__InvalidSigner();
@@ -191,6 +194,12 @@ interface IWalletRegistry {
     /// @param incidentTimestamp Unix timestamp when incident occurred (must match acknowledge phase)
     /// @param deadline Timestamp deadline for the signature
     /// @param nonce Expected nonce for replay protection
+    /// @param windowBlock Block whose hash the signer committed to. NOT part of the signed
+    ///        struct — the signed `windowBlockHash` binds it, so a false value fails the
+    ///        `blockhash` comparison. Must satisfy
+    ///        `gracePeriodStart <= windowBlock < block.number` and be within
+    ///        {TimingConfig.MAX_WINDOW_BLOCK_AGE}; this is what proves the signature was
+    ///        produced after the grace period elapsed.
     /// @param v ECDSA signature v component
     /// @param r ECDSA signature r component
     /// @param s ECDSA signature s component
@@ -201,6 +210,7 @@ interface IWalletRegistry {
         uint64 incidentTimestamp,
         uint256 deadline,
         uint256 nonce,
+        uint256 windowBlock,
         uint8 v,
         bytes32 r,
         bytes32 s

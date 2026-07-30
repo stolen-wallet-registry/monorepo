@@ -411,7 +411,13 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         // acknowledge a count too large for phase 2 to fit in a block, then be unable to
         // complete registration until the acknowledgement expires — having already paid.
         if (transactionCount > MAX_TWO_PHASE_BATCH_SIZE) revert TransactionRegistry__BatchTooLarge();
+        // Only the forwarder named in the signature may open the window — see
+        // {WalletRegistry.acknowledge} for the timing-grind and nonce-burn rationale.
+        if (msg.sender != trustedForwarder) revert TransactionRegistry__InvalidForwarder();
         if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
+        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+            revert TransactionRegistry__DeadlineTooFarInFuture();
+        }
 
         // Check not already acknowledged
         {
@@ -460,7 +466,8 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         uint256 deadline,
         uint256 nonce,
         address reporter,
-        uint32 txCount
+        uint32 txCount,
+        bytes32 windowBlockHash
     ) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
@@ -472,7 +479,8 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
                 reportedChainId,
                 txCount,
                 nonce,
-                deadline
+                deadline,
+                windowBlockHash
             )
         );
     }
@@ -526,12 +534,13 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         bytes32 reportedChainId,
         uint256 deadline,
         uint32 txCount,
+        bytes32 windowBlockHash,
         uint8 v,
         bytes32 r,
         bytes32 s
     ) internal view {
         bytes32 structHash = _buildTxBatchRegStructHash(
-            dataHash, reportedChainId, deadline, nonces[reporter], reporter, txCount
+            dataHash, reportedChainId, deadline, nonces[reporter], reporter, txCount, windowBlockHash
         );
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = ECDSA.recover(digest, v, r, s);
@@ -546,6 +555,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         uint256 deadline,
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds,
+        uint256 windowBlock,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -559,6 +569,9 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         if (transactionHashes.length > MAX_TWO_PHASE_BATCH_SIZE) revert TransactionRegistry__BatchTooLarge();
         if (transactionHashes.length != chainIds.length) revert TransactionRegistry__ArrayLengthMismatch();
         if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
+        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+            revert TransactionRegistry__DeadlineTooFarInFuture();
+        }
 
         // Load and validate acknowledgement
         TransactionAcknowledgementData memory ack = _pendingAcknowledgements[reporter];
@@ -575,9 +588,22 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
             revert TransactionRegistry__ArrayLengthMismatch();
         }
 
+        // ANTI-PHISHING: see {WalletRegistry.register}. The signature commits to the hash of a
+        // block at or after the grace period started, so it cannot have been produced in the
+        // same sitting as the acknowledgement.
+        bytes32 windowBlockHash = TimingConfig.resolveWindowBlockHash(windowBlock, ack.gracePeriodStart);
+
         // Verify EIP-712 signature (uses real reportedChainId from ack data)
         _verifyRegistrationSignature(
-            reporter, dataHash, ack.reportedChainId, deadline, uint32(transactionHashes.length), v, r, s
+            reporter,
+            dataHash,
+            ack.reportedChainId,
+            deadline,
+            uint32(transactionHashes.length),
+            windowBlockHash,
+            v,
+            r,
+            s
         );
 
         // === EFFECTS ===

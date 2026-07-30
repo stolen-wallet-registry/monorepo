@@ -6,6 +6,7 @@ import { IWalletRegistry } from "../src/interfaces/IWalletRegistry.sol";
 import { FraudRegistryHub } from "../src/FraudRegistryHub.sol";
 import { CAIP10 } from "../src/libraries/CAIP10.sol";
 import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
+import { TimingConfig } from "../src/libraries/TimingConfig.sol";
 import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
@@ -96,16 +97,18 @@ contract WalletRegistryTest is EIP712TestHelper {
         walletRegistry.acknowledge(wallet, _forwarder, reportedChainId, _incidentTimestamp, deadline, nonce, v, r, s);
     }
 
-    /// @dev Skip block.number to the grace period start so registration is allowed
-    function _skipToRegistrationWindow() internal {
+    /// @dev Skip block.number into the registration window and return a valid `windowBlock`.
+    /// @return windowBlock A mined block at/after the grace period start, usable as the
+    ///         anti-phishing freshness reference for `register`
+    function _skipToRegistrationWindow() internal returns (uint256 windowBlock) {
         IWalletRegistry.AcknowledgementData memory ack = walletRegistry.getAcknowledgementData(wallet);
-        vm.roll(ack.gracePeriodStart);
+        return _rollToWindow(ack.gracePeriodStart);
     }
 
     /// @dev Execute the full two-phase flow (ack + skip + register)
     function _doFullRegistration(address _forwarder, uint64 reportedChainId, uint64 _incidentTimestamp) internal {
         _doAck(_forwarder, reportedChainId, _incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(wallet);
@@ -117,10 +120,13 @@ contract WalletRegistryTest is EIP712TestHelper {
             reportedChainId,
             _incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
         vm.prank(_forwarder);
-        walletRegistry.register(wallet, _forwarder, reportedChainId, _incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, _forwarder, reportedChainId, _incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -354,13 +360,12 @@ contract WalletRegistryTest is EIP712TestHelper {
     /// @notice Full two-phase flow: ack -> grace period -> register succeeds
     function test_Register_Success() public {
         _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
-        _skipToRegistrationWindow();
-
-        bytes32 expectedIdentifier = bytes32(uint256(uint160(wallet)));
-        bytes32 expectedChainIdHash = CAIP10Evm.caip2Hash(REPORTED_CHAIN_ID);
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         vm.expectEmit(true, true, false, true);
-        emit WalletRegistered(expectedIdentifier, expectedChainIdHash, incidentTimestamp, true);
+        emit WalletRegistered(
+            bytes32(uint256(uint160(wallet))), CAIP10Evm.caip2Hash(REPORTED_CHAIN_ID), incidentTimestamp, true
+        );
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(wallet);
@@ -372,11 +377,14 @@ contract WalletRegistryTest is EIP712TestHelper {
             REPORTED_CHAIN_ID,
             incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(forwarder);
-        walletRegistry.register(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
 
         // Verify registration stored
         assertTrue(walletRegistry.isWalletRegistered(wallet));
@@ -399,6 +407,9 @@ contract WalletRegistryTest is EIP712TestHelper {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(wallet);
+        // The grace-period check fires before the windowBlock is resolved, so the reference
+        // block here is irrelevant to the assertion.
+        uint256 windowBlock = block.number - 1;
         (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
             walletPrivateKey,
             address(walletRegistry),
@@ -407,12 +418,15 @@ contract WalletRegistryTest is EIP712TestHelper {
             REPORTED_CHAIN_ID,
             incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(forwarder);
         vm.expectRevert(IWalletRegistry.WalletRegistry__GracePeriodNotStarted.selector);
-        walletRegistry.register(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     /// @notice Registration rejects after acknowledgement deadline expires
@@ -425,6 +439,8 @@ contract WalletRegistryTest is EIP712TestHelper {
 
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = walletRegistry.nonces(wallet);
+        // Otherwise-valid window reference, so the expiry check is what fails.
+        uint256 windowBlock = ack.gracePeriodStart;
         (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
             walletPrivateKey,
             address(walletRegistry),
@@ -433,18 +449,21 @@ contract WalletRegistryTest is EIP712TestHelper {
             REPORTED_CHAIN_ID,
             incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(forwarder);
         vm.expectRevert(IWalletRegistry.WalletRegistry__DeadlineExpired.selector);
-        walletRegistry.register(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     /// @notice Registration rejects when msg.sender is not the authorized forwarder
     function test_Register_RejectsWrongForwarder() public {
         _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         address wrongForwarder = makeAddr("wrongForwarder");
         vm.deal(wrongForwarder, 10 ether);
@@ -460,18 +479,21 @@ contract WalletRegistryTest is EIP712TestHelper {
             REPORTED_CHAIN_ID,
             incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(wrongForwarder);
         vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidForwarder.selector);
-        walletRegistry.register(wallet, wrongForwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, wrongForwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     /// @notice Registration rejects invalid EIP-712 signature (wrong private key)
     function test_Register_RejectsInvalidSignature() public {
         _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         uint256 wrongPrivateKey = 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef;
         uint256 deadline = block.timestamp + 1 hours;
@@ -484,18 +506,21 @@ contract WalletRegistryTest is EIP712TestHelper {
             REPORTED_CHAIN_ID,
             incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(forwarder);
         vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidSignature.selector);
-        walletRegistry.register(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     /// @notice Registration rejects mismatched reportedChainId between ack and register phases
     function test_Register_RejectsMismatchedReportedChainId() public {
         _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         // Use different reportedChainId in registration signature
         uint64 wrongChainId = 10; // Different from REPORTED_CHAIN_ID=1
@@ -509,18 +534,21 @@ contract WalletRegistryTest is EIP712TestHelper {
             wrongChainId,
             incidentTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(forwarder);
         vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidSignature.selector);
-        walletRegistry.register(wallet, forwarder, wrongChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, forwarder, wrongChainId, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     /// @notice Registration rejects mismatched incidentTimestamp between ack and register phases
     function test_Register_RejectsMismatchedIncidentTimestamp() public {
         _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         uint64 wrongTimestamp = incidentTimestamp + 1;
         uint256 deadline = block.timestamp + 1 hours;
@@ -533,12 +561,194 @@ contract WalletRegistryTest is EIP712TestHelper {
             REPORTED_CHAIN_ID,
             wrongTimestamp,
             nonce,
-            deadline
+            deadline,
+            windowBlock
         );
 
         vm.prank(forwarder);
         vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidSignature.selector);
-        walletRegistry.register(wallet, forwarder, REPORTED_CHAIN_ID, wrongTimestamp, deadline, nonce, v, r, s);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, wrongTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ANTI-PHISHING: WINDOW BLOCK FRESHNESS (V1)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice A registration signature that commits to a block predating the grace period is rejected.
+    /// @dev This is the core anti-phishing control: the referenced block must not have existed
+    ///      when the acknowledgement was signed, so a phishing page cannot harvest both
+    ///      signatures in one sitting. Referencing an older block would restore that ability.
+    function test_register_revertsIfWindowBlockBeforeGracePeriod() public {
+        _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
+        IWalletRegistry.AcknowledgementData memory ack = walletRegistry.getAcknowledgementData(wallet);
+        _rollToWindow(ack.gracePeriodStart);
+
+        // One block BEFORE the window opens — a hash that already existed at ack time.
+        uint256 windowBlock = ack.gracePeriodStart - 1;
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = walletRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(walletRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            windowBlock
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockBeforeGracePeriod.selector);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
+    }
+
+    /// @notice A registration referencing the current (unmined) block is rejected.
+    /// @dev `blockhash(block.number)` is zero, so accepting it would let a signer commit to a
+    ///      value they can compute in advance — defeating the freshness proof entirely.
+    function test_register_revertsIfWindowBlockNotMined() public {
+        _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
+        IWalletRegistry.AcknowledgementData memory ack = walletRegistry.getAcknowledgementData(wallet);
+        _rollToWindow(ack.gracePeriodStart);
+
+        uint256 windowBlock = block.number; // not yet mined
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = walletRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(walletRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            windowBlock
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockNotMined.selector);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
+    }
+
+    /// @notice A registration referencing a block older than 256 blocks is rejected.
+    /// @dev Beyond `MAX_WINDOW_BLOCK_AGE` the EVM no longer exposes the hash, so the proof is
+    ///      unverifiable and the user must re-sign against a fresher block. Uses a registry with
+    ///      a long deadline window so the ack itself has not expired when we roll 300 blocks.
+    function test_register_revertsIfWindowBlockTooOld() public {
+        // deadlineBlocks large enough that a 300-block roll stays inside the ack window
+        WalletRegistry longRegistry = new WalletRegistry(owner, address(0), GRACE_BLOCKS, 2000);
+
+        uint256 windowBlock;
+        {
+            uint256 ackDeadline = block.timestamp + 1 hours;
+            uint256 ackNonce = longRegistry.nonces(wallet);
+            (uint8 av, bytes32 ar, bytes32 as_) = _signWalletAck(
+                walletPrivateKey,
+                address(longRegistry),
+                wallet,
+                forwarder,
+                REPORTED_CHAIN_ID,
+                incidentTimestamp,
+                ackNonce,
+                ackDeadline
+            );
+            vm.prank(forwarder);
+            longRegistry.acknowledge(
+                wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, ackDeadline, ackNonce, av, ar, as_
+            );
+
+            IWalletRegistry.AcknowledgementData memory ack = longRegistry.getAcknowledgementData(wallet);
+            windowBlock = _rollToWindow(ack.gracePeriodStart);
+        }
+
+        // Age the reference out of blockhash range
+        vm.roll(block.number + 300);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = longRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(longRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            windowBlock
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockTooOld.selector);
+        longRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SIGNATURE LIFETIME / FORWARDER BINDING (V13)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Only the forwarder named in the signature may submit the acknowledgement.
+    /// @dev A third-party submitter could otherwise grind their own address to steer the
+    ///      "randomized" timing, or burn the victim's nonce to grief them.
+    function test_acknowledge_revertsIfSenderIsNotForwarder() public {
+        address stranger = makeAddr("stranger");
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = walletRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletAck(
+            walletPrivateKey,
+            address(walletRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline
+        );
+
+        vm.prank(stranger);
+        vm.expectRevert(IWalletRegistry.WalletRegistry__InvalidForwarder.selector);
+        walletRegistry.acknowledge(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
+    }
+
+    /// @notice Registration rejects a deadline beyond MAX_SIGNATURE_LIFETIME (2 hours).
+    /// @dev Bounds how long a harvested signature stays usable — without the cap a hostile
+    ///      frontend could set an effectively unbounded deadline and submit months later.
+    function test_register_revertsIfDeadlineTooFarInFuture() public {
+        _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
+        uint256 windowBlock = _skipToRegistrationWindow();
+
+        uint256 deadline = block.timestamp + 3 hours; // > MAX_SIGNATURE_LIFETIME
+        uint256 nonce = walletRegistry.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
+            walletPrivateKey,
+            address(walletRegistry),
+            wallet,
+            forwarder,
+            REPORTED_CHAIN_ID,
+            incidentTimestamp,
+            nonce,
+            deadline,
+            windowBlock
+        );
+
+        vm.prank(forwarder);
+        vm.expectRevert(IWalletRegistry.WalletRegistry__DeadlineTooFarInFuture.selector);
+        walletRegistry.register(
+            wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -991,7 +1201,7 @@ contract WalletRegistryTest is EIP712TestHelper {
         }
 
         IWalletRegistry.AcknowledgementData memory ack = feeRegistry.getAcknowledgementData(wallet);
-        vm.roll(ack.gracePeriodStart);
+        uint256 windowBlock = _rollToWindow(ack.gracePeriodStart);
 
         // Register with exact required fee
         uint256 fee = fm.currentFeeWei();
@@ -999,12 +1209,22 @@ contract WalletRegistryTest is EIP712TestHelper {
             uint256 deadline1 = block.timestamp + 1 hours;
             uint256 nonce1 = feeRegistry.nonces(wallet);
             (uint8 v1, bytes32 r1, bytes32 s1) = _signWalletReg(
-                walletPrivateKey, address(feeRegistry), wallet, forwarder, REPORTED_CHAIN_ID, ts, nonce1, deadline1
+                walletPrivateKey,
+                address(feeRegistry),
+                wallet,
+                forwarder,
+                REPORTED_CHAIN_ID,
+                ts,
+                nonce1,
+                deadline1,
+                windowBlock
             );
 
             vm.deal(forwarder, fee);
             vm.prank(forwarder);
-            feeRegistry.register{ value: fee }(wallet, forwarder, REPORTED_CHAIN_ID, ts, deadline1, nonce1, v1, r1, s1);
+            feeRegistry.register{ value: fee }(
+                wallet, forwarder, REPORTED_CHAIN_ID, ts, deadline1, nonce1, windowBlock, v1, r1, s1
+            );
         }
 
         // Fee should be held by the registry since hub is unset

@@ -34,6 +34,13 @@ const SIGNATURE_INVALIDATING_SUFFIXES = [
   'InvalidNonce',
   'InvalidSignature',
   'InvalidForwarder',
+  // Anti-phishing freshness commitment (TimingConfig__*). The registration signature commits to
+  // `blockhash(windowBlock)`, and that block ages out of the EVM's 256-block window. Once it
+  // has, resubmitting the same bytes can never succeed — only a signature over a newer block
+  // can. The acknowledgement is untouched, so this is a re-sign, not a restart.
+  'WindowBlockBeforeGracePeriod',
+  'WindowBlockNotMined',
+  'WindowBlockTooOld',
 ] as const;
 
 /**

@@ -787,6 +787,11 @@ export const WalletRegistryABI = [
         internalType: 'uint256',
       },
       {
+        name: 'windowBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
         name: 'v',
         type: 'uint8',
         internalType: 'uint8',
@@ -1337,6 +1342,21 @@ export const WalletRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TimingConfig__WindowBlockBeforeGracePeriod',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockNotMined',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockTooOld',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'WalletRegistry__AlreadyAcknowledged',
     inputs: [],
   },
@@ -1363,6 +1383,11 @@ export const WalletRegistryABI = [
   {
     type: 'error',
     name: 'WalletRegistry__DeadlineInPast',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'WalletRegistry__DeadlineTooFarInFuture',
     inputs: [],
   },
   {

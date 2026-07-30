@@ -102,6 +102,10 @@ async function processTxSignature(
     chainId: sig.chainId,
     step,
     storedAt: Date.now(),
+    // Registration only: the relayer submits this block number verbatim and rebuilds the
+    // digest from this hash to verify the signature. Neither can be re-derived here.
+    windowBlock: sig.windowBlock != null ? BigInt(sig.windowBlock) : undefined,
+    windowBlockHash: sig.windowBlockHash != null ? (sig.windowBlockHash as Hash) : undefined,
   };
   storeTxSignature(stored);
 

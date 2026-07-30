@@ -203,13 +203,16 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       storedSig.reportedChainId === undefined ||
       storedSig.incidentTimestamp === undefined ||
       storedSig.nonce === undefined ||
-      storedSig.deadline === undefined
+      storedSig.deadline === undefined ||
+      // Signed over blockhash(windowBlock); the peer must have sent the number with it.
+      storedSig.windowBlock === undefined
     ) {
       logger.p2p.error('Cannot submit REG - missing required signature fields', {
         hasReportedChainId: storedSig.reportedChainId !== undefined,
         hasIncidentTimestamp: storedSig.incidentTimestamp !== undefined,
         hasNonce: storedSig.nonce !== undefined,
         hasDeadline: storedSig.deadline !== undefined,
+        hasWindowBlock: storedSig.windowBlock !== undefined,
       });
       return;
     }
@@ -237,6 +240,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       incidentTimestamp,
       deadline: storedSig.deadline,
       nonce: storedSig.nonce,
+      windowBlock: storedSig.windowBlock,
       signature: parsedSig,
       feeWei,
     });

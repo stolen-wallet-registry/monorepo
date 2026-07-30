@@ -797,6 +797,11 @@ export const TransactionRegistryABI = [
         internalType: 'bytes32[]',
       },
       {
+        name: 'windowBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
         name: 'v',
         type: 'uint8',
         internalType: 'uint8',
@@ -1393,6 +1398,21 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TimingConfig__WindowBlockBeforeGracePeriod',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockNotMined',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockTooOld',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TransactionRegistry__AlreadyAcknowledged',
     inputs: [],
   },
@@ -1424,6 +1444,11 @@ export const TransactionRegistryABI = [
   {
     type: 'error',
     name: 'TransactionRegistry__DeadlineInPast',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TransactionRegistry__DeadlineTooFarInFuture',
     inputs: [],
   },
   {

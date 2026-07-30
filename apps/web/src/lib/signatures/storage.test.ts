@@ -8,7 +8,7 @@ import {
   type StoredSignature,
 } from './storage';
 import { SIGNATURE_STEP } from './eip712';
-import type { Address, Hex } from '@/lib/types/ethereum';
+import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 describe('signature storage', () => {
   const testAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
@@ -401,5 +401,60 @@ describe('forwarder binding', () => {
 
     expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, OTHER_FORWARDER)).toBeNull();
     expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER)).not.toBeNull();
+  });
+});
+
+describe('window block commitment', () => {
+  const ADDRESS = `0x${'a'.repeat(40)}` as Address;
+  const FORWARDER = `0x${'b'.repeat(40)}` as Address;
+  const WINDOW_BLOCK_HASH = `0x${'ab'.repeat(32)}` as Hash;
+
+  function store(overrides: Partial<StoredSignature> = {}) {
+    storeSignature({
+      signature: `0x${'d'.repeat(130)}`,
+      deadline: 1_900_000_000n,
+      nonce: 1n,
+      address: ADDRESS,
+      chainId: 8453,
+      step: SIGNATURE_STEP.REGISTRATION,
+      storedAt: Date.now(),
+      trustedForwarder: FORWARDER,
+      reportedChainId: 8453n,
+      incidentTimestamp: 0n,
+      windowBlock: 4242n,
+      windowBlockHash: WINDOW_BLOCK_HASH,
+      ...overrides,
+    });
+  }
+
+  // The pay step submits windowBlock verbatim; a lossy round-trip is an on-chain revert.
+  it('round-trips the block number and hash as BigInt/hex', () => {
+    store();
+
+    const found = getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER);
+    expect(found?.windowBlock).toBe(4242n);
+    expect(found?.windowBlockHash).toBe(WINDOW_BLOCK_HASH);
+  });
+
+  // Block 0 has no usable hash, so a zero here is corruption rather than a valid commitment.
+  it('discards a signature whose stored window block is zero', () => {
+    store({ windowBlock: 0n });
+
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER)).toBeNull();
+  });
+
+  it('discards a signature whose stored window block hash is not bytes32', () => {
+    store({ windowBlockHash: '0xdeadbeef' as Hash });
+
+    expect(getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER)).toBeNull();
+  });
+
+  // Acknowledgement signatures carry no freshness commitment and must still be retrievable.
+  it('accepts a signature with no window block at all', () => {
+    store({ windowBlock: undefined, windowBlockHash: undefined });
+
+    const found = getSignature(ADDRESS, 8453, SIGNATURE_STEP.REGISTRATION, FORWARDER);
+    expect(found).not.toBeNull();
+    expect(found?.windowBlock).toBeUndefined();
   });
 });

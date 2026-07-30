@@ -19,6 +19,7 @@ import {
   useSignTxEIP712,
   useTransactionRegistrationHashStruct,
   useTxContractNonce,
+  useTxContractDeadlines,
 } from '@/hooks/transactions';
 import {
   storeTxSignature,
@@ -113,6 +114,11 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
 
   const { signTxRegistration, reset: resetSigning } = useSignTxEIP712();
 
+  // The registration signature commits to the hash of a block at or after the acknowledgement's
+  // grace-period start; passing the start block lets the signer refuse early rather than
+  // producing a signature the contract will reject.
+  const { data: ackDeadlines } = useTxContractDeadlines(reporterAddress);
+
   const isContractDataLoading = nonceLoading || hashLoading;
   const hasContractError = nonceError || hashError;
 
@@ -200,7 +206,11 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
         chainId,
       });
 
-      const sig = await signTxRegistration({
+      const {
+        signature: sig,
+        windowBlock,
+        windowBlockHash,
+      } = await signTxRegistration({
         reporter: address,
         dataHash: dataHash!,
         reportedChainId: reportedChainIdHash,
@@ -208,10 +218,12 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
         trustedForwarder: forwarderAddress,
         nonce: freshNonce,
         deadline: freshDeadline,
+        gracePeriodStart: ackDeadlines?.start,
       });
 
       logger.signature.info('Transaction batch registration signature obtained', {
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
+        windowBlock: windowBlock.toString(),
       });
 
       // Set signature state first so UI reflects success even if storage fails
@@ -232,6 +244,9 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
           chainId,
           step: TX_SIGNATURE_STEP.REGISTRATION,
           storedAt: Date.now(),
+          // The pay step must submit the block that was signed over, not re-derive one.
+          windowBlock,
+          windowBlockHash,
         });
         logger.signature.debug('Transaction batch registration signature stored in sessionStorage');
       } catch (storageErr) {

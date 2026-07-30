@@ -26,6 +26,20 @@ export interface StoredTxSignature {
   chainId: number;
   step: TxSignatureStep;
   storedAt: number; // timestamp
+  /**
+   * Block number whose hash the REGISTRATION signature committed to (anti-phishing control).
+   *
+   * The signature covers `blockhash(windowBlock)`, so the pay step must submit this exact
+   * number — the contract recomputes the hash from it and compares. Undefined for
+   * acknowledgement signatures, which carry no freshness commitment.
+   */
+  windowBlock?: bigint;
+  /**
+   * `blockhash(windowBlock)` — the value inside the signed struct. Needed by a relayer
+   * re-verifying a signature received over P2P, which cannot re-read the hash once the chain
+   * has moved past 256 blocks. Undefined for acknowledgement signatures.
+   */
+  windowBlockHash?: Hash;
 }
 
 // Serializable version for sessionStorage
@@ -41,6 +55,8 @@ interface SerializedTxSignature {
   chainId: number;
   step: number;
   storedAt: number;
+  windowBlock?: string;
+  windowBlockHash?: string;
 }
 
 // Store a signature
@@ -58,6 +74,8 @@ export function storeTxSignature(sig: StoredTxSignature): void {
     chainId: sig.chainId,
     step: sig.step,
     storedAt: sig.storedAt,
+    windowBlock: sig.windowBlock?.toString(),
+    windowBlockHash: sig.windowBlockHash,
   };
   sessionStorage.setItem(key, JSON.stringify(serialized));
 }
@@ -97,8 +115,21 @@ export function getTxSignature(
       return null;
     }
 
-    // Validate numeric strings before BigInt conversion
+    // Validate numeric strings before BigInt conversion. windowBlock is submitted verbatim as
+    // calldata, so a corrupted value would surface as an opaque revert; block 0 has no usable
+    // hash, so it counts as corruption.
     if (!/^\d+$/.test(parsed.deadline) || !/^\d+$/.test(parsed.nonce)) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+    if (parsed.windowBlock !== undefined && !/^[1-9]\d*$/.test(parsed.windowBlock)) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+    if (
+      parsed.windowBlockHash !== undefined &&
+      !(isHex(parsed.windowBlockHash, { strict: true }) && size(parsed.windowBlockHash) === 32)
+    ) {
       sessionStorage.removeItem(key);
       return null;
     }
@@ -115,6 +146,8 @@ export function getTxSignature(
       chainId: parsed.chainId,
       step: parsed.step as TxSignatureStep,
       storedAt: parsed.storedAt,
+      windowBlock: parsed.windowBlock !== undefined ? BigInt(parsed.windowBlock) : undefined,
+      windowBlockHash: parsed.windowBlockHash as Hash | undefined,
     };
 
     return signature;

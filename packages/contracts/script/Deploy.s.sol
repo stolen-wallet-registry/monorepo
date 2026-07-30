@@ -75,20 +75,30 @@ contract Deploy is Script {
     // ═══════════════════════════════════════════════════════════════════════════
     // TIMING CONFIGURATION
     // ═══════════════════════════════════════════════════════════════════════════
-    // Block times: Anvil ~13s, Base/OP ~2s, Arbitrum ~0.25s
-    // Target: ~30s grace for local, ~2 min grace for testnet/mainnet
+    // CALIBRATE TO THE RATE `block.number` ADVANCES — NOT to the chain's block time.
+    // These are compared against `block.number` inside the registries. On most chains that
+    // is the chain's own block counter, but not on Arbitrum (see below).
+    // Target: ~30s grace for local, ~2 min grace for testnet/mainnet.
 
     // Local Anvil (13s blocks) - ~30s grace, ~10 min registration window
     uint256 constant ANVIL_GRACE_BLOCKS = 2; // ~30s
     uint256 constant ANVIL_DEADLINE_BLOCKS = 50; // ~10 min
 
-    // Base/Optimism L2 (2s blocks)
+    // Base/Optimism L2 (2s blocks; block.number is the L2 counter)
     uint256 constant L2_GRACE_BLOCKS = 60; // ~2 min
     uint256 constant L2_DEADLINE_BLOCKS = 300; // ~10 min
 
-    // Arbitrum (0.25s blocks)
-    uint256 constant ARBITRUM_GRACE_BLOCKS = 480; // ~2 min
-    uint256 constant ARBITRUM_DEADLINE_BLOCKS = 2400; // ~10 min
+    // Arbitrum: `block.number` returns the **L1** block number (~12s), NOT the ~0.25s L2 rate.
+    // Verified empirically 2026-07-30 against Arbitrum One mainnet:
+    //   eth_blockNumber (RPC)      = 489,269,716  <- L2 block number
+    //   block.number in a contract =  25,645,219  <- L1 block number
+    //   ArbSys.arbBlockNumber()    = 489,269,728  <- L2 block number
+    // So Arbitrum takes the SAME counts as Ethereum L1. The previous 480/2400 values assumed
+    // the L2 rate and produced a ~96 MINUTE grace period and an ~8 HOUR registration window.
+    // If an L2-rate clock is ever wanted, read ArbSys(0x64).arbBlockNumber() instead —
+    // see TimingConfig's note on the matching blockhash caveat before doing so.
+    uint256 constant ARBITRUM_GRACE_BLOCKS = 10; // ~2 min at L1 rate
+    uint256 constant ARBITRUM_DEADLINE_BLOCKS = 50; // ~10 min at L1 rate
 
     // ═══════════════════════════════════════════════════════════════════════════
     // BRIDGE CONSTANTS

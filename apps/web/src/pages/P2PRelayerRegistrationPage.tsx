@@ -51,7 +51,7 @@ import {
 } from '@/lib/p2p';
 import { storeSignature, SIGNATURE_STEP, type StoredSignature } from '@/lib/signatures';
 import { logger } from '@/lib/logger';
-import type { Address, Hex } from '@/lib/types/ethereum';
+import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 /**
  * Process a received signature: validate, store, confirm receipt, and advance step.
@@ -91,6 +91,10 @@ async function processSignature(
       trustedForwarder,
       reportedChainId: sig.reportedChainId != null ? BigInt(sig.reportedChainId) : undefined,
       incidentTimestamp: sig.incidentTimestamp != null ? BigInt(sig.incidentTimestamp) : undefined,
+      // Registration only: the block the registeree's signature committed to. The relayer
+      // submits it verbatim — it cannot be re-derived here, since the chain has moved on.
+      windowBlock: sig.windowBlock != null ? BigInt(sig.windowBlock) : undefined,
+      windowBlockHash: sig.windowBlockHash != null ? (sig.windowBlockHash as Hash) : undefined,
     };
   } catch (e) {
     logger.p2p.warn('Failed to parse signature fields as BigInt', { error: e, data });

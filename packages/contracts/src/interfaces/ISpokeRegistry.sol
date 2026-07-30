@@ -117,6 +117,9 @@ interface ISpokeRegistry {
     error SpokeRegistry__InvalidTimingConfig();
     error SpokeRegistry__InvalidOwner();
     error SpokeRegistry__SignatureExpired();
+    /// @notice Signature deadline exceeds {TimingConfig.MAX_SIGNATURE_LIFETIME}
+    /// @dev Blocks a hostile frontend from minting effectively non-expiring signatures.
+    error SpokeRegistry__DeadlineTooFarInFuture();
     error SpokeRegistry__InvalidNonce();
     error SpokeRegistry__InvalidSigner();
     error SpokeRegistry__InvalidForwarder();
@@ -182,6 +185,10 @@ interface ISpokeRegistry {
     /// @param incidentTimestamp Incident timestamp (must match acknowledgement)
     /// @param deadline Signature expiry timestamp
     /// @param nonce Expected nonce for replay protection
+    /// @param windowBlock Block whose hash the signer committed to. NOT part of the signed
+    ///        struct — the signed `windowBlockHash` binds it. Must satisfy
+    ///        `startBlock <= windowBlock < block.number` and be within
+    ///        {TimingConfig.MAX_WINDOW_BLOCK_AGE}; proves the signature post-dates the grace period.
     /// @param v Signature v component
     /// @param r Signature r component
     /// @param s Signature s component
@@ -192,6 +199,7 @@ interface ISpokeRegistry {
         uint64 incidentTimestamp,
         uint256 deadline,
         uint256 nonce,
+        uint256 windowBlock,
         uint8 v,
         bytes32 r,
         bytes32 s

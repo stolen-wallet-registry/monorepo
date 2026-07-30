@@ -15,6 +15,7 @@ import { useFormStore } from '@/stores/formStore';
 import { useSignEIP712 } from '@/hooks/useSignEIP712';
 import { useGenerateHashStruct } from '@/hooks/useGenerateHashStruct';
 import { useContractNonce } from '@/hooks/useContractNonce';
+import { useContractDeadlines } from '@/hooks/useContractDeadlines';
 import { storeSignature, removeSignature, SIGNATURE_STEP } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { logger } from '@/lib/logger';
@@ -84,6 +85,11 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
   } = useGenerateHashStruct(forwarder ?? undefined, SIGNATURE_STEP.REGISTRATION);
 
   const { signRegistration, reset: resetSigning } = useSignEIP712();
+
+  // The registration signature commits to the hash of a block at or after the acknowledgement's
+  // grace-period start. Passing the start block lets the signer refuse early rather than
+  // producing a signature the contract will reject.
+  const { data: deadlines } = useContractDeadlines(registeree ?? undefined);
 
   const isContractDataLoading = nonceLoading || hashLoading;
   const hasContractError = nonceError || hashError;
@@ -181,17 +187,19 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         chainId,
       });
 
-      const sig = await signRegistration({
+      const { signature: sig, windowBlock } = await signRegistration({
         wallet: registeree,
         trustedForwarder: forwarder,
         reportedChainId,
         incidentTimestamp,
         nonce: freshNonce,
         deadline: freshDeadline,
+        gracePeriodStart: deadlines?.start,
       });
 
       logger.signature.info('Registration signature obtained', {
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
+        windowBlock: windowBlock.toString(),
       });
 
       // Store signature with stabilized fields (same values used for signing)
@@ -208,6 +216,8 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         trustedForwarder: forwarder,
         reportedChainId,
         incidentTimestamp,
+        // The pay step must submit the block that was signed over, not re-derive one.
+        windowBlock,
       });
       logger.signature.debug('Registration signature stored in sessionStorage');
 

@@ -16,13 +16,14 @@ import type { Libp2p } from 'libp2p';
 import { useSignEIP712, type SignParams } from '@/hooks/useSignEIP712';
 import { useGenerateHashStruct } from '@/hooks/useGenerateHashStruct';
 import { useContractNonce } from '@/hooks/useContractNonce';
+import { useContractDeadlines } from '@/hooks/useContractDeadlines';
 import { type SignatureStep } from '@/lib/signatures';
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
 import { passStreamData, getPeerConnection } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 import type { SignatureStatus } from '@/components/composed/SignatureCard';
-import type { Hex } from '@/lib/types/ethereum';
+import type { Hash, Hex } from '@/lib/types/ethereum';
 
 export interface P2PSignFlowConfig {
   /** Which signature step (ACKNOWLEDGEMENT or REGISTRATION) */
@@ -113,7 +114,12 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
     reset: resetSign,
   } = useSignEIP712();
 
-  const signFn = signType === 'acknowledgement' ? signAcknowledgement : signRegistration;
+  // Registration only: the signature commits to the hash of a block at or after the
+  // acknowledgement's grace-period start, so the signer needs the start block to refuse early.
+  const { data: deadlines } = useContractDeadlines(
+    signType === 'registration' ? (registeree ?? undefined) : undefined
+  );
+  const gracePeriodStart = deadlines?.start;
 
   const getStatus = (): SignatureStatus => {
     if (signature) return 'success';
@@ -171,9 +177,19 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
         incidentTimestamp,
         nonce: freshNonce,
         deadline: freshDeadline,
+        gracePeriodStart,
       };
 
-      const sig = await signFn(params);
+      // Registration returns the freshness commitment alongside the signature; the relayer
+      // cannot rebuild the digest or the calldata without it, so both go on the wire.
+      let sig: Hex;
+      let windowBlock: bigint | undefined;
+      let windowBlockHash: Hash | undefined;
+      if (signType === 'registration') {
+        ({ signature: sig, windowBlock, windowBlockHash } = await signRegistration(params));
+      } else {
+        sig = await signAcknowledgement(params);
+      }
 
       // Set isSending before signature to avoid a brief "success" flash in getStatus()
       // (signature being set while isSending is false would momentarily return 'success')
@@ -195,6 +211,8 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
             chainId,
             reportedChainId: reportedChainId.toString(),
             incidentTimestamp: incidentTimestamp.toString(),
+            windowBlock: windowBlock?.toString(),
+            windowBlockHash,
           },
         },
       });
@@ -219,7 +237,10 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
     nonce,
     chainId,
     stableFields,
-    signFn,
+    signType,
+    signAcknowledgement,
+    signRegistration,
+    gracePeriodStart,
     resetSign,
     protocol,
     keyRef,

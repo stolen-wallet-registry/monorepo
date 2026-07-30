@@ -28,6 +28,9 @@ const ABI = parseAbi([
   'error SpokeRegistry__ForwarderExpired()',
   'error WalletRegistry__AlreadyAcknowledged()',
   'error FeeManager__InvalidPrice()',
+  'error TimingConfig__WindowBlockTooOld()',
+  'error TimingConfig__WindowBlockNotMined()',
+  'error TimingConfig__WindowBlockBeforeGracePeriod()',
   'function register() returns (bool)',
 ]);
 
@@ -68,6 +71,11 @@ describe('isSignatureInvalidatingError', () => {
     'WalletRegistry__InvalidNonce',
     'WalletRegistry__DeadlineExpired',
     'SpokeRegistry__ForwarderExpired',
+    // The registration signature commits to blockhash(windowBlock); once that block ages out
+    // of the EVM's 256-block window no resubmission of the same bytes can ever succeed.
+    'TimingConfig__WindowBlockTooOld',
+    'TimingConfig__WindowBlockNotMined',
+    'TimingConfig__WindowBlockBeforeGracePeriod',
   ])('treats %s as signature-invalidating', (name) => {
     expect(isSignatureInvalidatingError(revertWith(name))).toBe(true);
   });

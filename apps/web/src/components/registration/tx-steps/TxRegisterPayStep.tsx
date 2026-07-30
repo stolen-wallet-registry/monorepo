@@ -217,6 +217,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     chainIds: chainIdsForContractGuarded,
     reporter: storedSignatureState?.reporter,
     deadline: storedSignatureState?.deadline,
+    // Hub registration commits to this block's hash; the estimate must use the signed value.
+    windowBlock: isHub ? storedSignatureState?.windowBlock : undefined,
     // Spoke-specific params
     reportedChainId: isSpoke ? reportedChainIdHash : undefined,
     nonce: isSpoke ? storedSignatureState?.nonce : undefined,
@@ -452,12 +454,23 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       let params: TxRegistrationParams;
 
       if (isHub) {
-        // Hub: registerTransactions(reporter, deadline, transactionHashes, chainIds, v, r, s) - payable
+        // Hub: registerTransactions(reporter, deadline, transactionHashes, chainIds, windowBlock,
+        //                           v, r, s) - payable
+        if (storedSignatureState.windowBlock === undefined) {
+          // Signed over blockhash(windowBlock); without the number the contract cannot
+          // recompute it, so there is nothing valid to submit.
+          logger.contract.error('Cannot submit transaction registration - missing windowBlock', {
+            dataHash,
+          });
+          setLocalError('Signature is missing required data. Please go back and sign again.');
+          return;
+        }
         const hubParams: TxRegistrationParamsHub = {
           reporter: storedSignatureState.reporter,
           deadline: storedSignatureState.deadline,
           transactionHashes: txHashesForContractGuarded,
           chainIds: chainIdsForContractGuarded,
+          windowBlock: storedSignatureState.windowBlock,
           signature: parsedSig,
           feeWei,
         };

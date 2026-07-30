@@ -7,6 +7,10 @@ import { ISpokeRegistry } from "../src/interfaces/ISpokeRegistry.sol";
 import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
 import { CAIP10 } from "../src/libraries/CAIP10.sol";
 import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
+import { TimingConfig } from "../src/libraries/TimingConfig.sol";
+import { EIP712Constants } from "../src/libraries/EIP712Constants.sol";
+import { WalletRegistry } from "../src/registries/WalletRegistry.sol";
+import { IWalletRegistry } from "../src/interfaces/IWalletRegistry.sol";
 import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
@@ -56,16 +60,24 @@ contract SpokeRegistryTest is Test {
     bytes32 internal constant ACK_TYPEHASH = keccak256(
         "AcknowledgementOfRegistry(string statement,address wallet,address trustedForwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
     );
+    // `windowBlockHash` is the V1 anti-phishing field: the registration signature commits to the
+    // hash of a block at or after the acknowledgement's grace start, so it cannot be produced in
+    // the same sitting as the acknowledgement. Shared verbatim with the hub (see EIP712Constants).
     bytes32 internal constant REG_TYPEHASH = keccak256(
-        "Registration(string statement,address wallet,address trustedForwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+        "Registration(string statement,address wallet,address trustedForwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline,bytes32 windowBlockHash)"
     );
 
     // EIP-712 constants for transaction batch
     bytes32 internal constant TX_BATCH_ACK_TYPEHASH = keccak256(
         "TransactionBatchAcknowledgement(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
     );
+    // Mirrors EIP712Constants.TX_BATCH_REG_TYPEHASH, which gained `windowBlockHash` alongside the
+    // wallet typehash. NOTE: SpokeRegistry's transaction-batch path hashes this typehash but does
+    // NOT yet append a windowBlockHash field (the hub's TransactionRegistry does), so the signed
+    // struct below deliberately stops at `deadline` to match what the spoke actually computes.
+    // When the spoke's tx-batch path is brought to parity, add blockhash(windowBlock) here too.
     bytes32 internal constant TX_BATCH_REG_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+        "TransactionBatchRegistration(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline,bytes32 windowBlockHash)"
     );
 
     string internal constant ACK_STATEMENT =
@@ -185,6 +197,10 @@ contract SpokeRegistryTest is Test {
         return vm.sign(privateKey, digest);
     }
 
+    /// @dev Signs the registration message. Only the HASH of `windowBlock` is signed; the block
+    ///      number itself travels to `register` as unsigned calldata, so pass the same value to
+    ///      both. To exercise a rejection, pass a `windowBlock` that is before the grace start,
+    ///      at/above `block.number`, or more than 256 blocks old.
     function _signReg(
         uint256 privateKey,
         address _wallet,
@@ -192,19 +208,11 @@ contract SpokeRegistryTest is Test {
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 nonce,
-        uint256 deadline
+        uint256 deadline,
+        uint256 windowBlock
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 structHash = keccak256(
-            abi.encode(
-                REG_TYPEHASH,
-                keccak256(bytes(REG_STATEMENT)),
-                _wallet,
-                _forwarder,
-                reportedChainId,
-                incidentTimestamp,
-                nonce,
-                deadline
-            )
+        bytes32 structHash = _regStructHash(
+            _wallet, _forwarder, reportedChainId, incidentTimestamp, nonce, deadline, windowBlock
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
         return vm.sign(privateKey, digest);
@@ -221,10 +229,35 @@ contract SpokeRegistryTest is Test {
         spoke.acknowledge(wallet, _forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
-    function _skipToRegistrationWindow() internal {
-        // Get current acknowledgement and skip to start block
+    /// @dev Roll one block past `graceStart` and return a `windowBlock` that satisfies both of
+    ///      `register`'s bounds: `windowBlock >= ack.startBlock` AND `windowBlock < block.number`.
+    ///      Rolling only to `graceStart` (as before V1) leaves no mined block to reference.
+    function _rollToWindow(uint256 graceStart) internal returns (uint256 windowBlock) {
+        if (block.number <= graceStart) vm.roll(graceStart + 1);
+        return graceStart;
+    }
+
+    /// @dev Skip into the registration window and return the `windowBlock` to sign/submit.
+    function _skipToRegistrationWindow() internal returns (uint256 windowBlock) {
         ISpokeRegistry.AcknowledgementData memory ack = spoke.getAcknowledgement(wallet);
-        vm.roll(ack.startBlock);
+        return _rollToWindow(ack.startBlock);
+    }
+
+    /// @dev Prepare a wallet registration signature into _sv/_sr/_ss/_sDeadline/_sNonce.
+    ///      `register` now takes 10 arguments; routing the signature and deadline/nonce through
+    ///      storage keeps the call sites inside the EVM's 16-slot stack limit without via-ir.
+    ///      Reads the nonce via an external call, so call this BEFORE vm.expectRevert.
+    function _prepareWalletRegSig(
+        address _forwarder,
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
+        uint256 windowBlock
+    ) internal {
+        _sDeadline = block.timestamp + 1 hours;
+        _sNonce = spoke.nonces(wallet);
+        (_sv, _sr, _ss) = _signReg(
+            walletPrivateKey, wallet, _forwarder, reportedChainId, incidentTimestamp, _sNonce, _sDeadline, windowBlock
+        );
     }
 
     function _skipToTxBatchRegistrationWindow(address _reporter) internal {
@@ -611,13 +644,9 @@ contract SpokeRegistryTest is Test {
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(wallet);
-
-        (uint8 v, bytes32 r, bytes32 s) =
-            _signReg(walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
+        _prepareWalletRegSig(forwarder, reportedChainId, incidentTimestamp, windowBlock);
 
         // Get required fee
         uint256 fee = spoke.quoteRegistration(wallet);
@@ -626,7 +655,9 @@ contract SpokeRegistryTest is Test {
         emit RegistrationSentToHub(wallet, bytes32(0), HUB_CHAIN_ID); // messageId will be computed
 
         vm.prank(forwarder);
-        spoke.register{ value: fee }(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
 
         // Verify acknowledgement cleaned up
         assertFalse(spoke.isPending(wallet));
@@ -641,17 +672,18 @@ contract SpokeRegistryTest is Test {
         _doAck(forwarder, reportedChainId, incidentTimestamp);
         // Don't skip to registration window
 
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(wallet);
-
-        (uint8 v, bytes32 r, bytes32 s) =
-            _signReg(walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
+        // windowBlock is irrelevant here: the grace-period check runs before the window is
+        // resolved, so this must still surface GracePeriodNotStarted rather than a timing error.
+        uint256 windowBlock = block.number - 1;
+        _prepareWalletRegSig(forwarder, reportedChainId, incidentTimestamp, windowBlock);
 
         uint256 fee = spoke.quoteRegistration(wallet);
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__GracePeriodNotStarted.selector);
-        spoke.register{ value: fee }(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
     }
 
     /// @notice Registration fails after expiry
@@ -662,20 +694,22 @@ contract SpokeRegistryTest is Test {
         _doAck(forwarder, reportedChainId, incidentTimestamp);
 
         // Skip past expiry
-        ISpokeRegistry.AcknowledgementData memory ack = spoke.getAcknowledgement(wallet);
-        vm.roll(ack.expiryBlock);
+        uint256 windowBlock;
+        {
+            ISpokeRegistry.AcknowledgementData memory ack = spoke.getAcknowledgement(wallet);
+            vm.roll(ack.expiryBlock);
+            windowBlock = ack.startBlock; // otherwise-valid window; expiry must still win
+        }
 
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(wallet);
-
-        (uint8 v, bytes32 r, bytes32 s) =
-            _signReg(walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
+        _prepareWalletRegSig(forwarder, reportedChainId, incidentTimestamp, windowBlock);
 
         uint256 fee = spoke.quoteRegistration(wallet);
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__ForwarderExpired.selector);
-        spoke.register{ value: fee }(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
     }
 
     /// @notice Registration fails with wrong forwarder
@@ -684,23 +718,19 @@ contract SpokeRegistryTest is Test {
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
         address wrongForwarder = makeAddr("wrongForwarder");
         vm.deal(wrongForwarder, 10 ether);
 
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(wallet);
-
-        (uint8 v, bytes32 r, bytes32 s) =
-            _signReg(walletPrivateKey, wallet, wrongForwarder, reportedChainId, incidentTimestamp, nonce, deadline);
+        _prepareWalletRegSig(wrongForwarder, reportedChainId, incidentTimestamp, windowBlock);
 
         uint256 fee = spoke.quoteRegistration(wallet);
 
         vm.prank(wrongForwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidForwarder.selector);
         spoke.register{ value: fee }(
-            wallet, wrongForwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s
+            wallet, wrongForwarder, reportedChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
         );
     }
 
@@ -710,17 +740,15 @@ contract SpokeRegistryTest is Test {
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         _doAck(forwarder, reportedChainId, incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(wallet);
-
-        (uint8 v, bytes32 r, bytes32 s) =
-            _signReg(walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
+        _prepareWalletRegSig(forwarder, reportedChainId, incidentTimestamp, windowBlock);
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InsufficientFee.selector);
-        spoke.register{ value: 0 }(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: 0 }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
     }
 
     /// @notice Registration fails when hub not configured
@@ -750,20 +778,19 @@ contract SpokeRegistryTest is Test {
         vm.prank(forwarder);
         unconfiguredSpoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
-        // Skip to registration window
-        ISpokeRegistry.AcknowledgementData memory ack = unconfiguredSpoke.getAcknowledgement(wallet);
-        vm.roll(ack.startBlock);
+        // Skip to registration window (one block past grace start, so a window block exists)
+        uint256 windowBlock = _rollToWindow(unconfiguredSpoke.getAcknowledgement(wallet).startBlock);
 
         // Try to register
         nonce = unconfiguredSpoke.nonces(wallet);
         (v, r, s) = _signRegForSpoke(
-            unconfiguredSpoke, walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline
+            unconfiguredSpoke, forwarder, reportedChainId, incidentTimestamp, nonce, deadline, windowBlock
         );
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__HubNotConfigured.selector);
         unconfiguredSpoke.register{ value: 1 ether }(
-            wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s
+            wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
         );
     }
 
@@ -803,26 +830,18 @@ contract SpokeRegistryTest is Test {
         return vm.sign(privateKey, digest);
     }
 
-    function _signRegForSpoke(
-        SpokeRegistry _spoke,
-        uint256 privateKey,
+    /// @dev Registration struct hash, extracted so the signing helpers stay under the 16-slot
+    ///      stack limit now that `windowBlock` is a ninth parameter (no via-ir in this project).
+    function _regStructHash(
         address _wallet,
         address _forwarder,
         uint64 reportedChainId,
         uint64 incidentTimestamp,
         uint256 nonce,
-        uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
-        bytes32 domainSeparator = keccak256(
-            abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256("StolenWalletRegistry"),
-                keccak256("4"),
-                block.chainid,
-                address(_spoke)
-            )
-        );
-        bytes32 structHash = keccak256(
+        uint256 deadline,
+        uint256 windowBlock
+    ) internal view returns (bytes32) {
+        return keccak256(
             abi.encode(
                 REG_TYPEHASH,
                 keccak256(bytes(REG_STATEMENT)),
@@ -831,11 +850,35 @@ contract SpokeRegistryTest is Test {
                 reportedChainId,
                 incidentTimestamp,
                 nonce,
-                deadline
+                deadline,
+                blockhash(windowBlock)
             )
         );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        return vm.sign(privateKey, digest);
+    }
+
+    /// @dev Signs a registration for an arbitrary spoke instance. Unlike {_signAckForSpoke} this
+    ///      takes neither the signer key nor the wallet: with `windowBlock` added, nine parameters
+    ///      plus the three return values exceed the 16-slot stack limit (no via-ir here), so the
+    ///      test wallet is read from state instead.
+    function _signRegForSpoke(
+        SpokeRegistry _spoke,
+        address _forwarder,
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
+        uint256 nonce,
+        uint256 deadline,
+        uint256 windowBlock
+    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+        return vm.sign(
+            walletPrivateKey,
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    _domainSeparatorFor("StolenWalletRegistry", "4", address(_spoke)),
+                    _regStructHash(wallet, _forwarder, reportedChainId, incidentTimestamp, nonce, deadline, windowBlock)
+                )
+            )
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1307,20 +1350,20 @@ contract SpokeRegistryTest is Test {
 
         // Acknowledge with chainId=1
         _doAck(forwarder, ackChainId, incidentTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
-        // Try to register with chainId=10
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(wallet);
-
-        (uint8 v, bytes32 r, bytes32 s) =
-            _signReg(walletPrivateKey, wallet, forwarder, regChainId, incidentTimestamp, nonce, deadline);
+        // Try to register with chainId=10. The signature itself is valid (it commits to the same
+        // mismatched chainId that is submitted), so validation reaches the ack/register data
+        // comparison rather than failing earlier on the signer or the window block.
+        _prepareWalletRegSig(forwarder, regChainId, incidentTimestamp, windowBlock);
 
         uint256 fee = spoke.quoteRegistration(wallet);
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__DataMismatch.selector);
-        spoke.register{ value: fee }(wallet, forwarder, regChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(
+            wallet, forwarder, regChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
     }
 
     /// @notice Register rejects mismatched incidentTimestamp between ack and register
@@ -1331,20 +1374,19 @@ contract SpokeRegistryTest is Test {
 
         // Acknowledge with ackTimestamp
         _doAck(forwarder, reportedChainId, ackTimestamp);
-        _skipToRegistrationWindow();
+        uint256 windowBlock = _skipToRegistrationWindow();
 
-        // Try to register with different timestamp
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(wallet);
-
-        (uint8 v, bytes32 r, bytes32 s) =
-            _signReg(walletPrivateKey, wallet, forwarder, reportedChainId, regTimestamp, nonce, deadline);
+        // Try to register with different timestamp — signature is internally consistent, so the
+        // ack-vs-register comparison is what must reject it.
+        _prepareWalletRegSig(forwarder, reportedChainId, regTimestamp, windowBlock);
 
         uint256 fee = spoke.quoteRegistration(wallet);
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__DataMismatch.selector);
-        spoke.register{ value: fee }(wallet, forwarder, reportedChainId, regTimestamp, deadline, nonce, v, r, s);
+        spoke.register{ value: fee }(
+            wallet, forwarder, reportedChainId, regTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1517,5 +1559,176 @@ contract SpokeRegistryTest is Test {
         vm.prank(notOwner);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", notOwner));
         spoke.withdrawFees(makeAddr("treasury"), 1 ether);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WINDOW BLOCK (ANTI-PHISHING) TESTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice A window block older than the acknowledgement's grace start is rejected.
+    /// @dev This is the anti-phishing control itself. If a pre-grace block were accepted, both
+    ///      signatures could be harvested in one sitting: the attacker would reference a block
+    ///      that already existed at acknowledgement time, and the enforced delay would apply only
+    ///      to the transactions, not to the victim's two interactions.
+    function test_register_revertsIfWindowBlockBeforeGracePeriod() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        _doAck(forwarder, reportedChainId, incidentTimestamp);
+        uint256 graceStart = _skipToRegistrationWindow();
+
+        // One block too early — the hash of this block existed before the grace period elapsed.
+        uint256 windowBlock = graceStart - 1;
+        _prepareWalletRegSig(forwarder, reportedChainId, incidentTimestamp, windowBlock);
+
+        uint256 fee = spoke.quoteRegistration(wallet);
+
+        vm.prank(forwarder);
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockBeforeGracePeriod.selector);
+        spoke.register{ value: fee }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
+    }
+
+    /// @notice A window block at or beyond the current block is rejected.
+    /// @dev `blockhash` returns zero for an unmined block. Without this bound a signer could
+    ///      commit to bytes32(0) for a future block and satisfy the check with a hash nobody had
+    ///      to wait for.
+    function test_register_revertsIfWindowBlockNotMined() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        _doAck(forwarder, reportedChainId, incidentTimestamp);
+        _skipToRegistrationWindow();
+
+        // The current block is not yet mined from the EVM's point of view.
+        uint256 windowBlock = block.number;
+        _prepareWalletRegSig(forwarder, reportedChainId, incidentTimestamp, windowBlock);
+
+        uint256 fee = spoke.quoteRegistration(wallet);
+
+        vm.prank(forwarder);
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockNotMined.selector);
+        spoke.register{ value: fee }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
+    }
+
+    /// @notice Only the forwarder named in the signature may submit the acknowledgement.
+    /// @dev Hub parity. A third party able to submit someone else's acknowledgement could grind
+    ///      submissions for favourable randomized timing and burn the wallet's nonce, invalidating
+    ///      a registration signature the user had already produced.
+    function test_acknowledge_revertsIfSenderIsNotForwarder() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(wallet);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAck(walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
+
+        address thirdParty = makeAddr("thirdParty");
+        vm.deal(thirdParty, 1 ether);
+
+        vm.prank(thirdParty);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidForwarder.selector);
+        spoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+    }
+
+    /// @notice A deadline further out than MAX_SIGNATURE_LIFETIME is rejected in both phases.
+    /// @dev An unbounded deadline lets a harvested signature stay usable indefinitely, so it could
+    ///      be submitted months later when the victim has no memory of signing.
+    function test_acknowledge_revertsIfDeadlineTooFarInFuture() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+        uint256 deadline = block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME + 1;
+        uint256 nonce = spoke.nonces(wallet);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAck(walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__DeadlineTooFarInFuture.selector);
+        spoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HUB / SPOKE SIGNATURE UNIFICATION
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Hub and spoke must build the SAME registration struct hash and expose the SAME
+    ///         `register` ABI, so one frontend code path can serve both.
+    /// @dev The full EIP-712 digests necessarily differ in `verifyingContract` only — that field is
+    ///      what stops a spoke signature being replayed on the hub. Everything else must match:
+    ///      the domain name/version, the typehash (including the new trailing `windowBlockHash`
+    ///      field), the field order, and the external argument order. Any drift here silently
+    ///      breaks one of the two chains' signing paths.
+    function test_HubAndSpokeRegistrationDigestsAreUnified() public {
+        WalletRegistry hub = new WalletRegistry(owner, address(feeManager), GRACE_BLOCKS, DEADLINE_BLOCKS);
+
+        // The typehash the test signs with is the one both production contracts use.
+        assertEq(REG_TYPEHASH, EIP712Constants.WALLET_REG_TYPEHASH, "typehash drift");
+        assertEq(keccak256(bytes(REG_STATEMENT)), EIP712Constants.REG_STATEMENT_HASH, "statement drift");
+
+        // Identical inputs must produce an identical struct hash on both sides.
+        bytes32 structHash = keccak256(
+            abi.encode(
+                EIP712Constants.WALLET_REG_TYPEHASH,
+                EIP712Constants.REG_STATEMENT_HASH,
+                wallet,
+                forwarder,
+                uint64(1),
+                uint64(block.timestamp - 1 days),
+                uint256(0),
+                block.timestamp + 1 hours,
+                blockhash(block.number - 1)
+            )
+        );
+
+        // Same domain name and version on both contracts; only verifyingContract differs.
+        (, string memory hubName, string memory hubVersion,, address hubVerifying,,) = hub.eip712Domain();
+        (, string memory spokeName, string memory spokeVersion,, address spokeVerifying,,) = spoke.eip712Domain();
+        assertEq(hubName, spokeName, "domain name drift");
+        assertEq(hubVersion, spokeVersion, "domain version drift");
+        assertEq(hubVerifying, address(hub));
+        assertEq(spokeVerifying, address(spoke));
+
+        bytes32 hubDigest = keccak256(
+            abi.encodePacked("\x19\x01", _domainSeparatorFor(hubName, hubVersion, address(hub)), structHash)
+        );
+        bytes32 spokeDigest = keccak256(
+            abi.encodePacked("\x19\x01", _domainSeparatorFor(spokeName, spokeVersion, address(spoke)), structHash)
+        );
+
+        // Substituting the spoke's address into the hub's domain reproduces the spoke digest
+        // exactly, which is only possible if every other input matches.
+        assertEq(
+            spokeDigest,
+            keccak256(
+                abi.encodePacked("\x19\x01", _domainSeparatorFor(hubName, hubVersion, address(spoke)), structHash)
+            ),
+            "digest differs by more than verifyingContract"
+        );
+        assertTrue(hubDigest != spokeDigest, "cross-chain replay must remain impossible");
+
+        // The external ABI (argument order, including windowBlock's position) must also match.
+        assertEq(ISpokeRegistry.register.selector, IWalletRegistry.register.selector, "register ABI drift");
+    }
+
+    /// @dev EIP-712 domain separator for an arbitrary (name, version, contract) triple.
+    function _domainSeparatorFor(string memory name, string memory version, address verifying)
+        internal
+        view
+        returns (bytes32)
+    {
+        return keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                block.chainid,
+                verifying
+            )
+        );
     }
 }

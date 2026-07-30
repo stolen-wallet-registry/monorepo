@@ -61,8 +61,21 @@ library EIP712Constants {
     );
 
     /// @notice EIP-712 typehash for wallet registration phase
+    /// @dev `windowBlockHash` is the ANTI-PHISHING CONTROL. It is the hash of a block at or
+    ///      after the acknowledgement's `gracePeriodStart`, so this signature CANNOT be
+    ///      produced until the grace period has actually elapsed on-chain.
+    ///
+    ///      Without it, the grace period delayed only the *transaction*: a phishing page
+    ///      could collect the acknowledgement AND registration signatures seconds apart
+    ///      (signing `nonce` and `nonce + 1` — a nonce is just a struct field, so signing
+    ///      against one that does not exist yet is possible), then submit both itself with
+    ///      the victim long gone. The delay was respected, unattended, by the attacker.
+    ///
+    ///      Only the HASH is signed; the corresponding block number travels as unsigned
+    ///      calldata. The hash binds the number — a lied-about number fails the
+    ///      `blockhash()` comparison — so a second signed field would be redundant.
     bytes32 internal constant WALLET_REG_TYPEHASH = keccak256(
-        "Registration(string statement,address wallet,address trustedForwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline)"
+        "Registration(string statement,address wallet,address trustedForwarder,uint64 reportedChainId,uint64 incidentTimestamp,uint256 nonce,uint256 deadline,bytes32 windowBlockHash)"
     );
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -76,7 +89,9 @@ library EIP712Constants {
     );
 
     /// @notice EIP-712 typehash for transaction batch registration
+    /// @dev `windowBlockHash` carries the same anti-phishing guarantee as
+    ///      {WALLET_REG_TYPEHASH} — see that NatSpec for the full rationale.
     bytes32 internal constant TX_BATCH_REG_TYPEHASH = keccak256(
-        "TransactionBatchRegistration(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
+        "TransactionBatchRegistration(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline,bytes32 windowBlockHash)"
     );
 }

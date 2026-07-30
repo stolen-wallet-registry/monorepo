@@ -33,6 +33,14 @@ export const SignatureOverTheWireSchema = z
     reportedChainId: z.string().max(66).optional(), // bytes32 hex string
     /** Unix timestamp when incident occurred (0 = unknown) */
     incidentTimestamp: z.string().max(50).optional(), // BigInt as string
+    /**
+     * Registration only: block number whose hash the signature committed to (anti-phishing
+     * freshness control). Travels unsigned — the relayer submits it verbatim and the contract
+     * recomputes `blockhash(windowBlock)` to check it against the signed hash.
+     */
+    windowBlock: z.string().max(50).optional(), // BigInt as string
+    /** Registration only: `blockhash(windowBlock)`, the value actually signed. */
+    windowBlockHash: z.string().max(66).optional(), // bytes32 hex string
   })
   .strict();
 

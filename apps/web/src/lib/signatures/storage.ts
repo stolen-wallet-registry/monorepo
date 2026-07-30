@@ -2,9 +2,9 @@
 // Stores EIP-712 signatures in sessionStorage (clears on tab close for security)
 // NOTE: This file stays in web app (browser-specific, uses sessionStorage)
 
-import { isHex, isAddress } from 'viem';
+import { isHex, isAddress, size } from 'viem';
 import { SIGNATURE_STEP, type SignatureStep } from '@swr/signatures';
-import type { Address, Hex } from '@/lib/types/ethereum';
+import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 /** Signature session TTL in milliseconds (30 minutes) */
 export const SIGNATURE_TTL_MS = 30 * 60 * 1000;
@@ -41,6 +41,25 @@ export interface StoredSignature {
   reportedChainId?: bigint;
   /** Unix timestamp when incident occurred */
   incidentTimestamp?: bigint;
+  /**
+   * Block number whose hash the REGISTRATION signature committed to (anti-phishing control).
+   *
+   * The signature covers `blockhash(windowBlock)`, not the number, so the pay step MUST submit
+   * this exact number — the contract recomputes the hash from it and compares. Persisted here
+   * for the same reason as `trustedForwarder`: signing and submitting happen in different
+   * components, and a re-derived value would not match what was signed.
+   *
+   * Undefined for acknowledgement signatures, which carry no freshness commitment.
+   */
+  windowBlock?: bigint;
+  /**
+   * `blockhash(windowBlock)` — the value actually inside the signed struct.
+   *
+   * Not needed to submit (the contract recomputes it), but a relayer re-verifying a signature
+   * it received over P2P must rebuild the same digest, and the chain may already have moved
+   * past this block by the time it looks. Undefined for acknowledgement signatures.
+   */
+  windowBlockHash?: Hash;
 }
 
 // Serializable version for sessionStorage
@@ -56,6 +75,8 @@ interface SerializedSignature {
   trustedForwarder?: string;
   reportedChainId?: string;
   incidentTimestamp?: string;
+  windowBlock?: string;
+  windowBlockHash?: string;
 }
 
 // Store a signature
@@ -73,6 +94,8 @@ export function storeSignature(sig: StoredSignature): void {
     trustedForwarder: sig.trustedForwarder,
     reportedChainId: sig.reportedChainId?.toString(),
     incidentTimestamp: sig.incidentTimestamp?.toString(),
+    windowBlock: sig.windowBlock?.toString(),
+    windowBlockHash: sig.windowBlockHash,
   };
   sessionStorage.setItem(key, JSON.stringify(serialized));
 }
@@ -156,6 +179,32 @@ export function getSignature(
       }
     }
 
+    // The pay step submits this number verbatim as calldata, so a corrupted value produces an
+    // opaque on-chain revert. Block 0 has no usable hash, so treat it as corruption too.
+    let windowBlock: bigint | undefined;
+
+    if (parsed.windowBlock !== undefined) {
+      try {
+        windowBlock = BigInt(parsed.windowBlock);
+        if (windowBlock <= 0n) {
+          sessionStorage.removeItem(key);
+          return null;
+        }
+      } catch {
+        sessionStorage.removeItem(key);
+        return null;
+      }
+    }
+
+    // A bytes32 that is not 32 bytes cannot be the value that was signed.
+    if (
+      parsed.windowBlockHash !== undefined &&
+      !(isHex(parsed.windowBlockHash, { strict: true }) && size(parsed.windowBlockHash) === 32)
+    ) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+
     // strict:false — the forwarder may have been stored lowercased (form input, P2P payload)
     // rather than checksummed, and rejecting it on casing alone would silently force a
     // needless re-sign. Comparison below is case-insensitive for the same reason.
@@ -187,6 +236,8 @@ export function getSignature(
       trustedForwarder,
       reportedChainId,
       incidentTimestamp,
+      windowBlock,
+      windowBlockHash: parsed.windowBlockHash as Hash | undefined,
     };
 
     return signature;

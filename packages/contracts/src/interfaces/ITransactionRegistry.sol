@@ -71,6 +71,9 @@ interface ITransactionRegistry {
     error TransactionRegistry__AlreadyAcknowledged();
     error TransactionRegistry__NotAcknowledged();
     error TransactionRegistry__DeadlineExpired();
+    /// @notice Signature deadline exceeds {TimingConfig.MAX_SIGNATURE_LIFETIME}
+    /// @dev Blocks a hostile frontend from minting effectively non-expiring signatures.
+    error TransactionRegistry__DeadlineTooFarInFuture();
     error TransactionRegistry__DeadlineInPast();
     error TransactionRegistry__GracePeriodNotStarted();
     error TransactionRegistry__InvalidSignature();
@@ -204,6 +207,10 @@ interface ITransactionRegistry {
     /// @param deadline Block number deadline for the signature
     /// @param transactionHashes Array of transaction hashes to register
     /// @param chainIds Array of CAIP-2 chain ID hashes for each transaction
+    /// @param windowBlock Block whose hash the signer committed to. NOT part of the signed
+    ///        struct — the signed `windowBlockHash` binds it. Must satisfy
+    ///        `gracePeriodStart <= windowBlock < block.number` and be within
+    ///        {TimingConfig.MAX_WINDOW_BLOCK_AGE}; proves the signature post-dates the grace period.
     /// @param v EIP-712 signature v component
     /// @param r EIP-712 signature r component
     /// @param s EIP-712 signature s component
@@ -212,6 +219,7 @@ interface ITransactionRegistry {
         uint256 deadline,
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds,
+        uint256 windowBlock,
         uint8 v,
         bytes32 r,
         bytes32 s

@@ -56,6 +56,7 @@ import {
   useTransactionAcknowledgementHashStruct,
   useTransactionRegistrationHashStruct,
   useTxContractNonce,
+  useTxContractDeadlines,
   useTxCrossChainConfirmation,
   needsTxCrossChainConfirmation,
 } from '@/hooks/transactions';
@@ -407,6 +408,10 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
     forwarder ?? undefined
   );
 
+  // The registration signature commits to the hash of a block at or after the acknowledgement's
+  // grace-period start; passing the start block lets the signer refuse early.
+  const { data: ackDeadlines } = useTxContractDeadlines(address);
+
   const {
     signTxRegistration,
     isPending: isSigning,
@@ -443,7 +448,11 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
       }
 
       // Sign
-      const sig = await signTxRegistration({
+      const {
+        signature: sig,
+        windowBlock,
+        windowBlockHash,
+      } = await signTxRegistration({
         reporter: address,
         dataHash,
         reportedChainId: reportedChainIdHash,
@@ -451,6 +460,7 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
         trustedForwarder: forwarder,
         nonce: freshNonce,
         deadline: freshDeadline,
+        gracePeriodStart: ackDeadlines?.start,
       });
 
       setSignature(sig);
@@ -470,6 +480,10 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
             nonce: freshNonce.toString(),
             address,
             chainId,
+            // The relayer cannot re-derive these: it must submit this exact block number and
+            // rebuild the digest from this exact hash to verify the signature before paying.
+            windowBlock: windowBlock.toString(),
+            windowBlockHash,
           },
           transactionBatch: {
             dataHash,
@@ -498,6 +512,7 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
     refetchNonce,
     refetchHashStruct,
     signTxRegistration,
+    ackDeadlines,
     resetSigning,
     selectedTxHashes.length,
     txHashesForContract,

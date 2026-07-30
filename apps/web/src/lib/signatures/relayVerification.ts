@@ -126,6 +126,12 @@ export interface RecoverWalletSignatureInput {
   incidentTimestamp: bigint;
   nonce: bigint;
   deadline: bigint;
+  /**
+   * Registration only: `blockhash(windowBlock)` the signature committed to. Part of the signed
+   * struct, so recovery without it produces a different digest and a bogus signer. Required
+   * whenever `step` is REGISTRATION.
+   */
+  windowBlockHash?: Hash;
 }
 
 /**
@@ -149,6 +155,7 @@ export async function recoverWalletSignatureSigner(
     incidentTimestamp,
     nonce,
     deadline,
+    windowBlockHash,
   } = input;
 
   const message = {
@@ -160,10 +167,25 @@ export async function recoverWalletSignatureSigner(
     deadline,
   };
 
-  const typedData =
-    step === SIGNATURE_STEP.ACKNOWLEDGEMENT
-      ? buildAcknowledgementTypedData(chainId, verifyingContract, isHub, message)
-      : buildRegistrationTypedData(chainId, verifyingContract, isHub, message);
+  let typedData;
+  if (step === SIGNATURE_STEP.ACKNOWLEDGEMENT) {
+    typedData = buildAcknowledgementTypedData(chainId, verifyingContract, isHub, message);
+  } else {
+    if (!windowBlockHash) {
+      // Returning null rather than guessing: without the committed hash the digest is a
+      // different message, and "recovered someone else" reads as fraud rather than as the
+      // missing field it is.
+      logger.signature.warn('Cannot verify relayed registration signature: no windowBlockHash', {
+        chainId,
+        verifyingContract,
+      });
+      return null;
+    }
+    typedData = buildRegistrationTypedData(chainId, verifyingContract, isHub, {
+      ...message,
+      windowBlockHash,
+    });
+  }
 
   try {
     const recovered = await recoverTypedDataAddress({ ...typedData, signature });
@@ -192,6 +214,8 @@ export interface RecoverTxSignatureInput {
   transactionCount: number;
   nonce: bigint;
   deadline: bigint;
+  /** Registration only — see {@link RecoverWalletSignatureInput.windowBlockHash}. */
+  windowBlockHash?: Hash;
 }
 
 /**
@@ -216,6 +240,7 @@ export async function recoverTxSignatureSigner(
     transactionCount,
     nonce,
     deadline,
+    windowBlockHash,
   } = input;
 
   const message = {
@@ -228,10 +253,22 @@ export async function recoverTxSignatureSigner(
     deadline,
   };
 
-  const typedData =
-    step === TX_SIGNATURE_STEP.ACKNOWLEDGEMENT
-      ? buildTxAcknowledgementTypedData(chainId, verifyingContract, isHub, message)
-      : buildTxRegistrationTypedData(chainId, verifyingContract, isHub, message);
+  let typedData;
+  if (step === TX_SIGNATURE_STEP.ACKNOWLEDGEMENT) {
+    typedData = buildTxAcknowledgementTypedData(chainId, verifyingContract, isHub, message);
+  } else {
+    if (!windowBlockHash) {
+      logger.signature.warn('Cannot verify relayed transaction signature: no windowBlockHash', {
+        chainId,
+        verifyingContract,
+      });
+      return null;
+    }
+    typedData = buildTxRegistrationTypedData(chainId, verifyingContract, isHub, {
+      ...message,
+      windowBlockHash,
+    });
+  }
 
   try {
     const recovered = await recoverTypedDataAddress({ ...typedData, signature });

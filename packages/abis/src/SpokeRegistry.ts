@@ -903,6 +903,11 @@ export const SpokeRegistryABI = [
         internalType: 'uint256',
       },
       {
+        name: 'windowBlock',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
         name: 'v',
         type: 'uint8',
         internalType: 'uint8',
@@ -1382,6 +1387,11 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'error',
+    name: 'SpokeRegistry__DeadlineTooFarInFuture',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'SpokeRegistry__EmptyBatch',
     inputs: [],
   },
@@ -1499,6 +1509,21 @@ export const SpokeRegistryABI = [
   {
     type: 'error',
     name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockBeforeGracePeriod',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockNotMined',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimingConfig__WindowBlockTooOld',
     inputs: [],
   },
 ] as const;

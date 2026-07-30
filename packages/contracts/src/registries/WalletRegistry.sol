@@ -209,6 +209,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
         uint64 incidentTimestamp,
         uint256 nonce,
         uint256 deadline,
+        bytes32 windowBlockHash,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -223,7 +224,8 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
                     reportedChainId,
                     incidentTimestamp,
                     nonce,
-                    deadline
+                    deadline,
+                    windowBlockHash
                 )
             )
         );
@@ -407,7 +409,16 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
     ) external {
         if (registeree == address(0)) revert WalletRegistry__ZeroAddress();
         if (trustedForwarder == address(0)) revert WalletRegistry__ZeroAddress();
+        // Only the forwarder named in the signature may open the window. All three flows
+        // already satisfy this (standard: self; self-relay: the gas wallet; P2P: the relayer),
+        // and requiring it closes two holes: a third party could otherwise grind their own
+        // address to steer the "randomized" timing, and could burn a victim's nonce to grief
+        // them. `register` already demands `msg.sender == trustedForwarder`.
+        if (msg.sender != trustedForwarder) revert WalletRegistry__InvalidForwarder();
         if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
+        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+            revert WalletRegistry__DeadlineTooFarInFuture();
+        }
         // 0 means "unknown" and is allowed; a future incident is not physically possible and
         // would permanently poison time-based analytics for every downstream consumer.
         if (incidentTimestamp > block.timestamp) revert WalletRegistry__InvalidIncidentTimestamp();
@@ -464,12 +475,16 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
         uint64 incidentTimestamp,
         uint256 deadline, // EIP-712 signature expiry (timestamp, compared to block.timestamp)
         uint256 nonce,
+        uint256 windowBlock, // Block whose hash the signature commits to (NOT signed — see below)
         uint8 v,
         bytes32 r,
         bytes32 s
     ) external payable {
         if (registeree == address(0)) revert WalletRegistry__ZeroAddress();
         if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
+        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+            revert WalletRegistry__DeadlineTooFarInFuture();
+        }
 
         // Load and validate acknowledgement (ack.deadline and ack.gracePeriodStart are BLOCK NUMBERS)
         AcknowledgementData memory ack = _pendingAcknowledgements[registeree];
@@ -488,8 +503,18 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
         // Validate nonce matches expected value (fail-fast before signature verification)
         if (nonce != nonces[registeree]) revert WalletRegistry__InvalidNonce();
 
+        // ANTI-PHISHING: the signature must commit to the hash of a block at or after the
+        // grace period started. That block — and therefore its hash — did not exist when the
+        // acknowledgement was signed, so this signature CANNOT have been produced in the same
+        // sitting as the acknowledgement. Without this, a phishing page could collect both
+        // signatures seconds apart and submit them itself once the delay had quietly elapsed.
+        // Reverts if the reference is too early, unmined, or aged out of `blockhash` range.
+        bytes32 windowBlockHash = TimingConfig.resolveWindowBlockHash(windowBlock, ack.gracePeriodStart);
+
         // Verify EIP-712 signature (uses trustedForwarder param — must match msg.sender for sig to be valid)
-        _verifyRegSignature(registeree, trustedForwarder, reportedChainId, incidentTimestamp, nonce, deadline, v, r, s);
+        _verifyRegSignature(
+            registeree, trustedForwarder, reportedChainId, incidentTimestamp, nonce, deadline, windowBlockHash, v, r, s
+        );
 
         // Revert if wallet was registered by another path (cross-chain/operator) during grace period
         bytes32 key = CAIP10Evm.evmWalletKey(registeree);

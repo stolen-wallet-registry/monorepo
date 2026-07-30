@@ -27,6 +27,12 @@ export {
 } from './storage';
 
 export {
+  resolveWindowBlock,
+  WINDOW_BLOCK_HISTORY_LIMIT,
+  type WindowBlockCommitment,
+} from './windowBlock';
+
+export {
   parseSignature,
   isSignatureExpired,
   isWithinRegistrationWindow,
