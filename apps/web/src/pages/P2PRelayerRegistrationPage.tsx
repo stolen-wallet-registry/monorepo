@@ -51,7 +51,7 @@ import {
 } from '@/lib/p2p';
 import { storeSignature, SIGNATURE_STEP, type StoredSignature } from '@/lib/signatures';
 import { logger } from '@/lib/logger';
-import type { Hex } from '@/lib/types/ethereum';
+import type { Address, Hex } from '@/lib/types/ethereum';
 
 /**
  * Process a received signature: validate, store, confirm receipt, and advance step.
@@ -84,6 +84,11 @@ async function processSignature(
       chainId: sig.chainId,
       step,
       storedAt: Date.now(),
+      // The registeree signed over this relayer as the forwarder, so record it. `getSignature`
+      // treats a missing trustedForwarder as a mismatch when a forwarder is expected, and the
+      // pay steps always pass one — without this the relayer could never retrieve what it just
+      // stored.
+      trustedForwarder,
       reportedChainId: sig.reportedChainId != null ? BigInt(sig.reportedChainId) : undefined,
       incidentTimestamp: sig.incidentTimestamp != null ? BigInt(sig.incidentTimestamp) : undefined,
     };
@@ -277,6 +282,7 @@ export function P2PRelayerRegistrationPage() {
                     chainIdRef.current,
                     SIGNATURE_STEP.ACKNOWLEDGEMENT,
                     PROTOCOLS.ACK_REC,
+                    address,
                     goToNextStepRef.current
                   );
                   break;
@@ -289,6 +295,7 @@ export function P2PRelayerRegistrationPage() {
                     chainIdRef.current,
                     SIGNATURE_STEP.REGISTRATION,
                     PROTOCOLS.REG_REC,
+                    address,
                     goToNextStepRef.current
                   );
                   break;

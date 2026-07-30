@@ -1,10 +1,10 @@
 /**
  * Hook to check if the P2P relay server is actually reachable.
  *
- * Unlike `isP2PAvailable()` which only checks config, this performs a
- * lightweight WebSocket handshake to the relay server. The relay is a
- * libp2p WebSocket server, so a successful WS open proves it's running.
- * A connection error or timeout means it's unreachable.
+ * Rather than just reading config, this performs a lightweight WebSocket
+ * handshake against the relay server. The relay is a libp2p WebSocket
+ * server, so a successful WS open proves it's running. A connection error
+ * or timeout means it's unreachable.
  *
  * Uses WebSocket instead of fetch to avoid browser console noise —
  * fetch to a WS server returns HTTP 400 which the browser logs as an error.
@@ -61,7 +61,16 @@ function probeRelay(wsUrl: string, timeoutMs: number): Promise<boolean> {
       resolve(result);
     };
 
-    const ws = new WebSocket(wsUrl);
+    // The constructor itself can throw synchronously — a SecurityError for a `ws://` URL on
+    // an HTTPS page, or a SyntaxError for a malformed one. Unhandled, that rejects the
+    // promise and leaves the caller's `isChecking` stuck true, i.e. a permanent spinner.
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch {
+      settle(false);
+      return;
+    }
 
     const timeout = setTimeout(() => {
       ws.close();

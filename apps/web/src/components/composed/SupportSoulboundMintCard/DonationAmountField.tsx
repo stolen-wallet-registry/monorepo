@@ -5,6 +5,7 @@
  * so this component only renders the two-way-bound fields it is given.
  */
 
+import { useId } from 'react';
 import { Button, Input, Label } from '@swr/ui';
 import { formatEther } from 'viem';
 
@@ -40,10 +41,14 @@ export function DonationAmountField({
   showMinimumWarning,
   minWei,
 }: DonationAmountFieldProps) {
+  // The ETH/USD suffixes are decorative spans, so without these the two fields reach a
+  // screen reader as a pair of unnamed textboxes.
+  const ethInputId = useId();
+
   return (
     <div className="space-y-3">
       <div>
-        <Label>Donation Amount</Label>
+        <Label htmlFor={ethInputId}>Donation Amount</Label>
         <p className="text-xs text-muted-foreground mt-1">Enter any amount you'd like to donate</p>
       </div>
 
@@ -51,6 +56,7 @@ export function DonationAmountField({
       <div className="grid grid-cols-2 gap-3">
         <div className="relative">
           <Input
+            id={ethInputId}
             type="text"
             inputMode="decimal"
             value={ethInput}
@@ -70,6 +76,7 @@ export function DonationAmountField({
           <Input
             type="text"
             inputMode="decimal"
+            aria-label="Donation amount in USD"
             value={usdInput}
             onChange={onUsdChange}
             disabled={isMinting || !ethPrice}

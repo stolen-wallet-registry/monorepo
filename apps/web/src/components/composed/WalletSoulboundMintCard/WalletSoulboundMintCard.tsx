@@ -18,7 +18,6 @@ import { getExplorerTxUrl } from '@/components/composed/ExplorerLink';
 import { SoulboundPreviewModal } from '@/components/composed/SoulboundPreviewModal';
 import { MintedTokenDisplay } from '@/components/composed/MintedTokenDisplay';
 import { CrossChainMintStatusCard } from '@/components/composed/soulbound-mint/CrossChainMintStatusCard';
-import { useMemo } from 'react';
 import { WalletMintActions } from './WalletMintActions';
 import { WalletAlreadyMintedCard, WalletMintSuccessCard } from './WalletMintedCard';
 import { useWalletMintFlow } from './useWalletMintFlow';
@@ -103,58 +102,35 @@ export function WalletSoulboundMintCard({
     handleReset,
   } = useWalletMintFlow(wallet, onSuccess);
 
-  // Group the flow state into stable objects - inline literals would be new on every
-  // render and defeat memoisation downstream.
-  const chain = useMemo(
-    () => ({ hubChainName, currentChainName, isOnHubChain, isOnSpokeChain }),
-    [hubChainName, currentChainName, isOnHubChain, isOnSpokeChain]
-  );
-  const hubMint = useMemo(
-    () => ({ isPending, isConfirming, isMinting, isError, error }),
-    [isPending, isConfirming, isMinting, isError, error]
-  );
-  const crossChainMint = useMemo(
-    () => ({
-      isPending: isCrossChainPending,
-      isConfirming: isCrossChainConfirming,
-      isMinting: isCrossChainMinting,
-      isError: isCrossChainError,
-      error: crossChainError,
-    }),
-    [
-      isCrossChainPending,
-      isCrossChainConfirming,
-      isCrossChainMinting,
-      isCrossChainError,
-      crossChainError,
-    ]
-  );
-  const cost = useMemo(
-    () => ({
-      fee: crossChainFee,
-      isLoadingFee,
-      isFeeError,
-      feeError,
-      gas: gasEstimate,
-      isLoadingGas,
-      ethPrice,
-    }),
-    [crossChainFee, isLoadingFee, isFeeError, feeError, gasEstimate, isLoadingGas, ethPrice]
-  );
+  // Grouped purely to keep WalletMintActions' prop list readable. Deliberately NOT memoized:
+  // WalletMintActions is a plain function component, so it re-renders with this one no matter
+  // how stable these references are.
+  const chain = { hubChainName, currentChainName, isOnHubChain, isOnSpokeChain };
+  const hubMint = { isPending, isConfirming, isMinting, isError, error };
+  const crossChainMint = {
+    isPending: isCrossChainPending,
+    isConfirming: isCrossChainConfirming,
+    isMinting: isCrossChainMinting,
+    isError: isCrossChainError,
+    error: crossChainError,
+  };
+  const cost = {
+    fee: crossChainFee,
+    isLoadingFee,
+    isFeeError,
+    feeError,
+    gas: gasEstimate,
+    isLoadingGas,
+    ethPrice,
+  };
 
-  // Already minted state - show the minted NFT
-  if (hasMinted && !isLoading) {
-    return (
-      <WalletAlreadyMintedCard
-        className={className}
-        contractAddress={walletSoulboundAddress}
-        tokenId={tokenId}
-        isLoadingTokenId={isLoadingTokenId}
-      />
-    );
-  }
-
-  // Cross-chain mint confirmation state (message dispatched, waiting for hub mint)
+  // Cross-chain mint confirmation state (message dispatched, waiting for hub mint).
+  //
+  // Checked BEFORE the already-minted branch, matching SupportSoulboundMintCard. The flow
+  // refetches hasMinted as soon as the hub mint lands, so with the other ordering a user
+  // watching their cross-chain mint was yanked out of this status card — losing the
+  // Hyperlane link and the Done button — into the generic "already minted" card the instant
+  // it succeeded.
   if (isCrossChainConfirmed && crossChainHash) {
     const isConfirmedOnHub = isMintedOnHub || confirmationStatus === 'confirmed';
     const isPolling = confirmationStatus === 'polling' || confirmationStatus === 'waiting';
@@ -190,6 +166,18 @@ export function WalletSoulboundMintCard({
         footerNote={`The Hyperlane relayer will deliver your mint request to ${hubChainName}. You can check back in a few minutes to see your minted token.`}
         resetLabel={isConfirmedOnHub ? 'Done' : 'Close'}
         onReset={handleReset}
+      />
+    );
+  }
+
+  // Already minted state - show the minted NFT
+  if (hasMinted && !isLoading) {
+    return (
+      <WalletAlreadyMintedCard
+        className={className}
+        contractAddress={walletSoulboundAddress}
+        tokenId={tokenId}
+        isLoadingTokenId={isLoadingTokenId}
       />
     );
   }

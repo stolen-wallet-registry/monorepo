@@ -66,6 +66,11 @@ export function isTransactionHash(value: string): boolean {
 
 /**
  * Check if a string is a valid CAIP-10 identifier.
+ *
+ * The chain reference may be `*`. A wallet marked stolen is stolen on every EVM chain, so
+ * the registry stores eip155 wallets under a wildcard key (`CAIP10.walletKey`) and the
+ * indexer and UI both surface `eip155:*:0x…`. Rejecting the wildcard here meant a user who
+ * copied the identifier the app had just shown them got "invalid input".
  */
 export function isCAIP10(value: string): boolean {
   const [namespace, chainId, address] = value.toLowerCase().split(':');
@@ -73,9 +78,29 @@ export function isCAIP10(value: string): boolean {
     namespace === 'eip155' &&
     chainId !== undefined &&
     address !== undefined &&
-    /^\d+$/.test(chainId) &&
+    (/^\d+$/.test(chainId) || chainId === EVM_WILDCARD_CHAIN_REF) &&
     /^0x[0-9a-f]{40}$/.test(address)
   );
+}
+
+/** Chain reference used by eip155 wallet keys, which are chain-agnostic. */
+export const EVM_WILDCARD_CHAIN_REF = '*';
+
+/**
+ * Parse an eip155 CAIP-10 whose chain reference is the wildcard `*`.
+ *
+ * Kept separate from {@link parseCAIP10} because that returns a numeric chainId and a
+ * wildcard has no numeric form.
+ *
+ * @returns The address, or null if this is not a wildcard eip155 identifier
+ */
+export function parseWildcardCAIP10(value: string): { address: string } | null {
+  const parts = value.trim().split(':');
+  if (parts.length !== 3) return null;
+  const [namespace, chainId, address] = parts;
+  if (namespace?.toLowerCase() !== 'eip155' || chainId !== EVM_WILDCARD_CHAIN_REF) return null;
+  if (!address || !isAddress(address)) return null;
+  return { address };
 }
 
 /**

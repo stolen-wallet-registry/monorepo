@@ -69,16 +69,6 @@ export function truncateToAddress(identifier: Hex): Address {
 }
 
 /**
- * `OperatorSubmitter._getOperatorId()` returns `bytes32(uint256(uint160(msg.sender)))`,
- * so the operator address is recoverable from the event's `operatorId` — which is the
- * authoritative submitter, unlike `event.transaction.from` (wrong for any batch relayed
- * through a multisig, AA account, or relayer).
- */
-export function operatorIdToAddress(operatorId: Hex): Address | null {
-  return identifierToAddress(operatorId);
-}
-
-/**
  * CAIP-2 wildcard chain reference used by `CAIP10.walletKey` for eip155.
  * A wallet marked stolen is stolen on EVERY EVM chain, so the canonical identifier for
  * an EVM wallet must not pin one chain.

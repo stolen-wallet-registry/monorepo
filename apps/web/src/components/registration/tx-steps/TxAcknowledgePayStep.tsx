@@ -44,8 +44,8 @@ import { parseSignature } from '@/lib/signatures';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { getExplorerTxUrl } from '@/lib/explorer';
-import { useQueryClient } from '@tanstack/react-query';
-import { invalidateRegistryQueries } from '@/lib/contracts/queryKeys';
+import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
+import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -199,15 +199,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
     enabled: !!storedSignature && !!dataHash && !!reportedChainIdHash && isCorrectWallet && !hash, // Stop polling once tx is submitted
   });
 
-  // Refresh every registry-derived cache the moment the transaction confirms. Without this
-  // the nonce, deadlines and registration status keep serving pre-transaction values to the
-  // next step — the root cause of the stale-nonce bugs that sign-time refetches only papered
-  // over. Broad by design: after a confirmation, all of those reads are suspect.
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    if (!isConfirmed || !hash) return;
-    invalidateRegistryQueries(queryClient, { step: 'transaction-acknowledgement', hash });
-  }, [isConfirmed, hash, queryClient]);
+  useInvalidateRegistryOnConfirm('transaction-acknowledgement', hash, isConfirmed);
 
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
@@ -573,15 +565,7 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         />
       )}
 
-      {/* A signature-invalidating revert cannot be retried — say so before they press it */}
-      {needsResign && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            This signature can no longer be used. Retry will take you back to sign a new one.
-          </AlertDescription>
-        </Alert>
-      )}
+      {needsResign && <SignatureInvalidatedAlert />}
 
       {/* P2P relay: review before you pay */}
       {isP2PRelayed && storedSignature && (

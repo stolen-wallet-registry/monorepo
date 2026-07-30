@@ -56,8 +56,8 @@ import {
   getBridgeMessageByIdUrl,
 } from '@/lib/explorer';
 import { extractBridgeMessageId } from '@/lib/bridge/messageId';
-import { useQueryClient } from '@tanstack/react-query';
-import { invalidateRegistryQueries } from '@/lib/contracts/queryKeys';
+import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
+import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage, formatEthConsistent, formatCentsToUsd } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -283,15 +283,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
     return 'idle';
   };
 
-  // Refresh every registry-derived cache the moment the transaction confirms. Without this
-  // the nonce, deadlines and registration status keep serving pre-transaction values to the
-  // next step — the root cause of the stale-nonce bugs that sign-time refetches only papered
-  // over. Broad by design: after a confirmation, all of those reads are suspect.
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    if (!isConfirmed || !hash) return;
-    invalidateRegistryQueries(queryClient, { step: 'transaction-registration', hash });
-  }, [isConfirmed, hash, queryClient]);
+  useInvalidateRegistryOnConfirm('transaction-registration', hash, isConfirmed);
 
   // Build cross-chain progress data for UI
   // Include both 'relaying' and 'hub-timeout' so the explorer link stays visible during timeout
@@ -709,17 +701,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         />
       )}
 
-      {/* A signature-invalidating revert cannot be retried — say so before they press it */}
-      {needsResign && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            {windowClosed
-              ? 'The registration window has closed. Retry will restart the process from the acknowledgement step.'
-              : 'This signature can no longer be used. Retry will take you back to sign a new one.'}
-          </AlertDescription>
-        </Alert>
-      )}
+      {needsResign && <SignatureInvalidatedAlert windowClosed={windowClosed} />}
 
       {/* P2P relay: review before you pay */}
       {isP2PRelayed && storedSignatureState && (

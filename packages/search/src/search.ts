@@ -7,7 +7,7 @@
 
 import { request } from 'graphql-request';
 import { getCAIP2ChainName } from '@swr/chains';
-import { detectSearchType, parseCAIP10 } from './detect';
+import { detectSearchType, parseCAIP10, parseWildcardCAIP10 } from './detect';
 import {
   WALLET_QUERY,
   WALLET_BY_CAIP10_QUERY,
@@ -110,6 +110,13 @@ export async function searchWalletByCAIP10(
   // the matching wildcard form. An exact string match on "eip155:1:0x…" would therefore
   // report "not found" for a wallet that IS registered, so normalize any eip155 CAIP-10 to
   // a plain address lookup regardless of the chain the user typed.
+  // The wildcard form (`eip155:*:0x…`) is what the registry stores and the UI displays, so
+  // it must resolve too — parseCAIP10 cannot represent it because it returns a numeric chainId.
+  const wildcard = parseWildcardCAIP10(caip10);
+  if (wildcard) {
+    return searchWallet(config, wildcard.address);
+  }
+
   const evm = parseCAIP10(caip10);
   if (evm && evm.namespace === 'eip155') {
     return searchWallet(config, evm.address);

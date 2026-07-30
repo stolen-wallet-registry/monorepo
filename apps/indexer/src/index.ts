@@ -25,11 +25,10 @@ import {
   type Environment,
 } from '@swr/chains';
 import { type Address, type Hex } from 'viem';
-import { eq } from 'ponder';
+import { and, eq, isNull } from 'ponder';
 import {
   identifierToAddress,
   normalizeIdentifier,
-  operatorIdToAddress,
   truncateToAddress,
   walletCaip10,
 } from './lib/identifiers';
@@ -57,7 +56,7 @@ const HUB_CHAIN_ID = HUB_CHAIN_IDS[PONDER_ENV];
  * (should not happen today, but the column is notNull).
  */
 function resolveOperator(operatorId: Hex, txFrom: Address): Address {
-  return operatorIdToAddress(operatorId) ?? (txFrom.toLowerCase() as Address);
+  return identifierToAddress(operatorId) ?? (txFrom.toLowerCase() as Address);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -263,10 +262,16 @@ ponder.on('WalletRegistry:BatchCreated', async ({ event, context }) => {
   // Raw SQL is required because the write is keyed on transactionHash, not the primary key.
   // Ponder flushes + invalidates its indexing cache before a non-SELECT db.sql statement,
   // so the rows inserted earlier in this same tx are visible and are not clobbered later.
+  //
+  // The isNull guard makes the one-call-per-tx assumption safe rather than merely true
+  // today: should a tx ever carry two batches (e.g. batched bridge delivery), the second
+  // BatchCreated would otherwise re-tag the first batch's entries with its own id.
   await db.sql
     .update(stolenWallet)
     .set({ batchId: batchIdStr, operator: operatorAddress })
-    .where(eq(stolenWallet.transactionHash, event.transaction.hash));
+    .where(
+      and(eq(stolenWallet.transactionHash, event.transaction.hash), isNull(stolenWallet.batchId))
+    );
 
   await updateGlobalStats(db, { totalWalletBatches: 1 }, event.block.timestamp);
 });
@@ -367,11 +372,16 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
     .onConflictDoNothing();
 
   // Back-fill batchId onto the per-entry rows (TransactionRegistered carries none).
-  // See the wallet BatchCreated handler for why raw SQL is safe here.
+  // See the wallet BatchCreated handler for why raw SQL is safe and why the isNull guard.
   await db.sql
     .update(transactionInBatch)
     .set({ batchId: batchId.toString() })
-    .where(eq(transactionInBatch.transactionHash, event.transaction.hash));
+    .where(
+      and(
+        eq(transactionInBatch.transactionHash, event.transaction.hash),
+        isNull(transactionInBatch.batchId)
+      )
+    );
 
   // Mark pending ack as registered
   const reporterAddr = reporter.toLowerCase() as Address;
@@ -461,7 +471,12 @@ ponder.on('TransactionRegistry:TransactionBatchCreated', async ({ event, context
   await db.sql
     .update(transactionInBatch)
     .set({ batchId: batchIdStr })
-    .where(eq(transactionInBatch.transactionHash, event.transaction.hash));
+    .where(
+      and(
+        eq(transactionInBatch.transactionHash, event.transaction.hash),
+        isNull(transactionInBatch.batchId)
+      )
+    );
 
   await updateGlobalStats(
     db,

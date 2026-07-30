@@ -127,8 +127,6 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
    */
   const isExpired = hasBlockData && currentBlock >= targetBlock;
 
-  const isRunning = !isPaused && totalMs > 0 && !isExpired;
-
   /**
    * Sticky until either the block arrives (isExpired) or a new deadline is
    * issued (targetBlock no longer matches the latch). Deliberately NOT
@@ -138,6 +136,15 @@ export function useCountdownTimer(options: UseCountdownTimerOptions): UseCountdo
    */
   const isWaitingForBlock =
     !isExpired && waitingForTarget !== null && waitingForTarget === targetBlock;
+
+  /**
+   * The latch is part of this, not just of `isWaitingForBlock`. Without it the
+   * re-sync effect's next non-zero estimate flips `isRunning` back to true and
+   * the display resumes counting down after it had already hit zero — the exact
+   * behaviour the latch above exists to prevent. (Consumers were shielded only
+   * because `getGracePeriodStatus` happens to test `isWaitingForBlock` first.)
+   */
+  const isRunning = !isPaused && totalMs > 0 && !isExpired && !isWaitingForBlock;
 
   // ── Effects ───────────────────────────────────────────────────────────────
 

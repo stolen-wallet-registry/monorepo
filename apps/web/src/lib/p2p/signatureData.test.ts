@@ -7,6 +7,8 @@ const ADDRESS = `0x${'a'.repeat(40)}`;
 const SIG = `0x${'b'.repeat(130)}`;
 const BYTES32 = `0x${'c'.repeat(64)}`;
 
+// Mirrors exactly what useP2PSignFlow puts on the wire, including the extended fields —
+// reportedChainId as a DECIMAL chain ID (the contracts take uint64), not a bytes32 hash.
 function walletMessage(overrides: Record<string, unknown> = {}): ParsedStreamData {
   return {
     signature: {
@@ -16,6 +18,8 @@ function walletMessage(overrides: Record<string, unknown> = {}): ParsedStreamDat
       value: SIG,
       deadline: '1700000000',
       nonce: '3',
+      reportedChainId: '84532',
+      incidentTimestamp: '0',
       ...overrides,
     },
   } as ParsedStreamData;
@@ -72,6 +76,29 @@ describe('isValidSignatureData (wallet flow)', () => {
   it('rejects deadline and nonce values BigInt() would throw on', () => {
     expect(isValidSignatureData(walletMessage({ deadline: '1e9' }), CHAIN_ID)).toBe(false);
     expect(isValidSignatureData(walletMessage({ nonce: '-1' }), CHAIN_ID)).toBe(false);
+  });
+
+  // The wallet contracts take `uint64 reportedChainId` and the sender ships
+  // `BigInt(chainId).toString()`. Validating it as bytes32 (as the transaction flow's
+  // CAIP-2 hash genuinely is) rejected every relayed wallet signature as malformed.
+  it('accepts a decimal reportedChainId and rejects a bytes32 one', () => {
+    expect(isValidSignatureData(walletMessage({ reportedChainId: '1' }), CHAIN_ID)).toBe(true);
+    expect(isValidSignatureData(walletMessage({ reportedChainId: BYTES32 }), CHAIN_ID)).toBe(false);
+  });
+
+  it('accepts a payload omitting the optional extended fields', () => {
+    expect(
+      isValidSignatureData(
+        walletMessage({ reportedChainId: undefined, incidentTimestamp: undefined }),
+        CHAIN_ID
+      )
+    ).toBe(true);
+  });
+
+  it('rejects an incidentTimestamp BigInt() would throw on', () => {
+    expect(isValidSignatureData(walletMessage({ incidentTimestamp: 'today' }), CHAIN_ID)).toBe(
+      false
+    );
   });
 });
 

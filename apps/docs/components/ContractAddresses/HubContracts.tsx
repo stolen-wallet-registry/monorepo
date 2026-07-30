@@ -1,6 +1,7 @@
 import { allNetworks, type HubNetworkConfig } from '@swr/chains';
 
 import { HubTable } from './HubTable';
+import { LocalDevNote } from './LocalDevNote';
 
 export function HubContracts() {
   const deployedHubs = allNetworks.filter(
@@ -22,11 +23,7 @@ export function HubContracts() {
       )}
       {localHubs.length > 0 && (
         <>
-          <h4>Local Development</h4>
-          <p>
-            These addresses are from <code>pnpm deploy:crosschain</code> using deterministic Anvil
-            deployer nonces. Click any address to copy.
-          </p>
+          <LocalDevNote />
           <HubTable hubs={localHubs} />
         </>
       )}

@@ -308,55 +308,7 @@ contract Deploy is Script {
         vm.selectFork(spokeForkId);
         vm.startBroadcast(deployerPrivateKey);
 
-        // Get timing config for spoke chain
-        (uint256 spokeGraceBlocks, uint256 spokeDeadlineBlocks) = _getTimingConfig(block.chainid);
-        console2.log("Timing - Grace Blocks:", spokeGraceBlocks);
-        console2.log("Timing - Deadline Blocks:", spokeDeadlineBlocks);
-
-        // Spoke contracts (regular CREATE — nonce-based, bytecode-independent addresses)
-        // No gas paymaster is deployed: from Hyperlane v3 the interchain gas payment is
-        // collected by the mailbox's own default post-dispatch hook during dispatch().
-        hyperlaneAdapterAddr = address(new HyperlaneAdapter(deployer, spokeMailbox));
-        console2.log("1. HyperlaneAdapter:", hyperlaneAdapterAddr);
-
-        HyperlaneAdapter(hyperlaneAdapterAddr).setDomainSupport(HUB_CHAIN_ID, true);
-        console2.log("   -> Hub chain", HUB_CHAIN_ID, "enabled as destination");
-
-        spokeMockAggregatorAddr = address(new MockAggregator(int256(350_000_000_000)));
-        console2.log("2. MockAggregator (Spoke):", spokeMockAggregatorAddr);
-
-        spokeFeeManagerAddr = address(new FeeManager(deployer, spokeMockAggregatorAddr));
-        console2.log("3. FeeManager (Spoke):", spokeFeeManagerAddr);
-
-        bytes32 inboxBytes = _addressToBytes32(crossChainInboxAddr);
-        spokeRegistryAddr = address(
-            new SpokeRegistry(
-                deployer,
-                hyperlaneAdapterAddr,
-                spokeFeeManagerAddr,
-                HUB_CHAIN_ID,
-                inboxBytes,
-                spokeGraceBlocks,
-                spokeDeadlineBlocks,
-                BRIDGE_ID_HYPERLANE
-            )
-        );
-        console2.log("4. SpokeRegistry:", spokeRegistryAddr);
-
-        bytes32 soulboundReceiverBytes = _addressToBytes32(soulboundReceiverAddr);
-        spokeSoulboundForwarderAddr = address(
-            new SpokeSoulboundForwarder(
-                deployer, hyperlaneAdapterAddr, HUB_CHAIN_ID, soulboundReceiverBytes, MIN_DONATION
-            )
-        );
-        console2.log("5. SpokeSoulboundForwarder:", spokeSoulboundForwarderAddr);
-
-        HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeRegistryAddr, true);
-        HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeSoulboundForwarderAddr, true);
-        console2.log("   -> Spoke contracts authorized to dispatch via adapter");
-
-        spokeMulticall3Addr = _deployMulticall3(Salts.MULTICALL3_SPOKE);
-        console2.log("6. Multicall3 (Spoke):", spokeMulticall3Addr);
+        _deploySpokeContracts();
 
         vm.stopBroadcast();
         console2.log("");
@@ -580,54 +532,7 @@ contract Deploy is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        (uint256 graceBlocks, uint256 deadlineBlocks) = _getTimingConfig(block.chainid);
-        console2.log("Timing - Grace Blocks:", graceBlocks);
-        console2.log("Timing - Deadline Blocks:", deadlineBlocks);
-
-        // Spoke contracts (regular CREATE — nonce-based, bytecode-independent addresses)
-        // No gas paymaster is deployed: from Hyperlane v3 the interchain gas payment is
-        // collected by the mailbox's own default post-dispatch hook during dispatch().
-        hyperlaneAdapterAddr = address(new HyperlaneAdapter(deployer, spokeMailbox));
-        console2.log("1. HyperlaneAdapter:", hyperlaneAdapterAddr);
-
-        HyperlaneAdapter(hyperlaneAdapterAddr).setDomainSupport(HUB_CHAIN_ID, true);
-        console2.log("   -> Hub chain", HUB_CHAIN_ID, "enabled as destination");
-
-        spokeMockAggregatorAddr = address(new MockAggregator(int256(350_000_000_000)));
-        console2.log("2. MockAggregator (Spoke):", spokeMockAggregatorAddr);
-
-        spokeFeeManagerAddr = address(new FeeManager(deployer, spokeMockAggregatorAddr));
-        console2.log("3. FeeManager (Spoke):", spokeFeeManagerAddr);
-
-        bytes32 inboxBytes = _addressToBytes32(crossChainInboxAddr);
-        spokeRegistryAddr = address(
-            new SpokeRegistry(
-                deployer,
-                hyperlaneAdapterAddr,
-                spokeFeeManagerAddr,
-                HUB_CHAIN_ID,
-                inboxBytes,
-                graceBlocks,
-                deadlineBlocks,
-                BRIDGE_ID_HYPERLANE
-            )
-        );
-        console2.log("4. SpokeRegistry:", spokeRegistryAddr);
-
-        bytes32 soulboundReceiverBytes = _addressToBytes32(soulboundReceiverAddr);
-        spokeSoulboundForwarderAddr = address(
-            new SpokeSoulboundForwarder(
-                deployer, hyperlaneAdapterAddr, HUB_CHAIN_ID, soulboundReceiverBytes, MIN_DONATION
-            )
-        );
-        console2.log("5. SpokeSoulboundForwarder:", spokeSoulboundForwarderAddr);
-
-        HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeRegistryAddr, true);
-        HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeSoulboundForwarderAddr, true);
-        console2.log("   -> Spoke contracts authorized to dispatch via adapter");
-
-        spokeMulticall3Addr = _deployMulticall3(Salts.MULTICALL3_SPOKE);
-        console2.log("6. Multicall3 (Spoke):", spokeMulticall3Addr);
+        _deploySpokeContracts();
 
         vm.stopBroadcast();
 
@@ -707,16 +612,10 @@ contract Deploy is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        _completeSetupIfNeeded(vm.envOr("FRAUD_REGISTRY_HUB", address(0)), "FraudRegistryHub");
-        _completeSetupIfNeeded(vm.envOr("CROSS_CHAIN_INBOX", address(0)), "CrossChainInbox");
-        _completeSetupIfNeeded(vm.envOr("OPERATOR_REGISTRY", address(0)), "OperatorRegistry");
-        _completeSetupIfNeeded(vm.envOr("SOULBOUND_RECEIVER", address(0)), "SoulboundReceiver");
-        _completeSetupIfNeeded(vm.envOr("WALLET_SOULBOUND", address(0)), "WalletSoulbound");
-        _completeSetupIfNeeded(vm.envOr("SUPPORT_SOULBOUND", address(0)), "SupportSoulbound");
-        _completeSetupIfNeeded(vm.envOr("WALLET_REGISTRY", address(0)), "WalletRegistry");
-        _completeSetupIfNeeded(vm.envOr("TRANSACTION_REGISTRY", address(0)), "TransactionRegistry");
-        _completeSetupIfNeeded(vm.envOr("CONTRACT_REGISTRY", address(0)), "ContractRegistry");
-        _completeSetupIfNeeded(vm.envOr("OPERATOR_SUBMITTER", address(0)), "OperatorSubmitter");
+        SetupTarget[] memory targets = _hubTargets();
+        for (uint256 i = 0; i < targets.length; i++) {
+            _completeSetupIfNeeded(targets[i].addr, targets[i].label);
+        }
 
         vm.stopBroadcast();
 
@@ -752,8 +651,10 @@ contract Deploy is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        _completeSetupIfNeeded(vm.envOr("HYPERLANE_ADAPTER", address(0)), "HyperlaneAdapter");
-        _completeSetupIfNeeded(vm.envOr("SPOKE_REGISTRY", address(0)), "SpokeRegistry");
+        SetupTarget[] memory targets = _spokeTargets();
+        for (uint256 i = 0; i < targets.length; i++) {
+            _completeSetupIfNeeded(targets[i].addr, targets[i].label);
+        }
 
         vm.stopBroadcast();
 
@@ -764,8 +665,10 @@ contract Deploy is Script {
     /// @notice Assert every configured spoke-side TimelockOwnable contract is locked
     /// @dev Same env vars as {finalizeSpokeSetup}. Run against the spoke RPC.
     function verifySpokeSetup() external view {
-        _requireSetupComplete(vm.envOr("HYPERLANE_ADAPTER", address(0)), "HyperlaneAdapter");
-        _requireSetupComplete(vm.envOr("SPOKE_REGISTRY", address(0)), "SpokeRegistry");
+        SetupTarget[] memory targets = _spokeTargets();
+        for (uint256 i = 0; i < targets.length; i++) {
+            _requireSetupComplete(targets[i].addr, targets[i].label);
+        }
         console2.log("=== All configured spoke contracts have setupComplete == true ===");
     }
 
@@ -774,17 +677,44 @@ contract Deploy is Script {
     ///      so a forgotten `finalizeSetup()` fails the deployment instead of shipping silently.
     ///      Same env vars as {finalizeSetup}. Hub-side only — see {verifySpokeSetup}.
     function verifySetup() external view {
-        _requireSetupComplete(vm.envOr("FRAUD_REGISTRY_HUB", address(0)), "FraudRegistryHub");
-        _requireSetupComplete(vm.envOr("CROSS_CHAIN_INBOX", address(0)), "CrossChainInbox");
-        _requireSetupComplete(vm.envOr("OPERATOR_REGISTRY", address(0)), "OperatorRegistry");
-        _requireSetupComplete(vm.envOr("SOULBOUND_RECEIVER", address(0)), "SoulboundReceiver");
-        _requireSetupComplete(vm.envOr("WALLET_SOULBOUND", address(0)), "WalletSoulbound");
-        _requireSetupComplete(vm.envOr("SUPPORT_SOULBOUND", address(0)), "SupportSoulbound");
-        _requireSetupComplete(vm.envOr("WALLET_REGISTRY", address(0)), "WalletRegistry");
-        _requireSetupComplete(vm.envOr("TRANSACTION_REGISTRY", address(0)), "TransactionRegistry");
-        _requireSetupComplete(vm.envOr("CONTRACT_REGISTRY", address(0)), "ContractRegistry");
-        _requireSetupComplete(vm.envOr("OPERATOR_SUBMITTER", address(0)), "OperatorSubmitter");
+        SetupTarget[] memory targets = _hubTargets();
+        for (uint256 i = 0; i < targets.length; i++) {
+            _requireSetupComplete(targets[i].addr, targets[i].label);
+        }
         console2.log("=== All configured contracts have setupComplete == true ===");
+    }
+
+    /// @notice A TimelockOwnable contract that finalize/verify should act on
+    struct SetupTarget {
+        address addr;
+        string label;
+    }
+
+    /// @notice Hub-chain TimelockOwnable contracts, read from the deploy env
+    /// @dev Single source for {finalizeSetup} and {verifySetup}. These were previously two
+    ///      hand-maintained copies of the same ten entries, where forgetting one in the verify
+    ///      copy would silently skip the check that a contract had actually been locked.
+    function _hubTargets() internal view returns (SetupTarget[] memory targets) {
+        targets = new SetupTarget[](10);
+        targets[0] = SetupTarget(vm.envOr("FRAUD_REGISTRY_HUB", address(0)), "FraudRegistryHub");
+        targets[1] = SetupTarget(vm.envOr("CROSS_CHAIN_INBOX", address(0)), "CrossChainInbox");
+        targets[2] = SetupTarget(vm.envOr("OPERATOR_REGISTRY", address(0)), "OperatorRegistry");
+        targets[3] = SetupTarget(vm.envOr("SOULBOUND_RECEIVER", address(0)), "SoulboundReceiver");
+        targets[4] = SetupTarget(vm.envOr("WALLET_SOULBOUND", address(0)), "WalletSoulbound");
+        targets[5] = SetupTarget(vm.envOr("SUPPORT_SOULBOUND", address(0)), "SupportSoulbound");
+        targets[6] = SetupTarget(vm.envOr("WALLET_REGISTRY", address(0)), "WalletRegistry");
+        targets[7] = SetupTarget(vm.envOr("TRANSACTION_REGISTRY", address(0)), "TransactionRegistry");
+        targets[8] = SetupTarget(vm.envOr("CONTRACT_REGISTRY", address(0)), "ContractRegistry");
+        targets[9] = SetupTarget(vm.envOr("OPERATOR_SUBMITTER", address(0)), "OperatorSubmitter");
+    }
+
+    /// @notice Spoke-chain TimelockOwnable contracts, read from the deploy env
+    /// @dev Single source for {finalizeSpokeSetup} and {verifySpokeSetup}. SpokeSoulboundForwarder
+    ///      is deliberately absent — see the note on {finalizeSpokeSetup}.
+    function _spokeTargets() internal view returns (SetupTarget[] memory targets) {
+        targets = new SetupTarget[](2);
+        targets[0] = SetupTarget(vm.envOr("HYPERLANE_ADAPTER", address(0)), "HyperlaneAdapter");
+        targets[1] = SetupTarget(vm.envOr("SPOKE_REGISTRY", address(0)), "SpokeRegistry");
     }
 
     /// @dev Call completeSetup() unless the address is unset or already complete
@@ -1328,6 +1258,63 @@ contract Deploy is Script {
 
     function _addressToBytes32(address addr) internal pure returns (bytes32) {
         return bytes32(uint256(uint160(addr)));
+    }
+
+    /// @notice Deploy the full spoke-side contract set onto the currently selected fork
+    /// @dev Shared by the local cross-chain deploy and the standalone spoke deploy, which
+    ///      previously carried verbatim copies of this — including the two authorized-sender
+    ///      calls, which had to be added to both. Reads `spokeMailbox`, `crossChainInboxAddr`
+    ///      and `soulboundReceiverAddr`; writes the `spoke*` address fields. The caller owns
+    ///      the surrounding broadcast.
+    function _deploySpokeContracts() internal {
+        (uint256 graceBlocks, uint256 deadlineBlocks) = _getTimingConfig(block.chainid);
+        console2.log("Timing - Grace Blocks:", graceBlocks);
+        console2.log("Timing - Deadline Blocks:", deadlineBlocks);
+
+        // Spoke contracts (regular CREATE — nonce-based, bytecode-independent addresses)
+        // No gas paymaster is deployed: from Hyperlane v3 the interchain gas payment is
+        // collected by the mailbox's own default post-dispatch hook during dispatch().
+        hyperlaneAdapterAddr = address(new HyperlaneAdapter(deployer, spokeMailbox));
+        console2.log("1. HyperlaneAdapter:", hyperlaneAdapterAddr);
+
+        HyperlaneAdapter(hyperlaneAdapterAddr).setDomainSupport(HUB_CHAIN_ID, true);
+        console2.log("   -> Hub chain", HUB_CHAIN_ID, "enabled as destination");
+
+        spokeMockAggregatorAddr = address(new MockAggregator(int256(350_000_000_000)));
+        console2.log("2. MockAggregator (Spoke):", spokeMockAggregatorAddr);
+
+        spokeFeeManagerAddr = address(new FeeManager(deployer, spokeMockAggregatorAddr));
+        console2.log("3. FeeManager (Spoke):", spokeFeeManagerAddr);
+
+        bytes32 inboxBytes = _addressToBytes32(crossChainInboxAddr);
+        spokeRegistryAddr = address(
+            new SpokeRegistry(
+                deployer,
+                hyperlaneAdapterAddr,
+                spokeFeeManagerAddr,
+                HUB_CHAIN_ID,
+                inboxBytes,
+                graceBlocks,
+                deadlineBlocks,
+                BRIDGE_ID_HYPERLANE
+            )
+        );
+        console2.log("4. SpokeRegistry:", spokeRegistryAddr);
+
+        bytes32 soulboundReceiverBytes = _addressToBytes32(soulboundReceiverAddr);
+        spokeSoulboundForwarderAddr = address(
+            new SpokeSoulboundForwarder(
+                deployer, hyperlaneAdapterAddr, HUB_CHAIN_ID, soulboundReceiverBytes, MIN_DONATION
+            )
+        );
+        console2.log("5. SpokeSoulboundForwarder:", spokeSoulboundForwarderAddr);
+
+        HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeRegistryAddr, true);
+        HyperlaneAdapter(hyperlaneAdapterAddr).setAuthorizedSender(spokeSoulboundForwarderAddr, true);
+        console2.log("   -> Spoke contracts authorized to dispatch via adapter");
+
+        spokeMulticall3Addr = _deployMulticall3(Salts.MULTICALL3_SPOKE);
+        console2.log("6. Multicall3 (Spoke):", spokeMulticall3Addr);
     }
 
     /// @notice Get Chainlink ETH/USD feed address for known chains

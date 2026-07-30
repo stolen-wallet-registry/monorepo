@@ -2,6 +2,8 @@
  * ENS name detection and validation utilities.
  */
 
+import { detectSearchType } from '@swr/search';
+
 /**
  * Checks if a string looks like an ENS name.
  *
@@ -37,45 +39,20 @@ export type SearchTypeWithEns = 'address' | 'transaction' | 'ens' | 'caip10' | '
 /**
  * Extended search type detection that includes ENS names.
  *
+ * Everything except the ENS branch delegates to `detectSearchType`. This used to be a
+ * hand-copied duplicate of it, which then drifted: the copy rejected the wildcard CAIP-10
+ * (`eip155:*:0x…`) that the registry stores and the UI displays.
+ *
  * @param query - Search query to classify
  * @returns Query type: 'address' | 'transaction' | 'ens' | 'caip10' | 'invalid'
  */
 export function detectSearchTypeWithEns(query: string): SearchTypeWithEns {
   if (!query || typeof query !== 'string') return 'invalid';
 
-  const trimmed = query.trim();
-
-  // Check for ENS name first (before hex checks)
-  if (isEnsName(trimmed)) {
+  // ENS is checked first: `detectSearchType` has no notion of it and would return 'invalid'.
+  if (isEnsName(query.trim())) {
     return 'ens';
   }
 
-  const lowered = trimmed.toLowerCase();
-
-  // Check for CAIP-10 format (eip155:chainId:address)
-  if (lowered.includes(':')) {
-    const parts = lowered.split(':');
-    if (
-      parts.length === 3 &&
-      parts[0] === 'eip155' &&
-      parts[1] != null &&
-      /^\d+$/.test(parts[1]) &&
-      parts[2] != null &&
-      /^0x[0-9a-f]{40}$/.test(parts[2])
-    ) {
-      return 'caip10';
-    }
-  }
-
-  // Check for hex address (42 chars: 0x + 40 hex)
-  if (/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
-    return 'address';
-  }
-
-  // Check for transaction hash (66 chars: 0x + 64 hex)
-  if (/^0x[a-fA-F0-9]{64}$/.test(trimmed)) {
-    return 'transaction';
-  }
-
-  return 'invalid';
+  return detectSearchType(query);
 }

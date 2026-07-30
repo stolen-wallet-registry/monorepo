@@ -188,11 +188,15 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
         name: 'swr-registration-state',
         storage: bigintStorage, // BigInt-safe serialization for incidentTimestamp
         version: 1,
-        // No `migrate`: there is no released version of this app, so no persisted state in the
-        // wild needs a version transform. `merge` below runs on EVERY rehydrate and supplies a
-        // default for every field, which covers any stale local state a developer may have.
-        // (Validation must live here, not in `migrate` — zustand only calls `migrate` on a
-        // version mismatch, so validation placed there never runs on a normal reload.)
+        // There is no released version of this app, so nothing needs a real version
+        // transform — any older blob is simply discarded. `migrate` still has to exist:
+        // without it, zustand hits a version mismatch, console.errors, and never marks the
+        // load as migrated, so it never rewrites the entry and the error repeats on every
+        // single reload for anyone holding state from an earlier local version.
+        migrate: () => initialState,
+        // Validation lives in `merge`, not `migrate`: zustand only calls `migrate` on a
+        // version mismatch, so validation placed there never runs on a normal reload.
+        // `merge` runs on EVERY rehydrate and supplies a default for every field.
         merge: (persisted, current) => {
           // Validate basic shape
           if (!persisted || typeof persisted !== 'object') {

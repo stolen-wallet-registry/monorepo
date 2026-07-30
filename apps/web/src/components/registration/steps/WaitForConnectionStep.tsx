@@ -29,7 +29,8 @@ export interface WaitForConnectionStepProps {
  */
 export function WaitForConnectionStep({ onComplete, role, getLibp2p }: WaitForConnectionStepProps) {
   const { address } = useAccount();
-  const { peerId, isInitialized, setPartnerPeerId, setConnectedToPeer } = useP2PStore();
+  const { peerId, isInitialized, setPartnerPeerId, clearPartnerPeerId, setConnectedToPeer } =
+    useP2PStore();
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
@@ -75,11 +76,24 @@ export function WaitForConnectionStep({ onComplete, role, getLibp2p }: WaitForCo
         const message = err instanceof Error ? err.message : 'Failed to connect';
         logger.p2p.error('Connection to relayer failed', {}, err as Error);
         setConnectionError(message);
+        // Undo the optimistic pin above. The handshake never completed, so leaving it set
+        // would have the guard silently drop streams from every other peer — including the
+        // correct one, if the user retries with a different peer ID — with only a log line
+        // to explain why nothing happens.
+        clearPartnerPeerId();
       } finally {
         setIsConnecting(false);
       }
     },
-    [getLibp2p, address, peerId, setPartnerPeerId, setConnectedToPeer, onComplete]
+    [
+      getLibp2p,
+      address,
+      peerId,
+      setPartnerPeerId,
+      clearPartnerPeerId,
+      setConnectedToPeer,
+      onComplete,
+    ]
   );
 
   if (!isInitialized) {

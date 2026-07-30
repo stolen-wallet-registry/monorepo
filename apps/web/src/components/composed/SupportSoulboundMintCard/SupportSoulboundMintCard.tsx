@@ -10,7 +10,6 @@ import { getExplorerTxUrl } from '@/components/composed/ExplorerLink';
 import { SoulboundPreviewModal } from '@/components/composed/SoulboundPreviewModal';
 import { MintedTokenDisplay } from '@/components/composed/MintedTokenDisplay';
 import { CrossChainMintStatusCard } from '@/components/composed/soulbound-mint/CrossChainMintStatusCard';
-import { useMemo } from 'react';
 import { DonationAmountField } from './DonationAmountField';
 import { SupportMintActions } from './SupportMintActions';
 import { SupportMintSuccessCard, SupportPreviousTokens } from './SupportMintedTokens';
@@ -95,46 +94,31 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
     handleReset,
   } = useSupportMintFlow(onSuccess);
 
-  // Group the flow state into stable objects - inline literals would be new on every
-  // render and defeat memoisation downstream.
-  const chain = useMemo(
-    () => ({ hubChainName, currentChainName, isOnHubChain, isOnSpokeChain }),
-    [hubChainName, currentChainName, isOnHubChain, isOnSpokeChain]
-  );
-  const hubMint = useMemo(
-    () => ({ isPending, isConfirming, isMinting, isError, error }),
-    [isPending, isConfirming, isMinting, isError, error]
-  );
-  const crossChainMint = useMemo(
-    () => ({
-      isPending: isCrossChainPending,
-      isConfirming: isCrossChainConfirming,
-      isMinting: isCrossChainMinting,
-      isError: isCrossChainError,
-      error: crossChainError,
-    }),
-    [
-      isCrossChainPending,
-      isCrossChainConfirming,
-      isCrossChainMinting,
-      isCrossChainError,
-      crossChainError,
-    ]
-  );
-  const cost = useMemo(
-    () => ({
-      fee: crossChainFee,
-      isLoadingFee,
-      isFeeError,
-      feeError,
-      gas: gasEstimate,
-      isLoadingGas,
-      ethPrice,
-    }),
-    [crossChainFee, isLoadingFee, isFeeError, feeError, gasEstimate, isLoadingGas, ethPrice]
-  );
+  // Grouped purely to keep SupportMintActions' prop list readable. Deliberately NOT memoized:
+  // SupportMintActions is a plain function component, so it re-renders with this one no matter
+  // how stable these references are.
+  const chain = { hubChainName, currentChainName, isOnHubChain, isOnSpokeChain };
+  const hubMint = { isPending, isConfirming, isMinting, isError, error };
+  const crossChainMint = {
+    isPending: isCrossChainPending,
+    isConfirming: isCrossChainConfirming,
+    isMinting: isCrossChainMinting,
+    isError: isCrossChainError,
+    error: crossChainError,
+  };
+  const cost = {
+    fee: crossChainFee,
+    isLoadingFee,
+    isFeeError,
+    feeError,
+    gas: gasEstimate,
+    isLoadingGas,
+    ethPrice,
+  };
 
-  // Cross-chain mint confirmation state (message dispatched, waiting for hub mint)
+  // Cross-chain mint confirmation state (message dispatched, waiting for hub mint).
+  // Note the reset label below says 'Close' rather than 'Done' until the hub confirms —
+  // "Done" on a mint still in flight reads as a confirmation that has not happened.
   if (isCrossChainConfirmed && crossChainHash) {
     const isConfirmedOnHub = isMintedOnHub || confirmationStatus === 'confirmed';
     const isPolling = confirmationStatus === 'polling' || confirmationStatus === 'waiting';
@@ -168,7 +152,7 @@ export function SupportSoulboundMintCard({ onSuccess, className }: SupportSoulbo
         messageId={messageId}
         explorerUrl={explorerUrl}
         footerNote={`The Hyperlane relayer will deliver your donation request to ${hubChainName}. Your donation is held on ${mintedSpokeChainName} and will be collected by the treasury.`}
-        resetLabel={isConfirmedOnHub ? 'Make Another Donation' : 'Done'}
+        resetLabel={isConfirmedOnHub ? 'Make Another Donation' : 'Close'}
         onReset={handleReset}
       />
     );

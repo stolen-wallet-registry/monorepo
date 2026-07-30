@@ -63,9 +63,6 @@ export async function quote(options: QuoteOptions): Promise<void> {
         break;
 
       case 'contract':
-        if (config.contracts.fraudulentContractRegistry === zeroAddress) {
-          throw new Error('Contract registry not configured for this environment');
-        }
         if (config.contracts.operatorSubmitter === zeroAddress) {
           throw new Error('OperatorSubmitter not configured for this environment');
         }

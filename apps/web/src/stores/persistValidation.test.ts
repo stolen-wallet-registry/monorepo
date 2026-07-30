@@ -156,4 +156,28 @@ describe('persisted store validation runs on rehydrate', () => {
     expect(useRegistrationStore.getState().step).toBe('register-and-sign');
     expect(useRegistrationStore.getState().registrationType).toBe('selfRelay');
   });
+
+  // A blob left behind by an earlier local version must be discarded AND rewritten. Without a
+  // `migrate`, zustand logs "couldn't be migrated since no migrate function was provided",
+  // leaves the stale entry in place, and repeats the error on every single reload.
+  it('registrationStore discards and rewrites a blob from an older version', async () => {
+    seedPersistedState('swr-registration-state', { step: 'grace-period' }, 99);
+
+    const { useRegistrationStore } = await import('./registrationStore');
+
+    expect(useRegistrationStore.getState().step).toBeNull();
+    // Rewritten at the current version, so the next reload takes the normal path.
+    const rewritten = JSON.parse(localStorage.getItem('swr-registration-state') ?? '{}');
+    expect(rewritten.version).toBe(1);
+  });
+
+  it('transactionFormStore discards and rewrites a blob from an older version', async () => {
+    seedPersistedState('swr-transaction-form-state', { selectedTxHashes: ['0xdead'] }, 99);
+
+    const { useTransactionFormStore } = await import('./transactionFormStore');
+
+    expect(useTransactionFormStore.getState().selectedTxHashes).toEqual([]);
+    const rewritten = JSON.parse(localStorage.getItem('swr-transaction-form-state') ?? '{}');
+    expect(rewritten.version).toBe(1);
+  });
 });

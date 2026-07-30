@@ -19,7 +19,8 @@
     "dev": "tsup --watch",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "echo 'No tests yet'",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:watch": "echo 'No tests yet'"
   },
   "dependencies": {
@@ -32,6 +33,7 @@
     "eslint": "^9.39.1",
     "tsup": "^8.5.0",
     "typescript": "~5.9.3",
-    "typescript-eslint": "^8.46.4"
+    "typescript-eslint": "^8.46.4",
+    "vitest": "^4.0.15"
   }
 }

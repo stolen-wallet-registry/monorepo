@@ -1,6 +1,7 @@
 import { allNetworks, type SpokeNetworkConfig } from '@swr/chains';
 
 import { SpokeTable } from './SpokeTable';
+import { LocalDevNote } from './LocalDevNote';
 
 export function SpokeContracts() {
   const deployedSpokes = allNetworks.filter(
@@ -22,11 +23,7 @@ export function SpokeContracts() {
       )}
       {localSpokes.length > 0 && (
         <>
-          <h4>Local Development</h4>
-          <p>
-            These addresses are from <code>pnpm deploy:crosschain</code> using deterministic Anvil
-            deployer nonces. Click any address to copy.
-          </p>
+          <LocalDevNote />
           <SpokeTable spokes={localSpokes} />
         </>
       )}

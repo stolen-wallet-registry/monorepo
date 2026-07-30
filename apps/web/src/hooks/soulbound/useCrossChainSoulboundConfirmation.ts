@@ -104,15 +104,6 @@ const INITIAL_DELAY = 2000; // 2 second delay before polling starts
 interface ElapsedState {
   runKey: string;
   ms: number;
-  /**
-   * The `startTimeRef` value this reading was taken against.
-   *
-   * Tagging the reading rather than clearing it on disable is what lets the stopwatch stay
-   * pure: a stored value is valid only while the stopwatch it came from is still running, so
-   * a disable→re-enable of the SAME run reads 0 immediately instead of replaying the old
-   * elapsed value until the next tick (which would briefly render 'timeout' on re-enable).
-   */
-  startedAt: number | null;
 }
 
 /** Run-tagged Hyperlane messageId. */
@@ -139,11 +130,7 @@ export function useCrossChainSoulboundConfirmation({
   // Identifies the confirmation run. Everything below is scoped to it.
   const runKey = `${spokeHash ?? ''}-${wallet ?? ''}`;
 
-  const [elapsedState, setElapsedState] = useState<ElapsedState>(() => ({
-    runKey,
-    ms: 0,
-    startedAt: null,
-  }));
+  const [elapsedState, setElapsedState] = useState<ElapsedState>(() => ({ runKey, ms: 0 }));
   const [messageIdState, setMessageIdState] = useState<MessageIdState | null>(null);
 
   const startTimeRef = useRef<number | null>(null);
@@ -350,12 +337,19 @@ export function useCrossChainSoulboundConfirmation({
     [deriveIsMinted, mintQueryResult]
   );
 
-  // Derive status
+  // Derive status.
+  //
+  // Terminal states are checked BEFORE 'extracting'. Message-ID extraction can fail
+  // permanently — the MintRequestForwarded log may be absent from the receipt, or the
+  // receipt fetch may fail — and messageId then stays undefined with no further effect runs
+  // to change it. Checking 'extracting' first pinned the status there forever, hiding both a
+  // mint that actually confirmed on the hub and the polling timeout. The messageId is only
+  // ever used to render a bridge explorer link, so not having it must not mask the outcome.
   const status: SoulboundConfirmationStatus = useMemo(() => {
     if (!enabled) return 'idle';
-    if (!messageId && spokeHash) return 'extracting';
     if (isMintedOnHub === true) return 'confirmed';
     if (elapsedTime >= maxPollingTime) return 'timeout';
+    if (!messageId && spokeHash) return 'extracting';
     if (elapsedTime < INITIAL_DELAY) return 'waiting';
     return 'polling';
   }, [enabled, messageId, spokeHash, isMintedOnHub, elapsedTime, maxPollingTime]);
@@ -367,8 +361,9 @@ export function useCrossChainSoulboundConfirmation({
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      // No state clearing needed: nulling startTimeRef invalidates any stored reading via
-      // the `startedAt` tag, so `elapsedTime` derives 0 without a setState in this effect.
+      // No state clearing needed: `elapsedTime` already derives 0 while disabled, so this
+      // effect stays free of setState. Nulling the ref stops any in-flight tick from
+      // writing a reading for a stopwatch that is no longer running.
       startTimeRef.current = null;
       return;
     }
@@ -385,7 +380,7 @@ export function useCrossChainSoulboundConfirmation({
 
     intervalRef.current = setInterval(() => {
       if (startTimeRef.current === startedAt) {
-        setElapsedState({ runKey, ms: Date.now() - startedAt, startedAt });
+        setElapsedState({ runKey, ms: Date.now() - startedAt });
       }
     }, 1000);
 
@@ -449,7 +444,7 @@ export function useCrossChainSoulboundConfirmation({
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    setElapsedState({ runKey, ms: 0, startedAt: null });
+    setElapsedState({ runKey, ms: 0 });
     setMessageIdState(null);
     loggedConfirmationForRunRef.current = null;
     loggedTimeoutForRunRef.current = null;

@@ -33,8 +33,8 @@ import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl, getChainName, getBridgeMessageByIdUrl } from '@/lib/explorer';
 import { getHubChainId } from '@/lib/chains/config';
 import { extractBridgeMessageId } from '@/lib/bridge/messageId';
-import { useQueryClient } from '@tanstack/react-query';
-import { invalidateRegistryQueries } from '@/lib/contracts/queryKeys';
+import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
+import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -180,15 +180,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     void extractMessage();
   }, [isCrossChain, receipt, setBridgeMessageId]);
 
-  // Refresh every registry-derived cache the moment the transaction confirms. Without this
-  // the nonce, deadlines and registration status keep serving pre-transaction values to the
-  // next step — the root cause of the stale-nonce bugs that sign-time refetches only papered
-  // over. Broad by design: after a confirmation, all of those reads are suspect.
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    if (!isConfirmed || !hash) return;
-    invalidateRegistryQueries(queryClient, { step: 'registration', hash });
-  }, [isConfirmed, hash, queryClient]);
+  useInvalidateRegistryOnConfirm('registration', hash, isConfirmed);
 
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
@@ -489,17 +481,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         />
       )}
 
-      {/* A signature-invalidating revert cannot be retried — say so before they press it */}
-      {needsResign && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            {windowClosed
-              ? 'The registration window has closed. Retry will restart the process from the acknowledgement step.'
-              : 'This signature can no longer be used. Retry will take you back to sign a new one.'}
-          </AlertDescription>
-        </Alert>
-      )}
+      {needsResign && <SignatureInvalidatedAlert windowClosed={windowClosed} />}
 
       {/* Transaction card with integrated cost estimate */}
       <TransactionCard

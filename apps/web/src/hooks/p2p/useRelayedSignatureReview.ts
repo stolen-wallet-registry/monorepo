@@ -109,6 +109,12 @@ export function useRelayedWalletSignatureReview({
     }
 
     let cancelled = false;
+    // Clear the previous verdict before re-recovering. `review` is memoized over
+    // recoveredSigner (old signature) plus nonce/deadline (already the new one), and `ok`
+    // gates the pay button — leaving them set would report the old signature's signer as
+    // verified for a signature that has not been checked yet.
+    setRecoveredSigner(null);
+    setHasChecked(false);
     setIsChecking(true);
 
     recoverWalletSignatureSigner({
@@ -133,6 +139,19 @@ export function useRelayedWalletSignatureReview({
           recovered,
           expectedSigner,
         });
+      })
+      .catch((err: unknown) => {
+        // Recovery swallows its own errors, but typed-data construction ahead of it can
+        // throw. Mark the check complete with no signer so the review renders a failure
+        // instead of stranding the panel in "Verifying…" with payment blocked forever.
+        if (cancelled) return;
+        setRecoveredSigner(null);
+        setHasChecked(true);
+        logger.signature.error(
+          'Failed to recover signer for relayed wallet signature',
+          { step },
+          err instanceof Error ? err : undefined
+        );
       })
       .finally(() => {
         if (!cancelled) setIsChecking(false);
@@ -232,7 +251,10 @@ export function useRelayedTxSignatureReview({
       !reporter ||
       !trustedForwarder ||
       !dataHash ||
-      !reportedChainId ||
+      // Explicit undefined check, matching the wallet hook: a falsy-but-present value (an
+      // all-zero chain hash) must be reviewed and flagged, not silently skipped — skipping
+      // leaves `review` null, which reads the same as "nothing to verify".
+      reportedChainId === undefined ||
       transactionCount === undefined ||
       nonce === undefined ||
       deadline === undefined
@@ -241,6 +263,10 @@ export function useRelayedTxSignatureReview({
     }
 
     let cancelled = false;
+    // Clear the previous verdict before re-recovering — see the wallet hook above for why a
+    // stale recoveredSigner can briefly report an unchecked signature as verified.
+    setRecoveredSigner(null);
+    setHasChecked(false);
     setIsChecking(true);
 
     recoverTxSignatureSigner({
@@ -266,6 +292,16 @@ export function useRelayedTxSignatureReview({
           recovered,
           expectedSigner,
         });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setRecoveredSigner(null);
+        setHasChecked(true);
+        logger.signature.error(
+          'Failed to recover signer for relayed transaction signature',
+          { step },
+          err instanceof Error ? err : undefined
+        );
       })
       .finally(() => {
         if (!cancelled) setIsChecking(false);

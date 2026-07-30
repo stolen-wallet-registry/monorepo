@@ -11,6 +11,7 @@ import { peerIdFromString } from '@libp2p/peer-id';
 import type { Ping } from '@libp2p/ping';
 
 import { logger } from '@/lib/logger';
+import { useOnValueChange } from '@/hooks/useOnValueChange';
 
 /** Default ping interval in milliseconds (45 seconds) */
 const DEFAULT_PING_INTERVAL_MS = 45_000;
@@ -69,7 +70,6 @@ export function useP2PKeepAlive({
 }: UseP2PKeepAliveOptions): UseP2PKeepAliveResult {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const consecutiveFailuresRef = useRef(0);
-  const prevRemotePeerIdRef = useRef<string | null>(null);
   const connectionLostFiredRef = useRef(false);
 
   // Latest-ref syncs run after every render with no dependency array. Callers pass inline
@@ -168,23 +168,20 @@ export function useP2PKeepAlive({
     pingRef.current = ping;
   });
 
+  // Start every new peer from a clean slate. This used to live inside the ping effect below
+  // as a manual prev-value ref, which had a StrictMode hole: the first invocation updated the
+  // ref and scheduled the reset, the immediate cleanup cancelled it, and the second
+  // invocation saw no change — so health state was never actually reset for the new peer.
+  // Running in its own hook also removes the setTimeout(0) that deferral required.
+  useOnValueChange(remotePeerId, () => {
+    consecutiveFailuresRef.current = 0;
+    connectionLostFiredRef.current = false;
+    setIsHealthy(true);
+    setLastPingLatency(null);
+  });
+
   // Set up periodic pinging
   useEffect(() => {
-    // Track timeout for state reset cleanup
-    let resetStateTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    // Reset state when remotePeerId changes
-    if (remotePeerId !== prevRemotePeerIdRef.current) {
-      prevRemotePeerIdRef.current = remotePeerId;
-      consecutiveFailuresRef.current = 0;
-      connectionLostFiredRef.current = false;
-      // Reset state for new peer (deferred to avoid synchronous setState in effect)
-      resetStateTimeout = setTimeout(() => {
-        setIsHealthy(true);
-        setLastPingLatency(null);
-      }, 0);
-    }
-
     // Get current libp2p instance
     const libp2p = getLibp2pRef.current();
     const nodeAvailable = !!libp2p;
@@ -196,14 +193,7 @@ export function useP2PKeepAlive({
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      // Still return a cleanup: the remotePeerId-change branch above may have just
-      // scheduled resetStateTimeout, and this early return would otherwise leave it
-      // pending — firing setState after the hook is disabled or unmounted.
-      return () => {
-        if (resetStateTimeout) {
-          clearTimeout(resetStateTimeout);
-        }
-      };
+      return;
     }
 
     logger.p2p.info('Starting P2P keep-alive', {
@@ -222,9 +212,6 @@ export function useP2PKeepAlive({
     }, pingIntervalMs);
 
     return () => {
-      if (resetStateTimeout) {
-        clearTimeout(resetStateTimeout);
-      }
       clearTimeout(initialPingTimeout);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);

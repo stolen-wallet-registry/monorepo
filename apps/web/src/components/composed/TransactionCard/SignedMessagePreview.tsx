@@ -9,6 +9,7 @@
  */
 
 import { Badge, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
+import { formatTimestamp } from '@swr/search';
 import { Check, Copy, FileSignature, Globe } from 'lucide-react';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
@@ -102,11 +103,14 @@ export function SignedMessagePreview({
           <span className="text-muted-foreground flex items-center gap-1">
             Deadline:
             <InfoTooltip
-              content="The block number after which this signature expires and cannot be used."
+              content="The time after which this signature expires and cannot be used."
               size="sm"
             />
           </span>
-          <span>Block {signedMessage.deadline.toString()}</span>
+          {/* A timestamp, not a block number: the signature deadline comes from
+              TimingConfig.getSignatureDeadline() (block.timestamp + window) and the contract
+              compares it against block.timestamp. Only the grace period is measured in blocks. */}
+          <span>{formatTimestamp(signedMessage.deadline)}</span>
         </div>
         <div className="pt-2 border-t">
           <div className="flex items-center justify-between mb-1">

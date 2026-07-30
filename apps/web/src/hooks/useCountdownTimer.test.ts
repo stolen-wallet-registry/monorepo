@@ -171,6 +171,11 @@ describe('useCountdownTimer', () => {
         });
         expect(result.current.isExpired).toBe(false);
         expect(result.current.isWaitingForBlock).toBe(true);
+        // Each poll re-syncs the estimate to a non-zero value because blocks genuinely
+        // remain. `isRunning` must NOT come back to life on that — the countdown already
+        // hit zero, and resuming it shows the user a second countdown for the same
+        // deadline.
+        expect(result.current.isRunning).toBe(false);
       }
 
       await act(async () => {

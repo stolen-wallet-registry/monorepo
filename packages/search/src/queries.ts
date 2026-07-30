@@ -536,20 +536,8 @@ export interface RawRegistryStatsResponse {
 
 export interface RawRecentWalletsResponse {
   stolenWallets: {
-    items: Array<{
-      /** FULL bytes32 identifier — see RawWalletItem. Use `walletAddress` for the address. */
-      id: string;
-      walletAddress: string | null;
-      /** Wildcard for EVM wallets ("eip155:*:0x…") — use `reportedChainCAIP2` for the chain */
-      caip10: string;
-      registeredAt: string;
-      transactionHash: string;
-      isSponsored: boolean;
-      operator?: string;
-      sourceChainCAIP2?: string;
-      reportedChainCAIP2?: string;
-      batchId?: string;
-    }>;
+    /** RECENT_WALLETS_QUERY selects every RawWalletItem field plus the batch columns. */
+    items: Array<RawWalletItem & { operator?: string; batchId?: string }>;
   };
 }
 
@@ -640,17 +628,11 @@ export interface RawWalletBatchOnlyResponse {
 
 export interface RawWalletEntriesByTxHashResponse {
   stolenWallets: {
-    items: Array<{
-      /** FULL bytes32 identifier — see RawWalletItem. Use `walletAddress` for the address. */
-      id: string;
-      walletAddress: string | null;
-      caip10: string;
-      registeredAt: string;
-      transactionHash: string;
-      operator?: string;
-      sourceChainCAIP2?: string;
-      reportedChainCAIP2?: string;
-    }>;
+    /**
+     * `isSponsored` is omitted deliberately — WALLET_ENTRIES_BY_TX_HASH_QUERY does not
+     * select it, so typing it as present would misrepresent the response.
+     */
+    items: Array<Omit<RawWalletItem, 'isSponsored'> & { operator?: string }>;
   };
 }
 

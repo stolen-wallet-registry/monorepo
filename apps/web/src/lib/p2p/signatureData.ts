@@ -90,9 +90,23 @@ export function isValidSignatureData(
 
   const sig = data.signature;
 
-  // Optional extended fields: reportedChainId is a bytes32 hash, incidentTimestamp a uint.
-  if (sig.reportedChainId != null && !BYTES32_HEX.test(sig.reportedChainId)) return false;
-  if (sig.incidentTimestamp != null && !DECIMAL_UINT.test(sig.incidentTimestamp)) return false;
+  // Optional extended fields. `reportedChainId` here is a DECIMAL chain ID, not a bytes32
+  // hash: the wallet contracts take `uint64 reportedChainId`, and the sender ships
+  // `BigInt(chainId).toString()`. Only the transaction flow hashes it to a bytes32 CAIP-2
+  // reference — see isValidTxSignatureData. Validating this one as bytes32 rejected every
+  // relayed wallet signature.
+  if (sig.reportedChainId != null && !DECIMAL_UINT.test(sig.reportedChainId)) {
+    logger.p2p.warn('Signature rejected: reportedChainId is not a plain decimal integer', {
+      reportedChainId: sig.reportedChainId,
+    });
+    return false;
+  }
+  if (sig.incidentTimestamp != null && !DECIMAL_UINT.test(sig.incidentTimestamp)) {
+    logger.p2p.warn('Signature rejected: incidentTimestamp is not a plain decimal integer', {
+      incidentTimestamp: sig.incidentTimestamp,
+    });
+    return false;
+  }
 
   return true;
 }

@@ -16,8 +16,9 @@ import { useEffect, useRef } from 'react';
  * @param onChange - Called with the new and previous value on a real transition
  */
 export function useOnValueChange<T>(value: T, onChange: (next: T, previous: T) => void): void {
+  // Seeded with the mount value, so the Object.is guard below already suppresses the
+  // mount call — no separate first-run flag is needed.
   const previousRef = useRef<T>(value);
-  const isFirstRunRef = useRef(true);
   const onChangeRef = useRef(onChange);
 
   // No dependency array on purpose. Callers pass an inline arrow, so `onChange` is a new
@@ -30,12 +31,6 @@ export function useOnValueChange<T>(value: T, onChange: (next: T, previous: T) =
   });
 
   useEffect(() => {
-    if (isFirstRunRef.current) {
-      isFirstRunRef.current = false;
-      previousRef.current = value;
-      return;
-    }
-
     const previous = previousRef.current;
     if (Object.is(previous, value)) return;
 

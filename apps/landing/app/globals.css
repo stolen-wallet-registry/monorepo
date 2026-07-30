@@ -18,8 +18,9 @@ html {
 /*
  * Respect the OS "reduce motion" setting (WCAG 2.3.3).
  *
- * This landing page animates heavily — the motion library, the rotating globe, marquees,
- * and Tailwind transitions — and none of it carried a reduced-motion path. Vestibular
+ * This landing page animates heavily — the motion library, the rotating globe, the
+ * cross-chain visualization, and Tailwind transitions — and none of it carried a
+ * reduced-motion path. Vestibular
  * disorders, migraine and motion sensitivity make large or continuous movement actively
  * painful, so the preference has to be honoured.
  *
@@ -31,7 +32,7 @@ html {
  * SCOPE: this deliberately does NOT kill every transition on the page. The earlier version
  * of this block also forced `transition-duration: 0.01ms !important` on `*`, which removed
  * every shadcn/Radix state fade (hover, focus ring, dropdown open, theme switch) along with
- * the marquee. Reduced-motion guidance targets large, continuous or unexpected movement —
+ * the genuine motion. Reduced-motion guidance targets large, continuous or unexpected movement —
  * a 150ms colour or opacity fade is not that, and stripping it makes the whole UI feel
  * broken. Transform-based motion IS the vestibular trigger, so that is what is frozen
  * below, via the two Tailwind utilities the page uses to declare it.

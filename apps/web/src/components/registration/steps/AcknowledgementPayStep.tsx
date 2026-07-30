@@ -24,8 +24,8 @@ import { useStepNavigation } from '@/hooks/useStepNavigation';
 import type { WalletAcknowledgeArgs } from '@/lib/signatures';
 import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
-import { useQueryClient } from '@tanstack/react-query';
-import { invalidateRegistryQueries } from '@/lib/contracts/queryKeys';
+import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
+import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -121,15 +121,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
     ownerAddress: registeree,
   });
 
-  // Refresh every registry-derived cache the moment the transaction confirms. Without this
-  // the nonce, deadlines and registration status keep serving pre-transaction values to the
-  // next step — the root cause of the stale-nonce bugs that sign-time refetches only papered
-  // over. Broad by design: after a confirmation, all of those reads are suspect.
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    if (!isConfirmed || !hash) return;
-    invalidateRegistryQueries(queryClient, { step: 'acknowledgement', hash });
-  }, [isConfirmed, hash, queryClient]);
+  useInvalidateRegistryOnConfirm('acknowledgement', hash, isConfirmed);
 
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
@@ -339,15 +331,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
         />
       )}
 
-      {/* A signature-invalidating revert cannot be retried — say so before they press it */}
-      {needsResign && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            This signature can no longer be used. Retry will take you back to sign a new one.
-          </AlertDescription>
-        </Alert>
-      )}
+      {needsResign && <SignatureInvalidatedAlert />}
 
       {/* Transaction card with integrated cost estimate */}
       <TransactionCard

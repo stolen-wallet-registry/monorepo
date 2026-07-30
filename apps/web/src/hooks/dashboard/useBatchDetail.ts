@@ -169,10 +169,13 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
           { txHash: batchRes.walletBatch.transactionHash, limit, offset }
         );
 
-        // Derive chain from first entry if batch-level is missing
+        // Derive chain from first entry if batch-level is missing. The `?? undefined` is
+        // load-bearing: GraphQL returns null (not absent) for an unset nullable column, so
+        // `??` alone would fall through to null rather than to the field being omitted.
         const walletReportedChain =
           batchRes.walletBatch.reportedChainCAIP2 ??
-          entriesRes.stolenWallets.items[0]?.reportedChainCAIP2;
+          entriesRes.stolenWallets.items[0]?.reportedChainCAIP2 ??
+          undefined;
 
         const batch: WalletBatchDetail = {
           id: batchRes.walletBatch.id,
@@ -191,8 +194,9 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
           registeredAt: safeBigInt(raw.registeredAt),
           transactionHash: raw.transactionHash as Hash,
           operator: asOptionalAddress(raw.operator),
-          sourceChainCAIP2: raw.sourceChainCAIP2,
-          reportedChainCAIP2: raw.reportedChainCAIP2,
+          // GraphQL returns null (not absent) for an unset nullable column.
+          sourceChainCAIP2: raw.sourceChainCAIP2 ?? undefined,
+          reportedChainCAIP2: raw.reportedChainCAIP2 ?? undefined,
         }));
 
         return { type: 'wallet', batch, entries };

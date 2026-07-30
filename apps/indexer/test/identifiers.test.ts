@@ -5,7 +5,6 @@ import {
   identifierToAddress,
   isEvmIdentifier,
   normalizeIdentifier,
-  operatorIdToAddress,
   truncateToAddress,
   walletCaip10,
 } from '../src/lib/identifiers';
@@ -47,6 +46,8 @@ describe('isEvmIdentifier', () => {
 });
 
 describe('identifierToAddress', () => {
+  // Also covers operator IDs: `OperatorSubmitter._getOperatorId()` returns
+  // `bytes32(uint256(uint160(msg.sender)))`, which is the same encoding as EVM_ID.
   it('decodes an EVM identifier', () => {
     expect(identifierToAddress(EVM_ID)).toBe(EVM_ADDR);
   });
@@ -64,12 +65,6 @@ describe('identifierToAddress', () => {
 
   it('returns null for the zero identifier', () => {
     expect(identifierToAddress(`0x${'0'.repeat(64)}` as Hex)).toBeNull();
-  });
-});
-
-describe('operatorIdToAddress', () => {
-  it('decodes OperatorSubmitter._getOperatorId() output', () => {
-    expect(operatorIdToAddress(EVM_ID)).toBe(EVM_ADDR);
   });
 });
 

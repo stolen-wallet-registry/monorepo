@@ -47,7 +47,15 @@ export type {
 } from './types';
 
 // Detection utilities
-export { detectSearchType, isAddress, isTransactionHash, isCAIP10, parseCAIP10 } from './detect';
+export {
+  detectSearchType,
+  isAddress,
+  isTransactionHash,
+  isCAIP10,
+  parseCAIP10,
+  parseWildcardCAIP10,
+  EVM_WILDCARD_CHAIN_REF,
+} from './detect';
 
 // Core search functions
 export {
