@@ -100,6 +100,19 @@ function getChainInfo(
       return { chainId, name: `Chain ${chainId}`, Icon: Globe };
     }
   }
+
+  // CAIP-2 wildcard reference. A registered wallet is stolen on every chain in its namespace,
+  // so this is a meaningful state rather than bad data — the registry key itself is
+  // chain-wildcarded (see CAIP10.sol). It only reaches the table when a row has no resolvable
+  // reported chain; render it as the statement it is, not as a raw "eip155:*".
+  if (reference === '*') {
+    return {
+      chainId: null,
+      name: namespace === 'eip155' ? 'All EVM chains' : `All ${namespace} chains`,
+      Icon: Globe,
+    };
+  }
+
   // Fallback for invalid or non-EVM chains
   const displayName = reference ? `${namespace}:${reference}` : namespace;
   return { chainId: null, name: displayName, Icon: Globe };

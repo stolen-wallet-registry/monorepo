@@ -267,8 +267,18 @@ export function BatchEntriesCard({
                   </TableRow>
                 ) : data.type === 'wallet' ? (
                   data.entries.map((entry) => {
-                    const address = extractAddressFromCAIP10(entry.caip10) ?? entry.id;
-                    const caip2 = extractCAIP2FromCAIP10(entry.caip10) ?? entry.sourceChainCAIP2;
+                    // Prefer the dedicated fields over parsing `caip10`. Wallet identifiers are
+                    // stored chain-wildcarded (`eip155:*:0x…`) because a registered wallet is
+                    // stolen on every EVM chain, so `extractCAIP2FromCAIP10` yields `eip155:*`
+                    // — not a chain, and no explorer link. `reportedChainCAIP2` is the specific
+                    // chain the theft was reported on.
+                    const address =
+                      entry.walletAddress ?? extractAddressFromCAIP10(entry.caip10) ?? entry.id;
+                    const caip2 =
+                      entry.reportedChainCAIP2 ??
+                      entry.sourceChainCAIP2 ??
+                      extractCAIP2FromCAIP10(entry.caip10) ??
+                      undefined;
                     const chainInfo = getChainDisplayFromCaip2(caip2);
                     const explorerUrl = chainInfo.chainId
                       ? getExplorerAddressUrl(chainInfo.chainId, address)

@@ -52,11 +52,22 @@ export interface WalletBatchDetail {
 
 export interface WalletBatchEntry {
   id: string;
+  /** Full bytes32 identifier — NOT an address. Use `walletAddress` to display one. */
   caip10: string;
+  /** EVM address, or undefined for a non-EVM identifier that has no address form. */
+  walletAddress?: string;
   registeredAt: bigint;
   transactionHash: Hash;
   operator?: Address;
   sourceChainCAIP2?: string;
+  /**
+   * The specific chain the theft was reported on.
+   *
+   * Required for the chain badge: `caip10` is stored in the CAIP-2 wildcard form
+   * (`eip155:*:0x…`) because a registered wallet is stolen on every EVM chain, so parsing a
+   * chain out of it yields the literal `*` rather than a chain.
+   */
+  reportedChainCAIP2?: string;
 }
 
 export interface TransactionBatchDetail {
@@ -176,10 +187,12 @@ export function useBatchDetail(options: UseBatchDetailOptions): UseBatchDetailRe
         const entries = entriesRes.stolenWallets.items.map<WalletBatchEntry>((raw) => ({
           id: raw.id,
           caip10: raw.caip10,
+          walletAddress: raw.walletAddress ?? undefined,
           registeredAt: safeBigInt(raw.registeredAt),
           transactionHash: raw.transactionHash as Hash,
           operator: asOptionalAddress(raw.operator),
           sourceChainCAIP2: raw.sourceChainCAIP2,
+          reportedChainCAIP2: raw.reportedChainCAIP2,
         }));
 
         return { type: 'wallet', batch, entries };
