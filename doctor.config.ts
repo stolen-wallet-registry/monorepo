@@ -30,4 +30,8 @@ export default {
      */
     'react-doctor/no-giant-component': 'off',
   },
+  ignore: {
+    files: ['**/dist/**', '**/storybook-static/**', '**/coverage/**', 'packages/contracts/out/**'],
+    overrides: [{ files: ['**/dist/**'], rules: ['react-doctor/artifact-secret-leak'] }],
+  },
 };

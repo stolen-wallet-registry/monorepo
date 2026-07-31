@@ -82,6 +82,15 @@ export function WaitForConnectionStep({
     clearAckTimeout();
     setConnectedToPeer(true);
     logger.p2p.info('Relayer acknowledged the pairing');
+    // Not a parent/child state mirror, which is what `no-prop-callback-in-effect` is for.
+    // `onComplete` is `goToNextStep` — a one-shot navigation fired when the relayer's reply
+    // arrives, and the rule's canonical fix (hoist the shared value into a Provider) does not
+    // apply: the value it would hoist, `partnerAcknowledged`, is ALREADY shared store state
+    // (`relayerFromPeerSession`). The advance cannot move up to the page precisely because it
+    // must be gated on `awaitingPartner` — local proof that THIS peer sent the CONNECT and is
+    // waiting on it. Without that gate a stale persisted flag, or the relayer-role render of
+    // this same step, would advance a user who never initiated a pairing.
+    // react-doctor-disable-next-line react-doctor/no-prop-callback-in-effect
     onComplete();
   }, [awaitingPartner, partnerAcknowledged, clearAckTimeout, setConnectedToPeer, onComplete]);
 
