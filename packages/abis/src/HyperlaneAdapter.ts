@@ -102,6 +102,19 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
+    name: 'activateOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'addDomains',
     inputs: [
       {
@@ -255,6 +268,25 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
+    name: 'ownershipTransferKey',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
     name: 'pendingActivations',
     inputs: [
       {
@@ -325,6 +357,19 @@ export const HyperlaneAdapterABI = [
         name: 'domain',
         type: 'uint32',
         internalType: 'uint32',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'proposeOwnershipTransfer',
+    inputs: [
+      {
+        name: 'newOwner',
+        type: 'address',
+        internalType: 'address',
       },
     ],
     outputs: [],
@@ -775,12 +820,22 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__RenounceDisabled',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TimelockOwnable__SetupAlreadyComplete',
     inputs: [],
   },
   {
     type: 'error',
     name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__ZeroAddress',
     inputs: [],
   },
 ] as const;

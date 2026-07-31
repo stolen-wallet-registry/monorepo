@@ -167,5 +167,13 @@ export function acceptStream(
   role: StreamRole
 ): connection is Connection {
   if (authorizeStreamPeer(protocol, connection, role === 'relayer') === null) return false;
-  return validateProtocolMessage(protocol, data);
+  if (!validateProtocolMessage(protocol, data)) return false;
+
+  // Liveness is recorded here rather than at parse time: a well-formed message from a
+  // stranger proves nothing about the partner, and recording it there would let anyone on
+  // the public relay paper over a keep-alive failure that correctly reported the partner
+  // lost. Past this point the sender IS the bound partner, so the traffic is real evidence.
+  useP2PStore.getState().setConnectedToPeer(true);
+
+  return true;
 }

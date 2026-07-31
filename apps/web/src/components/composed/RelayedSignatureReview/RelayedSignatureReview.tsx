@@ -64,6 +64,7 @@ export function RelayedSignatureReview({
             <EnsExplorerLink
               value={review.recoveredSigner}
               type="address"
+              resolveEns={false}
               showDisabledIcon={false}
             />
           ) : (
@@ -73,7 +74,12 @@ export function RelayedSignatureReview({
         <div className="flex justify-between items-center gap-2">
           <span className="text-muted-foreground">You were told:</span>
           {expectedSigner ? (
-            <EnsExplorerLink value={expectedSigner} type="address" showDisabledIcon={false} />
+            <EnsExplorerLink
+              value={expectedSigner}
+              type="address"
+              resolveEns={false}
+              showDisabledIcon={false}
+            />
           ) : (
             <span className="text-destructive">unknown</span>
           )}

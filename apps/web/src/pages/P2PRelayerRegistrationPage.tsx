@@ -51,6 +51,7 @@ import {
 } from '@/lib/p2p';
 import { storeSignature, SIGNATURE_STEP, type StoredSignature } from '@/lib/signatures';
 import { logger } from '@/lib/logger';
+import { isAddress } from '@/lib/types/ethereum';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 /**
@@ -250,14 +251,28 @@ export function P2PRelayerRegistrationPage() {
               // Bind the stream to the agreed partner peer and to this protocol's schema
               // before any of it is trusted. Without this an arbitrary peer that learned a
               // displayed peer ID could inject signatures or drive the step machine.
-              if (!acceptStream(protocol, connection, data, 'relayer')) return;
+              if (!acceptStream(protocol, connection, data, 'relayer')) {
+                // Rejections used to be logged and nothing else, which made the failure mode
+                // indistinguishable from a quiet network: the real registeree's CONNECT is
+                // refused because someone else was pinned first, and both sides just sit
+                // there. Saying so is what lets a relayer notice they are paired with the
+                // wrong peer and restart, rather than eventually paying gas for a stranger.
+                if (protocol === PROTOCOLS.CONNECT) {
+                  setConnectionError(
+                    'A connection attempt was refused because it came from a different peer than the one you are paired with. If your partner cannot connect, restart this page to clear the pairing.'
+                  );
+                }
+                return;
+              }
 
               logger.p2p.info('Relayer received data', { protocol, data });
 
               switch (protocol) {
                 case PROTOCOLS.CONNECT:
                   // Registeree connected
-                  if (data.form?.registeree) {
+                  // Validated rather than asserted: this is where a peer's claim about which
+                  // wallet is being registered enters the relayer's own state.
+                  if (data.form?.registeree && isAddress(data.form.registeree)) {
                     setFormValues({ registeree: data.form.registeree });
                   }
                   // The partner peer ID is pinned by acceptStream from connection.remotePeer.

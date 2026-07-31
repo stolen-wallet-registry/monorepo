@@ -15,6 +15,7 @@
 import type { ParsedStreamData } from '@swr/p2p';
 import { logger } from '@/lib/logger';
 import { isAddress } from '@/lib/types/ethereum';
+import type { Address } from '@/lib/types/ethereum';
 
 /** A 65-byte ECDSA signature: 0x + 130 hex characters. */
 export const SIGNATURE_HEX = /^0x[0-9a-fA-F]{130}$/;
@@ -104,7 +105,12 @@ function hasValidSignatureEnvelope(
 export function isValidSignatureData(
   data: ParsedStreamData,
   expectedChainId: number
-): data is ParsedStreamData & { signature: NonNullable<ParsedStreamData['signature']> } {
+): data is ParsedStreamData & {
+  // `address` narrows to `Address` because this function proves it with `isAddress` below.
+  // Without the narrowing every caller has to re-validate or assert something already
+  // checked here — and asserting is how an unchecked wire value ends up used as a signer.
+  signature: Omit<NonNullable<ParsedStreamData['signature']>, 'address'> & { address: Address };
+} {
   if (!hasValidSignatureEnvelope(data, expectedChainId)) return false;
 
   const sig = data.signature;

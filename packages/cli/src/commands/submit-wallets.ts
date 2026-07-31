@@ -12,7 +12,7 @@ import { join } from 'path';
 export interface SubmitWalletsOptions {
   file: string;
   env: 'local' | 'testnet' | 'mainnet';
-  privateKey?: string;
+  privateKey?: Hex;
   chainId?: number;
   outputDir?: string;
   dryRun?: boolean;
@@ -130,11 +130,11 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
     // 7. For direct submission, private key is required
     if (!options.privateKey) {
       throw new Error(
-        'Private key required for direct submission. Use --build-only for multisig workflows.'
+        'No signing credential resolved for direct submission. Use --keystore <path>, or --build-only for multisig workflows.'
       );
     }
 
-    const { walletClient, account } = createClients(config, options.privateKey as `0x${string}`);
+    const { walletClient, account } = createClients(config, options.privateKey);
 
     console.log(chalk.gray(`Operator address: ${account}`));
 

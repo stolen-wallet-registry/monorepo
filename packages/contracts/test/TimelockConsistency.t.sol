@@ -2,8 +2,13 @@
 pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
+import { CrossChainInbox } from "../src/CrossChainInbox.sol";
+import { FraudRegistryHub } from "../src/FraudRegistryHub.sol";
+import { SoulboundReceiver } from "../src/soulbound/SoulboundReceiver.sol";
+import { ISoulboundReceiver } from "../src/interfaces/ISoulboundReceiver.sol";
 import { OperatorSubmitter } from "../src/OperatorSubmitter.sol";
 import { OperatorRegistry } from "../src/OperatorRegistry.sol";
 import { IOperatorRegistry } from "../src/interfaces/IOperatorRegistry.sol";
@@ -29,6 +34,8 @@ import { MockMailbox } from "./mocks/MockMailbox.sol";
 contract TimelockConsistencyTest is Test {
     address internal owner;
     uint32 internal constant HUB_DOMAIN = 8453;
+    uint32 internal constant SPOKE_DOMAIN = 11_155_420; // OP Sepolia
+    bytes32 internal constant SPOKE_BYTES32 = bytes32(uint256(uint160(0xBEEF)));
 
     function setUp() public {
         vm.warp(1_704_067_200); // 2024-01-01
@@ -309,5 +316,276 @@ contract TimelockConsistencyTest is Test {
         spoke.activateHubConfig(HUB_DOMAIN, newInbox);
 
         assertEq(spoke.hubInbox(), newInbox);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CrossChainInbox — the revoke path that was blocked along with the grant
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function _inbox() internal returns (CrossChainInbox) {
+        MockMailbox mailbox = new MockMailbox(HUB_DOMAIN);
+        FraudRegistryHub hub = new FraudRegistryHub(owner, makeAddr("feeRecipient"));
+        return new CrossChainInbox(address(mailbox), address(hub), owner);
+    }
+
+    /// @notice Trusting a spoke is immediate during setup (deploy scripts rely on it).
+    function test_Inbox_TrustImmediateDuringSetup() public {
+        CrossChainInbox inbox = _inbox();
+
+        inbox.setTrustedSource(SPOKE_DOMAIN, SPOKE_BYTES32, true);
+
+        assertTrue(inbox.isTrustedSource(SPOKE_DOMAIN, SPOKE_BYTES32));
+    }
+
+    /// @notice After completeSetup(), trusting a new spoke in one transaction is rejected.
+    /// @dev A trusted source's messages reach WalletRegistry.registerFromHub, which performs no
+    ///      signature check — granting trust is the widest write capability in the system.
+    function test_Inbox_TrustBlockedAfterSetup() public {
+        CrossChainInbox inbox = _inbox();
+        inbox.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        inbox.setTrustedSource(SPOKE_DOMAIN, bytes32(uint256(uint160(makeAddr("attackerSpoke")))), true);
+    }
+
+    /// @notice Un-trusting a compromised spoke stays immediate after setup.
+    /// @dev This is the finding: the setter was `onlyDuringSetup` unconditionally, so cutting off
+    ///      a spoke that was forging registrations required propose → 2 days → activate, and the
+    ///      only immediate lever was the hub-wide pause that also stops every honest spoke.
+    function test_Inbox_UntrustStaysImmediateAfterSetup() public {
+        CrossChainInbox inbox = _inbox();
+        inbox.setTrustedSource(SPOKE_DOMAIN, SPOKE_BYTES32, true);
+        inbox.completeSetup();
+
+        inbox.setTrustedSource(SPOKE_DOMAIN, SPOKE_BYTES32, false);
+
+        assertFalse(inbox.isTrustedSource(SPOKE_DOMAIN, SPOKE_BYTES32), "Revocation must not require the timelock");
+    }
+
+    /// @notice The propose → wait → activate path can (re-)trust a spoke after the full delay.
+    function test_Inbox_TrustViaTimelock() public {
+        CrossChainInbox inbox = _inbox();
+        inbox.completeSetup();
+
+        inbox.proposeTrustedSource(SPOKE_DOMAIN, SPOKE_BYTES32, true);
+
+        vm.warp(block.timestamp + inbox.ACTIVATION_DELAY() - 1);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__TooEarly.selector);
+        inbox.activateTrustedSource(SPOKE_DOMAIN, SPOKE_BYTES32, true);
+
+        vm.warp(block.timestamp + 1);
+        inbox.activateTrustedSource(SPOKE_DOMAIN, SPOKE_BYTES32, true);
+
+        assertTrue(inbox.isTrustedSource(SPOKE_DOMAIN, SPOKE_BYTES32));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SoulboundReceiver — a domain could never be un-trusted at all
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function _receiver() internal returns (SoulboundReceiver, address) {
+        MockMailbox mailbox = new MockMailbox(HUB_DOMAIN);
+        SoulboundReceiver receiver =
+            new SoulboundReceiver(owner, address(mailbox), makeAddr("walletSoulbound"), makeAddr("supportSoulbound"));
+        return (receiver, address(mailbox));
+    }
+
+    /// @notice Pointing a domain at its forwarder is immediate during setup.
+    function test_Receiver_SetForwarderImmediateDuringSetup() public {
+        (SoulboundReceiver receiver,) = _receiver();
+        address forwarder = makeAddr("spokeForwarder");
+
+        receiver.setTrustedForwarder(SPOKE_DOMAIN, forwarder);
+
+        assertEq(receiver.trustedForwarders(SPOKE_DOMAIN), forwarder);
+    }
+
+    /// @notice After completeSetup(), pointing a domain at a new forwarder requires the timelock.
+    function test_Receiver_SetForwarderBlockedAfterSetup() public {
+        (SoulboundReceiver receiver,) = _receiver();
+        receiver.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        receiver.setTrustedForwarder(SPOKE_DOMAIN, makeAddr("attackerForwarder"));
+    }
+
+    /// @notice Un-trusting a domain (forwarder = address(0)) stays immediate after setup.
+    /// @dev Previously impossible in any form: the setter was `onlyDuringSetup` AND both the
+    ///      immediate and the timelocked paths rejected address(0), so a compromised forwarder
+    ///      could only be *repointed* after 2 days, never cut off.
+    function test_Receiver_UntrustStaysImmediateAfterSetup() public {
+        (SoulboundReceiver receiver,) = _receiver();
+        address forwarder = makeAddr("spokeForwarder");
+        receiver.setTrustedForwarder(SPOKE_DOMAIN, forwarder);
+        receiver.completeSetup();
+
+        receiver.setTrustedForwarder(SPOKE_DOMAIN, address(0));
+
+        assertEq(receiver.trustedForwarders(SPOKE_DOMAIN), address(0), "Revocation must not require the timelock");
+    }
+
+    /// @notice The propose → wait → activate path still grants forwarder trust after setup.
+    function test_Receiver_SetForwarderViaTimelock() public {
+        (SoulboundReceiver receiver,) = _receiver();
+        receiver.completeSetup();
+        address forwarder = makeAddr("newForwarder");
+
+        receiver.proposeTrustedForwarder(SPOKE_DOMAIN, forwarder);
+
+        vm.warp(block.timestamp + receiver.ACTIVATION_DELAY() - 1);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__TooEarly.selector);
+        receiver.activateTrustedForwarder(SPOKE_DOMAIN, forwarder);
+
+        vm.warp(block.timestamp + 1);
+        receiver.activateTrustedForwarder(SPOKE_DOMAIN, forwarder);
+
+        assertEq(receiver.trustedForwarders(SPOKE_DOMAIN), forwarder);
+    }
+
+    /// @notice pause() is the receiver's kill switch and unpause() fully restores handling.
+    /// @dev The receiver had no pause at all, so a forwarder compromise had no global stop.
+    ///      The unpaused half asserts the modifier is actually off: the call gets past
+    ///      whenNotPaused and fails later, on the forwarder-trust check.
+    function test_Receiver_PauseBlocksHandleUnpauseRestores() public {
+        (SoulboundReceiver receiver, address mailbox) = _receiver();
+        bytes memory message = abi.encode(uint8(1), makeAddr("wallet"), address(0), uint256(0));
+        bytes32 sender = bytes32(uint256(uint160(makeAddr("untrusted"))));
+
+        receiver.pause();
+        assertTrue(receiver.paused());
+
+        vm.prank(mailbox);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        receiver.handle(SPOKE_DOMAIN, sender, message);
+
+        receiver.unpause();
+        assertFalse(receiver.paused());
+
+        vm.prank(mailbox);
+        vm.expectRevert(ISoulboundReceiver.SoulboundReceiver__UntrustedForwarder.selector);
+        receiver.handle(SPOKE_DOMAIN, sender, message);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Ownership — custody of the timelock is itself a trust boundary
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Ownership handover is immediate during setup (deploy → hand to multisig).
+    function test_Ownership_TransferImmediateDuringSetup() public {
+        OperatorRegistry reg = new OperatorRegistry(owner);
+        address newOwner = makeAddr("multisig");
+
+        reg.transferOwnership(newOwner);
+        vm.prank(newOwner);
+        reg.acceptOwnership();
+
+        assertEq(reg.owner(), newOwner);
+    }
+
+    /// @notice After completeSetup(), a compromised owner key cannot hand over ownership instantly.
+    /// @dev The timelock guarded individual actions but not custody of the timelock. One
+    ///      transferOwnership + acceptOwnership handed an attacker every NON-timelocked lever at
+    ///      once — revoke every operator, pause everything, cancelAction on the DAO's own recovery
+    ///      proposals — with zero delay and zero warning.
+    function test_Ownership_TransferBlockedAfterSetup() public {
+        OperatorRegistry reg = new OperatorRegistry(owner);
+        reg.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        reg.transferOwnership(makeAddr("attacker"));
+
+        assertEq(reg.pendingOwner(), address(0));
+        assertEq(reg.owner(), owner);
+    }
+
+    /// @notice The legitimate handover still works end to end: propose → wait → activate → accept.
+    function test_Ownership_TransferViaTimelock() public {
+        OperatorRegistry reg = new OperatorRegistry(owner);
+        reg.completeSetup();
+        address dao = makeAddr("dao");
+
+        reg.proposeOwnershipTransfer(dao);
+
+        vm.warp(block.timestamp + reg.ACTIVATION_DELAY() - 1);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__TooEarly.selector);
+        reg.activateOwnershipTransfer(dao);
+
+        vm.warp(block.timestamp + 1);
+        reg.activateOwnershipTransfer(dao);
+
+        // Activation only starts the Ownable2Step handshake
+        assertEq(reg.pendingOwner(), dao);
+        assertEq(reg.owner(), owner);
+
+        vm.prank(dao);
+        reg.acceptOwnership();
+
+        assertEq(reg.owner(), dao);
+        assertEq(reg.pendingOwner(), address(0));
+    }
+
+    /// @notice Activation applies only the exact address that was proposed.
+    function test_Ownership_ActivateRejectsUnproposedAddress() public {
+        OperatorRegistry reg = new OperatorRegistry(owner);
+        reg.completeSetup();
+
+        reg.proposeOwnershipTransfer(makeAddr("dao"));
+        vm.warp(block.timestamp + reg.ACTIVATION_DELAY());
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__NotProposed.selector);
+        reg.activateOwnershipTransfer(makeAddr("attacker"));
+    }
+
+    /// @notice A pending handover can be cancelled immediately, before the new owner accepts.
+    /// @dev Clearing pendingOwner only ever narrows access, so it must not itself be timelocked —
+    ///      otherwise a proposal activated under duress would be un-stoppable during the window
+    ///      between activation and acceptance.
+    function test_Ownership_CancelPendingTransferStaysImmediate() public {
+        OperatorRegistry reg = new OperatorRegistry(owner);
+        reg.completeSetup();
+        address dao = makeAddr("dao");
+
+        reg.proposeOwnershipTransfer(dao);
+        vm.warp(block.timestamp + reg.ACTIVATION_DELAY());
+        reg.activateOwnershipTransfer(dao);
+
+        reg.transferOwnership(address(0));
+        assertEq(reg.pendingOwner(), address(0));
+
+        vm.prank(dao);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", dao));
+        reg.acceptOwnership();
+    }
+
+    /// @notice Proposing the zero address is rejected — it is not a handover, it is a cancel.
+    function test_Ownership_ProposeZeroAddressReverts() public {
+        OperatorRegistry reg = new OperatorRegistry(owner);
+        reg.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__ZeroAddress.selector);
+        reg.proposeOwnershipTransfer(address(0));
+    }
+
+    /// @notice Renouncing is still possible while the contract is not yet live.
+    function test_Ownership_RenounceAllowedDuringSetup() public {
+        OperatorRegistry reg = new OperatorRegistry(owner);
+
+        reg.renounceOwnership();
+
+        assertEq(reg.owner(), address(0));
+    }
+
+    /// @notice After completeSetup(), renouncing is permanently disabled.
+    /// @dev The inverse of the seizure: an owner-less live contract can never activate a
+    ///      timelocked setter, never revoke a compromised operator or spoke, and never pause.
+    ///      The config and the trust boundaries freeze forever.
+    function test_Ownership_RenounceBlockedAfterSetup() public {
+        OperatorRegistry reg = new OperatorRegistry(owner);
+        reg.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__RenounceDisabled.selector);
+        reg.renounceOwnership();
+
+        assertEq(reg.owner(), owner);
     }
 }

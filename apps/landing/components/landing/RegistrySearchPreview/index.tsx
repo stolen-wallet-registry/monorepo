@@ -22,6 +22,7 @@ import {
 } from '@swr/ui';
 import {
   search,
+  isSearchUnavailableError,
   getResultStatus,
   getStatusLabel,
   getStatusDescription,
@@ -72,6 +73,10 @@ function getResultBgClass(status: ResultStatus): string {
       return 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-900';
     case 'not-found':
       return 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-900';
+    case 'unverified':
+      // Deliberately not green: a registry that did not answer is an unknown, and showing
+      // the clean styling for it is how someone concludes a stolen wallet is safe.
+      return 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900';
   }
 }
 
@@ -86,6 +91,8 @@ function StatusIcon({ status }: { status: ResultStatus }) {
       return <LinkIcon className="h-4 w-4 text-yellow-500" />;
     case 'not-found':
       return <CheckCircle className="h-4 w-4 text-green-500" />;
+    case 'unverified':
+      return <AlertTriangle className="h-4 w-4 text-amber-500" />;
   }
 }
 
@@ -99,6 +106,7 @@ function createStubbedWalletResult(address: string): SearchResult {
   return {
     type: 'address',
     found: true,
+    unverified: [],
     foundInWalletRegistry: true,
     foundInContractRegistry: false,
     data: {
@@ -120,6 +128,7 @@ function createStubbedTransactionResult(txHash: string): SearchResult {
   return {
     type: 'transaction',
     found: true,
+    unverified: [],
     data: {
       txHash: txHash.toLowerCase() as `0x${string}`,
       chains: [
@@ -141,6 +150,7 @@ function createStubbedNotFoundAddressResult(address: string): SearchResult {
   return {
     type: 'address',
     found: false,
+    unverified: [],
     foundInWalletRegistry: false,
     foundInContractRegistry: false,
     data: {
@@ -155,6 +165,7 @@ function createStubbedCleanTransactionResult(_txHash: string): SearchResult {
   return {
     type: 'transaction',
     found: false,
+    unverified: [],
     data: null,
   };
 }
@@ -163,6 +174,7 @@ function createStubbedContractResult(address: string): SearchResult {
   return {
     type: 'address',
     found: true,
+    unverified: [],
     foundInWalletRegistry: false,
     foundInContractRegistry: true,
     data: {
@@ -261,7 +273,14 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
       if (latestQueryRef.current !== trimmed) return;
 
       console.error('Registry search failed:', err);
-      setError('Failed to search registry. Please try again.');
+      // Say what the failure means, not just that it happened. A visitor who reads
+      // "search failed" and moves on has effectively been told "clean" — which is the one
+      // conclusion an unreachable registry does not support.
+      setError(
+        isSearchUnavailableError(err)
+          ? 'The registry could not be reached, so this address could not be checked. This is not a clean result — please try again.'
+          : 'Failed to search registry. Please try again.'
+      );
       setResult(null);
     } finally {
       // Only clear loading if this is still the latest query.

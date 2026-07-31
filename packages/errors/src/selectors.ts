@@ -676,6 +676,16 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Initial setup is complete. Changes require timelock.',
     action: 'Use the propose/activate flow for this change.',
   },
+  '0xab3bcf81': {
+    name: 'TimelockOwnable__RenounceDisabled',
+    message: 'Ownership cannot be renounced after setup.',
+    action: 'Transfer ownership via the propose/activate flow instead.',
+  },
+  '0x8674ccdc': {
+    name: 'TimelockOwnable__ZeroAddress',
+    message: 'Ownership cannot be transferred to the zero address.',
+    action: 'Provide a valid new owner address.',
+  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // BridgeAdapter Errors

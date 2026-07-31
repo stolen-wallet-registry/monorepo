@@ -24,6 +24,26 @@ export type Hash = `0x${string}`;
  */
 export type SearchType = 'address' | 'transaction' | 'caip10' | 'invalid';
 
+/**
+ * A registry a search can consult.
+ */
+export type RegistryKind = 'wallet' | 'contract' | 'transaction';
+
+/**
+ * Registries that could NOT be consulted for a given search.
+ *
+ * This exists so that `found: false` can never be read as "clean" on its own. For a fraud
+ * registry a false negative is the most dangerous possible answer — an off-ramp clearing a
+ * wallet that IS registered stolen — so every result states which registries actually
+ * answered. When a registry is listed here, `found: false` means only "absent from the
+ * registries that answered", and the caller must say "could not verify", never "clean".
+ *
+ * A search that finds nothing AND cannot reach a registry does not return at all: it throws
+ * {@link SearchUnavailableError}, because a flag on a returned value can be ignored while an
+ * exception cannot.
+ */
+export type UnverifiedRegistries = readonly RegistryKind[];
+
 // ═══════════════════════════════════════════════════════════════════════════
 // WALLET SEARCH
 // ═══════════════════════════════════════════════════════════════════════════
@@ -64,6 +84,8 @@ export interface WalletSearchResult {
   type: 'wallet';
   found: boolean;
   data: WalletSearchData | null;
+  /** Registries that could not be consulted. See {@link UnverifiedRegistries}. */
+  unverified: UnverifiedRegistries;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -105,6 +127,8 @@ export interface TransactionSearchResult {
   type: 'transaction';
   found: boolean;
   data: TransactionSearchData | null;
+  /** Registries that could not be consulted. See {@link UnverifiedRegistries}. */
+  unverified: UnverifiedRegistries;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -168,6 +192,13 @@ export interface AddressSearchResult {
   /** Found in fraudulent contract registry */
   foundInContractRegistry: boolean;
   data: AddressSearchData | null;
+  /**
+   * Registries that could not be consulted. See {@link UnverifiedRegistries}.
+   *
+   * `foundInWalletRegistry: false` with `'wallet'` listed here does NOT mean the address is
+   * absent from the wallet registry — it means the wallet registry never answered.
+   */
+  unverified: UnverifiedRegistries;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -207,6 +238,8 @@ export interface InvalidSearchResult {
   type: 'invalid';
   found: false;
   data: null;
+  /** Always empty: nothing was queried, because the input was not a valid identifier. */
+  unverified: UnverifiedRegistries;
 }
 
 /**
@@ -220,8 +253,12 @@ export type SearchResult = AddressSearchResult | TransactionSearchResult | Inval
 
 /**
  * Simplified status for display.
+ *
+ * `unverified` is distinct from `not-found` on purpose: it is the state where the registry
+ * did not answer, and presenting it as `not-found` is the false-negative this type exists to
+ * prevent.
  */
-export type ResultStatus = 'registered' | 'pending' | 'not-found';
+export type ResultStatus = 'registered' | 'pending' | 'not-found' | 'unverified';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SEARCH CONFIG
@@ -233,4 +270,38 @@ export type ResultStatus = 'registered' | 'pending' | 'not-found';
 export interface SearchConfig {
   /** Ponder indexer URL */
   indexerUrl: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INDEXER STATUS (staleness)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * How far the indexer has progressed on one chain.
+ */
+export interface IndexerChainStatus {
+  /** Chain name as configured in ponder */
+  chainName: string;
+  /** Numeric chain ID */
+  chainId: number;
+  /** Last block the indexer has processed */
+  blockNumber: number;
+  /** Timestamp of that block (Unix seconds) */
+  blockTimestamp: number;
+}
+
+/**
+ * Indexer progress across all configured chains.
+ *
+ * A search answers questions about the state of the world *as of* these blocks. Without it,
+ * an indexer that is hours behind returns `found: false` with full confidence for everything
+ * registered in the gap — indistinguishable from a genuinely clean address.
+ */
+export interface IndexerStatus {
+  /** Per-chain progress, ordered by chain ID */
+  chains: IndexerChainStatus[];
+  /** Oldest chain timestamp, i.e. the worst-case freshness of any answer (Unix seconds) */
+  oldestBlockTimestamp: number | null;
+  /** Seconds between the oldest indexed block and now */
+  lagSeconds: number | null;
 }

@@ -283,10 +283,23 @@ export function SearchPage() {
       // Only save address searches to recent (they're the primary use case)
       if (type === 'address' || type === 'caip10') {
         // Extract address from CAIP-10 (format: namespace:chainId:address)
-        const address = type === 'caip10' ? (query.split(':')[2] ?? query) : query;
-        logger.ui.info('Search initiated from input', { address: redactAddress(address), chainId });
-        saveRecentSearch({ address, chainId, type: 'wallet', resultStatus: 'unknown' });
-        notifyRecentSearchesChange();
+        const candidate = type === 'caip10' ? (query.split(':')[2] ?? query) : query;
+        // The CAIP-10 split can yield a non-EVM identifier (or nothing useful), and the
+        // recent-search list is keyed by address. Validate rather than assume: an entry that
+        // is not an address cannot be matched against later results anyway.
+        if (isAddress(candidate)) {
+          logger.ui.info('Search initiated from input', {
+            address: redactAddress(candidate),
+            chainId,
+          });
+          saveRecentSearch({
+            address: candidate,
+            chainId,
+            type: 'wallet',
+            resultStatus: 'unknown',
+          });
+          notifyRecentSearchesChange();
+        }
       } else {
         logger.ui.info('Transaction search initiated', { query, type });
       }

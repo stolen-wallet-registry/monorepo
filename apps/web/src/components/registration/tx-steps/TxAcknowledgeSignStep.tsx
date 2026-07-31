@@ -4,7 +4,7 @@
  * Signs the EIP-712 acknowledgement message for transaction batch registration.
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
 import { Alert, AlertDescription, Button, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
@@ -102,6 +102,13 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   );
 
   const { signTxAcknowledgement, isPending: isSigning, reset: resetSigning } = useSignTxEIP712();
+
+  // Compared as sets: details are ordered by transaction history, not selection order.
+  const selectionIsConsistent = useMemo(() => {
+    if (selectedTxHashes.length !== selectedTxDetails.length) return false;
+    const shown = new Set(selectedTxDetails.map((detail) => detail.hash));
+    return shown.size === selectedTxHashes.length && selectedTxHashes.every((h) => shown.has(h));
+  }, [selectedTxHashes, selectedTxDetails]);
 
   const isContractDataLoading = nonceLoading || hashLoading;
   const hasContractError = nonceError || hashError;
@@ -247,6 +254,24 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           No transactions selected. Please go back and select transactions to report.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  // The table below renders `selectedTxDetails`; `selectedTxHashes` is what is hashed into
+  // the signature and submitted on-chain. If those ever disagree, the user is being shown one
+  // set of transactions and asked to sign another — and because the signature over the
+  // mismatched set is genuine, nothing downstream can catch it. The store refuses to rehydrate
+  // a mismatched pair, so reaching here means a live code path broke the invariant. Refuse to
+  // sign rather than sign something the user cannot see.
+  if (!selectionIsConsistent) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          The transactions shown do not match the transactions that would be signed. Nothing has
+          been signed. Please go back and select your transactions again.
         </AlertDescription>
       </Alert>
     );

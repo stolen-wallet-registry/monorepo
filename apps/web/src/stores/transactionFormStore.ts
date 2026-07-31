@@ -13,7 +13,7 @@ import { logger } from '@/lib/logger';
 // Note: selection.ts imports `StoredTransactionDetail` from this module, but only
 // as `import type`, so that edge is erased at compile time — no runtime cycle.
 import { toStoredTransactionDetail } from '@/lib/transactions/selection';
-import type { Address, Hash } from '@/lib/types/ethereum';
+import { isAddress, isHash, type Address, type Hash } from '@/lib/types/ethereum';
 import type { UserTransaction } from '@/hooks/transactions/useUserTransactions';
 
 /**
@@ -60,6 +60,99 @@ export interface TransactionFormActions {
   /** Set transaction data for contract calls and signing */
   setTransactionData: (dataHash: Hash | null, txHashes: Hash[], chainIds: Hash[]) => void;
   reset: () => void;
+}
+
+/** Empty selection — what every rejected rehydrate falls back to. */
+const EMPTY_SELECTION: { hashes: Hash[]; details: StoredTransactionDetail[] } = {
+  hashes: [],
+  details: [],
+};
+
+/**
+ * `isAddress`/`isHash` take a string; persisted values are `unknown` and may be absent.
+ *
+ * `strict: false` disables EIP-55 checksum enforcement, which viem applies by default. The
+ * question being asked here is "is this a well-formed address", not "is it checksummed" — and
+ * a lowercase address is well-formed. Enforcing the checksum would discard legitimate state,
+ * and for the `to` field it would discard the entire transaction selection over a display-only
+ * value. No security property here depends on casing.
+ */
+function isPersistedAddress(value: unknown): value is Address {
+  return typeof value === 'string' && isAddress(value, { strict: false });
+}
+
+function isPersistedHash(value: unknown): value is Hash {
+  return typeof value === 'string' && isHash(value);
+}
+
+/** Whether a persisted entry has the shape and types of a stored transaction detail. */
+function isStoredTransactionDetail(value: unknown): value is StoredTransactionDetail {
+  if (value === null || typeof value !== 'object') return false;
+  const detail = value as Partial<StoredTransactionDetail>;
+  return (
+    isPersistedHash(detail.hash) &&
+    (detail.to === null || isPersistedAddress(detail.to)) &&
+    typeof detail.value === 'string' &&
+    typeof detail.blockNumber === 'string' &&
+    (detail.timestamp === undefined || typeof detail.timestamp === 'number')
+  );
+}
+
+/**
+ * Restore the transaction selection only if the signed set and the displayed set agree.
+ *
+ * The two arrays are compared as SETS, not element-wise: `selectStoredTransactionDetails`
+ * orders details by the user's transaction history rather than by selection order, so a
+ * positional comparison would reject legitimate state.
+ *
+ * Returns an empty selection on any mismatch — a hash that no detail describes would be
+ * signed and submitted invisibly, and a detail with no matching hash is a row shown to the
+ * user that is not actually being reported.
+ */
+function restoreSelection(
+  persistedHashes: unknown,
+  persistedDetails: unknown
+): { hashes: Hash[]; details: StoredTransactionDetail[] } {
+  if (!Array.isArray(persistedHashes) || !Array.isArray(persistedDetails)) {
+    return EMPTY_SELECTION;
+  }
+
+  if (persistedHashes.length === 0 && persistedDetails.length === 0) {
+    return EMPTY_SELECTION;
+  }
+
+  if (!persistedHashes.every(isPersistedHash)) {
+    logger.store.warn('Discarding transaction selection: malformed hash in persisted state');
+    return EMPTY_SELECTION;
+  }
+
+  if (!persistedDetails.every(isStoredTransactionDetail)) {
+    logger.store.warn('Discarding transaction selection: malformed detail in persisted state');
+    return EMPTY_SELECTION;
+  }
+
+  const hashes = persistedHashes as Hash[];
+  const details = persistedDetails as StoredTransactionDetail[];
+
+  // Duplicates would make the set comparison pass while the submitted array differs.
+  const hashSet = new Set(hashes);
+  const detailHashSet = new Set(details.map((detail) => detail.hash));
+
+  const agrees =
+    hashSet.size === hashes.length &&
+    detailHashSet.size === details.length &&
+    hashSet.size === detailHashSet.size &&
+    hashes.every((hash) => detailHashSet.has(hash));
+
+  if (!agrees) {
+    logger.store.warn(
+      'Discarding transaction selection: the hashes to be signed do not match the transactions shown',
+      { hashCount: hashes.length, detailCount: details.length }
+    );
+    return EMPTY_SELECTION;
+  }
+
+  return { hashes, details };
 }
 
 const initialState: TransactionFormState = {
@@ -208,17 +301,32 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
 
           const state = persisted as Partial<TransactionFormState>;
 
+          // `selectedTxHashes` is what gets hashed into the signed `dataHash` and submitted
+          // on-chain; `selectedTxDetails` is the only thing the user ever sees. Restoring them
+          // independently means a rewritten localStorage entry can show the victim their own
+          // transactions while they sign and submit someone else's — and every downstream
+          // check passes, because the signature over the poisoned hash is genuine and the
+          // count check compares the poisoned array against itself.
+          //
+          // So they are restored as a pair or not at all. Any disagreement clears the
+          // selection and sends the user back to pick again, which is recoverable; signing an
+          // attacker's transaction list under your own name is not.
+          const selection = restoreSelection(state.selectedTxHashes, state.selectedTxDetails);
+
           return {
             ...current,
-            reporter: state.reporter ?? initialState.reporter,
-            forwarder: state.forwarder ?? initialState.forwarder,
-            selectedTxHashes: Array.isArray(state.selectedTxHashes)
-              ? state.selectedTxHashes
-              : initialState.selectedTxHashes,
-            selectedTxDetails: Array.isArray(state.selectedTxDetails)
-              ? state.selectedTxDetails
-              : initialState.selectedTxDetails,
-            reportedChainId: state.reportedChainId ?? initialState.reportedChainId,
+            reporter: isPersistedAddress(state.reporter) ? state.reporter : initialState.reporter,
+            forwarder: isPersistedAddress(state.forwarder)
+              ? state.forwarder
+              : initialState.forwarder,
+            selectedTxHashes: selection.hashes,
+            selectedTxDetails: selection.details,
+            reportedChainId:
+              typeof state.reportedChainId === 'number' &&
+              Number.isInteger(state.reportedChainId) &&
+              state.reportedChainId > 0
+                ? state.reportedChainId
+                : initialState.reportedChainId,
             // Derived data is recomputed, never restored.
             dataHash: null,
             txHashesForContract: [],

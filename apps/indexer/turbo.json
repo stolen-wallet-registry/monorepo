@@ -1,0 +1,21 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "typecheck": {
+      "dependsOn": ["^build"],
+      // tsconfig.json includes "./**/*.ts", so `tsc` checks test/ as well — but the root
+      // typecheck task only globs src/**. Without this override, adding or editing a test
+      // file does not invalidate the cache, and a broken test file reports a cached PASS.
+      // That is not hypothetical: it is exactly how a type error in test/security.test.ts
+      // survived a full `turbo lint typecheck test` run.
+      "inputs": ["src/**/*.ts", "test/**/*.ts", "*.ts", "tsconfig.json", "ponder-env.d.ts"],
+      "outputs": []
+    },
+    "lint": {
+      "dependsOn": ["^build"],
+      // `eslint .` covers test/ too, so the inputs must as well — same stale-cache trap.
+      "inputs": ["src/**/*.ts", "test/**/*.ts", "*.ts", "eslint.config.js"]
+    }
+  }
+}

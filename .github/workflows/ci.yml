@@ -10,7 +10,9 @@ name: CI
 # ║                                                                                      ║
 # ║  To actually check a PR: add the `ci` label (remove + re-add to re-run).              ║
 # ║                                                                                      ║
-# ║  The one exception is `abi-freshness`, which runs on every PR WITHOUT the             ║
+# ║  There are TWO exceptions that run on every PR: `supply-chain` (lockfile integrity +  ║
+# ║  audit, ungated because a lockfile edit is exactly what a malicious PR carries) and   ║
+# ║  `abi-freshness`, which runs on every PR WITHOUT the                                  ║
 # ║  `abi-unchanged` label, because it is seconds of pure git and needs no toolchain.     ║
 # ║  It only proves that packages/abis/src was touched alongside a Solidity change — NOT  ║
 # ║  that the committed ABIs are correct. Only the (label-gated) `abi-drift` job, which   ║
@@ -53,6 +55,56 @@ env:
   FOUNDRY_PROFILE: ci
 
 jobs:
+  # UNGATED, like abi-freshness. This is the second exception to the opt-in rule, and it is
+  # deliberate.
+  #
+  # Every other install site passes `--frozen-lockfile`, but they all sit behind the `ci`
+  # label — so on an ordinary PR `--frozen-lockfile` never actually executed, and nothing
+  # verified that a `pnpm-lock.yaml` change matched the manifests. With `^` ranges on
+  # viem/wagmi/rainbowkit, the lockfile is the only thing standing between this repo and a
+  # malicious minor release, and a lockfile edit is exactly what a supply-chain PR would carry.
+  # Skipped checks render the same green as passing ones, so the gap was invisible.
+  #
+  # `--ignore-scripts` is the point of the job as much as the lockfile check: it means a
+  # hostile postinstall in a newly-added dependency does not execute on a runner holding the
+  # repo token, even while we are busy verifying that dependency.
+  supply-chain:
+    name: Supply chain (lockfile + audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # Fails if pnpm-lock.yaml disagrees with any package.json. This is the blocking half.
+      - name: Verify lockfile matches manifests
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # ADVISORY, NOT BLOCKING — and that is a measured decision, not an oversight.
+      #
+      # Measured 2026-07-30 on this tree: 278 advisories (101 high, 7 critical); production-only
+      # is still 72 high and 4 critical. `--audit-level=high` — or even `critical` — would fail
+      # on the first run and stay failing, which does not make anything safer: a check that is
+      # always red gets ignored, and it would block every unrelated PR from merging.
+      #
+      # Most of the browser-side weight is one dependency. `@hyperlane-xyz/sdk` is pulled into
+      # apps/web for a single event decode and drags in protobufjs, @aws-sdk/client-s3, cosmjs,
+      # axios, h3 and ws; it accounts for 30 of the 39 apps/web highs and all three browser
+      # criticals. See V30 in PRPs/security-audit-2026-07-30.md — replacing it with a local
+      # viem `parseEventLogs` deletes that subtree.
+      #
+      # FLIP THIS TO BLOCKING (drop continue-on-error) once the count is down to something a
+      # human will actually read. Until then the output is here to be looked at, honestly
+      # labelled, rather than silently absent.
+      - name: Audit dependencies (advisory)
+        continue-on-error: true
+        run: pnpm audit --audit-level=high
+
   contracts:
     name: Contracts (forge)
     runs-on: ubuntu-latest
@@ -61,12 +113,12 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
         with:
           version: stable
 
@@ -90,11 +142,11 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -132,18 +184,18 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'ci')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
         with:
           version: stable
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -189,7 +241,7 @@ jobs:
       github.event_name == 'pull_request' &&
       !contains(github.event.pull_request.labels.*.name, 'abi-unchanged')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 

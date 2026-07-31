@@ -2,8 +2,11 @@
  * Contract error decoding utilities.
  */
 
-import { BaseError, ContractFunctionRevertedError } from 'viem';
+import { BaseError, ContractFunctionRevertedError, HttpRequestError, TimeoutError } from 'viem';
 import { CONTRACT_ERROR_BY_NAME, CONTRACT_ERROR_MAP, type ContractErrorInfo } from './selectors';
+
+/** viem error names that mean "the request never got an answer". */
+const NETWORK_ERROR_NAMES = new Set(['HttpRequestError', 'TimeoutError']);
 
 /** Render an error info entry as the single string shown to the user. */
 function formatErrorInfo(info: ContractErrorInfo): string {
@@ -113,8 +116,25 @@ export function sanitizeErrorMessage(error: unknown, logError?: (error: unknown)
     return structuralError;
   }
 
-  // Check for known viem error types
   if (error instanceof BaseError) {
+    // A network failure is nested inside a wrapper (viem puts HttpRequestError under
+    // ContractFunctionExecutionError for contract calls), so matching on the top-level
+    // name never fires and execution falls through to the tail sanitizer — which returns
+    // the raw viem message including `URL:` and `Request body:`. That message is rendered
+    // at ~20 UI sites, so a keyed RPC transport would put the API key in the DOM.
+    // Walking the cause chain is what closes that path; see the V29 tests.
+    // Matched by name as well as by instance: with duplicate viem copies in a pnpm workspace
+    // an `instanceof` check silently fails, and this is the arm whose failure leaks the URL.
+    const network = error.walk(
+      (e) =>
+        e instanceof HttpRequestError ||
+        e instanceof TimeoutError ||
+        (e instanceof Error && NETWORK_ERROR_NAMES.has(e.name))
+    );
+    if (network) {
+      return 'Network error. Please check your connection and try again.';
+    }
+
     switch (error.name) {
       case 'UserRejectedRequestError':
         return 'Transaction was cancelled. Please try again when ready.';
@@ -122,9 +142,6 @@ export function sanitizeErrorMessage(error: unknown, logError?: (error: unknown)
         return 'Insufficient funds to complete this transaction.';
       case 'NonceTooLowError':
         return 'Transaction conflict detected. Please refresh and try again.';
-      case 'HttpRequestError':
-      case 'TimeoutError':
-        return 'Network error. Please check your connection and try again.';
     }
   }
 
@@ -161,6 +178,13 @@ export function sanitizeErrorMessage(error: unknown, logError?: (error: unknown)
 
   // Strip "Raw Call Arguments:" section (contains long hex data that breaks UI)
   sanitized = sanitized.replace(/\s*Raw Call Arguments:[\s\S]*$/i, '');
+
+  // Strip request details. `URL:` can carry an API key and `Request body:` carries JSON-RPC
+  // calldata; neither belongs in a user-facing string. Both are truncated to end-of-string
+  // rather than matched precisely, because a partial match on nested JSON braces would leave
+  // fragments of exactly the thing being redacted.
+  sanitized = sanitized.replace(/\s*URL:\s*\S+/gi, '');
+  sanitized = sanitized.replace(/\s*Request body:[\s\S]*$/i, '');
 
   // Clean up any double spaces or trailing punctuation issues
   sanitized = sanitized.replace(/\s+/g, ' ').trim();

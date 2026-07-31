@@ -185,7 +185,15 @@ export function ExplorerLink({
 
     // Show ENS name if available (for address type only)
     if (ensName && resolvedType === 'address') {
-      return <span className="font-medium">{ensName}</span>;
+      // Isolated the same way `TruncatedAddress` isolates hex: a name may contain bidi
+      // control characters, and without isolation those reorder the surrounding sentence
+      // rather than just themselves. Callers are expected to filter unsafe names before
+      // they reach this prop; this is the rendering-side backstop.
+      return (
+        <span className="font-medium" dir="ltr" style={{ unicodeBidi: 'isolate' }}>
+          {ensName}
+        </span>
+      );
     }
 
     // Fall back to truncated address or full value

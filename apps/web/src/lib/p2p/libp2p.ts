@@ -446,9 +446,11 @@ export const readStreamData = async (stream: Stream): Promise<ParsedStreamData> 
     message: data.message,
   });
 
-  // Successful receive proves connection is alive - update store
-  logger.p2p.debug('Marking peer as connected (message received successfully)');
-  useP2PStore.getState().setConnectedToPeer(true);
+  // Deliberately does NOT mark the peer as connected. Parsing proves only that SOMEONE sent
+  // well-formed JSON — this runs before the caller's `acceptStream` check, so treating it as
+  // liveness let any stranger on the public relay flip the victim's UI to "connected" and
+  // overwrite a keep-alive failure that had correctly reported the real partner lost.
+  // `acceptStream` sets it instead, once the sender is known to be the bound partner.
 
   return data;
 };

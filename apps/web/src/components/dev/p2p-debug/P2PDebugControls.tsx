@@ -202,7 +202,7 @@ export function P2PDebugControls({
                 hasPeerId ? 'bg-green-500' : 'bg-gray-500'
               )}
             />
-            {hasPeerId ? 'Stored in localStorage' : 'Not stored'}
+            {hasPeerId ? 'Stored in sessionStorage (this tab)' : 'Not stored'}
           </div>
           <Button
             variant="outline"

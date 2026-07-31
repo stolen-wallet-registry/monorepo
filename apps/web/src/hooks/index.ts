@@ -116,6 +116,9 @@ export {
   type TransactionSearchResult,
   type TransactionSearchData,
   type TransactionChainReport,
+  // Indexer freshness
+  useIndexerStatus,
+  type IndexerStatus,
 } from './indexer';
 
 // ENS hooks

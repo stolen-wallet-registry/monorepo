@@ -74,7 +74,13 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
             {relayer && (
               <>
                 (
-                <EnsExplorerLink value={relayer} type="address" truncate showDisabledIcon={false} />
+                <EnsExplorerLink
+                  value={relayer}
+                  type="address"
+                  truncate
+                  resolveEns={false}
+                  showDisabledIcon={false}
+                />
                 )
               </>
             )}{' '}

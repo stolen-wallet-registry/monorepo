@@ -25,6 +25,12 @@ export type {
   SearchType,
   SearchConfig,
   SearchResult,
+  // Verification coverage
+  RegistryKind,
+  UnverifiedRegistries,
+  // Indexer freshness
+  IndexerStatus,
+  IndexerChainStatus,
   // Address (combined wallet + contract)
   AddressSearchData,
   AddressSearchResult,
@@ -62,6 +68,7 @@ export {
 export {
   search,
   searchAddress,
+  searchAddressByCAIP10,
   searchWallet,
   searchWalletByCAIP10,
   searchTransaction,
@@ -69,6 +76,14 @@ export {
   getOperator,
   listOperators,
 } from './search';
+
+// Failure handling — a search that cannot reach a registry throws rather than
+// returning something that reads as "clean".
+export { SearchUnavailableError, isSearchUnavailableError, registryKindLabel } from './errors';
+
+// Indexer freshness — a stale indexer answers "not found" for everything it has not
+// reached yet, so consumers acting on a clean result need to know the lag.
+export { getIndexerStatus, isIndexerStale, DEFAULT_MAX_LAG_SECONDS } from './status';
 
 // Interpretation utilities
 export {

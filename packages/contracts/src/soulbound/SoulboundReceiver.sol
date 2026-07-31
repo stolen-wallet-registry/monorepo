@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { TimelockOwnable } from "../libraries/TimelockOwnable.sol";
 import { IMessageRecipient } from "@hyperlane-xyz/core/contracts/interfaces/IMessageRecipient.sol";
 import { ISoulboundReceiver } from "../interfaces/ISoulboundReceiver.sol";
@@ -13,7 +14,7 @@ import { SupportSoulbound } from "./SupportSoulbound.sol";
 /// @notice Hub chain receiver for cross-chain soulbound mint requests
 /// @dev Implements Hyperlane's IMessageRecipient to receive messages from spoke chains.
 ///      Validates trusted forwarders and executes mints on soulbound contracts.
-contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwnable {
+contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwnable, Pausable {
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -75,7 +76,7 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     /// @param _message Encoded payload: [msgType, wallet, supporter, donationAmount]
     /// @dev `payable` because IMessageRecipient.handle is payable from Hyperlane v3. Our dispatches
     ///      set msgValue to 0, so no value is expected here.
-    function handle(uint32 _origin, bytes32 _sender, bytes calldata _message) external payable {
+    function handle(uint32 _origin, bytes32 _sender, bytes calldata _message) external payable whenNotPaused {
         // Only mailbox can call
         if (msg.sender != mailbox) revert SoulboundReceiver__OnlyMailbox();
 
@@ -140,11 +141,26 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc ISoulboundReceiver
-    /// @dev Immediate during initial setup, timelocked after completeSetup()
-    function setTrustedForwarder(uint32 domain, address forwarder) external onlyOwner onlyDuringSetup {
-        if (forwarder == address(0)) revert SoulboundReceiver__ZeroAddress();
+    /// @dev Granting trust is immediate during setup and timelocked after completeSetup().
+    ///      Passing address(0) un-trusts the domain and stays immediate at all times: it only
+    ///      ever narrows what this contract accepts, and it is the targeted emergency response
+    ///      to a compromised spoke forwarder (the alternative, pause(), stops every domain).
+    function setTrustedForwarder(uint32 domain, address forwarder) external onlyOwner {
+        if (forwarder != address(0) && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
         _trustedForwarders[domain] = forwarder;
         emit TrustedForwarderUpdated(domain, forwarder);
+    }
+
+    /// @notice Pause cross-chain mint handling
+    /// @dev Kill switch for the whole receiver. Hyperlane messages that revert in `handle` are
+    ///      not lost — they can be re-processed once unpaused.
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /// @notice Resume cross-chain mint handling
+    function unpause() external onlyOwner {
+        _unpause();
     }
 
     /// @notice Propose a trusted forwarder change (2-day delay)

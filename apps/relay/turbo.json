@@ -1,0 +1,14 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "dependsOn": ["^build"],
+      // The root `test` task globs only .ts/.tsx. The relay is pure JS, so without this
+      // override none of its sources count as inputs and the task would cache-hit forever,
+      // silently skipping the tests after the first run.
+      "inputs": ["src/**/*.mjs", "test/**/*.mjs", "package.json"],
+      "outputs": []
+    }
+  }
+}

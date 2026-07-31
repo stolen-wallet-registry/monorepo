@@ -3,6 +3,50 @@
  */
 
 import { detectSearchType } from '@swr/search';
+import { normalize } from 'viem/ens';
+
+/**
+ * Whether a resolved ENS name is safe to display in place of an address.
+ *
+ * A resolved name is attacker-controlled data: anyone can register a name, point it at their
+ * own wallet, and set the reverse record. When the UI substitutes that name for the hex
+ * address in a slot where someone decides whom to trust, the attacker chooses what that slot
+ * says.
+ *
+ * Three rejections, each closing a distinct vector:
+ *
+ * 1. **Names that are not their own normalized form.** ENSIP-15 normalization is what makes
+ *    two names that look identical resolve identically. A name that survives resolution but
+ *    differs from `normalize(name)` is displaying something other than what it is.
+ * 2. **Names shaped like hex addresses.** `0xd8da6bf26964af9d7eed9e03e53415d37aa96045.eth`
+ *    is pure ASCII, fully ENSIP-15-valid, registerable today, and unchanged by `normalize`.
+ *    In an address slot it reads as a hex address while resolving to the attacker's wallet.
+ *    This is why the normalization gate alone is insufficient.
+ * 3. **Names carrying bidirectional control characters.** RLO and friends reorder the text
+ *    around them, so a name can rewrite the sentence it sits in. Rendering isolates them too
+ *    (belt and braces), but they have no legitimate use in a name we display.
+ *
+ * @param name - The resolved ENS name, or null/undefined when none resolved
+ * @returns true only if the name can be shown in place of an address
+ */
+export function isDisplaySafeEnsName(name: string | null | undefined): name is string {
+  if (!name || typeof name !== 'string') return false;
+
+  // Anything that looks like the start of a hex address. Six nibbles is already enough to
+  // impersonate a truncated address, and truncated is how addresses are usually shown.
+  if (/^0x[0-9a-fA-F]{6,}/.test(name)) return false;
+
+  // Bidi embedding/override (U+202A-U+202E), isolates (U+2066-U+2069) and the LRM/RLM marks.
+  // Written as escapes deliberately - as literals they would be invisible in this source.
+  if (/[\u202A-\u202E\u2066-\u2069\u200E\u200F]/.test(name)) return false;
+
+  try {
+    return normalize(name) === name;
+  } catch {
+    // Not a normalizable name at all.
+    return false;
+  }
+}
 
 /**
  * Checks if a string looks like an ENS name.

@@ -6,6 +6,7 @@ export * from './protocols';
 export * from './types';
 export * from './libp2p';
 export * from './peerGuard';
+export * from './protocolSteps';
 export * from './signatureData';
 export * from './peerId';
 export * from './reconnect';

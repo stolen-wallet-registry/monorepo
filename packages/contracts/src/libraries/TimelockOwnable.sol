@@ -70,6 +70,14 @@ abstract contract TimelockOwnable is Ownable2Step {
     /// @notice Thrown when using an immediate setter after setup is complete
     error TimelockOwnable__SetupAlreadyComplete();
 
+    /// @notice Thrown when renouncing ownership after setup is complete
+    /// @dev Renouncing would permanently freeze every timelocked setter AND every emergency
+    ///      revoke lever, so it is disabled once the contract is live.
+    error TimelockOwnable__RenounceDisabled();
+
+    /// @notice Thrown when proposing an ownership transfer to the zero address
+    error TimelockOwnable__ZeroAddress();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MODIFIERS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -120,5 +128,56 @@ abstract contract TimelockOwnable is Ownable2Step {
         if (pendingActivations[actionKey] == 0) revert TimelockOwnable__NotProposed();
         delete pendingActivations[actionKey];
         emit ActionCancelled(actionKey);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OWNERSHIP (timelocked after setup)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Compute the action key for an ownership transfer proposal
+    /// @param newOwner The address that would become pending owner on activation
+    /// @return The timelock action key
+    function ownershipTransferKey(address newOwner) public pure returns (bytes32) {
+        return keccak256(abi.encode("transferOwnership", newOwner));
+    }
+
+    /// @notice Start an ownership transfer — immediate during setup, timelocked afterwards
+    /// @dev Custody of the timelock is itself a trust boundary: an owner key that can hand over
+    ///      ownership in one transaction can hand over every *non*-timelocked lever at once
+    ///      (revoke operators, pause, cancelAction on pending proposals, redirect fees), which
+    ///      makes the 2-day delay on individual setters meaningless. After completeSetup() the
+    ///      only path is propose → wait ACTIVATION_DELAY → activate.
+    ///      Passing address(0) is always allowed: that clears a pending transfer and only ever
+    ///      narrows access, so it stays immediate like every other revoke in this system.
+    /// @param newOwner The proposed new owner, or address(0) to clear a pending transfer
+    function transferOwnership(address newOwner) public virtual override onlyOwner {
+        if (newOwner != address(0) && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
+        super.transferOwnership(newOwner);
+    }
+
+    /// @notice Propose an ownership transfer (2-day delay before activation)
+    /// @param newOwner The address that will become pending owner on activation
+    function proposeOwnershipTransfer(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert TimelockOwnable__ZeroAddress();
+        _proposeAction(ownershipTransferKey(newOwner));
+    }
+
+    /// @notice Activate a previously proposed ownership transfer
+    /// @dev Only starts the Ownable2Step handshake — `newOwner` must still call
+    ///      `acceptOwnership()`. Until then the current owner can cancel it immediately via
+    ///      `transferOwnership(address(0))`.
+    /// @param newOwner The address proposed via proposeOwnershipTransfer
+    function activateOwnershipTransfer(address newOwner) external onlyOwner {
+        _activateAction(ownershipTransferKey(newOwner));
+        super.transferOwnership(newOwner);
+    }
+
+    /// @notice Renouncing ownership is permanently disabled once setup is complete
+    /// @dev Without an owner, every timelocked setter and every emergency revoke lever
+    ///      (revokeOperator, un-trust a spoke, pause) becomes uncallable forever — a worse
+    ///      end state than a compromised key, which the DAO can at least time out.
+    function renounceOwnership() public virtual override onlyOwner {
+        if (setupComplete) revert TimelockOwnable__RenounceDisabled();
+        super.renounceOwnership();
     }
 }

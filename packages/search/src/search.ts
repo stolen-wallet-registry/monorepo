@@ -23,9 +23,11 @@ import {
   type RawOperatorResponse,
   type RawOperatorsListResponse,
 } from './queries';
+import { SearchUnavailableError } from './errors';
 import type {
   Address,
   Hash,
+  RegistryKind,
   SearchConfig,
   SearchResult,
   WalletSearchResult,
@@ -85,13 +87,14 @@ export async function searchWallet(
   const wallet = result.stolenWallets?.items?.[0];
 
   if (!wallet) {
-    return { type: 'wallet', found: false, data: null };
+    return { type: 'wallet', found: false, data: null, unverified: [] };
   }
 
   return {
     type: 'wallet',
     found: true,
     data: mapWalletData(wallet),
+    unverified: [],
   };
 }
 
@@ -134,13 +137,14 @@ export async function searchWalletByCAIP10(
   const wallet = result.stolenWallets?.items?.[0];
 
   if (!wallet) {
-    return { type: 'wallet', found: false, data: null };
+    return { type: 'wallet', found: false, data: null, unverified: [] };
   }
 
   return {
     type: 'wallet',
     found: true,
     data: mapWalletData(wallet),
+    unverified: [],
   };
 }
 
@@ -166,12 +170,13 @@ export async function searchTransaction(
   const firstTx = transactions[0];
 
   if (!firstTx) {
-    return { type: 'transaction', found: false, data: null };
+    return { type: 'transaction', found: false, data: null, unverified: [] };
   }
 
   return {
     type: 'transaction',
     found: true,
+    unverified: [],
     data: {
       txHash: firstTx.txHash as Hash,
       chains: transactions.map((t) => ({
@@ -239,14 +244,31 @@ export async function searchContract(
  * @param config - Search configuration with indexer URL
  * @param address - Address to search (will be lowercased)
  *
+ * A registry that fails to answer is never reported as "absent". If nothing was found and a
+ * registry did not answer, this throws {@link SearchUnavailableError} rather than returning a
+ * result that reads as clean. If something WAS found, it returns normally and lists the
+ * unreachable registries in `unverified` — a positive hit is actionable even when the other
+ * registry is down.
+ *
+ * @param config - Search configuration with indexer URL
+ * @param address - Address to search (will be lowercased)
+ *
+ * @throws {SearchUnavailableError} when nothing was found and a registry did not answer
+ *
  * @example
  * ```ts
- * const result = await searchAddress(config, '0x742d35Cc...');
- * if (result.foundInWalletRegistry) {
- *   console.log('Address is a stolen wallet');
- * }
- * if (result.foundInContractRegistry) {
- *   console.log('Address is a fraudulent contract');
+ * try {
+ *   const result = await searchAddress(config, '0x742d35Cc...');
+ *   if (result.foundInWalletRegistry) {
+ *     console.log('Address is a stolen wallet');
+ *   }
+ *   if (result.foundInContractRegistry) {
+ *     console.log('Address is a fraudulent contract');
+ *   }
+ * } catch (error) {
+ *   if (isSearchUnavailableError(error)) {
+ *     // NOT clean — the registry could not be consulted. Fail closed.
+ *   }
  * }
  * ```
  */
@@ -254,32 +276,34 @@ export async function searchAddress(
   config: SearchConfig,
   address: string
 ): Promise<AddressSearchResult> {
-  // Query both registries in parallel for performance
-  // Use Promise.allSettled to handle partial failures gracefully
+  // Query both registries in parallel for performance.
   const [walletSettled, contractSettled] = await Promise.allSettled([
     searchWallet(config, address),
     searchContract(config, address),
   ]);
 
-  // Extract results, defaulting to "not found" on failure
-  const walletResult =
-    walletSettled.status === 'fulfilled'
-      ? walletSettled.value
-      : { found: false as const, data: null };
+  const unverified: RegistryKind[] = [];
+  const failures: unknown[] = [];
 
-  const contractData = contractSettled.status === 'fulfilled' ? contractSettled.value : null;
-
-  // Log any failures for debugging
   if (walletSettled.status === 'rejected') {
-    console.warn('Wallet search failed:', walletSettled.reason);
+    unverified.push('wallet');
+    failures.push(walletSettled.reason);
   }
   if (contractSettled.status === 'rejected') {
-    console.warn('Contract search failed:', contractSettled.reason);
+    unverified.push('contract');
+    failures.push(contractSettled.reason);
   }
 
-  const foundInWallet = walletResult.found;
-  const foundInContract = contractData !== null;
+  const foundInWallet = walletSettled.status === 'fulfilled' && walletSettled.value.found;
+  const foundInContract = contractSettled.status === 'fulfilled' && contractSettled.value !== null;
   const found = foundInWallet || foundInContract;
+
+  // The critical branch. "Nothing found" is only meaningful if every registry answered;
+  // otherwise this is an unknown, and an unknown returned as `found: false` is the
+  // false-negative that clears a stolen wallet.
+  if (!found && unverified.length > 0) {
+    throw new SearchUnavailableError(unverified, failures);
+  }
 
   if (!found) {
     return {
@@ -288,6 +312,7 @@ export async function searchAddress(
       foundInWalletRegistry: false,
       foundInContractRegistry: false,
       data: null,
+      unverified: [],
     };
   }
 
@@ -298,9 +323,60 @@ export async function searchAddress(
     foundInContractRegistry: foundInContract,
     data: {
       address: address.toLowerCase() as Address,
-      wallet: walletResult.data,
-      contract: contractData,
+      wallet: walletSettled.status === 'fulfilled' ? walletSettled.value.data : null,
+      contract: contractSettled.status === 'fulfilled' ? contractSettled.value : null,
     },
+    unverified,
+  };
+}
+
+/**
+ * Search a CAIP-10 identifier across BOTH the wallet and contract registries.
+ *
+ * `eip155:8453:0x…` is the canonical form the docs and landing page promote, so it must reach
+ * every registry the bare address does. Previously the CAIP-10 path queried only the wallet
+ * registry and hardcoded `foundInContractRegistry: false`, so a registered fraudulent
+ * contract read as clean when searched in the very format users are told to use.
+ *
+ * @param config - Search configuration with indexer URL
+ * @param caip10 - CAIP-10 identifier (e.g., "eip155:8453:0x…" or "eip155:*:0x…")
+ *
+ * @throws {SearchUnavailableError} when nothing was found and a registry did not answer
+ */
+export async function searchAddressByCAIP10(
+  config: SearchConfig,
+  caip10: string
+): Promise<AddressSearchResult> {
+  // For EVM namespaces the address is the key in both registries, so the plain address path
+  // covers wallet AND contract. (Wallet keys are chain-wildcarded; see searchWalletByCAIP10.)
+  const wildcard = parseWildcardCAIP10(caip10);
+  if (wildcard) {
+    return searchAddress(config, wildcard.address);
+  }
+
+  const evm = parseCAIP10(caip10);
+  if (evm && evm.namespace === 'eip155') {
+    return searchAddress(config, evm.address);
+  }
+
+  // Non-EVM namespaces: the contract registry is keyed by an EVM address and has no form for
+  // these identifiers, so it genuinely cannot be consulted. Report that rather than claiming
+  // the address is absent from it.
+  const walletResult = await searchWalletByCAIP10(config, caip10);
+
+  return {
+    type: 'address',
+    found: walletResult.found,
+    foundInWalletRegistry: walletResult.found,
+    foundInContractRegistry: false,
+    data: walletResult.data
+      ? {
+          address: walletResult.data.address,
+          wallet: walletResult.data,
+          contract: null,
+        }
+      : null,
+    unverified: ['contract'],
   };
 }
 
@@ -415,28 +491,12 @@ export async function search(config: SearchConfig, query: string): Promise<Searc
     case 'address':
       // Searches BOTH wallet and contract registries in parallel
       return searchAddress(config, trimmed);
-    case 'caip10': {
-      // CAIP-10 currently only searches wallet registry
-      // TODO: Add contract registry support for CAIP-10 if needed
-      const walletResult = await searchWalletByCAIP10(config, trimmed);
-      // Convert WalletSearchResult to AddressSearchResult for consistency
-      return {
-        type: 'address',
-        found: walletResult.found,
-        foundInWalletRegistry: walletResult.found,
-        foundInContractRegistry: false,
-        data: walletResult.data
-          ? {
-              address: walletResult.data.address,
-              wallet: walletResult.data,
-              contract: null,
-            }
-          : null,
-      };
-    }
+    case 'caip10':
+      // Searches BOTH registries, same as the bare-address path.
+      return searchAddressByCAIP10(config, trimmed);
     case 'transaction':
       return searchTransaction(config, trimmed);
     case 'invalid':
-      return { type: 'invalid', found: false, data: null };
+      return { type: 'invalid', found: false, data: null, unverified: [] };
   }
 }

@@ -234,11 +234,18 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     // ADMIN FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice Set trusted source (immediate — only during initial setup)
+    /// @notice Trust or un-trust a spoke registry as a source of cross-chain registrations
+    /// @dev Granting trust is timelocked after setup (it widens who can write to the hub);
+    ///      revoking stays immediate, mirroring HyperlaneAdapter.setAuthorizedSender. A trusted
+    ///      source's messages reach WalletRegistry.registerFromHub, which performs no signature
+    ///      check — so cutting off a compromised spoke must not require a 2-day wait, during
+    ///      which the only alternative lever is the global pause that also kills every honest
+    ///      spoke.
     /// @param chainId Hyperlane domain ID
     /// @param spokeRegistry Spoke registry address (as bytes32)
     /// @param trusted Whether the source is trusted
-    function setTrustedSource(uint32 chainId, bytes32 spokeRegistry, bool trusted) external onlyOwner onlyDuringSetup {
+    function setTrustedSource(uint32 chainId, bytes32 spokeRegistry, bool trusted) external onlyOwner {
+        if (trusted && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
         if (trusted && spokeRegistry == bytes32(0)) revert CrossChainInbox__ZeroAddress();
         _trustedSources[chainId][spokeRegistry] = trusted;
         emit TrustedSourceUpdated(chainId, spokeRegistry, trusted);

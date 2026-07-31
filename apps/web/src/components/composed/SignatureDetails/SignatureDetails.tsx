@@ -83,7 +83,12 @@ export function SignatureDetails({
             size="sm"
           />
         </span>
-        <EnsExplorerLink value={data.trustedForwarder} type="address" showDisabledIcon={false} />
+        <EnsExplorerLink
+          value={data.trustedForwarder}
+          type="address"
+          resolveEns={false}
+          showDisabledIcon={false}
+        />
       </div>
       <div className="flex justify-between items-center">
         <span className="text-muted-foreground flex items-center gap-1">

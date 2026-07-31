@@ -7,10 +7,16 @@
  */
 
 import { Alert, AlertTitle, AlertDescription, Badge, Separator } from '@swr/ui';
-import { AlertCircle, CheckCircle2, FileWarning, Wallet } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, FileWarning, Wallet } from 'lucide-react';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { cn } from '@/lib/utils';
-import type { AddressSearchData, WalletSearchData, ContractSearchData } from '@swr/search';
+import { registryKindLabel } from '@swr/search';
+import type {
+  AddressSearchData,
+  WalletSearchData,
+  ContractSearchData,
+  UnverifiedRegistries,
+} from '@swr/search';
 
 export interface AddressSearchResultProps {
   /** Whether the address was found in any registry */
@@ -21,8 +27,23 @@ export interface AddressSearchResultProps {
   foundInContractRegistry: boolean;
   /** Combined search data (null if not found in any registry) */
   data: AddressSearchData | null;
+  /**
+   * Registries that could not be consulted.
+   *
+   * When non-empty, an absence of hits is NOT a clean result and must never render as one —
+   * a green "Clean" badge over an unreachable registry is how an off-ramp clears a wallet
+   * that is registered stolen.
+   */
+  unverified?: UnverifiedRegistries;
   /** Additional class names */
   className?: string;
+}
+
+/** Sentence naming the registries that did not answer. */
+function unverifiedSentence(unverified: UnverifiedRegistries): string {
+  const names = unverified.map(registryKindLabel).join(' and ');
+  const registryWord = unverified.length > 1 ? 'registries' : 'registry';
+  return `The ${names} ${registryWord} could not be checked.`;
 }
 
 /**
@@ -118,6 +139,7 @@ export function AddressSearchResult({
   foundInWalletRegistry,
   foundInContractRegistry,
   data,
+  unverified = [],
   className,
 }: AddressSearchResultProps) {
   if (found && data) {
@@ -156,6 +178,16 @@ export function AddressSearchResult({
             Address <code className="text-xs break-all">{data.address}</code>
           </p>
 
+          {unverified.length > 0 && (
+            <p className="mb-3 flex items-start gap-2 text-xs font-medium">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                {unverifiedSentence(unverified)} This address may also appear there — what is shown
+                below is only what the reachable registries reported.
+              </span>
+            </p>
+          )}
+
           <div className="space-y-3 pt-3 border-t border-destructive/20">
             {foundInWalletRegistry && data.wallet && <WalletSection data={data.wallet} />}
 
@@ -170,7 +202,37 @@ export function AddressSearchResult({
     );
   }
 
-  // Not found in any registry
+  // Nothing found, but a registry never answered — this is an unknown, not a clean result.
+  // Rendering the green card here is the false negative the search layer exists to prevent.
+  if (unverified.length > 0) {
+    return (
+      <Alert
+        className={cn(
+          'border-amber-500 bg-amber-50 dark:bg-amber-950/20 text-amber-900 dark:text-amber-100',
+          className
+        )}
+      >
+        <AlertTriangle className="h-4 w-4 text-amber-600" />
+        <AlertTitle className="flex items-center gap-2 text-amber-900 dark:text-amber-100">
+          Could Not Verify
+          <Badge
+            variant="outline"
+            className="text-xs border-amber-500 text-amber-700 dark:text-amber-300"
+          >
+            Unverified
+          </Badge>
+        </AlertTitle>
+        <AlertDescription className="text-amber-800 dark:text-amber-200">
+          <p>
+            {unverifiedSentence(unverified)} This is <strong>not</strong> a clean result — the
+            address may be registered. Try again before relying on it.
+          </p>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  // Not found, and every registry answered.
   return (
     <Alert
       className={cn(

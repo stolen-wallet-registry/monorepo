@@ -69,6 +69,7 @@ import {
   PROTOCOLS,
   readStreamData,
   acceptStream,
+  isTxProtocolExpectedAtStep,
   passStreamData,
   getPeerConnection,
   isStreamAbortError,
@@ -275,7 +276,13 @@ function TxP2PAckSign({ getLibp2p }: TxP2PAckSignProps) {
           {forwarder && (
             <>
               (
-              <EnsExplorerLink value={forwarder} type="address" truncate showDisabledIcon={false} />
+              <EnsExplorerLink
+                value={forwarder}
+                type="address"
+                truncate
+                resolveEns={false}
+                showDisabledIcon={false}
+              />
               )
             </>
           )}{' '}
@@ -534,7 +541,13 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
           {forwarder && (
             <>
               (
-              <EnsExplorerLink value={forwarder} type="address" truncate showDisabledIcon={false} />
+              <EnsExplorerLink
+                value={forwarder}
+                type="address"
+                truncate
+                resolveEns={false}
+                showDisabledIcon={false}
+              />
               )
             </>
           )}{' '}
@@ -842,6 +855,19 @@ export function TransactionP2PReporterPage() {
               // before any of it is trusted. Without this an arbitrary peer that learned a
               // displayed peer ID could inject signatures or drive the step machine.
               if (!acceptStream(protocol, connection, data, 'registeree')) return;
+
+              // Authenticity is not ordering. `acceptStream` proves the message came from
+              // the bound partner; this proves it makes sense right now. Without it,
+              // repeating a payload-free TX_ACK_REC/TX_REG_REC walks the flow one step per
+              // message all the way to the success screen.
+              const currentStep = useTransactionRegistrationStore.getState().step;
+              if (!isTxProtocolExpectedAtStep(protocol, currentStep)) {
+                logger.p2p.warn('Ignored protocol message that does not belong at this step', {
+                  protocol,
+                  step: currentStep,
+                });
+                return;
+              }
 
               logger.p2p.info('TX Reporter received data', { protocol, data });
 

@@ -74,7 +74,13 @@ export function P2PRegSignStep({ getLibp2p }: P2PRegSignStepProps) {
             {relayer && (
               <>
                 (
-                <EnsExplorerLink value={relayer} type="address" truncate showDisabledIcon={false} />
+                <EnsExplorerLink
+                  value={relayer}
+                  type="address"
+                  truncate
+                  resolveEns={false}
+                  showDisabledIcon={false}
+                />
                 )
               </>
             )}{' '}

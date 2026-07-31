@@ -15,8 +15,22 @@ import {
   Skeleton,
   Button,
 } from '@swr/ui';
-import { Search, X, Loader2, Wallet, FileText, AlertCircle, AtSign } from 'lucide-react';
-import { useRegistrySearch as useIndexerSearch, useEnsResolve, type SearchType } from '@/hooks';
+import {
+  Search,
+  X,
+  Loader2,
+  Wallet,
+  FileText,
+  AlertCircle,
+  AtSign,
+  AlertTriangle,
+} from 'lucide-react';
+import {
+  useRegistrySearch as useIndexerSearch,
+  useEnsResolve,
+  useIndexerStatus,
+  type SearchType,
+} from '@/hooks';
 import { detectSearchTypeWithEns, type SearchTypeWithEns } from '@/lib/ens';
 import { cn } from '@/lib/utils';
 import { logger } from '@/lib/logger';
@@ -38,6 +52,14 @@ export interface RegistrySearchProps {
   compact?: boolean;
   /** Additional class names */
   className?: string;
+}
+
+/** Approximate lag in words, for a caveat line rather than a metric. */
+function formatLag(seconds: number): string {
+  if (seconds < 120) return `${seconds} seconds`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 120) return `${minutes} minutes`;
+  return `${Math.round(minutes / 60)} hours`;
 }
 
 /**
@@ -103,6 +125,7 @@ export function RegistrySearch({
   // Query the indexer with effective query (empty string when not searching - hook disables itself)
   const indexerQuery = hasSearched ? effectiveSearchQuery : '';
   const { data, isLoading, error } = useIndexerSearch(indexerQuery);
+  const { stale: indexerStale, data: indexerStatus } = useIndexerStatus();
 
   const handleSearch = useCallback(() => {
     const trimmed = inputValue.trim();
@@ -168,6 +191,11 @@ export function RegistrySearch({
   const showEnsLoading = inputType === 'ens' && isEnsLoading;
   const showResult = hasSearched && data && !isLoading;
   const showError = error && !isLoading;
+
+  // A "not found" is a statement about the blocks the indexer has actually processed. If it
+  // is behind, everything registered in the gap reads as clean, so the caveat belongs next to
+  // the result — only when there is nothing to report, since a hit stands on its own.
+  const showStaleWarning = Boolean(showResult && data && !data.found && indexerStale);
 
   // Can search if input is valid and not loading ENS
   const canSearch = useMemo(() => {
@@ -290,6 +318,18 @@ export function RegistrySearch({
         </div>
       )}
 
+      {/* Indexer freshness caveat on a negative result */}
+      {showStaleWarning && (
+        <p className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span>
+            {indexerStatus?.lagSeconds != null
+              ? `The indexer is about ${formatLag(indexerStatus.lagSeconds)} behind, so anything registered since then is not reflected here.`
+              : 'The indexer’s progress could not be confirmed, so this result may not reflect recent registrations.'}
+          </span>
+        </p>
+      )}
+
       {/* Search Results */}
       {showResult && data && (
         <>
@@ -299,6 +339,7 @@ export function RegistrySearch({
               foundInWalletRegistry={data.foundInWalletRegistry}
               foundInContractRegistry={data.foundInContractRegistry}
               data={data.data}
+              unverified={data.unverified}
             />
           )}
           {data.type === 'transaction' && (

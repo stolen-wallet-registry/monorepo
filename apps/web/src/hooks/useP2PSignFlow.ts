@@ -23,7 +23,7 @@ import { useP2PStore } from '@/stores/p2pStore';
 import { passStreamData, getPeerConnection } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 import type { SignatureStatus } from '@/components/composed/SignatureCard';
-import type { Hash, Hex } from '@/lib/types/ethereum';
+import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 export interface P2PSignFlowConfig {
   /** Which signature step (ACKNOWLEDGEMENT or REGISTRATION) */
@@ -54,9 +54,9 @@ export interface P2PSignFlowResult {
   /** Current nonce */
   nonce: bigint | undefined;
   /** Registeree address from form store */
-  registeree: string | null;
+  registeree: Address | null;
   /** Relayer address from form store */
-  relayer: string | null;
+  relayer: Address | null;
   /** Connected chain ID */
   chainId: number;
   /** Trigger signing and P2P sending */
@@ -68,7 +68,7 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
 
   const { address } = useAccount();
   const chainId = useChainId();
-  const { registeree, relayer } = useFormStore();
+  const { registeree, relayer, relayerFromPeerSession } = useFormStore();
   const { partnerPeerId } = useP2PStore();
 
   const [isSending, setIsSending] = useState(false);
@@ -139,6 +139,22 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
       !relayer ||
       nonce === undefined
     ) {
+      return;
+    }
+
+    // `relayer` becomes the `trustedForwarder` inside the signed message, and whoever holds
+    // that role can complete the irreversible registration on their own schedule. It is only
+    // trustworthy if it arrived from a CONNECT handshake in this session — a value restored
+    // from localStorage may have been written by anyone with access to this browser profile.
+    // A reload at this step does not re-run CONNECT, so without this check the persisted
+    // value is what gets signed.
+    if (!relayerFromPeerSession) {
+      logger.p2p.warn('Refusing to sign: relayer was not established by a handshake this session', {
+        keyRef,
+      });
+      setSendError(
+        'Your relayer connection was not verified in this session. Please reconnect to your relayer before signing.'
+      );
       return;
     }
 
@@ -232,6 +248,7 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
     hashData,
     address,
     partnerPeerId,
+    relayerFromPeerSession,
     registeree,
     relayer,
     nonce,

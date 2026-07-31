@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isEnsName, detectSearchTypeWithEns } from './ens';
+import { isEnsName, detectSearchTypeWithEns, isDisplaySafeEnsName } from './ens';
 
 describe('isEnsName', () => {
   it('returns true for valid ENS names', () => {
@@ -108,5 +108,50 @@ describe('detectSearchTypeWithEns', () => {
       // @ts-expect-error - testing invalid input
       expect(detectSearchTypeWithEns(undefined)).toBe('invalid');
     });
+  });
+});
+
+describe('isDisplaySafeEnsName', () => {
+  // A resolved ENS name is attacker-controlled: anyone can register a name, point it at their
+  // own wallet, and set the reverse record. Wherever the UI substitutes that name for a hex
+  // address in a slot used to decide whom to trust, the attacker chooses what that slot says.
+
+  it('accepts an ordinary name', () => {
+    expect(isDisplaySafeEnsName('vitalik.eth')).toBe(true);
+    expect(isDisplaySafeEnsName('dao.vitalik.eth')).toBe(true);
+  });
+
+  it('rejects a name shaped like a hex address', () => {
+    // The vector that makes the normalization gate insufficient on its own: pure ASCII,
+    // fully ENSIP-15-valid, registerable today, and normalize() returns it unchanged. In an
+    // address slot it reads as a hex address while resolving to the attacker's wallet.
+    expect(isDisplaySafeEnsName('0xd8da6bf26964af9d7eed9e03e53415d37aa96045.eth')).toBe(false);
+  });
+
+  it('rejects a name impersonating a truncated address', () => {
+    // Addresses are usually shown truncated, so a short hex prefix is enough to impersonate.
+    expect(isDisplaySafeEnsName('0xd8da6b.eth')).toBe(false);
+  });
+
+  it('rejects a name that is not its own normalized form', () => {
+    // Uppercase does not survive ENSIP-15 normalization, so displaying it would show
+    // something other than the name that actually resolves.
+    expect(isDisplaySafeEnsName('Vitalik.eth')).toBe(false);
+  });
+
+  it('rejects names carrying bidirectional control characters', () => {
+    // RLO reorders the text around it, letting a name rewrite the sentence it sits in.
+    expect(isDisplaySafeEnsName('‮kcatta.eth')).toBe(false);
+    expect(isDisplaySafeEnsName('safe⁦name.eth')).toBe(false);
+  });
+
+  it('rejects names that cannot be normalized at all', () => {
+    expect(isDisplaySafeEnsName(' .eth')).toBe(false);
+  });
+
+  it('rejects empty and absent names', () => {
+    expect(isDisplaySafeEnsName(null)).toBe(false);
+    expect(isDisplaySafeEnsName(undefined)).toBe(false);
+    expect(isDisplaySafeEnsName('')).toBe(false);
   });
 });

@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
+  BaseError,
   ContractFunctionExecutionError,
   ContractFunctionRevertedError,
+  HttpRequestError,
+  TimeoutError,
   encodeErrorResult,
   parseAbi,
 } from 'viem';
@@ -159,6 +162,91 @@ describe('sanitizeErrorMessage', () => {
     );
     expect(result).toContain('registration window has expired');
     expect(result).not.toContain('Version:');
+  });
+});
+
+/**
+ * The app has no keyed transport today, so nothing leaks yet. It will the moment
+ * VITE_ALCHEMY_API_KEY reaches the app's wagmi config (.env.example instructs operators to
+ * set it, and useUserTransactions.ts still carries a TODO to wire the Alchemy SDK in).
+ * These tests are what make that latent leak structurally impossible: the sanitized string
+ * is rendered at ~20 UI sites, so anything it carries is in the DOM.
+ */
+describe('sanitizeErrorMessage — never leaks request details (V29)', () => {
+  const SECRET_KEY = 'sEcReTaLcHeMyKeY123456789';
+  const KEYED_URL = `https://base-mainnet.g.alchemy.com/v2/${SECRET_KEY}`;
+
+  /** viem nests network failures inside a wrapper, so the top-level name is the wrapper's. */
+  function makeNestedHttpError(cause: BaseError) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const typedAbi = REVERT_ABI as any;
+    return new ContractFunctionExecutionError(cause, {
+      abi: typedAbi,
+      functionName: 'register',
+    });
+  }
+
+  it('strips the RPC URL and request body from a nested HttpRequestError', () => {
+    const httpError = new HttpRequestError({
+      body: { method: 'eth_call', params: [{ data: '0xdeadbeef' }] },
+      details: 'connect ECONNREFUSED',
+      status: 500,
+      url: KEYED_URL,
+    });
+
+    const result = sanitizeErrorMessage(makeNestedHttpError(httpError));
+
+    expect(result).not.toContain(SECRET_KEY);
+    expect(result).not.toContain('alchemy.com');
+    expect(result).not.toContain('URL:');
+    expect(result).not.toContain('Request body:');
+    expect(result).toContain('Network error');
+  });
+
+  it('strips the RPC URL from a nested TimeoutError', () => {
+    const timeout = new TimeoutError({
+      body: { method: 'eth_call' },
+      url: KEYED_URL,
+    });
+
+    const result = sanitizeErrorMessage(makeNestedHttpError(timeout));
+
+    expect(result).not.toContain(SECRET_KEY);
+    expect(result).toContain('Network error');
+  });
+
+  it('strips URL and request body even when no viem error class matches', () => {
+    // Defense in depth: an error shape we do not recognize must still not carry the key
+    // through the generic tail sanitizer.
+    const raw = new Error(
+      [
+        'Something unexpected went wrong while talking to the node.',
+        `URL: ${KEYED_URL}`,
+        'Request body: {"method":"eth_call","params":[{"data":"0xabc"}]}',
+      ].join('\n')
+    );
+
+    const result = sanitizeErrorMessage(raw);
+
+    expect(result).not.toContain(SECRET_KEY);
+    expect(result).not.toContain('alchemy.com');
+    expect(result).not.toContain('Request body:');
+  });
+
+  it('a recognized contract revert still wins over the network path', () => {
+    // The revert decoder runs first; walking the chain for network errors must not
+    // shadow the more specific message.
+    const result = sanitizeErrorMessage(
+      makeViemRevertError({
+        abi: REVERT_ABI,
+        data: encodeErrorResult({
+          abi: REVERT_ABI,
+          errorName: 'SpokeRegistry__ForwarderExpired',
+        }),
+      })
+    );
+
+    expect(result).not.toContain('Network error');
   });
 });
 

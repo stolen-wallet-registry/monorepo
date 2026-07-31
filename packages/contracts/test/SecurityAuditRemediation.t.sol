@@ -332,7 +332,11 @@ contract SecurityAuditRemediationTest is Test {
         assertFalse(reg.isApproved(op));
     }
 
-    /// @notice CrossChainInbox timelock: setTrustedSource locked after setup
+    /// @notice CrossChainInbox timelock: GRANTING trust is locked after setup, revoking is not
+    /// @dev The setter used to be `onlyDuringSetup` unconditionally, which also blocked the
+    ///      revoke direction — so cutting off a spoke that was forging registrations took 2 days.
+    ///      Matches HyperlaneAdapter: grants widen the trust boundary and are timelocked;
+    ///      revocations only narrow it and are the emergency response.
     function test_Timelock_CrossChainInbox_SetTrustedSourceLockedAfterSetup() public {
         MockMailbox mailbox = new MockMailbox(84_532);
         FraudRegistryHub hub = new FraudRegistryHub(owner, owner);
@@ -342,15 +346,19 @@ contract SecurityAuditRemediationTest is Test {
         inbox.setTrustedSource(31_338, spokeBytes, true);
         inbox.completeSetup();
 
-        // Immediate setter locked
+        // Granting trust in one transaction is locked
         vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
-        inbox.setTrustedSource(31_338, spokeBytes, false);
+        inbox.setTrustedSource(31_339, spokeBytes, true);
 
-        // But propose/activate works
-        inbox.proposeTrustedSource(31_338, spokeBytes, false);
-        vm.warp(block.timestamp + 2 days + 1);
-        inbox.activateTrustedSource(31_338, spokeBytes, false);
+        // Revoking is immediate
+        inbox.setTrustedSource(31_338, spokeBytes, false);
         assertFalse(inbox.isTrustedSource(31_338, spokeBytes));
+
+        // And the grant still works through propose/activate
+        inbox.proposeTrustedSource(31_338, spokeBytes, true);
+        vm.warp(block.timestamp + 2 days + 1);
+        inbox.activateTrustedSource(31_338, spokeBytes, true);
+        assertTrue(inbox.isTrustedSource(31_338, spokeBytes));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

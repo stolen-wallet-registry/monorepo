@@ -49,6 +49,7 @@ import {
   PROTOCOLS,
   readStreamData,
   acceptStream,
+  isProtocolExpectedAtStep,
   isStreamAbortError,
   type ProtocolHandler,
 } from '@/lib/p2p';
@@ -59,7 +60,7 @@ import {
 import { getHubChainId } from '@/lib/chains/config';
 import { getChainName, getBridgeMessageByIdUrl } from '@/lib/explorer';
 import { logger } from '@/lib/logger';
-import { isHash } from '@/lib/types/ethereum';
+import { isAddress, isHash } from '@/lib/types/ethereum';
 import type { Address } from '@/lib/types/ethereum';
 
 /**
@@ -163,7 +164,7 @@ export function P2PRegistereeRegistrationPage() {
     setRegistrationHash,
     setBridgeMessageId,
   } = useRegistrationStore();
-  const { setFormValues } = useFormStore();
+  const { setFormValues, setRelayerFromPeer } = useFormStore();
   const {
     partnerPeerId,
     setPeerId,
@@ -265,14 +266,33 @@ export function P2PRegistereeRegistrationPage() {
               // displayed peer ID could inject signatures or drive the step machine.
               if (!acceptStream(protocol, connection, data, 'registeree')) return;
 
+              // Authenticity is not ordering. `acceptStream` proves the message came from
+              // the bound partner; this proves the message makes sense right now. Without
+              // it, repeating a payload-free ACK_REC/REG_REC walks the flow one step per
+              // message all the way to the success screen.
+              const currentStep = useRegistrationStore.getState().step;
+              if (!isProtocolExpectedAtStep(protocol, currentStep)) {
+                logger.p2p.warn('Ignored protocol message that does not belong at this step', {
+                  protocol,
+                  step: currentStep,
+                });
+                return;
+              }
+
               logger.p2p.info('Registeree received data', { protocol, data });
 
               switch (protocol) {
                 case PROTOCOLS.CONNECT:
                   // Connection established, relayer responded
                   // Only update state here - step advancement is handled by WaitForConnectionStep.onComplete()
-                  if (data.form?.relayer) {
-                    setFormValues({ relayer: data.form.relayer });
+                  // `isAddress` narrows the wire value to `Address` and re-checks it. The Zod
+                  // schema already enforces the shape, so this is belt-and-braces — but it is
+                  // the boundary where peer-supplied text becomes an address the victim will
+                  // sign over, so it validates here rather than asserting a type.
+                  if (data.form?.relayer && isAddress(data.form.relayer)) {
+                    // Marks the relayer as handshaked in this session. Signing refuses a
+                    // relayer that only came back from localStorage — see FormState.
+                    setRelayerFromPeer(data.form.relayer);
                   }
                   setConnectedToPeer(true);
                   // DO NOT call goToNextStepRef.current() here - causes double step advancement
@@ -318,17 +338,18 @@ export function P2PRegistereeRegistrationPage() {
                         messageId: data.messageId,
                       });
                     }
-                    // On spoke chains, don't advance to success yet — the cross-chain
-                    // polling in WalletP2PWaitForRegistration will advance when the
-                    // hub chain confirms delivery via Hyperlane.
-                    if (needsCrossChainConfirmation(chainIdRef.current)) {
-                      logger.registration.info(
-                        'Spoke chain — waiting for hub confirmation before advancing',
-                        { spokeChainId: chainIdRef.current }
-                      );
-                    } else {
-                      goToNextStepRef.current();
-                    }
+                    // Never advance to success on the relayer's word. `data.hash` is only
+                    // checked for shape — there is no proof the transaction exists, targets
+                    // the registry, or succeeded — so advancing here would show a fraud
+                    // victim a success screen, with an explorer link, for a registration
+                    // that may never have happened. The hash is recorded for that link and
+                    // nothing more; `WalletP2PWaitForRegistration` polls
+                    // `isWalletRegistered` and advances only once the chain agrees, on hub
+                    // and spoke chains alike.
+                    logger.registration.info(
+                      'Recorded relayer-reported registration hash; awaiting on-chain confirmation',
+                      { chainId: chainIdRef.current }
+                    );
                   } else {
                     logger.p2p.warn('REG_PAY received with invalid or missing hash', {
                       hash: data.hash,
@@ -415,6 +436,7 @@ export function P2PRegistereeRegistrationPage() {
     chainId,
     setPeerId,
     setFormValues,
+    setRelayerFromPeer,
     setConnectedToPeer,
     setInitialized,
     setAcknowledgementHash,

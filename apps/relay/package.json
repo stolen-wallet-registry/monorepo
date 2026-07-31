@@ -11,7 +11,8 @@
     "dev:debug": "DEBUG=libp2p* node src/index.mjs",
     "start": "node src/index.mjs",
     "start:debug": "DEBUG=libp2p* node src/index.mjs",
-    "lint": "eslint src/",
+    "lint": "eslint src/ test/",
+    "test": "node --test \"test/**/*.test.mjs\"",
     "typecheck": "echo 'No TypeScript in relay (pure JS)'"
   },
   "dependencies": {
