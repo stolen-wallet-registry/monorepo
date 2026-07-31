@@ -453,18 +453,19 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       // Build params based on chain type (hub vs spoke have different signatures)
       let params: TxRegistrationParams;
 
+      // Both hub and spoke registration signatures commit to blockhash(windowBlock); without
+      // the number the contract cannot recompute it, so there is nothing valid to submit.
+      if (storedSignatureState.windowBlock === undefined) {
+        logger.contract.error('Cannot submit transaction registration - missing windowBlock', {
+          dataHash,
+        });
+        setLocalError('Signature is missing required data. Please go back and sign again.');
+        return;
+      }
+
       if (isHub) {
         // Hub: registerTransactions(reporter, deadline, transactionHashes, chainIds, windowBlock,
         //                           v, r, s) - payable
-        if (storedSignatureState.windowBlock === undefined) {
-          // Signed over blockhash(windowBlock); without the number the contract cannot
-          // recompute it, so there is nothing valid to submit.
-          logger.contract.error('Cannot submit transaction registration - missing windowBlock', {
-            dataHash,
-          });
-          setLocalError('Signature is missing required data. Please go back and sign again.');
-          return;
-        }
         const hubParams: TxRegistrationParamsHub = {
           reporter: storedSignatureState.reporter,
           deadline: storedSignatureState.deadline,
@@ -476,7 +477,8 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         };
         params = hubParams;
       } else {
-        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter, transactionHashes, chainIds, v, r, s)
+        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter,
+        //                                 transactionHashes, chainIds, windowBlock, v, r, s)
         const spokeParams: TxRegistrationParamsSpoke = {
           reporter: storedSignatureState.reporter,
           reportedChainId: reportedChainIdHash,
@@ -484,6 +486,7 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
           nonce: storedSignatureState.nonce,
           transactionHashes: txHashesForContractGuarded,
           chainIds: chainIdsForContractGuarded,
+          windowBlock: storedSignatureState.windowBlock,
           signature: parsedSig,
           feeWei,
         };

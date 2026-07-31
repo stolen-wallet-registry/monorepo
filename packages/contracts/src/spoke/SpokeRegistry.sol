@@ -425,8 +425,11 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         if (transactionCount == 0) revert SpokeRegistry__EmptyBatch();
         if (transactionCount > MAX_CROSS_CHAIN_BATCH_SIZE) revert SpokeRegistry__BatchTooLarge();
 
-        // Validate signature deadline hasn't passed
+        // Validate signature deadline is neither expired nor unbounded
         if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
+        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+            revert SpokeRegistry__DeadlineTooFarInFuture();
+        }
 
         // Reject re-acknowledgement while a prior one is still live, matching
         // TransactionRegistry.acknowledgeTransactions on the hub (and the wallet path above).
@@ -487,21 +490,56 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         address reporter,
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds,
+        uint256 windowBlock,
         uint8 v,
         bytes32 r,
         bytes32 s
     ) external payable {
+        // Collapsed into a memory struct before validation: with `windowBlock` added, passing
+        // these flat alongside two calldata arrays exceeded the EVM's 16-slot stack limit (this
+        // project builds without via-ir). Same treatment as {WalletRegParams} on the wallet
+        // path. The EXTERNAL signature stays flat.
+        TxBatchRegParams memory p = TxBatchRegParams({
+            reportedChainId: reportedChainId,
+            deadline: deadline,
+            nonce: nonce,
+            reporter: reporter,
+            windowBlock: windowBlock,
+            v: v,
+            r: r,
+            s: s
+        });
+
         // Compute dataHash from submitted arrays - this is the key verification
         bytes32 dataHash = keccak256(abi.encode(transactionHashes, chainIds));
 
-        // Validate inputs and acknowledgement (reverts on failure)
-        _validateTxBatchRegistration(dataHash, reportedChainId, deadline, nonce, reporter, transactionHashes, chainIds);
+        // Validate inputs and acknowledgement (reverts on failure). Returns the anti-phishing
+        // freshness commitment the signature must have been produced against.
+        bytes32 windowBlockHash = _validateTxBatchRegistration(p, dataHash, transactionHashes, chainIds);
 
         // Verify EIP-712 signature
-        _verifyTxBatchSignature(dataHash, reportedChainId, deadline, nonce, reporter, transactionHashes.length, v, r, s);
+        _verifyTxBatchSignature(p, dataHash, transactionHashes.length, windowBlockHash);
 
-        // Execute registration (state changes + cross-chain message)
-        _executeTxBatchRegistration(dataHash, reportedChainId, nonce, reporter, transactionHashes, chainIds);
+        // Execute registration (state changes + cross-chain message). Reads through `p` rather
+        // than the flat parameters so the latter are dead by here — with ten of them plus two
+        // calldata arrays, keeping any alive to this point overflows the 16-slot stack.
+        _executeTxBatchRegistration(dataHash, p.reportedChainId, p.nonce, p.reporter, transactionHashes, chainIds);
+    }
+
+    /// @dev Internal-only carrier for {registerTransactionBatch}'s scalar arguments. Exists purely
+    ///      to keep the validation path within the stack limit; never appears in the external ABI.
+    ///      The calldata arrays stay out of it — copying them to memory would cost gas for no
+    ///      stack benefit. See {WalletRegParams} for the same rationale on the wallet path; the
+    ///      solhint `gas-struct-packing` note applies here too (memory-only, never stored).
+    struct TxBatchRegParams {
+        bytes32 reportedChainId;
+        uint256 deadline;
+        uint256 nonce;
+        address reporter;
+        uint256 windowBlock;
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -637,84 +675,54 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     }
 
     /// @inheritdoc ISpokeRegistry
-    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
+    /// @dev Returns ONLY the deadline. There is deliberately no hash-struct return value.
+    ///      The registration typehashes gained `windowBlockHash` (audit finding V1), and that
+    ///      value is NOT knowable here: the frontend calls this BEFORE signing to obtain the
+    ///      deadline, and resolves the window block later, at signing time. Any digest this
+    ///      function could build for the registration phase would therefore be missing a member
+    ///      the typehash declares — a digest no wallet will ever produce and no verifier will
+    ///      ever accept. It previously returned exactly that, silently. Callers build their own
+    ///      typed data (see `packages/signatures`); this call exists for the deadline alone.
+    ///      Do NOT reintroduce a hash-struct return by adding a `windowBlockHash` parameter —
+    ///      the caller does not have one at this point in the flow.
+    function generateHashStruct(
+        uint64, /* reportedChainId */
+        uint64, /* incidentTimestamp */
+        address, /* trustedForwarder */
+        uint8 step
+    )
         external
         view
-        returns (uint256 deadline, bytes32 hashStruct)
+        returns (uint256 deadline)
     {
         if (step != 1 && step != 2) revert SpokeRegistry__InvalidStep();
-        deadline = TimingConfig.getSignatureDeadline();
-
-        if (step == 1) {
-            hashStruct = keccak256(
-                abi.encode(
-                    EIP712Constants.WALLET_ACK_TYPEHASH,
-                    EIP712Constants.ACK_STATEMENT_HASH,
-                    msg.sender,
-                    trustedForwarder,
-                    reportedChainId,
-                    incidentTimestamp,
-                    nonces[msg.sender],
-                    deadline
-                )
-            );
-        } else {
-            hashStruct = keccak256(
-                abi.encode(
-                    EIP712Constants.WALLET_REG_TYPEHASH,
-                    EIP712Constants.REG_STATEMENT_HASH,
-                    msg.sender,
-                    trustedForwarder,
-                    reportedChainId,
-                    incidentTimestamp,
-                    nonces[msg.sender],
-                    deadline
-                )
-            );
-        }
+        return TimingConfig.getSignatureDeadline();
     }
 
     /// @inheritdoc ISpokeRegistry
+    /// @dev Returns ONLY the deadline. There is deliberately no hash-struct return value.
+    ///      The registration typehashes gained `windowBlockHash` (audit finding V1), and that
+    ///      value is NOT knowable here: the frontend calls this BEFORE signing to obtain the
+    ///      deadline, and resolves the window block later, at signing time. Any digest this
+    ///      function could build for the registration phase would therefore be missing a member
+    ///      the typehash declares — a digest no wallet will ever produce and no verifier will
+    ///      ever accept. It previously returned exactly that, silently. Callers build their own
+    ///      typed data (see `packages/signatures`); this call exists for the deadline alone.
+    ///      Do NOT reintroduce a hash-struct return by adding a `windowBlockHash` parameter —
+    ///      the caller does not have one at this point in the flow.
     function generateTransactionHashStruct(
-        bytes32 dataHash,
-        bytes32 reportedChainId,
-        uint32 transactionCount,
-        address trustedForwarder,
+        bytes32, /* dataHash */
+        bytes32, /* reportedChainId */
+        uint32, /* transactionCount */
+        address, /* trustedForwarder */
         uint8 step
-    ) external view returns (uint256 deadline, bytes32 hashStruct) {
+    )
+        external
+        view
+        returns (uint256 deadline)
+    {
         if (step != 1 && step != 2) revert SpokeRegistry__InvalidStep();
-        deadline = TimingConfig.getSignatureDeadline();
-        if (step == 1) {
-            // Acknowledgement — matches acknowledgeTransactionBatch signature verification
-            hashStruct = keccak256(
-                abi.encode(
-                    EIP712Constants.TX_BATCH_ACK_TYPEHASH,
-                    EIP712Constants.TX_ACK_STATEMENT_HASH,
-                    msg.sender, // reporter
-                    trustedForwarder,
-                    dataHash,
-                    reportedChainId,
-                    transactionCount,
-                    nonces[msg.sender],
-                    deadline
-                )
-            );
-        } else {
-            // Registration — matches _computeTxBatchRegStructHash
-            hashStruct = keccak256(
-                abi.encode(
-                    EIP712Constants.TX_BATCH_REG_TYPEHASH,
-                    EIP712Constants.TX_REG_STATEMENT_HASH,
-                    msg.sender,
-                    trustedForwarder,
-                    dataHash,
-                    reportedChainId,
-                    transactionCount,
-                    nonces[msg.sender],
-                    deadline
-                )
-            );
-        }
+        return TimingConfig.getSignatureDeadline();
     }
 
     /// @dev Compute deadline fields from acknowledgement timing data
@@ -825,17 +833,15 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @dev Validate inputs and acknowledgement for transaction batch registration
+    /// @return windowBlockHash The freshness commitment the signature must have committed to
     function _validateTxBatchRegistration(
+        TxBatchRegParams memory p,
         bytes32 dataHash,
-        bytes32 reportedChainId,
-        uint256 deadline,
-        uint256 nonce,
-        address reporter,
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds
-    ) internal view {
+    ) internal view returns (bytes32 windowBlockHash) {
         // Fail fast: reject zero address
-        if (reporter == address(0)) revert SpokeRegistry__InvalidOwner();
+        if (p.reporter == address(0)) revert SpokeRegistry__InvalidOwner();
 
         // Validate hub is configured
         if (hubInbox == bytes32(0)) revert SpokeRegistry__HubNotConfigured();
@@ -844,66 +850,75 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         if (transactionHashes.length != chainIds.length) revert SpokeRegistry__ArrayLengthMismatch();
         if (transactionHashes.length == 0) revert SpokeRegistry__EmptyBatch();
 
-        // Validate signature deadline hasn't passed
-        if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
+        // Validate signature deadline is neither expired nor unbounded
+        if (p.deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
+        if (p.deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+            revert SpokeRegistry__DeadlineTooFarInFuture();
+        }
 
         // Validate nonce matches expected value
-        if (nonce != nonces[reporter]) revert SpokeRegistry__InvalidNonce();
+        if (p.nonce != nonces[p.reporter]) revert SpokeRegistry__InvalidNonce();
 
         // Load and validate acknowledgement
-        TransactionAcknowledgementData memory ack = _pendingTxAcknowledgements[reporter];
+        TransactionAcknowledgementData memory ack = _pendingTxAcknowledgements[p.reporter];
         if (ack.trustedForwarder != msg.sender) revert SpokeRegistry__InvalidForwarder();
         if (block.number < ack.startBlock) revert SpokeRegistry__GracePeriodNotStarted();
         if (block.number >= ack.expiryBlock) revert SpokeRegistry__ForwarderExpired();
 
         // Validate computed dataHash matches what was acknowledged
         // This proves the submitted arrays are exactly what the user signed
-        if (ack.dataHash != dataHash || ack.reportedChainId != reportedChainId) {
+        if (ack.dataHash != dataHash || ack.reportedChainId != p.reportedChainId) {
             revert SpokeRegistry__InvalidDataHash();
         }
         if (ack.transactionCount != transactionHashes.length) {
             revert SpokeRegistry__ArrayLengthMismatch();
         }
+
+        // ANTI-PHISHING: see {WalletRegistry.register}. The signature commits to the hash of a
+        // block at or after the grace period started, so it cannot have been produced in the
+        // same sitting as the acknowledgement. Kept identical to the wallet path and the hub's
+        // TransactionRegistry so one frontend code path serves all three.
+        windowBlockHash = TimingConfig.resolveWindowBlockHash(p.windowBlock, ack.startBlock);
     }
 
     /// @dev Verify EIP-712 signature for transaction batch registration
     function _verifyTxBatchSignature(
+        TxBatchRegParams memory p,
         bytes32 dataHash,
-        bytes32 reportedChainId,
-        uint256 deadline,
-        uint256 nonce,
-        address reporter,
         uint256 txCount,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
+        bytes32 windowBlockHash
     ) internal view {
-        bytes32 structHash = _computeTxBatchRegStructHash(dataHash, reportedChainId, deadline, nonce, reporter, txCount);
+        bytes32 structHash = _computeTxBatchRegStructHash(p, dataHash, txCount, windowBlockHash);
         bytes32 digest = _hashTypedDataV4(structHash);
-        address signer = ECDSA.recover(digest, v, r, s);
-        if (signer == address(0) || signer != reporter) revert SpokeRegistry__InvalidSigner();
+        address signer = ECDSA.recover(digest, p.v, p.r, p.s);
+        if (signer == address(0) || signer != p.reporter) revert SpokeRegistry__InvalidSigner();
     }
 
     /// @dev Compute struct hash for transaction batch registration (avoids stack too deep)
+    /// @dev The encoded member list MUST stay in lockstep with
+    ///      {EIP712Constants.TX_BATCH_REG_TYPEHASH}, which declares nine members. It previously
+    ///      stopped at `deadline` — eight members under a nine-member typehash — so the digest
+    ///      disagreed with the one the frontend signature builder produces, and the freshness
+    ///      commitment was absent entirely. Do not add or drop a field here without changing
+    ///      the typehash.
     function _computeTxBatchRegStructHash(
+        TxBatchRegParams memory p,
         bytes32 dataHash,
-        bytes32 reportedChainId,
-        uint256 deadline,
-        uint256 nonce,
-        address reporter,
-        uint256 txCount
+        uint256 txCount,
+        bytes32 windowBlockHash
     ) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
                 EIP712Constants.TX_BATCH_REG_TYPEHASH,
                 EIP712Constants.TX_REG_STATEMENT_HASH,
-                reporter,
+                p.reporter,
                 msg.sender,
                 dataHash,
-                reportedChainId,
+                p.reportedChainId,
                 uint32(txCount),
-                nonce,
-                deadline
+                p.nonce,
+                p.deadline,
+                windowBlockHash
             )
         );
     }

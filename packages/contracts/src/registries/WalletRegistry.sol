@@ -311,42 +311,28 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
     }
 
     /// @inheritdoc IWalletRegistry
-    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
+    /// @dev Returns ONLY the deadline. There is deliberately no hash-struct return value.
+    ///      The registration typehashes gained `windowBlockHash` (audit finding V1), and that
+    ///      value is NOT knowable here: the frontend calls this BEFORE signing to obtain the
+    ///      deadline, and resolves the window block later, at signing time. Any digest this
+    ///      function could build for the registration phase would therefore be missing a member
+    ///      the typehash declares — a digest no wallet will ever produce and no verifier will
+    ///      ever accept. It previously returned exactly that, silently. Callers build their own
+    ///      typed data (see `packages/signatures`); this call exists for the deadline alone.
+    ///      Do NOT reintroduce a hash-struct return by adding a `windowBlockHash` parameter —
+    ///      the caller does not have one at this point in the flow.
+    function generateHashStruct(
+        uint64, /* reportedChainId */
+        uint64, /* incidentTimestamp */
+        address, /* trustedForwarder */
+        uint8 step
+    )
         external
         view
-        returns (uint256 deadline, bytes32 hashStruct)
+        returns (uint256 deadline)
     {
         if (step != 1 && step != 2) revert WalletRegistry__InvalidStep();
-        deadline = TimingConfig.getSignatureDeadline();
-        if (step == 1) {
-            // Acknowledgement
-            hashStruct = keccak256(
-                abi.encode(
-                    EIP712Constants.WALLET_ACK_TYPEHASH,
-                    EIP712Constants.ACK_STATEMENT_HASH,
-                    msg.sender, // wallet
-                    trustedForwarder,
-                    reportedChainId,
-                    incidentTimestamp,
-                    nonces[msg.sender],
-                    deadline
-                )
-            );
-        } else {
-            // Registration
-            hashStruct = keccak256(
-                abi.encode(
-                    EIP712Constants.WALLET_REG_TYPEHASH,
-                    EIP712Constants.REG_STATEMENT_HASH,
-                    msg.sender,
-                    trustedForwarder,
-                    reportedChainId,
-                    incidentTimestamp,
-                    nonces[msg.sender],
-                    deadline
-                )
-            );
-        }
+        return TimingConfig.getSignatureDeadline();
     }
 
     /// @inheritdoc IWalletRegistry

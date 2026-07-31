@@ -257,17 +257,17 @@ export const WalletRegistryABI = [
     name: 'generateHashStruct',
     inputs: [
       {
-        name: 'reportedChainId',
+        name: '',
         type: 'uint64',
         internalType: 'uint64',
       },
       {
-        name: 'incidentTimestamp',
+        name: '',
         type: 'uint64',
         internalType: 'uint64',
       },
       {
-        name: 'trustedForwarder',
+        name: '',
         type: 'address',
         internalType: 'address',
       },
@@ -282,11 +282,6 @@ export const WalletRegistryABI = [
         name: 'deadline',
         type: 'uint256',
         internalType: 'uint256',
-      },
-      {
-        name: 'hashStruct',
-        type: 'bytes32',
-        internalType: 'bytes32',
       },
     ],
     stateMutability: 'view',

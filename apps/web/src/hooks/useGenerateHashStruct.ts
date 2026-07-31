@@ -1,8 +1,14 @@
 /**
- * Hook to read deadline and hash struct from the registry contract.
+ * Hook to read the signing deadline from the registry contract.
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
- * The hash struct returned can be used for verification but is typically not needed client-side.
+ *
+ * The contract deliberately returns ONLY a deadline — no hash struct. The registration typehash
+ * commits to `windowBlockHash`, which is not knowable at this point in the flow (the window block
+ * is resolved later, at signing time), so any digest the contract could build here would be
+ * missing a member its own typehash declares. Typed data is built client-side by
+ * `packages/signatures`; this call exists for the deadline alone. The name is retained for ABI
+ * and call-site stability.
  *
  * Chain-aware: Works with WalletRegistry (hub) and SpokeRegistry (spoke).
  *
@@ -14,12 +20,11 @@ import { useReadContract, useChainId, type UseReadContractReturnType } from 'wag
 import { resolveRegistryContract } from '@/lib/contracts/resolveContract';
 import { walletRegistryAbi, spokeRegistryAbi } from '@/lib/contracts/abis';
 import type { SignatureStep } from '@/lib/signatures';
-import type { Address, Hash } from '@/lib/types/ethereum';
+import type { Address } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
 
 export interface HashStructData {
   deadline: bigint;
-  hashStruct: Hash;
 }
 
 export interface UseGenerateHashStructResult {
@@ -97,18 +102,13 @@ export function useGenerateHashStruct(
     logger.contract.debug('generateHashStruct call succeeded', {
       chainId,
       contractAddress,
-      deadline: result.data[0]?.toString(),
+      deadline: result.data?.toString(),
     });
   }
 
-  // Transform the raw array result into a typed object
-  // The ABI returns bytes32 which wagmi infers as string, but we know it's a hex hash
-  const transformedData: HashStructData | undefined = result.data
-    ? {
-        deadline: result.data[0],
-        hashStruct: result.data[1] as Hash,
-      }
-    : undefined;
+  // The contract returns a bare uint256 deadline; wrap it so call sites keep a named field.
+  const transformedData: HashStructData | undefined =
+    result.data !== undefined ? { deadline: result.data } : undefined;
 
   return {
     data: transformedData,

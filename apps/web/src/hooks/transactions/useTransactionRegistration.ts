@@ -56,6 +56,11 @@ export interface TxRegistrationParamsSpoke {
   transactionHashes: Hash[];
   /** CAIP-2 chain IDs for each transaction as bytes32 */
   chainIds: Hash[];
+  /**
+   * Block whose hash the signature committed to. Unsigned calldata — the contract recomputes
+   * `blockhash(windowBlock)` and compares, so this must be the exact block used at signing.
+   */
+  windowBlock: bigint;
   /** EIP-712 signature */
   signature: ParsedSignature;
   /** Protocol fee to send with the transaction */
@@ -200,8 +205,9 @@ export function useTransactionRegistration(): UseTxRegistrationResult {
           value: feeWei ?? 0n,
         });
       } else if (isSpoke && isSpokeParams(params)) {
-        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter, transactionHashes, chainIds, v, r, s)
-        const { reportedChainId, nonce, feeWei } = params;
+        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter,
+        // transactionHashes, chainIds, windowBlock, v, r, s)
+        const { reportedChainId, nonce, feeWei, windowBlock } = params;
 
         txHash = await writeContractAsync({
           address: contractAddress,
@@ -215,6 +221,7 @@ export function useTransactionRegistration(): UseTxRegistrationResult {
             reporter,
             transactionHashes,
             chainIds,
+            windowBlock,
             signature.v,
             signature.r,
             signature.s,

@@ -82,8 +82,8 @@ import { getHubChainId } from '@/lib/chains/config';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { logger } from '@/lib/logger';
-import { isHash } from '@/lib/types/ethereum';
-import type { Address, Hash, Hex } from '@/lib/types/ethereum';
+import { isAddress, isHash } from '@/lib/types/ethereum';
+import type { Hash, Hex } from '@/lib/types/ethereum';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Step descriptions / titles
@@ -124,6 +124,7 @@ function TxP2PAckSign({ getLibp2p }: TxP2PAckSignProps) {
   const chainId = useChainId();
   const { partnerPeerId } = useP2PStore();
   const forwarder = useTransactionFormStore((s) => s.forwarder);
+  const forwarderFromPeerSession = useTransactionFormStore((s) => s.forwarderFromPeerSession);
   const {
     selectedTxHashes,
     selectedTxDetails,
@@ -182,6 +183,16 @@ function TxP2PAckSign({ getLibp2p }: TxP2PAckSignProps) {
       !forwarder ||
       nonce === undefined
     ) {
+      return;
+    }
+
+    if (!forwarderFromPeerSession) {
+      logger.p2p.warn(
+        'Refusing to sign: forwarder was not established by a handshake this session'
+      );
+      setSendError(
+        'Your relayer connection was not verified in this session. Please reconnect to your relayer before signing.'
+      );
       return;
     }
 
@@ -251,6 +262,7 @@ function TxP2PAckSign({ getLibp2p }: TxP2PAckSignProps) {
     dataHash,
     reportedChainIdHash,
     forwarder,
+    forwarderFromPeerSession,
     nonce,
     hashStructData,
     refetchHashStruct,
@@ -377,6 +389,7 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
   const chainId = useChainId();
   const { partnerPeerId } = useP2PStore();
   const forwarder = useTransactionFormStore((s) => s.forwarder);
+  const forwarderFromPeerSession = useTransactionFormStore((s) => s.forwarderFromPeerSession);
   const {
     selectedTxHashes,
     selectedTxDetails,
@@ -437,6 +450,19 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
   const handleSign = useCallback(async () => {
     const libp2p = getLibp2pRef.current();
     if (!address || !libp2p || !partnerPeerId || !dataHash || !reportedChainIdHash || !forwarder) {
+      return;
+    }
+
+    // Re-checked at the registration phase too, not just at acknowledgement: this is the
+    // signature that completes the irreversible registration, and a reload between the two
+    // phases restores the forwarder from localStorage without re-running CONNECT.
+    if (!forwarderFromPeerSession) {
+      logger.p2p.warn(
+        'Refusing to sign: forwarder was not established by a handshake this session'
+      );
+      setSendError(
+        'Your relayer connection was not verified in this session. Please reconnect to your relayer before signing.'
+      );
       return;
     }
 
@@ -516,6 +542,7 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
     dataHash,
     reportedChainIdHash,
     forwarder,
+    forwarderFromPeerSession,
     refetchNonce,
     refetchHashStruct,
     signTxRegistration,
@@ -715,6 +742,8 @@ export function TransactionP2PReporterPage() {
     setReportedChainId,
     setTransactionData,
   } = useTransactionSelection();
+  const forwarderFromPeerSession = useTransactionFormStore((s) => s.forwarderFromPeerSession);
+  const clearForwarderProvenance = useTransactionFormStore((s) => s.clearForwarderProvenance);
   const {
     partnerPeerId,
     setPeerId,
@@ -723,6 +752,15 @@ export function TransactionP2PReporterPage() {
     setInitialized,
     reset: resetP2P,
   } = useP2PStore();
+
+  // Entering (or returning to) the pairing step invalidates any earlier handshake. Without
+  // this, a second connection attempt would find the flag already true and advance on the
+  // send instead of on the relayer's reply — the exact gap the reply gate closes.
+  useEffect(() => {
+    if (step === 'wait-for-connection') {
+      clearForwarderProvenance();
+    }
+  }, [step, clearForwarderProvenance]);
 
   // Store libp2p in ref - NEVER pass libp2pRef.current directly as a prop!
   const libp2pRef = useRef<Libp2p | null>(null);
@@ -873,9 +911,18 @@ export function TransactionP2PReporterPage() {
 
               switch (protocol) {
                 case PROTOCOLS.CONNECT:
-                  // Relayer responded with their address
-                  if (data.form?.relayer) {
-                    useTransactionFormStore.getState().setForwarder(data.form.relayer as Address);
+                  // Relayer responded with their address.
+                  // `isAddress` narrows the wire value rather than asserting it: this is the
+                  // boundary where peer-supplied text becomes the `trustedForwarder` the
+                  // reporter signs over. `setForwarderFromPeer` also marks it as handshaked in
+                  // this session — signing refuses a forwarder that only came back from
+                  // localStorage (see TransactionFormState.forwarderFromPeerSession).
+                  if (data.form?.relayer && isAddress(data.form.relayer)) {
+                    useTransactionFormStore.getState().setForwarderFromPeer(data.form.relayer);
+                  } else if (data.form?.relayer) {
+                    logger.p2p.warn('Ignored CONNECT with a malformed relayer address', {
+                      relayer: data.form.relayer,
+                    });
                   }
                   setConnectedToPeer(true);
                   // Step advancement handled by WaitForConnectionStep.onComplete
@@ -911,17 +958,17 @@ export function TransactionP2PReporterPage() {
                     if (typeof data.messageId === 'string' && isHash(data.messageId)) {
                       setBridgeMessageId(data.messageId);
                     }
-                    // On spoke chains, don't advance to success yet — the cross-chain
-                    // polling in TxP2PWaitForRegistration will advance when the
-                    // hub chain confirms delivery via Hyperlane.
-                    if (needsTxCrossChainConfirmation(chainIdRef.current)) {
-                      logger.registration.info(
-                        'Spoke chain — waiting for hub confirmation before advancing',
-                        { spokeChainId: chainIdRef.current }
-                      );
-                    } else {
-                      goToNextStepRef.current();
-                    }
+                    // Never advance to success on the relayer's word. `data.hash` is only
+                    // checked for shape — there is no proof the transaction exists, targets
+                    // the registry, or succeeded — so advancing here would show a reporter a
+                    // success screen, with an explorer link, for a batch that may never have
+                    // been registered. The hash is recorded for that link and nothing more;
+                    // `TxP2PWaitForRegistration` polls `isTransactionRegistered` and advances
+                    // only once the chain agrees, on hub and spoke chains alike.
+                    logger.registration.info(
+                      'Recorded relayer-reported registration hash; awaiting on-chain confirmation',
+                      { chainId: chainIdRef.current }
+                    );
                   } else {
                     logger.p2p.warn('TX_REG_PAY received with invalid hash', { hash: data.hash });
                     setProtocolError('Received invalid registration hash from relayer');
@@ -1113,6 +1160,10 @@ export function TransactionP2PReporterPage() {
             role="registeree"
             getLibp2p={getLibp2p}
             onComplete={goToNextStep}
+            // Only the relayer's CONNECT reply sets this (see the handler above). A resolved
+            // write is not proof the pairing was accepted — a refused CONNECT looks identical
+            // from the sending side, and advancing on it walks a refused reporter into signing.
+            partnerAcknowledged={forwarderFromPeerSession}
           />
         );
 

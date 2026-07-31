@@ -20,6 +20,16 @@ import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
 /// hash — at acknowledgement time, which makes the second signature physically unproducible
 /// early. The attack tests below therefore assert the attack now FAILS; the last test proves the
 /// honest flow still succeeds, so the fix is not simply breaking everything.
+///
+/// COVERAGE MAP — V1 applies to four signing paths, and this file is only one of them. The other
+/// three carry the same inverted-exploit tests next to their own fixtures, because each needs a
+/// different deployment (the spoke paths need a mailbox, bridge adapter and fee oracle):
+///   - WalletRegistry.register .................... here
+///   - TransactionRegistry.registerTransactions ... test/TransactionRegistry.t.sol
+///   - SpokeRegistry.register (wallet) ............ test/SpokeRegistry.t.sol
+///   - SpokeRegistry.registerTransactionBatch ..... test/SpokeRegistry.t.sol, section
+///     "TX BATCH ANTI-PHISHING REGRESSION" — this was the path V1's first pass missed entirely.
+/// If a fifth signing path is added, it needs an entry here AND its own inverted-exploit test.
 contract AntiPhishingTest is EIP712TestHelper {
     WalletRegistry internal reg;
 

@@ -48,6 +48,7 @@ import {
   PROTOCOLS,
   readStreamData,
   acceptStream,
+  isTxRelayerProtocolExpectedAtStep,
   passStreamData,
   getPeerConnection,
   isStreamAbortError,
@@ -287,6 +288,19 @@ export function TransactionP2PRelayerPage() {
               // before any of it is trusted. Without this an arbitrary peer that learned a
               // displayed peer ID could inject signatures or drive the step machine.
               if (!acceptStream(protocol, connection, data, 'relayer')) return;
+
+              // Authenticity is not ordering. `acceptStream` proves the message came from the
+              // bound partner; this proves it belongs at the step the relayer is actually on.
+              // Without it a partner that repeats a CONNECT walks the relayer forward one step
+              // per message — into a payment step with no signature stored.
+              const currentStep = useTransactionRegistrationStore.getState().step;
+              if (!isTxRelayerProtocolExpectedAtStep(protocol, currentStep)) {
+                logger.p2p.warn('Ignored TX protocol message that does not belong at this step', {
+                  protocol,
+                  step: currentStep,
+                });
+                return;
+              }
 
               logger.p2p.info('TX Relayer received data', { protocol, data });
 

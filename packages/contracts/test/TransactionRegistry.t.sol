@@ -835,24 +835,15 @@ contract TransactionRegistryTest is EIP712TestHelper {
         bytes32 dataHash = _computeDataHash(txHashes, chainIds);
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
 
-        // Step 1: Acknowledgement
+        // Deadline only — the function no longer returns a hash struct, because the
+        // registration typehash commits to a `windowBlockHash` that is unknowable here.
         vm.prank(reporter);
-        (uint256 deadline1, bytes32 hashStruct1) =
-            txRegistry.generateTransactionHashStruct(dataHash, reportedChainId, 3, forwarder, 1);
-
+        uint256 deadline1 = txRegistry.generateTransactionHashStruct(dataHash, reportedChainId, 3, forwarder, 1);
         assertTrue(deadline1 > block.timestamp, "Deadline should be in the future");
-        assertTrue(hashStruct1 != bytes32(0), "HashStruct should not be zero");
 
-        // Step 2: Registration
         vm.prank(reporter);
-        (uint256 deadline2, bytes32 hashStruct2) =
-            txRegistry.generateTransactionHashStruct(dataHash, reportedChainId, 3, forwarder, 2);
-
+        uint256 deadline2 = txRegistry.generateTransactionHashStruct(dataHash, reportedChainId, 3, forwarder, 2);
         assertTrue(deadline2 > block.timestamp, "Deadline should be in the future");
-        assertTrue(hashStruct2 != bytes32(0), "HashStruct should not be zero");
-
-        // Step 1 and step 2 should produce different hash structs (different typehashes)
-        assertTrue(hashStruct1 != hashStruct2, "ACK and REG hash structs should differ");
     }
 
     /// @notice generateTransactionHashStruct reverts for invalid step values

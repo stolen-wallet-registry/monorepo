@@ -84,8 +84,16 @@ export function useTxCrossChainConfirmation({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevStatusRef = useRef<TxCrossChainStatus>('idle');
 
-  // Get the hub chain ID for this spoke
-  const hubChainId = spokeChainId ? getHubChainId(spokeChainId) : undefined;
+  // The registry to poll always lives on the hub. `getHubChainId` returns undefined when the
+  // chain IS the hub, so falling back to the chain itself is what makes this usable as a
+  // same-chain confirmation as well as a cross-chain one.
+  //
+  // Without that fallback the query is disabled on a hub chain (no hub id → no registry
+  // address → `enabled: false`), so it never confirms and silently runs to `timeout` after
+  // the full polling window. Callers that gate on `needsTxCrossChainConfirmation` never
+  // noticed because they only enable this on spokes; the P2P flow, which relies on it as the
+  // on-chain check that a registration actually happened, does.
+  const hubChainId = spokeChainId ? (getHubChainId(spokeChainId) ?? spokeChainId) : undefined;
 
   // Get hub registry address (RegistryHub, not the subregistry)
   let hubRegistryAddress: Address | undefined;

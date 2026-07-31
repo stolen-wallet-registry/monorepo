@@ -1009,26 +1009,19 @@ contract WalletRegistryTest is EIP712TestHelper {
     // VIEW FUNCTION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice generateHashStruct returns non-zero deadline and hashStruct for step 1 (ack) and step 2 (reg)
+    /// @notice generateHashStruct returns a usable deadline for both phases.
+    /// @dev It returns ONLY a deadline. It deliberately no longer returns a hash struct: the
+    ///      registration typehash commits to `windowBlockHash`, which is not knowable at this
+    ///      point in the flow, so any digest built here would be one no wallet can produce.
+    ///      Callers build their own typed data. See the NatSpec on the function.
     function test_GenerateHashStruct_Step1And2() public {
-        // Step 1 — acknowledgement
         vm.prank(wallet);
-        (uint256 deadline1, bytes32 hash1) =
-            walletRegistry.generateHashStruct(REPORTED_CHAIN_ID, incidentTimestamp, forwarder, 1);
-
+        uint256 deadline1 = walletRegistry.generateHashStruct(REPORTED_CHAIN_ID, incidentTimestamp, forwarder, 1);
         assertGt(deadline1, block.timestamp);
-        assertTrue(hash1 != bytes32(0));
 
-        // Step 2 — registration
         vm.prank(wallet);
-        (uint256 deadline2, bytes32 hash2) =
-            walletRegistry.generateHashStruct(REPORTED_CHAIN_ID, incidentTimestamp, forwarder, 2);
-
+        uint256 deadline2 = walletRegistry.generateHashStruct(REPORTED_CHAIN_ID, incidentTimestamp, forwarder, 2);
         assertGt(deadline2, block.timestamp);
-        assertTrue(hash2 != bytes32(0));
-
-        // Both steps should produce different hashStructs (different type hashes)
-        assertTrue(hash1 != hash2);
     }
 
     /// @notice getDeadlines returns correct timing info before and after acknowledgement

@@ -354,14 +354,13 @@ interface ITransactionRegistry {
     /// @param trustedForwarder The forwarder address authorized to complete registration
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline The deadline block number
-    /// @return hashStruct The EIP-712 hash struct for signing
     function generateTransactionHashStruct(
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,
         address trustedForwarder,
         uint8 step
-    ) external view returns (uint256 deadline, bytes32 hashStruct);
+    ) external view returns (uint256 deadline);
 
     /// @notice Get nonce for a reporter
     /// @param reporter The reporter address

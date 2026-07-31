@@ -226,12 +226,12 @@ export function InitialFormStep({ onComplete }: InitialFormStepProps) {
     // Refetch hash struct to get fresh deadline
     logger.contract.debug('Refetching hash struct for fresh deadline');
     const refetchResult = await refetchHashStruct();
-    // Refetch returns raw contract data [deadline, hashStruct], transform if present
-    const rawData =
-      refetchResult?.data && Array.isArray(refetchResult.data) && refetchResult.data.length >= 2
-        ? (refetchResult.data as [bigint, Hex])
-        : undefined;
-    const freshDeadline = rawData?.[0] ?? hashStructData?.deadline;
+    // Refetch returns the raw contract value: a bare uint256 deadline. (It used to be a
+    // [deadline, hashStruct] tuple; the hash struct was removed because the registration
+    // typehash commits to a windowBlockHash this call cannot know.) Reading it as a tuple
+    // would silently yield undefined and fall back to the cached, staler deadline.
+    const freshDeadline =
+      typeof refetchResult?.data === 'bigint' ? refetchResult.data : hashStructData?.deadline;
 
     if (freshDeadline === undefined) {
       logger.signature.error('Failed to get hash struct data');

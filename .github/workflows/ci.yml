@@ -87,20 +87,27 @@ jobs:
 
       # ADVISORY, NOT BLOCKING — and that is a measured decision, not an oversight.
       #
-      # Measured 2026-07-30 on this tree: 278 advisories (101 high, 7 critical); production-only
-      # is still 72 high and 4 critical. `--audit-level=high` — or even `critical` — would fail
-      # on the first run and stay failing, which does not make anything safer: a check that is
-      # always red gets ignored, and it would block every unrelated PR from merging.
+      # Measured 2026-07-31 on this tree, workspace-wide (`pnpm audit`): 245 advisories,
+      # 86 high, 5 critical. `--audit-level=high` here would fail on the first run and stay
+      # failing, which does not make anything safer: a check that is always red gets ignored,
+      # and it would block every unrelated PR from merging. Most of that count is devDependency
+      # tooling (docs site, Storybook, indexer) that never ships to a user's browser.
       #
-      # Most of the browser-side weight is one dependency. `@hyperlane-xyz/sdk` is pulled into
-      # apps/web for a single event decode and drags in protobufjs, @aws-sdk/client-s3, cosmjs,
-      # axios, h3 and ws; it accounts for 30 of the 39 apps/web highs and all three browser
-      # criticals. See V30 in PRPs/security-audit-2026-07-30.md — replacing it with a local
-      # viem `parseEventLogs` deletes that subtree.
+      # V30 (dropping @hyperlane-xyz/sdk in favour of a local viem `parseEventLogs`) has LANDED
+      # — see PRPs/security-audit-2026-07-30.md. That, plus a root `pnpm.overrides` pin of
+      # shell-quote to >=1.8.4 (the last critical in the shipped graph, reached via
+      # @libp2p/webrtc > react-native-webrtc > react-native > react-devtools-core), takes
+      # production-only (`pnpm audit --prod`) to 155 advisories, 57 high, 0 critical.
       #
-      # FLIP THIS TO BLOCKING (drop continue-on-error) once the count is down to something a
-      # human will actually read. Until then the output is here to be looked at, honestly
-      # labelled, rather than silently absent.
+      # NEXT STEP — the viable blocking gate is the production-only one, which is green today:
+      #
+      #     pnpm audit --prod --audit-level=critical
+      #
+      # Add that as a separate, blocking step (no continue-on-error) so any new critical in the
+      # shipped dependency graph fails the build, and keep this workspace-wide run advisory.
+      # Deliberately not done in the same change that made it green, so the flip is reviewed on
+      # its own. Deferred: the duplicate viem 2.23.2 pulled by @walletconnect/utils — an
+      # override there risks breaking WalletConnect signing and there is no smoke test for it.
       - name: Audit dependencies (advisory)
         continue-on-error: true
         run: pnpm audit --audit-level=high

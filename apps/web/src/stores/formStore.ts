@@ -31,6 +31,8 @@ export interface FormActions {
   setRelayer: (address: Address) => void;
   /** Set the relayer from a live CONNECT handshake, marking it valid for P2P signing. */
   setRelayerFromPeer: (address: Address) => void;
+  /** Invalidate a prior handshake when the pairing step is (re-)entered. */
+  clearRelayerProvenance: () => void;
   setFormValues: (values: Partial<Omit<FormState, 'relayerFromPeerSession'>>) => void;
   reset: () => void;
 }
@@ -58,6 +60,11 @@ export const useFormStore = create<FormState & FormActions>()(
             logger.store.debug('Form relayer updated', { address });
             state.relayer = address;
             // Typed into the form, not handshaked. The P2P path must not accept this.
+            state.relayerFromPeerSession = false;
+          }),
+
+        clearRelayerProvenance: () =>
+          set((state) => {
             state.relayerFromPeerSession = false;
           }),
 

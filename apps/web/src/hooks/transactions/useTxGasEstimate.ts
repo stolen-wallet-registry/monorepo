@@ -275,11 +275,13 @@ export function useTxGasEstimate({
         reportedChainId &&
         deadline !== undefined &&
         nonce !== undefined &&
+        windowBlock !== undefined &&
         reporter &&
         transactionHashes &&
         chainIds
       ) {
-        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter, transactionHashes, chainIds, v, r, s)
+        // Spoke: registerTransactionBatch(reportedChainId, deadline, nonce, reporter,
+        //                                 transactionHashes, chainIds, windowBlock, v, r, s)
         return encodeFunctionData({
           abi: spokeRegistryAbi,
           functionName: 'registerTransactionBatch',
@@ -290,6 +292,7 @@ export function useTxGasEstimate({
             reporter,
             transactionHashes,
             chainIds,
+            windowBlock,
             signature.v,
             signature.r,
             signature.s,

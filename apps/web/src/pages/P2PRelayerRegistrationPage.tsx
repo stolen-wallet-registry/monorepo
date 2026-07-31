@@ -43,6 +43,7 @@ import {
   PROTOCOLS,
   readStreamData,
   acceptStream,
+  isRelayerProtocolExpectedAtStep,
   passStreamData,
   isStreamAbortError,
   isValidSignatureData,
@@ -262,6 +263,20 @@ export function P2PRelayerRegistrationPage() {
                     'A connection attempt was refused because it came from a different peer than the one you are paired with. If your partner cannot connect, restart this page to clear the pairing.'
                   );
                 }
+                return;
+              }
+
+              // Authenticity is not ordering. `acceptStream` proves the message came from the
+              // bound partner; this proves it belongs at the step the relayer is actually on.
+              // Without it a partner that repeats a CONNECT walks the relayer forward one step
+              // per message — into a payment step with no signature stored, or past the
+              // grace period it is waiting out.
+              const currentStep = useRegistrationStore.getState().step;
+              if (!isRelayerProtocolExpectedAtStep(protocol, currentStep)) {
+                logger.p2p.warn('Ignored protocol message that does not belong at this step', {
+                  protocol,
+                  step: currentStep,
+                });
                 return;
               }
 

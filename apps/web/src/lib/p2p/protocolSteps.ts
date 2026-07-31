@@ -58,6 +58,39 @@ export function isProtocolExpectedAtStep(protocol: string, step: RegistrationSte
 }
 
 /**
+ * The relayer's side of the wallet flow.
+ *
+ * The relayer runs the same step sequence as the registeree but receives the opposite half of
+ * the protocol set, so it needs its own table: the registeree-facing entries above would
+ * reject every message the relayer actually gets. Without a table the relayer had no ordering
+ * check at all, and a bound partner could walk it forward one step per repeated CONNECT — the
+ * same defect this module exists to close, on the side that spends the gas.
+ *
+ * A CONNECT is only ever legitimate at `wait-for-connection`. Reconnection does not re-send
+ * one (`ReconnectDialog` re-dials without a handshake), so gating it here does not break resume.
+ */
+export const RELAYER_PROTOCOL_EXPECTED_STEP: Readonly<Record<string, RegistrationStep>> = {
+  [PROTOCOLS.CONNECT]: 'wait-for-connection',
+  [PROTOCOLS.ACK_SIG]: 'acknowledge-and-sign',
+  [PROTOCOLS.REG_SIG]: 'register-and-sign',
+};
+
+/**
+ * Whether a wallet-flow message on `protocol` may act while the relayer sits at `step`.
+ *
+ * Same fail-closed behaviour as {@link isProtocolExpectedAtStep}.
+ */
+export function isRelayerProtocolExpectedAtStep(
+  protocol: string,
+  step: RegistrationStep | null
+): boolean {
+  if (!step) return false;
+  const expected = RELAYER_PROTOCOL_EXPECTED_STEP[protocol];
+  if (!expected) return false;
+  return expected === step;
+}
+
+/**
  * The transaction flow's equivalent of {@link PROTOCOL_EXPECTED_STEP}.
  *
  * The transaction registration flow is a separate step machine with its own store, its own
@@ -87,6 +120,37 @@ export function isTxProtocolExpectedAtStep(
 ): boolean {
   if (!step) return false;
   const expected = TX_PROTOCOL_EXPECTED_STEP[protocol];
+  if (!expected) return false;
+  return expected === step;
+}
+
+/**
+ * The transaction relayer's table — the mirror of {@link RELAYER_PROTOCOL_EXPECTED_STEP}.
+ *
+ * `TX_ACK_SIG` legitimately arrives while the relayer still sits at `select-transactions`: the
+ * reporter chooses the batch locally, so the relayer has nothing to do at that step but wait,
+ * and the signature message is what carries the batch to it. `processTxSignature` advances one
+ * step and the handler advances a second time to reach `acknowledgement-payment`.
+ */
+export const TX_RELAYER_PROTOCOL_EXPECTED_STEP: Readonly<
+  Record<string, TransactionRegistrationStep>
+> = {
+  [PROTOCOLS.CONNECT]: 'wait-for-connection',
+  [PROTOCOLS.TX_ACK_SIG]: 'select-transactions',
+  [PROTOCOLS.TX_REG_SIG]: 'register-sign',
+};
+
+/**
+ * Whether a transaction-flow message on `protocol` may act while the relayer sits at `step`.
+ *
+ * Same fail-closed behaviour as {@link isProtocolExpectedAtStep}.
+ */
+export function isTxRelayerProtocolExpectedAtStep(
+  protocol: string,
+  step: TransactionRegistrationStep | null
+): boolean {
+  if (!step) return false;
+  const expected = TX_RELAYER_PROTOCOL_EXPECTED_STEP[protocol];
   if (!expected) return false;
   return expected === step;
 }

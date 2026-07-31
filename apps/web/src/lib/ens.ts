@@ -34,7 +34,29 @@ export function isDisplaySafeEnsName(name: string | null | undefined): name is s
 
   // Anything that looks like the start of a hex address. Six nibbles is already enough to
   // impersonate a truncated address, and truncated is how addresses are usually shown.
-  if (/^0x[0-9a-fA-F]{6,}/.test(name)) return false;
+  //
+  // The rule is applied to the name with `-`, `_` and `.` REMOVED, not to the raw string.
+  // Hyphens are ENS-legal, so `0x-d8da6bf269c7bb.eth` and `0x-d8da-6bf2-69c7.eth` are
+  // registerable names that carry no bidi controls and are their own normalized form — yet
+  // they read as an address in an address slot. Stripping separators first collapses every
+  // such spacing variant onto the same test.
+  //
+  // Deliberately narrow: the check only fires when the name STARTS with `0x`, so ordinary
+  // names that merely contain hex letters are untouched. `0xproject.eth` survives because
+  // `0xproject` is not six-plus hex nibbles.
+  const withoutSeparators = name.replace(/[-_.]/g, '');
+  if (/^0x[0-9a-fA-F]{6,}/.test(withoutSeparators)) return false;
+
+  // Second shape: a name that begins with `0x` and is overwhelmingly hex characters after it,
+  // e.g. `0xd8da6bf2z69c7bb.eth`, where a single non-hex letter is enough to break the
+  // consecutive-nibble run above while the string still reads as an address at a glance.
+  // Threshold is 80% of a body that is itself at least six characters long — short names like
+  // `0xdao` cannot trip it.
+  if (/^0x/i.test(withoutSeparators)) {
+    const body = withoutSeparators.slice(2).replace(/eth$/i, '');
+    const hexChars = body.replace(/[^0-9a-fA-F]/g, '').length;
+    if (body.length >= 6 && hexChars / body.length >= 0.8) return false;
+  }
 
   // Bidi embedding/override (U+202A-U+202E), isolates (U+2066-U+2069) and the LRM/RLM marks.
   // Written as escapes deliberately - as literals they would be invisible in this source.

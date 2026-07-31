@@ -33,6 +33,17 @@ export interface TransactionFormState {
   reporter: Address | null;
   /** Relayer/forwarder address (pays gas - same as reporter for standard) */
   forwarder: Address | null;
+  /**
+   * Whether `forwarder` arrived from a P2P CONNECT handshake in THIS session.
+   *
+   * Session-only by construction: never persisted, re-asserted false on rehydrate. The
+   * forwarder becomes the `trustedForwarder` inside the signed message, and whoever holds
+   * that role can complete the irreversible registration on their own schedule — a value
+   * restored from localStorage may have been written by anyone with access to this browser
+   * profile, and a reload mid-flow does not re-run CONNECT. The P2P signing path refuses to
+   * sign when this is false. Mirrors `relayerFromPeerSession` on the wallet form store.
+   */
+  forwarderFromPeerSession: boolean;
   /** Selected transaction hashes to register */
   selectedTxHashes: Hash[];
   /** Full transaction details for display in subsequent steps */
@@ -50,6 +61,16 @@ export interface TransactionFormState {
 export interface TransactionFormActions {
   setReporter: (address: Address) => void;
   setForwarder: (address: Address) => void;
+  /** Set the forwarder AND mark it as established by a P2P handshake this session. */
+  setForwarderFromPeer: (address: Address) => void;
+  /**
+   * Drop the handshake mark without touching the address.
+   *
+   * Called when the flow re-enters `wait-for-connection`: a pairing from an earlier attempt
+   * must not make the next CONNECT look pre-accepted, or the reply gate that catches a refused
+   * CONNECT would pass on stale evidence.
+   */
+  clearForwarderProvenance: () => void;
   setSelectedTxHashes: (hashes: Hash[]) => void;
   setSelectedTxDetails: (details: StoredTransactionDetail[]) => void;
   /** Set both hashes and details from UserTransaction array */
@@ -158,6 +179,7 @@ function restoreSelection(
 const initialState: TransactionFormState = {
   reporter: null,
   forwarder: null,
+  forwarderFromPeerSession: false,
   selectedTxHashes: [],
   selectedTxDetails: [],
   reportedChainId: null,
@@ -178,10 +200,24 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
             state.reporter = address;
           }),
 
+        clearForwarderProvenance: () =>
+          set((state) => {
+            state.forwarderFromPeerSession = false;
+          }),
+
+        setForwarderFromPeer: (address) =>
+          set((state) => {
+            logger.store.debug('Transaction forwarder set from peer handshake', { address });
+            state.forwarder = address;
+            state.forwarderFromPeerSession = true;
+          }),
+
         setForwarder: (address) =>
           set((state) => {
             logger.store.debug('Transaction form forwarder updated', { address });
             state.forwarder = address;
+            // Typed in or derived locally, not handshaked. The P2P path must not accept this.
+            state.forwarderFromPeerSession = false;
           }),
 
         setSelectedTxHashes: (hashes) =>
@@ -282,7 +318,9 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
         // load as migrated, so it never rewrites the entry and the error repeats on every
         // single reload for anyone holding state from an earlier local version.
         migrate: () => initialState,
-        // Don't persist derived data - it's computed
+        // Don't persist derived data - it's computed.
+        // `forwarderFromPeerSession` is session-only by design — persisting it would hand the
+        // attacker the very flag it exists to withhold.
         partialize: (state) => ({
           reporter: state.reporter,
           forwarder: state.forwarder,
@@ -319,6 +357,10 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
             forwarder: isPersistedAddress(state.forwarder)
               ? state.forwarder
               : initialState.forwarder,
+            // Explicit, not merely absent from the persisted blob: a rehydrated forwarder has
+            // by definition not been handshaked this session, and this is the assertion that
+            // makes a hand-written localStorage entry unsignable in the P2P flow.
+            forwarderFromPeerSession: false,
             selectedTxHashes: selection.hashes,
             selectedTxDetails: selection.details,
             reportedChainId:

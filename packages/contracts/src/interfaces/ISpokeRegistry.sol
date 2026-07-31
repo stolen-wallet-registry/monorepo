@@ -238,6 +238,10 @@ interface ISpokeRegistry {
     /// @param reporter Address that reported (must be signer)
     /// @param transactionHashes Array of transaction hashes in batch
     /// @param chainIds Parallel array of CAIP-2 chain IDs per transaction
+    /// @param windowBlock Block whose hash the signer committed to. NOT part of the signed
+    ///        struct — the signed `windowBlockHash` binds it. Must satisfy
+    ///        `startBlock <= windowBlock < block.number` and be within
+    ///        {TimingConfig.MAX_WINDOW_BLOCK_AGE} blocks of now.
     /// @param v Signature v component
     /// @param r Signature r component
     /// @param s Signature s component
@@ -248,6 +252,7 @@ interface ISpokeRegistry {
         address reporter,
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds,
+        uint256 windowBlock,
         uint8 v,
         bytes32 r,
         bytes32 s
@@ -321,11 +326,10 @@ interface ISpokeRegistry {
     /// @param trustedForwarder Address that will submit the transaction
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline Signature expiry timestamp
-    /// @return hashStruct Hash to sign
     function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
         external
         view
-        returns (uint256 deadline, bytes32 hashStruct);
+        returns (uint256 deadline);
 
     /// @notice Generate hash struct for transaction batch signing (frontend helper)
     /// @dev Uses msg.sender as the reporter address. Must be called by the actual reporter.
@@ -336,14 +340,13 @@ interface ISpokeRegistry {
     /// @param trustedForwarder Address that will submit the transaction
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline Signature expiry timestamp
-    /// @return hashStruct Hash to sign
     function generateTransactionHashStruct(
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,
         address trustedForwarder,
         uint8 step
-    ) external view returns (uint256 deadline, bytes32 hashStruct);
+    ) external view returns (uint256 deadline);
 
     /// @notice Get deadline info for pending wallet registration
     /// @param session The wallet address (session)

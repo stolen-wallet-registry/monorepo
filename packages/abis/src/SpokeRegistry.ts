@@ -339,17 +339,17 @@ export const SpokeRegistryABI = [
     name: 'generateHashStruct',
     inputs: [
       {
-        name: 'reportedChainId',
+        name: '',
         type: 'uint64',
         internalType: 'uint64',
       },
       {
-        name: 'incidentTimestamp',
+        name: '',
         type: 'uint64',
         internalType: 'uint64',
       },
       {
-        name: 'trustedForwarder',
+        name: '',
         type: 'address',
         internalType: 'address',
       },
@@ -364,11 +364,6 @@ export const SpokeRegistryABI = [
         name: 'deadline',
         type: 'uint256',
         internalType: 'uint256',
-      },
-      {
-        name: 'hashStruct',
-        type: 'bytes32',
-        internalType: 'bytes32',
       },
     ],
     stateMutability: 'view',
@@ -378,22 +373,22 @@ export const SpokeRegistryABI = [
     name: 'generateTransactionHashStruct',
     inputs: [
       {
-        name: 'dataHash',
+        name: '',
         type: 'bytes32',
         internalType: 'bytes32',
       },
       {
-        name: 'reportedChainId',
+        name: '',
         type: 'bytes32',
         internalType: 'bytes32',
       },
       {
-        name: 'transactionCount',
+        name: '',
         type: 'uint32',
         internalType: 'uint32',
       },
       {
-        name: 'trustedForwarder',
+        name: '',
         type: 'address',
         internalType: 'address',
       },
@@ -408,11 +403,6 @@ export const SpokeRegistryABI = [
         name: 'deadline',
         type: 'uint256',
         internalType: 'uint256',
-      },
-      {
-        name: 'hashStruct',
-        type: 'bytes32',
-        internalType: 'bytes32',
       },
     ],
     stateMutability: 'view',
@@ -1004,6 +994,11 @@ export const SpokeRegistryABI = [
         name: 'chainIds',
         type: 'bytes32[]',
         internalType: 'bytes32[]',
+      },
+      {
+        name: 'windowBlock',
+        type: 'uint256',
+        internalType: 'uint256',
       },
       {
         name: 'v',

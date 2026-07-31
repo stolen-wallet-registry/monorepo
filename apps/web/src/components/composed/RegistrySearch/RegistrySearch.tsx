@@ -32,7 +32,7 @@ import {
   type SearchType,
 } from '@/hooks';
 import { detectSearchTypeWithEns, type SearchTypeWithEns } from '@/lib/ens';
-import { cn } from '@/lib/utils';
+import { cn, sanitizeErrorMessage } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { AddressSearchResult } from './AddressSearchResult';
 import { TransactionSearchResult } from './TransactionSearchResult';
@@ -295,7 +295,10 @@ export function RegistrySearch({
         {/* Error */}
         {showError && (
           <p id="search-error" className="text-sm text-destructive">
-            Error querying indexer: {error.message}
+            {/* graphql-request's ClientError embeds the request and response verbatim, so
+                the raw message is not safe to render. Sanitize like every other error
+                surface; see the V29 tests in @swr/errors. */}
+            Error querying indexer: {sanitizeErrorMessage(error)}
           </p>
         )}
       </div>

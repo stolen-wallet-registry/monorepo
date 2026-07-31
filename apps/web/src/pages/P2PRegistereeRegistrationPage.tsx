@@ -164,7 +164,8 @@ export function P2PRegistereeRegistrationPage() {
     setRegistrationHash,
     setBridgeMessageId,
   } = useRegistrationStore();
-  const { setFormValues, setRelayerFromPeer } = useFormStore();
+  const { setFormValues, setRelayerFromPeer, clearRelayerProvenance } = useFormStore();
+  const relayerFromPeerSession = useFormStore((s) => s.relayerFromPeerSession);
   const {
     partnerPeerId,
     setPeerId,
@@ -174,6 +175,15 @@ export function P2PRegistereeRegistrationPage() {
     reset: resetP2P,
   } = useP2PStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
+
+  // Entering (or returning to) the pairing step invalidates any earlier handshake. Without
+  // this, a second connection attempt would find the flag already true and advance on the
+  // send instead of on the relayer's reply — the exact gap the reply gate closes.
+  useEffect(() => {
+    if (step === 'wait-for-connection') {
+      clearRelayerProvenance();
+    }
+  }, [step, clearRelayerProvenance]);
 
   // Store libp2p in ref - NEVER pass libp2pRef.current directly as a prop!
   // libp2p uses a Proxy that throws when React DevTools tries to serialize it.
@@ -498,6 +508,10 @@ export function P2PRegistereeRegistrationPage() {
             role="registeree"
             getLibp2p={getLibp2p}
             onComplete={goToNextStep}
+            // Writing to a stream the relayer silently drops still resolves, so a victim whose
+            // CONNECT was refused would otherwise advance and sign anyway. Advance on the
+            // relayer's reply instead of on our own send.
+            partnerAcknowledged={relayerFromPeerSession}
           />
         );
 

@@ -53,6 +53,8 @@ contract SpokeRegistryTest is Test {
     bytes32 internal _ss;
     uint256 internal _sDeadline;
     uint256 internal _sNonce;
+    uint256 internal _sWindowBlock;
+    uint256 internal _txWindowBlock;
 
     // EIP-712 constants — duplicated here (not imported from EIP712Constants) because
     // spoke uses uint64 reportedChainId/incidentTimestamp while hub uses bytes32.
@@ -71,11 +73,12 @@ contract SpokeRegistryTest is Test {
     bytes32 internal constant TX_BATCH_ACK_TYPEHASH = keccak256(
         "TransactionBatchAcknowledgement(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline)"
     );
-    // Mirrors EIP712Constants.TX_BATCH_REG_TYPEHASH, which gained `windowBlockHash` alongside the
-    // wallet typehash. NOTE: SpokeRegistry's transaction-batch path hashes this typehash but does
-    // NOT yet append a windowBlockHash field (the hub's TransactionRegistry does), so the signed
-    // struct below deliberately stops at `deadline` to match what the spoke actually computes.
-    // When the spoke's tx-batch path is brought to parity, add blockhash(windowBlock) here too.
+    // Mirrors EIP712Constants.TX_BATCH_REG_TYPEHASH. All nine declared members are encoded in
+    // `_signTxBatchReg` below, including the `windowBlockHash` freshness commitment — the spoke's
+    // transaction-batch path is now at parity with the wallet path and the hub's
+    // TransactionRegistry. Encoding fewer members than the typehash declares is what previously
+    // desynced this digest from the one the frontend signature builder produces; keep them in
+    // lockstep.
     bytes32 internal constant TX_BATCH_REG_TYPEHASH = keccak256(
         "TransactionBatchRegistration(string statement,address reporter,address trustedForwarder,bytes32 dataHash,bytes32 reportedChainId,uint32 transactionCount,uint256 nonce,uint256 deadline,bytes32 windowBlockHash)"
     );
@@ -260,10 +263,12 @@ contract SpokeRegistryTest is Test {
         );
     }
 
-    function _skipToTxBatchRegistrationWindow(address _reporter) internal {
-        // Get current tx batch acknowledgement and skip to start block
+    /// @dev Skip into the tx-batch registration window and return the `windowBlock` to sign and
+    ///      submit. Rolls one block PAST `startBlock` so there is a mined block to reference —
+    ///      `resolveWindowBlockHash` requires `startBlock <= windowBlock < block.number`.
+    function _skipToTxBatchRegistrationWindow(address _reporter) internal returns (uint256 windowBlock) {
         ISpokeRegistry.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(_reporter);
-        vm.roll(ack.startBlock);
+        return _rollToWindow(ack.startBlock);
     }
 
     /// @dev Compute dataHash from transaction hashes and chain IDs
@@ -306,7 +311,8 @@ contract SpokeRegistryTest is Test {
         bytes32 reportedChainId,
         uint32 transactionCount,
         uint256 nonce,
-        uint256 deadline
+        uint256 deadline,
+        uint256 windowBlock
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
         bytes32 structHash = keccak256(
             abi.encode(
@@ -318,7 +324,8 @@ contract SpokeRegistryTest is Test {
                 reportedChainId,
                 transactionCount,
                 nonce,
-                deadline
+                deadline,
+                blockhash(windowBlock)
             )
         );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _getDomainSeparator(), structHash));
@@ -365,26 +372,19 @@ contract SpokeRegistryTest is Test {
         bytes32 reportedChainId,
         bytes32[] memory txHashes,
         bytes32[] memory chainIds,
-        uint256 fee
+        uint256 fee,
+        uint256 windowBlock
     ) internal {
-        uint8 v;
-        bytes32 r;
-        bytes32 s;
-        uint256 deadline;
-        uint256 nonce;
-        {
-            uint32 transactionCount = uint32(txHashes.length);
-            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
-            deadline = block.timestamp + 1 hours;
-            nonce = spoke.nonces(reporter);
-            (v, r, s) = _signTxBatchReg(
-                reporterPrivateKey, reporter, _forwarder, dataHash, reportedChainId, transactionCount, nonce, deadline
-            );
-        }
+        // Signature components, deadline, nonce and windowBlock all travel through storage:
+        // registerTransactionBatch now takes ten arguments, and holding any of them as locals
+        // here overflows the EVM's 16-slot stack (this project builds without via-ir).
+        _prepareTxBatchRegSig(
+            _computeDataHash(txHashes, chainIds), reportedChainId, uint32(txHashes.length), _forwarder, windowBlock
+        );
 
         vm.prank(_forwarder);
         spoke.registerTransactionBatch{ value: fee }(
-            reportedChainId, deadline, nonce, reporter, txHashes, chainIds, v, r, s
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
         );
     }
 
@@ -395,7 +395,8 @@ contract SpokeRegistryTest is Test {
         bytes32 reportedChainId,
         bytes32[] memory txHashes,
         bytes32[] memory chainIds,
-        uint256 fee
+        uint256 fee,
+        uint256 windowBlock
     ) internal {
         uint8 v;
         bytes32 r;
@@ -415,13 +416,14 @@ contract SpokeRegistryTest is Test {
                 reportedChainId,
                 transactionCount,
                 nonce,
-                deadline
+                deadline,
+                windowBlock
             );
         }
 
         vm.prank(submitter);
         spoke.registerTransactionBatch{ value: fee }(
-            reportedChainId, deadline, nonce, reporter, txHashes, chainIds, v, r, s
+            reportedChainId, deadline, nonce, reporter, txHashes, chainIds, windowBlock, v, r, s
         );
     }
 
@@ -432,7 +434,8 @@ contract SpokeRegistryTest is Test {
         bytes32 reportedChainId,
         bytes32[] memory txHashes,
         bytes32[] memory chainIds,
-        uint256 fee
+        uint256 fee,
+        uint256 windowBlock
     ) internal {
         uint8 v;
         bytes32 r;
@@ -450,27 +453,41 @@ contract SpokeRegistryTest is Test {
                 reportedChainId,
                 signingTxCount,
                 nonce,
-                deadline
+                deadline,
+                windowBlock
             );
         }
 
         vm.prank(forwarder);
         spoke.registerTransactionBatch{ value: fee }(
-            reportedChainId, deadline, nonce, reporter, txHashes, chainIds, v, r, s
+            reportedChainId, deadline, nonce, reporter, txHashes, chainIds, windowBlock, v, r, s
         );
     }
 
     /// @dev Prepare tx batch reg signature and store in _sv/_sr/_ss/_sDeadline/_sNonce.
-    ///      Writes to storage to free stack slots — registerTransactionBatch takes 9 args,
+    ///      Writes to storage to free stack slots — registerTransactionBatch takes 10 args,
     ///      which combined with local variables exceeds the EVM's 16-slot stack limit.
     ///      Reads nonce via external call, so call BEFORE vm.expectRevert.
-    function _prepareTxBatchRegSig(bytes32 dataHash, bytes32 reportedChainId, uint32 txCount, address _forwarder)
-        internal
-    {
+    function _prepareTxBatchRegSig(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 txCount,
+        address _forwarder,
+        uint256 windowBlock
+    ) internal {
         _sDeadline = block.timestamp + 1 hours;
         _sNonce = spoke.nonces(reporter);
+        _sWindowBlock = windowBlock;
         (_sv, _sr, _ss) = _signTxBatchReg(
-            reporterPrivateKey, reporter, _forwarder, dataHash, reportedChainId, txCount, _sNonce, _sDeadline
+            reporterPrivateKey,
+            reporter,
+            _forwarder,
+            dataHash,
+            reportedChainId,
+            txCount,
+            _sNonce,
+            _sDeadline,
+            windowBlock
         );
     }
 
@@ -895,17 +912,17 @@ contract SpokeRegistryTest is Test {
         assertEq(fees.bridgeName, "Hyperlane");
     }
 
-    /// @notice generateHashStruct returns valid data for signing
+    /// @notice generateHashStruct returns a usable signing deadline.
+    /// @dev Deadline only — see {WalletRegistry} test of the same name for why there is no
+    ///      hash-struct return value any more.
     function test_GenerateHashStruct() public {
         uint64 reportedChainId = 1;
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         vm.prank(wallet);
-        (uint256 deadline, bytes32 hashStruct) =
-            spoke.generateHashStruct(reportedChainId, incidentTimestamp, forwarder, 1);
+        uint256 deadline = spoke.generateHashStruct(reportedChainId, incidentTimestamp, forwarder, 1);
 
         assertGt(deadline, block.timestamp);
-        assertTrue(hashStruct != bytes32(0));
     }
 
     /// @notice generateHashStruct reverts on invalid step values
@@ -1185,7 +1202,7 @@ contract SpokeRegistryTest is Test {
 
         // Phase 1: Acknowledge
         _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
-        _skipToTxBatchRegistrationWindow(reporter);
+        uint256 windowBlock = _skipToTxBatchRegistrationWindow(reporter);
 
         // Phase 2: Register
         uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
@@ -1193,7 +1210,7 @@ contract SpokeRegistryTest is Test {
         vm.expectEmit(true, false, true, true);
         emit TransactionBatchSentToHub(reporter, bytes32(0), dataHash, HUB_CHAIN_ID);
 
-        _doTxBatchReg(forwarder, reportedChainId, txHashes, chainIds, fee);
+        _doTxBatchReg(forwarder, reportedChainId, txHashes, chainIds, fee, windowBlock);
 
         // Verify acknowledgement cleaned up
         assertFalse(spoke.isPendingTransactionBatch(reporter));
@@ -1404,8 +1421,8 @@ contract SpokeRegistryTest is Test {
         {
             bytes32 dataHash = _computeDataHash(txHashes, chainIds);
             _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
-            _skipToTxBatchRegistrationWindow(reporter);
-            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder);
+            uint256 windowBlock = _skipToTxBatchRegistrationWindow(reporter);
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder, windowBlock);
         }
         uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
         address wrongFwd = makeAddr("wrongForwarder");
@@ -1414,7 +1431,7 @@ contract SpokeRegistryTest is Test {
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidForwarder.selector);
         vm.prank(wrongFwd);
         spoke.registerTransactionBatch{ value: fee }(
-            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sv, _sr, _ss
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
         );
     }
 
@@ -1429,15 +1446,16 @@ contract SpokeRegistryTest is Test {
         {
             bytes32 dataHash = _computeDataHash(txHashes, chainIds);
             _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
-            // DO NOT skip to registration window
-            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder);
+            // DO NOT skip to registration window. The grace-period check fires before
+            // resolveWindowBlockHash, so any mined block works as the (unusable) reference.
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder, block.number - 1);
         }
         uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
 
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__GracePeriodNotStarted.selector);
         vm.prank(forwarder);
         spoke.registerTransactionBatch{ value: fee }(
-            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sv, _sr, _ss
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
         );
     }
 
@@ -1454,14 +1472,15 @@ contract SpokeRegistryTest is Test {
             _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
             ISpokeRegistry.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(reporter);
             vm.roll(ack.expiryBlock);
-            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder);
+            // Otherwise-valid window; the expiry check must still win.
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder, ack.startBlock);
         }
         uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
 
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__ForwarderExpired.selector);
         vm.prank(forwarder);
         spoke.registerTransactionBatch{ value: fee }(
-            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sv, _sr, _ss
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
         );
     }
 
@@ -1476,7 +1495,7 @@ contract SpokeRegistryTest is Test {
         {
             bytes32 dataHash = _computeDataHash(txHashes, chainIds);
             _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
-            _skipToTxBatchRegistrationWindow(reporter);
+            _txWindowBlock = _skipToTxBatchRegistrationWindow(reporter);
         }
 
         bytes32[] memory wrongTxHashes = new bytes32[](3);
@@ -1485,14 +1504,16 @@ contract SpokeRegistryTest is Test {
         wrongTxHashes[2] = keccak256("wrong_tx3");
         {
             bytes32 wrongDataHash = _computeDataHash(wrongTxHashes, chainIds);
-            _prepareTxBatchRegSig(wrongDataHash, reportedChainId, uint32(wrongTxHashes.length), forwarder);
+            _prepareTxBatchRegSig(
+                wrongDataHash, reportedChainId, uint32(wrongTxHashes.length), forwarder, _txWindowBlock
+            );
         }
         uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
 
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidDataHash.selector);
         vm.prank(forwarder);
         spoke.registerTransactionBatch{ value: fee }(
-            reportedChainId, _sDeadline, _sNonce, reporter, wrongTxHashes, chainIds, _sv, _sr, _ss
+            reportedChainId, _sDeadline, _sNonce, reporter, wrongTxHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
         );
     }
 
@@ -1507,14 +1528,112 @@ contract SpokeRegistryTest is Test {
         {
             bytes32 dataHash = _computeDataHash(txHashes, chainIds);
             _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
-            _skipToTxBatchRegistrationWindow(reporter);
-            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder);
+            uint256 windowBlock = _skipToTxBatchRegistrationWindow(reporter);
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder, windowBlock);
         }
 
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InsufficientFee.selector);
         vm.prank(forwarder);
         spoke.registerTransactionBatch{ value: 0 }(
-            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sv, _sr, _ss
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TX BATCH ANTI-PHISHING REGRESSION (audit finding V1) + SIGNATURE LIFETIME (V13)
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // The spoke's transaction-batch path was the one signing path V1's original fix missed:
+    // its struct hash encoded eight members under the nine-member TX_BATCH_REG_TYPEHASH, so it
+    // carried no freshness commitment at all (and disagreed with the digest the frontend
+    // builds). These tests are the inverted exploit — they must FAIL to register. The honest
+    // flow is covered by test_TxBatchReg_Success above; keep both halves, or a change that
+    // simply broke registration would still look secure.
+
+    /// The core exploit: a phishing page collects the batch acknowledgement AND the batch
+    /// registration signature seconds apart in one visit, then submits both itself once the
+    /// grace period has quietly elapsed. The registration signature can only commit to a block
+    /// that already exists at signing time, and every such block precedes `startBlock`.
+    function test_attack_TxBatch_bothSignaturesInOneSitting_cannotRegister() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        {
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
+            // Signed in the same sitting as the acknowledgement: the newest block available is
+            // the one before the ack, which is necessarily earlier than the grace-period start.
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder, block.number - 1);
+            // Attacker now waits out the grace period alone, victim long gone.
+            _rollToWindow(spoke.getTransactionAcknowledgement(reporter).startBlock);
+        }
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
+
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockBeforeGracePeriod.selector);
+        vm.prank(forwarder);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
+        );
+    }
+
+    /// The obvious escape from the test above: sign over the grace-start block anyway, before
+    /// it is mined. `blockhash` of an unmined block is zero, so the attacker signs over
+    /// bytes32(0) while the contract resolves the real hash — the digests cannot agree.
+    function test_attack_TxBatch_cannotPreCommitToAFutureBlock() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        {
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
+            uint256 graceStart = spoke.getTransactionAcknowledgement(reporter).startBlock;
+            assertEq(blockhash(graceStart), bytes32(0), "grace-start block must not be mined yet");
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder, graceStart);
+            _rollToWindow(graceStart);
+        }
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
+
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidSigner.selector);
+        vm.prank(forwarder);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
+        );
+    }
+
+    /// V13: a hostile frontend must not be able to mint a batch acknowledgement signature that
+    /// stays usable indefinitely. Bounds how long a harvested signature survives.
+    function test_TxBatchAck_RejectsDeadlineBeyondMaxLifetime() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 txCount = uint32(txHashes.length);
+
+        uint256 deadline = block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME + 1;
+        uint256 nonce = spoke.nonces(reporter);
+        (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
+            reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, txCount, nonce, deadline
+        );
+
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__DeadlineTooFarInFuture.selector);
+        vm.prank(forwarder);
+        spoke.acknowledgeTransactionBatch(dataHash, reportedChainId, txCount, deadline, nonce, reporter, v, r, s);
+    }
+
+    /// V13, phase 2: the same bound on the registration signature.
+    function test_TxBatchReg_RejectsDeadlineBeyondMaxLifetime() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        {
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
+            uint256 windowBlock = _skipToTxBatchRegistrationWindow(reporter);
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder, windowBlock);
+        }
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
+        uint256 farDeadline = block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME + 1;
+
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__DeadlineTooFarInFuture.selector);
+        vm.prank(forwarder);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, farDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
         );
     }
 

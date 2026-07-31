@@ -73,7 +73,12 @@ export function SignatureDetails({
           {registereeLabel}
           <InfoTooltip content={registereeTooltip} size="sm" />
         </span>
-        <EnsExplorerLink value={data.registeree} type="address" showDisabledIcon={false} />
+        <EnsExplorerLink
+          value={data.registeree}
+          type="address"
+          resolveEns={false}
+          showDisabledIcon={false}
+        />
       </div>
       <div className="flex justify-between items-center">
         <span className="text-muted-foreground flex items-center gap-1">

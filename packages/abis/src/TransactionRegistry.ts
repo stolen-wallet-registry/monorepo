@@ -257,22 +257,22 @@ export const TransactionRegistryABI = [
     name: 'generateTransactionHashStruct',
     inputs: [
       {
-        name: 'dataHash',
+        name: '',
         type: 'bytes32',
         internalType: 'bytes32',
       },
       {
-        name: 'reportedChainId',
+        name: '',
         type: 'bytes32',
         internalType: 'bytes32',
       },
       {
-        name: 'transactionCount',
+        name: '',
         type: 'uint32',
         internalType: 'uint32',
       },
       {
-        name: 'trustedForwarder',
+        name: '',
         type: 'address',
         internalType: 'address',
       },
@@ -287,11 +287,6 @@ export const TransactionRegistryABI = [
         name: 'deadline',
         type: 'uint256',
         internalType: 'uint256',
-      },
-      {
-        name: 'hashStruct',
-        type: 'bytes32',
-        internalType: 'bytes32',
       },
     ],
     stateMutability: 'view',

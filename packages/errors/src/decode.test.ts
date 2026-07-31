@@ -166,11 +166,17 @@ describe('sanitizeErrorMessage', () => {
 });
 
 /**
- * The app has no keyed transport today, so nothing leaks yet. It will the moment
- * VITE_ALCHEMY_API_KEY reaches the app's wagmi config (.env.example instructs operators to
- * set it, and useUserTransactions.ts still carries a TODO to wire the Alchemy SDK in).
- * These tests are what make that latent leak structurally impossible: the sanitized string
- * is rendered at ~20 UI sites, so anything it carries is in the DOM.
+ * The keyed transport is LIVE — this is not a latent risk.
+ *
+ * `apps/web/src/lib/ens-config.ts` builds
+ * `https://eth-mainnet.g.alchemy.com/v2/${VITE_ALCHEMY_API_KEY}` (or takes
+ * `VITE_MAINNET_RPC_URL` verbatim) and hands it to the viem client behind `useEnsDisplay`
+ * and `useEnsResolve`, so any ENS failure already produces a viem error carrying the key in
+ * its `URL:` line. The sanitized string is rendered at ~20 UI sites, so anything it carries
+ * goes straight into the DOM.
+ *
+ * These tests are therefore load-bearing, not defensive. Do NOT relax them on the old
+ * assumption that no key is in play.
  */
 describe('sanitizeErrorMessage — never leaks request details (V29)', () => {
   const SECRET_KEY = 'sEcReTaLcHeMyKeY123456789';

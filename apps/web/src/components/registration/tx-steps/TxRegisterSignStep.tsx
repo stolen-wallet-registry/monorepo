@@ -4,7 +4,7 @@
  * Signs the registration message after the grace period.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 
 import { Alert, AlertDescription, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
@@ -31,6 +31,7 @@ import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import type { Hash, Hex } from '@/lib/types/ethereum';
+import { selectionMatchesSignedBatch } from '@/lib/transactions/selectionConsistency';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 export interface TxRegisterSignStepProps {
@@ -85,6 +86,13 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
 
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
+
+  // Mirrors the identical check in TxAcknowledgeSignStep — phase 2 is a second signature over
+  // the same batch, so it needs the same guard. See the refusal branch below.
+  const selectionIsConsistent = useMemo(
+    () => selectionMatchesSignedBatch(selectedTxHashes, selectedTxDetails),
+    [selectedTxHashes, selectedTxDetails]
+  );
 
   // Compute dataHash from sorted arrays for signing/contract calls
   const dataHash: Hash | undefined =
@@ -304,6 +312,25 @@ export function TxRegisterSignStep({ onComplete }: TxRegisterSignStepProps) {
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           Missing registration data. Please start over from the beginning.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  // The table below renders `selectedTxDetails`; `selectedTxHashes` (via `txHashesForContract`)
+  // is what is hashed into `dataHash`, signed, and submitted on-chain. If those ever disagree,
+  // the user is being shown one set of transactions and asked to sign another — and because the
+  // signature over the mismatched set is genuine, nothing downstream can catch it. This is the
+  // SECOND signature over the same batch, so it needs the same guard as the acknowledgement:
+  // a mismatch introduced between the two phases would otherwise be signed here unchecked.
+  // Refuse to sign rather than sign something the user cannot see.
+  if (!selectionIsConsistent) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          The transactions shown do not match the transactions that would be signed. Nothing has
+          been signed. Please go back and select your transactions again.
         </AlertDescription>
       </Alert>
     );

@@ -166,6 +166,7 @@ export function ConnectedWalletStatus({
               value={address}
               type="address"
               truncate={false}
+              resolveEns={false}
               showDisabledIcon={false}
               className="inline"
             />
@@ -205,6 +206,7 @@ export function ConnectedWalletStatus({
               value={address}
               type="address"
               truncate={false}
+              resolveEns={false}
               showDisabledIcon={false}
               className="inline"
             />

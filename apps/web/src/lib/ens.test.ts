@@ -133,6 +133,32 @@ describe('isDisplaySafeEnsName', () => {
     expect(isDisplaySafeEnsName('0xd8da6b.eth')).toBe(false);
   });
 
+  // The consecutive-nibble regex was bypassable: hyphens are ENS-legal, so an attacker could
+  // break the run of six hex characters while the name still reads as an address. These names
+  // normalize to themselves and carry no bidi controls, so nothing else in the function stops
+  // them. The rule is applied with `-`, `_` and `.` removed.
+  it('rejects hex-address shapes that use separators to break the nibble run', () => {
+    expect(isDisplaySafeEnsName('0x-d8da6bf269c7bb.eth')).toBe(false);
+    expect(isDisplaySafeEnsName('0x-d8da-6bf2-69c7.eth')).toBe(false);
+    expect(isDisplaySafeEnsName('0x_d8da_6bf2_69c7.eth')).toBe(false);
+    expect(isDisplaySafeEnsName('0x.d8da6bf269c7bb.eth')).toBe(false);
+  });
+
+  // A single non-hex character is enough to break the consecutive run while the string still
+  // reads as an address at a glance, so a mostly-hex body after `0x` is also rejected.
+  it('rejects a name that is overwhelmingly hex after a 0x prefix', () => {
+    expect(isDisplaySafeEnsName('0xd8da6bf2z69c7bb.eth')).toBe(false);
+  });
+
+  // The tightening must not swallow ordinary names. These all still resolve and display.
+  it('accepts legitimate names that merely start with 0x or contain hex letters', () => {
+    expect(isDisplaySafeEnsName('0xproject.eth')).toBe(true);
+    expect(isDisplaySafeEnsName('0xdao.eth')).toBe(true);
+    expect(isDisplaySafeEnsName('0xsecurity-research.eth')).toBe(true);
+    expect(isDisplaySafeEnsName('decaf.eth')).toBe(true);
+    expect(isDisplaySafeEnsName('cafe-babe.eth')).toBe(true);
+  });
+
   it('rejects a name that is not its own normalized form', () => {
     // Uppercase does not survive ENSIP-15 normalization, so displaying it would show
     // something other than the name that actually resolves.

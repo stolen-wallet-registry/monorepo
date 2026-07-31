@@ -63,6 +63,7 @@ import {
 import { useWalletType } from '@/hooks/useWalletType';
 import { operatorRegistryAbi } from '@/lib/contracts/abis';
 import { getOperatorRegistryAddress } from '@swr/chains';
+import { sanitizeErrorMessage } from '@/lib/utils';
 import type { Address, Hex } from '@/lib/types/ethereum';
 
 /** Permission description for header tooltip */
@@ -656,8 +657,11 @@ export function OperatorsTable({
         // Background refetch to sync with indexer (may take a moment)
         setTimeout(() => refetch(), 2000);
       } catch (error) {
+        // Never render a raw viem message: it carries `URL:` and `Request body:`, and the
+        // app's ENS transport is keyed (lib/ens-config.ts), so the raw message can put an
+        // API key in the DOM. See the V29 tests in @swr/errors.
         toast.error('Failed to approve operator', {
-          description: error instanceof Error ? error.message : 'Transaction failed',
+          description: sanitizeErrorMessage(error),
         });
         // Re-throw so caller knows the operation failed (preserves form inputs)
         throw error;
@@ -712,7 +716,7 @@ export function OperatorsTable({
           setTimeout(() => refetch(), 2000);
         } catch (error) {
           toast.error('Failed to update permissions', {
-            description: error instanceof Error ? error.message : 'Transaction failed',
+            description: sanitizeErrorMessage(error),
           });
         } finally {
           setActionInProgress(null);
@@ -788,7 +792,7 @@ export function OperatorsTable({
           setTimeout(() => refetch(), 2000);
         } catch (error) {
           toast.error('Failed to revoke operator', {
-            description: error instanceof Error ? error.message : 'Transaction failed',
+            description: sanitizeErrorMessage(error),
           });
         } finally {
           setActionInProgress(null);

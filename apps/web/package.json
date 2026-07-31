@@ -46,7 +46,6 @@
     "@swr/ui": "workspace:*",
     "@tailwindcss/vite": "^4.1.17",
     "@tanstack/react-query": "^5.90.12",
-    "alchemy-sdk": "^3.6.5",
     "clsx": "^2.1.1",
     "graphql": "^16.12.0",
     "graphql-request": "^7.4.0",

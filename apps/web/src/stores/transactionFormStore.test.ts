@@ -184,3 +184,60 @@ describe('transactionFormStore rehydration — address and chain validation', ()
     expect(state.chainIdsForContract).toEqual([]);
   });
 });
+
+describe('transactionFormStore — forwarder provenance is session-only (V28)', () => {
+  const RELAYER = '0x8ba1f109551bD432803012645Ac136ddd64DBA72';
+
+  it('starts unmarked', () => {
+    expect(useTransactionFormStore.getState().forwarderFromPeerSession).toBe(false);
+  });
+
+  it('marks the forwarder only when it came from a peer handshake', () => {
+    const store = useTransactionFormStore.getState();
+    store.setForwarderFromPeer(RELAYER);
+    expect(useTransactionFormStore.getState().forwarder).toBe(RELAYER);
+    expect(useTransactionFormStore.getState().forwarderFromPeerSession).toBe(true);
+  });
+
+  it('clears the mark when the forwarder is set by any other path', () => {
+    // A locally derived or form-supplied forwarder carries no handshake evidence, and must
+    // not inherit the mark left by an earlier P2P session.
+    const store = useTransactionFormStore.getState();
+    store.setForwarderFromPeer(RELAYER);
+    useTransactionFormStore.getState().setForwarder(REPORTER);
+    expect(useTransactionFormStore.getState().forwarderFromPeerSession).toBe(false);
+  });
+
+  it('clearForwarderProvenance drops the mark but keeps the address', () => {
+    // Re-entering the pairing step must not let a previous handshake stand in for the reply
+    // that proves the NEW pairing was accepted.
+    const store = useTransactionFormStore.getState();
+    store.setForwarderFromPeer(RELAYER);
+    useTransactionFormStore.getState().clearForwarderProvenance();
+    expect(useTransactionFormStore.getState().forwarder).toBe(RELAYER);
+    expect(useTransactionFormStore.getState().forwarderFromPeerSession).toBe(false);
+  });
+
+  it('never persists the mark', async () => {
+    useTransactionFormStore.getState().setForwarderFromPeer(RELAYER);
+    await useTransactionFormStore.persist.rehydrate();
+    const raw = localStorage.getItem(STORAGE_KEY);
+    expect(raw).not.toBeNull();
+    expect(JSON.parse(raw as string).state).not.toHaveProperty('forwarderFromPeerSession');
+  });
+
+  it('refuses to restore an injected mark from localStorage', async () => {
+    // The whole point of the flag: a hand-written persisted blob must not be able to grant
+    // itself the handshake evidence it is missing.
+    const state = await rehydrateWith({
+      reporter: REPORTER,
+      forwarder: RELAYER,
+      forwarderFromPeerSession: true,
+      selectedTxHashes: [],
+      selectedTxDetails: [],
+      reportedChainId: 8453,
+    });
+    expect(state.forwarder).toBe(RELAYER);
+    expect(state.forwarderFromPeerSession).toBe(false);
+  });
+});
