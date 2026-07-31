@@ -31,7 +31,34 @@ export default {
     'react-doctor/no-giant-component': 'off',
   },
   ignore: {
+    /**
+     * Build output is not source. Scanning it attributes every bundled third-party library's
+     * code to us. All gitignored artifacts; the sources that produce them are already scanned.
+     */
     files: ['**/dist/**', '**/storybook-static/**', '**/coverage/**', 'packages/contracts/out/**'],
-    overrides: [{ files: ['**/dist/**'], rules: ['react-doctor/artifact-secret-leak'] }],
+
+    overrides: [
+      {
+        /**
+         * `artifact-secret-leak` picks its inputs by hardcoded artifact path (`public/`,
+         * `dist/assets/`, `.next/static/`, ...) rather than from the scanned-file set, so
+         * `ignore.files` above does not reach it — it has to be dropped per-path here.
+         *
+         * What it flagged in `apps/web/dist/assets/vendor-p2p-*.js` is @libp2p/webrtc's SDP
+         * builder emitting `a=ice-pwd:${ufrag}`. `ufrag` is a per-connection ICE credential
+         * generated at runtime, not a value baked into the bundle — libp2p reuses the ufrag as
+         * the ICE password by design, and WebRTC transport security here rests on the Noise
+         * handshake plus the DTLS certhash pinned in the multiaddr, not on ICE.
+         * See node_modules/@libp2p/webrtc/dist/src/private-to-public/utils/sdp.js.
+         *
+         * Deliberately scoped to build output instead of `rules: off` or a `warn` downgrade:
+         * the rule still runs at `error` against `apps/web/public/` and every other checked-in
+         * browser-delivered asset, which is where a real leaked secret of ours would land.
+         * Verified by planting a `sk_live_...` probe in `apps/web/public/` — still caught.
+         */
+        files: ['**/dist/**'],
+        rules: ['react-doctor/artifact-secret-leak'],
+      },
+    ],
   },
 };
