@@ -1449,7 +1449,22 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'error',
+    name: 'SpokeRegistry__BatchCountMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'SpokeRegistry__BatchTooLarge',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__ChainIdMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'SpokeRegistry__DataHashMismatch',
     inputs: [],
   },
   {

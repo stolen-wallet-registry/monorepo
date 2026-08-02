@@ -1525,6 +1525,11 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TransactionRegistry__BatchCountMismatch',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TransactionRegistry__BatchTooLarge',
     inputs: [],
   },
@@ -1566,6 +1571,11 @@ export const TransactionRegistryABI = [
   {
     type: 'error',
     name: 'TransactionRegistry__InsufficientFee',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TransactionRegistry__InvalidDataHash',
     inputs: [],
   },
   {

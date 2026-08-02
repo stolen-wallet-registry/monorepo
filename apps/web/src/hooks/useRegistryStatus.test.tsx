@@ -132,7 +132,7 @@ describe('useRegistryStatus', () => {
       isPending: true,
       registrationData: null,
       acknowledgementData: {
-        trustedForwarder: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address,
+        trustedForwarder: '0x742D35CC6634c0532925A3b844BC9E7595F0BEb0' as Address,
         startBlock: 100n,
         expiryBlock: 200n,
       },
@@ -149,7 +149,7 @@ describe('useRegistryStatus', () => {
     expect(result.current.isRegistered).toBe(false);
     expect(result.current.isPending).toBe(true);
     expect(result.current.acknowledgementData).toEqual({
-      trustedForwarder: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
+      trustedForwarder: '0x742D35CC6634c0532925A3b844BC9E7595F0BEb0',
       startBlock: 100n,
       expiryBlock: 200n,
     });

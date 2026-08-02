@@ -85,8 +85,23 @@ interface ITransactionRegistry {
     error TransactionRegistry__OnlyOperatorSubmitter();
     error TransactionRegistry__EmptyBatch();
     error TransactionRegistry__BatchTooLarge();
+    /// @notice Thrown when two arrays the CALLER supplied disagree in length
+    /// @dev Caller bug, not a tampering signal. Distinct from
+    ///      {TransactionRegistry__BatchCountMismatch}, which compares a submitted array against
+    ///      the count that was signed.
     error TransactionRegistry__ArrayLengthMismatch();
+    /// @notice Thrown when a supplied `dataHash` is zero
+    /// @dev Caller bug (phase 1). Distinct from {TransactionRegistry__DataHashMismatch}, which
+    ///      means the submitted batch differs from the acknowledged one.
+    error TransactionRegistry__InvalidDataHash();
+    /// @notice Thrown when the submitted batch content differs from what was acknowledged
+    /// @dev TAMPERING signal, not a caller bug.
     error TransactionRegistry__DataHashMismatch();
+    /// @notice Thrown when the number of transactions submitted differs from the
+    ///         `transactionCount` committed to in the acknowledgement signature
+    /// @dev TAMPERING signal, not a caller bug. The arrays themselves are internally consistent;
+    ///      they simply are not the batch the reporter signed for.
+    error TransactionRegistry__BatchCountMismatch();
     error TransactionRegistry__InvalidStep();
     error TransactionRegistry__InvalidTxHashLength();
     error TransactionRegistry__HubTransferFailed();

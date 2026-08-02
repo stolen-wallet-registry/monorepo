@@ -367,11 +367,14 @@ contract TransactionRegistryTest is EIP712TestHelper {
     }
 
     /// @notice Reverts when dataHash is bytes32(0)
+    /// @dev Expects `__InvalidDataHash` (a CALLER BUG — nothing has been acknowledged yet, so
+    ///      there is nothing to have tampered with), NOT `__DataHashMismatch`, which is reserved
+    ///      for a phase-2 batch that differs from the acknowledged one.
     function test_TxAck_RejectsZeroDataHash() public {
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint256 deadline = block.timestamp + 3600;
 
-        vm.expectRevert(ITransactionRegistry.TransactionRegistry__DataHashMismatch.selector);
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidDataHash.selector);
         vm.prank(forwarder);
         txRegistry.acknowledgeTransactions(
             reporter, forwarder, deadline, bytes32(0), reportedChainId, 3, 27, bytes32(0), bytes32(0)
@@ -593,7 +596,7 @@ contract TransactionRegistryTest is EIP712TestHelper {
     /// @notice Reverts when submitted arrays differ from what was acknowledged.
     /// @dev The contract computes dataHash from submitted arrays. Changing the array
     ///      length changes the dataHash, so DataHashMismatch fires before the
-    ///      transactionCount check (ArrayLengthMismatch). This is the correct
+    ///      transactionCount check (BatchCountMismatch). This is the correct
     ///      defense-in-depth: any data tampering is caught by the hash commitment.
     function test_TxReg_RejectsCountMismatch() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
@@ -625,6 +628,47 @@ contract TransactionRegistryTest is EIP712TestHelper {
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__DataHashMismatch.selector);
         vm.prank(forwarder);
         txRegistry.registerTransactions(reporter, deadline, fewerTxHashes, fewerChainIds, windowBlock, v, r, s);
+    }
+
+    /// @notice A pure count discrepancy reverts with `__BatchCountMismatch`, NOT `__DataHashMismatch`.
+    /// @dev This is the discrimination test for the error split, and the only way to reach the
+    ///      count check at all. Phase 1 accepts `dataHash` and `transactionCount` as independent
+    ///      arguments, so an acknowledgement can commit the hash of the real 3-item batch while
+    ///      committing a count of 2. Phase 2 then submits the genuine arrays: the hash commitment
+    ///      is satisfied — proving DataHashMismatch is not what fires — and the count is the only
+    ///      thing wrong. Without the split, the frontend would see one error here and at
+    ///      {test_TxReg_RejectsCountMismatch} and could not tell the two apart.
+    function test_TxReg_CountMismatchIsDistinctFromDataHashMismatch() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+
+        // Acknowledge the REAL dataHash but a WRONG transactionCount (2, not 3).
+        {
+            uint256 ackNonce = txRegistry.nonces(reporter);
+            uint256 ackDeadline = block.timestamp + 3600;
+            (uint8 av, bytes32 ar, bytes32 ass) = _signProdTxAck(
+                reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 2, ackNonce, ackDeadline
+            );
+            vm.prank(forwarder);
+            txRegistry.acknowledgeTransactions(
+                reporter, forwarder, ackDeadline, dataHash, reportedChainId, 2, av, ar, ass
+            );
+        }
+
+        uint256 windowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+        uint256 nonce = txRegistry.nonces(reporter);
+        uint256 deadline = block.timestamp + 3600;
+
+        _sigWindowBlock = windowBlock;
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signProdTxReg(reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, 3, nonce, deadline);
+
+        // The submitted arrays hash to exactly the acknowledged dataHash, so the hash check passes
+        // and only the count check can be responsible for this revert.
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__BatchCountMismatch.selector);
+        vm.prank(forwarder);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, windowBlock, v, r, s);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

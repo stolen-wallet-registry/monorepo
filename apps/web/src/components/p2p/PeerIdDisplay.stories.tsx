@@ -72,7 +72,7 @@ export const LongPeerId: Story = {
 export const PairingCode: Story = {
   args: {
     peerId: samplePeerId,
-    walletAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
+    walletAddress: '0x742D35CC6634c0532925A3b844BC9E7595F0BEb0',
     isLoading: false,
   },
 };

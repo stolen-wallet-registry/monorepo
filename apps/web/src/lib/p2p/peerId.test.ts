@@ -6,7 +6,7 @@ const SESSION_KEY = 'swr-p2p-session-key';
 const LEGACY_PREFIX = 'swr-p2p-keypair-';
 
 const WALLET_A = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
-const WALLET_B = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0';
+const WALLET_B = '0x742D35CC6634c0532925A3b844BC9E7595F0BEb0';
 
 describe('V32 — session-scoped peer identity', () => {
   beforeEach(() => {

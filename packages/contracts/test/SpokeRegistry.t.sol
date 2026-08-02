@@ -1512,9 +1512,86 @@ contract SpokeRegistryTest is Test {
         );
     }
 
+    /// @notice A zero `dataHash` at acknowledgement reverts with `__InvalidDataHash`.
+    /// @dev Sibling of {test_TxBatchReg_RejectsDataMismatch}. Nothing has been acknowledged yet,
+    ///      so this is a CALLER BUG and must not surface as one of the tampering errors.
+    function test_TxBatchAck_RejectsZeroDataHash() public {
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(reporter);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signTxBatchAck(reporterPrivateKey, reporter, forwarder, bytes32(0), reportedChainId, 3, nonce, deadline);
+
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidDataHash.selector);
+        vm.prank(forwarder);
+        spoke.acknowledgeTransactionBatch(bytes32(0), reportedChainId, 3, deadline, nonce, reporter, v, r, s);
+    }
+
     /// @notice Tx batch registration rejects when submitted data differs from acknowledged data
+    /// @dev Expects `__DataHashMismatch` (a TAMPERING signal), not `__InvalidDataHash`, which now
+    ///      means only "the caller passed a zero dataHash" — see {test_TxBatchAck_RejectsZeroDataHash}.
     function test_TxBatchReg_RejectsDataMismatch() public {
         _rejectsDataMismatchImpl();
+    }
+
+    /// @notice A pure chain-ID discrepancy reverts with `__ChainIdMismatch`, NOT `__DataHashMismatch`.
+    /// @dev Discrimination test. `dataHash` covers only `(transactionHashes, chainIds)`, so
+    ///      submitting the acknowledged arrays under a different `reportedChainId` satisfies the
+    ///      hash commitment and isolates the chain check. These were previously fused into one
+    ///      `||` condition behind a single error, so a relayer swapping the reported chain looked
+    ///      identical to one swapping the whole transaction set.
+    function test_TxBatchReg_ChainIdMismatchIsDistinctFromDataHashMismatch() public {
+        _chainIdMismatchImpl();
+    }
+
+    function _chainIdMismatchImpl() internal {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 ackChainId = CAIP10Evm.caip2Hash(uint64(1));
+        bytes32 wrongChainId = CAIP10Evm.caip2Hash(uint64(8453));
+        {
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            _doTxBatchAck(forwarder, dataHash, ackChainId, uint32(txHashes.length));
+            uint256 windowBlock = _skipToTxBatchRegistrationWindow(reporter);
+            // Sign for the WRONG chain so the signature is not what rejects this.
+            _prepareTxBatchRegSig(dataHash, wrongChainId, uint32(txHashes.length), forwarder, windowBlock);
+        }
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
+
+        // Arrays are byte-identical to the acknowledged ones, so the dataHash check passes and
+        // only the reportedChainId check can be responsible for this revert.
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__ChainIdMismatch.selector);
+        vm.prank(forwarder);
+        spoke.registerTransactionBatch{ value: fee }(
+            wrongChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
+        );
+    }
+
+    /// @notice A pure count discrepancy reverts with `__BatchCountMismatch`, NOT `__DataHashMismatch`.
+    /// @dev Discrimination test, and the only way to reach the count check at all. Phase 1 takes
+    ///      `dataHash` and `transactionCount` as independent arguments, so an acknowledgement can
+    ///      commit the hash of the real 3-item batch alongside a count of 2. Phase 2 then submits
+    ///      the genuine arrays: hash and chain both match, leaving the count as the sole fault.
+    function test_TxBatchReg_CountMismatchIsDistinctFromDataHashMismatch() public {
+        _countMismatchImpl();
+    }
+
+    function _countMismatchImpl() internal {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        {
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            // Acknowledge the REAL dataHash but a WRONG transactionCount (2, not 3).
+            _doTxBatchAck(forwarder, dataHash, reportedChainId, 2);
+            uint256 windowBlock = _skipToTxBatchRegistrationWindow(reporter);
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder, windowBlock);
+        }
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
+
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__BatchCountMismatch.selector);
+        vm.prank(forwarder);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
+        );
     }
 
     function _rejectsDataMismatchImpl() internal {
@@ -1538,7 +1615,7 @@ contract SpokeRegistryTest is Test {
         }
         uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
 
-        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidDataHash.selector);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__DataHashMismatch.selector);
         vm.prank(forwarder);
         spoke.registerTransactionBatch{ value: fee }(
             reportedChainId, _sDeadline, _sNonce, reporter, wrongTxHashes, chainIds, _sWindowBlock, _sv, _sr, _ss

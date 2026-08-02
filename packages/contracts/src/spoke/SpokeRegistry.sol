@@ -850,7 +850,8 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     ///      user which one tripped:
     ///        - zero reporter -> `SpokeRegistry__InvalidOwner`; unset hub -> `__HubNotConfigured`
     ///          (a spoke with no hub would accept a batch it could never bridge);
-    ///        - array length mismatch / empty batch -> `__ArrayLengthMismatch` / `__EmptyBatch`;
+    ///        - the two caller-supplied arrays disagreeing in length / empty batch ->
+    ///          `__ArrayLengthMismatch` / `__EmptyBatch`. These are caller bugs, not tampering;
     ///        - deadline outside the accepted band -> `__SignatureExpired` when already past,
     ///          `__DeadlineTooFarInFuture` otherwise. The band itself is owned by
     ///          {TimingConfig.isSignatureDeadlineValid}; the inner branch only picks the error;
@@ -860,11 +861,15 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     ///        - the grace period must have STARTED and not yet expired ->
     ///          `__GracePeriodNotStarted` / `__ForwarderExpired`. The start check is the
     ///          anti-phishing delay; skipping it collapses the flow to a single sitting;
-    ///        - `dataHash` and `reportedChainId` must equal what was acknowledged ->
-    ///          `__InvalidDataHash`. Since `dataHash` is recomputed by the caller from the
-    ///          submitted arrays, this is what proves the arrays are exactly the ones signed —
-    ///          without it a forwarder could swap in a different set of transactions;
-    ///        - `transactionCount` must match the acknowledged count -> `__ArrayLengthMismatch`.
+    ///        - `dataHash` must equal what was acknowledged -> `__DataHashMismatch`. Since
+    ///          `dataHash` is recomputed by the caller from the submitted arrays, this is what
+    ///          proves the arrays are exactly the ones signed — without it a forwarder could swap
+    ///          in a different set of transactions;
+    ///        - `reportedChainId` must equal what was acknowledged -> `__ChainIdMismatch`;
+    ///        - `transactionCount` must match the acknowledged count -> `__BatchCountMismatch`.
+    ///      Those last three are TAMPERING signals rather than caller bugs — the submitted batch
+    ///      is well-formed but is not the batch the reporter signed for — and each gets its own
+    ///      error so the frontend can report the specific discrepancy instead of a generic one.
     ///      View-only: it makes no state changes, so a revert here costs the caller nothing but
     ///      gas and leaves the pending acknowledgement intact for a corrected retry.
     /// @param p Scalar registration arguments (reporter, deadline, nonce, reportedChainId,
@@ -908,13 +913,15 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         if (block.number < ack.startBlock) revert SpokeRegistry__GracePeriodNotStarted();
         if (block.number >= ack.expiryBlock) revert SpokeRegistry__ForwarderExpired();
 
-        // Validate computed dataHash matches what was acknowledged
-        // This proves the submitted arrays are exactly what the user signed
-        if (ack.dataHash != dataHash || ack.reportedChainId != p.reportedChainId) {
-            revert SpokeRegistry__InvalidDataHash();
-        }
+        // Validate computed dataHash matches what was acknowledged.
+        // This proves the submitted arrays are exactly what the user signed. Each of the three
+        // checks below is a distinct TAMPERING signal, not a caller bug, so they get distinct
+        // errors: a swapped transaction set, a swapped chain, and a resized batch are different
+        // incidents and the frontend must be able to tell them apart.
+        if (ack.dataHash != dataHash) revert SpokeRegistry__DataHashMismatch();
+        if (ack.reportedChainId != p.reportedChainId) revert SpokeRegistry__ChainIdMismatch();
         if (ack.transactionCount != transactionHashes.length) {
-            revert SpokeRegistry__ArrayLengthMismatch();
+            revert SpokeRegistry__BatchCountMismatch();
         }
 
         // ANTI-PHISHING: see {WalletRegistry.register}. The signature commits to the hash of a

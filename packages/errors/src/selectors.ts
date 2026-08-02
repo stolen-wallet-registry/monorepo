@@ -234,10 +234,20 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'Transaction hashes and chain IDs must have the same length.',
     action: 'Please verify the inputs and try again.',
   },
+  '0xdd53fd88': {
+    name: 'TransactionRegistry__InvalidDataHash',
+    message: 'Batch data hash is empty.',
+    action: 'Please try again. If the issue persists, contact support.',
+  },
   '0x97606fef': {
     name: 'TransactionRegistry__DataHashMismatch',
     message: 'Data hash does not match acknowledgement.',
     action: 'Ensure the transaction list matches what was acknowledged.',
+  },
+  '0x849d2272': {
+    name: 'TransactionRegistry__BatchCountMismatch',
+    message: 'The batch size differs from what you signed.',
+    action: 'Stop and re-check the batch.',
   },
   '0xef0b2ab3': {
     name: 'TransactionRegistry__InvalidStep',
@@ -491,8 +501,23 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
   },
   '0xba8873e4': {
     name: 'SpokeRegistry__InvalidDataHash',
-    message: 'Data hash mismatch.',
-    action: 'Your data may have changed. Please start over.',
+    message: 'Batch data hash is empty.',
+    action: 'Please try again. If the issue persists, contact support.',
+  },
+  '0x3d7ee93f': {
+    name: 'SpokeRegistry__DataHashMismatch',
+    message: 'This batch does not match the batch you signed.',
+    action: 'Stop and re-check the batch.',
+  },
+  '0x9e6deac9': {
+    name: 'SpokeRegistry__ChainIdMismatch',
+    message: 'The chain differs from the one you signed for.',
+    action: 'Stop and re-check the batch.',
+  },
+  '0x08cbb2f6': {
+    name: 'SpokeRegistry__BatchCountMismatch',
+    message: 'The batch size differs from what you signed.',
+    action: 'Stop and re-check the batch.',
   },
   '0x9de3b4a9': {
     name: 'SpokeRegistry__DataMismatch',

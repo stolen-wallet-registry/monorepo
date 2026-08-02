@@ -133,8 +133,27 @@ interface ISpokeRegistry {
     error SpokeRegistry__EmptyBatch();
     /// @notice Thrown when a transaction batch exceeds what the hub can execute on delivery
     error SpokeRegistry__BatchTooLarge();
+    /// @notice Thrown when two arrays the CALLER supplied disagree in length
+    /// @dev Caller bug, not a tampering signal. Distinct from
+    ///      {SpokeRegistry__BatchCountMismatch}, which compares a submitted array against the
+    ///      count that was signed.
     error SpokeRegistry__ArrayLengthMismatch();
+    /// @notice Thrown when a supplied `dataHash` is zero
+    /// @dev Caller bug (phase 1). Distinct from {SpokeRegistry__DataHashMismatch}, which means
+    ///      the submitted batch differs from the acknowledged one.
     error SpokeRegistry__InvalidDataHash();
+    /// @notice Thrown when the submitted batch content differs from what was acknowledged
+    /// @dev TAMPERING signal, not a caller bug. Mirrors
+    ///      {ITransactionRegistry.TransactionRegistry__DataHashMismatch} on the hub.
+    error SpokeRegistry__DataHashMismatch();
+    /// @notice Thrown when the submitted `reportedChainId` differs from the acknowledged one
+    /// @dev TAMPERING signal, not a caller bug. Split out from `__InvalidDataHash` so a swapped
+    ///      chain and a swapped transaction set are distinguishable.
+    error SpokeRegistry__ChainIdMismatch();
+    /// @notice Thrown when the number of transactions submitted differs from the
+    ///         `transactionCount` committed to in the acknowledgement signature
+    /// @dev TAMPERING signal, not a caller bug.
+    error SpokeRegistry__BatchCountMismatch();
     error SpokeRegistry__DataMismatch();
     error SpokeRegistry__InvalidStep();
     /// @notice Thrown when acknowledging while a prior acknowledgement is still live

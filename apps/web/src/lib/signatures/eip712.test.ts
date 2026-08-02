@@ -17,7 +17,7 @@ describe('EIP-712 typed data', () => {
   const testChainId = 1;
   const testContract = '0x5FbDB2315678afecb367f032d93F642f64180aa3' as Address;
   const testWallet = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
-  const testForwarder = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0' as Address;
+  const testForwarder = '0x742D35CC6634c0532925A3b844BC9E7595F0BEb0' as Address;
   const testWindowBlockHash =
     '0x1111111111111111111111111111111111111111111111111111111111111111' as Hash;
 

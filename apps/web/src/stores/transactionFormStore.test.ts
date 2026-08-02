@@ -22,7 +22,7 @@ const STORAGE_KEY = 'swr-transaction-form-state';
 const HASH_A = `0x${'a'.repeat(64)}`;
 const HASH_B = `0x${'b'.repeat(64)}`;
 const ATTACKER_HASH = `0x${'e'.repeat(64)}`;
-const REPORTER = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0';
+const REPORTER = '0x742D35CC6634c0532925A3b844BC9E7595F0BEb0';
 
 function detailFor(hash: string) {
   return {

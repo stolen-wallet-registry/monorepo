@@ -352,6 +352,28 @@ The invariant is documented in 4+ places to prevent regression:
 CAIP-10 is specifically for account identifiers (addresses), not transaction hashes.
 We call our transaction format "chain-qualified references" to avoid confusion.
 
+### Sample Addresses Must Be Valid EIP-55 Checksums
+
+Any address literal used as a fixture, story arg, doc example, or test constant **must be a
+correctly checksummed EIP-55 address**. viem's `isAddress()` rejects a mis-cased address under
+its default strict mode, so a bad sample only "works" while the consuming code passes
+`{ strict: false }` — and it gets copy-pasted into new files as if it were a good example.
+
+Generate one before pasting it anywhere:
+
+```bash
+cast to-check-sum-address 0x742d35cc6634c0532925a3b844bc9e7595f0beb0
+# 0x742D35CC6634c0532925A3b844BC9E7595F0BEb0
+```
+
+The canonical sample wallet for this repo is `0x742D35CC6634c0532925A3b844BC9E7595F0BEb0`.
+
+Two intentional exceptions exist and should not be "fixed":
+
+- All-lowercase addresses, which viem accepts and the indexer stores (e.g.
+  `apps/web/src/lib/signatures/storage.test.ts`).
+- Deliberately malformed addresses in negative tests (e.g. `apps/web/src/lib/address.test.ts`).
+
 ---
 
 ## Type Conventions

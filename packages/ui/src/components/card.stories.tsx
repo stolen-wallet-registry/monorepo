@@ -84,7 +84,7 @@ export const RegistrationCard: Story = {
         <div className="space-y-2">
           <p className="text-sm font-medium">Wallet Address</p>
           <p className="text-sm text-muted-foreground font-mono">
-            0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0
+            0x742D35CC6634c0532925A3b844BC9E7595F0BEb0
           </p>
         </div>
         <div className="space-y-2">

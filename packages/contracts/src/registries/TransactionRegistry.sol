@@ -398,7 +398,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
     ) external {
         if (reporter == address(0)) revert TransactionRegistry__ZeroAddress();
         if (trustedForwarder == address(0)) revert TransactionRegistry__ZeroAddress();
-        if (dataHash == bytes32(0)) revert TransactionRegistry__DataHashMismatch();
+        if (dataHash == bytes32(0)) revert TransactionRegistry__InvalidDataHash();
         if (transactionCount == 0) revert TransactionRegistry__EmptyBatch();
         // Bound phase 1. Committing a count is not a bound: without this a user could
         // acknowledge a count too large for phase 2 to fit in a block, then be unable to
@@ -600,9 +600,11 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         bytes32 dataHash = keccak256(abi.encode(transactionHashes, chainIds));
         if (dataHash != ack.dataHash) revert TransactionRegistry__DataHashMismatch();
 
-        // Validate transactionCount matches acknowledge phase
+        // Validate transactionCount matches acknowledge phase.
+        // TAMPERING signal, not a caller bug: the arrays are internally consistent, they just are
+        // not the batch that was signed for.
         if (ack.transactionCount != uint32(transactionHashes.length)) {
-            revert TransactionRegistry__ArrayLengthMismatch();
+            revert TransactionRegistry__BatchCountMismatch();
         }
 
         // ANTI-PHISHING: see {WalletRegistry.register}. The signature commits to the hash of a
