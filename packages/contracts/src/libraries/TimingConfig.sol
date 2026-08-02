@@ -48,6 +48,16 @@ pragma solidity ^0.8.24;
 ///   the seed produced a minimum grace period and a maximum registration window —
 ///   making "randomized" timing attacker-selected. Only values the submitter cannot
 ///   choose may enter the seed.
+/// - RESIDUAL, ACCEPTED: the seed is now purely block-level, so every acknowledgement in a
+///   block shares its offsets and a submitter still chooses WHICH block to land in. On
+///   OP-stack L2s `prevrandao` is the L1 beacon value and holds for ~6 L2 blocks, while
+///   `timestamp`/`number` are predictable one block ahead — so an attacker can simulate the
+///   next block's offset and submit only when grace is minimal and the window maximal. The
+///   cost is waiting, not gas. This is strictly better than the address grind it replaced
+///   (which was free and instant), and it is tolerable ONLY because randomization is not the
+///   control being relied on: `resolveWindowBlockHash` is. Do not reintroduce caller-chosen
+///   entropy to "fix" this — that restores the worse attack. Removing block-level grind
+///   entirely needs a commit-reveal or VRF, which is out of proportion to what the offsets buy.
 library TimingConfig {
     // ═══════════════════════════════════════════════════════════════════════════
     // ERRORS
@@ -112,7 +122,14 @@ library TimingConfig {
     function resolveWindowBlockHash(uint256 windowBlock, uint256 gracePeriodStart) internal view returns (bytes32) {
         if (windowBlock < gracePeriodStart) revert TimingConfig__WindowBlockBeforeGracePeriod();
         if (windowBlock >= block.number) revert TimingConfig__WindowBlockNotMined();
-        // Strictly-less-than: at exactly MAX_WINDOW_BLOCK_AGE the hash is already gone.
+        // Conservative by one block, deliberately. The EVM makes `blockhash` available for
+        // `block.number - 256 <= x < block.number`, so an age of exactly 256 DOES still resolve;
+        // this rejects it anyway. Erring inside the horizon rather than at it means the bound
+        // stays correct on any chain that trims the window (Arbitrum's is not the L1 hash), and
+        // it costs a signer one block out of 256. Do not "fix" this to `>` without re-checking
+        // every target chain's blockhash semantics. Pinned by
+        // `test_registerTransactions_acceptsWindowBlockAtMaxAge` (255 passes) and
+        // `test_registerTransactions_revertsIfWindowBlockTooOld` (256 reverts).
         if (block.number - windowBlock >= MAX_WINDOW_BLOCK_AGE) revert TimingConfig__WindowBlockTooOld();
 
         bytes32 hash = blockhash(windowBlock);
@@ -124,6 +141,15 @@ library TimingConfig {
     }
 
     /// @notice Reject a signature deadline that is expired or unreasonably far in the future
+    /// @dev THE SINGLE SOURCE OF THE ACCEPTED DEADLINE RANGE. Every registry entry point routes
+    ///      through this rather than re-deriving `block.timestamp + MAX_SIGNATURE_LIFETIME` inline.
+    ///
+    ///      Call sites still branch on `deadline <= block.timestamp` afterwards, but only to
+    ///      attribute blame between their two user-facing error selectors (`__DeadlineExpired`
+    ///      vs `__DeadlineTooFarInFuture`, which the frontend maps to different messages). That
+    ///      second comparison never decides whether the deadline is acceptable — this function
+    ///      already did. Do NOT reintroduce the upper bound at a call site: eight copies of
+    ///      the range is what this replaced.
     /// @param deadline Signature expiry timestamp, as signed
     /// @return True when the deadline is within the accepted range
     function isSignatureDeadlineValid(uint256 deadline) internal view returns (bool) {

@@ -153,6 +153,7 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
     windowClosed: boolean;
   } | null>(null);
   const partnerPeerId = useP2PStore((s) => s.partnerPeerId);
+  const pairedWallet = useP2PStore((s) => s.pairedWallet);
 
   // Get stored signature (client-only)
   useEffect(() => {
@@ -188,7 +189,7 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
       enabled: isP2PRelayed && !!storedSignatureState,
       step: TX_SIGNATURE_STEP.REGISTRATION,
       storedSignature: storedSignatureState,
-      expectedSigner: storedSignatureState?.reporter,
+      expectedSigner: storedSignatureState?.reporter, // logged only; gating uses pairedWallet
       trustedForwarder: storedSignatureState?.trustedForwarder,
     }
   );
@@ -814,7 +815,11 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
         <RelayedSignatureReview
           review={signatureReview}
           isChecking={isReviewingSignature}
-          expectedSigner={storedSignatureState.reporter}
+          // The out-of-band wallet, never `.reporter` — that is the peer's own claim, so a
+          // panel built from it shows "Signed by: X / You were told: X" for an attacker who
+          // signed over its own address, i.e. two matching rows next to a signer-mismatch
+          // alert. Gating already used `pairedWallet`; the display now agrees with it.
+          expectedSigner={pairedWallet}
           deadline={storedSignatureState.deadline}
         />
       )}

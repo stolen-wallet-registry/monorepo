@@ -192,7 +192,16 @@ export const transactionInBatch = onchainTable(
     numericChainId: t.integer(),
     /** Registration transaction hash (join key to parent batch) */
     transactionHash: t.hex().notNull(),
-    /** Reporter address */
+    /**
+     * Reporter address — MEANINGFUL ONLY FOR INDIVIDUAL BATCHES.
+     *
+     * The operator path emits `TransactionRegistered(txHash, chainId, address(0), false)`
+     * (TransactionRegistry.sol), so every entry submitted by an operator carries the zero
+     * address here. Attribute operator entries through `batchId` →
+     * `transactionBatch.operatorId` / `.operator` instead; a query that groups this table by
+     * `reporter` silently lumps every operator submission in the registry into one bogus
+     * 0x000…0 bucket.
+     */
     reporter: t.hex().notNull(),
     /** When batch was registered */
     reportedAt: t.bigint().notNull(),
@@ -454,6 +463,10 @@ export const fraudulentContract = onchainTable(
     reportedAt: t.bigint().notNull(),
   }),
   (table) => ({
+    // The primary key is `${identifier}-${chainIdHash}`, so a lookup by identifier alone
+    // (the reason the column exists at all: non-EVM contracts that do not reduce to an
+    // address) cannot use it. Without this index that lookup is a sequential scan.
+    identifierIdx: index().on(table.identifier),
     contractAddressIdx: index().on(table.contractAddress),
     caip2ChainIdIdx: index().on(table.caip2ChainId),
     batchIdIdx: index().on(table.batchId),

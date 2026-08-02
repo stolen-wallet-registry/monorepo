@@ -392,7 +392,13 @@ export const CrossChainInboxABI = [
   {
     type: 'function',
     name: 'sweep',
-    inputs: [],
+    inputs: [
+      {
+        name: 'to',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -703,6 +709,11 @@ export const CrossChainInboxABI = [
   {
     type: 'error',
     name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
     inputs: [],
   },
   {

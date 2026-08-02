@@ -51,6 +51,20 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege for GITHUB_TOKEN, workflow-wide.
+#
+# Nothing here writes to the repository: no job pushes a commit, opens a PR, publishes a
+# package or posts a comment. Without this block every job inherits the repository's DEFAULT
+# token scope, which on many repos is read-write — and the `supply-chain` job below reasons
+# explicitly about "a hostile postinstall in a newly-added dependency" executing "on a runner
+# holding the repo token". It passes `--ignore-scripts` to stop that from running; this line
+# is what makes the token worthless if it ever does.
+#
+# If a job later needs to write (a release, a bot comment), grant it at THAT job's level
+# rather than widening this one.
+permissions:
+  contents: read
+
 env:
   FOUNDRY_PROFILE: ci
 
@@ -163,6 +177,18 @@ jobs:
 
       - name: Lint / typecheck / test
         run: pnpm turbo lint typecheck test --filter='!@swr/contracts'
+
+      # Nothing in this workflow built anything before this step, so a change that typechecks
+      # but breaks the PRODUCTION bundle reached Vercel uncaught. Those are different failures:
+      # `tsc` never resolves a dynamic import, runs a Vite plugin, evaluates a Next server
+      # component, or notices a missing Node polyfill — and apps/web/vite.config.ts carries an
+      # explicit warning that the wallet and P2P stacks "break at runtime (not at build time)"
+      # without `buffer`/`process`.
+      #
+      # `!@swr/contracts` because that package's build is Foundry, which this job has no
+      # toolchain for; the `contracts` job covers it.
+      - name: Build (production bundles)
+        run: pnpm turbo build --filter='!@swr/contracts'
 
       - name: Prettier check
         run: pnpm exec prettier --check "**/*.{ts,tsx,js,json,md,mdx}"

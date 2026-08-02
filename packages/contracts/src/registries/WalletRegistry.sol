@@ -401,8 +401,10 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
         // address to steer the "randomized" timing, and could burn a victim's nonce to grief
         // them. `register` already demands `msg.sender == trustedForwarder`.
         if (msg.sender != trustedForwarder) revert WalletRegistry__InvalidForwarder();
-        if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
-        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+        // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
+        // only picks which of the two user-facing errors to report.
+        if (!TimingConfig.isSignatureDeadlineValid(deadline)) {
+            if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
             revert WalletRegistry__DeadlineTooFarInFuture();
         }
         // 0 means "unknown" and is allowed; a future incident is not physically possible and
@@ -467,8 +469,10 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
         bytes32 s
     ) external payable {
         if (registeree == address(0)) revert WalletRegistry__ZeroAddress();
-        if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
-        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+        // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
+        // only picks which of the two user-facing errors to report.
+        if (!TimingConfig.isSignatureDeadlineValid(deadline)) {
+            if (deadline <= block.timestamp) revert WalletRegistry__DeadlineExpired();
             revert WalletRegistry__DeadlineTooFarInFuture();
         }
 

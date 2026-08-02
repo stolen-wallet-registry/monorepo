@@ -63,7 +63,10 @@ contract TimelockExpiryTest is Test {
         assertEq(h.value(), 0, "expired proposal must not apply");
     }
 
-    /// @notice The window is inclusive of its final second — one second before lapse still works.
+    /// @notice The window is inclusive of its final second — activating ON the deadline works.
+    /// @dev `block.timestamp == activationTime + ACTIVATION_EXPIRY` is the LAST valid instant, not
+    ///      one before it; test_Expiry_ActivateAfterWindowReverts covers the very next second. The
+    ///      two together pin the bound as `<=` rather than `<`.
     function test_Expiry_ActivateAtExactBoundarySucceeds() public {
         h.proposeValue(42);
 
@@ -229,5 +232,17 @@ contract TimelockExpiryTest is Test {
 
         vm.expectRevert(TimelockOwnable.TimelockOwnable__Expired.selector);
         reg.activateOperator(op, 1, "acme");
+
+        // The revert alone does not prove the escalation was not applied: assert the end state
+        // too, matching test_Expiry_OwnershipTransferProposalExpires. A lapsed proposal that
+        // reverted but had already written the operator would be the actual danger here.
+        assertFalse(reg.isApproved(op), "an expired proposal must not have approved the operator");
+
+        // Recoverable: re-propose and run the full delay again.
+        reg.proposeOperator(op, 1, "acme");
+        vm.warp(block.timestamp + reg.ACTIVATION_DELAY());
+        reg.activateOperator(op, 1, "acme");
+        assertTrue(reg.isApproved(op));
+        assertEq(reg.getOperator(op).capabilities, 1);
     }
 }

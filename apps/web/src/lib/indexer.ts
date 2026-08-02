@@ -24,13 +24,17 @@ if (import.meta.env.PROD && !import.meta.env.VITE_INDEXER_URL) {
  * @returns The address, or undefined if the value is not one
  */
 export function parseIndexerAddress(value: unknown): Address | undefined {
-  // `strict: false` disables EIP-55 checksum validation, and that is REQUIRED here, not a
-  // relaxation. viem's `isAddress` defaults to strict, which compares the input against its
-  // checksummed form — so every all-lowercase address fails it. The indexer stores and returns
-  // addresses lowercased, so a strict check would drop every row in every dashboard table.
-  // Checksum casing is a typo-detection aid for human-entered text; for machine data off the
-  // wire the property we need is shape (0x + 40 hex), which is what this validates. Same choice
-  // as `transactionFormStore.ts`.
+  // `strict: false` disables EIP-55 checksum validation. It is load-bearing, but NOT for the
+  // reason one might assume: viem's strict mode short-circuits on an all-lowercase address and
+  // accepts it, so the indexer's lowercased rows pass either way. What strict actually rejects
+  // is a MIXED-CASE address whose casing is not a valid EIP-55 checksum — and nothing
+  // guarantees the casing of an address arriving over the wire. A cross-chain source, a
+  // hand-seeded fixture, or any upstream that re-cased an address would be silently dropped
+  // from every dashboard table.
+  //
+  // Checksum casing is a typo-detection aid for human-entered text. For machine data off the
+  // wire the property we need is shape (0x + 40 hex), which is exactly what this validates.
+  // Same choice, same reasoning, as `transactionFormStore.ts`.
   return typeof value === 'string' && isAddress(value, { strict: false }) ? value : undefined;
 }
 

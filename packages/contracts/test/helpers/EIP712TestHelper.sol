@@ -157,6 +157,10 @@ abstract contract EIP712TestHelper is Test {
     /// @dev The window opens at `graceStart`, but `register` also requires
     ///      `windowBlock < block.number`, so a valid reference needs at least one block to
     ///      have been mined on top. Centralised here so every test expresses the same intent.
+    ///
+    ///      MIRRORED in test/SpokeRegistry.t.sol, which cannot inherit this helper (the spoke
+    ///      signs reportedChainId/incidentTimestamp as uint64 where the hub uses bytes32, so the
+    ///      typehashes differ). Keep the two bodies identical — see the note on that copy.
     /// @param graceStart The acknowledgement's grace-period start block
     /// @return windowBlock A block satisfying `graceStart <= windowBlock < block.number`
     function _rollToWindow(uint256 graceStart) internal returns (uint256 windowBlock) {

@@ -16,6 +16,7 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 import { logger } from '@/lib/logger';
+import type { Address } from '@/lib/types/ethereum';
 
 /**
  * Query key factory for registry reads whose keys we supply ourselves.
@@ -25,7 +26,7 @@ export const registryKeys = {
   all: ['registry'] as const,
 
   /** Combined status query (batched isRegistered + isPending + data) */
-  status: (address: string, chainId?: number) =>
+  status: (address: Address, chainId?: number) =>
     chainId !== undefined
       ? ([...registryKeys.all, 'status', chainId, address] as const)
       : ([...registryKeys.all, 'status', address] as const),

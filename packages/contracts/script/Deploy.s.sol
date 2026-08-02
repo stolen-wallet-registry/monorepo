@@ -687,7 +687,7 @@ contract Deploy is Script {
     function verifySpokeSetup() external view {
         SetupTarget[] memory targets = _spokeTargets();
         for (uint256 i = 0; i < targets.length; i++) {
-            _requireSetupComplete(targets[i].addr, targets[i].label);
+            _requireSetupComplete(targets[i]);
         }
         console2.log("=== All configured spoke contracts have setupComplete == true ===");
     }
@@ -699,15 +699,18 @@ contract Deploy is Script {
     function verifySetup() external view {
         SetupTarget[] memory targets = _hubTargets();
         for (uint256 i = 0; i < targets.length; i++) {
-            _requireSetupComplete(targets[i].addr, targets[i].label);
+            _requireSetupComplete(targets[i]);
         }
         console2.log("=== All configured contracts have setupComplete == true ===");
     }
 
     /// @notice A TimelockOwnable contract that finalize/verify should act on
+    /// @dev `envKey` is carried alongside the resolved address so {_requireSetupComplete} can name
+    ///      the exact variable that was left unset, and derive the `SKIP_<envKey>` opt-out.
     struct SetupTarget {
         address addr;
         string label;
+        string envKey;
     }
 
     /// @notice Hub-chain TimelockOwnable contracts, read from the deploy env
@@ -716,20 +719,25 @@ contract Deploy is Script {
     ///      copy would silently skip the check that a contract had actually been locked.
     function _hubTargets() internal view returns (SetupTarget[] memory targets) {
         targets = new SetupTarget[](11);
-        targets[0] = SetupTarget(vm.envOr("FRAUD_REGISTRY_HUB", address(0)), "FraudRegistryHub");
-        targets[1] = SetupTarget(vm.envOr("CROSS_CHAIN_INBOX", address(0)), "CrossChainInbox");
-        targets[2] = SetupTarget(vm.envOr("OPERATOR_REGISTRY", address(0)), "OperatorRegistry");
-        targets[3] = SetupTarget(vm.envOr("SOULBOUND_RECEIVER", address(0)), "SoulboundReceiver");
-        targets[4] = SetupTarget(vm.envOr("WALLET_SOULBOUND", address(0)), "WalletSoulbound");
-        targets[5] = SetupTarget(vm.envOr("SUPPORT_SOULBOUND", address(0)), "SupportSoulbound");
-        targets[6] = SetupTarget(vm.envOr("WALLET_REGISTRY", address(0)), "WalletRegistry");
-        targets[7] = SetupTarget(vm.envOr("TRANSACTION_REGISTRY", address(0)), "TransactionRegistry");
-        targets[8] = SetupTarget(vm.envOr("CONTRACT_REGISTRY", address(0)), "ContractRegistry");
-        targets[9] = SetupTarget(vm.envOr("OPERATOR_SUBMITTER", address(0)), "OperatorSubmitter");
+        targets[0] = _target("FRAUD_REGISTRY_HUB", "FraudRegistryHub");
+        targets[1] = _target("CROSS_CHAIN_INBOX", "CrossChainInbox");
+        targets[2] = _target("OPERATOR_REGISTRY", "OperatorRegistry");
+        targets[3] = _target("SOULBOUND_RECEIVER", "SoulboundReceiver");
+        targets[4] = _target("WALLET_SOULBOUND", "WalletSoulbound");
+        targets[5] = _target("SUPPORT_SOULBOUND", "SupportSoulbound");
+        targets[6] = _target("WALLET_REGISTRY", "WalletRegistry");
+        targets[7] = _target("TRANSACTION_REGISTRY", "TransactionRegistry");
+        targets[8] = _target("CONTRACT_REGISTRY", "ContractRegistry");
+        targets[9] = _target("OPERATOR_SUBMITTER", "OperatorSubmitter");
         // FeeManager became TimelockOwnable (V11): its setters are on the critical path of every
         // fee-collecting registration, so it must be finalized like any other trust boundary.
         // Omitting it here would leave setBaseFee/setFallbackPrice as one-transaction owner calls.
-        targets[10] = SetupTarget(vm.envOr("FEE_MANAGER", address(0)), "FeeManager");
+        targets[10] = _target("FEE_MANAGER", "FeeManager");
+    }
+
+    /// @dev Resolve one target from its env var, keeping the key for error messages
+    function _target(string memory envKey, string memory label) internal view returns (SetupTarget memory) {
+        return SetupTarget(vm.envOr(envKey, address(0)), label, envKey);
     }
 
     /// @notice Spoke-chain TimelockOwnable contracts, read from the deploy env
@@ -737,14 +745,17 @@ contract Deploy is Script {
     ///      is deliberately absent — see the note on {finalizeSpokeSetup}.
     function _spokeTargets() internal view returns (SetupTarget[] memory targets) {
         targets = new SetupTarget[](2);
-        targets[0] = SetupTarget(vm.envOr("HYPERLANE_ADAPTER", address(0)), "HyperlaneAdapter");
-        targets[1] = SetupTarget(vm.envOr("SPOKE_REGISTRY", address(0)), "SpokeRegistry");
+        targets[0] = _target("HYPERLANE_ADAPTER", "HyperlaneAdapter");
+        targets[1] = _target("SPOKE_REGISTRY", "SpokeRegistry");
     }
 
-    /// @dev Call completeSetup() unless the address is unset or already complete
+    /// @dev Call completeSetup() unless the address is unset or already complete.
+    ///      A skip here is NOT the safety net — {_requireSetupComplete} is. This only logs,
+    ///      because finalize must stay re-runnable across a partially-configured environment;
+    ///      run `verifySetup()` afterwards and it will refuse the same unset target.
     function _completeSetupIfNeeded(address target, string memory label) internal {
         if (target == address(0)) {
-            console2.log("  skipped (not configured):", label);
+            console2.log("  !! SKIPPED, NOT CONFIGURED - verifySetup() will reject this:", label);
             return;
         }
         if (TimelockOwnable(target).setupComplete()) {
@@ -755,12 +766,35 @@ contract Deploy is Script {
         console2.log("  setup completed:", label, target);
     }
 
-    /// @dev Revert unless the target has completed setup (unset addresses are skipped)
-    function _requireSetupComplete(address target, string memory label) internal view {
-        if (target == address(0)) return;
+    /// @dev Revert unless the target has completed setup.
+    ///
+    ///      An UNSET env var also reverts, and that is the point. This used to `return` on
+    ///      address(0), which meant a forgotten variable produced the exact silent pass the check
+    ///      exists to prevent: {finalizeSetup} skips the same address for the same reason, so both
+    ///      failures co-occur — the contract ships with its immediate setters open and
+    ///      `verifySetup()` prints success and exits 0.
+    ///
+    ///      Genuinely-absent contracts (a hub-only deployment with no soulbounds, say) opt out
+    ///      explicitly with `SKIP_<ENV_KEY>=true`, so the exclusion is a recorded decision in the
+    ///      deploy environment rather than an omission nobody notices.
+    function _requireSetupComplete(SetupTarget memory target) internal view {
+        if (target.addr == address(0)) {
+            require(
+                vm.envOr(string.concat("SKIP_", target.envKey), false),
+                string.concat(
+                    target.label,
+                    ": ",
+                    target.envKey,
+                    " is unset - set it to the deployed address, or set SKIP_",
+                    target.envKey,
+                    "=true to deliberately exclude this contract"
+                )
+            );
+            return;
+        }
         require(
-            TimelockOwnable(target).setupComplete(),
-            string.concat(label, ": setupComplete is false - run finalizeSetup()")
+            TimelockOwnable(target.addr).setupComplete(),
+            string.concat(target.label, ": setupComplete is false - run finalizeSetup()")
         );
     }
 
@@ -836,7 +870,7 @@ contract Deploy is Script {
         // it cannot lock down without another round trip, and leaves a window where the deployer
         // key still has one-transaction power over trust boundaries.
         for (uint256 i = 0; i < targets.length; i++) {
-            _requireSetupComplete(targets[i].addr, targets[i].label);
+            _requireSetupComplete(targets[i]);
         }
 
         for (uint256 i = 0; i < targets.length; i++) {
@@ -936,7 +970,7 @@ contract Deploy is Script {
         SetupTarget[] memory targets = _spokeTargets();
         if (!activate) {
             for (uint256 i = 0; i < targets.length; i++) {
-                _requireSetupComplete(targets[i].addr, targets[i].label);
+                _requireSetupComplete(targets[i]);
             }
         }
 

@@ -77,7 +77,60 @@ export function readRelayLimits(env = process.env) {
 }
 
 /**
+ * Collapse an IPv6 address to its /64 prefix.
+ *
+ * A /64 is the smallest block anyone is routinely assigned — it is what a residential ISP
+ * hands a single household and what a VPS provider hands a single instance. Keying the
+ * per-host cap on the full 128-bit address therefore does not cap a host at all: one ordinary
+ * allocation yields 2^64 distinct "hosts", enough for one attacker to fill every one of the
+ * 512 global slots and take P2P registration — the only route open to a fully drained wallet
+ * — offline. Grouping by /64 makes one allocation count as one host.
+ *
+ * Returns null for anything that does not parse as IPv6, so the caller falls back to the
+ * global ceiling rather than inventing a key.
+ *
+ * @param {string} address
+ * @returns {string | null}
+ */
+export function ipv6Prefix64(address) {
+  // Strip a zone index (fe80::1%eth0) and any IPv4-mapped tail before counting groups.
+  const bare = address.split('%')[0];
+  if (!bare.includes(':')) return null;
+
+  const halves = bare.split('::');
+  if (halves.length > 2) return null;
+
+  /** @param {string} half */
+  const groupsOf = (half) => (half === '' ? [] : half.split(':').filter((g) => g !== ''));
+
+  const head = groupsOf(halves[0]);
+  const tail = halves.length === 2 ? groupsOf(halves[1]) : [];
+
+  let groups;
+  if (halves.length === 2) {
+    const missing = 8 - head.length - tail.length;
+    if (missing < 0) return null;
+    groups = [...head, ...Array(missing).fill('0'), ...tail];
+  } else {
+    if (head.length !== 8) return null;
+    groups = head;
+  }
+
+  // Normalise each group (drop leading zeros) so 2001:0db8:… and 2001:db8:… are one key.
+  const prefix = groups.slice(0, 4).map((g) => {
+    const parsed = Number.parseInt(g, 16);
+    return Number.isNaN(parsed) ? null : parsed.toString(16);
+  });
+  if (prefix.some((g) => g === null)) return null;
+
+  return `${prefix.join(':')}::/64`;
+}
+
+/**
  * Extract the source host from a multiaddr, for grouping reservations by origin.
+ *
+ * IPv6 sources are grouped by /64 (see `ipv6Prefix64`); IPv4 and DNS sources are used
+ * verbatim.
  *
  * Returns null when the address has no host component we recognise; callers treat that as
  * "cannot attribute" and fall back to the global ceiling rather than denying, so an
@@ -102,7 +155,10 @@ export function extractHost(multiaddr) {
       protocol === 'dnsaddr'
     ) {
       const value = parts[i + 1];
-      return value !== undefined && value.length > 0 ? value.toLowerCase() : null;
+      if (value === undefined || value.length === 0) return null;
+      const host = value.toLowerCase();
+      if (protocol === 'ip6') return ipv6Prefix64(host) ?? host;
+      return host;
     }
   }
   return null;

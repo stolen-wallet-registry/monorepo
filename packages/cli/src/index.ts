@@ -46,16 +46,27 @@ function fail(message: string): never {
 }
 
 /**
+ * Validate `-e` and narrow it.
+ *
+ * Shared by every command: `quote` and `verify` previously passed the raw string straight to
+ * `getConfig()`, so a typo (`-e mainet`) surfaced as an internal error instead of the same
+ * clear message the submit commands give.
+ */
+function parseEnvironment(value: string): CliEnvironment {
+  if (!VALID_ENVIRONMENTS.includes(value)) {
+    fail(`Invalid environment: ${value}. Expected one of ${VALID_ENVIRONMENTS.join(', ')}.`);
+  }
+  return value as CliEnvironment;
+}
+
+/**
  * Validate shared submit options and resolve the operator signing credential.
  *
  * The credential policy (audit V7) lives in lib/credentials.ts: `--private-key` is refused on
  * any non-local network because argv is world-readable. Nothing here prints the key.
  */
 async function prepareSubmit(options: SubmitOptions) {
-  if (!VALID_ENVIRONMENTS.includes(options.env)) {
-    fail(`Invalid environment: ${options.env}. Expected one of ${VALID_ENVIRONMENTS.join(', ')}.`);
-  }
-  const env = options.env as CliEnvironment;
+  const env = parseEnvironment(options.env);
 
   const chainId = Number(options.chainId);
   if (!Number.isInteger(chainId) || chainId <= 0) {
@@ -180,9 +191,10 @@ program
   .option('-e, --env <env>', 'Environment: local, testnet, mainnet', 'local')
   .option('-t, --type <type>', 'Registry type: wallet, transaction, contract', 'contract')
   .action(async (options) => {
+    const env = parseEnvironment(options.env);
     try {
       await quote({
-        env: options.env,
+        env,
         type: options.type,
       });
     } catch (error) {
@@ -199,16 +211,16 @@ program
   .option('-c, --chain-id <id>', 'Chain ID', '8453')
   .option('-t, --type <type>', 'Registry type: wallet, contract', 'contract')
   .action(async (options) => {
+    const env = parseEnvironment(options.env);
     const chainId = Number(options.chainId);
     if (!Number.isInteger(chainId) || chainId <= 0) {
-      console.error(chalk.red(`Error: Invalid chain ID: ${options.chainId}`));
-      process.exit(1);
+      fail(`Invalid chain ID: ${options.chainId}`);
     }
 
     try {
       await verify({
         address: options.address,
-        env: options.env,
+        env,
         chainId,
         type: options.type,
       });
@@ -218,5 +230,12 @@ program
     }
   });
 
-// Parse and execute
-program.parse();
+// Parse and execute.
+//
+// parseAsync, not parse: every action handler is async, and `parse()` does not await them.
+// Today each one terminates via `fail()` inside a catch so nothing is lost, but a future
+// non-throwing async path would be silently un-awaited — and an unhandled rejection would exit
+// 0 on some Node versions, reporting success for a failed batch.
+program.parseAsync().catch((error: unknown) => {
+  fail(error instanceof Error ? error.message : String(error));
+});

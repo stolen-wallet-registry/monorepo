@@ -41,7 +41,15 @@ export async function promptSecret(question: string): Promise<string> {
   };
 
   try {
-    const answer = await new Promise<string>((resolve) => {
+    const answer = await new Promise<string>((resolve, reject) => {
+      // Ctrl-D (EOF) and Ctrl-C fire 'close'/SIGINT without ever invoking the question
+      // callback. Without these the promise never settles and the CLI hangs at the passphrase
+      // prompt with echo suppressed — the worst possible place to be stuck.
+      rl.once('close', () => reject(new Error('Passphrase entry cancelled.')));
+      rl.once('SIGINT', () => {
+        rl.close();
+        reject(new Error('Passphrase entry cancelled.'));
+      });
       rl.question(question, resolve);
       muted = true;
     });
@@ -81,7 +89,18 @@ export async function promptLine(question: string): Promise<string> {
   });
 
   try {
-    return (await new Promise<string>((resolve) => rl.question(question, resolve))).trim();
+    const answer = await new Promise<string>((resolve, reject) => {
+      // Same EOF/SIGINT hazard as promptSecret. Here the failure mode is milder (nothing is
+      // muted) but a hung confirmation prompt still blocks a scripted operator run forever.
+      // Rejecting means the caller aborts the submission, which is the safe direction.
+      rl.once('close', () => reject(new Error('Confirmation cancelled.')));
+      rl.once('SIGINT', () => {
+        rl.close();
+        reject(new Error('Confirmation cancelled.'));
+      });
+      rl.question(question, resolve);
+    });
+    return answer.trim();
   } finally {
     rl.close();
   }

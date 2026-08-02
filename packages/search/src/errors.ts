@@ -22,23 +22,47 @@ import type { RegistryKind, UnverifiedRegistries } from './types';
  * is still actionable.
  */
 export class SearchUnavailableError extends Error {
-  /** Registries that did not answer. */
+  /** Registries that could not be consulted. */
   readonly unverified: UnverifiedRegistries;
 
   /** The underlying rejection(s), for logging. Never render these to a user. */
   readonly failures: readonly unknown[];
 
-  constructor(unverified: UnverifiedRegistries, failures: readonly unknown[]) {
+  /**
+   * Why the registries could not be consulted.
+   *
+   * - `'unreachable'` — the query was sent and failed (indexer down, network error).
+   * - `'unsupported-identifier'` — the registry has no form for this identifier, so there
+   *   was nothing to query. A non-EVM CAIP-10 against the contract registry, which is keyed
+   *   by an EVM address, is the case that exists today.
+   *
+   * Both are unknowns and both fail closed; they are distinguished so the message does not
+   * send someone debugging an indexer that answered perfectly well.
+   */
+  readonly reason: SearchUnavailableReason;
+
+  constructor(
+    unverified: UnverifiedRegistries,
+    failures: readonly unknown[],
+    reason: SearchUnavailableReason = 'unreachable'
+  ) {
     const registries = unverified.length > 0 ? unverified.join(' and ') : 'registry';
+    const cause =
+      reason === 'unsupported-identifier'
+        ? 'that registry cannot be queried for this kind of identifier'
+        : 'the indexer did not answer';
     super(
-      `Could not verify against the ${registries} registry — the indexer did not answer. ` +
-        `This is NOT a clean result.`
+      `Could not verify against the ${registries} registry — ${cause}. This is NOT a clean result.`
     );
     this.name = 'SearchUnavailableError';
     this.unverified = unverified;
     this.failures = failures;
+    this.reason = reason;
   }
 }
+
+/** Why a search could not consult a registry. See {@link SearchUnavailableError.reason}. */
+export type SearchUnavailableReason = 'unreachable' | 'unsupported-identifier';
 
 /**
  * Narrow an unknown error to {@link SearchUnavailableError}.

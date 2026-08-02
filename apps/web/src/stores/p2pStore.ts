@@ -141,6 +141,12 @@ export const useP2PStore = create<P2PState & P2PActions>()(
       {
         name: 'swr-p2p-state',
         version: 1,
+        // There is no released version of this app, so nothing needs a real version
+        // transform — any older blob is simply discarded. `migrate` still has to exist:
+        // without it, zustand hits a version mismatch, console.errors, and never marks the
+        // load as migrated, so it never rewrites the entry and the error repeats on every
+        // single reload for anyone holding state from an earlier local version.
+        migrate: () => initialState,
         // partnerPeerId stays persisted on purpose: a mid-flow reload (grace period, payment
         // step) has to come back with its partner still pinned, and the pin is the only thing
         // that survives losing the libp2p node. The cost is that a user who closes the tab from

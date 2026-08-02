@@ -15,6 +15,7 @@ import type {
   AddressSearchData,
   WalletSearchData,
   ContractSearchData,
+  SearchUnavailableReason,
   UnverifiedRegistries,
 } from '@swr/search';
 
@@ -35,6 +36,16 @@ export interface AddressSearchResultProps {
    * that is registered stolen.
    */
   unverified?: UnverifiedRegistries;
+  /**
+   * Why those registries could not be consulted. Only affects the guidance sentence on the
+   * "Could Not Verify" card.
+   *
+   * `'unreachable'` (the default) means the query was sent and failed, so retrying is the
+   * right advice. `'unsupported-identifier'` means the registry has no form for this
+   * identifier and nothing was ever queried — telling that user to "try again" sends them
+   * debugging an indexer that answered perfectly well.
+   */
+  reason?: SearchUnavailableReason;
   /** Additional class names */
   className?: string;
 }
@@ -140,6 +151,7 @@ export function AddressSearchResult({
   foundInContractRegistry,
   data,
   unverified = [],
+  reason = 'unreachable',
   className,
 }: AddressSearchResultProps) {
   if (found && data) {
@@ -224,8 +236,19 @@ export function AddressSearchResult({
         </AlertTitle>
         <AlertDescription className="text-amber-800 dark:text-amber-200">
           <p>
-            {unverifiedSentence(unverified)} This is <strong>not</strong> a clean result — the
-            address may be registered. Try again before relying on it.
+            {unverifiedSentence(unverified)}{' '}
+            {reason === 'unsupported-identifier' ? (
+              <>
+                That registry cannot be queried for this kind of identifier, so nothing there was
+                checked. This is <strong>not</strong> a clean result — the address may be registered
+                there, and retrying will not change that.
+              </>
+            ) : (
+              <>
+                This is <strong>not</strong> a clean result — the address may be registered. Try
+                again before relying on it.
+              </>
+            )}
           </p>
         </AlertDescription>
       </Alert>

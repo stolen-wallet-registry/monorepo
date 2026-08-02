@@ -83,8 +83,18 @@ abstract contract TimelockOwnable is Ownable2Step {
     /// @notice Thrown when proposing an action that already has a pending proposal
     error TimelockOwnable__AlreadyPending();
 
-    /// @notice Thrown when using an immediate setter after setup is complete
+    /// @notice Thrown when completeSetup() is called a second time
+    /// @dev Reserved for exactly that. It used to double as the "this setter is now gated"
+    ///      error — see {TimelockOwnable__UseTimelockedPath} for why that was wrong.
     error TimelockOwnable__SetupAlreadyComplete();
+
+    /// @notice Thrown when calling an immediate setter that is now gated behind the timelock
+    /// @dev The action is not forbidden — it must go through propose → ACTIVATION_DELAY →
+    ///      activate. This previously reverted with {TimelockOwnable__SetupAlreadyComplete},
+    ///      which reads as "you already ran setup" and told a caller nothing about the path
+    ///      that would actually work. Every setter that reverts with this has a matching
+    ///      `propose*` / `activate*` pair on the same contract.
+    error TimelockOwnable__UseTimelockedPath();
 
     /// @notice Thrown when renouncing ownership after setup is complete
     /// @dev Renouncing would permanently freeze every timelocked setter AND every emergency
@@ -107,9 +117,10 @@ abstract contract TimelockOwnable is Ownable2Step {
     // MODIFIERS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Modifier for immediate setters — only allowed during initial setup
+    /// @dev Modifier for immediate setters — only allowed during initial setup. Afterwards the
+    ///      same change is still possible, via the contract's propose*/activate* pair.
     modifier onlyDuringSetup() {
-        if (setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
+        if (setupComplete) revert TimelockOwnable__UseTimelockedPath();
         _;
     }
 
@@ -204,7 +215,7 @@ abstract contract TimelockOwnable is Ownable2Step {
     ///      narrows access, so it stays immediate like every other revoke in this system.
     /// @param newOwner The proposed new owner, or address(0) to clear a pending transfer
     function transferOwnership(address newOwner) public virtual override onlyOwner {
-        if (newOwner != address(0) && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
+        if (newOwner != address(0) && setupComplete) revert TimelockOwnable__UseTimelockedPath();
         super.transferOwnership(newOwner);
     }
 

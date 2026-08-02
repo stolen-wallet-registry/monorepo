@@ -144,7 +144,7 @@ contract OperatorRegistry is IOperatorRegistry, TimelockOwnable {
 
         // Any bit set in the new mask that is not set in the old one is an escalation.
         bool isEscalation = (capabilities & ~op.capabilities) != 0;
-        if (isEscalation && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
+        if (isEscalation && setupComplete) revert TimelockOwnable__UseTimelockedPath();
 
         _updateCapabilitiesInternal(operator, capabilities);
     }

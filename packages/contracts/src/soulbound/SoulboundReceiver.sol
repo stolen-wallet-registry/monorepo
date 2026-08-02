@@ -141,12 +141,36 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
             emit CrossChainMintExecuted(MintType.WALLET, wallet, origin);
         } catch (bytes memory reason) {
             emit MintFailed(MintType.WALLET, wallet, origin, reason);
-            // Transient: the registration message has not landed yet, or we ran out of gas.
-            // Let Hyperlane re-deliver.
-            if (reason.length == 0 || _hasSelector(reason, WalletSoulbound.NotRegistered.selector)) {
+            // Out of gas (empty reason under the 63/64 rule) is always worth re-delivering.
+            if (reason.length == 0) revert SoulboundReceiver__WalletMintFailed();
+            // `NotRegistered` is transient ONLY while a registration is still in flight. A wallet
+            // with a live acknowledgement is mid-flow, so the retry is the recovery mechanism.
+            // A wallet with NEITHER a registration NOR a pending acknowledgement is not going to
+            // become registered by being asked again: the acknowledgement expired, or the mint
+            // was requested for a wallet that never started. Reverting there means Hyperlane
+            // re-delivers the identical body forever, never marks it delivered, and the bridge
+            // fee is burnt on a message that can never succeed. Consume it instead — the
+            // permissionless hub-side `mintTo` remains the recovery path if the wallet does
+            // register later.
+            if (_hasSelector(reason, WalletSoulbound.NotRegistered.selector) && _isWalletPending(wallet)) {
                 revert SoulboundReceiver__WalletMintFailed();
             }
-            // Permanent (already minted, or any other terminal cause): consume the message.
+            // Permanent (already minted, expired acknowledgement, any other terminal cause).
+        }
+    }
+
+    /// @notice Distinguishes a mint that is merely EARLY from one that can never succeed, which is
+    ///         what decides whether {_handleWalletMint} lets Hyperlane retry or consumes the message.
+    /// @dev Is a registration still in flight for this wallet?
+    /// @param wallet The wallet to check
+    /// @return True when the registry reports a live pending acknowledgement. A registry that
+    ///         reverts or returns nothing decodable is treated as NOT pending, so an unexpected
+    ///         registry failure consumes the message rather than pinning it in retry forever.
+    function _isWalletPending(address wallet) internal view returns (bool) {
+        try WalletSoulbound(walletSoulbound).registry().isWalletPending(wallet) returns (bool pending) {
+            return pending;
+        } catch {
+            return false;
         }
     }
 
@@ -172,6 +196,9 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
         }
     }
 
+    /// @notice Identifies WHICH custom error a `try/catch` caught, so the transient causes can be
+    ///         re-reverted for redelivery and the terminal ones consumed. Returning false on a
+    ///         short payload means an undecodable failure is treated as terminal, not transient.
     /// @dev Does a captured revert payload start with `selector`?
     /// @param reason Raw revert data from a `try/catch`
     /// @param selector The 4-byte custom-error selector to match
@@ -179,6 +206,11 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     function _hasSelector(bytes memory reason, bytes4 selector) internal pure returns (bool) {
         if (reason.length < 4) return false;
         bytes4 found;
+        // Suppressed, not fixed: reading the leading 4 bytes of a `bytes memory` payload has no
+        // Solidity-level equivalent that is not strictly worse (slicing allocates a copy). The
+        // read is bounded by the `reason.length < 4` guard above, so it cannot run past the
+        // buffer, and it touches no state.
+        // solhint-disable-next-line no-inline-assembly
         assembly {
             found := mload(add(reason, 0x20))
         }
@@ -195,7 +227,7 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     ///      ever narrows what this contract accepts, and it is the targeted emergency response
     ///      to a compromised spoke forwarder (the alternative, pause(), stops every domain).
     function setTrustedForwarder(uint32 domain, address forwarder) external onlyOwner {
-        if (forwarder != address(0) && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
+        if (forwarder != address(0) && setupComplete) revert TimelockOwnable__UseTimelockedPath();
         _trustedForwarders[domain] = forwarder;
         emit TrustedForwarderUpdated(domain, forwarder);
     }
@@ -236,8 +268,12 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     /// @dev `handle` is payable (Hyperlane v3), but our dispatches always set msgValue to 0 —
     ///      any balance here arrived unexpectedly (e.g. a misbehaving hook) and would otherwise
     ///      be locked forever.
-    function sweep() external onlyOwner {
-        (bool success,) = msg.sender.call{ value: address(this).balance }("");
+    ///      Takes an explicit recipient rather than paying `msg.sender` — see
+    ///      {CrossChainInbox.sweep} for why a DAO owner makes that distinction matter.
+    /// @param to Recipient of the swept balance
+    function sweep(address to) external onlyOwner {
+        if (to == address(0)) revert SoulboundReceiver__ZeroAddress();
+        (bool success,) = to.call{ value: address(this).balance }("");
         if (!success) revert SoulboundReceiver__SweepFailed();
     }
 

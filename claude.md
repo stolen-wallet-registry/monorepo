@@ -417,6 +417,23 @@ import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
 <EnsExplorerLink value={address} />
 ```
 
+#### EXCEPTION: verification surfaces pass `resolveEns={false}` (security — do not "fix")
+
+"ENS everywhere" stops at any surface where the user is being asked to **verify an address
+before making a trust decision**. These deliberately render raw hex:
+
+| Component                | Why                                                         |
+| ------------------------ | ----------------------------------------------------------- |
+| `SignatureDetails`       | User confirms what they are about to sign                   |
+| `WalletSwitchPrompt`     | User confirms which wallet to switch to                     |
+| `RelayedSignatureReview` | Relayer compares recovered signer against the paired wallet |
+| `ConnectedWalletStatus`  | User confirms which wallet is connected                     |
+
+This is audit finding **V26**: an all-ASCII ENS name can impersonate a hex address, so showing
+a name in place of the address hands an attacker control of the very string the user is
+checking. A name is a claim; the hex is the fact. Adding `EnsExplorerLink` to any of these
+re-opens V26 — if a new verification surface is added, it should pass `resolveEns={false}` too.
+
 ### ENS Utilities
 
 ```typescript

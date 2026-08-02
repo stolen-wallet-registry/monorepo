@@ -80,6 +80,7 @@ export {
 // Failure handling — a search that cannot reach a registry throws rather than
 // returning something that reads as "clean".
 export { SearchUnavailableError, isSearchUnavailableError, registryKindLabel } from './errors';
+export type { SearchUnavailableReason } from './errors';
 
 // Indexer freshness — a stale indexer answers "not found" for everything it has not
 // reached yet, so consumers acting on a clean result need to know the lag.

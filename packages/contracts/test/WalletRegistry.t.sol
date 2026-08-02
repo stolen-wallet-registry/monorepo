@@ -723,14 +723,17 @@ contract WalletRegistryTest is EIP712TestHelper {
         walletRegistry.acknowledge(wallet, forwarder, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, v, r, s);
     }
 
-    /// @notice Registration rejects a deadline beyond MAX_SIGNATURE_LIFETIME (2 hours).
+    /// @notice Registration rejects a deadline beyond MAX_SIGNATURE_LIFETIME.
     /// @dev Bounds how long a harvested signature stays usable — without the cap a hostile
     ///      frontend could set an effectively unbounded deadline and submit months later.
+    ///      Derived from the constant rather than hardcoded, so raising MAX_SIGNATURE_LIFETIME
+    ///      cannot silently turn this into a test of a deadline that is now inside the bound.
+    ///      Matches the sibling test in TransactionRegistry.t.sol.
     function test_register_revertsIfDeadlineTooFarInFuture() public {
         _doAck(forwarder, REPORTED_CHAIN_ID, incidentTimestamp);
         uint256 windowBlock = _skipToRegistrationWindow();
 
-        uint256 deadline = block.timestamp + 3 hours; // > MAX_SIGNATURE_LIFETIME
+        uint256 deadline = block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME + 1;
         uint256 nonce = walletRegistry.nonces(wallet);
         (uint8 v, bytes32 r, bytes32 s) = _signWalletReg(
             walletPrivateKey,

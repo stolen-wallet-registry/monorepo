@@ -156,6 +156,12 @@ export const useTransactionRegistrationStore = create<
       {
         name: 'swr-transaction-registration-state',
         version: 1,
+        // There is no released version of this app, so nothing needs a real version
+        // transform — any older blob is simply discarded. `migrate` still has to exist:
+        // without it, zustand hits a version mismatch, console.errors, and never marks the
+        // load as migrated, so it never rewrites the entry and the error repeats on every
+        // single reload for anyone holding state from an earlier local version.
+        migrate: () => initialState,
         // Validation runs in `merge`, not `migrate`: zustand only calls `migrate` on a version
         // mismatch, so validation placed there would never run on a normal rehydrate.
         merge: (persisted, current) => {

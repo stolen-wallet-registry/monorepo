@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   ABSOLUTE_MAX_BATCH_SIZE,
   DEFAULT_MAX_BATCH_SIZE,
@@ -220,6 +220,66 @@ describe('confirmSubmission', () => {
       confirmSubmission(confirmOptions({ assumeYes: true, prompt }))
     ).resolves.toBeUndefined();
     expect(prompt).not.toHaveBeenCalled();
+  });
+
+  // ── --yes on mainnet requires SWR_CONFIRM_COUNT ────────────────────────────
+  //
+  // The count prompt is the only rail that defends against the V16 scenario (wrong file /
+  // wrong environment), and `--yes` used to skip it outright. The realistic failure is an
+  // operator replaying a testnet command from shell history with `-e mainnet` swapped in and
+  // `-y` riding along invisibly. On mainnet, automation must now assert the number it believes
+  // it is submitting.
+  describe('--yes on mainnet', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('refuses when SWR_CONFIRM_COUNT is absent', async () => {
+      vi.stubEnv('SWR_CONFIRM_COUNT', undefined);
+      const prompt = vi.fn();
+      await expect(
+        confirmSubmission(confirmOptions({ env: 'mainnet', assumeYes: true, prompt }))
+      ).rejects.toThrow(/SWR_CONFIRM_COUNT/);
+      expect(prompt).not.toHaveBeenCalled();
+    });
+
+    it('proceeds when SWR_CONFIRM_COUNT matches the parsed entry count', async () => {
+      vi.stubEnv('SWR_CONFIRM_COUNT', '42');
+      const prompt = vi.fn();
+      await expect(
+        confirmSubmission(confirmOptions({ env: 'mainnet', assumeYes: true, prompt }))
+      ).resolves.toBeUndefined();
+      expect(prompt).not.toHaveBeenCalled();
+    });
+
+    it('refuses on a mismatch and names both numbers', async () => {
+      vi.stubEnv('SWR_CONFIRM_COUNT', '41');
+      const error = await confirmSubmission(
+        confirmOptions({ env: 'mainnet', assumeYes: true, prompt: vi.fn() })
+      ).catch((e: Error) => e);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain('41');
+      expect((error as Error).message).toContain('42');
+    });
+
+    it('refuses a non-numeric SWR_CONFIRM_COUNT', async () => {
+      vi.stubEnv('SWR_CONFIRM_COUNT', 'yes');
+      await expect(
+        confirmSubmission(confirmOptions({ env: 'mainnet', assumeYes: true, prompt: vi.fn() }))
+      ).rejects.toThrow(/SWR_CONFIRM_COUNT/);
+    });
+
+    // Regression guard: the new rail is mainnet-only. Testnet and local keep --yes as-is,
+    // because the point of the rail is the irreversible mainnet write.
+    it.each(['testnet', 'local'] as const)('leaves --yes on %s unchanged', async (env) => {
+      vi.stubEnv('SWR_CONFIRM_COUNT', undefined);
+      const prompt = vi.fn();
+      await expect(
+        confirmSubmission(confirmOptions({ env, assumeYes: true, prompt }))
+      ).resolves.toBeUndefined();
+      expect(prompt).not.toHaveBeenCalled();
+    });
   });
 
   it('shows the count, chain, contract and a sample before asking', async () => {

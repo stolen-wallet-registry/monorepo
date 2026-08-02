@@ -407,8 +407,10 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         // Only the forwarder named in the signature may open the window — see
         // {WalletRegistry.acknowledge} for the timing-grind and nonce-burn rationale.
         if (msg.sender != trustedForwarder) revert TransactionRegistry__InvalidForwarder();
-        if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
-        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+        // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
+        // only picks which of the two user-facing errors to report.
+        if (!TimingConfig.isSignatureDeadlineValid(deadline)) {
+            if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
             revert TransactionRegistry__DeadlineTooFarInFuture();
         }
 
@@ -487,7 +489,9 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds
     ) internal returns (uint32) {
-        uint256 batchId = _nextBatchId++;
+        // Read WITHOUT incrementing. The ID is only committed if at least one entry is written —
+        // see the zero-count branch below.
+        uint256 batchId = _nextBatchId;
 
         // Register transactions, counting actual registrations
         uint32 actualCount = 0;
@@ -508,6 +512,21 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
             actualCount++;
             emit TransactionRegistered(txHash, chainId, reporter, isSponsored);
         }
+
+        // Nothing was written (every hash was zero or already registered), so there is no batch.
+        // Return WITHOUT consuming the ID, writing a row, or emitting the batch event — the same
+        // outcome `registerTransactionsFromOperator` reaches by reverting, reached here without a
+        // revert because the caller's nonce bump and acknowledgement deletion must stand (V8).
+        //
+        // Emitting anyway would produce a batch with transactionCount 0 and no per-entry events
+        // sharing its transaction hash. The indexer joins entries to batches on exactly that hash,
+        // so the row would be a permanent orphan, and the skipped ID a hole in the sequence.
+        if (actualCount == 0) {
+            return 0;
+        }
+
+        // Commit the ID only now that it is backed by at least one entry.
+        _nextBatchId = batchId + 1;
 
         // Write batch after loop with accurate count
         _batches[batchId] = TransactionBatch({
@@ -564,8 +583,10 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         // hashing the arrays.
         if (transactionHashes.length > MAX_TWO_PHASE_BATCH_SIZE) revert TransactionRegistry__BatchTooLarge();
         if (transactionHashes.length != chainIds.length) revert TransactionRegistry__ArrayLengthMismatch();
-        if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
-        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+        // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
+        // only picks which of the two user-facing errors to report.
+        if (!TimingConfig.isSignatureDeadlineValid(deadline)) {
+            if (deadline <= block.timestamp) revert TransactionRegistry__DeadlineExpired();
             revert TransactionRegistry__DeadlineTooFarInFuture();
         }
 

@@ -49,6 +49,24 @@ describe('selectionMatchesSignedBatch', () => {
     expect(selectionMatchesSignedBatch([a, b], [{ hash: a }, { hash: a }])).toBe(false);
   });
 
+  // The mirror image, and the case the original implementation let through: the duplicate is
+  // on the SIGNED side. Lengths agree (2/2), the shown set has two members so `shown.size`
+  // equals `selectedTxHashes.length`, and every signed hash (`a`, twice) is in the shown set —
+  // so every check passed while `b` was on screen without being signed and `a` was signed
+  // twice. Rejecting duplicates only on the details side is not enough; membership has to be
+  // checked in both directions.
+  it('rejects duplicate signed hashes masking a transaction shown but never signed', () => {
+    expect(selectionMatchesSignedBatch([a, a], [{ hash: a }, { hash: b }])).toBe(false);
+  });
+
+  // Same defect at a larger size, to pin that the fix is a real distinctness check and not a
+  // special case for length 2.
+  it('rejects duplicate signed hashes at larger batch sizes', () => {
+    expect(selectionMatchesSignedBatch([a, b, b], [{ hash: a }, { hash: b }, { hash: c }])).toBe(
+      false
+    );
+  });
+
   it('rejects when details are empty but hashes are not', () => {
     expect(selectionMatchesSignedBatch([a], [])).toBe(false);
   });

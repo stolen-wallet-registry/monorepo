@@ -156,9 +156,10 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         // See {WalletRegistry.acknowledge} for why (timing grind + nonce-burn griefing).
         if (msg.sender != trustedForwarder) revert SpokeRegistry__InvalidForwarder();
 
-        // Validate signature deadline is neither expired nor unbounded
-        if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
-        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+        // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
+        // only picks which of the two user-facing errors to report.
+        if (!TimingConfig.isSignatureDeadlineValid(deadline)) {
+            if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
             revert SpokeRegistry__DeadlineTooFarInFuture();
         }
 
@@ -270,6 +271,10 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     ///      to silence the linter would obscure the mapping to the function signature for zero
     ///      benefit. Do NOT add packed fields here on the assumption it is a storage struct —
     ///      the 1-slot storage invariant applies to entry structs, not this carrier.
+    // Suppressed, not fixed: packing advice is meaningless for a memory-only struct, and acting on
+    // it here would invite a reader to confuse this carrier with a real entry struct, where the
+    // repo's hard 1-storage-slot invariant does apply. See the NatSpec above.
+    // solhint-disable-next-line gas-struct-packing
     struct WalletRegParams {
         address wallet;
         address trustedForwarder;
@@ -302,9 +307,10 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         // Validate hub is configured
         if (hubInbox == bytes32(0)) revert SpokeRegistry__HubNotConfigured();
 
-        // Validate signature deadline is neither expired nor unbounded
-        if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
-        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+        // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
+        // only picks which of the two user-facing errors to report.
+        if (!TimingConfig.isSignatureDeadlineValid(deadline)) {
+            if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
             revert SpokeRegistry__DeadlineTooFarInFuture();
         }
 
@@ -425,9 +431,10 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         if (transactionCount == 0) revert SpokeRegistry__EmptyBatch();
         if (transactionCount > MAX_CROSS_CHAIN_BATCH_SIZE) revert SpokeRegistry__BatchTooLarge();
 
-        // Validate signature deadline is neither expired nor unbounded
-        if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
-        if (deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+        // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
+        // only picks which of the two user-facing errors to report.
+        if (!TimingConfig.isSignatureDeadlineValid(deadline)) {
+            if (deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
             revert SpokeRegistry__DeadlineTooFarInFuture();
         }
 
@@ -531,6 +538,10 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     ///      The calldata arrays stay out of it — copying them to memory would cost gas for no
     ///      stack benefit. See {WalletRegParams} for the same rationale on the wallet path; the
     ///      solhint `gas-struct-packing` note applies here too (memory-only, never stored).
+    // Suppressed, not fixed: packing advice is meaningless for a memory-only struct, and acting on
+    // it here would invite a reader to confuse this carrier with a real entry struct, where the
+    // repo's hard 1-storage-slot invariant does apply. See {WalletRegParams}.
+    // solhint-disable-next-line gas-struct-packing
     struct TxBatchRegParams {
         bytes32 reportedChainId;
         uint256 deadline;
@@ -832,7 +843,38 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     // INTERNAL HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @dev Validate inputs and acknowledgement for transaction batch registration
+    /// @notice Enforces every precondition of phase two of the two-phase transaction-batch flow
+    ///         BEFORE any signature is recovered, and returns the freshness commitment that
+    ///         signature must contain.
+    /// @dev Ordered fail-fast; each check maps to a distinct revert so the frontend can tell the
+    ///      user which one tripped:
+    ///        - zero reporter -> `SpokeRegistry__InvalidOwner`; unset hub -> `__HubNotConfigured`
+    ///          (a spoke with no hub would accept a batch it could never bridge);
+    ///        - array length mismatch / empty batch -> `__ArrayLengthMismatch` / `__EmptyBatch`;
+    ///        - deadline outside the accepted band -> `__SignatureExpired` when already past,
+    ///          `__DeadlineTooFarInFuture` otherwise. The band itself is owned by
+    ///          {TimingConfig.isSignatureDeadlineValid}; the inner branch only picks the error;
+    ///        - `nonce` must equal the reporter's current nonce -> `__InvalidNonce` (replay);
+    ///        - `msg.sender` must be the forwarder named in the acknowledgement ->
+    ///          `__InvalidForwarder`, so a third party cannot land someone else's signed batch;
+    ///        - the grace period must have STARTED and not yet expired ->
+    ///          `__GracePeriodNotStarted` / `__ForwarderExpired`. The start check is the
+    ///          anti-phishing delay; skipping it collapses the flow to a single sitting;
+    ///        - `dataHash` and `reportedChainId` must equal what was acknowledged ->
+    ///          `__InvalidDataHash`. Since `dataHash` is recomputed by the caller from the
+    ///          submitted arrays, this is what proves the arrays are exactly the ones signed —
+    ///          without it a forwarder could swap in a different set of transactions;
+    ///        - `transactionCount` must match the acknowledged count -> `__ArrayLengthMismatch`.
+    ///      View-only: it makes no state changes, so a revert here costs the caller nothing but
+    ///      gas and leaves the pending acknowledgement intact for a corrected retry.
+    /// @param p Scalar registration arguments (reporter, deadline, nonce, reportedChainId,
+    ///          windowBlock, v/r/s). Collapsed into a struct only to stay under the stack limit.
+    /// @param dataHash keccak256 of the submitted `(transactionHashes, chainIds)`, recomputed by
+    ///        the caller and checked against the acknowledged commitment
+    /// @param transactionHashes Transaction hashes being registered; length and content are both
+    ///        constrained (count against the acknowledgement, content via `dataHash`)
+    /// @param chainIds CAIP-2 chain ID hash per transaction; must be the same length as
+    ///        `transactionHashes` and is covered by the same `dataHash`
     /// @return windowBlockHash The freshness commitment the signature must have committed to
     function _validateTxBatchRegistration(
         TxBatchRegParams memory p,
@@ -850,9 +892,10 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         if (transactionHashes.length != chainIds.length) revert SpokeRegistry__ArrayLengthMismatch();
         if (transactionHashes.length == 0) revert SpokeRegistry__EmptyBatch();
 
-        // Validate signature deadline is neither expired nor unbounded
-        if (p.deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
-        if (p.deadline > block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME) {
+        // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
+        // only picks which of the two user-facing errors to report.
+        if (!TimingConfig.isSignatureDeadlineValid(p.deadline)) {
+            if (p.deadline <= block.timestamp) revert SpokeRegistry__SignatureExpired();
             revert SpokeRegistry__DeadlineTooFarInFuture();
         }
 

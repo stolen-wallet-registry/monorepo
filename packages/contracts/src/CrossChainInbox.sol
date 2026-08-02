@@ -245,7 +245,7 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     /// @param spokeRegistry Spoke registry address (as bytes32)
     /// @param trusted Whether the source is trusted
     function setTrustedSource(uint32 chainId, bytes32 spokeRegistry, bool trusted) external onlyOwner {
-        if (trusted && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
+        if (trusted && setupComplete) revert TimelockOwnable__UseTimelockedPath();
         if (trusted && spokeRegistry == bytes32(0)) revert CrossChainInbox__ZeroAddress();
         _trustedSources[chainId][spokeRegistry] = trusted;
         emit TrustedSourceUpdated(chainId, spokeRegistry, trusted);
@@ -276,8 +276,15 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     /// @dev `handle` is payable (Hyperlane v3), but our dispatches always set msgValue to 0 —
     ///      any balance here arrived unexpectedly (e.g. a misbehaving hook) and would otherwise
     ///      be locked forever.
-    function sweep() external onlyOwner {
-        (bool success,) = msg.sender.call{ value: address(this).balance }("");
+    ///
+    ///      Takes an explicit recipient rather than paying `msg.sender`. After the DAO handover
+    ///      the owner is a multisig or Governor, and a plain `call` to a contract whose fallback
+    ///      is non-payable or gas-limited reverts — leaving the funds unrecoverable with no
+    ///      alternative destination.
+    /// @param to Recipient of the swept balance
+    function sweep(address to) external onlyOwner {
+        if (to == address(0)) revert CrossChainInbox__ZeroAddress();
+        (bool success,) = to.call{ value: address(this).balance }("");
         if (!success) revert CrossChainInbox__SweepFailed();
     }
 

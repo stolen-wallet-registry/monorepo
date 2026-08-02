@@ -93,6 +93,12 @@ export const useFormStore = create<FormState & FormActions>()(
       {
         name: 'swr-form-state',
         version: 1,
+        // There is no released version of this app, so nothing needs a real version
+        // transform — any older blob is simply discarded. `migrate` still has to exist:
+        // without it, zustand hits a version mismatch, console.errors, and never marks the
+        // load as migrated, so it never rewrites the entry and the error repeats on every
+        // single reload for anyone holding state from an earlier local version.
+        migrate: () => initialState,
         // `relayerFromPeerSession` is session-only by design — persisting it would hand the
         // attacker the very flag it exists to withhold.
         partialize: (state) => ({

@@ -117,6 +117,7 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
    */
   const [resignRequest, setResignRequest] = useState<{ notified: boolean | null } | null>(null);
   const partnerPeerId = useP2PStore((s) => s.partnerPeerId);
+  const pairedWallet = useP2PStore((s) => s.pairedWallet);
 
   // See handleRetry: some reverts make the stored signature permanently unusable, so Retry
   // has to mean "sign again", not "submit the same bytes again".
@@ -161,7 +162,7 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
       enabled: isP2PRelayed && !!storedSignature,
       step: TX_SIGNATURE_STEP.ACKNOWLEDGEMENT,
       storedSignature,
-      expectedSigner: storedSignature?.reporter,
+      expectedSigner: storedSignature?.reporter, // logged only; gating uses pairedWallet
       trustedForwarder: storedSignature?.trustedForwarder,
     }
   );
@@ -643,7 +644,11 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
         <RelayedSignatureReview
           review={signatureReview}
           isChecking={isReviewingSignature}
-          expectedSigner={storedSignature.reporter}
+          // The out-of-band wallet, never `.reporter` — that is the peer's own claim, so a
+          // panel built from it shows "Signed by: X / You were told: X" for an attacker who
+          // signed over its own address, i.e. two matching rows next to a signer-mismatch
+          // alert. Gating already used `pairedWallet`; the display now agrees with it.
+          expectedSigner={pairedWallet}
           deadline={storedSignature.deadline}
         />
       )}

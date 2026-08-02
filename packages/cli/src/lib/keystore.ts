@@ -19,6 +19,34 @@ import { keccak256, type Hex } from 'viem';
 export const KEYSTORE_DECRYPT_FAILED =
   'Failed to decrypt keystore: wrong passphrase or corrupt file.';
 
+/**
+ * Minimum pbkdf2 iteration count.
+ *
+ * The KDF parameters are read out of the keystore file, so the file itself decides how hard it
+ * is to brute-force. A keystore rewritten to `c: 1` still decrypts to the right key under the
+ * right passphrase — it is a plaintext key wearing a keystore's clothes, and without a floor
+ * nothing tells the operator. 100,000 is well under what geth (262,144) and ethers emit, so
+ * only a deliberately weakened file trips it.
+ */
+export const MIN_PBKDF2_ITERATIONS = 100_000;
+
+/** Upper bound on pbkdf2 iterations: past this the CLI hangs rather than fails. */
+export const MAX_PBKDF2_ITERATIONS = 10_000_000;
+
+/** Minimum scrypt cost parameter. 4096 = 2^12; geth/ethers use 262,144 or 131,072. */
+export const MIN_SCRYPT_N = 4096;
+
+/**
+ * Memory ceiling for scrypt, in bytes.
+ *
+ * scrypt's working set is `128 * N * r + 128 * r * p`, all three factors file-controlled. The
+ * previous `maxmem: 256 * n * r + 32MB` was derived FROM the untrusted `n`, so it granted
+ * whatever the file asked for: `n = 2^26, r = 8` sizes a ~137 GB allocation the process then
+ * attempts. 1 GiB is ~4x the heaviest parameters any real wallet emits (geth's n=262144, r=8
+ * needs ~268 MB).
+ */
+export const MAX_SCRYPT_MEMORY_BYTES = 1024 * 1024 * 1024;
+
 interface KdfParams {
   dklen?: number;
   salt?: string;
@@ -74,13 +102,39 @@ function deriveKey(kdf: string, kdfparams: KdfParams, passphrase: string): Buffe
       if (!n || !r || !p) {
         throw new Error('Invalid keystore: scrypt requires "n", "r" and "p".');
       }
+      if (!Number.isInteger(n) || !Number.isInteger(r) || !Number.isInteger(p)) {
+        throw new Error('Invalid keystore: scrypt "n", "r" and "p" must be integers.');
+      }
+      // scrypt requires N to be a power of two. Node rejects anything else with an opaque
+      // parameter error, so name the field here.
+      if ((n & (n - 1)) !== 0) {
+        throw new Error(`Invalid keystore: scrypt "n" must be a power of two (got ${n}).`);
+      }
+      if (n < MIN_SCRYPT_N) {
+        throw new Error(
+          `Refusing keystore: scrypt cost "n" is ${n}, below the minimum of ${MIN_SCRYPT_N}. ` +
+            'A keystore this weak is close to storing the key in plaintext — re-encrypt it ' +
+            'with your wallet (geth and ethers default to n=262144).'
+        );
+      }
+      // Checked BEFORE scryptSync: the point is to refuse the allocation, not to attempt it
+      // and hope the allocator says no first.
+      const requiredMemory = 128 * n * r + 128 * r * p;
+      if (requiredMemory > MAX_SCRYPT_MEMORY_BYTES) {
+        throw new Error(
+          `Refusing keystore: scrypt parameters (n=${n}, r=${r}, p=${p}) require ` +
+            `${Math.round(requiredMemory / (1024 * 1024))} MB of memory, above the ` +
+            `${MAX_SCRYPT_MEMORY_BYTES / (1024 * 1024)} MB ceiling. No real wallet emits ` +
+            'parameters this large.'
+        );
+      }
       // Node's default maxmem (32MB) is below what standard keystores need
-      // (n=262144, r=8 => ~268MB). Grant headroom explicitly.
+      // (n=262144, r=8 => ~268MB). Grant exactly what the (now bounded) parameters need.
       return scryptSync(secret, salt, dklen, {
         N: n,
         r,
         p,
-        maxmem: 256 * n * r + 32 * 1024 * 1024,
+        maxmem: requiredMemory + 32 * 1024 * 1024,
       });
     }
 
@@ -91,6 +145,22 @@ function deriveKey(kdf: string, kdfparams: KdfParams, passphrase: string): Buffe
       const c = kdfparams.c ?? 0;
       if (!c) {
         throw new Error('Invalid keystore: pbkdf2 requires "c".');
+      }
+      if (!Number.isInteger(c)) {
+        throw new Error('Invalid keystore: pbkdf2 "c" must be an integer.');
+      }
+      if (c < MIN_PBKDF2_ITERATIONS) {
+        throw new Error(
+          `Refusing keystore: pbkdf2 iteration count "c" is ${c}, below the minimum of ` +
+            `${MIN_PBKDF2_ITERATIONS}. A keystore this weak is close to storing the key in ` +
+            'plaintext — re-encrypt it with your wallet.'
+        );
+      }
+      if (c > MAX_PBKDF2_ITERATIONS) {
+        throw new Error(
+          `Refusing keystore: pbkdf2 iteration count "c" is ${c}, above the maximum of ` +
+            `${MAX_PBKDF2_ITERATIONS}. Deriving this key would hang rather than fail.`
+        );
       }
       return pbkdf2Sync(secret, salt, c, dklen, 'sha256');
     }

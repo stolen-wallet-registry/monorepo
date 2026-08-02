@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test } from "forge-std/Test.sol";
+import { Test, Vm } from "forge-std/Test.sol";
 import { TransactionRegistry } from "../src/registries/TransactionRegistry.sol";
 import { ITransactionRegistry } from "../src/interfaces/ITransactionRegistry.sol";
 import { FraudRegistryHub } from "../src/FraudRegistryHub.sol";
@@ -685,6 +685,68 @@ contract TransactionRegistryTest is EIP712TestHelper {
         txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, windowBlock, v, r, s);
     }
 
+    /// @notice A window block exactly at the edge of the `blockhash` horizon (age 255) is accepted.
+    /// @dev Pins the lower half of the boundary the source flags at
+    ///      {TimingConfig.resolveWindowBlockHash}: the check is `>= MAX_WINDOW_BLOCK_AGE`, so age
+    ///      255 must still work. Without this, tightening the bound by one would pass CI while
+    ///      silently shortening the window a P2P relay has to get the signature on-chain.
+    function test_registerTransactions_acceptsWindowBlockAtMaxAge() public {
+        TransactionRegistry reg = _deployLongWindowRegistry();
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        _doFullFlowAck(reg, txHashes, chainIds);
+
+        _sigWindowBlock = reg.getTransactionAcknowledgementData(reporter).gracePeriodStart;
+        vm.roll(_sigWindowBlock + TimingConfig.MAX_WINDOW_BLOCK_AGE - 1);
+        assertEq(block.number - _sigWindowBlock, 255, "Precondition: window block age must be exactly 255");
+
+        _doFullFlowReg(reg, txHashes, chainIds, 0);
+
+        assertTrue(reg.isTransactionRegistered(txHashes[0], chainIds[0]), "Age-255 window block must be accepted");
+    }
+
+    /// @notice A window block one past the `blockhash` horizon (age 256) is rejected.
+    /// @dev The upper half of the same boundary. Previously asserted only on the WalletRegistry
+    ///      path, so a regression that dropped this bound from the transaction path — where it
+    ///      would let a caller commit to `bytes32(0)` for an unreachable block — passed CI.
+    function test_registerTransactions_revertsIfWindowBlockTooOld() public {
+        TransactionRegistry reg = _deployLongWindowRegistry();
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        _doFullFlowAck(reg, txHashes, chainIds);
+
+        uint256 windowBlock = reg.getTransactionAcknowledgementData(reporter).gracePeriodStart;
+        _sigWindowBlock = windowBlock;
+        vm.roll(windowBlock + TimingConfig.MAX_WINDOW_BLOCK_AGE);
+        assertEq(block.number - windowBlock, 256, "Precondition: window block age must be exactly 256");
+
+        // Precomputed BEFORE vm.expectRevert: the cheatcode applies to the next external call,
+        // and `nonces()` is one.
+        uint256 deadline = block.timestamp + 3600;
+        (uint8 v, bytes32 r, bytes32 s) = _signProdTxRegFor(
+            address(reg),
+            _computeDataHash(txHashes, chainIds),
+            CAIP10Evm.caip2Hash(uint64(1)),
+            uint32(txHashes.length),
+            reg.nonces(reporter),
+            deadline
+        );
+
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockTooOld.selector);
+        vm.prank(forwarder);
+        reg.registerTransactions(reporter, deadline, txHashes, chainIds, windowBlock, v, r, s);
+    }
+
+    /// @dev A registry whose registration window is long enough that the 256-block `blockhash`
+    ///      horizon — not the acknowledgement expiry — is the binding constraint. With the shared
+    ///      DEADLINE_BLOCKS of 50 the acknowledgement expires ~100 blocks in, so the horizon is
+    ///      unreachable and neither boundary above can be exercised.
+    function _deployLongWindowRegistry() internal returns (TransactionRegistry reg) {
+        reg = new TransactionRegistry(owner, address(0), GRACE_BLOCKS, 400);
+        vm.prank(owner);
+        reg.setHub(address(hub));
+    }
+
     /// @notice Only the forwarder named in the acknowledgement signature may submit phase 1.
     /// @dev Signature is valid and names `forwarder`, but a third party submits it. Letting anyone
     ///      relay the acknowledgement would let an attacker burn the reporter's nonce and grind the
@@ -1182,6 +1244,45 @@ contract TransactionRegistryTest is EIP712TestHelper {
         );
     }
 
+    /// @notice V8 residual: a two-phase batch that writes zero entries must not materialise a batch.
+    /// @dev The refund half of V8 landed; the batch write did not. The indexer joins per-entry
+    ///      events to batches on the transaction hash they share, so a batch row with
+    ///      transactionCount 0 and no accompanying TransactionRegistered events is a permanent
+    ///      orphan — exactly what `registerTransactionsFromOperator`'s EmptyBatch guard was added
+    ///      to prevent. A burnt batch ID also leaves a hole in the sequence the indexer walks.
+    function test_TxReg_ZeroEffectiveEntries_DoesNotMaterialiseBatch() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        // First round registers every hash, so the identical second round writes nothing.
+        _doFullFlowOnRegistry(txRegistry, txHashes, chainIds);
+        uint256 batchCountAfterFirst = txRegistry.transactionBatchCount();
+
+        _zeroEffectiveRoundEmitsNoBatch(txHashes, chainIds);
+
+        assertEq(txRegistry.transactionBatchCount(), batchCountAfterFirst, "Zero-entry batch must not burn a batch ID");
+        assertEq(
+            txRegistry.getTransactionBatch(batchCountAfterFirst + 1).timestamp,
+            0,
+            "No phantom batch row may be written for a zero-entry batch"
+        );
+    }
+
+    /// @dev Runs the zero-effective round and asserts no TransactionBatchRegistered was emitted.
+    ///      Extracted to keep the recordLogs bookkeeping off the caller's stack.
+    function _zeroEffectiveRoundEmitsNoBatch(bytes32[] memory txHashes, bytes32[] memory chainIds) internal {
+        _doFullFlowAck(txRegistry, txHashes, chainIds);
+        _sigWindowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+
+        vm.recordLogs();
+        _doFullFlowReg(txRegistry, txHashes, chainIds, 0);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        bytes32 batchTopic = keccak256("TransactionBatchRegistered(uint256,address,bytes32,uint32,bool)");
+        for (uint256 i = 0; i < logs.length; i++) {
+            assertTrue(logs[i].topics[0] != batchTopic, "Zero-entry batch must not emit TransactionBatchRegistered");
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // WITHDRAW COLLECTED FEES TESTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1249,7 +1350,6 @@ contract TransactionRegistryTest is EIP712TestHelper {
         assertTrue(txRegistry.isTransactionRegistered(txHashes[2], chainId));
     }
 
-    /// @notice Operator batch skips already-registered transactions silently
     /// @notice Already-registered entries are skipped, and the batch counts only what landed.
     function test_TxRegFromOperator_SkipsDuplicates() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();

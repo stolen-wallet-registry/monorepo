@@ -190,7 +190,11 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         chainId,
       });
 
-      const { signature: sig, windowBlock } = await signRegistration({
+      const {
+        signature: sig,
+        windowBlock,
+        windowBlockHash,
+      } = await signRegistration({
         wallet: registeree,
         trustedForwarder: forwarder,
         reportedChainId,
@@ -221,6 +225,10 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
         incidentTimestamp,
         // The pay step must submit the block that was signed over, not re-derive one.
         windowBlock,
+        // Stored alongside it for the same reason `TxRegisterSignStep` does: this is the value
+        // actually inside the signed struct, and anything re-deriving the digest later cannot
+        // read it back off-chain once the chain has moved past the 256-block `blockhash` window.
+        windowBlockHash,
       });
       logger.signature.debug('Registration signature stored in sessionStorage');
 

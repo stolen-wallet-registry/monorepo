@@ -50,6 +50,12 @@ contract HyperlaneAdapter is IBridgeAdapter, TimelockOwnable {
     ///      above the ~950-entry ceiling a 25M-gas destination block can execute anyway.
     uint256 public constant MAX_GAS_LIMIT = 30_000_000;
 
+    /// @notice Ceiling on the per-domain FIXED destination gas term
+    /// @dev 4x DEFAULT_BASE_GAS. Wide enough for any plausible destination gas-schedule change
+    ///      (the default already covers decode + dispatch on every supported chain), narrow
+    ///      enough that the fixed term cannot dominate a quote. See {setGasAmounts}.
+    uint256 public constant MAX_BASE_GAS = DEFAULT_BASE_GAS * 4;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLES
     // ═══════════════════════════════════════════════════════════════════════════
@@ -246,7 +252,7 @@ contract HyperlaneAdapter is IBridgeAdapter, TimelockOwnable {
     /// @param domain Hyperlane domain ID
     /// @param supported True to enable, false to disable
     function setDomainSupport(uint32 domain, bool supported) external onlyOwner {
-        if (supported && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
+        if (supported && setupComplete) revert TimelockOwnable__UseTimelockedPath();
         _setDomainSupport(domain, supported);
     }
 
@@ -273,7 +279,7 @@ contract HyperlaneAdapter is IBridgeAdapter, TimelockOwnable {
     /// @param authorized True to enable, false to revoke
     function setAuthorizedSender(address sender, bool authorized) external onlyOwner {
         if (sender == address(0)) revert HyperlaneAdapter__ZeroAddress();
-        if (authorized && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
+        if (authorized && setupComplete) revert TimelockOwnable__UseTimelockedPath();
         _setAuthorizedSender(sender, authorized);
     }
 
@@ -298,12 +304,21 @@ contract HyperlaneAdapter is IBridgeAdapter, TimelockOwnable {
     ///      values are validated so a maximum-size batch stays quotable under MAX_GAS_LIMIT —
     ///      without this, a plausible perEntryGas bump would make every large batch revert on
     ///      quoteMessage, stranding already-acknowledged batches whose reporters burned a nonce.
+    ///
+    ///      `baseGas` carries its OWN ceiling ({MAX_BASE_GAS}), not just the combined one. The
+    ///      combined check alone leaves almost the entire MAX_GAS_LIMIT assignable to the fixed
+    ///      term: `setGasAmounts(d, 29_000_000, 1_000)` passes it, and every single-entry
+    ///      registration then buys ~29M of destination gas through the IGP — a fee orders of
+    ///      magnitude above cost, charged to users, with no delay for anyone to react. This is
+    ///      the one way an untimelocked owner call here can change what a user pays, so it is
+    ///      bounded rather than left to the combined limit.
     /// @param domain Hyperlane domain ID
     /// @param baseGas Fixed gas amount (0 = use DEFAULT_BASE_GAS)
     /// @param perEntryGas Per-entry gas amount (0 = use DEFAULT_PER_ENTRY_GAS)
     function setGasAmounts(uint32 domain, uint256 baseGas, uint256 perEntryGas) external onlyOwner {
         uint256 effectiveBase = baseGas == 0 ? DEFAULT_BASE_GAS : baseGas;
         uint256 effectivePerEntry = perEntryGas == 0 ? DEFAULT_PER_ENTRY_GAS : perEntryGas;
+        if (effectiveBase > MAX_BASE_GAS) revert HyperlaneAdapter__GasConfigExceedsLimit();
         if (effectiveBase + effectivePerEntry * BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE > MAX_GAS_LIMIT) {
             revert HyperlaneAdapter__GasConfigExceedsLimit();
         }

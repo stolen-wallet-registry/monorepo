@@ -129,10 +129,15 @@ await loadOrGenerateKeys();
 const limits = readRelayLimits();
 
 // The gater is constructed before the node exists and reads it lazily; see
-// createReservationGater. `relayService` is likewise resolved after startup.
+// createReservationGater. Both handles are `let … = null` rather than a forward reference to
+// the `const server` below: createLibp2p starts listening before it returns, so a reservation
+// arriving in that window would hit the temporal dead zone and throw a ReferenceError inside
+// the gater — which circuit-relay-v2 awaits (server/index.js:123), turning a fail-open into an
+// unhandled rejection. A null both callers already handle is the correct behaviour there.
+let node = null;
 let relayService = null;
 const denyInboundRelayReservation = createReservationGater({
-  getNode: () => server,
+  getNode: () => node,
   getRelayService: () => relayService,
   reservationsPerHost: limits.reservationsPerHost,
   onDeny: (host, peerId) => {
@@ -196,6 +201,7 @@ const server = await createLibp2p({
   },
 });
 
+node = server;
 relayService = server.services.relay;
 
 console.log(

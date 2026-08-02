@@ -201,6 +201,37 @@ forge coverage
 forge test --gas-report
 ```
 
+## Linting
+
+`pnpm lint` runs `solhint 'src/**/*.sol'` followed by `forge fmt --check`. Rule configuration is in
+`.solhint.json`; solhint rejects both comments and unknown top-level keys in that file, so the
+rationale for the non-obvious choices lives here.
+
+**`max-line-length` is off, deliberately.** `forge fmt` is this repo's formatter and owns line
+length (`foundry.toml` `[fmt] line_length = 120`), and `pnpm lint` runs it immediately after
+solhint. Two authorities on formatting is the bug, and they genuinely disagree: solhint rejected
+`src/CrossChainInbox.sol:162` at 121 characters, and wrapping that line made `forge fmt --check`
+emit a diff demanding the exact 121-character line back. The conflict is unfixable while both
+rules are on, so the duplicate rule is removed rather than patched with a per-line exception.
+Line length is still enforced — by `forge fmt`.
+
+**`use-natspec` under-reports; a clean run is not coverage.** The rule appears to require
+`@notice` only once a function already carries other NatSpec tags. In `src/FeeManager.sol`,
+`_withinBounds` (which has `@dev`, `@param` and `@return`) warned for a missing `@notice`, while
+`_isStale` directly below it — carrying `@dev` and nothing else, no `@notice` and no `@param` —
+did not warn at all. Zero `use-natspec` warnings therefore does not mean the file is documented.
+
+**`code-complexity` and `function-max-lines` are left on and left failing** (~22 warnings, 0
+errors). Everything they flag is a two-phase EIP-712 registration validator. Splitting those to
+satisfy a line-count metric is a security-critical refactor with real regression risk and no
+correctness benefit, so the warnings are treated as advisory. They do not fail the build.
+
+Three warnings are suppressed inline at the source with a stated reason — two
+`gas-struct-packing` in `src/spoke/SpokeRegistry.sol` (memory-only stack-limit carriers, never
+written to storage) and one `no-inline-assembly` in `src/soulbound/SoulboundReceiver.sol`
+(bounded 4-byte selector read from revert data). Never add a bare `solhint-disable` without a
+comment saying why the rule does not apply.
+
 ## Security Considerations
 
 - Two-phase EIP-712 registration prevents single-transaction phishing.

@@ -180,4 +180,62 @@ describe('persisted store validation runs on rehydrate', () => {
     const rewritten = JSON.parse(localStorage.getItem('swr-transaction-form-state') ?? '{}');
     expect(rewritten.version).toBe(1);
   });
+
+  /**
+   * Every versioned persisted store needs the same treatment, and only two of the five had it.
+   *
+   * Without a `migrate`, zustand hits the version mismatch, logs "State loaded from storage
+   * couldn't be migrated since no migrate function was provided", and — the part that matters —
+   * never marks the load as migrated, so it never rewrites the entry. The stale blob stays in
+   * localStorage and the error repeats on every single reload, forever, for anyone holding
+   * state from an earlier local version.
+   *
+   * Each case seeds an OLD version (99) and asserts both halves: the stale state is discarded,
+   * AND the entry is rewritten at the current version so the next reload takes the normal path.
+   */
+  describe.each([
+    {
+      store: 'formStore',
+      key: 'swr-form-state',
+      stale: { registeree: '0x' + 'b'.repeat(40), relayer: '0x' + 'c'.repeat(40) },
+      load: () => import('./formStore').then((m) => m.useFormStore),
+      assertDiscarded: (state: Record<string, unknown>) => {
+        expect(state.registeree).toBeNull();
+        expect(state.relayer).toBeNull();
+      },
+    },
+    {
+      store: 'p2pStore',
+      key: 'swr-p2p-state',
+      stale: { peerId: '12D3KooWStale', partnerPeerId: '12D3KooWStalePartner' },
+      load: () => import('./p2pStore').then((m) => m.useP2PStore),
+      assertDiscarded: (state: Record<string, unknown>) => {
+        expect(state.peerId).toBeNull();
+        expect(state.partnerPeerId).toBeNull();
+      },
+    },
+    {
+      store: 'transactionRegistrationStore',
+      key: 'swr-transaction-registration-state',
+      stale: { step: 'grace-period' },
+      load: () =>
+        import('./transactionRegistrationStore').then((m) => m.useTransactionRegistrationStore),
+      assertDiscarded: (state: Record<string, unknown>) => {
+        expect(state.step).toBeNull();
+      },
+    },
+  ])(
+    '$store discards and rewrites a blob from an older version',
+    ({ key, stale, load, assertDiscarded }) => {
+      it('discards the stale state and rewrites the entry at the current version', async () => {
+        seedPersistedState(key, stale, 99);
+
+        const store = await load();
+
+        assertDiscarded(store.getState() as unknown as Record<string, unknown>);
+        const rewritten = JSON.parse(localStorage.getItem(key) ?? '{}');
+        expect(rewritten.version).toBe(1);
+      });
+    }
+  );
 });

@@ -111,6 +111,23 @@ const DEFAULT_WINDOW_MS = 60_000;
  */
 const DEFAULT_MAX_TRACKED_CLIENTS = 20_000;
 
+/**
+ * Trusted `X-Forwarded-For` hops in front of ponder. Fixed at 1, not configurable, because
+ * exactly one thing is ever in front of ponder: `gateway.mjs`, which binds the public port,
+ * runs ponder on loopback, and OVERWRITES `X-Forwarded-For` with a single authoritative entry
+ * before proxying (see its CLIENT IDENTITY section).
+ *
+ * This used to be `INDEXER_TRUST_PROXY_HOPS`, which was a footgun in both directions: too low
+ * and every client shared the `127.0.0.1` bucket, too high and `resolveClientKey` fell back to
+ * that same bucket. The gateway now owns that variable — it counts proxies in front of the
+ * GATEWAY — and the count seen here is a repository-level invariant instead of a deployment
+ * guess.
+ *
+ * `pnpm start:ponder-unfiltered` runs ponder with no gateway; it is a local debugging script
+ * and is documented as unsafe to deploy.
+ */
+const GATEWAY_TRUST_PROXY_HOPS = 1;
+
 export interface RateLimitOptions {
   maxRequests: number;
   windowMs: number;
@@ -123,30 +140,44 @@ export interface RateLimitOptions {
 
 export function readRateLimitOptions(env: NodeJS.ProcessEnv): RateLimitOptions {
   return {
-    maxRequests: readInt(env.INDEXER_RATE_LIMIT_MAX, DEFAULT_MAX_REQUESTS),
+    // Only `maxRequests` may be 0 — that is the documented "disable" switch. A 0 window or a
+    // 0 client ceiling would silently disable the limiter instead (every request would land in
+    // a freshly expired bucket), which is exactly the kind of quiet failure a typo should not
+    // be able to cause.
+    maxRequests: readInt(env.INDEXER_RATE_LIMIT_MAX, DEFAULT_MAX_REQUESTS, { allowZero: true }),
     windowMs: readInt(env.INDEXER_RATE_LIMIT_WINDOW_MS, DEFAULT_WINDOW_MS),
     maxTrackedClients: readInt(env.INDEXER_RATE_LIMIT_MAX_TRACKED, DEFAULT_MAX_TRACKED_CLIENTS),
-    // Default 1: the supported deployment (Railway, see DEPLOY.md) always terminates TLS in
-    // front of this process, so the socket address is the proxy and every client would
-    // otherwise share a single bucket.
-    trustProxyHops: readInt(env.INDEXER_TRUST_PROXY_HOPS, 1),
+    trustProxyHops: GATEWAY_TRUST_PROXY_HOPS,
   };
 }
 
-function readInt(raw: string | undefined, fallback: number): number {
+function readInt(
+  raw: string | undefined,
+  fallback: number,
+  { allowZero = false }: { allowZero?: boolean } = {}
+): number {
   if (raw === undefined || raw.trim() === '') return fallback;
   const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 0) return fallback;
+  if (!Number.isInteger(parsed)) return fallback;
+  if (parsed < (allowZero ? 0 : 1)) return fallback;
   return parsed;
 }
 
 /**
  * Identify the client for rate-limiting purposes.
  *
- * X-Forwarded-For is client-controlled, so it is only consulted for the number of hops we
- * actually trust. With N trusted proxies appending, the real client is at `length - N`
- * counting from the left: anything an attacker prepends shifts left, out of the way, and
- * cannot forge the entry our own proxy wrote.
+ * X-Forwarded-For is client-controlled in general, so it is only consulted for the number of
+ * hops we actually trust. With N trusted proxies appending, the real client is at
+ * `length - N` counting from the left: anything an attacker prepends shifts left, out of the
+ * way, and cannot forge the entry our own proxy wrote.
+ *
+ * In this deployment N is 1 and that one hop is `gateway.mjs`, which REPLACES the header with
+ * a single entry it computed from the socket (see GATEWAY_TRUST_PROXY_HOPS above). So the
+ * header reaching here is not client-controlled at all — `parts.length - 1` is index 0, the
+ * value the gateway wrote.
+ *
+ * The socket fallback is a last resort only. Under the gateway it is always `127.0.0.1`, i.e.
+ * one bucket for the whole world, so reaching it means something upstream is misconfigured.
  */
 export function resolveClientKey(
   forwardedFor: string | undefined,

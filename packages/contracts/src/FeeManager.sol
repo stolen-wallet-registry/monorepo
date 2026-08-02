@@ -257,6 +257,8 @@ contract FeeManager is IFeeManager, TimelockOwnable {
         }
     }
 
+    /// @notice Rejects a well-formed oracle answer whose VALUE is implausible, so a compromised or
+    ///         misconfigured feed cannot price a $5 registration at 5 ETH or drop it to free.
     /// @dev Is a converted oracle answer inside the configured sanity band?
     ///
     ///      Every other guard on this path defends against a MISSING answer — a reverting feed, a
@@ -388,7 +390,7 @@ contract FeeManager is IFeeManager, TimelockOwnable {
     ///      matches the `address(0)`-is-a-revoke carve-out used for trusted sources, forwarders
     ///      and ownership transfers elsewhere in this system.
     function setPriceFeed(address priceFeedAddress) external onlyOwner {
-        if (priceFeedAddress != address(0) && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
+        if (priceFeedAddress != address(0) && setupComplete) revert TimelockOwnable__UseTimelockedPath();
         _priceFeed = AggregatorV3Interface(priceFeedAddress);
         emit PriceFeedConfigured(priceFeedAddress);
     }

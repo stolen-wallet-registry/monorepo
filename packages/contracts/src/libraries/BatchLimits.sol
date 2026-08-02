@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 /// @title BatchLimits
+/// @author Stolen Wallet Registry Team
 /// @notice Batch-size bounds shared across the hub, spokes, and bridge adapters.
 /// @dev A single definition so the three contracts that depend on this value cannot drift:
 ///      - `SpokeRegistry.MAX_CROSS_CHAIN_BATCH_SIZE` bounds what a spoke will acknowledge;

@@ -1242,6 +1242,11 @@ export const WalletSoulboundABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TimelockOwnable__ZeroAddress',
     inputs: [],
   },

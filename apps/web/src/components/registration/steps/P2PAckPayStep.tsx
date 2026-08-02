@@ -53,7 +53,7 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
   const chainId = useChainId();
   const { address: relayerAddress } = useAccount();
   const { registeree } = useFormStore();
-  const { partnerPeerId } = useP2PStore();
+  const { partnerPeerId, pairedWallet } = useP2PStore();
   const { acknowledgementHash, setAcknowledgementHash } = useRegistrationStore();
   const { goToStep } = useStepNavigation();
   const [hasSentHash, setHasSentHash] = useState(false);
@@ -79,6 +79,9 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
   useEffect(() => {
     onCompleteRef.current = onComplete;
   });
+
+  /** Guards the tx-hash send against a concurrent second attempt — see `sendHash`. */
+  const sendInFlightRef = useRef(false);
 
   // Latch recording that the step already advanced. Advancing a registration step twice
   // skips a step of the two-phase flow, so single-firing is made structurally impossible
@@ -108,7 +111,7 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
       enabled: role === 'relayer' && !!storedSig,
       step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
       storedSignature: storedSig,
-      expectedSigner: registeree,
+      expectedSigner: registeree, // logged only; gating uses pairedWallet
       trustedForwarder: relayerAddress,
     });
 
@@ -229,6 +232,16 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
       return;
     }
 
+    // Narrowed explicitly rather than defaulted — mirrors `P2PRegPayStep`. The button is
+    // already disabled without these, so reaching here means something upstream changed.
+    if (storedSig.reportedChainId === undefined || storedSig.incidentTimestamp === undefined) {
+      logger.p2p.error('Cannot submit ACK - missing required signature fields', {
+        hasReportedChainId: storedSig.reportedChainId !== undefined,
+        hasIncidentTimestamp: storedSig.incidentTimestamp !== undefined,
+      });
+      return;
+    }
+
     logger.p2p.info('Relayer submitting ACK transaction');
 
     // Parse signature to v, r, s components
@@ -238,13 +251,16 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     await submitAcknowledgement({
       registeree,
       trustedForwarder: relayerAddress,
-      reportedChainId: storedSig.reportedChainId ?? BigInt(chainId),
-      incidentTimestamp: storedSig.incidentTimestamp ?? 0n,
+      // No `??` fallbacks: `hasRequiredFields` and the signature review both block submission
+      // when either is undefined, so a default here could only ever mask a bug by submitting
+      // values the registeree never signed over.
+      reportedChainId: storedSig.reportedChainId,
+      incidentTimestamp: storedSig.incidentTimestamp,
       deadline: storedSig.deadline,
       nonce: storedSig.nonce,
       signature: parsedSig,
     });
-  }, [storedSig, registeree, relayerAddress, chainId, submitAcknowledgement, signatureReview]);
+  }, [storedSig, registeree, relayerAddress, submitAcknowledgement, signatureReview]);
 
   // Relayer: Store acknowledgement hash when confirmed (for grace period display)
   useEffect(() => {
@@ -263,11 +279,18 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     let cancelled = false;
 
     const sendHash = async () => {
+      // `cancelled` suppresses state writes on a superseded run, but not the dial and the
+      // stream write themselves — so an effect re-run mid-flight opened a SECOND ACK_PAY
+      // stream to the same partner. The receiver's step gate drops the duplicate, but sending
+      // it at all is wasted work on a connection that is already struggling.
+      if (sendInFlightRef.current) return;
+
       const libp2p = getLibp2p();
       if (role !== 'relayer' || !isConfirmed || !hash || !libp2p || !partnerPeerId || hasSentHash) {
         return;
       }
 
+      sendInFlightRef.current = true;
       try {
         setSendError(null);
         logger.p2p.info('Attempting to send ACK tx hash', { hash, attempt: retryCount + 1 });
@@ -303,6 +326,8 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
           setSendError(message);
           logger.p2p.error('Max retries exceeded for sending ACK tx hash', { hash });
         }
+      } finally {
+        sendInFlightRef.current = false;
       }
     };
 
@@ -335,19 +360,27 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
   //
   // `applyScheduledRetry` guards the increment against a schedule the user has already
   // superseded with a manual resend.
+  // Keyed on the primitive fields, NOT the object. The send effect re-runs for reasons
+  // unrelated to retrying (a new receipt, a new partner peer ID, `hasSentHash` flipping) and
+  // each failing run records the same intent afresh. Keying on object identity made every one
+  // of those a new dependency value, so the pending timer was cleared and the full backoff
+  // restarted — a flapping dependency could postpone the retry indefinitely. The values are
+  // what the timer actually depends on, so an identical re-record is now a no-op.
+  const retryAt = retrySchedule?.at ?? null;
+  const retryFromAttempt = retrySchedule?.fromAttempt ?? null;
   useEffect(() => {
-    if (!retrySchedule) return;
+    if (retryAt === null || retryFromAttempt === null) return;
 
     const timerId = setTimeout(
       () => {
         setRetrySchedule(null);
-        setRetryCount((prev) => applyScheduledRetry(prev, retrySchedule.fromAttempt));
+        setRetryCount((prev) => applyScheduledRetry(prev, retryFromAttempt));
       },
-      Math.max(0, retrySchedule.at - Date.now())
+      Math.max(0, retryAt - Date.now())
     );
 
     return () => clearTimeout(timerId);
-  }, [retrySchedule]);
+  }, [retryAt, retryFromAttempt]);
 
   // Manual retry handler for user-initiated resend
   const handleResendHash = useCallback(() => {
@@ -447,7 +480,10 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
           <RelayedSignatureReview
             review={signatureReview}
             isChecking={isReviewingSignature}
-            expectedSigner={registeree}
+            // The out-of-band wallet from the pairing code, which is also what the review
+            // gates on. `registeree` is written from it on CONNECT, so the two agree today —
+            // sourcing the display straight from the store means they cannot drift apart.
+            expectedSigner={pairedWallet}
             deadline={storedSig.deadline}
           />
 

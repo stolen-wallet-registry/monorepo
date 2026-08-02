@@ -92,11 +92,17 @@ const EMPTY_SELECTION: { hashes: Hash[]; details: StoredTransactionDetail[] } = 
 /**
  * `isAddress`/`isHash` take a string; persisted values are `unknown` and may be absent.
  *
- * `strict: false` disables EIP-55 checksum enforcement, which viem applies by default. The
- * question being asked here is "is this a well-formed address", not "is it checksummed" — and
- * a lowercase address is well-formed. Enforcing the checksum would discard legitimate state,
- * and for the `to` field it would discard the entire transaction selection over a display-only
- * value. No security property here depends on casing.
+ * `strict: false` disables EIP-55 checksum enforcement, which viem applies by default.
+ *
+ * Note what strict actually does: it short-circuits and ACCEPTS an all-lowercase address, so
+ * lowercase is not the case at risk. What it rejects is a mixed-case address whose casing is
+ * not a valid EIP-55 checksum — which persisted state routinely contains, since an address can
+ * be re-cased by any upstream that touched it before it was stored.
+ *
+ * The question being asked here is "is this a well-formed address", not "is it checksummed".
+ * Enforcing the checksum would discard legitimate state, and for the `to` field it would
+ * discard the entire transaction selection over a display-only value. No security property
+ * here depends on casing — the selection guard compares hashes, not addresses.
  */
 function isPersistedAddress(value: unknown): value is Address {
   return typeof value === 'string' && isAddress(value, { strict: false });
@@ -329,9 +335,10 @@ export const useTransactionFormStore = create<TransactionFormState & Transaction
           reportedChainId: state.reportedChainId,
         }),
         // Validation runs in `merge`, not `migrate`: zustand only calls `migrate` on a version
-        // mismatch, so validation placed there would never run on a normal rehydrate. There is
-        // no released version of this app, so no `migrate` is needed at all — `merge` supplies
-        // a default for every field, which covers any stale local state a developer may have.
+        // mismatch, so validation placed there would never run on a normal rehydrate. `merge`
+        // supplies a default for every field, which covers any stale local state a developer
+        // may have. (The `migrate` above is not validation — it exists only so a version
+        // mismatch discards and REWRITES the entry instead of erroring on every reload.)
         merge: (persisted, current) => {
           if (!persisted || typeof persisted !== 'object') {
             return current;

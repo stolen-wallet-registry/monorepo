@@ -20,14 +20,32 @@ import { logger } from '@/lib/logger';
 export { DEFAULT_MAX_LAG_SECONDS };
 export type { IndexerStatus };
 
+export interface UseIndexerStatusOptions {
+  /** Tolerance before results are treated as stale. */
+  maxLagSeconds?: number;
+  /**
+   * Whether to poll at all. Default true.
+   *
+   * Freshness only matters once there is a result to qualify, and the hook is mounted by the
+   * search box, which lives on pages a user may never search from. Left ungated it polls
+   * `/status` every 30s for the lifetime of the page regardless — traffic that buys nothing
+   * until a search happens. Callers pass `enabled` so the polling starts with the first
+   * search and stops when the component unmounts.
+   */
+  enabled?: boolean;
+}
+
 /**
  * How far behind the indexer is.
  *
- * @param maxLagSeconds - Tolerance before results are treated as stale
  * @returns The status plus a `stale` flag. `stale` is true when freshness is unknown, because
- *   the absence of a freshness signal is not evidence of freshness.
+ *   the absence of a freshness signal is not evidence of freshness — including while disabled,
+ *   so a caller that has not started polling can never read the default as "fresh".
  */
-export function useIndexerStatus(maxLagSeconds: number = DEFAULT_MAX_LAG_SECONDS) {
+export function useIndexerStatus({
+  maxLagSeconds = DEFAULT_MAX_LAG_SECONDS,
+  enabled = true,
+}: UseIndexerStatusOptions = {}) {
   const query = useQuery({
     queryKey: ['indexer-status'],
     queryFn: async (): Promise<IndexerStatus> => {
@@ -38,15 +56,17 @@ export function useIndexerStatus(maxLagSeconds: number = DEFAULT_MAX_LAG_SECONDS
       });
       return status;
     },
+    enabled,
     // Freshness is only useful if it is itself fresh.
     staleTime: 15_000,
-    refetchInterval: 30_000,
+    refetchInterval: enabled ? 30_000 : false,
     retry: 1,
   });
 
   return {
     ...query,
-    // A failed status request means freshness is unknown, which counts as stale.
+    // A failed status request means freshness is unknown, which counts as stale. So does not
+    // having asked yet: `isIndexerStale(undefined)` is true by design.
     stale: query.isError ? true : isIndexerStale(query.data, maxLagSeconds),
   };
 }

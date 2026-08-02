@@ -42,20 +42,35 @@ export interface UseRelayedSignatureReviewResult {
   isChecking: boolean;
 }
 
-/** Wall clock in unix seconds, re-read on an interval so an expiring deadline is noticed. */
+/**
+ * Wall clock in unix seconds, re-read on an interval so an expiring deadline is noticed.
+ *
+ * Read at render rather than held in state, so there is no seed that can go stale. These hooks
+ * mount disabled — `enabled` is `role === 'relayer' && !!storedSig`, and the signature arrives
+ * later — so a value captured by a `useState` initialiser would be arbitrarily old by the time
+ * the review first runs. That stale clock reported a just-expired deadline as still valid and
+ * unblocked the pay button. The contract rejects such a signature, so the cost is gas rather
+ * than a bad registration — but the check exists precisely so the relayer finds out before
+ * spending it.
+ */
 function useNowSeconds(enabled: boolean): bigint {
-  const [nowSeconds, setNowSeconds] = useState(() => BigInt(Math.floor(Date.now() / 1000)));
+  // The interval only forces a re-render; the time itself is read at render. Holding the clock
+  // in state is what created the staleness — the seed was captured at mount, and these hooks
+  // mount disabled, so the first verdict was computed against a clock that could be minutes
+  // old. Reading it here means the value is current whenever a verdict is produced, including
+  // on the render that first enables the hook.
+  //
+  // The return is whole seconds, so the value is a stable `bigint` between ticks and the
+  // `review` memo downstream still only recomputes when the second actually changes.
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
-    const id = setInterval(
-      () => setNowSeconds(BigInt(Math.floor(Date.now() / 1000))),
-      CLOCK_TICK_MS
-    );
+    const id = setInterval(() => setTick((t) => t + 1), CLOCK_TICK_MS);
     return () => clearInterval(id);
   }, [enabled]);
 
-  return nowSeconds;
+  return BigInt(Math.floor(Date.now() / 1000));
 }
 
 export interface UseRelayedWalletSignatureReviewParams {

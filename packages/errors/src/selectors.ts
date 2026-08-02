@@ -673,7 +673,12 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
   },
   '0xe5900879': {
     name: 'TimelockOwnable__SetupAlreadyComplete',
-    message: 'Initial setup is complete. Changes require timelock.',
+    message: 'Initial setup has already been completed.',
+    action: 'No action needed - setup only runs once.',
+  },
+  '0xac5551d8': {
+    name: 'TimelockOwnable__UseTimelockedPath',
+    message: 'This change is now timelocked.',
     action: 'Use the propose/activate flow for this change.',
   },
   '0xab3bcf81': {

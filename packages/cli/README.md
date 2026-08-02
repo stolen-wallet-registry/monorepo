@@ -30,8 +30,39 @@ pnpm --filter @swr/cli build
 -c, --chain-id <id>     Default chain ID for entries [default: 8453]
 -o, --output-dir <path> Directory to save transaction data
 --dry-run               Simulate without submitting
+-y, --yes               Skip the confirmation prompt (mainnet also needs SWR_CONFIRM_COUNT)
 -k, --private-key <key> Plaintext key — LOCAL DEVELOPMENT ONLY (see below)
 ```
+
+### `--yes` on mainnet requires `SWR_CONFIRM_COUNT`
+
+Interactively, a mainnet `submit-*` does not accept "y" — it makes you type the entry count read
+off the summary. That is the one rail that catches the wrong file or the wrong environment.
+
+`--yes` skips the prompt for scripted use, so on mainnet it is not sufficient on its own:
+automation must also set `SWR_CONFIRM_COUNT` to the number of entries it expects, and the value
+must match the count parsed from the input file.
+
+```bash
+SWR_CONFIRM_COUNT=800 pnpm --filter @swr/cli swr submit-wallets \
+  -f ./batch-07.json \
+  -e mainnet \
+  --keystore ~/.swr/operator-keystore.json \
+  --yes
+```
+
+If the number is absent or does not match, the command refuses and names both numbers:
+
+```console
+$ SWR_CONFIRM_COUNT=800 swr submit-wallets -f ./batch-08.json -e mainnet -y
+Error: SWR_CONFIRM_COUNT does not match this batch: expected 800 wallets, but the input file
+parsed to 412. Refusing to submit. ...
+```
+
+This keeps mainnet automation possible while forcing the script to assert the number it believes
+it is submitting — so a command recalled from shell history against a different file fails loudly
+instead of silently registering the wrong batch. `-e testnet` and `-e local` are unaffected:
+`--yes` there behaves as before.
 
 ## Signing credentials
 

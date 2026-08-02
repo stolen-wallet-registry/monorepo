@@ -241,9 +241,6 @@ export async function searchContract(
  * wallet registry and fraudulent contract registry in parallel, returning a
  * combined result that shows which registry(ies) the address was found in.
  *
- * @param config - Search configuration with indexer URL
- * @param address - Address to search (will be lowercased)
- *
  * A registry that fails to answer is never reported as "absent". If nothing was found and a
  * registry did not answer, this throws {@link SearchUnavailableError} rather than returning a
  * result that reads as clean. If something WAS found, it returns normally and lists the
@@ -341,7 +338,9 @@ export async function searchAddress(
  * @param config - Search configuration with indexer URL
  * @param caip10 - CAIP-10 identifier (e.g., "eip155:8453:0x…" or "eip155:*:0x…")
  *
- * @throws {SearchUnavailableError} when nothing was found and a registry did not answer
+ * @throws {SearchUnavailableError} when nothing was found and a registry could not be
+ *   consulted — either because it did not answer, or (for non-EVM namespaces) because the
+ *   contract registry has no form for the identifier. Check `error.reason` to tell them apart.
  */
 export async function searchAddressByCAIP10(
   config: SearchConfig,
@@ -360,14 +359,26 @@ export async function searchAddressByCAIP10(
   }
 
   // Non-EVM namespaces: the contract registry is keyed by an EVM address and has no form for
-  // these identifiers, so it genuinely cannot be consulted. Report that rather than claiming
-  // the address is absent from it.
+  // these identifiers, so it genuinely cannot be consulted.
+  //
+  // That is an UNKNOWN, not an absence, and it takes the same route every other unknown takes.
+  // This branch used to return `{ found: false, unverified: ['contract'] }`, which is precisely
+  // the shape the package forbids elsewhere: the flag is advisory, `found: false` is not, and
+  // `if (!result.found) allow()` clears the address. The cause differs from an indexer outage
+  // (nothing failed — there was nothing to query), so the error carries a distinct `reason`
+  // rather than claiming the indexer went missing.
   const walletResult = await searchWalletByCAIP10(config, caip10);
 
+  if (!walletResult.found) {
+    throw new SearchUnavailableError(['contract'], [], 'unsupported-identifier');
+  }
+
+  // A hit is actionable even with partial coverage, so it returns — with the gap stated,
+  // exactly as the EVM partial-failure path does.
   return {
     type: 'address',
-    found: walletResult.found,
-    foundInWalletRegistry: walletResult.found,
+    found: true,
+    foundInWalletRegistry: true,
     foundInContractRegistry: false,
     data: walletResult.data
       ? {

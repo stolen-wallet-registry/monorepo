@@ -31,6 +31,7 @@ import {
   SuccessStep,
 } from '@/components/registration/steps';
 import { WaitingForData, ConnectionStatusBadge, ReconnectDialog } from '@/components/p2p';
+import { processSignature } from '@/components/p2p/processRelayedSignature';
 import { useRegistrationStore, type RegistrationStep } from '@/stores/registrationStore';
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore, isPreConnectionStep } from '@/stores/p2pStore';
@@ -44,79 +45,12 @@ import {
   readStreamData,
   acceptStream,
   isRelayerProtocolExpectedAtStep,
-  passStreamData,
   isStreamAbortError,
-  isValidSignatureData,
   type ProtocolHandler,
-  type ParsedStreamData,
 } from '@/lib/p2p';
-import { storeSignature, SIGNATURE_STEP, type StoredSignature } from '@/lib/signatures';
+import { SIGNATURE_STEP } from '@/lib/signatures';
 import { logger } from '@/lib/logger';
 import { isAddress } from '@/lib/types/ethereum';
-import type { Address, Hash, Hex } from '@/lib/types/ethereum';
-
-/**
- * Process a received signature: validate, store, confirm receipt, and advance step.
- */
-async function processSignature(
-  data: ParsedStreamData,
-  connection: Connection,
-  expectedChainId: number,
-  step: typeof SIGNATURE_STEP.ACKNOWLEDGEMENT | typeof SIGNATURE_STEP.REGISTRATION,
-  receiptProtocol: string,
-  trustedForwarder: Address,
-  goToNextStep: () => void
-): Promise<boolean> {
-  if (!isValidSignatureData(data, expectedChainId)) {
-    logger.p2p.warn(
-      `Received malformed ${step === SIGNATURE_STEP.ACKNOWLEDGEMENT ? 'ACK' : 'REG'} signature data`,
-      { data }
-    );
-    return false;
-  }
-
-  const sig = data.signature;
-  let stored: StoredSignature;
-  try {
-    stored = {
-      signature: sig.value as Hex,
-      deadline: BigInt(sig.deadline),
-      nonce: BigInt(sig.nonce),
-      address: sig.address,
-      chainId: sig.chainId,
-      step,
-      storedAt: Date.now(),
-      // The registeree signed over this relayer as the forwarder, so record it. `getSignature`
-      // treats a missing trustedForwarder as a mismatch when a forwarder is expected, and the
-      // pay steps always pass one — without this the relayer could never retrieve what it just
-      // stored.
-      trustedForwarder,
-      reportedChainId: sig.reportedChainId != null ? BigInt(sig.reportedChainId) : undefined,
-      incidentTimestamp: sig.incidentTimestamp != null ? BigInt(sig.incidentTimestamp) : undefined,
-      // Registration only: the block the registeree's signature committed to. The relayer
-      // submits it verbatim — it cannot be re-derived here, since the chain has moved on.
-      windowBlock: sig.windowBlock != null ? BigInt(sig.windowBlock) : undefined,
-      windowBlockHash: sig.windowBlockHash != null ? (sig.windowBlockHash as Hash) : undefined,
-    };
-  } catch (e) {
-    logger.p2p.warn('Failed to parse signature fields as BigInt', { error: e, data });
-    return false;
-  }
-  storeSignature(stored);
-
-  // Confirm receipt
-  await passStreamData({
-    connection,
-    protocols: [receiptProtocol],
-    streamData: { success: true, message: 'Signature received' },
-  });
-
-  logger.p2p.info(
-    `${step === SIGNATURE_STEP.ACKNOWLEDGEMENT ? 'ACK' : 'REG'} signature stored, advancing to payment`
-  );
-  goToNextStep();
-  return true;
-}
 
 /**
  * Step descriptions for P2P relayer flow.
@@ -153,6 +87,7 @@ export function P2PRelayerRegistrationPage() {
   const {
     partnerPeerId,
     connectedToPeer,
+    pairedWallet,
     setPeerId,
     setPartnerPeerId,
     setConnectedToPeer,
@@ -616,6 +551,10 @@ export function P2PRelayerRegistrationPage() {
         getLibp2p={getLibp2p}
         currentPeerId={partnerPeerId}
         partnerRole="registeree"
+        // The wallet this relayer agreed to pay for. A re-pin is only accepted from a fresh
+        // pairing code naming this same wallet — without it, reconnect is a second, unguarded
+        // way to change the binding V4 established (see the dialog's module comment).
+        pairedWallet={pairedWallet}
         onReconnected={(peerId) => {
           setPartnerPeerId(peerId);
           setConnectionError(null);

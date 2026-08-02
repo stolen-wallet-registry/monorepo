@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "preinstall": "node -e \"const v=process.versions.node,m=+v.split('.')[0];if(process.env.SWR_SKIP_NODE_CHECK)process.exit(0);if(m!==22){console.error('\\n\\u001b[31m\\u2716 Node '+v+' detected — this repo requires Node 22 (see .nvmrc).\\u001b[0m\\n\\n  Node 24+ ships experimental Web Storage that shadows jsdom, and apps/web/src/test/setup.ts\\n  fails loudly rather than run 49 test files against the wrong globals.\\n\\n  Fix:  nvm use            (or: nvm install 22 && nvm use 22)\\n  Skip: SWR_SKIP_NODE_CHECK=1 pnpm install\\n');process.exit(1)}\"",
     "dev": "turbo dev --filter=web --filter=landing --filter=@swr/docs",
     "dev:web": "pnpm --filter web dev",
     "dev:landing": "pnpm --filter landing dev",
@@ -81,7 +82,7 @@
   },
   "packageManager": "pnpm@10.28.0",
   "engines": {
-    "node": ">=22.12.0",
+    "node": ">=22.12.0 <23",
     "pnpm": ">=9.0.0"
   },
   "pnpm": {

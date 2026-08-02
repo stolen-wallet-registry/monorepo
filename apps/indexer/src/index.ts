@@ -33,6 +33,7 @@ import {
   walletCaip10,
 } from './lib/identifiers';
 import { applyStatsDelta, type StatsDelta } from './lib/stats';
+import { transactionBackfillValues, walletBackfillValues } from './lib/backfill';
 
 // Hub chain configuration - determined by environment
 const PONDER_ENV = (process.env.PONDER_ENV ?? 'development') as Environment;
@@ -266,9 +267,20 @@ ponder.on('WalletRegistry:BatchCreated', async ({ event, context }) => {
   // The isNull guard makes the one-call-per-tx assumption safe rather than merely true
   // today: should a tx ever carry two batches (e.g. batched bridge delivery), the second
   // BatchCreated would otherwise re-tag the first batch's entries with its own id.
+  //
+  // COST (measured against ponder 0.16.1 — do not re-derive this from scratch):
+  //   1. A non-SELECT `db.sql` runs `indexingCache.flush(); invalidate(); clear()`
+  //      (indexing-store/index.js:400-405). That is the WHOLE cache, not the touched table,
+  //      so every `db.find` after this statement re-reads Postgres until the cache refills.
+  //   2. User indexes are created only AFTER the historical backfill completes
+  //      (runtime/omnichain.js:317), so `WHERE transaction_hash = …` is a sequential scan for
+  //      the entire backfill — `txHashIdx` does not exist yet.
+  //   Together: O(batches × rows) during backfill, plus one full cache drop per batch.
+  // This is accepted, not overlooked. Do not "fix" it by moving the write into the per-entry
+  // handler — WalletRegistered does not carry the batchId, which is the whole point.
   await db.sql
     .update(stolenWallet)
-    .set({ batchId: batchIdStr, operator: operatorAddress })
+    .set(walletBackfillValues(batchIdStr, operatorAddress))
     .where(
       and(eq(stolenWallet.transactionHash, event.transaction.hash), isNull(stolenWallet.batchId))
     );
@@ -372,10 +384,11 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
     .onConflictDoNothing();
 
   // Back-fill batchId onto the per-entry rows (TransactionRegistered carries none).
-  // See the wallet BatchCreated handler for why raw SQL is safe and why the isNull guard.
+  // See the wallet BatchCreated handler for why raw SQL is safe, why the isNull guard, and
+  // what this costs during the historical backfill (full cache drop + sequential scan).
   await db.sql
     .update(transactionInBatch)
-    .set({ batchId: batchId.toString() })
+    .set(transactionBackfillValues(batchId))
     .where(
       and(
         eq(transactionInBatch.transactionHash, event.transaction.hash),
@@ -470,7 +483,7 @@ ponder.on('TransactionRegistry:TransactionBatchCreated', async ({ event, context
   // Back-fill batchId onto the per-entry rows — see TransactionBatchRegistered.
   await db.sql
     .update(transactionInBatch)
-    .set({ batchId: batchIdStr })
+    .set(transactionBackfillValues(batchIdStr))
     .where(
       and(
         eq(transactionInBatch.transactionHash, event.transaction.hash),

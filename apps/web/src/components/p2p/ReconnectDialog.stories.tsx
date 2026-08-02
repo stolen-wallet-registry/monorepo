@@ -51,25 +51,44 @@ export const RelayerPartner: Story = {
 };
 
 /**
- * Dialog for a registeree partner.
+ * Dialog for a registeree partner — i.e. the helper's view.
+ *
+ * `pairedWallet` is the wallet from the pairing code this helper pasted, so the "new pairing
+ * code" mode is available and will refuse any code naming a different wallet.
  */
 export const RegistereePartner: Story = {
   args: {
     open: true,
     partnerRole: 'registeree',
     currentPeerId: MOCK_PEER_ID,
+    pairedWallet: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
+  },
+};
+
+/**
+ * The party being helped: no pairing artifact to check a typed peer ID against, so the
+ * "new pairing code" mode offers to clear the pin instead of accepting an identity.
+ */
+export const NoPairedWallet: Story = {
+  args: {
+    open: true,
+    partnerRole: 'relayer',
+    currentPeerId: MOCK_PEER_ID,
+    pairedWallet: null,
+    onClearPairing: () => console.log('onClearPairing'),
   },
 };
 
 /**
  * Dialog without a current peer ID.
- * "Retry Connection" button is disabled, forcing "New Peer ID" mode.
+ * "Retry Connection" button is disabled, forcing the pairing-code mode.
  */
 export const NoPreviousPeer: Story = {
   args: {
     open: true,
     partnerRole: 'relayer',
     currentPeerId: null,
+    pairedWallet: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
   },
 };
 

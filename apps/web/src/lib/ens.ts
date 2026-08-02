@@ -44,6 +44,13 @@ export function isDisplaySafeEnsName(name: string | null | undefined): name is s
   // Deliberately narrow: the check only fires when the name STARTS with `0x`, so ordinary
   // names that merely contain hex letters are untouched. `0xproject.eth` survives because
   // `0xproject` is not six-plus hex nibbles.
+  //
+  // It is not free of false positives, and that is the accepted side of the trade: separators
+  // are stripped before the test and the `.eth` label is part of the string, so a plausible
+  // name like `0xdecaf.eth` collapses to `0xdecafeth` and its first six nibbles (d,e,c,a,f,e)
+  // read as hex. Such a name falls back to displaying its hex address, which is a cosmetic
+  // loss; letting a truncated-address impersonation through is not. See the test that pins
+  // this case.
   const withoutSeparators = name.replace(/[-_.]/g, '');
   if (/^0x[0-9a-fA-F]{6,}/.test(withoutSeparators)) return false;
 

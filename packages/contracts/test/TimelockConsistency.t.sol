@@ -69,7 +69,7 @@ contract TimelockConsistencyTest is Test {
         HyperlaneAdapter adapter = _adapter();
         adapter.completeSetup();
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         adapter.setAuthorizedSender(makeAddr("attacker"), true);
     }
 
@@ -122,7 +122,7 @@ contract TimelockConsistencyTest is Test {
         adapter.setDomainSupport(HUB_DOMAIN, true);
         adapter.completeSetup();
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         adapter.setDomainSupport(999, true);
 
         // Disabling still works
@@ -144,7 +144,7 @@ contract TimelockConsistencyTest is Test {
         uint32[] memory domains = new uint32[](1);
         domains[0] = 10;
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         adapter.addDomains(domains);
     }
 
@@ -178,13 +178,13 @@ contract TimelockConsistencyTest is Test {
         submitter.completeSetup();
         address sink = makeAddr("sink");
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         submitter.setWalletRegistry(sink);
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         submitter.setTransactionRegistry(sink);
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         submitter.setContractRegistry(sink);
     }
 
@@ -232,7 +232,7 @@ contract TimelockConsistencyTest is Test {
         OperatorRegistry reg = _registryWithOperator(operator, 1); // WALLET_REGISTRY only
         reg.completeSetup();
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         reg.updateCapabilities(operator, 7); // ALL_REGISTRIES
     }
 
@@ -245,6 +245,63 @@ contract TimelockConsistencyTest is Test {
         reg.updateCapabilities(operator, 1); // narrow to WALLET_REGISTRY
 
         assertEq(reg.getOperator(operator).capabilities, 1);
+    }
+
+    /// @notice A LATERAL capability change — reduction and escalation at once — is blocked.
+    /// @dev This is the case that actually pins the bitmask semantics at OperatorRegistry.sol:146
+    ///      (`capabilities & ~op.capabilities != 0`). The 1→7 and 7→1 cases above do NOT: they
+    ///      behave identically under the correct bitmask check and under a naive numeric
+    ///      `capabilities > op.capabilities`, so neither would catch a regression to the latter.
+    ///
+    ///      3 (0b011 = WALLET|TRANSACTION) → 5 (0b101 = WALLET|CONTRACT) drops the TRANSACTION
+    ///      bit while ADDING the CONTRACT bit, and 5 > 3 is false. A naive numeric check would
+    ///      wave it through, handing instant access to
+    ///      ContractRegistry.registerContractsFromOperator — the operator-only path that has no
+    ///      two-phase EIP-712 protection — with no timelock and no warning. That is the exact
+    ///      escalation this control exists to stop, arrived at sideways.
+    function test_OperatorRegistry_LateralCapabilityChangeBlockedAfterSetup() public {
+        address operator = makeAddr("operator");
+        OperatorRegistry reg = _registryWithOperator(operator, 3); // WALLET | TRANSACTION
+        reg.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
+        reg.updateCapabilities(operator, 5); // WALLET | CONTRACT
+
+        assertEq(reg.getOperator(operator).capabilities, 3, "capabilities must be unchanged");
+    }
+
+    /// @notice The strictly-numeric-decrease lateral case: 6 (0b110) → 5 (0b101) is still blocked.
+    /// @dev The sharper half of the test above, and the one a naive `>` check provably fails.
+    ///      5 < 6, so a numeric comparison reads this as a REDUCTION and lets it through
+    ///      immediately — yet 0b101 adds the WALLET bit that 0b110 does not have. Only the
+    ///      `newCaps & ~oldCaps != 0` form rejects it. If this test ever passes while
+    ///      test_OperatorRegistry_LateralCapabilityChangeBlockedAfterSetup fails, the
+    ///      implementation has silently reverted to a numeric comparison.
+    function test_OperatorRegistry_NumericallySmallerLateralChangeBlockedAfterSetup() public {
+        address operator = makeAddr("operator");
+        OperatorRegistry reg = _registryWithOperator(operator, 6); // TRANSACTION | CONTRACT
+        reg.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
+        reg.updateCapabilities(operator, 5); // CONTRACT | WALLET — numerically smaller, still an escalation
+
+        assertEq(reg.getOperator(operator).capabilities, 6, "capabilities must be unchanged");
+    }
+
+    /// @notice A lateral change is still reachable through the timelock, not permanently blocked.
+    /// @dev The guard must gate the escalation behind the delay, not forbid the transition. Without
+    ///      this the two tests above would also pass against an implementation that rejected every
+    ///      lateral change outright, which would be a denial of service on legitimate re-scoping.
+    function test_OperatorRegistry_LateralCapabilityChangeViaTimelock() public {
+        address operator = makeAddr("operator");
+        OperatorRegistry reg = _registryWithOperator(operator, 3); // WALLET | TRANSACTION
+        reg.completeSetup();
+
+        reg.proposeCapabilities(operator, 5);
+        vm.warp(block.timestamp + reg.ACTIVATION_DELAY());
+        reg.activateCapabilities(operator, 5);
+
+        assertEq(reg.getOperator(operator).capabilities, 5);
     }
 
     /// @notice Escalation works through propose → wait → activate.
@@ -301,7 +358,7 @@ contract TimelockConsistencyTest is Test {
         SpokeRegistry spoke = _spoke();
         spoke.completeSetup();
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         spoke.setHubConfig(HUB_DOMAIN, bytes32(uint256(uint160(makeAddr("attackerInbox")))));
     }
 
@@ -344,7 +401,7 @@ contract TimelockConsistencyTest is Test {
         CrossChainInbox inbox = _inbox();
         inbox.completeSetup();
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         inbox.setTrustedSource(SPOKE_DOMAIN, bytes32(uint256(uint160(makeAddr("attackerSpoke")))), true);
     }
 
@@ -405,7 +462,7 @@ contract TimelockConsistencyTest is Test {
         (SoulboundReceiver receiver,) = _receiver();
         receiver.completeSetup();
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         receiver.setTrustedForwarder(SPOKE_DOMAIN, makeAddr("attackerForwarder"));
     }
 
@@ -491,7 +548,7 @@ contract TimelockConsistencyTest is Test {
         OperatorRegistry reg = new OperatorRegistry(owner);
         reg.completeSetup();
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         reg.transferOwnership(makeAddr("attacker"));
 
         assertEq(reg.pendingOwner(), address(0));

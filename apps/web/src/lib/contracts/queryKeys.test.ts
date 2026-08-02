@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
 import { invalidateRegistryQueries, registryKeys } from './queryKeys';
+import type { Address } from '@/lib/types/ethereum';
+
+/** Real-shaped addresses: `registryKeys.status` takes an `Address`, not a bare string. */
+const WALLET = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' as Address;
+const REGISTRY = '0x8ba1f109551bD432803012645Ac136ddd64DBA72' as Address;
 
 /**
  * A wagmi `useReadContract` cache entry, keyed the way wagmi keys it. This is the shape the
@@ -9,7 +14,7 @@ import { invalidateRegistryQueries, registryKeys } from './queryKeys';
  */
 const WAGMI_NONCE_KEY = [
   'readContract',
-  { address: '0xregistry', functionName: 'nonces', args: ['0xwallet'], chainId: 8453 },
+  { address: REGISTRY, functionName: 'nonces', args: [WALLET], chainId: 8453 },
 ];
 
 function seed(client: QueryClient, key: unknown[], data: unknown) {
@@ -24,7 +29,7 @@ describe('invalidateRegistryQueries', () => {
     const client = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
 
     seed(client, WAGMI_NONCE_KEY, 3n);
-    seed(client, [...registryKeys.status('0xwallet', 8453)], { isRegistered: false });
+    seed(client, [...registryKeys.status(WALLET, 8453)], { isRegistered: false });
 
     expect(client.getQueryCache().find({ queryKey: WAGMI_NONCE_KEY })?.isStale()).toBe(false);
 
@@ -34,7 +39,7 @@ describe('invalidateRegistryQueries', () => {
     expect(
       client
         .getQueryCache()
-        .find({ queryKey: [...registryKeys.status('0xwallet', 8453)] })
+        .find({ queryKey: [...registryKeys.status(WALLET, 8453)] })
         ?.isStale()
     ).toBe(true);
   });
@@ -44,7 +49,7 @@ describe('invalidateRegistryQueries', () => {
   it('leaves unrelated caches alone', () => {
     const client = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
 
-    seed(client, ['ens', 'name', '0xwallet'], 'vitalik.eth');
+    seed(client, ['ens', 'name', WALLET], 'vitalik.eth');
     seed(client, WAGMI_NONCE_KEY, 3n);
 
     invalidateRegistryQueries(client);
@@ -52,7 +57,7 @@ describe('invalidateRegistryQueries', () => {
     expect(
       client
         .getQueryCache()
-        .find({ queryKey: ['ens', 'name', '0xwallet'] })
+        .find({ queryKey: ['ens', 'name', WALLET] })
         ?.isStale()
     ).toBe(false);
     expect(client.getQueryCache().find({ queryKey: WAGMI_NONCE_KEY })?.isStale()).toBe(true);

@@ -23,13 +23,36 @@ import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
 ///
 /// COVERAGE MAP — V1 applies to four signing paths, and this file is only one of them. The other
 /// three carry the same inverted-exploit tests next to their own fixtures, because each needs a
-/// different deployment (the spoke paths need a mailbox, bridge adapter and fee oracle):
-///   - WalletRegistry.register .................... here
-///   - TransactionRegistry.registerTransactions ... test/TransactionRegistry.t.sol
+/// different deployment (the spoke paths need a mailbox, bridge adapter and fee oracle).
+///
+/// The window-block guard in TimingConfig.resolveWindowBlockHash has THREE rejection branches, and
+/// "this path is covered" means all three, not just the headline one. Per-branch status:
+///
+///   path                                     | BeforeGrace | NotMined | TooOld
+///   -----------------------------------------|-------------|----------|-------
+///   WalletRegistry.register (here + Wallet.t) |     yes     |   yes    |  yes
+///   TransactionRegistry.registerTransactions  |     yes     |   yes    |  yes
+///   SpokeRegistry.register (wallet)           |     yes     |   yes    |  yes
+///   SpokeRegistry.registerTransactionBatch    |     yes     |   yes    |  yes
+///
+///   - WalletRegistry.register .................... here, plus test/WalletRegistry.t.sol
+///     (TooOld, and the MAX_WINDOW_BLOCK_AGE boundary, live in test/SpokeRegistry.t.sol)
+///   - TransactionRegistry.registerTransactions ... test/TransactionRegistry.t.sol, including
+///     `test_registerTransactions_acceptsWindowBlockAtMaxAge` (255 passes) and
+///     `test_registerTransactions_revertsIfWindowBlockTooOld` (256 reverts).
 ///   - SpokeRegistry.register (wallet) ............ test/SpokeRegistry.t.sol
 ///   - SpokeRegistry.registerTransactionBatch ..... test/SpokeRegistry.t.sol, section
 ///     "TX BATCH ANTI-PHISHING REGRESSION" — this was the path V1's first pass missed entirely.
-/// If a fifth signing path is added, it needs an entry here AND its own inverted-exploit test.
+///
+/// The age bound is `block.number - windowBlock >= MAX_WINDOW_BLOCK_AGE`, so 255 is the last valid
+/// age and 256 the first rejected one. Both sides of that edge are pinned on both spoke paths in
+/// test/SpokeRegistry.t.sol, section "WINDOW BLOCK AGE BOUND". Note that the EVM itself still
+/// serves `blockhash` at age 256 (only 257+ returns zero), so this bound is one block stricter
+/// than strictly necessary — harmless, but it means the defensive `hash == 0` check in
+/// TimingConfig is NOT what enforces this edge.
+///
+/// If a fifth signing path is added, it needs a row here AND its own inverted-exploit test.
+/// Do not mark a path covered until all three branches have a test.
 contract AntiPhishingTest is EIP712TestHelper {
     WalletRegistry internal reg;
 

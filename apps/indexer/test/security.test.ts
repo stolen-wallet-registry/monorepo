@@ -181,8 +181,16 @@ describe('V17 — rate limiting', () => {
 });
 
 describe('V17 — client identification is not spoofable', () => {
-  // With one trusted proxy appending, anything the attacker prepends shifts left and is
-  // ignored; the entry our own proxy wrote is what counts.
+  /**
+   * The one trusted hop is `gateway.mjs`, which REPLACES X-Forwarded-For with a single entry
+   * it derived from the socket before proxying. So in this deployment `parts` has length 1 and
+   * index 0 is the gateway's own value — the header reaching here is not client-controlled at
+   * all, which is what makes trusting it correct.
+   *
+   * The multi-entry cases below are defence in depth for a hand-run
+   * `start:ponder-unfiltered`: with one appending proxy, anything an attacker prepends shifts
+   * left and is ignored.
+   */
   it('picks the entry the trusted proxy wrote, not a prepended forgery', () => {
     expect(resolveClientKey('1.2.3.4', '10.0.0.1', 1)).toBe('1.2.3.4');
     expect(resolveClientKey('9.9.9.9, 1.2.3.4', '10.0.0.1', 1)).toBe('1.2.3.4');
@@ -218,21 +226,50 @@ describe('V17 — configuration defaults', () => {
     const options = readRateLimitOptions({
       INDEXER_RATE_LIMIT_MAX: '5',
       INDEXER_RATE_LIMIT_WINDOW_MS: '1000',
-      INDEXER_TRUST_PROXY_HOPS: '0',
     });
     expect(options.maxRequests).toBe(5);
     expect(options.windowMs).toBe(1000);
-    expect(options.trustProxyHops).toBe(0);
+  });
+
+  /**
+   * `trustProxyHops` is deliberately NOT configurable here. Exactly one thing is ever in front
+   * of ponder — gateway.mjs — and it overwrites X-Forwarded-For with a single entry, so the
+   * count is a repository invariant. It used to read INDEXER_TRUST_PROXY_HOPS, which was a
+   * footgun in both directions: too low and every client shared the `127.0.0.1` bucket, too
+   * high and resolveClientKey fell back to that same bucket. That variable now belongs to the
+   * gateway, where it means "proxies in front of the gateway".
+   */
+  it('ignores INDEXER_TRUST_PROXY_HOPS — the gateway owns that variable now', () => {
+    expect(readRateLimitOptions({ INDEXER_TRUST_PROXY_HOPS: '0' }).trustProxyHops).toBe(1);
+    expect(readRateLimitOptions({ INDEXER_TRUST_PROXY_HOPS: '7' }).trustProxyHops).toBe(1);
   });
 
   // A typo'd env var must not silently disable the limiter.
   it('falls back to defaults on malformed values', () => {
     const options = readRateLimitOptions({
       INDEXER_RATE_LIMIT_MAX: 'lots',
-      INDEXER_TRUST_PROXY_HOPS: '-3',
+      INDEXER_RATE_LIMIT_WINDOW_MS: 'soon',
     });
     expect(options.maxRequests).toBe(120);
-    expect(options.trustProxyHops).toBe(1);
+    expect(options.windowMs).toBe(60_000);
+  });
+
+  /**
+   * Only `maxRequests` may be 0 — that is the documented disable switch. A 0 window would
+   * silently disable the limiter instead: every request lands in a bucket that already
+   * expired, so nothing is ever counted. A typo must not be able to do that quietly.
+   */
+  it('accepts 0 only for maxRequests, never for the window or the client ceiling', () => {
+    expect(readRateLimitOptions({ INDEXER_RATE_LIMIT_MAX: '0' }).maxRequests).toBe(0);
+    expect(readRateLimitOptions({ INDEXER_RATE_LIMIT_WINDOW_MS: '0' }).windowMs).toBe(60_000);
+    expect(readRateLimitOptions({ INDEXER_RATE_LIMIT_MAX_TRACKED: '0' }).maxTrackedClients).toBe(
+      20_000
+    );
+  });
+
+  it('rejects negative values', () => {
+    expect(readRateLimitOptions({ INDEXER_RATE_LIMIT_MAX: '-3' }).maxRequests).toBe(120);
+    expect(readRateLimitOptions({ INDEXER_RATE_LIMIT_WINDOW_MS: '-1' }).windowMs).toBe(60_000);
   });
 });
 

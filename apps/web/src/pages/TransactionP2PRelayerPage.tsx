@@ -62,6 +62,7 @@ import {
   TX_SIGNATURE_STEP,
   type StoredTxSignature,
 } from '@/lib/signatures/transactions';
+import { isSameAddress } from '@/lib/p2p/pairingToken';
 import { logger } from '@/lib/logger';
 import { isAddress } from '@/lib/types/ethereum';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
@@ -88,8 +89,23 @@ async function processTxSignature(
     return false;
   }
 
-  const sig = data.signature!;
-  const batch = data.transactionBatch!;
+  const sig = data.signature;
+  const batch = data.transactionBatch;
+
+  // The signature must be FROM the reporter named in the pairing code, and nobody else. The
+  // wallet flow's `processSignature` carries the same check for the same reason: everything
+  // downstream (the review's recovered-signer comparison, the reporter shown in the UI, the
+  // `reporter` argument submitted on chain) is anchored to `pairedWallet`, so a payload naming
+  // a different address can only produce a flow that cannot complete. Fails closed with no
+  // pairing at all, which is exactly the state in which anything would be accepted.
+  const pairedWallet = useP2PStore.getState().pairedWallet;
+  if (!pairedWallet || !isSameAddress(sig.address, pairedWallet)) {
+    logger.p2p.warn('Rejected relayed transaction signature that is not from the paired wallet', {
+      claimed: sig.address,
+      paired: pairedWallet,
+    });
+    return false;
+  }
 
   // Store signature in sessionStorage
   const stored: StoredTxSignature = {
@@ -99,6 +115,7 @@ async function processTxSignature(
     dataHash: batch.dataHash as Hash,
     reportedChainId: batch.reportedChainId as Hash,
     transactionCount: batch.transactionCount,
+    // Provably the paired wallet — the guard above rejected anything else.
     reporter: sig.address as Address,
     trustedForwarder: relayerAddress,
     chainId: sig.chainId,
@@ -166,6 +183,7 @@ export function TransactionP2PRelayerPage() {
   const {
     partnerPeerId,
     connectedToPeer,
+    pairedWallet,
     setPeerId,
     setPartnerPeerId,
     setConnectedToPeer,
@@ -757,6 +775,10 @@ export function TransactionP2PRelayerPage() {
         getLibp2p={getLibp2p}
         currentPeerId={partnerPeerId}
         partnerRole="registeree"
+        // The wallet this relayer agreed to pay for. A re-pin is only accepted from a fresh
+        // pairing code naming this same wallet — without it, reconnect is a second, unguarded
+        // way to change the binding V4 established (see the dialog's module comment).
+        pairedWallet={pairedWallet}
         onReconnected={(peerId) => {
           setPartnerPeerId(peerId);
           setConnectionError(null);

@@ -216,7 +216,10 @@ export interface ConfirmSubmissionOptions {
   fee: string;
   /** A few identifiers to show, so a wrong file is visible before it lands. */
   sample: string[];
-  /** `--yes`: skip the prompt entirely (scripted use). */
+  /**
+   * `--yes`: skip the prompt (scripted use). On mainnet this additionally requires
+   * `SWR_CONFIRM_COUNT` to match `count` — see `confirmSubmission`.
+   */
   assumeYes?: boolean;
   /** Injected in tests. */
   prompt?: (question: string) => Promise<string>;
@@ -234,6 +237,18 @@ export interface ConfirmSubmissionOptions {
  * `--yes` skips the prompt for scripted use. That is a deliberate escape hatch, not an
  * oversight: operators run these commands from pipelines, and a prompt that cannot be bypassed
  * gets bypassed by `yes |` instead, which is strictly worse.
+ *
+ * On mainnet, however, `--yes` alone is not sufficient — automation must also set
+ * `SWR_CONFIRM_COUNT` to the number of entries it believes it is submitting, and the value must
+ * match the count parsed from the input file. Without this, `--yes` returned before the count
+ * check ran and the one rail built for mainnet never executed. The realistic failure it closes
+ * is not a scripted pipeline but an operator recalling a working testnet command from shell
+ * history, changing `-e testnet` to `-e mainnet`, with `-y` riding along invisibly.
+ *
+ * The point of routing the assertion through the environment rather than a flag is that it keeps
+ * scripted mainnet use possible while forcing the script to ASSERT THE NUMBER IT BELIEVES IT IS
+ * SUBMITTING. A stale invocation carrying the wrong count then fails loudly instead of silently
+ * submitting, and `yes |` still cannot produce a number.
  */
 export async function confirmSubmission(options: ConfirmSubmissionOptions): Promise<void> {
   const write = options.write ?? ((line: string) => console.log(line));
@@ -259,6 +274,11 @@ export async function confirmSubmission(options: ConfirmSubmissionOptions): Prom
   write('');
 
   if (options.assumeYes) {
+    if (options.env === 'mainnet') {
+      assertConfirmCountEnv(options.count, options.label);
+      write(chalk.gray(`  --yes supplied with SWR_CONFIRM_COUNT=${options.count}; proceeding.`));
+      return;
+    }
     write(chalk.gray('  --yes supplied; skipping confirmation.'));
     return;
   }
@@ -273,6 +293,45 @@ export async function confirmSubmission(options: ConfirmSubmissionOptions): Prom
 
   if (answer !== expected) {
     throw new Error('Submission cancelled — confirmation did not match.');
+  }
+}
+
+/** Environment variable a scripted mainnet run must set to assert its own entry count. */
+export const CONFIRM_COUNT_ENV = 'SWR_CONFIRM_COUNT';
+
+/**
+ * Mainnet `--yes` gate: require `SWR_CONFIRM_COUNT` and require it to equal `count`.
+ *
+ * Errors name both numbers, because the whole value of the check is telling the operator that
+ * the batch in front of them is not the batch their command was written for.
+ */
+function assertConfirmCountEnv(count: number, label: string): void {
+  const raw = process.env[CONFIRM_COUNT_ENV];
+
+  if (raw === undefined || raw.trim() === '') {
+    throw new Error(
+      `--yes is not sufficient on mainnet. Set ${CONFIRM_COUNT_ENV}=${count} to confirm you ` +
+        `are submitting ${count} ${label}. Mainnet registrations are irreversible, so an ` +
+        'unattended run must assert the count it expects rather than accepting whatever the ' +
+        'input file happens to contain.'
+    );
+  }
+
+  const supplied = Number(raw.trim());
+
+  if (!Number.isInteger(supplied) || supplied < 0) {
+    throw new Error(
+      `${CONFIRM_COUNT_ENV}="${raw}" is not a whole number. Set it to the number of ${label} ` +
+        `you expect to submit (this batch contains ${count}).`
+    );
+  }
+
+  if (supplied !== count) {
+    throw new Error(
+      `${CONFIRM_COUNT_ENV} does not match this batch: expected ${supplied} ${label}, but the ` +
+        `input file parsed to ${count}. Refusing to submit. Either the file changed or this ` +
+        'command was written for a different batch — check the input before re-running.'
+    );
   }
 }
 

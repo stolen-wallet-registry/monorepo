@@ -34,10 +34,17 @@ contract DeployHarness is Deploy {
         _validateDao(dao, deployerAddr);
     }
 
+    /// @dev Drive {Deploy._requireSetupComplete} on a single synthetic target. `envKey` is
+    ///      caller-supplied so each test can pick a unique one: the opt-out is read from the
+    ///      process-global environment, and a shared key would race across concurrent tests.
+    function requireSetupComplete(address addr, string memory envKey) external view {
+        _requireSetupComplete(SetupTarget(addr, "target", envKey));
+    }
+
     function _targets(address[] memory addrs) internal pure returns (SetupTarget[] memory targets) {
         targets = new SetupTarget[](addrs.length);
         for (uint256 i = 0; i < addrs.length; i++) {
-            targets[i] = SetupTarget(addrs[i], "target");
+            targets[i] = SetupTarget(addrs[i], "target", "TARGET");
         }
     }
 }
@@ -81,8 +88,9 @@ contract DeployHandoverTest is Test {
         translations = new TranslationRegistry(deployer);
         vm.stopPrank();
 
-        // One unset entry, to pin that address(0) targets are skipped rather than reverting.
-        targets = [address(operatorRegistry), address(feeManager), address(0)];
+        // No address(0) entry: an unset target is now a hard failure unless explicitly opted out
+        // of, and that behaviour has its own dedicated tests below.
+        targets = [address(operatorRegistry), address(feeManager)];
     }
 
     function _finalize() internal {
@@ -147,8 +155,15 @@ contract DeployHandoverTest is Test {
     }
 
     /// @notice verify() fails if any target still has a dangling pending transfer.
-    /// @dev Catches the case where the DAO accepted some contracts and not others — a system in
-    ///      split custody is not a handover, and must not read as one.
+    /// @dev Pins the SECOND require in `_verifyOwnership`, which is unreachable while any target
+    ///      still fails the owner check. The previous version of this test left feeManager at
+    ///      owner=deployer, so it tripped "owner is not DAO_OWNER" — the same assertion
+    ///      test_V23_VerifyRejectsUnacceptedHandover already makes. The pendingOwner require had
+    ///      zero coverage and could have been deleted without failing CI.
+    ///
+    ///      The realistic shape of this failure is a SECOND handover left in flight: custody
+    ///      reads as DAO-owned, but an accepted transfer would move it again with no further
+    ///      approval, so a deployment gate must refuse it.
     function test_V23_VerifyRejectsDanglingPendingOwner() public {
         _finalize();
         script.propose(dao, targets, address(translations));
@@ -157,12 +172,64 @@ contract DeployHandoverTest is Test {
 
         vm.startPrank(dao);
         operatorRegistry.acceptOwnership();
+        feeManager.acceptOwnership();
         translations.acceptOwnership();
         vm.stopPrank();
 
-        // feeManager is still owner=deployer, pendingOwner=dao.
-        vm.expectRevert(bytes("target: owner is not DAO_OWNER - handover incomplete"));
+        // The owner check now passes, so the pendingOwner check is the only thing left to fail.
         script.verify(dao, targets, address(translations));
+
+        address successor = makeAddr("successorMultisig");
+        vm.startPrank(dao);
+        feeManager.proposeOwnershipTransfer(successor);
+        vm.warp(block.timestamp + feeManager.ACTIVATION_DELAY());
+        feeManager.activateOwnershipTransfer(successor);
+        vm.stopPrank();
+
+        assertEq(feeManager.owner(), dao, "Precondition: owner check must pass so pendingOwner is reached");
+        assertEq(feeManager.pendingOwner(), successor, "Precondition: a pending transfer must be open");
+
+        vm.expectRevert(bytes("target: a pending owner transfer is still open"));
+        script.verify(dao, targets, address(translations));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // UNSET DEPLOY TARGETS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice A target whose env var was never set is a hard failure, not a silent skip.
+    /// @dev This used to `return` on address(0), which made `verifySetup()` print success for a
+    ///      contract nobody had verified. `finalizeSetup()` skips the same address for the same
+    ///      reason, so the two failures co-occur: the contract ships with its immediate setters
+    ///      open — `setBaseFee`, `setTrustedSource`, `setAuthorizedSender` all one-transaction
+    ///      owner calls — and the post-deploy gate exits 0.
+    function test_UnsetTargetIsRejectedRatherThanSkipped() public {
+        vm.expectRevert(
+            bytes(
+                "target: SWR_TEST_UNSET_NEVER_SET is unset - set it to the deployed address,"
+                " or set SKIP_SWR_TEST_UNSET_NEVER_SET=true to deliberately exclude this contract"
+            )
+        );
+        script.requireSetupComplete(address(0), "SWR_TEST_UNSET_NEVER_SET");
+    }
+
+    /// @notice A genuinely-absent contract can be excluded, but only deliberately.
+    /// @dev A hub-only deployment with no soulbounds is legitimate. The opt-out makes that a
+    ///      recorded decision in the deploy environment rather than an omission nobody notices.
+    ///      The env key is unique to this test: forge runs tests concurrently against a
+    ///      process-global environment, so a shared key would race.
+    function test_UnsetTargetCanBeExplicitlyOptedOut() public {
+        vm.setEnv("SKIP_SWR_TEST_OPTOUT_PROBE", "true");
+        script.requireSetupComplete(address(0), "SWR_TEST_OPTOUT_PROBE");
+    }
+
+    /// @notice The opt-out only covers absence — a configured-but-unfinalized contract still fails.
+    /// @dev Otherwise `SKIP_*` would double as a way to wave through a live contract that never
+    ///      had `completeSetup()` called, which is the exact state the gate exists to catch.
+    function test_OptOutDoesNotExcuseUnfinalizedContract() public {
+        vm.setEnv("SKIP_SWR_TEST_OPTOUT_PROBE_2", "true");
+        vm.expectRevert(bytes("target: setupComplete is false - run finalizeSetup()"));
+        script.requireSetupComplete(address(operatorRegistry), "SWR_TEST_OPTOUT_PROBE_2");
     }
 
     /// @notice The handover itself is timelocked — activate cannot follow propose in one block.

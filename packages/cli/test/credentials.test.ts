@@ -185,6 +185,83 @@ describe('V7 — operator key must not travel on argv', () => {
       expect(result.source).toBe('keystore');
       expect(result.privateKey).toBe(VECTOR_PRIVATE_KEY);
     });
+
+    // An empty SWR_KEYSTORE_PASSWORD is what an unset CI secret expands to. Treating "" as a
+    // supplied passphrase turns "the secret was never provisioned" into the generic
+    // wrong-passphrase failure, which sends the operator looking in the wrong place.
+    it('falls back to the prompt when SWR_KEYSTORE_PASSWORD is empty', async () => {
+      const promptPassphrase = vi.fn().mockResolvedValue(VECTOR_PASSPHRASE);
+      const result = await resolveCredential({
+        env: 'mainnet',
+        keystorePath: PBKDF2_KEYSTORE,
+        envKeystorePassword: '',
+        promptPassphrase,
+        warn: noopWarn,
+      });
+      expect(promptPassphrase).toHaveBeenCalledOnce();
+      expect(result.privateKey).toBe(VECTOR_PRIVATE_KEY);
+    });
+  });
+
+  // A mode that never signs must never hold a signing key. `--build-only` emits calldata for a
+  // multisig and `--dry-run` writes nothing, so decrypting a keystore for either one puts a
+  // plaintext operator key in process memory for no reason at all — and prompts the operator
+  // for a passphrase that cannot possibly be needed.
+  describe('credential-free modes acquire no key', () => {
+    it('--build-only does not decrypt a keystore or prompt for its passphrase', async () => {
+      const promptPassphrase = vi.fn().mockResolvedValue(VECTOR_PASSPHRASE);
+      const result = await resolveCredential({
+        env: 'mainnet',
+        keystorePath: PBKDF2_KEYSTORE,
+        buildOnly: true,
+        promptPassphrase,
+        warn: noopWarn,
+      });
+      expect(promptPassphrase).not.toHaveBeenCalled();
+      expect(result.source).toBe('none');
+      expect(result.privateKey).toBeUndefined();
+    });
+
+    it('--dry-run does not decrypt a keystore or prompt for its passphrase', async () => {
+      const promptPassphrase = vi.fn().mockResolvedValue(VECTOR_PASSPHRASE);
+      const result = await resolveCredential({
+        env: 'mainnet',
+        keystorePath: PBKDF2_KEYSTORE,
+        dryRun: true,
+        promptPassphrase,
+        warn: noopWarn,
+      });
+      expect(promptPassphrase).not.toHaveBeenCalled();
+      expect(result.source).toBe('none');
+      expect(result.privateKey).toBeUndefined();
+    });
+
+    it('--build-only ignores OPERATOR_PRIVATE_KEY instead of warning about it', async () => {
+      const warn = vi.fn();
+      const result = await resolveCredential({
+        env: 'mainnet',
+        envPrivateKey: ANVIL_KEY,
+        buildOnly: true,
+        warn,
+      });
+      expect(result.source).toBe('none');
+      expect(result.privateKey).toBeUndefined();
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    // The V7 argv rule outranks even the credential-free short circuit: passing -k on mainnet
+    // has already disclosed the key, and the operator must be told so rather than getting a
+    // "that worked" signal for the habit.
+    it('still refuses --private-key on mainnet under --build-only', async () => {
+      await expect(
+        resolveCredential({
+          env: 'mainnet',
+          privateKeyArg: ANVIL_KEY,
+          buildOnly: true,
+          warn: noopWarn,
+        })
+      ).rejects.toThrow(CredentialError);
+    });
   });
 });
 
@@ -309,6 +386,97 @@ describe('keystore decryption (Web3 Secret Storage V3)', () => {
         'x'
       )
     ).toThrow(/kdf/i);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // KDF WORK FACTORS
+  //
+  // The KDF parameters live in the keystore file, so the file decides how hard it is to
+  // brute-force itself and how much memory decrypting it costs. Accepting them unchecked means
+  // (a) a keystore weakened to `c: 1` or `n: 2` decrypts silently — it is a plaintext key
+  // wearing a keystore's clothes, and nothing tells the operator — and (b) a crafted `n` sizes
+  // an allocation the process then attempts. Floors and a memory ceiling make both loud.
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('KDF work factors', () => {
+    /** A structurally valid keystore with caller-chosen kdf params. */
+    function keystoreWith(kdf: string, kdfparams: Record<string, unknown>) {
+      return {
+        version: 3,
+        crypto: {
+          cipher: 'aes-128-ctr',
+          ciphertext: '00'.repeat(32),
+          cipherparams: { iv: '00'.repeat(16) },
+          mac: '00'.repeat(32),
+          kdf,
+          kdfparams: { dklen: 32, salt: '00'.repeat(32), ...kdfparams },
+        },
+      };
+    }
+
+    it('refuses a pbkdf2 keystore below the iteration floor', () => {
+      expect(() => decryptKeystore(keystoreWith('pbkdf2', { c: 1 }), 'x')).toThrow(
+        /iteration|work factor|too weak/i
+      );
+      expect(() => decryptKeystore(keystoreWith('pbkdf2', { c: 1000 }), 'x')).toThrow(
+        /iteration|work factor|too weak/i
+      );
+    });
+
+    it('refuses a scrypt keystore below the cost floor', () => {
+      expect(() => decryptKeystore(keystoreWith('scrypt', { n: 2, r: 8, p: 1 }), 'x')).toThrow(
+        /cost|work factor|too weak/i
+      );
+      expect(() => decryptKeystore(keystoreWith('scrypt', { n: 1024, r: 8, p: 1 }), 'x')).toThrow(
+        /cost|work factor|too weak/i
+      );
+    });
+
+    // scrypt's N must be a power of two. Node throws an opaque param error for anything else;
+    // catching it here says which field is wrong.
+    it('refuses a scrypt n that is not a power of two', () => {
+      expect(() => decryptKeystore(keystoreWith('scrypt', { n: 100000, r: 8, p: 1 }), 'x')).toThrow(
+        /power of two/i
+      );
+    });
+
+    // Must reject BEFORE calling scryptSync: the point is not to attempt the allocation.
+    it('refuses a scrypt keystore demanding more memory than the ceiling', () => {
+      expect(() =>
+        decryptKeystore(keystoreWith('scrypt', { n: 2 ** 26, r: 8, p: 1 }), 'x')
+      ).toThrow(/memory/i);
+      expect(() =>
+        decryptKeystore(keystoreWith('scrypt', { n: 262144, r: 4096, p: 1 }), 'x')
+      ).toThrow(/memory/i);
+    });
+
+    it('refuses an absurd pbkdf2 iteration count instead of hanging', () => {
+      expect(() => decryptKeystore(keystoreWith('pbkdf2', { c: 2 ** 40 }), 'x')).toThrow(
+        /iteration/i
+      );
+    });
+
+    // The two real fixtures must keep working: geth/ethers defaults sit above every floor.
+    it('accepts the work factors real wallets actually emit', async () => {
+      await expect(loadKeystoreFile(PBKDF2_KEYSTORE, VECTOR_PASSPHRASE)).resolves.toBe(
+        VECTOR_PRIVATE_KEY
+      );
+      await expect(loadKeystoreFile(SCRYPT_KEYSTORE, VECTOR_PASSPHRASE)).resolves.toBe(
+        VECTOR_PRIVATE_KEY
+      );
+    });
+
+    // A rejection message describes the parameter, never the secret used with it.
+    it('work-factor rejections leak no passphrase', () => {
+      const passphrase = 'leak-me-if-you-can';
+      const error = (() => {
+        try {
+          decryptKeystore(keystoreWith('pbkdf2', { c: 1 }), passphrase);
+        } catch (e) {
+          return e as Error;
+        }
+      })();
+      expect(error?.message).not.toContain(passphrase);
+    });
   });
 
   it('rejects a non-object and a missing crypto section', () => {

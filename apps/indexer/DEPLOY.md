@@ -77,9 +77,13 @@ variables are read in `src/api/security.ts`.
 | -------------------------------- | ---------------------------- | ----------------------------------------------------------- |
 | `INDEXER_ALLOWED_ORIGINS`        | localhost 5173 / 3000 / 6006 | Comma-separated CORS allowlist. `*` re-opens to any origin. |
 | `INDEXER_RATE_LIMIT_MAX`         | `120`                        | Requests per client per window. `0` disables.               |
-| `INDEXER_RATE_LIMIT_WINDOW_MS`   | `60000`                      | Rate limit window.                                          |
-| `INDEXER_TRUST_PROXY_HOPS`       | `1`                          | Trusted proxies appending to `X-Forwarded-For`.             |
-| `INDEXER_RATE_LIMIT_MAX_TRACKED` | `20000`                      | Client buckets held in memory.                              |
+| `INDEXER_RATE_LIMIT_WINDOW_MS`   | `60000`                      | Rate limit window. Must be > 0.                             |
+| `INDEXER_RATE_LIMIT_MAX_TRACKED` | `20000`                      | Client buckets held in memory. Must be > 0.                 |
+
+Only `INDEXER_RATE_LIMIT_MAX` accepts `0` — that is the deliberate "disable" switch. A `0`
+window or a `0` client ceiling would silently disable the limiter instead (every request would
+land in a bucket that already expired), so those fall back to their defaults rather than
+letting a typo quietly turn the control off.
 
 **Set `INDEXER_ALLOWED_ORIGINS` on every deployment.** The default only covers local dev, so a
 deployed indexer with this unset will refuse CORS to your actual frontend:
@@ -88,12 +92,34 @@ deployed indexer with this unset will refuse CORS to your actual frontend:
 railway variables set INDEXER_ALLOWED_ORIGINS="https://your-app.vercel.app"
 ```
 
-`INDEXER_TRUST_PROXY_HOPS=1` is correct for Railway, which terminates TLS in front of the
-process. If you put another proxy (Cloudflare, a load balancer) in front of Railway, raise it to
-match, or every client will share one rate-limit bucket — or worse, a client-supplied
-`X-Forwarded-For` will be trusted.
+### Client identification — `INDEXER_TRUST_PROXY_HOPS`
 
-### `/metrics` is blocked by the gateway process (no edge rule needed)
+**This variable belongs to the gateway, and it counts proxies in front of the GATEWAY.**
+
+Ponder only ever sees connections from `gateway.mjs` over loopback, so its socket address is
+useless for rate limiting: without a rewrite, every client on earth shares the bucket keyed
+`127.0.0.1` and 120 requests/minute in total would 429 the entire service. The gateway
+therefore resolves the client itself and writes a **single-entry** `X-Forwarded-For` upstream,
+overwriting whatever the client sent. That makes the one trusted hop inside ponder a property
+of this repository rather than an assumption about the host's proxy behaviour — so
+`src/api/security.ts` no longer reads this variable at all.
+
+| Deployment                            | Set it to     | Why                                       |
+| ------------------------------------- | ------------- | ----------------------------------------- |
+| `docker run` / bare, nothing in front | `0` (default) | No proxy writes the header, so ignore it. |
+| **Railway** (terminates TLS in front) | **`1`**       | Trust the entry Railway's edge appended.  |
+| Cloudflare → Railway → gateway        | `2`           | Two appending proxies.                    |
+
+```bash
+railway variables set INDEXER_TRUST_PROXY_HOPS=1
+```
+
+The default is `0` — trust nothing the client sent — because the two failure modes are not
+symmetric. Too low fails **visibly**: clients share a bucket and 429s appear. Too high fails
+**invisibly**: an attacker rotates `X-Forwarded-For` per request and the limiter silently does
+nothing. The gateway logs the effective value at startup.
+
+### Ponder's own routes are handled by the gateway process (no edge rule needed)
 
 Ponder registers `/metrics`, `/health`, `/ready` and `/status` on its own Hono instance
 **before** mounting `src/api/index.ts`, and those handlers return without calling `next`. They
@@ -101,6 +127,9 @@ are therefore unreachable from application middleware: the CORS restriction and 
 above do **not** apply to them, and ponder 0.16.1 has no flag to disable them (`ponder start`
 exposes only `--config --debug --disable-ui --hostname --log-format --log-level --port --root
 --schema --views-schema --trace`).
+
+`/metrics` is blocked outright. The other three stay reachable but are **rate limited at the
+gateway**, which is the only layer that can see them — see below.
 
 `/metrics` is a full Prometheus dump — indexing progress, database pool state, per-chain RPC
 counters. It is free reconnaissance for sizing a flood.
@@ -116,15 +145,31 @@ Ponder is not reachable from outside the container, so the block cannot be bypas
 addressing it directly. Path matching is percent-decoded, case-folded and slash-normalised, so
 `/Metrics/`, `/%6d%65trics` and `/metrics?x=1` are all blocked (`test/gateway.test.ts`).
 
-`/ready` stays reachable — `railway.toml` and the Dockerfile HEALTHCHECK both use it.
+#### `/health`, `/ready` and `/status` are rate limited, not blocked
 
-| Variable                | Default    | Purpose                                                                    |
-| ----------------------- | ---------- | -------------------------------------------------------------------------- |
-| `PORT`                  | `42069`    | Public port the gateway binds.                                             |
-| `INDEXER_UPSTREAM_PORT` | `42070`    | Loopback port ponder binds. Must differ from `PORT`.                       |
-| `INDEXER_BLOCKED_PATHS` | `/metrics` | Comma-separated. Explicitly empty (`""`) disables blocking.                |
-| `INDEXER_METRICS_TOKEN` | unset      | If set, `Authorization: Bearer <token>` reaches `/metrics` for monitoring. |
-| `PONDER_SCHEMA`         | `swr_prod` | Passed through as `ponder start --schema`.                                 |
+`/ready` and `/status` each run a database query on **every** request (ponder's `select_ready`
+and `select_checkpoints`). Left ungated they are an unmetered path to the same connection pool
+the GraphQL API uses — i.e. the application rate limit above, sidestepped entirely for database
+load. They cannot be blocked (`railway.toml` and the Dockerfile HEALTHCHECK both poll `/ready`),
+so the gateway meters them: **60 requests per client per minute**, shared across the three
+paths. A real monitoring scrape is nowhere near that.
+
+The container's own healthcheck is exempt: a loopback socket that did **not** arrive through a
+proxy. A remote client always has `X-Forwarded-For` appended by the edge, so it cannot claim the
+exemption by sending `X-Forwarded-For: 127.0.0.1`.
+
+| Variable                   | Default    | Purpose                                                                           |
+| -------------------------- | ---------- | --------------------------------------------------------------------------------- |
+| `PORT`                     | `42069`    | Public port the gateway binds.                                                    |
+| `INDEXER_UPSTREAM_PORT`    | `42070`    | Loopback port ponder binds. Must differ from `PORT`.                              |
+| `INDEXER_BLOCKED_PATHS`    | `/metrics` | Comma-separated. Explicitly empty (`""`) disables blocking.                       |
+| `INDEXER_METRICS_TOKEN`    | unset      | If set, `Authorization: Bearer <token>` reaches `/metrics` — and only `/metrics`. |
+| `INDEXER_TRUST_PROXY_HOPS` | `0`        | Proxies in front of the gateway. Set to `1` on Railway (see above).               |
+| `PONDER_SCHEMA`            | `swr_prod` | Passed through as `ponder start --schema`.                                        |
+
+The gateway also strips hop-by-hop headers, applies a 30s upstream timeout plus Slowloris
+ceilings on the public listener, and never echoes upstream error text (it names the internal
+port, which is the thing this process exists to hide) — it logs it and returns a fixed `502`.
 
 To let a Prometheus scraper through without exposing the endpoint publicly:
 

@@ -24,7 +24,11 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}", "vitest.config.*"],
+      // `test/**` (not `test/**/*.{ts,tsx}`) on purpose: the previous glob matched only
+      // TypeScript, so editing a JSON/CSV fixture — packages/cli/test/fixtures/*.json, which
+      // includes the two keystore fixtures the credential tests decrypt — did not invalidate
+      // the cache. The result was a replayed green "test" for a run that never happened.
+      "inputs": ["src/**/*.{ts,tsx}", "test/**", "vitest.config.*", "vitest.setup.*"],
       "outputs": []
     },
     "@swr/contracts#test": {

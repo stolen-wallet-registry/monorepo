@@ -62,7 +62,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
   const chainId = useChainId();
   const { address: relayerAddress } = useAccount();
   const { registeree } = useFormStore();
-  const { partnerPeerId } = useP2PStore();
+  const { partnerPeerId, pairedWallet } = useP2PStore();
   const {
     registrationHash,
     registrationChainId,
@@ -98,6 +98,9 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     onCompleteRef.current = onComplete;
   });
 
+  /** Guards the tx-hash send against a concurrent second attempt — see `sendHash`. */
+  const sendInFlightRef = useRef(false);
+
   // Latch recording that the step already advanced. Three separate paths can advance this
   // step (local-chain send completing, hub confirming a cross-chain delivery, registeree
   // receiving the hash) and they are only mutually exclusive by role and chain kind.
@@ -128,7 +131,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       enabled: role === 'relayer' && !!storedSig,
       step: SIGNATURE_STEP.REGISTRATION,
       storedSignature: storedSig,
-      expectedSigner: registeree,
+      expectedSigner: registeree, // logged only; gating uses pairedWallet
       trustedForwarder: relayerAddress,
     });
 
@@ -364,6 +367,12 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     let cancelled = false;
 
     const sendHash = async () => {
+      // `cancelled` suppresses state writes on a superseded run, but not the dial and the
+      // stream write themselves — so an effect re-run mid-flight opened a SECOND REG_PAY
+      // stream to the same partner. The receiver's step gate drops the duplicate, but sending
+      // it at all is wasted work on a connection that is already struggling.
+      if (sendInFlightRef.current) return;
+
       const libp2p = getLibp2p();
       if (role !== 'relayer' || !isConfirmed || !hash || !libp2p || !partnerPeerId || hasSentHash) {
         return;
@@ -376,6 +385,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
         return;
       }
 
+      sendInFlightRef.current = true;
       try {
         setSendError(null);
 
@@ -438,6 +448,8 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
           setSendError(message);
           logger.p2p.error('Max retries exceeded for sending REG tx hash', { hash });
         }
+      } finally {
+        sendInFlightRef.current = false;
       }
     };
 
@@ -473,19 +485,27 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
   //
   // `applyScheduledRetry` guards the increment against a schedule the user has already
   // superseded with a manual resend.
+  // Keyed on the primitive fields, NOT the object. The send effect re-runs for reasons
+  // unrelated to retrying (a new receipt, a new partner peer ID, `hasSentHash` flipping) and
+  // each failing run records the same intent afresh. Keying on object identity made every one
+  // of those a new dependency value, so the pending timer was cleared and the full backoff
+  // restarted — a flapping dependency could postpone the retry indefinitely. The values are
+  // what the timer actually depends on, so an identical re-record is now a no-op.
+  const retryAt = retrySchedule?.at ?? null;
+  const retryFromAttempt = retrySchedule?.fromAttempt ?? null;
   useEffect(() => {
-    if (!retrySchedule) return;
+    if (retryAt === null || retryFromAttempt === null) return;
 
     const timerId = setTimeout(
       () => {
         setRetrySchedule(null);
-        setRetryCount((prev) => applyScheduledRetry(prev, retrySchedule.fromAttempt));
+        setRetryCount((prev) => applyScheduledRetry(prev, retryFromAttempt));
       },
-      Math.max(0, retrySchedule.at - Date.now())
+      Math.max(0, retryAt - Date.now())
     );
 
     return () => clearTimeout(timerId);
-  }, [retrySchedule]);
+  }, [retryAt, retryFromAttempt]);
 
   // Manual retry handler for user-initiated resend
   const handleResendHash = useCallback(() => {
@@ -594,7 +614,10 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
           <RelayedSignatureReview
             review={signatureReview}
             isChecking={isReviewingSignature}
-            expectedSigner={registeree}
+            // The out-of-band wallet from the pairing code, which is also what the review
+            // gates on. `registeree` is written from it on CONNECT, so the two agree today —
+            // sourcing the display straight from the store means they cannot drift apart.
+            expectedSigner={pairedWallet}
             deadline={storedSig.deadline}
           />
 

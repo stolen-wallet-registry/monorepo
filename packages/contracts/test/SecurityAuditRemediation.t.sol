@@ -275,7 +275,7 @@ contract SecurityAuditRemediationTest is Test {
         hub.completeSetup();
 
         // Should revert with SetupAlreadyComplete
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         hub.setWalletRegistry(makeAddr("walletReg2"));
     }
 
@@ -284,6 +284,8 @@ contract SecurityAuditRemediationTest is Test {
         FraudRegistryHub hub = new FraudRegistryHub(owner, owner);
         hub.completeSetup();
 
+        // Literal double-completeSetup keeps SetupAlreadyComplete — it is the one case where the
+        // name is accurate, and there is no timelocked path to point the caller at.
         vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
         hub.completeSetup();
     }
@@ -347,7 +349,7 @@ contract SecurityAuditRemediationTest is Test {
         inbox.completeSetup();
 
         // Granting trust in one transaction is locked
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         inbox.setTrustedSource(31_339, spokeBytes, true);
 
         // Revoking is immediate
@@ -378,7 +380,7 @@ contract SecurityAuditRemediationTest is Test {
         reg.setHub(makeAddr("hub1"));
         reg.completeSetup();
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         reg.setHub(makeAddr("hub2"));
 
         address newHub = makeAddr("hub2");
@@ -398,7 +400,7 @@ contract SecurityAuditRemediationTest is Test {
         reg.setOperatorSubmitter(makeAddr("submitter1"));
         reg.completeSetup();
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         reg.setOperatorSubmitter(makeAddr("submitter2"));
 
         address newSubmitter = makeAddr("submitter2");
@@ -414,7 +416,7 @@ contract SecurityAuditRemediationTest is Test {
         reg.setHub(makeAddr("hub1"));
         reg.completeSetup();
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         reg.setHub(makeAddr("hub2"));
 
         address newHub = makeAddr("hub2");
@@ -431,7 +433,7 @@ contract SecurityAuditRemediationTest is Test {
         reg.setOperatorSubmitter(makeAddr("submitter1"));
         reg.completeSetup();
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         reg.setOperatorSubmitter(makeAddr("submitter2"));
 
         address newSubmitter = makeAddr("submitter2");
@@ -464,7 +466,7 @@ contract SecurityAuditRemediationTest is Test {
 
         submitter.completeSetup();
 
-        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupAlreadyComplete.selector);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
         submitter.setOperatorRegistry(makeAddr("registry2"));
 
         address newRegistry = makeAddr("registry2");

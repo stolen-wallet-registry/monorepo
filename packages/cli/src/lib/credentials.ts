@@ -91,7 +91,9 @@ export function assertPrivateKeyArgAllowed(env: string): void {
 /**
  * Resolve the operator signing key from the allowed sources, applying the V7 policy.
  *
- * Precedence: --keystore > --private-key > OPERATOR_PRIVATE_KEY.
+ * Order: the argv refusal runs first (it is unconditional), then the credential-free
+ * short circuit for --build-only/--dry-run, then --keystore > --private-key >
+ * OPERATOR_PRIVATE_KEY.
  */
 export async function resolveCredential(sources: CredentialSources): Promise<ResolvedCredential> {
   const {
@@ -113,9 +115,21 @@ export async function resolveCredential(sources: CredentialSources): Promise<Res
     assertPrivateKeyArgAllowed(env);
   }
 
+  // A mode that never signs must never hold a signing key. Checked BEFORE the keystore and
+  // environment branches, not after them: decrypting for --build-only put a plaintext operator
+  // key in process memory for a path that only ever emits calldata, and prompted for a
+  // passphrase that could not possibly be needed. The argv rule above still runs first — -k on
+  // mainnet has already leaked the key, and --build-only does not un-leak it.
+  if (buildOnly || dryRun) {
+    return { source: 'none' };
+  }
+
   if (keystorePath) {
+    // Truthiness, not `??`: an unset CI secret expands to the empty string, and treating that
+    // as a supplied passphrase reports the generic wrong-passphrase failure instead of
+    // prompting — sending the operator to look for a bad passphrase rather than a missing one.
     const passphrase =
-      envKeystorePassword ?? (await promptPassphrase(`Passphrase for ${keystorePath}: `));
+      envKeystorePassword || (await promptPassphrase(`Passphrase for ${keystorePath}: `));
     // loadKeystoreFile never echoes the passphrase or the decrypted key.
     const privateKey = await loadKeystoreFile(keystorePath, passphrase);
     return {
@@ -142,10 +156,6 @@ export async function resolveCredential(sources: CredentialSources): Promise<Res
       privateKey: assertPrivateKeyShape(envPrivateKey, 'OPERATOR_PRIVATE_KEY'),
       source: 'env',
     };
-  }
-
-  if (buildOnly || dryRun) {
-    return { source: 'none' };
   }
 
   throw new CredentialError(

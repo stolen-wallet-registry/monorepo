@@ -32,7 +32,7 @@ import {
   SuccessStep,
 } from '@/components/registration/steps';
 import {
-  WaitingForData,
+  P2PWaitForAcknowledgement,
   ConnectionStatusBadge,
   ReconnectDialog,
   P2PWaitForConfirmation,
@@ -42,7 +42,13 @@ import { useFormStore } from '@/stores/formStore';
 import { useP2PStore, isPreConnectionStep } from '@/stores/p2pStore';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
 import { useRequireWallet } from '@/hooks/useRequireWallet';
+import { useContractDeadlines } from '@/hooks/useContractDeadlines';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
+import {
+  clearSentSignature,
+  receiptMayAdvance,
+  resetSentSignatures,
+} from '@/hooks/p2p/sentSignatureLatch';
 import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
 import {
   setup,
@@ -178,6 +184,7 @@ export function P2PRegistereeRegistrationPage() {
     partnerPeerId,
     setPeerId,
     setPartnerPeerId,
+    clearPartnerPeerId,
     setConnectedToPeer,
     setInitialized,
     reset: resetP2P,
@@ -190,6 +197,9 @@ export function P2PRegistereeRegistrationPage() {
   useEffect(() => {
     if (step === 'wait-for-connection') {
       clearRelayerProvenance();
+      // A second run in this tab must not inherit the first run's "we sent it" latches, or the
+      // receipt gate is already open for signatures this run has not produced.
+      resetSentSignatures();
     }
   }, [step, clearRelayerProvenance]);
 
@@ -348,7 +358,17 @@ export function P2PRegistereeRegistrationPage() {
                   break;
 
                 case PROTOCOLS.ACK_REC:
-                  // Signature received confirmation
+                  // A receipt is only meaningful as an acknowledgement of something WE sent.
+                  // Without this, a relayer that sends ACK_REC early pushes the registeree off
+                  // the sign step having signed nothing — and the flow then stalls at a payment
+                  // step forever. Ordering (`isProtocolExpectedAtStep`) does not cover this: the
+                  // receipt IS legitimate at this step, just not before we signed.
+                  if (!receiptMayAdvance('wallet-ack')) {
+                    logger.p2p.warn('Ignored ACK receipt for a signature this session never sent', {
+                      step: currentStep,
+                    });
+                    break;
+                  }
                   logger.p2p.info('ACK signature received by relayer');
                   goToNextStepRef.current();
                   break;
@@ -356,10 +376,20 @@ export function P2PRegistereeRegistrationPage() {
                 case PROTOCOLS.ACK_PAY:
                   // Acknowledgement tx hash received - use relayer's chainId if provided
                   // Use chainIdRef.current to avoid stale closure when network changes
-                  // Only advance step when hash validation succeeds
                   if (typeof data.hash === 'string' && isHash(data.hash)) {
                     setAcknowledgementHash(data.hash, data.txChainId ?? chainIdRef.current);
-                    goToNextStepRef.current();
+                    // Never advance on the relayer's word — the same rule REG_PAY below already
+                    // follows. `data.hash` is shape-checked only: no proof the transaction
+                    // exists, targets the registry, or succeeded. Advancing here drops the
+                    // victim into the anti-phishing grace period with nothing on chain behind
+                    // it, so they wait out the delay and are then asked for a registration
+                    // signature that cannot succeed. The hash is kept for its explorer link;
+                    // `P2PWaitForAcknowledgement` advances once the chain shows a live
+                    // acknowledgement.
+                    logger.registration.info(
+                      'Recorded relayer-reported acknowledgement hash; awaiting on-chain confirmation',
+                      { chainId: chainIdRef.current }
+                    );
                   } else {
                     logger.p2p.warn('ACK_PAY received with invalid or missing hash', {
                       hash: data.hash,
@@ -369,7 +399,13 @@ export function P2PRegistereeRegistrationPage() {
                   break;
 
                 case PROTOCOLS.REG_REC:
-                  // Registration signature received confirmation
+                  // See ACK_REC above — same rule, phase two.
+                  if (!receiptMayAdvance('wallet-reg')) {
+                    logger.p2p.warn('Ignored REG receipt for a signature this session never sent', {
+                      step: currentStep,
+                    });
+                    break;
+                  }
                   logger.p2p.info('REG signature received by relayer');
                   goToNextStepRef.current();
                   break;
@@ -488,6 +524,12 @@ export function P2PRegistereeRegistrationPage() {
                     reason,
                     honoured: resignRequestCount.current,
                   });
+                  // A re-sign sends the flow back to a sign step, so the latch for the
+                  // signature being replaced has to be dropped — otherwise the receipt gate is
+                  // already open for a signature that no longer exists.
+                  clearSentSignature('wallet-reg');
+                  if (target === 'acknowledge-and-sign') clearSentSignature('wallet-ack');
+
                   useRegistrationStore.getState().setStep(target);
                   break;
                 }
@@ -589,6 +631,10 @@ export function P2PRegistereeRegistrationPage() {
   // Redirect home only when genuinely disconnected (not while wagmi reconnects on reload)
   const { isReady } = useRequireWallet();
 
+  // The acknowledgement-payment step advances on this, not on the relayer's ACK_PAY message.
+  // Polls on a block-time interval, so it is the chain that moves the flow forward.
+  const { data: ackDeadlines } = useContractDeadlines(address);
+
   const handleBack = useCallback(() => {
     resetFlow();
     resetP2P();
@@ -644,9 +690,11 @@ export function P2PRegistereeRegistrationPage() {
         return <P2PAckSignStep getLibp2p={getLibp2p} />;
 
       case 'acknowledgement-payment':
+        // Gated on the chain, not on the relayer's ACK_PAY message — see the handler above.
         return (
-          <WaitingForData
-            message="Waiting for relayer to submit acknowledgement transaction..."
+          <P2PWaitForAcknowledgement
+            deadlines={ackDeadlines}
+            onComplete={goToNextStep}
             waitingFor="acknowledgement transaction"
           />
         );
@@ -741,6 +789,15 @@ export function P2PRegistereeRegistrationPage() {
         getLibp2p={getLibp2p}
         currentPeerId={partnerPeerId}
         partnerRole="relayer"
+        // This side publishes a pairing code and never holds one for its partner, so there is
+        // nothing a typed peer ID could be checked against. Passing no `pairedWallet` withdraws
+        // the typed-identity path; clearing the pin is the recovery instead, which re-opens the
+        // same trust-on-first-use the original pairing used and extends no new trust.
+        onClearPairing={() => {
+          clearPartnerPeerId();
+          setConnectedToPeer(false);
+          setProtocolError(null);
+        }}
         onReconnected={(peerId) => {
           setPartnerPeerId(peerId);
           setProtocolError(null);

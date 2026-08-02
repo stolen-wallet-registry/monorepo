@@ -5,6 +5,7 @@
  * Uses useP2PSignFlow for the common sign-and-send logic.
  */
 
+import { useEffect } from 'react';
 import type { Libp2p } from 'libp2p';
 
 import { SignatureCard } from '@/components/composed/SignatureCard';
@@ -13,6 +14,7 @@ import { Alert, AlertDescription } from '@swr/ui';
 import { SIGNATURE_STEP } from '@/lib/signatures';
 import { PROTOCOLS } from '@/lib/p2p';
 import { useP2PSignFlow } from '@/hooks/useP2PSignFlow';
+import { markSignatureSent } from '@/hooks/p2p/sentSignatureLatch';
 
 export interface P2PAckSignStepProps {
   /**
@@ -51,6 +53,14 @@ export function P2PAckSignStep({ getLibp2p }: P2PAckSignStepProps) {
     keyRef: 'AcknowledgementOfRegistry',
     getLibp2p,
   });
+
+  // Record that this side actually produced and sent the acknowledgement signature. The page's
+  // ACK_REC handler advances the flow only when this is set, so a relayer cannot push the
+  // registeree off this step before they have signed anything. Keyed on the signature existing,
+  // not on `handleSign` being called: a prompt the user dismissed must not unlock the receipt.
+  useEffect(() => {
+    if (signature) markSignatureSent('wallet-ack');
+  }, [signature]);
 
   // Build signature data for display
   const signatureData =

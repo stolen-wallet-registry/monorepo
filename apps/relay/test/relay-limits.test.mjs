@@ -9,17 +9,67 @@ import {
   countReservationsByHost,
   createReservationGater,
   extractHost,
+  ipv6Prefix64,
   readRelayLimits,
   shouldDenyReservation,
 } from '../src/relay-limits.mjs';
+
+describe('ipv6Prefix64', () => {
+  test('keeps the first four groups', () => {
+    assert.equal(ipv6Prefix64('2001:db8:1234:5678:9abc:def0:1234:5678'), '2001:db8:1234:5678::/64');
+  });
+
+  test('expands :: before slicing', () => {
+    assert.equal(ipv6Prefix64('2001:db8::1'), '2001:db8:0:0::/64');
+    assert.equal(ipv6Prefix64('::1'), '0:0:0:0::/64');
+  });
+
+  test('normalises leading zeros and case so one prefix is one key', () => {
+    assert.equal(ipv6Prefix64('2001:0DB8:0000:0001::5'), ipv6Prefix64('2001:db8:0:1::9'));
+  });
+
+  test('ignores a zone index', () => {
+    assert.equal(ipv6Prefix64('fe80::1%eth0'), ipv6Prefix64('fe80::2'));
+  });
+
+  test('returns null for things that are not IPv6', () => {
+    assert.equal(ipv6Prefix64('203.0.113.7'), null);
+    assert.equal(ipv6Prefix64('relay.example'), null);
+    assert.equal(ipv6Prefix64('2001::db8::1'), null);
+  });
+});
 
 describe('extractHost', () => {
   test('pulls the IPv4 host out of a websocket multiaddr', () => {
     assert.equal(extractHost('/ip4/203.0.113.7/tcp/12312/ws'), '203.0.113.7');
   });
 
-  test('pulls the IPv6 host and normalises case', () => {
-    assert.equal(extractHost('/ip6/2001:DB8::1/tcp/12312/ws'), '2001:db8::1');
+  test('groups IPv6 by /64 and normalises case', () => {
+    assert.equal(extractHost('/ip6/2001:DB8::1/tcp/12312/ws'), '2001:db8:0:0::/64');
+  });
+
+  /**
+   * The reason /64 masking exists. A /64 is the smallest block anyone is routinely assigned —
+   * one household, one VPS. Keying on the full 128-bit address gave a single attacker 2^64
+   * distinct "hosts", so the per-host cap of 8 capped nothing and one ordinary allocation
+   * could fill all 512 global slots. That takes P2P relay registration offline, and P2P relay
+   * is the ONLY route left to a victim whose wallet is fully drained.
+   */
+  test('two addresses in the same /64 are one host', () => {
+    const a = extractHost('/ip6/2001:db8:abcd:0001::1/tcp/12312/ws');
+    const b = extractHost('/ip6/2001:db8:abcd:0001:ffff:ffff:ffff:ffff/tcp/12312/ws');
+    assert.equal(a, b);
+  });
+
+  test('a different /64 is a different host', () => {
+    const a = extractHost('/ip6/2001:db8:abcd:0001::1/tcp/12312/ws');
+    const b = extractHost('/ip6/2001:db8:abcd:0002::1/tcp/12312/ws');
+    assert.notEqual(a, b);
+  });
+
+  test('an unparseable ip6 value still yields a stable key rather than null', () => {
+    // Fail-safe, not fail-open: we would rather over-group than lose attribution entirely.
+    assert.equal(extractHost('/ip6/not-an-address/tcp/1/ws'), 'not-an-address');
   });
 
   test('handles dns forms', () => {
@@ -53,6 +103,20 @@ describe('countReservationsByHost', () => {
     ]);
     assert.equal(counts.get('1.1.1.1'), 2);
     assert.equal(counts.get('2.2.2.2'), 1);
+  });
+
+  // The counting half of the /64 fix: 8 addresses from one allocation must count as 8 against
+  // one host, not 1 each against 8 hosts.
+  test('counts every address in a /64 against the same host', () => {
+    const counts = countReservationsByHost([
+      ['a', { addr: '/ip6/2001:db8:0:1::1/tcp/1/ws' }],
+      ['b', { addr: '/ip6/2001:db8:0:1::2/tcp/2/ws' }],
+      ['c', { addr: '/ip6/2001:db8:0:1:aaaa:bbbb:cccc:dddd/tcp/3/ws' }],
+      ['d', { addr: '/ip6/2001:db8:0:2::1/tcp/4/ws' }],
+    ]);
+    assert.equal(counts.size, 2);
+    assert.equal(counts.get('2001:db8:0:1::/64'), 3);
+    assert.equal(counts.get('2001:db8:0:2::/64'), 1);
   });
 
   test('skips unattributable reservations rather than bucketing them together', () => {
@@ -151,6 +215,30 @@ describe('createReservationGater', () => {
       connectionAddr: '/ip4/9.9.9.9/tcp/3/ws',
     });
     assert.equal(await gater('p3'), true);
+  });
+
+  // End to end for the /64 fix: an attacker rotating source addresses inside one allocation
+  // is denied, where before the fix each new address looked like a brand-new host.
+  test('denies a peer rotating addresses within one IPv6 /64', async () => {
+    const gater = makeGater({
+      reservations: [
+        ['p1', { addr: '/ip6/2001:db8:0:7::1/tcp/1/ws' }],
+        ['p2', { addr: '/ip6/2001:db8:0:7::2/tcp/2/ws' }],
+      ],
+      connectionAddr: '/ip6/2001:db8:0:7::dead/tcp/3/ws',
+    });
+    assert.equal(await gater('p3'), true);
+  });
+
+  test('allows a peer from a different IPv6 /64', async () => {
+    const gater = makeGater({
+      reservations: [
+        ['p1', { addr: '/ip6/2001:db8:0:7::1/tcp/1/ws' }],
+        ['p2', { addr: '/ip6/2001:db8:0:7::2/tcp/2/ws' }],
+      ],
+      connectionAddr: '/ip6/2001:db8:0:8::1/tcp/3/ws',
+    });
+    assert.equal(await gater('p3'), false);
   });
 
   test('allows a peer from an unaffected host', async () => {

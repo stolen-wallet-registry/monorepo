@@ -31,6 +31,7 @@ import {
   useIndexerStatus,
   type SearchType,
 } from '@/hooks';
+import { isSearchUnavailableError } from '@swr/search';
 import { detectSearchTypeWithEns, type SearchTypeWithEns } from '@/lib/ens';
 import { cn, sanitizeErrorMessage } from '@/lib/utils';
 import { logger } from '@/lib/logger';
@@ -125,7 +126,10 @@ export function RegistrySearch({
   // Query the indexer with effective query (empty string when not searching - hook disables itself)
   const indexerQuery = hasSearched ? effectiveSearchQuery : '';
   const { data, isLoading, error } = useIndexerSearch(indexerQuery);
-  const { stale: indexerStale, data: indexerStatus } = useIndexerStatus();
+  // Only polled once a search has happened — see UseIndexerStatusOptions.enabled. Until then
+  // `stale` reads true (unknown freshness), which is the safe default and unused anyway,
+  // since the caveat only renders alongside a result.
+  const { stale: indexerStale, data: indexerStatus } = useIndexerStatus({ enabled: hasSearched });
 
   const handleSearch = useCallback(() => {
     const trimmed = inputValue.trim();
@@ -190,12 +194,30 @@ export function RegistrySearch({
   const showLoading = hasSearched && isLoading;
   const showEnsLoading = inputType === 'ens' && isEnsLoading;
   const showResult = hasSearched && data && !isLoading;
-  const showError = error && !isLoading;
+
+  // `@swr/search` fails CLOSED: rather than return a result an integrator could read as
+  // "clean", it throws `SearchUnavailableError` when it cannot establish whether an identifier
+  // is registered. TanStack Query hands that back as `error`, but it is not an error in the
+  // sense the generic line below means — the search ran, the registry simply was not checked,
+  // and that is a distinct state the user must be shown as such (audit finding V2). Rendering
+  // it as "Error querying indexer: …" buries the one fact that matters.
+  //
+  // Deliberately narrow: only this error type gets the card. Anything else is a genuine
+  // failure of ours and stays on the generic path, where it is sanitized.
+  const unavailable = error && isSearchUnavailableError(error) ? error : null;
+  const showUnavailable = Boolean(unavailable) && !isLoading;
+  const showError = error && !unavailable && !isLoading;
 
   // A "not found" is a statement about the blocks the indexer has actually processed. If it
   // is behind, everything registered in the gap reads as clean, so the caveat belongs next to
   // the result — only when there is nothing to report, since a hit stands on its own.
-  const showStaleWarning = Boolean(showResult && data && !data.found && indexerStale);
+  //
+  // `type: 'invalid'` is excluded: it also carries `found: false`, but nothing was queried, so
+  // indexer lag has no bearing on it. Warning there attaches a scary, irrelevant caveat to what
+  // is really just a typo, and trains people to ignore the warning where it does matter.
+  const showStaleWarning = Boolean(
+    showResult && data && data.type !== 'invalid' && !data.found && indexerStale
+  );
 
   // Can search if input is valid and not loading ENS
   const canSearch = useMemo(() => {
@@ -310,6 +332,7 @@ export function RegistrySearch({
         {showResult &&
           data &&
           `Search complete. ${data.found ? 'Match found.' : 'No match found.'}`}
+        {showUnavailable && 'Search could not be completed. The registry was not checked.'}
         {showError && 'Search error occurred.'}
       </div>
 
@@ -331,6 +354,18 @@ export function RegistrySearch({
               : 'The indexer’s progress could not be confirmed, so this result may not reflect recent registrations.'}
           </span>
         </p>
+      )}
+
+      {/* Could not verify — an unknown, never an absence. See `unavailable` above. */}
+      {showUnavailable && unavailable && (
+        <AddressSearchResult
+          found={false}
+          foundInWalletRegistry={false}
+          foundInContractRegistry={false}
+          data={null}
+          unverified={unavailable.unverified}
+          reason={unavailable.reason}
+        />
       )}
 
       {/* Search Results */}

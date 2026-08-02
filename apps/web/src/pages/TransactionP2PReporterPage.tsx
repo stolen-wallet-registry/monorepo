@@ -37,7 +37,7 @@ import { P2PDebugPanel } from '@/components/dev/P2PDebugPanel';
 import { WaitForConnectionStep } from '@/components/registration/steps';
 import { TxGracePeriodStep, TxSuccessStep } from '@/components/registration/tx-steps';
 import {
-  WaitingForData,
+  P2PWaitForAcknowledgement,
   ConnectionStatusBadge,
   ReconnectDialog,
   P2PWaitForConfirmation,
@@ -61,6 +61,12 @@ import {
   needsTxCrossChainConfirmation,
 } from '@/hooks/transactions';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
+import {
+  clearSentSignature,
+  markSignatureSent,
+  receiptMayAdvance,
+  resetSentSignatures,
+} from '@/hooks/p2p/sentSignatureLatch';
 import { useRequireWallet } from '@/hooks/useRequireWallet';
 import { useP2PConnectionHealth } from '@/hooks/p2p/useP2PConnectionHealth';
 import { useOnValueChange } from '@/hooks/useOnValueChange';
@@ -253,6 +259,11 @@ function TxP2PAckSign({ getLibp2p }: TxP2PAckSignProps) {
         },
       });
 
+      // Record that this side actually produced AND sent the signature. The TX_ACK_REC handler
+      // advances the flow only when this is set, so a relayer cannot push the reporter off this
+      // step before they have signed anything. Marked here rather than next to `setSignature`
+      // above so it means "on the wire", matching the wallet flow's semantics.
+      markSignatureSent('tx-ack');
       logger.p2p.info('TX ACK signature + batch sent to relayer');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to sign or send';
@@ -534,6 +545,8 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
         },
       });
 
+      // See the acknowledgement marker above — same rule, phase two.
+      markSignatureSent('tx-reg');
       logger.p2p.info('TX REG signature + batch sent to relayer');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to sign or send';
@@ -754,6 +767,7 @@ export function TransactionP2PReporterPage() {
     partnerPeerId,
     setPeerId,
     setPartnerPeerId,
+    clearPartnerPeerId,
     setConnectedToPeer,
     setInitialized,
     reset: resetP2P,
@@ -765,6 +779,9 @@ export function TransactionP2PReporterPage() {
   useEffect(() => {
     if (step === 'wait-for-connection') {
       clearForwarderProvenance();
+      // A second run in this tab must not inherit the first run's "we sent it" latches, or the
+      // receipt gate is already open for signatures this run has not produced.
+      resetSentSignatures();
     }
   }, [step, clearForwarderProvenance]);
 
@@ -955,7 +972,18 @@ export function TransactionP2PReporterPage() {
                   break;
 
                 case PROTOCOLS.TX_ACK_REC:
-                  // Relayer confirmed receipt of ack signature
+                  // A receipt is only meaningful as an acknowledgement of something WE sent.
+                  // Without this, a relayer that sends TX_ACK_REC early pushes the reporter off
+                  // the sign step having signed nothing — and the flow then stalls at a payment
+                  // step forever. Ordering (`isTxProtocolExpectedAtStep`) does not cover this:
+                  // the receipt IS legitimate at this step, just not before we signed.
+                  if (!receiptMayAdvance('tx-ack')) {
+                    logger.p2p.warn(
+                      'Ignored TX ACK receipt for a signature this session never sent',
+                      { step: currentStep }
+                    );
+                    break;
+                  }
                   logger.p2p.info('TX ACK signature received by relayer');
                   goToNextStepRef.current();
                   break;
@@ -964,7 +992,18 @@ export function TransactionP2PReporterPage() {
                   // Relayer submitted ack tx
                   if (typeof data.hash === 'string' && isHash(data.hash)) {
                     setAcknowledgementHash(data.hash, data.txChainId ?? chainIdRef.current);
-                    goToNextStepRef.current();
+                    // Never advance on the relayer's word — the same rule TX_REG_PAY below
+                    // already follows. `data.hash` is shape-checked only: no proof the
+                    // transaction exists, targets the registry, or succeeded. Advancing here
+                    // drops the reporter into the anti-phishing grace period with nothing on
+                    // chain behind it, so they wait out the delay and are then asked for a
+                    // registration signature that cannot succeed. The hash is kept for its
+                    // explorer link; `P2PWaitForAcknowledgement` advances once the chain shows
+                    // a live acknowledgement.
+                    logger.registration.info(
+                      'Recorded relayer-reported acknowledgement hash; awaiting on-chain confirmation',
+                      { chainId: chainIdRef.current }
+                    );
                   } else {
                     logger.p2p.warn('TX_ACK_PAY received with invalid hash', { hash: data.hash });
                     setProtocolError('Received invalid acknowledgement hash from relayer');
@@ -972,7 +1011,14 @@ export function TransactionP2PReporterPage() {
                   break;
 
                 case PROTOCOLS.TX_REG_REC:
-                  // Relayer confirmed receipt of reg signature
+                  // See TX_ACK_REC above — same rule, phase two.
+                  if (!receiptMayAdvance('tx-reg')) {
+                    logger.p2p.warn(
+                      'Ignored TX REG receipt for a signature this session never sent',
+                      { step: currentStep }
+                    );
+                    break;
+                  }
                   logger.p2p.info('TX REG signature received by relayer');
                   goToNextStepRef.current();
                   break;
@@ -1062,6 +1108,12 @@ export function TransactionP2PReporterPage() {
                     reason,
                     honoured: resignRequestCount.current,
                   });
+                  // A re-sign sends the flow back to a sign step, so the latch for the
+                  // signature being replaced has to be dropped — otherwise the receipt gate is
+                  // already open for a signature that no longer exists.
+                  clearSentSignature('tx-reg');
+                  if (target === 'acknowledge-sign') clearSentSignature('tx-ack');
+
                   useTransactionRegistrationStore.getState().setStep(target);
                   break;
                 }
@@ -1170,6 +1222,10 @@ export function TransactionP2PReporterPage() {
 
   // Redirect home only when genuinely disconnected (not while wagmi reconnects on reload)
   const { isReady } = useRequireWallet();
+
+  // The acknowledgement-payment step advances on this, not on the relayer's TX_ACK_PAY message.
+  // Polls on a block-time interval, so it is the chain that moves the flow forward.
+  const { data: ackDeadlines } = useTxContractDeadlines(address);
 
   const goToNextStep = useCallback(() => {
     goToNextStepRef.current();
@@ -1348,9 +1404,11 @@ export function TransactionP2PReporterPage() {
         return <TxP2PAckSign getLibp2p={getLibp2p} />;
 
       case 'acknowledgement-payment':
+        // Gated on the chain, not on the relayer's TX_ACK_PAY message — see the handler above.
         return (
-          <WaitingForData
-            message="Waiting for relayer to submit acknowledgement transaction..."
+          <P2PWaitForAcknowledgement
+            deadlines={ackDeadlines}
+            onComplete={goToNextStep}
             waitingFor="acknowledgement transaction"
           />
         );
@@ -1445,6 +1503,15 @@ export function TransactionP2PReporterPage() {
         getLibp2p={getLibp2p}
         currentPeerId={partnerPeerId}
         partnerRole="relayer"
+        // This side publishes a pairing code and never holds one for its partner, so there is
+        // nothing a typed peer ID could be checked against. Passing no `pairedWallet` withdraws
+        // the typed-identity path; clearing the pin is the recovery instead, which re-opens the
+        // same trust-on-first-use the original pairing used and extends no new trust.
+        onClearPairing={() => {
+          clearPartnerPeerId();
+          setConnectedToPeer(false);
+          setProtocolError(null);
+        }}
         onReconnected={(peerId) => {
           setPartnerPeerId(peerId);
           setProtocolError(null);

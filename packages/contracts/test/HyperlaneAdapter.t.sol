@@ -6,6 +6,7 @@ import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.so
 import { IBridgeAdapter } from "../src/interfaces/IBridgeAdapter.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
 import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
+import { BatchLimits } from "../src/libraries/BatchLimits.sol";
 
 contract HyperlaneAdapterTest is Test {
     HyperlaneAdapter adapter;
@@ -268,23 +269,95 @@ contract HyperlaneAdapterTest is Test {
     ///      gas-schedule change) would make every large batch revert on quoteMessage —
     ///      including already-acknowledged batches whose reporters burned a nonce and cannot
     ///      re-acknowledge until expiry. 40_000 × 800 + 200_000 = 32.2M > 30M.
+    ///
+    ///      The batch size is read from BatchLimits, the same constant _validateGasModel uses,
+    ///      rather than hardcoded: with a literal 800 here, raising the shared limit would make
+    ///      this test assert against a batch size the contract no longer enforces.
     function test_SetGasAmounts_RejectsConfigThatBreaksMaxBatch() public {
+        uint256 maxBatch = BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE;
+        // Any per-entry value that overflows the ceiling alongside the default base.
+        uint256 tooMuch = ((adapter.MAX_GAS_LIMIT() - adapter.DEFAULT_BASE_GAS()) / maxBatch) + 1;
+
         vm.prank(owner);
         vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigExceedsLimit.selector);
-        adapter.setGasAmounts(HUB_DOMAIN, 0, 40_000);
+        adapter.setGasAmounts(HUB_DOMAIN, 0, tooMuch);
+    }
+
+    /// @notice baseGas carries its own ceiling, independent of the combined check.
+    /// @dev The combined bound alone does NOT catch a huge base paired with a small per-entry cost:
+    ///      `setGasAmounts(d, 29_000_000, 1_000)` computes 29M + 1_000 × 800 = 29.8M, which is
+    ///      under MAX_GAS_LIMIT and used to validate cleanly. Every single-entry cross-chain
+    ///      registration would then buy ~29M of destination gas through the IGP — a fee-inflation
+    ///      lever on an owner-only setter with no timelock in front of it.
+    ///
+    ///      This asserts the ORIGINAL exploit config is now rejected. It is discriminating by
+    ///      construction: the combined check passes these numbers, so only MAX_BASE_GAS can be
+    ///      what rejects them.
+    function test_SetGasAmounts_RejectsInflatedBaseGasThatCombinedCheckMisses() public {
+        // Precondition: prove the combined check really would have let this through.
+        assertLe(
+            uint256(29_000_000) + 1000 * BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE,
+            adapter.MAX_GAS_LIMIT(),
+            "precondition: the combined bound does not reject this config"
+        );
+
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigExceedsLimit.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, 29_000_000, 1000);
+
+        assertEq(adapter.baseGasAmounts(HUB_DOMAIN), 0, "rejected config must not be written");
+    }
+
+    /// @notice One wei of gas over MAX_BASE_GAS is rejected.
+    /// @dev Paired with the exact-value success below. perEntryGas is 0 here, so the effective
+    ///      per-entry falls back to DEFAULT_PER_ENTRY_GAS and the combined total is ~28.8M —
+    ///      comfortably under MAX_GAS_LIMIT. The combined check therefore cannot fire, which makes
+    ///      MAX_BASE_GAS provably the only bound under test.
+    function test_SetGasAmounts_RejectsBaseGasAboveMaxBaseGas() public {
+        uint256 overLimit = adapter.MAX_BASE_GAS() + 1;
+
+        // Precondition: the combined bound is not what rejects this.
+        assertLe(
+            overLimit + adapter.DEFAULT_PER_ENTRY_GAS() * BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE,
+            adapter.MAX_GAS_LIMIT(),
+            "precondition: the combined bound does not reject this config"
+        );
+
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigExceedsLimit.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, overLimit, 0);
+    }
+
+    /// @notice Exactly MAX_BASE_GAS is accepted — the bound is `>`, not `>=`.
+    /// @dev The load-bearing half of the pair. Without it, a bound mistakenly written as `>=`
+    ///      (rejecting the documented maximum) would go unnoticed, and so would a check that
+    ///      rejected every non-zero baseGas outright. Adjacent to the rejection above, so an
+    ///      off-by-one in either direction breaks exactly one of the two.
+    function test_SetGasAmounts_AcceptsBaseGasAtExactlyMaxBaseGas() public {
+        uint256 atLimit = adapter.MAX_BASE_GAS();
+
+        vm.prank(owner);
+        adapter.setGasAmounts(HUB_DOMAIN, atLimit, 0);
+
+        assertEq(adapter.baseGasAmounts(HUB_DOMAIN), atLimit, "the documented maximum must be usable");
     }
 
     /// @notice The bound validates the effective values: 0 means "use default", not "no gas".
-    /// @dev baseGas = 0 falls back to DEFAULT_BASE_GAS (200k), so a perEntryGas at exactly the
-    ///      ceiling for a zero base must still be rejected once the default base is added.
+    /// @dev baseGas = 0 falls back to DEFAULT_BASE_GAS, so a perEntryGas at exactly the ceiling
+    ///      for a ZERO base must still be rejected once the default base is added back. A bound
+    ///      that validated the raw arguments instead of the effective ones would accept it.
     function test_SetGasAmounts_ValidatesEffectiveDefaults() public {
-        // 37_500 × 800 = 30M exactly — fits with zero base, but not with the 200k default base.
+        uint256 maxBatch = BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE;
+
+        // Exactly fills MAX_GAS_LIMIT with a zero base — and therefore overflows it once the
+        // default base is applied.
+        uint256 fitsOnlyWithoutBase = adapter.MAX_GAS_LIMIT() / maxBatch;
         vm.prank(owner);
         vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigExceedsLimit.selector);
-        adapter.setGasAmounts(HUB_DOMAIN, 0, 37_500);
+        adapter.setGasAmounts(HUB_DOMAIN, 0, fitsOnlyWithoutBase);
 
         // The largest per-entry value that fits alongside the default base is accepted.
-        uint256 maxPerEntry = (adapter.MAX_GAS_LIMIT() - adapter.DEFAULT_BASE_GAS()) / 800;
+        uint256 maxPerEntry = (adapter.MAX_GAS_LIMIT() - adapter.DEFAULT_BASE_GAS()) / maxBatch;
         vm.prank(owner);
         adapter.setGasAmounts(HUB_DOMAIN, 0, maxPerEntry);
         assertEq(adapter.perEntryGasAmounts(HUB_DOMAIN), maxPerEntry);

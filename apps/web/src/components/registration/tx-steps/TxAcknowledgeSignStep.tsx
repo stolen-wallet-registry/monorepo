@@ -24,6 +24,7 @@ import {
   computeTransactionDataHash,
 } from '@/lib/signatures/transactions';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
+import { selectionMatchesSignedBatch } from '@/lib/transactions/selectionConsistency';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import type { Hash } from '@/lib/types/ethereum';
 import { logger } from '@/lib/logger';
@@ -104,11 +105,12 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   const { signTxAcknowledgement, isPending: isSigning, reset: resetSigning } = useSignTxEIP712();
 
   // Compared as sets: details are ordered by transaction history, not selection order.
-  const selectionIsConsistent = useMemo(() => {
-    if (selectedTxHashes.length !== selectedTxDetails.length) return false;
-    const shown = new Set(selectedTxDetails.map((detail) => detail.hash));
-    return shown.size === selectedTxHashes.length && selectedTxHashes.every((h) => shown.has(h));
-  }, [selectedTxHashes, selectedTxDetails]);
+  // Shared with TxRegisterSignStep rather than inlined — this step carried its own copy, which
+  // then missed the duplicate-signed-hash case the shared predicate now rejects.
+  const selectionIsConsistent = useMemo(
+    () => selectionMatchesSignedBatch(selectedTxHashes, selectedTxDetails),
+    [selectedTxHashes, selectedTxDetails]
+  );
 
   const isContractDataLoading = nonceLoading || hashLoading;
   const hasContractError = nonceError || hashError;

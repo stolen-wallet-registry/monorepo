@@ -178,4 +178,42 @@ describe('useRelayedWalletSignatureReview', () => {
 
     await waitFor(() => expect(result.current.review?.ok).toBe(true));
   });
+
+  // The clock must be read when the verdict is produced, not captured at mount. These hooks
+  // mount DISABLED — `enabled` is `role === 'relayer' && !!storedSig`, and the signature
+  // arrives later — so a value seeded into state by a `useState` initialiser is as old as the
+  // wait for the partner. A deadline that lapsed during that wait then reads as still valid
+  // and unblocks the pay button; the contract rejects the signature, so the relayer pays gas
+  // to discover what this check exists to tell them first.
+  it('judges the deadline against the current clock, not the clock at mount', async () => {
+    useP2PStore.getState().setPairedWallet(VICTIM);
+    h.recovered = VICTIM;
+
+    const mountMs = 1_800_000_000_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(mountMs);
+
+    // Valid at mount, lapsed 50s before the signature actually arrives.
+    const sig = storedSig({ deadline: BigInt(Math.floor(mountMs / 1000) + 10) });
+
+    const { result, rerender } = renderHook(
+      (props: { enabled: boolean }) =>
+        useRelayedWalletSignatureReview({
+          enabled: props.enabled,
+          step: SIGNATURE_STEP.ACKNOWLEDGEMENT,
+          storedSignature: sig,
+          expectedSigner: ATTACKER,
+          trustedForwarder: RELAYER,
+        }),
+      { initialProps: { enabled: false } }
+    );
+
+    nowSpy.mockReturnValue(mountMs + 60_000);
+    rerender({ enabled: true });
+
+    await waitFor(() => expect(result.current.review).not.toBeNull());
+    expect(result.current.review?.issues).toContain('deadline-expired');
+    expect(result.current.review?.ok).toBe(false);
+
+    nowSpy.mockRestore();
+  });
 });

@@ -235,6 +235,14 @@ contract SpokeRegistryTest is Test {
     /// @dev Roll one block past `graceStart` and return a `windowBlock` that satisfies both of
     ///      `register`'s bounds: `windowBlock >= ack.startBlock` AND `windowBlock < block.number`.
     ///      Rolling only to `graceStart` (as before V1) leaves no mined block to reference.
+    ///
+    ///      DUPLICATE OF {EIP712TestHelper._rollToWindow}, and deliberately so: this suite extends
+    ///      forge-std's Test directly rather than EIP712TestHelper, because the spoke signs
+    ///      `reportedChainId`/`incidentTimestamp` as uint64 where the hub uses bytes32, so it
+    ///      cannot share the helper's typehashes. The two bodies MUST stay identical — they encode
+    ///      the same anti-phishing window convention, and a change to one without the other would
+    ///      silently give the hub and spoke test suites different notions of a valid windowBlock.
+    ///      If EIP712TestHelper's copy changes, change this one.
     function _rollToWindow(uint256 graceStart) internal returns (uint256 windowBlock) {
         if (block.number <= graceStart) vm.roll(graceStart + 1);
         return graceStart;
@@ -475,7 +483,27 @@ contract SpokeRegistryTest is Test {
         address _forwarder,
         uint256 windowBlock
     ) internal {
-        _sDeadline = block.timestamp + 1 hours;
+        _prepareTxBatchRegSigWithDeadline(
+            dataHash, reportedChainId, txCount, _forwarder, windowBlock, block.timestamp + 1 hours
+        );
+    }
+
+    /// @dev As {_prepareTxBatchRegSig}, but with an explicit deadline, so a test can produce a
+    ///      signature that genuinely commits to the deadline it then submits. Without this a
+    ///      deadline-bound test signs one value and submits another, which passes only because
+    ///      the bound is checked before signature recovery — i.e. it tests check ORDER, not the
+    ///      bound itself, and would keep passing if the bound were removed but the recovery
+    ///      happened to reject the mismatch.
+    ///      Reads nonce via an external call, so call BEFORE vm.expectRevert.
+    function _prepareTxBatchRegSigWithDeadline(
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 txCount,
+        address _forwarder,
+        uint256 windowBlock,
+        uint256 deadline
+    ) internal {
+        _sDeadline = deadline;
         _sNonce = spoke.nonces(reporter);
         _sWindowBlock = windowBlock;
         (_sv, _sr, _ss) = _signTxBatchReg(
@@ -1618,6 +1646,11 @@ contract SpokeRegistryTest is Test {
     }
 
     /// V13, phase 2: the same bound on the registration signature.
+    /// @dev The signature is produced OVER `farDeadline`, not over a different value that the call
+    ///      then replaces. Otherwise the submission would be rejectable on two independent grounds
+    ///      and the test would pass even with the lifetime bound removed, as long as signature
+    ///      recovery still failed on the mismatch. Signing the submitted deadline makes this
+    ///      otherwise fully valid, so the lifetime bound is the only thing that can reject it.
     function test_TxBatchReg_RejectsDeadlineBeyondMaxLifetime() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
@@ -1625,15 +1658,21 @@ contract SpokeRegistryTest is Test {
             bytes32 dataHash = _computeDataHash(txHashes, chainIds);
             _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
             uint256 windowBlock = _skipToTxBatchRegistrationWindow(reporter);
-            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder, windowBlock);
+            _prepareTxBatchRegSigWithDeadline(
+                dataHash,
+                reportedChainId,
+                uint32(txHashes.length),
+                forwarder,
+                windowBlock,
+                block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME + 1
+            );
         }
         uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
-        uint256 farDeadline = block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME + 1;
 
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__DeadlineTooFarInFuture.selector);
         vm.prank(forwarder);
         spoke.registerTransactionBatch{ value: fee }(
-            reportedChainId, farDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
         );
     }
 
@@ -1678,6 +1717,291 @@ contract SpokeRegistryTest is Test {
         vm.prank(notOwner);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", notOwner));
         spoke.withdrawFees(makeAddr("treasury"), 1 ether);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WINDOW BLOCK AGE BOUND (TimingConfig.MAX_WINDOW_BLOCK_AGE)
+    // ═══════════════════════════════════════════════════════════════════════════
+    //
+    // TimingConfig.resolveWindowBlockHash rejects with `block.number - windowBlock >=
+    // MAX_WINDOW_BLOCK_AGE`, i.e. STRICTLY less than 256 is required, so the last valid age is
+    // 255. Both sides of that edge are pinned below, on both spoke signing paths.
+    //
+    // MEASURED, because the source comment on that line is wrong and it changes what these tests
+    // prove. It says "at exactly MAX_WINDOW_BLOCK_AGE the hash is already gone"; the EVM actually
+    // serves `blockhash` for ages 1..256 inclusive, and only age 257 returns zero (verified in
+    // this fixture). So the contract's bound is deliberately ONE BLOCK STRICTER than the EVM's,
+    // and the defensive `hash == 0` check is NOT a backstop for this edge.
+    //
+    // That is exactly why the exact-256 test below is worth having: if the bound were mistakenly
+    // relaxed to `>`, age 256 would clear the range check AND `blockhash` would return a real
+    // non-zero hash, so the registration would SUCCEED and the test would fail. The pair is a
+    // genuine off-by-one detector rather than a restatement of the zero-check.
+    //
+    // These need a spoke whose registration window outlives a 256-block roll; the default
+    // DEADLINE_BLOCKS of 50 would trip ForwarderExpired first and the age check would never run.
+
+    uint256 internal constant LONG_DEADLINE_BLOCKS = 2000;
+
+    /// @dev A spoke wired exactly like the one in setUp, but with a registration window wide
+    ///      enough that a 256-block roll stays inside it.
+    function _longWindowSpoke() internal returns (SpokeRegistry longSpoke) {
+        longSpoke = new SpokeRegistry(
+            owner,
+            address(bridgeAdapter),
+            address(feeManager),
+            HUB_CHAIN_ID,
+            HUB_INBOX,
+            GRACE_BLOCKS,
+            LONG_DEADLINE_BLOCKS,
+            1
+        );
+        bridgeAdapter.setAuthorizedSender(address(longSpoke), true);
+    }
+
+    /// @dev Acknowledge on `longSpoke` and return the grace start.
+    ///      Extracted so phase-1 locals are off the stack before phase 2 signs (no via-ir here).
+    function _ackOnSpoke(SpokeRegistry longSpoke, uint64 reportedChainId, uint64 incidentTimestamp)
+        internal
+        returns (uint256 graceStart)
+    {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = longSpoke.nonces(wallet);
+        (uint8 v, bytes32 r, bytes32 s) = _signAckForSpoke(
+            longSpoke, walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline
+        );
+        vm.prank(forwarder);
+        longSpoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+        return longSpoke.getAcknowledgement(wallet).startBlock;
+    }
+
+    /// @dev Sign and submit a wallet registration on `longSpoke` at the given windowBlock.
+    ///      All external calls (nonce, fee) happen before the caller's vm.expectRevert.
+    function _registerOnSpokeAtWindow(
+        SpokeRegistry longSpoke,
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
+        uint256 windowBlock,
+        bool expectTooOld
+    ) internal {
+        _sDeadline = block.timestamp + 1 hours;
+        _sNonce = longSpoke.nonces(wallet);
+        (_sv, _sr, _ss) = _signRegForSpoke(
+            longSpoke, forwarder, reportedChainId, incidentTimestamp, _sNonce, _sDeadline, windowBlock
+        );
+        uint256 fee = longSpoke.quoteRegistration(wallet);
+
+        vm.prank(forwarder);
+        if (expectTooOld) vm.expectRevert(TimingConfig.TimingConfig__WindowBlockTooOld.selector);
+        longSpoke.register{ value: fee }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
+    }
+
+    /// @notice Wallet path: a windowBlock exactly MAX_WINDOW_BLOCK_AGE - 1 blocks old still works.
+    /// @dev The last age at which `blockhash` still resolves. If the bound were mistakenly written
+    ///      as `>` instead of `>=`, this test would still pass — which is why the companion below
+    ///      is the one that matters. Kept as the paired half so a fix that simply tightened the
+    ///      bound into uselessness (rejecting everything) fails here.
+    function test_register_windowBlockAtMaxAgeMinusOneSucceeds() public {
+        SpokeRegistry longSpoke = _longWindowSpoke();
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+        uint256 graceStart = _ackOnSpoke(longSpoke, 1, incidentTimestamp);
+
+        vm.roll(graceStart + TimingConfig.MAX_WINDOW_BLOCK_AGE - 1);
+        // age == MAX_WINDOW_BLOCK_AGE - 1 == 255
+        assertEq(block.number - graceStart, TimingConfig.MAX_WINDOW_BLOCK_AGE - 1);
+
+        _registerOnSpokeAtWindow(longSpoke, 1, incidentTimestamp, graceStart, false);
+        assertFalse(longSpoke.isPending(wallet), "registration at the oldest valid age must succeed");
+    }
+
+    /// @notice Wallet path: a windowBlock exactly MAX_WINDOW_BLOCK_AGE blocks old is rejected.
+    /// @dev The assertion that pins the `>=`. The EVM still serves `blockhash` at this age (see
+    ///      the section note), so with `>` the contract would clear the range check, get a real
+    ///      non-zero hash, and the registration would SUCCEED — this test would fail. Directly
+    ///      adjacent to the passing case above, so an off-by-one in either direction breaks
+    ///      exactly one of the two.
+    function test_register_windowBlockAtExactlyMaxAgeReverts() public {
+        SpokeRegistry longSpoke = _longWindowSpoke();
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+        uint256 graceStart = _ackOnSpoke(longSpoke, 1, incidentTimestamp);
+
+        vm.roll(graceStart + TimingConfig.MAX_WINDOW_BLOCK_AGE);
+        assertEq(block.number - graceStart, TimingConfig.MAX_WINDOW_BLOCK_AGE);
+
+        _registerOnSpokeAtWindow(longSpoke, 1, incidentTimestamp, graceStart, true);
+        assertTrue(longSpoke.isPending(wallet), "a rejected registration must leave the ack intact");
+    }
+
+    /// @notice Tx-batch path: a windowBlock at or beyond the current block is rejected.
+    /// @dev The spoke's transaction-batch path is the one V1's first pass missed entirely, so each
+    ///      window-block branch needs pinning here separately from the wallet path — they are
+    ///      distinct call sites into resolveWindowBlockHash.
+    function test_registerTransactionBatch_revertsIfWindowBlockNotMined() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        {
+            bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+            _doTxBatchAck(forwarder, dataHash, reportedChainId, uint32(txHashes.length));
+            _skipToTxBatchRegistrationWindow(reporter);
+            // The current block is not yet mined from the EVM's point of view.
+            _prepareTxBatchRegSig(dataHash, reportedChainId, uint32(txHashes.length), forwarder, block.number);
+        }
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
+
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockNotMined.selector);
+        vm.prank(forwarder);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
+        );
+    }
+
+    /// @notice Tx-batch path: a windowBlock older than MAX_WINDOW_BLOCK_AGE is rejected.
+    /// @dev Same bound as the wallet path, asserted at the tx-batch call site. Uses the
+    ///      long-window spoke so the age check, not ForwarderExpired, is what fires.
+    function test_registerTransactionBatch_revertsIfWindowBlockTooOld() public {
+        SpokeRegistry longSpoke = _longWindowSpoke();
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint256 graceStart = _ackTxBatchOnSpoke(longSpoke, txHashes, chainIds, reportedChainId);
+
+        vm.roll(graceStart + TimingConfig.MAX_WINDOW_BLOCK_AGE);
+
+        _prepareTxBatchRegSigForSpoke(longSpoke, txHashes, chainIds, reportedChainId, graceStart);
+        uint256 fee = longSpoke.quoteTransactionBatchRegistration(reporter);
+
+        vm.expectRevert(TimingConfig.TimingConfig__WindowBlockTooOld.selector);
+        vm.prank(forwarder);
+        longSpoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
+        );
+    }
+
+    /// @notice Tx-batch path: one block younger than that bound still works.
+    /// @dev The paired passing half of the test above — adjacent ages, so an off-by-one in the
+    ///      `>=` breaks exactly one of the two.
+    function test_registerTransactionBatch_windowBlockAtMaxAgeMinusOneSucceeds() public {
+        SpokeRegistry longSpoke = _longWindowSpoke();
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint256 graceStart = _ackTxBatchOnSpoke(longSpoke, txHashes, chainIds, reportedChainId);
+
+        vm.roll(graceStart + TimingConfig.MAX_WINDOW_BLOCK_AGE - 1);
+
+        _prepareTxBatchRegSigForSpoke(longSpoke, txHashes, chainIds, reportedChainId, graceStart);
+        uint256 fee = longSpoke.quoteTransactionBatchRegistration(reporter);
+
+        vm.prank(forwarder);
+        longSpoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, chainIds, _sWindowBlock, _sv, _sr, _ss
+        );
+
+        assertFalse(longSpoke.isPendingTransactionBatch(reporter), "registration at the oldest valid age must succeed");
+    }
+
+    /// @dev Tx-batch acknowledgement against an arbitrary spoke; returns its grace start.
+    ///      Signature components go through the _s* storage slots and the digest is built in a
+    ///      separate frame ({_txBatchAckDigestFor}) — inlining either overflows the 16-slot stack,
+    ///      and this project builds without via-ir.
+    function _ackTxBatchOnSpoke(
+        SpokeRegistry longSpoke,
+        bytes32[] memory txHashes,
+        bytes32[] memory chainIds,
+        bytes32 reportedChainId
+    ) internal returns (uint256 graceStart) {
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        uint32 txCount = uint32(txHashes.length);
+        _sDeadline = block.timestamp + 1 hours;
+        _sNonce = longSpoke.nonces(reporter);
+        (_sv, _sr, _ss) = vm.sign(
+            reporterPrivateKey,
+            _txBatchAckDigestFor(address(longSpoke), dataHash, reportedChainId, txCount, _sNonce, _sDeadline)
+        );
+        vm.prank(forwarder);
+        longSpoke.acknowledgeTransactionBatch(
+            dataHash, reportedChainId, txCount, _sDeadline, _sNonce, reporter, _sv, _sr, _ss
+        );
+        return longSpoke.getTransactionAcknowledgement(reporter).startBlock;
+    }
+
+    /// @dev Tx-batch acknowledgement digest for an arbitrary spoke instance.
+    function _txBatchAckDigestFor(
+        address spokeAddr,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 txCount,
+        uint256 nonce,
+        uint256 deadline
+    ) internal view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                TX_BATCH_ACK_TYPEHASH,
+                keccak256(bytes(TX_ACK_STATEMENT)),
+                reporter,
+                forwarder,
+                dataHash,
+                reportedChainId,
+                txCount,
+                nonce,
+                deadline
+            )
+        );
+        return keccak256(
+            abi.encodePacked("\x19\x01", _domainSeparatorFor("StolenWalletRegistry", "4", spokeAddr), structHash)
+        );
+    }
+
+    /// @dev Tx-batch registration signature against an arbitrary spoke, into the _s* storage
+    ///      slots. Reads the nonce via an external call, so call BEFORE vm.expectRevert.
+    function _prepareTxBatchRegSigForSpoke(
+        SpokeRegistry longSpoke,
+        bytes32[] memory txHashes,
+        bytes32[] memory chainIds,
+        bytes32 reportedChainId,
+        uint256 windowBlock
+    ) internal {
+        _sDeadline = block.timestamp + 1 hours;
+        _sNonce = longSpoke.nonces(reporter);
+        _sWindowBlock = windowBlock;
+        (_sv, _sr, _ss) = vm.sign(
+            reporterPrivateKey,
+            _txBatchRegDigestFor(
+                address(longSpoke),
+                _computeDataHash(txHashes, chainIds),
+                reportedChainId,
+                uint32(txHashes.length),
+                windowBlock
+            )
+        );
+    }
+
+    /// @dev Tx-batch registration digest for an arbitrary spoke instance. Reads nonce/deadline
+    ///      from the _s* slots the caller just populated, to stay inside the stack limit.
+    function _txBatchRegDigestFor(
+        address spokeAddr,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 txCount,
+        uint256 windowBlock
+    ) internal view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                TX_BATCH_REG_TYPEHASH,
+                keccak256(bytes(TX_REG_STATEMENT)),
+                reporter,
+                forwarder,
+                dataHash,
+                reportedChainId,
+                txCount,
+                _sNonce,
+                _sDeadline,
+                blockhash(windowBlock)
+            )
+        );
+        return keccak256(
+            abi.encodePacked("\x19\x01", _domainSeparatorFor("StolenWalletRegistry", "4", spokeAddr), structHash)
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1818,20 +2142,59 @@ contract SpokeRegistryTest is Test {
         bytes32 spokeDigest = keccak256(
             abi.encodePacked("\x19\x01", _domainSeparatorFor(spokeName, spokeVersion, address(spoke)), structHash)
         );
-
-        // Substituting the spoke's address into the hub's domain reproduces the spoke digest
-        // exactly, which is only possible if every other input matches.
-        assertEq(
-            spokeDigest,
-            keccak256(
-                abi.encodePacked("\x19\x01", _domainSeparatorFor(hubName, hubVersion, address(spoke)), structHash)
-            ),
-            "digest differs by more than verifyingContract"
-        );
         assertTrue(hubDigest != spokeDigest, "cross-chain replay must remain impossible");
 
         // The external ABI (argument order, including windowBlock's position) must also match.
         assertEq(ISpokeRegistry.register.selector, IWalletRegistry.register.selector, "register ABI drift");
+
+        // Everything above is computed off-chain from reported fields, so on its own it would
+        // still hold if a contract's REAL separator differed from the one its eip712Domain()
+        // fields describe. Neither registry exposes a public DOMAIN_SEPARATOR to read, so the
+        // separator is pinned behaviourally instead — see below.
+        _assertSpokeRejectsHubDomainSignature(_domainSeparatorFor(hubName, hubVersion, address(hub)));
+    }
+
+    /// @dev Empirical half of {test_HubAndSpokeRegistrationDigestsAreUnified}. Drives a real spoke
+    ///      registration whose signature is built over the HUB's domain separator and asserts the
+    ///      spoke rejects it.
+    ///
+    ///      This is what makes the digest comparison above non-circular. The positive direction is
+    ///      already covered by test_Register_Success, which succeeds with a signature built from
+    ///      `_domainSeparatorFor(spokeName, spokeVersion, spoke)` — so the spoke's real separator
+    ///      provably equals the locally computed one. This adds the negative direction: a
+    ///      signature that differs ONLY in `verifyingContract` must not verify, which is precisely
+    ///      the property that stops a spoke signature being replayed on the hub. Together they pin
+    ///      the separator to the contract's actual behaviour rather than to a recomputation of the
+    ///      same formula on both sides of an assertEq.
+    function _assertSpokeRejectsHubDomainSignature(bytes32 hubSeparator) internal {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        _doAck(forwarder, reportedChainId, incidentTimestamp);
+        uint256 windowBlock = _skipToRegistrationWindow();
+
+        // External calls (nonce, fee quote) all happen before vm.expectRevert.
+        _sDeadline = block.timestamp + 1 hours;
+        _sNonce = spoke.nonces(wallet);
+        (_sv, _sr, _ss) = vm.sign(
+            walletPrivateKey,
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    hubSeparator,
+                    _regStructHash(
+                        wallet, forwarder, reportedChainId, incidentTimestamp, _sNonce, _sDeadline, windowBlock
+                    )
+                )
+            )
+        );
+        uint256 fee = spoke.quoteRegistration(wallet);
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidSigner.selector);
+        spoke.register{ value: fee }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
     }
 
     /// @dev EIP-712 domain separator for an arbitrary (name, version, contract) triple.

@@ -191,17 +191,48 @@ describe('CAIP-10 search covers the contract registry (V18)', () => {
     ).rejects.toThrow(SearchUnavailableError);
   });
 
-  it('marks the contract registry unverified for non-EVM namespaces', async () => {
-    // The contract registry is keyed by an EVM address and has no form for these
-    // identifiers, so it genuinely cannot be consulted. Say so instead of reporting absence.
+  // The contract registry is keyed by an EVM address and has no form for a non-EVM
+  // identifier, so it genuinely cannot be consulted. That is still an UNKNOWN, not an
+  // absence — and the package's rule is that an unknown with nothing found throws rather
+  // than returning something a caller can read as clean. This branch used to return
+  // `{ found: false, unverified: ['contract'] }`, which is exactly the shape the rule
+  // exists to forbid: `if (!result.found) allow()` clears the address.
+  it('fails closed for a non-EVM namespace with nothing found', async () => {
     mockByQuery({ fallback: emptyWallet });
+
+    await expect(searchAddressByCAIP10(config, 'solana:mainnet:FN1abcDEF')).rejects.toThrow(
+      SearchUnavailableError
+    );
+  });
+
+  it('names the contract registry and explains why it could not be consulted', async () => {
+    mockByQuery({ fallback: emptyWallet });
+
+    const error = await searchAddressByCAIP10(config, 'solana:mainnet:FN1abcDEF').catch(
+      (e: unknown) => e
+    );
+
+    expect(isSearchUnavailableError(error)).toBe(true);
+    expect((error as SearchUnavailableError).unverified).toEqual(['contract']);
+    expect((error as Error).message).toContain('NOT a clean result');
+    // The indexer answered fine here — the registry simply has no form for this identifier.
+    // Saying "the indexer did not answer" would send someone debugging the wrong thing.
+    expect((error as Error).message).not.toContain('did not answer');
+  });
+
+  // A hit is still actionable under partial coverage, so the positive path returns rather
+  // than throwing — with the gap stated, exactly as the EVM partial-failure path does.
+  it('still returns a non-EVM wallet hit, flagging the contract registry as unverified', async () => {
+    mockByQuery({ fallback: () => ({ stolenWallets: { items: [WALLET_ITEM] } }) });
 
     const result = await searchAddressByCAIP10(config, 'solana:mainnet:FN1abcDEF');
 
-    expect(result.found).toBe(false);
+    expect(result.found).toBe(true);
+    expect(result.foundInWalletRegistry).toBe(true);
     expect(result.unverified).toEqual(['contract']);
-    expect(getAddressStatus(result)).toBe('unverified');
-    expect(getAddressStatusLabel(result)).toBe('Could Not Verify');
+    expect(getAddressStatus(result)).toBe('registered');
+    expect(getAddressStatusLabel(result)).not.toBe('Could Not Verify');
+    expect(getAddressStatusDescription(result)).toContain('could not be checked');
   });
 });
 

@@ -8,6 +8,7 @@
  * actionable error — never silently.
  */
 
+import { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
 import { Alert, AlertDescription, Badge } from '@swr/ui';
@@ -39,6 +40,25 @@ function formatTimeLeft(deadline: bigint): string {
   return `${Math.floor(minutes / 60)}h left`;
 }
 
+/**
+ * Re-render once a second so the countdown actually counts down.
+ *
+ * `formatTimeLeft` reads the clock during render, so without a tick the value freezes at
+ * whatever it was when the panel last rendered for some unrelated reason — and a relayer
+ * deciding whether to spend gas can be shown "4m left" for a signature that lapsed minutes
+ * ago. The interval only forces the re-render; the time itself stays read at render, so
+ * there is no second copy of the clock to go stale.
+ */
+function useCountdownTick(active: boolean): void {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1_000);
+    return () => clearInterval(id);
+  }, [active]);
+}
+
 export function RelayedSignatureReview({
   review,
   isChecking,
@@ -46,6 +66,9 @@ export function RelayedSignatureReview({
   deadline,
   className,
 }: RelayedSignatureReviewProps) {
+  // Before any early return: hook order must not depend on the review state.
+  useCountdownTick(deadline !== undefined);
+
   if (!review) {
     return (
       <Alert className={className}>

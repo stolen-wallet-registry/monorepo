@@ -159,6 +159,16 @@ describe('isDisplaySafeEnsName', () => {
     expect(isDisplaySafeEnsName('cafe-babe.eth')).toBe(true);
   });
 
+  // Documents a KNOWN false positive rather than asserting it is desirable. `0xdecaf.eth` is
+  // a plausible real name, but with separators stripped its first six post-`0x` characters
+  // (d,e,c,a,f,e — the trailing `e` coming from the `.eth` label) are all hex nibbles, so the
+  // address-shape rule fires. The trade is deliberate: the cost is one legitimate name falling
+  // back to its hex address, and the alternative is letting a truncated-address impersonation
+  // through. Pinned so that any future loosening has to confront this case explicitly.
+  it('also rejects some legitimate names whose leading characters are all hex (known trade-off)', () => {
+    expect(isDisplaySafeEnsName('0xdecaf.eth')).toBe(false);
+  });
+
   it('rejects a name that is not its own normalized form', () => {
     // Uppercase does not survive ENSIP-15 normalization, so displaying it would show
     // something other than the name that actually resolves.

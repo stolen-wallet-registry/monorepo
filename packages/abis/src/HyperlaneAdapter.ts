@@ -69,6 +69,19 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
+    name: 'MAX_BASE_GAS',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'MAX_GAS_LIMIT',
     inputs: [],
     outputs: [
@@ -873,6 +886,11 @@ export const HyperlaneAdapterABI = [
   {
     type: 'error',
     name: 'TimelockOwnable__TooEarly',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__UseTimelockedPath',
     inputs: [],
   },
   {
