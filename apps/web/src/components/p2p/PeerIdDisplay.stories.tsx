@@ -62,3 +62,17 @@ export const LongPeerId: Story = {
     isLoading: false,
   },
 };
+
+/**
+ * Pairing code — what the party being helped actually shares (audit V4).
+ *
+ * Supplying `walletAddress` folds the wallet being registered into the copied string, so the
+ * helper learns which wallet it would be paying for out of band rather than from the peer.
+ */
+export const PairingCode: Story = {
+  args: {
+    peerId: samplePeerId,
+    walletAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
+    isLoading: false,
+  },
+};

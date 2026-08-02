@@ -81,6 +81,12 @@ import { chainIdToBytes32, toCAIP2, getChainName, getBridgeMessageByIdUrl } from
 import { getHubChainId } from '@/lib/chains/config';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { sanitizeErrorMessage } from '@/lib/utils';
+import {
+  MAX_RESIGN_REQUESTS,
+  parseResignReason,
+  resignNoticeForRecipient,
+  txResignTargetStep,
+} from '@/components/registration/p2pResignRequest';
 import { logger } from '@/lib/logger';
 import { isAddress, isHash } from '@/lib/types/ethereum';
 import type { Hash, Hex } from '@/lib/types/ethereum';
@@ -90,7 +96,7 @@ import type { Hash, Hex } from '@/lib/types/ethereum';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const STEP_DESCRIPTIONS: Partial<Record<TransactionRegistrationStep, string>> = {
-  'wait-for-connection': 'Connect to your relayer via peer-to-peer',
+  'wait-for-connection': 'Share your pairing code with your relayer',
   'select-transactions': 'Select fraudulent transactions from your wallet',
   'acknowledge-sign': 'Sign the acknowledgement with your wallet',
   'acknowledgement-payment': 'Waiting for relayer to submit acknowledgement',
@@ -101,7 +107,7 @@ const STEP_DESCRIPTIONS: Partial<Record<TransactionRegistrationStep, string>> = 
 };
 
 const STEP_TITLES: Partial<Record<TransactionRegistrationStep, string>> = {
-  'wait-for-connection': 'Connect to Relayer',
+  'wait-for-connection': 'Pair with Relayer',
   'select-transactions': 'Select Fraudulent Transactions',
   'acknowledge-sign': 'Sign Acknowledgement',
   'acknowledgement-payment': 'Relayer Submitting',
@@ -811,6 +817,12 @@ export function TransactionP2PReporterPage() {
     }
   });
 
+  /**
+   * How many re-sign requests this flow has honoured. See the RESIGN_REQ handler below and
+   * `MAX_RESIGN_REQUESTS`. A ref so it never becomes a dependency of the P2P node effect.
+   */
+  const resignRequestCount = useRef(0);
+
   // Ref for chainId
   const chainIdRef = useRef(chainId);
 
@@ -919,12 +931,26 @@ export function TransactionP2PReporterPage() {
                   // localStorage (see TransactionFormState.forwarderFromPeerSession).
                   if (data.form?.relayer && isAddress(data.form.relayer)) {
                     useTransactionFormStore.getState().setForwarderFromPeer(data.form.relayer);
-                  } else if (data.form?.relayer) {
-                    logger.p2p.warn('Ignored CONNECT with a malformed relayer address', {
-                      relayer: data.form.relayer,
+                  } else {
+                    logger.p2p.warn('Ignored CONNECT without a usable relayer address', {
+                      relayer: data.form?.relayer,
                     });
+                    break;
                   }
                   setConnectedToPeer(true);
+
+                  // Answer, so the relayer learns its dial was accepted rather than refused in
+                  // silence — it cannot tell the two apart from a resolved write. The reporter
+                  // address is echoed so the relayer can compare it against the wallet in the
+                  // pairing code it pasted; it is a claim to check, never one to adopt.
+                  await passStreamData({
+                    connection,
+                    protocols: [PROTOCOLS.CONNECT],
+                    streamData: {
+                      form: { registeree: address },
+                      success: true,
+                    },
+                  });
                   // Step advancement handled by WaitForConnectionStep.onComplete
                   break;
 
@@ -974,6 +1000,71 @@ export function TransactionP2PReporterPage() {
                     setProtocolError('Received invalid registration hash from relayer');
                   }
                   break;
+
+                case PROTOCOLS.RESIGN_REQ: {
+                  // The ONLY inbound message that moves this flow backwards. Bounded exactly
+                  // as on the wallet side — see P2PRegistereeRegistrationPage for the full
+                  // argument. In short:
+                  //   WHO      `acceptStream` already required the pinned partner peer, and
+                  //            this is not CONNECT so the pin must pre-exist. It proves the
+                  //            sender is the relayer; it does not prove the relayer is honest,
+                  //            so everything below treats it as hostile.
+                  //   WHEN     `isTxProtocolExpectedAtStep` admits it at the two payment
+                  //            steps only.
+                  //   WHERE TO `txResignTargetStep` derives one step from our own current
+                  //            step plus a validated two-valued enum — never from the wire,
+                  //            and never back into `select-transactions`, so the relayer
+                  //            cannot make the reporter re-open which transactions get
+                  //            reported.
+                  //   HOW OFTEN capped by `MAX_RESIGN_REQUESTS` for the life of the flow.
+                  const reason = parseResignReason(data.reason);
+                  if (!reason) {
+                    logger.p2p.warn('Ignored re-sign request with no recognised reason', {
+                      step: currentStep,
+                    });
+                    break;
+                  }
+
+                  const target = txResignTargetStep(currentStep, reason);
+                  if (!target) {
+                    logger.p2p.warn('Ignored re-sign request that names no valid recovery step', {
+                      step: currentStep,
+                      reason,
+                    });
+                    break;
+                  }
+
+                  if (resignRequestCount.current >= MAX_RESIGN_REQUESTS) {
+                    logger.p2p.warn(
+                      'Refused re-sign request: this flow has already had its limit',
+                      {
+                        reason,
+                        honoured: resignRequestCount.current,
+                        limit: MAX_RESIGN_REQUESTS,
+                      }
+                    );
+                    setProtocolError(
+                      `Your relayer has asked you to sign again ${MAX_RESIGN_REQUESTS} times. Further requests are being ignored — stop here and start over with a relayer you trust.`
+                    );
+                    break;
+                  }
+                  resignRequestCount.current += 1;
+
+                  // Nothing to erase from storage: the transaction flow never writes a
+                  // signature to sessionStorage (`TxP2PAckSign`/`TxP2PRegSign` hold it in
+                  // component state and send it straight out). Moving off the payment step
+                  // unmounts the sign component, so the dead signature goes with it and the
+                  // remounted step starts from a fresh signing prompt.
+                  setProtocolError(resignNoticeForRecipient(reason, 'transaction'));
+                  logger.registration.warn('Relayer asked for a new signature; moving back', {
+                    from: currentStep,
+                    to: target,
+                    reason,
+                    honoured: resignRequestCount.current,
+                  });
+                  useTransactionRegistrationStore.getState().setStep(target);
+                  break;
+                }
               }
             } catch (err) {
               // Stream abort errors happen when the WebRTC connection degrades
@@ -999,6 +1090,7 @@ export function TransactionP2PReporterPage() {
           { protocol: PROTOCOLS.TX_ACK_PAY, streamHandler: streamHandler(PROTOCOLS.TX_ACK_PAY) },
           { protocol: PROTOCOLS.TX_REG_REC, streamHandler: streamHandler(PROTOCOLS.TX_REG_REC) },
           { protocol: PROTOCOLS.TX_REG_PAY, streamHandler: streamHandler(PROTOCOLS.TX_REG_PAY) },
+          { protocol: PROTOCOLS.RESIGN_REQ, streamHandler: streamHandler(PROTOCOLS.RESIGN_REQ) },
         ];
 
         const { libp2p: p2pNode } = await setup({ handlers, walletAddress: address });

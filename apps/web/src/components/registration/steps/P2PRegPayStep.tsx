@@ -17,9 +17,13 @@ import { WaitingForData, P2PWaitForConfirmation } from '@/components/p2p';
 import { Alert, AlertDescription, Button } from '@swr/ui';
 import { useRegistration } from '@/hooks/useRegistration';
 import { useQuoteRegistration } from '@/hooks/useQuoteRegistration';
+import { useContractDeadlines } from '@/hooks/useContractDeadlines';
+import { useStepNavigation } from '@/hooks/useStepNavigation';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistrationStore } from '@/stores/registrationStore';
-import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { getSignature, removeSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
+import { classifyP2PRetry, sendResignRequest } from '@/components/registration/p2pResignRequest';
 import type { Hash } from '@/lib/types/ethereum';
 import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
 import { applyScheduledRetry, backoffDelay, MAX_AUTO_RETRIES } from '@/lib/p2p/retryBackoff';
@@ -66,8 +70,18 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     setRegistrationHash,
     setBridgeMessageId,
   } = useRegistrationStore();
+  const { goToStep } = useStepNavigation();
   const [hasSentHash, setHasSentHash] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  /**
+   * Set once Retry has discarded a dead signature. `notified` records whether the registeree
+   * actually got the request; until it is true the relayer stays on this step so a delivery
+   * failure is visible rather than being swallowed by a step transition.
+   */
+  const [resignRequest, setResignRequest] = useState<{
+    notified: boolean | null;
+    windowClosed: boolean;
+  } | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   /** Pending auto-retry: when it should fire, and which attempt it was scheduled from. */
   const [retrySchedule, setRetrySchedule] = useState<{ at: number; fromAttempt: number } | null>(
@@ -178,6 +192,94 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     if (isError) return 'failed';
     return 'idle';
   };
+
+  // The contract reuses DeadlineExpired for two distinct failures: a stale signature
+  // timestamp (the registeree can fix that by signing again) and an acknowledgement window
+  // that closed on-chain (no registration signature can fix that — the acknowledgement
+  // itself has to be redone). Zeroed deadlines mean there is no pending acknowledgement at
+  // all, and the contract reports those as expired too, so they do not count as closed.
+  const { data: deadlines } = useContractDeadlines(
+    role === 'relayer' ? (registeree ?? undefined) : undefined
+  );
+  const hasNoPendingAck =
+    deadlines !== undefined && deadlines.start === 0n && deadlines.expiry === 0n;
+  const windowClosed = deadlines !== undefined && !hasNoPendingAck && deadlines.isExpired;
+
+  // `onRetry={reset}` rebuilt byte-identical calldata from the same cached signature and
+  // reverted identically, forever. On this path the relayer cannot break the loop by
+  // re-signing either — the signature belongs to the registeree, on another machine.
+  const retryAction = classifyP2PRetry({ isError, error, windowClosed });
+  const needsResign = retryAction.kind === 'request-resign';
+
+  /**
+   * Move back to the step at which a fresh signature from the registeree is accepted.
+   *
+   * `isRelayerProtocolExpectedAtStep` admits `REG_SIG` only at `register-and-sign` and
+   * `ACK_SIG` only at `acknowledge-and-sign`. Staying on `registration-payment` would have
+   * the relayer drop the very message it just asked for.
+   */
+  const returnToAwaitingSignature = useCallback(
+    (restartFromAcknowledgement: boolean) => {
+      setResignRequest(null);
+      goToStep(restartFromAcknowledgement ? 'acknowledge-and-sign' : 'register-and-sign');
+    },
+    [goToStep]
+  );
+
+  /**
+   * Retry after a failure.
+   *
+   * Plain resubmit for anything a resubmit can fix. For a signature-invalidating revert the
+   * relayed signature is dropped — so nothing on screen can resubmit it — and the registeree
+   * is asked over P2P to sign again. A closed window additionally discards the
+   * acknowledgement signature, whose nonce is spent, and restarts the two-phase flow: the
+   * window check is never bypassed, only recovered from.
+   */
+  const handleRetry = useCallback(() => {
+    if (retryAction.kind !== 'request-resign') {
+      reset();
+      return;
+    }
+
+    const restartFromAck = retryAction.discardAcknowledgement;
+
+    if (registeree) {
+      removeSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION);
+      if (restartFromAck) {
+        removeSignature(registeree, chainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+      }
+    }
+    reset();
+    setResignRequest({ notified: null, windowClosed: restartFromAck });
+
+    logger.registration.warn(
+      restartFromAck
+        ? 'Registration window closed on-chain; asking the registeree to restart from acknowledgement'
+        : 'Relayed registration signature invalidated by revert; requesting a new one from the registeree',
+      { registeree, windowClosed: restartFromAck, error: error?.message }
+    );
+
+    void sendResignRequest({
+      getLibp2p,
+      partnerPeerId,
+      reason: retryAction.reason,
+      flow: 'wallet',
+    }).then((notified) => {
+      setResignRequest({ notified, windowClosed: restartFromAck });
+      if (notified) {
+        returnToAwaitingSignature(restartFromAck);
+      }
+    });
+  }, [
+    retryAction,
+    registeree,
+    chainId,
+    reset,
+    error,
+    getLibp2p,
+    partnerPeerId,
+    returnToAwaitingSignature,
+  ]);
 
   // Relayer: Submit registration transaction
   const handleSubmit = useCallback(async () => {
@@ -445,6 +547,26 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
         </AlertDescription>
       </Alert>
 
+      {/* Signature discarded after an invalidating revert: say what has to happen next, and
+          whether the registeree was actually told. */}
+      {resignRequest && (
+        <>
+          <SignatureInvalidatedAlert
+            windowClosed={resignRequest.windowClosed}
+            partner={{ notified: resignRequest.notified, role: 'registeree' }}
+          />
+          {resignRequest.notified === false && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => returnToAwaitingSignature(resignRequest.windowClosed)}
+            >
+              I&apos;ve asked them — wait for a new signature
+            </Button>
+          )}
+        </>
+      )}
+
       {!storedSig ? (
         <WaitingForData
           message="Waiting for signature from registeree..."
@@ -476,6 +598,13 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
             deadline={storedSig.deadline}
           />
 
+          {needsResign && (
+            <SignatureInvalidatedAlert
+              windowClosed={windowClosed}
+              partner={{ notified: null, role: 'registeree' }}
+            />
+          )}
+
           <TransactionCard
             type="registration"
             status={getStatus()}
@@ -483,7 +612,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
             error={error ? sanitizeErrorMessage(error) : null}
             chainId={chainId}
             onSubmit={handleSubmit}
-            onRetry={reset}
+            onRetry={handleRetry}
             disabled={!storedSig || !signatureReview?.ok}
           />
           {sendError && isConfirmed && !hasSentHash && (

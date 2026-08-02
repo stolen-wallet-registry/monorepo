@@ -163,6 +163,48 @@ describe('sanitizeErrorMessage', () => {
     expect(result).toContain('registration window has expired');
     expect(result).not.toContain('Version:');
   });
+
+  // V29 residual. The old rule was `/\s*Details:\s*[^.]+\./gi` — it stopped at the FIRST
+  // period, so a details clause containing a dotted host stripped only as far as that host's
+  // first dot and rendered everything after it. Against the old rule this test fails with the
+  // key still present, which is the whole point of it existing.
+  it('strips a Details clause whose contents contain periods, including a keyed URL', () => {
+    const result = sanitizeErrorMessage(
+      new Error(
+        'HTTP request failed. Details: request to https://eth-mainnet.g.alchemy.com/v2/SECRETKEY123 failed. retrying.'
+      )
+    );
+
+    expect(result).not.toContain('SECRETKEY123');
+    expect(result).not.toContain('alchemy.com');
+    expect(result).not.toContain('Details:');
+  });
+
+  // The other half of the same defect: no trailing period meant the old rule matched nothing
+  // and the entire clause survived verbatim.
+  it('strips a Details clause with no trailing period', () => {
+    const result = sanitizeErrorMessage(
+      new Error('Request failed. Details: connection refused to https://rpc.example.com/v2/KEYABC')
+    );
+
+    expect(result).not.toContain('KEYABC');
+    expect(result).not.toContain('Details:');
+  });
+
+  // Truncating Details to end-of-LINE rather than end-of-string is deliberate: viem puts
+  // Version and Raw Call Arguments on their own lines, and swallowing them here would make
+  // their own redaction rules untestable. This pins that boundary.
+  it('does not swallow following lines when stripping Details', () => {
+    const result = sanitizeErrorMessage(
+      new Error(
+        'Execution reverted.\nDetails: execution reverted: some reason\nVersion: viem@2.41.2'
+      )
+    );
+
+    expect(result).not.toContain('Details:');
+    expect(result).not.toContain('Version:');
+    expect(result).toContain('Execution reverted');
+  });
 });
 
 /**

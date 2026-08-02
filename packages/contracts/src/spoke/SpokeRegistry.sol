@@ -685,7 +685,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     ///      typed data (see `packages/signatures`); this call exists for the deadline alone.
     ///      Do NOT reintroduce a hash-struct return by adding a `windowBlockHash` parameter —
     ///      the caller does not have one at this point in the flow.
-    function generateHashStruct(
+    function getSignatureDeadline(
         uint64, /* reportedChainId */
         uint64, /* incidentTimestamp */
         address, /* trustedForwarder */
@@ -710,7 +710,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     ///      typed data (see `packages/signatures`); this call exists for the deadline alone.
     ///      Do NOT reintroduce a hash-struct return by adding a `windowBlockHash` parameter —
     ///      the caller does not have one at this point in the flow.
-    function generateTransactionHashStruct(
+    function getTransactionSignatureDeadline(
         bytes32, /* dataHash */
         bytes32, /* reportedChainId */
         uint32, /* transactionCount */
@@ -943,6 +943,13 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         bytes memory encodedPayload =
             _encodeTxBatchPayload(dataHash, reportedChainId, nonce, reporter, transactionHashes, chainIds);
 
+        // ACCEPTED RISK (V8, spoke side): the registration fee is charged here, at dispatch time,
+        // but dedup happens on the hub. If every hash in this batch is already registered on the
+        // hub, the hub writes a zero-entry batch and this fee bought nothing. Unlike the hub-local
+        // path — which now refunds when zero entries are written — the spoke cannot know hub state
+        // at dispatch, and refunding would require a return message from the hub (an extra bridge
+        // hop and its fee, plus a callback trust boundary). Deliberately not fixed; treasury-side
+        // reimbursement is the intended remedy.
         // Quote and validate fees BEFORE state changes (matches wallet registration pattern)
         uint256 bridgeFee = IBridgeAdapter(bridgeAdapter).quoteMessage(hubChainId, encodedPayload);
         uint256 registrationFee = feeManager != address(0) ? IFeeManager(feeManager).currentFeeWei() : 0;

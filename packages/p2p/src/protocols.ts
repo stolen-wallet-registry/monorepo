@@ -28,6 +28,17 @@ export const PROTOCOLS = {
   /** Registration payment notification (relayer → registeree) */
   REG_PAY: '/swr/register/payment/1.0.0',
 
+  // ── Recovery ─────────────────────────────────────────────────────────
+  /**
+   * Re-sign request (relayer → registeree/reporter), shared by both flows.
+   *
+   * Sent when a relayed signature is invalidated by an on-chain revert. The relayer holds a
+   * copy it can delete but cannot replace — only the party being helped can sign again — so
+   * the request travels back over the wire. Deliberately flow-agnostic: the receiver derives
+   * everything actionable from its own step machine, never from the message.
+   */
+  RESIGN_REQ: '/swr/resign-request/1.0.0',
+
   // ── Transaction Registration ─────────────────────────────────────────
   /** Transaction acknowledgement signature + batch data (reporter → relayer) */
   TX_ACK_SIG: '/swr/tx-acknowledgement/signature/1.0.0',

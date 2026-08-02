@@ -2,9 +2,16 @@
  * "Review before you pay" checks for a relayer holding a signature it received over P2P.
  *
  * Recovers the signer from the EIP-712 digest, re-reads the nonce from the contract, and
- * checks the deadline against the wall clock. All of it is defence in depth — the contract
- * enforces every one of these on-chain — but the relayer is the one spending gas, so it
- * should find out first, and should be able to see who it is paying for.
+ * checks the deadline against the wall clock. The nonce and deadline checks are defence in
+ * depth — the contract enforces both on-chain — but the relayer is the one spending gas, so
+ * it should find out first.
+ *
+ * The signer check is NOT defence in depth. The contract will happily register whatever
+ * wallet signed, because that wallet consented; only the relayer can decide whether that is
+ * the wallet it agreed to spend money on. So the comparison must be against an out-of-band
+ * value, and the only one that exists is `pairedWallet` — the address half of the pairing
+ * token the relayer pasted (audit V4). It is read from the store here rather than accepted as
+ * a prop so no caller can hand this check a value that arrived over the wire.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -17,7 +24,9 @@ import {
   reviewRelayedSignature,
   type RelaySignatureReview,
 } from '@/lib/signatures/relayVerification';
+import { SIGNATURE_STEP, TX_SIGNATURE_STEP } from '@swr/signatures';
 import type { SignatureStep, TxSignatureStep } from '@swr/signatures';
+import { useP2PStore } from '@/stores/p2pStore';
 import type { StoredSignature } from '@/lib/signatures';
 import type { StoredTxSignature } from '@/lib/signatures/transactions';
 import { logger } from '@/lib/logger';
@@ -54,7 +63,13 @@ export interface UseRelayedWalletSignatureReviewParams {
   enabled: boolean;
   step: SignatureStep;
   storedSignature: StoredSignature | null;
-  /** Who the relayer believes it is paying for. */
+  /**
+   * Who the peer *claims* the signature belongs to (the form-store registeree).
+   *
+   * Logged and nothing else. It is not what payment is gated on: on the relayer side this
+   * value is written from the peer's own CONNECT payload, so checking a recovered signer
+   * against it compares a claim with itself. Gating uses `pairedWallet` from the P2P store.
+   */
   expectedSigner: Address | null | undefined;
   /** The relayer's own address — the forwarder named in the signed struct. */
   trustedForwarder: Address | undefined;
@@ -76,8 +91,13 @@ export function useRelayedWalletSignatureReview({
     'wallet',
     'useRelayedWalletSignatureReview'
   );
+  // The out-of-band wallet, and the only address in this hook that the peer did not supply.
+  const pairedWallet = useP2PStore((s) => s.pairedWallet);
+  // Read the nonce for the paired wallet, not the claimed one: the contract checks the
+  // signer's nonce, and a peer that could steer this read could make a stale signature look
+  // current.
   const { nonce: onChainNonce } = useContractNonce(
-    enabled && expectedSigner ? expectedSigner : undefined,
+    enabled && pairedWallet ? pairedWallet : undefined,
     'wallet'
   );
   const nowSeconds = useNowSeconds(enabled);
@@ -96,6 +116,14 @@ export function useRelayedWalletSignatureReview({
   const windowBlockHash = storedSignature?.windowBlockHash;
 
   useEffect(() => {
+    // Cleared FIRST, before any bail-out. `review` is memoized over recoveredSigner (the old
+    // signature) plus nonce/deadline (already the new one), and `ok` gates the pay button —
+    // so returning early with the previous verdict still standing reports the OLD signature's
+    // signer as verified for a signature that has not been checked. That is reachable
+    // whenever a replacement signature arrives missing a field the guard below requires.
+    setRecoveredSigner(null);
+    setHasChecked(false);
+
     if (
       !enabled ||
       !signature ||
@@ -105,18 +133,18 @@ export function useRelayedWalletSignatureReview({
       reportedChainId === undefined ||
       incidentTimestamp === undefined ||
       nonce === undefined ||
-      deadline === undefined
+      deadline === undefined ||
+      // Registration signs over the committed window block hash. It is passed into recovery
+      // below, so a registration signature arriving without it recovers against a different
+      // digest and yields some unrelated address — surfacing as "signer mismatch", which
+      // reads as an accusation against the partner rather than a truncated message.
+      (step === SIGNATURE_STEP.REGISTRATION && !windowBlockHash)
     ) {
+      setIsChecking(false);
       return;
     }
 
     let cancelled = false;
-    // Clear the previous verdict before re-recovering. `review` is memoized over
-    // recoveredSigner (old signature) plus nonce/deadline (already the new one), and `ok`
-    // gates the pay button — leaving them set would report the old signature's signer as
-    // verified for a signature that has not been checked yet.
-    setRecoveredSigner(null);
-    setHasChecked(false);
     setIsChecking(true);
 
     recoverWalletSignatureSigner({
@@ -140,7 +168,9 @@ export function useRelayedWalletSignatureReview({
         logger.signature.info('Recovered signer for relayed wallet signature', {
           step,
           recovered,
-          expectedSigner,
+          // Both are logged so a mismatch between what the peer claimed and what was agreed
+          // out of band is visible in the log, not just its consequence.
+          claimedSigner: expectedSigner,
         });
       })
       .catch((err: unknown) => {
@@ -186,7 +216,9 @@ export function useRelayedWalletSignatureReview({
     if (!enabled || !hasChecked || nonce === undefined || deadline === undefined) return null;
     return reviewRelayedSignature({
       recoveredSigner,
-      expectedSigner,
+      // pairedWallet, never the prop: see the module comment. Null here fails closed as
+      // `pairing-unknown` rather than falling back to the peer's claim.
+      expectedSigner: pairedWallet,
       signatureNonce: nonce,
       onChainNonce,
       deadline,
@@ -196,7 +228,7 @@ export function useRelayedWalletSignatureReview({
     enabled,
     hasChecked,
     recoveredSigner,
-    expectedSigner,
+    pairedWallet,
     nonce,
     onChainNonce,
     deadline,
@@ -210,6 +242,7 @@ export interface UseRelayedTxSignatureReviewParams {
   enabled: boolean;
   step: TxSignatureStep;
   storedSignature: StoredTxSignature | null | undefined;
+  /** Peer-claimed reporter. Logged only — gating uses `pairedWallet`; see the wallet hook. */
   expectedSigner: Address | null | undefined;
   trustedForwarder: Address | undefined;
 }
@@ -230,8 +263,9 @@ export function useRelayedTxSignatureReview({
     'transaction',
     'useRelayedTxSignatureReview'
   );
+  const pairedWallet = useP2PStore((s) => s.pairedWallet);
   const { nonce: onChainNonce } = useTxContractNonce(
-    enabled && expectedSigner ? expectedSigner : undefined
+    enabled && pairedWallet ? pairedWallet : undefined
   );
   const nowSeconds = useNowSeconds(enabled);
 
@@ -250,6 +284,11 @@ export function useRelayedTxSignatureReview({
   const windowBlockHash = storedSignature?.windowBlockHash;
 
   useEffect(() => {
+    // Cleared before any bail-out — see the wallet hook for why an early return that leaves
+    // the previous verdict standing can report an unchecked signature as safe to pay for.
+    setRecoveredSigner(null);
+    setHasChecked(false);
+
     if (
       !enabled ||
       !signature ||
@@ -263,16 +302,16 @@ export function useRelayedTxSignatureReview({
       reportedChainId === undefined ||
       transactionCount === undefined ||
       nonce === undefined ||
-      deadline === undefined
+      deadline === undefined ||
+      // Signed over by the registration struct and passed into recovery below; without it
+      // recovery runs against a different digest and reports a bogus signer mismatch.
+      (step === TX_SIGNATURE_STEP.REGISTRATION && !windowBlockHash)
     ) {
+      setIsChecking(false);
       return;
     }
 
     let cancelled = false;
-    // Clear the previous verdict before re-recovering — see the wallet hook above for why a
-    // stale recoveredSigner can briefly report an unchecked signature as verified.
-    setRecoveredSigner(null);
-    setHasChecked(false);
     setIsChecking(true);
 
     recoverTxSignatureSigner({
@@ -297,7 +336,7 @@ export function useRelayedTxSignatureReview({
         logger.signature.info('Recovered signer for relayed transaction signature', {
           step,
           recovered,
-          expectedSigner,
+          claimedSigner: expectedSigner,
         });
       })
       .catch((err: unknown) => {
@@ -339,7 +378,8 @@ export function useRelayedTxSignatureReview({
     if (!enabled || !hasChecked || nonce === undefined || deadline === undefined) return null;
     return reviewRelayedSignature({
       recoveredSigner,
-      expectedSigner,
+      // pairedWallet, never the prop — see the wallet hook.
+      expectedSigner: pairedWallet,
       signatureNonce: nonce,
       onChainNonce,
       deadline,
@@ -349,7 +389,7 @@ export function useRelayedTxSignatureReview({
     enabled,
     hasChecked,
     recoveredSigner,
-    expectedSigner,
+    pairedWallet,
     nonce,
     onChainNonce,
     deadline,

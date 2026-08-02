@@ -342,10 +342,12 @@ interface IWalletRegistry {
     /// @param trustedForwarder The forwarder address authorized to complete registration
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline The deadline block number
-    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
-        external
-        view
-        returns (uint256 deadline);
+    function getSignatureDeadline(
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
+        address trustedForwarder,
+        uint8 step
+    ) external view returns (uint256 deadline);
 
     /// @notice Get nonce for a wallet
     /// @param wallet The wallet address

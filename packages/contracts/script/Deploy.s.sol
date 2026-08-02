@@ -31,6 +31,16 @@ import { MockAggregator, Multicall3 } from "./DeployBase.s.sol";
 // Timelock base (used by finalizeSetup/verifySetup to lock immediate setters)
 import { TimelockOwnable } from "../src/libraries/TimelockOwnable.sol";
 
+/// @notice Minimal Ownable2Step surface used by the DAO handover steps
+/// @dev Declared here rather than importing OZ so the handover helpers work uniformly across
+///      TimelockOwnable contracts and the plain Ownable2Step ones (TranslationRegistry,
+///      SpokeSoulboundForwarder).
+interface IOwnable2Step {
+    function owner() external view returns (address);
+    function pendingOwner() external view returns (address);
+    function transferOwnership(address newOwner) external;
+}
+
 // CREATE2 deterministic deployment
 import { Create2Deployer } from "./Create2Deployer.sol";
 import { Salts } from "./Salts.sol";
@@ -705,7 +715,7 @@ contract Deploy is Script {
     ///      hand-maintained copies of the same ten entries, where forgetting one in the verify
     ///      copy would silently skip the check that a contract had actually been locked.
     function _hubTargets() internal view returns (SetupTarget[] memory targets) {
-        targets = new SetupTarget[](10);
+        targets = new SetupTarget[](11);
         targets[0] = SetupTarget(vm.envOr("FRAUD_REGISTRY_HUB", address(0)), "FraudRegistryHub");
         targets[1] = SetupTarget(vm.envOr("CROSS_CHAIN_INBOX", address(0)), "CrossChainInbox");
         targets[2] = SetupTarget(vm.envOr("OPERATOR_REGISTRY", address(0)), "OperatorRegistry");
@@ -716,6 +726,10 @@ contract Deploy is Script {
         targets[7] = SetupTarget(vm.envOr("TRANSACTION_REGISTRY", address(0)), "TransactionRegistry");
         targets[8] = SetupTarget(vm.envOr("CONTRACT_REGISTRY", address(0)), "ContractRegistry");
         targets[9] = SetupTarget(vm.envOr("OPERATOR_SUBMITTER", address(0)), "OperatorSubmitter");
+        // FeeManager became TimelockOwnable (V11): its setters are on the critical path of every
+        // fee-collecting registration, so it must be finalized like any other trust boundary.
+        // Omitting it here would leave setBaseFee/setFallbackPrice as one-transaction owner calls.
+        targets[10] = SetupTarget(vm.envOr("FEE_MANAGER", address(0)), "FeeManager");
     }
 
     /// @notice Spoke-chain TimelockOwnable contracts, read from the deploy env
@@ -748,6 +762,221 @@ contract Deploy is Script {
             TimelockOwnable(target).setupComplete(),
             string.concat(label, ": setupComplete is false - run finalizeSetup()")
         );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DAO HANDOVER
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Step 1 of 3: propose handing every hub contract to the DAO / multisig
+    ///
+    /// @dev Until this runs, ONE deployer EOA owns the hub, the inbox, the OperatorRegistry, the
+    ///      OperatorSubmitter, all three registries, the FeeManager, the soulbounds and the
+    ///      receiver. That single key can revoke every operator, un-trust every spoke, pause
+    ///      everything and cancel every pending proposal in one transaction. The timelock on
+    ///      individual setters does not help while one hot key holds all of them.
+    ///
+    ///      Run order (this matters, and getting it wrong is unrecoverable):
+    ///
+    ///        1. deployHub() / deploySpoke()      — deploy and wire
+    ///        2. configureTrust*                  — trusted sources / forwarders
+    ///        3. finalizeSetup()                  — locks immediate setters
+    ///        4. proposeHandover()                — THIS (needs step 3: transferOwnership is
+    ///                                              only immediate before completeSetup, and we
+    ///                                              deliberately want the DAO handover itself to
+    ///                                              go through the 2-day delay)
+    ///        5. wait ACTIVATION_DELAY (2 days)
+    ///        6. activateHandover()               — starts the Ownable2Step handshake
+    ///        7. DAO calls acceptOwnership() on each contract
+    ///        8. verifyOwnership()                — asserts the handover actually completed
+    ///
+    ///      Steps 4-6 are the timelocked path deliberately, not an inconvenience: the same delay
+    ///      that protects every other trust-boundary change protects custody of the system.
+    ///
+    ///      Note on inherited proposals: `pendingActivations` is plain storage and survives the
+    ///      handover, so a proposal armed by the deployer would become the DAO's problem. Since
+    ///      `_proposeAction` now rejects proposals before `completeSetup()` and every proposal
+    ///      expires after ACTIVATION_EXPIRY, the only inheritable proposals are ones armed in the
+    ///      window between step 3 and step 7. Audit that window and `cancelAction` anything
+    ///      unexpected before the DAO accepts.
+    ///
+    ///      Reads: DAO_OWNER (required), plus the same address env vars as {finalizeSetup} and
+    ///      TRANSLATION_REGISTRY.
+    ///
+    ///      Usage:
+    ///        forge script script/Deploy.s.sol:Deploy --sig "proposeHandover()" \
+    ///          --rpc-url $RPC --broadcast
+    function proposeHandover() external {
+        deployerPrivateKey = _getDeployerKey();
+        deployer = vm.addr(deployerPrivateKey);
+        address dao = _requireDaoOwner();
+        address translations = vm.envOr("TRANSLATION_REGISTRY", address(0));
+
+        console2.log("=== PROPOSING DAO HANDOVER ===");
+        console2.log("New owner (DAO):", dao);
+
+        vm.startBroadcast(deployerPrivateKey);
+        _proposeHandover(dao, _hubTargets(), translations);
+        vm.stopBroadcast();
+
+        console2.log("");
+        console2.log("Next: wait 2 days, then run activateHandover()");
+    }
+
+    /// @dev Parameterized body of {proposeHandover}. Split out so the handover can be exercised in
+    ///      forge tests: every `external` entry point here reads its inputs from `vm.envOr`, and
+    ///      env vars are process-global while forge runs tests concurrently, so a test that used
+    ///      `vm.setEnv` would race against every other test in the run. Taking the inputs as
+    ///      arguments removes the shared mutable state entirely.
+    /// @param dao The new owner (already validated by the caller)
+    /// @param targets Timelocked contracts to hand over; address(0) entries are skipped
+    /// @param translations Plain-Ownable2Step TranslationRegistry, or address(0) to skip
+    function _proposeHandover(address dao, SetupTarget[] memory targets, address translations) internal {
+        // A handover on a system whose immediate setters are still open hands the DAO a contract
+        // it cannot lock down without another round trip, and leaves a window where the deployer
+        // key still has one-transaction power over trust boundaries.
+        for (uint256 i = 0; i < targets.length; i++) {
+            _requireSetupComplete(targets[i].addr, targets[i].label);
+        }
+
+        for (uint256 i = 0; i < targets.length; i++) {
+            if (targets[i].addr == address(0)) {
+                console2.log("  skipped (not configured):", targets[i].label);
+                continue;
+            }
+            TimelockOwnable(targets[i].addr).proposeOwnershipTransfer(dao);
+            console2.log("  proposed:", targets[i].label, targets[i].addr);
+        }
+
+        // TranslationRegistry is plain Ownable2Step (no timelock), so its transfer is immediate.
+        // It holds only SVG translation strings — no trust boundary, no funds, no registry state.
+        if (translations != address(0)) {
+            IOwnable2Step(translations).transferOwnership(dao);
+            console2.log("  transferred (immediate, plain Ownable2Step): TranslationRegistry", translations);
+        }
+    }
+
+    /// @notice Step 2 of 3: activate the proposed handover after the 2-day delay
+    /// @dev Only STARTS the Ownable2Step handshake — the DAO must still call `acceptOwnership()`
+    ///      on each contract. Until it does, the deployer remains owner and can abort with
+    ///      `transferOwnership(address(0))`.
+    ///
+    ///      Reverts with TimelockOwnable__Expired if more than ACTIVATION_EXPIRY has passed since
+    ///      the proposal became activatable; re-run {proposeHandover} in that case.
+    function activateHandover() external {
+        deployerPrivateKey = _getDeployerKey();
+        deployer = vm.addr(deployerPrivateKey);
+        address dao = _requireDaoOwner();
+
+        console2.log("=== ACTIVATING DAO HANDOVER ===");
+
+        vm.startBroadcast(deployerPrivateKey);
+        _activateHandover(dao, _hubTargets());
+        vm.stopBroadcast();
+
+        console2.log("");
+        console2.log("Next: DAO must call acceptOwnership() on each contract, then verifyOwnership()");
+    }
+
+    /// @dev Parameterized body of {activateHandover} — see {_proposeHandover} for why.
+    /// @param dao The new owner (already validated by the caller)
+    /// @param targets Timelocked contracts to activate; address(0) entries are skipped
+    function _activateHandover(address dao, SetupTarget[] memory targets) internal {
+        for (uint256 i = 0; i < targets.length; i++) {
+            if (targets[i].addr == address(0)) {
+                console2.log("  skipped (not configured):", targets[i].label);
+                continue;
+            }
+            TimelockOwnable(targets[i].addr).activateOwnershipTransfer(dao);
+            console2.log("  pending owner set:", targets[i].label, targets[i].addr);
+        }
+    }
+
+    /// @notice Step 3 of 3: assert every hub contract is now owned by the DAO
+    /// @dev Run as a post-handover gate. Also asserts the deployer is no longer the pending owner
+    ///      anywhere, so a half-finished handover fails loudly instead of shipping.
+    function verifyOwnership() external view {
+        _verifyOwnership(_requireDaoOwner(), _hubTargets(), vm.envOr("TRANSLATION_REGISTRY", address(0)));
+    }
+
+    /// @dev Parameterized body of {verifyOwnership} — see {_proposeHandover} for why.
+    /// @param dao The expected owner
+    /// @param targets Contracts that must be DAO-owned with no dangling pending transfer
+    /// @param translations Plain-Ownable2Step TranslationRegistry, or address(0) to skip
+    function _verifyOwnership(address dao, SetupTarget[] memory targets, address translations) internal view {
+        for (uint256 i = 0; i < targets.length; i++) {
+            if (targets[i].addr == address(0)) continue;
+            require(
+                IOwnable2Step(targets[i].addr).owner() == dao,
+                string.concat(targets[i].label, ": owner is not DAO_OWNER - handover incomplete")
+            );
+            require(
+                IOwnable2Step(targets[i].addr).pendingOwner() == address(0),
+                string.concat(targets[i].label, ": a pending owner transfer is still open")
+            );
+        }
+        if (translations != address(0)) {
+            require(IOwnable2Step(translations).owner() == dao, "TranslationRegistry: owner is not DAO_OWNER");
+        }
+        console2.log("=== All configured hub contracts are owned by the DAO ===");
+    }
+
+    /// @notice Hand the SPOKE-side contracts to the DAO (run on the spoke chain)
+    /// @dev HyperlaneAdapter and SpokeRegistry are TimelockOwnable, so they take the same
+    ///      propose → 2 days → activate path; pass `activate = false` for step 1 and `true` for
+    ///      step 2. SpokeSoulboundForwarder is plain Ownable2Step and transfers immediately.
+    /// @param activate False to propose, true to activate a previously proposed handover
+    function handoverSpokeOwnership(bool activate) external {
+        deployerPrivateKey = _getDeployerKey();
+        deployer = vm.addr(deployerPrivateKey);
+        address dao = _requireDaoOwner();
+
+        console2.log(activate ? "=== ACTIVATING SPOKE HANDOVER ===" : "=== PROPOSING SPOKE HANDOVER ===");
+
+        SetupTarget[] memory targets = _spokeTargets();
+        if (!activate) {
+            for (uint256 i = 0; i < targets.length; i++) {
+                _requireSetupComplete(targets[i].addr, targets[i].label);
+            }
+        }
+
+        vm.startBroadcast(deployerPrivateKey);
+        for (uint256 i = 0; i < targets.length; i++) {
+            if (targets[i].addr == address(0)) {
+                console2.log("  skipped (not configured):", targets[i].label);
+                continue;
+            }
+            if (activate) {
+                TimelockOwnable(targets[i].addr).activateOwnershipTransfer(dao);
+            } else {
+                TimelockOwnable(targets[i].addr).proposeOwnershipTransfer(dao);
+            }
+            console2.log("  done:", targets[i].label, targets[i].addr);
+        }
+
+        // Plain Ownable2Step — only on the propose pass, since there is nothing to activate.
+        address forwarder = vm.envOr("SPOKE_SOULBOUND_FORWARDER", address(0));
+        if (!activate && forwarder != address(0)) {
+            IOwnable2Step(forwarder).transferOwnership(dao);
+            console2.log("  transferred (immediate): SpokeSoulboundForwarder", forwarder);
+        }
+        vm.stopBroadcast();
+    }
+
+    /// @dev Read and validate DAO_OWNER. Fails loudly rather than defaulting to the deployer —
+    ///      a handover that silently no-ops is worse than one that never ran.
+    function _requireDaoOwner() internal view returns (address dao) {
+        dao = vm.envAddress("DAO_OWNER");
+        _validateDao(dao, vm.addr(_getDeployerKey()));
+    }
+
+    /// @dev The two checks that make a handover a handover. Split from the env read so it is
+    ///      reachable from tests without touching process-global environment state.
+    /// @param dao Proposed new owner
+    /// @param deployerAddr The deploying EOA
+    function _validateDao(address dao, address deployerAddr) internal pure {
+        require(dao != address(0), "DAO_OWNER env var is zero address");
+        require(dao != deployerAddr, "DAO_OWNER equals the deployer EOA - that is not a handover");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

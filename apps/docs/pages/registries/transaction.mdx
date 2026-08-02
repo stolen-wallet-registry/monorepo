@@ -181,7 +181,7 @@ Single-phase, no signatures. Sets `reporter = address(0)` on entries. Emits `Tra
 | `getTransactionEntry(...)`                                 | Full `TransactionEntry` struct (both overloads)                             |
 | `isTransactionPending(address reporter)`                   | Whether reporter has active acknowledgement                                 |
 | `getTransactionDeadlines(address reporter)`                | Grace period timing                                                         |
-| `generateTransactionHashStruct(...)`                       | EIP-712 hash struct for frontend signature generation                       |
+| `getTransactionSignatureDeadline(...)`                     | Signing deadline for frontend signature generation                          |
 | `nonces(address reporter)`                                 | Current nonce for replay protection                                         |
 | `getTransactionBatch(uint256 batchId)`                     | Batch metadata                                                              |
 

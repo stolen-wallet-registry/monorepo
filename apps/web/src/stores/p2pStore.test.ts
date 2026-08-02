@@ -25,6 +25,45 @@ describe('clearPartnerPeerId', () => {
   });
 });
 
+describe('pairedWallet', () => {
+  const WALLET = '0x1111111111111111111111111111111111111111';
+
+  it('records and drops the wallet named by the pairing code', () => {
+    useP2PStore.getState().setPairedWallet(WALLET);
+    expect(useP2PStore.getState().pairedWallet).toBe(WALLET);
+
+    useP2PStore.getState().clearPairedWallet();
+    expect(useP2PStore.getState().pairedWallet).toBeNull();
+  });
+
+  // This value is what payment is authorized against, so a hand-edited or corrupted
+  // localStorage entry must not become an address the relayer pays to register. Rehydration
+  // re-validates rather than trusting what it finds.
+  it('drops a persisted value that is not an address on rehydrate', () => {
+    localStorage.setItem(
+      'swr-p2p-state',
+      JSON.stringify({ state: { peerId: null, partnerPeerId: null, pairedWallet: 'nonsense' } })
+    );
+
+    useP2PStore.persist.rehydrate();
+
+    expect(useP2PStore.getState().pairedWallet).toBeNull();
+    localStorage.removeItem('swr-p2p-state');
+  });
+
+  it('keeps a persisted value that is a valid address', () => {
+    localStorage.setItem(
+      'swr-p2p-state',
+      JSON.stringify({ state: { peerId: null, partnerPeerId: null, pairedWallet: WALLET } })
+    );
+
+    useP2PStore.persist.rehydrate();
+
+    expect(useP2PStore.getState().pairedWallet).toBe(WALLET);
+    localStorage.removeItem('swr-p2p-state');
+  });
+});
+
 describe('isPreConnectionStep', () => {
   // A fresh flow: any persisted partnerPeerId here is a leftover from an abandoned tab, and
   // keeping it makes the guard silently reject the NEXT partner's CONNECT.

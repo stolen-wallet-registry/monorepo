@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { request } from 'graphql-request';
 import { OPERATORS_LIST_QUERY, type RawOperatorsListResponse } from '@swr/search';
 import { logger } from '@/lib/logger';
-import { INDEXER_URL } from '@/lib/indexer';
+import { INDEXER_URL, parseIndexerAddress, logDroppedIndexerRow } from '@/lib/indexer';
 import type { Address } from '@/lib/types/ethereum';
 
 /** Capability bitmask values */
@@ -75,16 +75,29 @@ export function useOperators(options: UseOperatorsOptions = {}): UseOperatorsRes
         approved: approvedOnly ? true : undefined,
       });
 
-      const operators: OperatorInfo[] = response.operators.items.map((raw) => ({
-        address: raw.id as Address,
-        identifier: raw.identifier,
-        capabilities: raw.capabilities,
-        approved: raw.approved,
-        canSubmitWallet: raw.canSubmitWallet,
-        canSubmitTransaction: raw.canSubmitTransaction,
-        canSubmitContract: raw.canSubmitContract,
-        approvedAt: BigInt(raw.approvedAt),
-      }));
+      // `address` is required on OperatorInfo and is the operator's identity here — an entry
+      // whose id is not an address cannot be rendered, checked, or acted on, so it is dropped
+      // rather than asserted into the type with `as Address`.
+      const operators: OperatorInfo[] = response.operators.items.flatMap((raw) => {
+        const address = parseIndexerAddress(raw.id);
+        if (!address) {
+          logDroppedIndexerRow('operator', raw.id);
+          return [];
+        }
+
+        return [
+          {
+            address,
+            identifier: raw.identifier,
+            capabilities: raw.capabilities,
+            approved: raw.approved,
+            canSubmitWallet: raw.canSubmitWallet,
+            canSubmitTransaction: raw.canSubmitTransaction,
+            canSubmitContract: raw.canSubmitContract,
+            approvedAt: BigInt(raw.approvedAt),
+          },
+        ];
+      });
 
       logger.contract.info('Operators fetched', { count: operators.length });
 

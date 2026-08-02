@@ -56,7 +56,7 @@ export default {
          * browser-delivered asset, which is where a real leaked secret of ours would land.
          * Verified by planting a `sk_live_...` probe in `apps/web/public/` — still caught.
          */
-        files: ['**/dist/**'],
+        files: ['**/dist/assets/vendor-*'],
         rules: ['react-doctor/artifact-secret-leak'],
       },
     ],

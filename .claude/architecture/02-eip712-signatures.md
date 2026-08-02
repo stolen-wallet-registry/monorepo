@@ -130,7 +130,7 @@ export const TX_EIP712_TYPES = {
 
 ```typescript
 const { data } = useReadContract({
-  functionName: 'generateHashStruct',
+  functionName: 'getSignatureDeadline',
   args: [reportedChainId, incidentTimestamp, trustedForwarder, SIGNATURE_STEP.ACKNOWLEDGEMENT],
 });
 // Returns: [deadline, hashStruct]

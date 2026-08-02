@@ -16,9 +16,12 @@ import { useRelayedWalletSignatureReview } from '@/hooks/p2p/useRelayedSignature
 import { WaitingForData } from '@/components/p2p';
 import { Alert, AlertDescription, Button } from '@swr/ui';
 import { useAcknowledgement } from '@/hooks/useAcknowledgement';
+import { useStepNavigation } from '@/hooks/useStepNavigation';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistrationStore } from '@/stores/registrationStore';
-import { getSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { getSignature, removeSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
+import { classifyP2PRetry, sendResignRequest } from '@/components/registration/p2pResignRequest';
 import type { Hash } from '@/lib/types/ethereum';
 import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
 import { applyScheduledRetry, backoffDelay, MAX_AUTO_RETRIES } from '@/lib/p2p/retryBackoff';
@@ -52,7 +55,14 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
   const { registeree } = useFormStore();
   const { partnerPeerId } = useP2PStore();
   const { acknowledgementHash, setAcknowledgementHash } = useRegistrationStore();
+  const { goToStep } = useStepNavigation();
   const [hasSentHash, setHasSentHash] = useState(false);
+  /**
+   * Set once Retry has discarded a dead signature. `notified` records whether the partner
+   * actually got the request; until it is true the relayer stays on this step so the failure
+   * is visible rather than being swallowed by a step transition.
+   */
+  const [resignRequest, setResignRequest] = useState<{ notified: boolean | null } | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   /** Pending auto-retry: when it should fire, and which attempt it was scheduled from. */
@@ -134,6 +144,64 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
     if (isError) return 'failed';
     return 'idle';
   };
+
+  // Some reverts kill the signature itself (stale deadline, consumed nonce, expired
+  // forwarder). `reset()` as the Retry handler rebuilt byte-identical calldata from the same
+  // cached signature and reverted identically, forever — and on this path the relayer cannot
+  // break the loop by re-signing, because the signature belongs to the registeree.
+  const retryAction = classifyP2PRetry({ isError, error });
+  const needsResign = retryAction.kind === 'request-resign';
+
+  /**
+   * Move back to the step at which a fresh ACK signature from the registeree is accepted.
+   *
+   * `isRelayerProtocolExpectedAtStep` only admits `ACK_SIG` at `acknowledge-and-sign`. Asking
+   * for a new signature while sitting on `acknowledgement-payment` would have the relayer
+   * drop the reply it just asked for.
+   */
+  const returnToAwaitingSignature = useCallback(() => {
+    setResignRequest(null);
+    goToStep('acknowledge-and-sign');
+  }, [goToStep]);
+
+  /**
+   * Retry after a failure.
+   *
+   * Plain resubmit for anything a resubmit can fix. For a signature-invalidating revert the
+   * relayed signature is dropped — so nothing on screen can resubmit it — and the registeree
+   * is asked over P2P to sign again. If that request cannot be delivered the relayer stays
+   * here and is told to reach their partner directly, rather than silently moving to a
+   * waiting screen for a signature nobody knows to send.
+   */
+  const handleRetry = useCallback(() => {
+    if (!needsResign) {
+      reset();
+      return;
+    }
+
+    if (registeree) {
+      removeSignature(registeree, chainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+    }
+    reset();
+    setResignRequest({ notified: null });
+
+    logger.registration.warn(
+      'Relayed acknowledgement signature invalidated by revert; requesting a new one from the registeree',
+      { registeree, error: error?.message }
+    );
+
+    void sendResignRequest({
+      getLibp2p,
+      partnerPeerId,
+      reason: 'signature-invalidated',
+      flow: 'wallet',
+    }).then((notified) => {
+      setResignRequest({ notified });
+      if (notified) {
+        goToStep('acknowledge-and-sign');
+      }
+    });
+  }, [needsResign, registeree, chainId, reset, error, getLibp2p, partnerPeerId, goToStep]);
 
   // Check if stored signature has required fields
   const hasRequiredFields = Boolean(
@@ -340,6 +408,21 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
         </AlertDescription>
       </Alert>
 
+      {/* Signature discarded after an invalidating revert: say what has to happen next, and
+          whether the registeree was actually told. */}
+      {resignRequest && (
+        <>
+          <SignatureInvalidatedAlert
+            partner={{ notified: resignRequest.notified, role: 'registeree' }}
+          />
+          {resignRequest.notified === false && (
+            <Button variant="outline" size="sm" onClick={returnToAwaitingSignature}>
+              I&apos;ve asked them — wait for a new signature
+            </Button>
+          )}
+        </>
+      )}
+
       {!storedSig ? (
         <WaitingForData
           message="Waiting for signature from registeree..."
@@ -368,6 +451,10 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
             deadline={storedSig.deadline}
           />
 
+          {needsResign && (
+            <SignatureInvalidatedAlert partner={{ notified: null, role: 'registeree' }} />
+          )}
+
           <TransactionCard
             type="acknowledgement"
             status={getStatus()}
@@ -381,7 +468,7 @@ export function P2PAckPayStep({ onComplete, role, getLibp2p }: P2PAckPayStepProp
             }
             chainId={chainId}
             onSubmit={handleSubmit}
-            onRetry={reset}
+            onRetry={handleRetry}
             disabled={!storedSig || !hasRequiredFields || !signatureReview?.ok}
           />
           {sendError && isConfirmed && !hasSentHash && (

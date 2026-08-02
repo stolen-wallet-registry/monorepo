@@ -201,5 +201,5 @@ The `identifier` in `WalletRegistered` is `bytes32(uint256(uint160(address)))`. 
 | `getWalletEntry(...)`                | Full `WalletEntry` struct (both overloads)                           |
 | `isWalletPending(address)`           | Whether wallet has active acknowledgement                            |
 | `getDeadlines(address)`              | Grace period timing (currentBlock, expiryBlock, graceStartsAt, etc.) |
-| `generateHashStruct(...)`            | EIP-712 hash struct for frontend signature generation                |
+| `getSignatureDeadline(...)`          | Signing deadline for frontend signature generation                   |
 | `nonces(address)`                    | Current nonce for replay protection                                  |

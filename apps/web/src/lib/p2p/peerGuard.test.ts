@@ -35,10 +35,10 @@ describe('authorizeStreamPeer', () => {
     expect(useP2PStore.getState().partnerPeerId).toBe(PARTNER);
   });
 
-  // The TOFU race: with both sides pinning, whoever CONNECTed first won. An attacker who
-  // read the relayer's displayed peer ID could CONNECT to the registeree before the real
-  // relayer did and be adopted as the partner. The registeree always dials out first and
-  // therefore already knows its partner, so it must never adopt one from an inbound stream.
+  // The TOFU race: with both sides pinning, whoever CONNECTed first won, and on the relayer
+  // side losing it meant paying gas to register a wallet the attacker named. The relayer now
+  // pins from the pairing token before dialing, so it must never adopt a partner from an
+  // inbound stream.
   it('rejects an inbound CONNECT from an unknown peer when the role may not pin', () => {
     expect(authorizeStreamPeer(PROTOCOLS.CONNECT, conn(ATTACKER), false)).toBeNull();
     expect(useP2PStore.getState().partnerPeerId).toBeNull();
@@ -58,8 +58,8 @@ describe('authorizeStreamPeer', () => {
     expect(useP2PStore.getState().partnerPeerId).toBe(PARTNER);
   });
 
-  // The registeree pins the relayer's peer ID out of band before dialing, so a CONNECT
-  // arriving from anyone else is an impostor racing the real relayer.
+  // The relayer pins the peer ID from the pairing token before dialing, so a CONNECT
+  // arriving from anyone else is an impostor racing the real partner.
   it('rejects CONNECT from a peer other than the already-pinned partner', () => {
     useP2PStore.setState({ partnerPeerId: PARTNER });
 
@@ -151,13 +151,14 @@ describe('acceptStream', () => {
     );
   });
 
-  // Role wiring: the relayer waits to be dialed and learns its partner from the inbound
-  // CONNECT; the registeree/reporter dials out and must not.
-  it('lets only the relayer role adopt a partner from an inbound CONNECT', () => {
-    expect(acceptStream(PROTOCOLS.CONNECT, conn(ATTACKER), handshake, 'registeree')).toBe(false);
+  // Role wiring after the pairing-token flip: the registeree/reporter publishes a token and
+  // waits, so it learns its partner from the inbound CONNECT; the relayer pastes the token,
+  // pins from it and dials, so it must not.
+  it('lets only the registeree role adopt a partner from an inbound CONNECT', () => {
+    expect(acceptStream(PROTOCOLS.CONNECT, conn(ATTACKER), handshake, 'relayer')).toBe(false);
     expect(useP2PStore.getState().partnerPeerId).toBeNull();
 
-    expect(acceptStream(PROTOCOLS.CONNECT, conn(PARTNER), handshake, 'relayer')).toBe(true);
+    expect(acceptStream(PROTOCOLS.CONNECT, conn(PARTNER), handshake, 'registeree')).toBe(true);
     expect(useP2PStore.getState().partnerPeerId).toBe(PARTNER);
   });
 });

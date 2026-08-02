@@ -326,10 +326,12 @@ interface ISpokeRegistry {
     /// @param trustedForwarder Address that will submit the transaction
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline Signature expiry timestamp
-    function generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
-        external
-        view
-        returns (uint256 deadline);
+    function getSignatureDeadline(
+        uint64 reportedChainId,
+        uint64 incidentTimestamp,
+        address trustedForwarder,
+        uint8 step
+    ) external view returns (uint256 deadline);
 
     /// @notice Generate hash struct for transaction batch signing (frontend helper)
     /// @dev Uses msg.sender as the reporter address. Must be called by the actual reporter.
@@ -340,7 +342,7 @@ interface ISpokeRegistry {
     /// @param trustedForwarder Address that will submit the transaction
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline Signature expiry timestamp
-    function generateTransactionHashStruct(
+    function getTransactionSignatureDeadline(
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,

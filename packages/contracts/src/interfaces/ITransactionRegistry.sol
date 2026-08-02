@@ -354,7 +354,7 @@ interface ITransactionRegistry {
     /// @param trustedForwarder The forwarder address authorized to complete registration
     /// @param step 1 for acknowledgement, 2 for registration
     /// @return deadline The deadline block number
-    function generateTransactionHashStruct(
+    function getTransactionSignatureDeadline(
         bytes32 dataHash,
         bytes32 reportedChainId,
         uint32 transactionCount,

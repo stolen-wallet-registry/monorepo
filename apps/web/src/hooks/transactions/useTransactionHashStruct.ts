@@ -2,7 +2,7 @@
  * Hook to read the signing deadline from the transaction registry contract.
  * Chain-aware: works on both hub (TransactionRegistry) and spoke (SpokeRegistry).
  *
- * Both contracts expose `generateTransactionHashStruct` with the same signature:
+ * Both contracts expose `getTransactionSignatureDeadline` with the same signature:
  *   (bytes32 dataHash, bytes32 reportedChainId, uint32 transactionCount, address trustedForwarder, uint8 step)
  *
  * This is used before signing to get the contract-generated deadline for the EIP-712 message.
@@ -89,12 +89,12 @@ export function useTransactionHashStruct(
     !!forwarderAddress &&
     !!contractAddress;
 
-  // Hub chain: TransactionRegistry.generateTransactionHashStruct
+  // Hub chain: TransactionRegistry.getTransactionSignatureDeadline
   const hubResult = useReadContract({
     address: contractAddress,
     abi: transactionRegistryAbi,
     chainId,
-    functionName: 'generateTransactionHashStruct',
+    functionName: 'getTransactionSignatureDeadline',
     args: enabled
       ? [dataHash!, reportedChainId!, transactionCount!, forwarderAddress!, step]
       : undefined,
@@ -104,12 +104,12 @@ export function useTransactionHashStruct(
     },
   });
 
-  // Spoke chain: SpokeRegistry.generateTransactionHashStruct (same signature)
+  // Spoke chain: SpokeRegistry.getTransactionSignatureDeadline (same signature)
   const spokeResult = useReadContract({
     address: contractAddress,
     abi: spokeRegistryAbi,
     chainId,
-    functionName: 'generateTransactionHashStruct',
+    functionName: 'getTransactionSignatureDeadline',
     args: enabled
       ? [dataHash!, reportedChainId!, transactionCount!, forwarderAddress!, step]
       : undefined,
@@ -126,7 +126,7 @@ export function useTransactionHashStruct(
   // Log in useEffect to avoid render-time side effects
   useEffect(() => {
     if (result.isError) {
-      logger.contract.error('generateTransactionHashStruct call failed', {
+      logger.contract.error('getTransactionSignatureDeadline call failed', {
         chainId,
         contractAddress,
         isSpoke,
@@ -151,7 +151,7 @@ export function useTransactionHashStruct(
 
   useEffect(() => {
     if (transformedData) {
-      logger.contract.debug('generateTransactionHashStruct call succeeded', {
+      logger.contract.debug('getTransactionSignatureDeadline call succeeded', {
         chainId,
         contractAddress,
         isSpoke,

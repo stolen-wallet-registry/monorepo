@@ -1009,18 +1009,18 @@ contract WalletRegistryTest is EIP712TestHelper {
     // VIEW FUNCTION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice generateHashStruct returns a usable deadline for both phases.
+    /// @notice getSignatureDeadline returns a usable deadline for both phases.
     /// @dev It returns ONLY a deadline. It deliberately no longer returns a hash struct: the
     ///      registration typehash commits to `windowBlockHash`, which is not knowable at this
     ///      point in the flow, so any digest built here would be one no wallet can produce.
     ///      Callers build their own typed data. See the NatSpec on the function.
-    function test_GenerateHashStruct_Step1And2() public {
+    function test_GetSignatureDeadline_Step1And2() public {
         vm.prank(wallet);
-        uint256 deadline1 = walletRegistry.generateHashStruct(REPORTED_CHAIN_ID, incidentTimestamp, forwarder, 1);
+        uint256 deadline1 = walletRegistry.getSignatureDeadline(REPORTED_CHAIN_ID, incidentTimestamp, forwarder, 1);
         assertGt(deadline1, block.timestamp);
 
         vm.prank(wallet);
-        uint256 deadline2 = walletRegistry.generateHashStruct(REPORTED_CHAIN_ID, incidentTimestamp, forwarder, 2);
+        uint256 deadline2 = walletRegistry.getSignatureDeadline(REPORTED_CHAIN_ID, incidentTimestamp, forwarder, 2);
         assertGt(deadline2, block.timestamp);
     }
 

@@ -7,8 +7,9 @@
 
 import { useEffect, useState } from 'react';
 import { useAccount, useChainId, useWaitForTransactionReceipt } from 'wagmi';
+import type { Libp2p } from 'libp2p';
 
-import { Alert, AlertDescription, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
+import { Alert, AlertDescription, Button, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import {
   TransactionCard,
@@ -58,6 +59,8 @@ import {
 import { extractBridgeMessageId } from '@/lib/bridge/messageId';
 import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
 import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
+import { classifyP2PRetry, sendResignRequest } from '@/components/registration/p2pResignRequest';
+import { useP2PStore } from '@/stores/p2pStore';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage, formatEthConsistent, formatCentsToUsd } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -65,12 +68,21 @@ import { AlertCircle } from 'lucide-react';
 export interface TxRegisterPayStepProps {
   /** Called when step is complete */
   onComplete: () => void;
+  /**
+   * P2P relay only: getter for the relayer's libp2p node, used to ask the reporter to sign
+   * again when a revert kills the relayed signature. Optional because the standard and
+   * self-relay flows render this step with no peer at all. Without it the P2P path still
+   * discards the dead signature — it just cannot deliver the request, and says so.
+   *
+   * A getter, not the node: libp2p is a Proxy that throws when React DevTools serialises it.
+   */
+  getLibp2p?: () => Libp2p | null;
 }
 
 /**
  * Transaction batch registration payment step - submits the REG transaction.
  */
-export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
+export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
   const {
@@ -131,6 +143,16 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
   const [storedSignatureState, setStoredSignatureState] = useState<ReturnType<
     typeof getTxSignature
   > | null>(null);
+  /**
+   * P2P only. Set once Retry has discarded a dead relayed signature; `notified` records
+   * whether the reporter actually received the request to sign again, and `windowClosed`
+   * whether they have to restart from the acknowledgement rather than just re-sign.
+   */
+  const [resignRequest, setResignRequest] = useState<{
+    notified: boolean | null;
+    windowClosed: boolean;
+  } | null>(null);
+  const partnerPeerId = useP2PStore((s) => s.partnerPeerId);
 
   // Get stored signature (client-only)
   useEffect(() => {
@@ -527,6 +549,43 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
       reset();
       setLocalError(null);
 
+      // P2P relay: the signature is the reporter's, on another machine, so discarding the
+      // local copy is only half the recovery — without a request over the wire the reporter
+      // waits forever on a "the relayer is submitting" screen. The relayer must also move
+      // back to the step where `isTxRelayerProtocolExpectedAtStep` admits the reply:
+      // `select-transactions` for a fresh TX_ACK_SIG, `register-sign` for a TX_REG_SIG.
+      if (isP2PRelayed) {
+        const action = classifyP2PRetry({ isError, error, windowClosed });
+        const restartFromAck = action.kind === 'request-resign' && action.discardAcknowledgement;
+
+        if (dataHash && restartFromAck) {
+          removeTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
+        }
+        setStoredSignatureState(null);
+        setResignRequest({ notified: null, windowClosed: restartFromAck });
+
+        logger.contract.warn(
+          restartFromAck
+            ? 'Transaction registration window closed on-chain; asking the reporter to restart from acknowledgement'
+            : 'Relayed transaction registration signature invalidated by revert; requesting a new one from the reporter',
+          { dataHash, windowClosed: restartFromAck, error: error?.message }
+        );
+
+        void sendResignRequest({
+          getLibp2p: getLibp2p ?? (() => null),
+          partnerPeerId,
+          reason: restartFromAck ? 'window-closed' : 'signature-invalidated',
+          flow: 'transaction',
+        }).then((notified) => {
+          setResignRequest({ notified, windowClosed: restartFromAck });
+          if (notified) {
+            setResignRequest(null);
+            setStep(restartFromAck ? 'select-transactions' : 'register-sign');
+          }
+        });
+        return;
+      }
+
       // Window closed on-chain: a fresh registration signature reverts identically, so the
       // flow must restart from acknowledgement. The old ACK signature's nonce is consumed,
       // so it is discarded too.
@@ -576,6 +635,32 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>Please connect your wallet to continue.</AlertDescription>
       </Alert>
+    );
+  }
+
+  // Signature discarded after an invalidating revert on the P2P path. This has to come
+  // before the "signature not found" branch below — the signature is legitimately gone, and
+  // the reader needs to know why and what their partner has to do, not that something is
+  // missing.
+  if (resignRequest) {
+    return (
+      <div className="space-y-4">
+        <SignatureInvalidatedAlert
+          windowClosed={resignRequest.windowClosed}
+          partner={{ notified: resignRequest.notified, role: 'reporter' }}
+        />
+        {resignRequest.notified === false && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setStep(resignRequest.windowClosed ? 'select-transactions' : 'register-sign')
+            }
+          >
+            I&apos;ve asked them — wait for a new signature
+          </Button>
+        )}
+      </div>
     );
   }
 
@@ -717,7 +802,12 @@ export function TxRegisterPayStep({ onComplete }: TxRegisterPayStepProps) {
         />
       )}
 
-      {needsResign && <SignatureInvalidatedAlert windowClosed={windowClosed} />}
+      {needsResign && (
+        <SignatureInvalidatedAlert
+          windowClosed={windowClosed}
+          partner={isP2PRelayed ? { notified: null, role: 'reporter' } : undefined}
+        />
+      )}
 
       {/* P2P relay: review before you pay */}
       {isP2PRelayed && storedSignatureState && (

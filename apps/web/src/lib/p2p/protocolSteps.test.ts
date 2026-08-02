@@ -65,18 +65,68 @@ describe('isProtocolExpectedAtStep', () => {
     );
   });
 
-  it('maps every protocol to a step that exists in the p2pRelay sequence', () => {
+  it('maps every protocol to steps that exist in the p2pRelay sequence', () => {
     // Guards against a typo silently making a protocol permanently inert.
     const sequence = STEP_SEQUENCES.p2pRelay;
-    for (const [protocol, step] of Object.entries(PROTOCOL_EXPECTED_STEP)) {
-      expect(sequence, `${protocol} maps to a step outside the p2pRelay flow`).toContain(step);
+    for (const [protocol, steps] of Object.entries(PROTOCOL_EXPECTED_STEP)) {
+      expect(steps.length, `${protocol} has an empty step set`).toBeGreaterThan(0);
+      for (const step of steps) {
+        expect(sequence, `${protocol} maps to a step outside the p2pRelay flow`).toContain(step);
+      }
     }
   });
 
-  it('maps each protocol to a distinct step', () => {
-    // Two protocols sharing a step would let one stand in for the other.
-    const steps = Object.values(PROTOCOL_EXPECTED_STEP);
+  // RESIGN_REQ is the ONE protocol allowed more than a single step, and the only one that
+  // moves the flow backwards. Everything else keeps the original one-step-each shape, so
+  // widening the value type did not quietly widen any other protocol's gate.
+  it('gives exactly one protocol a multi-step set, and only the two payment steps', () => {
+    for (const [protocol, steps] of Object.entries(PROTOCOL_EXPECTED_STEP)) {
+      if (protocol === PROTOCOLS.RESIGN_REQ) {
+        expect([...steps].sort()).toEqual(['acknowledgement-payment', 'registration-payment']);
+      } else {
+        expect(steps, `${protocol} must stay pinned to a single step`).toHaveLength(1);
+      }
+    }
+  });
+
+  it('keeps every non-resign protocol on a distinct step', () => {
+    // Two of them sharing a step would let one stand in for the other. RESIGN_REQ overlaps
+    // by design — it acts where the payment notifications act — but it is dispatched by
+    // protocol, not by step, and its handler cannot do what theirs do.
+    const steps = Object.entries(PROTOCOL_EXPECTED_STEP)
+      .filter(([protocol]) => protocol !== PROTOCOLS.RESIGN_REQ)
+      .flatMap(([, value]) => value);
     expect(new Set(steps).size).toBe(steps.length);
+  });
+
+  it('admits a re-sign request only while waiting on the relayer to pay', () => {
+    expect(isProtocolExpectedAtStep(PROTOCOLS.RESIGN_REQ, 'acknowledgement-payment')).toBe(true);
+    expect(isProtocolExpectedAtStep(PROTOCOLS.RESIGN_REQ, 'registration-payment')).toBe(true);
+
+    // Nowhere else. In particular not the grace period (the anti-phishing delay is not
+    // something a peer may pull a victim out of) and not `success` (terminal).
+    for (const step of [
+      'wait-for-connection',
+      'acknowledge-and-sign',
+      'grace-period',
+      'register-and-sign',
+      'success',
+    ] as const) {
+      expect(isProtocolExpectedAtStep(PROTOCOLS.RESIGN_REQ, step)).toBe(false);
+    }
+    expect(isProtocolExpectedAtStep(PROTOCOLS.RESIGN_REQ, null)).toBe(false);
+  });
+
+  // Regression guard for the widening itself: the table is an object literal, so a lookup of
+  // an inherited key returns a function. Under the old `expected === step` check that was
+  // harmlessly false; under a membership check it must not throw or pass.
+  it('fails closed on inherited Object.prototype keys rather than throwing', () => {
+    for (const key of ['toString', 'constructor', 'hasOwnProperty', '__proto__']) {
+      expect(isProtocolExpectedAtStep(key, 'acknowledgement-payment')).toBe(false);
+      expect(isTxProtocolExpectedAtStep(key, 'acknowledgement-payment')).toBe(false);
+      expect(isRelayerProtocolExpectedAtStep(key, 'acknowledge-and-sign')).toBe(false);
+      expect(isTxRelayerProtocolExpectedAtStep(key, 'select-transactions')).toBe(false);
+    }
   });
 });
 
@@ -113,11 +163,41 @@ describe('isTxProtocolExpectedAtStep', () => {
     expect(isTxProtocolExpectedAtStep(PROTOCOLS.TX_REG_PAY, null)).toBe(false);
   });
 
-  it('maps every protocol to a step that exists in the p2pRelay tx sequence', () => {
+  it('maps every protocol to steps that exist in the p2pRelay tx sequence', () => {
     const sequence = TX_STEP_SEQUENCES.p2pRelay;
-    for (const [protocol, step] of Object.entries(TX_PROTOCOL_EXPECTED_STEP)) {
-      expect(sequence, `${protocol} maps to a step outside the tx p2pRelay flow`).toContain(step);
+    for (const [protocol, steps] of Object.entries(TX_PROTOCOL_EXPECTED_STEP)) {
+      expect(steps.length, `${protocol} has an empty step set`).toBeGreaterThan(0);
+      for (const step of steps) {
+        expect(sequence, `${protocol} maps to a step outside the tx p2pRelay flow`).toContain(step);
+      }
     }
+  });
+
+  it('gives exactly one protocol a multi-step set, and only the two payment steps', () => {
+    for (const [protocol, steps] of Object.entries(TX_PROTOCOL_EXPECTED_STEP)) {
+      if (protocol === PROTOCOLS.RESIGN_REQ) {
+        expect([...steps].sort()).toEqual(['acknowledgement-payment', 'registration-payment']);
+      } else {
+        expect(steps, `${protocol} must stay pinned to a single step`).toHaveLength(1);
+      }
+    }
+  });
+
+  it('admits a re-sign request only while waiting on the relayer to pay', () => {
+    expect(isTxProtocolExpectedAtStep(PROTOCOLS.RESIGN_REQ, 'acknowledgement-payment')).toBe(true);
+    expect(isTxProtocolExpectedAtStep(PROTOCOLS.RESIGN_REQ, 'registration-payment')).toBe(true);
+
+    for (const step of [
+      'wait-for-connection',
+      'select-transactions',
+      'acknowledge-sign',
+      'grace-period',
+      'register-sign',
+      'success',
+    ] as const) {
+      expect(isTxProtocolExpectedAtStep(PROTOCOLS.RESIGN_REQ, step)).toBe(false);
+    }
+    expect(isTxProtocolExpectedAtStep(PROTOCOLS.RESIGN_REQ, null)).toBe(false);
   });
 
   it('does not accept wallet-flow protocols', () => {
@@ -174,6 +254,23 @@ describe('isRelayerProtocolExpectedAtStep', () => {
       expect(sequence, `${protocol} maps to a step outside the p2pRelay flow`).toContain(step);
     }
   });
+
+  // The relayer SENDS re-sign requests; it must never act on one. Widening the two
+  // receiver-side tables must not have leaked into this one — a registeree that could walk
+  // the relayer backwards would be walking the side that spends the gas.
+  it('never admits a re-sign request, at any step', () => {
+    for (const step of STEP_SEQUENCES.p2pRelay) {
+      expect(isRelayerProtocolExpectedAtStep(PROTOCOLS.RESIGN_REQ, step)).toBe(false);
+    }
+    expect(RELAYER_PROTOCOL_EXPECTED_STEP[PROTOCOLS.RESIGN_REQ]).toBeUndefined();
+  });
+
+  // The relayer table keeps one step per protocol; nothing it receives is legitimate twice.
+  it('keeps a single step per protocol', () => {
+    for (const [protocol, step] of Object.entries(RELAYER_PROTOCOL_EXPECTED_STEP)) {
+      expect(typeof step, `${protocol} should be a bare step, not a set`).toBe('string');
+    }
+  });
 });
 
 describe('isTxRelayerProtocolExpectedAtStep', () => {
@@ -210,10 +307,23 @@ describe('isTxRelayerProtocolExpectedAtStep', () => {
     );
   });
 
-  it('maps every protocol to a step that exists in the p2pRelay tx sequence', () => {
+  it('maps every protocol to a step that exists in the tx p2pRelay sequence', () => {
     const sequence = TX_STEP_SEQUENCES.p2pRelay;
     for (const [protocol, step] of Object.entries(TX_RELAYER_PROTOCOL_EXPECTED_STEP)) {
       expect(sequence, `${protocol} maps to a step outside the tx p2pRelay flow`).toContain(step);
+    }
+  });
+
+  it('never admits a re-sign request, at any step', () => {
+    for (const step of TX_STEP_SEQUENCES.p2pRelay) {
+      expect(isTxRelayerProtocolExpectedAtStep(PROTOCOLS.RESIGN_REQ, step)).toBe(false);
+    }
+    expect(TX_RELAYER_PROTOCOL_EXPECTED_STEP[PROTOCOLS.RESIGN_REQ]).toBeUndefined();
+  });
+
+  it('keeps a single step per protocol', () => {
+    for (const [protocol, step] of Object.entries(TX_RELAYER_PROTOCOL_EXPECTED_STEP)) {
+      expect(typeof step, `${protocol} should be a bare step, not a set`).toBe('string');
     }
   });
 });

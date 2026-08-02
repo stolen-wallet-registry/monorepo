@@ -29,9 +29,13 @@ RUN chown -R appuser:appuser /app
 
 WORKDIR /app/apps/indexer
 
+# Only the gateway port is exposed. `pnpm start` runs gateway.mjs, which binds 42069 and
+# supervises `ponder start` on loopback 42070 so that ponder's ungatable `/metrics` route is
+# unreachable from outside the container (security audit V17). Do not EXPOSE 42070.
 EXPOSE 42069
 
-# wget is available in node:22-slim (curl is not)
+# wget is available in node:22-slim (curl is not).
+# /ready is proxied by the gateway, so this exercises both processes.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD wget -qO- http://localhost:42069/ready || exit 1
 

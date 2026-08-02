@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { isAddress } from 'viem';
 import { logger } from '@/lib/logger';
+import type { Address } from '@/lib/types/ethereum';
 
 export type P2PConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -10,6 +12,21 @@ export interface P2PState {
   peerId: string | null;
   /** Connected partner's peer ID */
   partnerPeerId: string | null;
+  /**
+   * Wallet the local user agreed OUT OF BAND to pay for, taken from the pairing token the
+   * helper pasted (see `lib/p2p/pairingToken.ts`). Null for the party being helped, and for
+   * every non-P2P flow.
+   *
+   * SECURITY (audit V4): this is the only statement about "which wallet is being registered"
+   * that did not come from the peer. Everything on the wire — `data.form.registeree`, the
+   * `reporter` field of a stored signature — is the counterparty's own claim, so comparing a
+   * recovered signer against it compares a claim with itself. Payment is gated on the
+   * recovered signer matching THIS value instead.
+   *
+   * Persisted with the peer IDs, and for the same reason: the pairing has to survive a
+   * mid-flow reload, and losing it would silently degrade the check back to self-referential.
+   */
+  pairedWallet: Address | null;
   /** Whether connected to partner peer */
   connectedToPeer: boolean;
   /** Connection status */
@@ -25,6 +42,10 @@ export interface P2PActions {
   setPartnerPeerId: (peerId: string) => void;
   /** Drop the pinned partner without touching the rest of the P2P state. */
   clearPartnerPeerId: () => void;
+  /** Record the wallet named by the pasted pairing token. */
+  setPairedWallet: (address: Address) => void;
+  /** Drop the pairing expectation (pairing abandoned, refused, or restarted). */
+  clearPairedWallet: () => void;
   setConnectedToPeer: (connected: boolean) => void;
   setConnectionStatus: (status: P2PConnectionStatus, errorMessage?: string) => void;
   setInitialized: (initialized: boolean) => void;
@@ -35,6 +56,7 @@ export interface P2PActions {
 const initialState: P2PState = {
   peerId: null,
   partnerPeerId: null,
+  pairedWallet: null,
   connectedToPeer: false,
   connectionStatus: 'disconnected',
   errorMessage: null,
@@ -67,6 +89,17 @@ export const useP2PStore = create<P2PState & P2PActions>()(
               });
             }
             state.partnerPeerId = null;
+          }),
+
+        setPairedWallet: (address) =>
+          set((state) => {
+            logger.p2p.info('Pairing token names the wallet to be registered', { address });
+            state.pairedWallet = address;
+          }),
+
+        clearPairedWallet: () =>
+          set((state) => {
+            state.pairedWallet = null;
           }),
 
         setConnectedToPeer: (connected) =>
@@ -124,6 +157,7 @@ export const useP2PStore = create<P2PState & P2PActions>()(
         partialize: (state) => ({
           peerId: state.peerId,
           partnerPeerId: state.partnerPeerId,
+          pairedWallet: state.pairedWallet,
         }),
         merge: (persisted, current) => {
           if (!persisted || typeof persisted !== 'object') {
@@ -136,6 +170,12 @@ export const useP2PStore = create<P2PState & P2PActions>()(
             ...current,
             peerId: state.peerId ?? initialState.peerId,
             partnerPeerId: state.partnerPeerId ?? initialState.partnerPeerId,
+            // Re-validated rather than trusted: a corrupt or hand-edited entry must not become
+            // the address a payment is authorized against.
+            pairedWallet:
+              state.pairedWallet && isAddress(state.pairedWallet)
+                ? (state.pairedWallet as Address)
+                : initialState.pairedWallet,
           };
         },
       }

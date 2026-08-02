@@ -321,7 +321,7 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
     ///      typed data (see `packages/signatures`); this call exists for the deadline alone.
     ///      Do NOT reintroduce a hash-struct return by adding a `windowBlockHash` parameter —
     ///      the caller does not have one at this point in the flow.
-    function generateHashStruct(
+    function getSignatureDeadline(
         uint64, /* reportedChainId */
         uint64, /* incidentTimestamp */
         address, /* trustedForwarder */

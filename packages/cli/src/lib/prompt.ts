@@ -52,3 +52,37 @@ export async function promptSecret(question: string): Promise<string> {
     rl.close();
   }
 }
+
+/**
+ * Interactive confirmation prompt (echoing, unlike promptSecret).
+ *
+ * Returns the trimmed line the operator typed. Callers compare it against whatever token they
+ * require — see `confirmSubmission` in lib/safety.ts.
+ *
+ * Throws when stdin is not a TTY: a batch submission is irreversible, so a piped or CI
+ * invocation must opt out explicitly with `--yes` rather than have the prompt silently
+ * resolve to an empty string.
+ */
+export async function promptLine(question: string): Promise<string> {
+  const input = process.stdin;
+
+  if (!input.isTTY) {
+    throw new Error(
+      'Cannot prompt for confirmation: stdin is not a TTY. ' +
+        'Re-run with --yes to confirm non-interactively.'
+    );
+  }
+
+  const rl = createInterface({
+    input,
+    output: process.stdout,
+    terminal: true,
+    historySize: 0,
+  });
+
+  try {
+    return (await new Promise<string>((resolve) => rl.question(question, resolve))).trim();
+  } finally {
+    rl.close();
+  }
+}

@@ -10,6 +10,7 @@ import { submitTransactions } from './commands/submit-transactions.js';
 import { verify } from './commands/verify.js';
 import { quote } from './commands/quote.js';
 import { resolveCredential } from './lib/credentials.js';
+import { ABSOLUTE_MAX_BATCH_SIZE, DEFAULT_MAX_BATCH_SIZE } from './lib/safety.js';
 import type { CliEnvironment } from './lib/config.js';
 
 // Load environment variables
@@ -34,6 +35,9 @@ interface SubmitOptions {
   outputDir?: string;
   dryRun?: boolean;
   buildOnly?: boolean;
+  dedupe?: boolean;
+  maxBatchSize?: string;
+  yes?: boolean;
 }
 
 function fail(message: string): never {
@@ -56,6 +60,22 @@ async function prepareSubmit(options: SubmitOptions) {
   const chainId = Number(options.chainId);
   if (!Number.isInteger(chainId) || chainId <= 0) {
     fail(`Invalid chain ID: ${options.chainId}`);
+  }
+
+  // Audit V16: parsed here rather than in the command so a typo fails before any network
+  // call, and so all three submit commands reject it identically.
+  let maxBatchSize: number | undefined;
+  if (options.maxBatchSize !== undefined) {
+    maxBatchSize = Number(options.maxBatchSize);
+    if (!Number.isInteger(maxBatchSize) || maxBatchSize <= 0) {
+      fail(`Invalid --max-batch-size: ${options.maxBatchSize}. Expected a positive integer.`);
+    }
+    if (maxBatchSize > ABSOLUTE_MAX_BATCH_SIZE) {
+      fail(
+        `--max-batch-size ${maxBatchSize} exceeds the hard ceiling of ${ABSOLUTE_MAX_BATCH_SIZE}. ` +
+          'A batch that large cannot fit in a 25M gas transaction and would revert on chain.'
+      );
+    }
   }
 
   let privateKey;
@@ -81,6 +101,9 @@ async function prepareSubmit(options: SubmitOptions) {
     outputDir: options.outputDir,
     dryRun: options.dryRun,
     buildOnly: options.buildOnly,
+    dedupe: options.dedupe,
+    maxBatchSize,
+    yes: options.yes,
   };
 }
 
@@ -94,6 +117,15 @@ function withSubmitOptions(command: Command): Command {
     .option('-c, --chain-id <id>', 'Default chain ID for entries', '8453')
     .option('-o, --output-dir <path>', 'Directory to save transaction data')
     .option('--dry-run', 'Simulate without submitting')
+    .option(
+      '-y, --yes',
+      'Skip the interactive confirmation. For scripted/CI use only — the batch is irreversible.'
+    )
+    .option('--dedupe', 'Drop repeated entries instead of refusing the file')
+    .option(
+      '--max-batch-size <n>',
+      `Maximum entries per batch (default ${DEFAULT_MAX_BATCH_SIZE}, hard ceiling ${ABSOLUTE_MAX_BATCH_SIZE})`
+    )
     .option(
       '-k, --private-key <key>',
       'Plaintext operator key. LOCAL DEVELOPMENT ONLY — refused for testnet/mainnet ' +

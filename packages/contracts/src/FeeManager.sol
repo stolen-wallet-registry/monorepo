@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { TimelockOwnable } from "./libraries/TimelockOwnable.sol";
 import { AggregatorV3Interface } from "./interfaces/chainlink/AggregatorV3Interface.sol";
 import { IFeeManager } from "./interfaces/IFeeManager.sol";
 
@@ -10,7 +11,39 @@ import { IFeeManager } from "./interfaces/IFeeManager.sol";
 /// @notice Manages USD-denominated fees with Chainlink ETH/USD price feed and manual fallback
 /// @dev Uses Chainlink for live pricing, falls back to stored price if oracle is stale/unavailable.
 ///      Supports opportunistic sync to keep fallback price reasonably fresh.
-contract FeeManager is IFeeManager, Ownable2Step {
+///
+///      Inherits {TimelockOwnable}, not plain Ownable2Step. Every setter here is an economic
+///      trust boundary on the critical path of registration: `fallbackEthPriceUsdCents = 1`
+///      together with a large `baseFeeUsdCents` makes `currentFeeWei()` exceed any balance, so
+///      every fee-collecting registration reverts `Fee__Insufficient`. That lands on PHASE TWO of
+///      the two-phase flow, so victims who have already acknowledged watch their window expire
+///      while `register` is unpayable — and both registries hold `feeManager` as `immutable`, so
+///      recovery would otherwise require redeploying the registries. A one-transaction owner call
+///      must not be able to do that; after `completeSetup()` these changes take the 2-day
+///      propose → activate path.
+///
+///      The single carve-out is `setPriceFeed(address(0))`, which stays immediate — see the note
+///      on that function.
+contract FeeManager is IFeeManager, TimelockOwnable {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Upper bound on {stalePriceThreshold}
+    /// @dev Without a cap the owner can set the threshold to `type(uint256).max`, which makes
+    ///      every answer "fresh" forever and turns off staleness detection entirely. 7 days is far
+    ///      beyond any legitimate ETH/USD heartbeat (Chainlink's is measured in hours), so it
+    ///      constrains the abuse without constraining operations.
+    uint256 public constant MAX_STALE_PRICE_THRESHOLD = 7 days;
+
+    /// @notice Floor for the configurable price bounds, in USD cents
+    /// @dev The bounds themselves are owner-settable, so they need their own bounds — otherwise
+    ///      "clamp the oracle" is just a second lever with the same reach as the first.
+    uint256 public constant MIN_PRICE_BOUND = 100; // $1.00
+
+    /// @notice Ceiling for the configurable price bounds, in USD cents
+    uint256 public constant MAX_PRICE_BOUND = 100_000_000; // $1,000,000.00
+
     // ═══════════════════════════════════════════════════════════════════════════
     // STATE
     // ═══════════════════════════════════════════════════════════════════════════
@@ -57,6 +90,43 @@ contract FeeManager is IFeeManager, Ownable2Step {
     /// @notice Interval between opportunistic fallback syncs
     /// @dev Default: 1 day - keeps fallback reasonably fresh without extra cost
     uint256 public fallbackSyncInterval = 1 days;
+
+    /// @notice Lowest ETH price, in USD cents, that will be accepted from the oracle
+    /// @dev Default: $50.00. See {_withinBounds} for why this exists.
+    uint256 public minEthPriceUsdCents = 5000;
+
+    /// @notice Highest ETH price, in USD cents, that will be accepted from the oracle
+    /// @dev Default: $50,000.00. See {_withinBounds} for why this exists.
+    uint256 public maxEthPriceUsdCents = 5_000_000;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ERRORS (not in IFeeManager — additions local to this implementation)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Thrown when the proposed price bounds are inverted or outside the hard limits
+    error Fee__InvalidBounds();
+
+    /// @notice Thrown when the proposed staleness threshold exceeds MAX_STALE_PRICE_THRESHOLD
+    error Fee__InvalidThreshold();
+
+    /// @notice Thrown when an oracle answer is well-formed and fresh but outside the sanity bounds
+    error Fee__PriceOutOfBounds();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // EVENTS (not in IFeeManager — additions local to this implementation)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Emitted when the oracle sanity bounds change
+    /// @param minUsdCents New lower bound in USD cents
+    /// @param maxUsdCents New upper bound in USD cents
+    event PriceBoundsUpdated(uint256 minUsdCents, uint256 maxUsdCents);
+
+    /// @notice Emitted when a fresh, positive oracle answer is rejected for being out of bounds
+    /// @dev Deliberately loud. A feed that trips this is either broken or manipulated, and the
+    ///      contract silently degrading to the fallback price is exactly the kind of thing that
+    ///      goes unnoticed until the fallback itself is months stale.
+    /// @param rejectedUsdCents The answer that was rejected, in USD cents
+    event OraclePriceRejected(uint256 rejectedUsdCents);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -144,6 +214,13 @@ contract FeeManager is IFeeManager, Ownable2Step {
                 return fallbackEthPriceUsdCents;
             }
 
+            // Sanity bounds: a fresh, positive, well-formed but WRONG answer is the one case
+            // every other guard here misses. See {_withinBounds}.
+            if (!_withinBounds(livePrice)) {
+                emit OraclePriceRejected(livePrice);
+                return fallbackEthPriceUsdCents;
+            }
+
             // Opportunistic sync: update fallback if interval has passed
             // Cost: ~100 gas for read + ~10k gas for write (only when triggered)
             // Most calls just add ~100 gas, one user per interval pays ~10k extra
@@ -171,10 +248,33 @@ contract FeeManager is IFeeManager, Ownable2Step {
                 return fallbackEthPriceUsdCents;
             }
             (bool ok, uint256 livePrice) = _tryToCents(price);
-            return ok ? livePrice : fallbackEthPriceUsdCents;
+            // Must mirror syncAndGetEthPriceUsdCents exactly, or the quoted fee and the collected
+            // fee disagree. This one is `view`, so it cannot emit OraclePriceRejected.
+            if (!ok || !_withinBounds(livePrice)) return fallbackEthPriceUsdCents;
+            return livePrice;
         } catch {
             return fallbackEthPriceUsdCents;
         }
+    }
+
+    /// @dev Is a converted oracle answer inside the configured sanity band?
+    ///
+    ///      Every other guard on this path defends against a MISSING answer — a reverting feed, a
+    ///      stale round, a non-positive price, a broken `decimals()`. Nothing defended against a
+    ///      fresh, positive, correctly-encoded answer that is simply wrong, and the fee formula
+    ///      `baseFeeUsdCents * 1e18 / ethPriceUsdCents` is unbounded in both directions:
+    ///
+    ///        - a $1 answer prices a $5 registration at 5 ETH;
+    ///        - a sub-cent answer is floored to 1 cent by {_tryToCents} and yields 500 ETH;
+    ///        - a 1e20 answer makes registration free, so the fee stops deterring sybil spam.
+    ///
+    ///      Out-of-band answers fall back to the last known-good price rather than reverting: a
+    ///      revert here would brick every fee-collecting registration path, which is a strictly
+    ///      worse failure than quoting a slightly stale price.
+    /// @param priceUsdCents Converted price in USD cents
+    /// @return True if within [minEthPriceUsdCents, maxEthPriceUsdCents]
+    function _withinBounds(uint256 priceUsdCents) internal view returns (bool) {
+        return priceUsdCents >= minEthPriceUsdCents && priceUsdCents <= maxEthPriceUsdCents;
     }
 
     /// @dev Is the feed's last update too old to trust?
@@ -246,6 +346,11 @@ contract FeeManager is IFeeManager, Ownable2Step {
 
         (bool ok, uint256 newPrice) = _tryToCents(price);
         if (!ok) revert Fee__InvalidPrice();
+        // This function is permissionless and WRITES the fallback. Without the bounds check a
+        // single out-of-band oracle answer would be laundered into the stored fallback price,
+        // which then survives long after the feed recovered. Reverting is correct here (unlike on
+        // the read paths): nothing depends on this call succeeding.
+        if (!_withinBounds(newPrice)) revert Fee__PriceOutOfBounds();
         fallbackEthPriceUsdCents = newPrice;
         lastFallbackSync = block.timestamp;
         emit FallbackPriceRefreshed(newPrice);
@@ -256,7 +361,159 @@ contract FeeManager is IFeeManager, Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IFeeManager
-    function setBaseFee(uint256 _baseFeeUsdCents) external onlyOwner {
+    /// @dev Immediate during setup; after {completeSetup} use
+    ///      {proposeBaseFee} → wait ACTIVATION_DELAY → {activateBaseFee}.
+    function setBaseFee(uint256 _baseFeeUsdCents) external onlyOwner onlyDuringSetup {
+        _setBaseFee(_baseFeeUsdCents);
+    }
+
+    /// @inheritdoc IFeeManager
+    /// @dev Immediate during setup; afterwards {proposeOperatorBatchFee} / {activateOperatorBatchFee}.
+    function setOperatorBatchFee(uint256 _operatorBatchFeeUsdCents) external onlyOwner onlyDuringSetup {
+        _setOperatorBatchFee(_operatorBatchFeeUsdCents);
+    }
+
+    /// @inheritdoc IFeeManager
+    /// @dev Immediate during setup; afterwards {proposeFallbackPrice} / {activateFallbackPrice}.
+    function setFallbackPrice(uint256 _fallbackEthPriceUsdCents) external onlyOwner onlyDuringSetup {
+        _setFallbackPrice(_fallbackEthPriceUsdCents);
+    }
+
+    /// @inheritdoc IFeeManager
+    /// @dev Pointing at a NEW feed is a trust-boundary change and is timelocked after setup
+    ///      ({proposeParcelFeed}-style pair below). Pointing at `address(0)` stays immediate at
+    ///      all times: that disables the oracle and drops the contract to the manual fallback
+    ///      price, which only ever NARROWS what this contract trusts. It is the targeted
+    ///      emergency response to a feed that has started answering wrongly-but-plausibly, and it
+    ///      matches the `address(0)`-is-a-revoke carve-out used for trusted sources, forwarders
+    ///      and ownership transfers elsewhere in this system.
+    function setPriceFeed(address priceFeedAddress) external onlyOwner {
+        if (priceFeedAddress != address(0) && setupComplete) revert TimelockOwnable__SetupAlreadyComplete();
+        _priceFeed = AggregatorV3Interface(priceFeedAddress);
+        emit PriceFeedConfigured(priceFeedAddress);
+    }
+
+    /// @inheritdoc IFeeManager
+    /// @notice Setting to 0 disables the oracle (all prices considered stale)
+    /// @dev Capped at {MAX_STALE_PRICE_THRESHOLD}. Immediate during setup; afterwards
+    ///      {proposeStalePriceThreshold} / {activateStalePriceThreshold}.
+    function setStalePriceThreshold(uint256 _stalePriceThreshold) external onlyOwner onlyDuringSetup {
+        _setStalePriceThreshold(_stalePriceThreshold);
+    }
+
+    /// @inheritdoc IFeeManager
+    /// @notice Setting to 0 triggers sync on every syncAndGetEthPriceUsdCents() call (higher gas)
+    ///         Consider using reasonable minimum (e.g., 1 hour) for normal operation
+    /// @dev Deliberately NOT timelocked. This is a gas-tuning knob only: it cannot change a quoted
+    ///      fee, cannot reject a payment, and cannot repoint any trust boundary. Its worst abuse is
+    ///      making one caller per call pay an extra SSTORE.
+    function setFallbackSyncInterval(uint256 _fallbackSyncInterval) external onlyOwner {
+        uint256 oldInterval = fallbackSyncInterval;
+        fallbackSyncInterval = _fallbackSyncInterval;
+        emit FallbackSyncIntervalUpdated(oldInterval, _fallbackSyncInterval);
+    }
+
+    /// @notice Set the oracle sanity bounds (immediate during setup)
+    /// @dev Afterwards {proposePriceBounds} / {activatePriceBounds}. See {_withinBounds}.
+    /// @param minUsdCents Lower bound in USD cents
+    /// @param maxUsdCents Upper bound in USD cents
+    function setPriceBounds(uint256 minUsdCents, uint256 maxUsdCents) external onlyOwner onlyDuringSetup {
+        _setPriceBounds(minUsdCents, maxUsdCents);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TIMELOCKED ADMIN (post-setup path)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice Propose a base fee change (2-day delay)
+    /// @param _baseFeeUsdCents New base fee in USD cents
+    function proposeBaseFee(uint256 _baseFeeUsdCents) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setBaseFee", _baseFeeUsdCents)));
+    }
+
+    /// @notice Activate a previously proposed base fee change
+    /// @param _baseFeeUsdCents The exact value passed to {proposeBaseFee}
+    function activateBaseFee(uint256 _baseFeeUsdCents) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setBaseFee", _baseFeeUsdCents)));
+        _setBaseFee(_baseFeeUsdCents);
+    }
+
+    /// @notice Propose an operator batch fee change (2-day delay)
+    /// @param _operatorBatchFeeUsdCents New per-batch fee in USD cents
+    function proposeOperatorBatchFee(uint256 _operatorBatchFeeUsdCents) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setOperatorBatchFee", _operatorBatchFeeUsdCents)));
+    }
+
+    /// @notice Activate a previously proposed operator batch fee change
+    /// @param _operatorBatchFeeUsdCents The exact value passed to {proposeOperatorBatchFee}
+    function activateOperatorBatchFee(uint256 _operatorBatchFeeUsdCents) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setOperatorBatchFee", _operatorBatchFeeUsdCents)));
+        _setOperatorBatchFee(_operatorBatchFeeUsdCents);
+    }
+
+    /// @notice Propose a fallback price change (2-day delay)
+    /// @param _fallbackEthPriceUsdCents New fallback ETH price in USD cents
+    function proposeFallbackPrice(uint256 _fallbackEthPriceUsdCents) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setFallbackPrice", _fallbackEthPriceUsdCents)));
+    }
+
+    /// @notice Activate a previously proposed fallback price change
+    /// @param _fallbackEthPriceUsdCents The exact value passed to {proposeFallbackPrice}
+    function activateFallbackPrice(uint256 _fallbackEthPriceUsdCents) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setFallbackPrice", _fallbackEthPriceUsdCents)));
+        _setFallbackPrice(_fallbackEthPriceUsdCents);
+    }
+
+    /// @notice Propose pointing at a new Chainlink feed (2-day delay)
+    /// @dev Un-pointing (address(0)) needs no proposal — see {setPriceFeed}.
+    /// @param priceFeedAddress The new feed address (must be non-zero)
+    function proposePriceFeed(address priceFeedAddress) external onlyOwner {
+        if (priceFeedAddress == address(0)) revert Fee__InvalidPrice();
+        _proposeAction(keccak256(abi.encode("setPriceFeed", priceFeedAddress)));
+    }
+
+    /// @notice Activate a previously proposed price feed change
+    /// @param priceFeedAddress The exact address passed to {proposePriceFeed}
+    function activatePriceFeed(address priceFeedAddress) external onlyOwner {
+        if (priceFeedAddress == address(0)) revert Fee__InvalidPrice();
+        _activateAction(keccak256(abi.encode("setPriceFeed", priceFeedAddress)));
+        _priceFeed = AggregatorV3Interface(priceFeedAddress);
+        emit PriceFeedConfigured(priceFeedAddress);
+    }
+
+    /// @notice Propose a staleness threshold change (2-day delay)
+    /// @param _stalePriceThreshold New threshold in seconds
+    function proposeStalePriceThreshold(uint256 _stalePriceThreshold) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setStalePriceThreshold", _stalePriceThreshold)));
+    }
+
+    /// @notice Activate a previously proposed staleness threshold change
+    /// @param _stalePriceThreshold The exact value passed to {proposeStalePriceThreshold}
+    function activateStalePriceThreshold(uint256 _stalePriceThreshold) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setStalePriceThreshold", _stalePriceThreshold)));
+        _setStalePriceThreshold(_stalePriceThreshold);
+    }
+
+    /// @notice Propose new oracle sanity bounds (2-day delay)
+    /// @param minUsdCents Lower bound in USD cents
+    /// @param maxUsdCents Upper bound in USD cents
+    function proposePriceBounds(uint256 minUsdCents, uint256 maxUsdCents) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setPriceBounds", minUsdCents, maxUsdCents)));
+    }
+
+    /// @notice Activate previously proposed oracle sanity bounds
+    /// @param minUsdCents The exact lower bound passed to {proposePriceBounds}
+    /// @param maxUsdCents The exact upper bound passed to {proposePriceBounds}
+    function activatePriceBounds(uint256 minUsdCents, uint256 maxUsdCents) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setPriceBounds", minUsdCents, maxUsdCents)));
+        _setPriceBounds(minUsdCents, maxUsdCents);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // INTERNAL SETTERS (single implementation shared by both paths)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function _setBaseFee(uint256 _baseFeeUsdCents) internal {
         // Prevent overflow in currentFeeWei calculation: (baseFeeUsdCents * 1e18) / ethPrice
         // Max safe value: type(uint256).max / 1e18 ≈ 1.15e59 (way beyond any realistic fee)
         if (_baseFeeUsdCents > type(uint256).max / 1e18) {
@@ -267,8 +524,7 @@ contract FeeManager is IFeeManager, Ownable2Step {
         emit BaseFeeUpdated(oldFee, _baseFeeUsdCents);
     }
 
-    /// @inheritdoc IFeeManager
-    function setOperatorBatchFee(uint256 _operatorBatchFeeUsdCents) external onlyOwner {
+    function _setOperatorBatchFee(uint256 _operatorBatchFeeUsdCents) internal {
         // Prevent overflow in operatorBatchFeeWei calculation
         if (_operatorBatchFeeUsdCents > type(uint256).max / 1e18) {
             revert Fee__InvalidPrice();
@@ -278,35 +534,36 @@ contract FeeManager is IFeeManager, Ownable2Step {
         emit OperatorBatchFeeUpdated(oldFee, _operatorBatchFeeUsdCents);
     }
 
-    /// @inheritdoc IFeeManager
-    function setFallbackPrice(uint256 _fallbackEthPriceUsdCents) external onlyOwner {
+    /// @dev The fallback is what every price path degrades to, so it takes the same sanity band
+    ///      as a live oracle answer. Otherwise the bound on the oracle is trivially sidestepped by
+    ///      setting the fallback to 1 cent and letting the feed go stale.
+    function _setFallbackPrice(uint256 _fallbackEthPriceUsdCents) internal {
         if (_fallbackEthPriceUsdCents == 0) revert Fee__InvalidPrice();
+        if (!_withinBounds(_fallbackEthPriceUsdCents)) revert Fee__PriceOutOfBounds();
         uint256 oldPrice = fallbackEthPriceUsdCents;
         fallbackEthPriceUsdCents = _fallbackEthPriceUsdCents;
         emit FallbackPriceUpdated(oldPrice, _fallbackEthPriceUsdCents);
     }
 
-    /// @inheritdoc IFeeManager
-    function setPriceFeed(address priceFeedAddress) external onlyOwner {
-        _priceFeed = AggregatorV3Interface(priceFeedAddress);
-        emit PriceFeedConfigured(priceFeedAddress);
-    }
-
-    /// @inheritdoc IFeeManager
-    /// @notice Setting to 0 disables the oracle (all prices considered stale)
-    ///         Consider using reasonable minimum (e.g., 1 hour) for normal operation
-    function setStalePriceThreshold(uint256 _stalePriceThreshold) external onlyOwner {
+    function _setStalePriceThreshold(uint256 _stalePriceThreshold) internal {
+        if (_stalePriceThreshold > MAX_STALE_PRICE_THRESHOLD) revert Fee__InvalidThreshold();
         uint256 oldThreshold = stalePriceThreshold;
         stalePriceThreshold = _stalePriceThreshold;
         emit StalePriceThresholdUpdated(oldThreshold, _stalePriceThreshold);
     }
 
-    /// @inheritdoc IFeeManager
-    /// @notice Setting to 0 triggers sync on every syncAndGetEthPriceUsdCents() call (higher gas)
-    ///         Consider using reasonable minimum (e.g., 1 hour) for normal operation
-    function setFallbackSyncInterval(uint256 _fallbackSyncInterval) external onlyOwner {
-        uint256 oldInterval = fallbackSyncInterval;
-        fallbackSyncInterval = _fallbackSyncInterval;
-        emit FallbackSyncIntervalUpdated(oldInterval, _fallbackSyncInterval);
+    /// @dev Narrowing the band must not orphan the price already in storage — if the current
+    ///      fallback fell outside the new bounds, {_setFallbackPrice} could never restore it and
+    ///      every read path would be quoting a value the contract itself considers invalid.
+    function _setPriceBounds(uint256 minUsdCents, uint256 maxUsdCents) internal {
+        if (minUsdCents < MIN_PRICE_BOUND || maxUsdCents > MAX_PRICE_BOUND || minUsdCents > maxUsdCents) {
+            revert Fee__InvalidBounds();
+        }
+        if (fallbackEthPriceUsdCents < minUsdCents || fallbackEthPriceUsdCents > maxUsdCents) {
+            revert Fee__InvalidBounds();
+        }
+        minEthPriceUsdCents = minUsdCents;
+        maxEthPriceUsdCents = maxUsdCents;
+        emit PriceBoundsUpdated(minUsdCents, maxUsdCents);
     }
 }

@@ -18,6 +18,19 @@
  *
  * The rule: a protocol may only advance the flow from the step at which that message
  * legitimately arrives. Anything else is ignored and logged.
+ *
+ * ── Why the receiver-side tables hold a SET of steps ──────────────────────────────────────
+ * Every table here mapped a protocol to exactly one step, which was true of every protocol
+ * until `RESIGN_REQ`: a relayer whose relayed signature was invalidated by a revert can be
+ * standing at either payment step when it discovers it, so the request is legitimate at two.
+ * The value type widened to a list rather than the check loosening — each protocol still
+ * names an explicit, closed set, membership is still exact, and both fail-closed paths are
+ * unchanged (unknown protocol → false, unknown/absent step → false). An empty or non-array
+ * entry is also false, so a malformed table cannot open the gate either.
+ *
+ * The two RELAYER tables are deliberately NOT widened. They keep the single-step shape,
+ * because nothing the relayer receives is legitimate at more than one step and a set there
+ * would be latitude bought for no reason.
  */
 
 import { PROTOCOLS } from '@swr/p2p';
@@ -25,20 +38,51 @@ import type { RegistrationStep } from '@/stores/registrationStore';
 import type { TransactionRegistrationStep } from '@/stores/transactionRegistrationStore';
 
 /**
- * The step the victim is on when each relayer message legitimately arrives.
+ * The steps the victim may be on when each relayer message legitimately arrives.
  *
- * Mirrors `STEP_SEQUENCES.p2pRelay`: each entry is the step the message advances *from*.
+ * Mirrors `STEP_SEQUENCES.p2pRelay`: each entry lists the step(s) the message may act from.
  * `grace-period` and `success` appear nowhere because nothing the relayer sends may move
  * the flow out of them — the grace period ends on the local timer, and `success` is
  * terminal.
+ *
+ * `RESIGN_REQ` is the only entry with more than one step, and the only message that moves
+ * the flow BACKWARDS. Both payment steps are listed because that is where the registeree
+ * waits while the relayer is spending gas, which is the only window in which the relayer can
+ * discover the signature is dead. It is absent from every other step for the usual reason:
+ * at `acknowledge-and-sign`/`register-and-sign` there is nothing to recover (the victim is
+ * already being asked to sign), and admitting it at `grace-period` would hand a peer the
+ * ability to pull a victim out of the anti-phishing delay.
  */
-export const PROTOCOL_EXPECTED_STEP: Readonly<Record<string, RegistrationStep>> = {
-  [PROTOCOLS.CONNECT]: 'wait-for-connection',
-  [PROTOCOLS.ACK_REC]: 'acknowledge-and-sign',
-  [PROTOCOLS.ACK_PAY]: 'acknowledgement-payment',
-  [PROTOCOLS.REG_REC]: 'register-and-sign',
-  [PROTOCOLS.REG_PAY]: 'registration-payment',
+export const PROTOCOL_EXPECTED_STEP: Readonly<Record<string, readonly RegistrationStep[]>> = {
+  [PROTOCOLS.CONNECT]: ['wait-for-connection'],
+  [PROTOCOLS.ACK_REC]: ['acknowledge-and-sign'],
+  [PROTOCOLS.ACK_PAY]: ['acknowledgement-payment'],
+  [PROTOCOLS.REG_REC]: ['register-and-sign'],
+  [PROTOCOLS.REG_PAY]: ['registration-payment'],
+  [PROTOCOLS.RESIGN_REQ]: ['acknowledgement-payment', 'registration-payment'],
 };
+
+/**
+ * Exact membership in a protocol's expected-step set, or false if there is no usable set.
+ *
+ * Rejects a non-array lookup as well as a missing one: a table is an object literal, so
+ * `table['toString']` resolves through `Object.prototype` to a function. `protocol` is
+ * always one of the strings this app registered a handler for, never peer-supplied, so that
+ * is not reachable today — but a truthy non-array would throw rather than fail closed, and
+ * a guard that only holds while an unrelated call site stays correct is not a guard.
+ */
+function stepIsExpected<TStep extends string>(
+  table: Readonly<Record<string, readonly TStep[]>>,
+  protocol: string,
+  step: TStep | null
+): boolean {
+  if (!step) return false;
+  const expected = Object.prototype.hasOwnProperty.call(table, protocol)
+    ? table[protocol]
+    : undefined;
+  if (!Array.isArray(expected) || expected.length === 0) return false;
+  return expected.includes(step);
+}
 
 /**
  * Whether a message on `protocol` may act on the flow while it sits at `step`.
@@ -51,10 +95,7 @@ export const PROTOCOL_EXPECTED_STEP: Readonly<Record<string, RegistrationStep>> 
  * @param step - The victim's current flow step
  */
 export function isProtocolExpectedAtStep(protocol: string, step: RegistrationStep | null): boolean {
-  if (!step) return false;
-  const expected = PROTOCOL_EXPECTED_STEP[protocol];
-  if (!expected) return false;
-  return expected === step;
+  return stepIsExpected(PROTOCOL_EXPECTED_STEP, protocol, step);
 }
 
 /**
@@ -68,6 +109,11 @@ export function isProtocolExpectedAtStep(protocol: string, step: RegistrationSte
  *
  * A CONNECT is only ever legitimate at `wait-for-connection`. Reconnection does not re-send
  * one (`ReconnectDialog` re-dials without a handshake), so gating it here does not break resume.
+ *
+ * Single step per protocol, unlike the receiver-side tables above. `RESIGN_REQ` is absent on
+ * purpose: the relayer sends re-sign requests, it never receives them, and the page registers
+ * no handler for one. Listing it would only give a registeree a way to walk the relayer
+ * backwards through the flow that spends the gas.
  */
 export const RELAYER_PROTOCOL_EXPECTED_STEP: Readonly<Record<string, RegistrationStep>> = {
   [PROTOCOLS.CONNECT]: 'wait-for-connection',
@@ -99,14 +145,18 @@ export function isRelayerProtocolExpectedAtStep(
  *
  * Mirrors `TX_STEP_SEQUENCES.p2pRelay`. `select-transactions` is absent deliberately — the
  * reporter chooses what to report locally, and no message from the relayer may move the flow
- * off that step.
+ * off that step. That includes `RESIGN_REQ`, which is admitted at the two payment steps only
+ * and sends the reporter back to a *sign* step, never back into the selection.
  */
-export const TX_PROTOCOL_EXPECTED_STEP: Readonly<Record<string, TransactionRegistrationStep>> = {
-  [PROTOCOLS.CONNECT]: 'wait-for-connection',
-  [PROTOCOLS.TX_ACK_REC]: 'acknowledge-sign',
-  [PROTOCOLS.TX_ACK_PAY]: 'acknowledgement-payment',
-  [PROTOCOLS.TX_REG_REC]: 'register-sign',
-  [PROTOCOLS.TX_REG_PAY]: 'registration-payment',
+export const TX_PROTOCOL_EXPECTED_STEP: Readonly<
+  Record<string, readonly TransactionRegistrationStep[]>
+> = {
+  [PROTOCOLS.CONNECT]: ['wait-for-connection'],
+  [PROTOCOLS.TX_ACK_REC]: ['acknowledge-sign'],
+  [PROTOCOLS.TX_ACK_PAY]: ['acknowledgement-payment'],
+  [PROTOCOLS.TX_REG_REC]: ['register-sign'],
+  [PROTOCOLS.TX_REG_PAY]: ['registration-payment'],
+  [PROTOCOLS.RESIGN_REQ]: ['acknowledgement-payment', 'registration-payment'],
 };
 
 /**
@@ -118,10 +168,7 @@ export function isTxProtocolExpectedAtStep(
   protocol: string,
   step: TransactionRegistrationStep | null
 ): boolean {
-  if (!step) return false;
-  const expected = TX_PROTOCOL_EXPECTED_STEP[protocol];
-  if (!expected) return false;
-  return expected === step;
+  return stepIsExpected(TX_PROTOCOL_EXPECTED_STEP, protocol, step);
 }
 
 /**

@@ -24,6 +24,22 @@ abstract contract TimelockOwnable is Ownable2Step {
     /// @notice Required delay between proposal and activation
     uint256 public constant ACTIVATION_DELAY = 2 days;
 
+    /// @notice How long a proposal stays activatable once its delay has elapsed
+    /// @dev Without an upper bound a proposal is a permanently loaded gun: `pendingActivations`
+    ///      is plain storage, so an entry armed on day 0 is still activatable years later, in a
+    ///      single transaction, with a zero-length community reaction window. Two concrete
+    ///      consequences this bounds:
+    ///        1. An owner key compromised at time T collapses the 2-day delay to zero for every
+    ///           proposal armed before T - ACTIVATION_DELAY.
+    ///        2. Proposals armed by the deployer EOA survive the handover into DAO ownership.
+    ///           The DAO inherits them and must know to `cancelAction` each one.
+    ///      14 days: long enough that a legitimate DAO vote plus execution scheduling fits
+    ///      comfortably inside the window (2-day delay + 12 days to act), short enough that a
+    ///      forgotten proposal lapses within one governance cycle rather than persisting
+    ///      indefinitely. An expired proposal is not lost — it can simply be re-proposed, which
+    ///      restarts the full ACTIVATION_DELAY and re-emits ActionProposed for watchers.
+    uint256 public constant ACTIVATION_EXPIRY = 14 days;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // STATE
     // ═══════════════════════════════════════════════════════════════════════════
@@ -78,6 +94,15 @@ abstract contract TimelockOwnable is Ownable2Step {
     /// @notice Thrown when proposing an ownership transfer to the zero address
     error TimelockOwnable__ZeroAddress();
 
+    /// @notice Thrown when activating a proposal whose activation window has closed
+    error TimelockOwnable__Expired();
+
+    /// @notice Thrown when proposing before completeSetup()
+    /// @dev During setup the immediate setters are open, so a proposal buys nothing and nobody is
+    ///      watching ActionProposed yet. Allowing it only creates pre-armed proposals that outlive
+    ///      setup. See {ACTIVATION_EXPIRY}.
+    error TimelockOwnable__SetupNotComplete();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MODIFIERS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -93,20 +118,48 @@ abstract contract TimelockOwnable is Ownable2Step {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @dev Propose an action — sets activation time to now + ACTIVATION_DELAY
+    ///
+    ///      Only callable after completeSetup(): before that the immediate setters are still
+    ///      open, so a proposal is redundant, and arming one early is purely a way to smuggle a
+    ///      pending action past the point where anyone starts watching ActionProposed.
+    ///
+    ///      An EXPIRED pending entry is silently replaced rather than treated as a conflict —
+    ///      otherwise a lapsed proposal would wedge its action key forever until someone
+    ///      remembered to cancelAction it. Replacing restarts the full ACTIVATION_DELAY.
     function _proposeAction(bytes32 actionKey) internal {
-        if (pendingActivations[actionKey] != 0) revert TimelockOwnable__AlreadyPending();
+        if (!setupComplete) revert TimelockOwnable__SetupNotComplete();
+        uint256 existing = pendingActivations[actionKey];
+        if (existing != 0 && block.timestamp <= existing + ACTIVATION_EXPIRY) {
+            revert TimelockOwnable__AlreadyPending();
+        }
         uint256 activationTime = block.timestamp + ACTIVATION_DELAY;
         pendingActivations[actionKey] = activationTime;
         emit ActionProposed(actionKey, activationTime);
     }
 
-    /// @dev Activate a previously proposed action — reverts if too early or not proposed
+    /// @dev Activate a previously proposed action — reverts if not proposed, too early, or expired
     function _activateAction(bytes32 actionKey) internal {
         uint256 activationTime = pendingActivations[actionKey];
         if (activationTime == 0) revert TimelockOwnable__NotProposed();
         if (block.timestamp < activationTime) revert TimelockOwnable__TooEarly();
+        if (block.timestamp > activationTime + ACTIVATION_EXPIRY) revert TimelockOwnable__Expired();
         delete pendingActivations[actionKey];
         emit ActionActivated(actionKey);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEW HELPERS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice The last timestamp at which a proposal can still be activated
+    /// @dev Returns 0 when nothing is pending for this key. Exposed so an incoming DAO can audit
+    ///      (and cancel) proposals it inherits from the deploying EOA — see {ACTIVATION_EXPIRY}.
+    /// @param actionKey The action key to inspect
+    /// @return The activation deadline, or 0 if not proposed
+    function activationExpiry(bytes32 actionKey) external view returns (uint256) {
+        uint256 activationTime = pendingActivations[actionKey];
+        if (activationTime == 0) return 0;
+        return activationTime + ACTIVATION_EXPIRY;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -63,6 +63,7 @@ import {
   type StoredTxSignature,
 } from '@/lib/signatures/transactions';
 import { logger } from '@/lib/logger';
+import { isAddress } from '@/lib/types/ethereum';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 /**
@@ -132,7 +133,7 @@ async function processTxSignature(
  * Step descriptions for P2P relayer transaction flow.
  */
 const STEP_DESCRIPTIONS: Partial<Record<TransactionRegistrationStep, string>> = {
-  'wait-for-connection': 'Share your Peer ID with the reporter',
+  'wait-for-connection': "Paste the reporter's pairing code",
   'select-transactions': 'Waiting for reporter to select transactions',
   'acknowledge-sign': 'Waiting for reporter to sign acknowledgement',
   'acknowledgement-payment': 'Submit the acknowledgement transaction',
@@ -164,12 +165,27 @@ export function TransactionP2PRelayerPage() {
   const { reset: resetTxReg } = useTransactionRegistrationStore();
   const {
     partnerPeerId,
+    connectedToPeer,
     setPeerId,
     setPartnerPeerId,
     setConnectedToPeer,
+    clearPairedWallet,
     setInitialized,
     reset: resetP2P,
   } = useP2PStore();
+
+  // Entering (or returning to) the pairing step invalidates any earlier pairing. Without this
+  // a second attempt would find `connectedToPeer` already true and advance immediately, and a
+  // stale `pairedWallet` from an abandoned session would authorize payment for a report this
+  // relayer never agreed to. Deps are `[step]` only, so the CONNECT that legitimately sets
+  // these while still on this step is not undone.
+  useEffect(() => {
+    if (step === 'wait-for-connection') {
+      setConnectedToPeer(false);
+      clearPairedWallet();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- must run on step entry only
+  }, [step]);
 
   // Store libp2p in ref - NEVER pass libp2pRef.current directly as a prop!
   const libp2pRef = useRef<Libp2p | null>(null);
@@ -219,7 +235,20 @@ export function TransactionP2PRelayerPage() {
     const batch = data.transactionBatch;
     const store = useTransactionFormStore.getState();
 
-    store.setReporter(sig.address as Address);
+    // The reporter is the wallet from the pairing code, never `sig.address` — that is the
+    // peer's own claim, and writing it here is what let a relayer end up submitting for a
+    // wallet it never agreed to (audit V4). A disagreement is dropped rather than merged:
+    // `useRelayedTxSignatureReview` will block payment anyway (recovery against a claimed
+    // reporter yields an address that is not the paired wallet), but the store must not
+    // display the claim as though it were the agreed reporter in the meantime.
+    const paired = useP2PStore.getState().pairedWallet;
+    if (!paired || (isAddress(sig.address) && sig.address.toLowerCase() !== paired.toLowerCase())) {
+      logger.p2p.warn('Relayed signature names a reporter other than the paired wallet', {
+        claimed: sig.address,
+        paired,
+      });
+    }
+    if (paired) store.setReporter(paired);
     store.setForwarder(relayerAddress);
     store.setReportedChainId(sig.chainId);
     store.setSelectedTxHashes(batch.transactionHashes as Hash[]);
@@ -287,7 +316,19 @@ export function TransactionP2PRelayerPage() {
               // Bind the stream to the agreed partner peer and to this protocol's schema
               // before any of it is trusted. Without this an arbitrary peer that learned a
               // displayed peer ID could inject signatures or drive the step machine.
-              if (!acceptStream(protocol, connection, data, 'relayer')) return;
+              if (!acceptStream(protocol, connection, data, 'relayer')) {
+                // Rejections used to be logged and nothing else, which made the failure mode
+                // indistinguishable from a quiet network: the real reporter's CONNECT is
+                // refused because someone else was pinned first, and both sides just sit
+                // there. Saying so is what lets a relayer notice they are paired with the
+                // wrong peer and restart, rather than eventually paying gas for a stranger.
+                if (protocol === PROTOCOLS.CONNECT) {
+                  setConnectionError(
+                    'A connection attempt was refused because it came from a different peer than the one you are paired with. If your partner cannot connect, restart this page to clear the pairing.'
+                  );
+                }
+                return;
+              }
 
               // Authenticity is not ordering. `acceptStream` proves the message came from the
               // bound partner; this proves it belongs at the step the relayer is actually on.
@@ -305,28 +346,47 @@ export function TransactionP2PRelayerPage() {
               logger.p2p.info('TX Relayer received data', { protocol, data });
 
               switch (protocol) {
-                case PROTOCOLS.CONNECT:
-                  // Reporter connected
-                  if (data.form?.registeree) {
-                    useTransactionFormStore.getState().setReporter(data.form.registeree as Address);
+                case PROTOCOLS.CONNECT: {
+                  // The reporter's answer to the CONNECT this page sent after pasting their
+                  // pairing code. It proves the pairing was accepted; nothing is learned here.
+                  //
+                  // SECURITY (audit V4): the reporter comes from the pairing code and from
+                  // nowhere else. `data.form.registeree` used to be written straight into the
+                  // form store with an `as Address` cast — that is the peer's own claim, and
+                  // it is what the later signer check was comparing against. Now it is only
+                  // compared, and a disagreement aborts rather than resolving in the peer's
+                  // favour.
+                  const paired = useP2PStore.getState().pairedWallet;
+                  if (!paired) {
+                    logger.p2p.error('CONNECT accepted with no paired wallet; refusing');
+                    setConnectionError(
+                      'This session has no pairing code, so there is no way to tell whose report you would be paying for. Restart this page and paste the code your partner shows you.'
+                    );
+                    break;
                   }
-                  // The partner peer ID is pinned by acceptStream from connection.remotePeer.
+                  if (
+                    data.form?.registeree &&
+                    (!isAddress(data.form.registeree) ||
+                      data.form.registeree.toLowerCase() !== paired.toLowerCase())
+                  ) {
+                    logger.p2p.warn('Peer claims a different wallet than the pairing code names', {
+                      claimed: data.form.registeree,
+                      paired,
+                    });
+                    setConnectionError(
+                      'Your partner is reporting from a different wallet than the one in the pairing code you pasted. Do not continue — ask them for a fresh code.'
+                    );
+                    break;
+                  }
+                  useTransactionFormStore.getState().setReporter(paired);
+                  // The partner peer ID was pinned from the pairing code before dialing.
                   // Deliberately NOT taken from data.p2p.partnerPeerId — a payload-supplied
                   // peer ID is attacker-controlled and would defeat the binding.
                   setConnectedToPeer(true);
-
-                  // Respond with relayer address
-                  await passStreamData({
-                    connection,
-                    protocols: [PROTOCOLS.CONNECT],
-                    streamData: {
-                      form: { relayer: address },
-                      success: true,
-                    },
-                  });
-
-                  goToNextStepRef.current();
+                  // No reply and no step advance: this side dialed, so WaitForConnectionStep
+                  // owns the advance and gates it on `connectedToPeer`.
                   break;
+                }
 
                 case PROTOCOLS.TX_ACK_SIG: {
                   // Transaction acknowledgement signature + batch data received.
@@ -562,7 +622,14 @@ export function TransactionP2PRelayerPage() {
     switch (step) {
       case 'wait-for-connection':
         return (
-          <WaitForConnectionStep role="relayer" getLibp2p={getLibp2p} onComplete={goToNextStep} />
+          <WaitForConnectionStep
+            role="relayer"
+            getLibp2p={getLibp2p}
+            onComplete={goToNextStep}
+            // Set by the CONNECT handler above when the reporter answers. A resolved write is
+            // not an accepted pairing — see the prop's documentation.
+            partnerAcknowledged={connectedToPeer}
+          />
         );
 
       case 'select-transactions':
@@ -582,7 +649,7 @@ export function TransactionP2PRelayerPage() {
         );
 
       case 'acknowledgement-payment':
-        return <TxAcknowledgePayStep onComplete={handleAckComplete} />;
+        return <TxAcknowledgePayStep onComplete={handleAckComplete} getLibp2p={getLibp2p} />;
 
       case 'grace-period':
         return <TxGracePeriodStep onComplete={goToNextStep} />;
@@ -596,7 +663,7 @@ export function TransactionP2PRelayerPage() {
         );
 
       case 'registration-payment':
-        return <TxRegisterPayStep onComplete={handleRegComplete} />;
+        return <TxRegisterPayStep onComplete={handleRegComplete} getLibp2p={getLibp2p} />;
 
       case 'success':
         return <TxSuccessStep />;

@@ -32,6 +32,22 @@ contract MockStolenWalletRegistry {
     }
 }
 
+/// @notice A contract wallet with NO onERC721Received — an older Safe or a minimal AA account
+/// @dev Deliberately empty: this is the shape `_safeMint` used to lock out permanently.
+contract NonReceiverWallet {
+    // intentionally no IERC721Receiver implementation
+}
+
+/// @notice A contract wallet that DOES implement IERC721Receiver
+contract ReceiverWallet {
+    bool public wasCalled;
+
+    function onERC721Received(address, address, uint256, bytes calldata) external returns (bytes4) {
+        wasCalled = true;
+        return this.onERC721Received.selector;
+    }
+}
+
 /// @title WalletSoulbound Tests
 /// @notice Tests for registry-gated soulbound tokens (1 per registered wallet)
 contract WalletSoulboundTest is Test {
@@ -370,6 +386,65 @@ contract WalletSoulboundTest is Test {
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, minter));
         soulbound.withdraw();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // V14 — _mint, NOT _safeMint
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @notice A contract wallet with no ERC-721 receiver hook can still mint its soulbound.
+    /// @dev This is the finding. `_safeMint` calls `onERC721Received` and reverts if the
+    ///      recipient is a contract that does not implement it — which describes older Safes and
+    ///      most AA wallets. Because minting is one-per-wallet and gated on registration, that
+    ///      was a permanent lockout of exactly the users the token exists to attest for, and the
+    ///      callback protected against nothing: `_update` reverts on every transfer, so the token
+    ///      is deliberately stranded in every recipient anyway. Reverts pre-fix.
+    function test_V14_ContractWalletWithoutReceiverCanMint() public {
+        NonReceiverWallet wallet = new NonReceiverWallet();
+        mockRegistry.setRegistered(address(wallet), true);
+
+        soulbound.mintTo(address(wallet));
+
+        assertEq(soulbound.balanceOf(address(wallet)), 1);
+        assertEq(soulbound.ownerOf(1), address(wallet));
+        assertTrue(soulbound.hasMinted(address(wallet)));
+    }
+
+    /// @notice A contract that DOES implement IERC721Receiver is unaffected by the switch.
+    /// @dev Dropping the callback must not change the outcome for legitimate receiver contracts —
+    ///      they simply no longer get called. Ownership and the ERC-721 Transfer event are
+    ///      identical either way.
+    function test_V14_ContractWalletWithReceiverStillMints() public {
+        ReceiverWallet wallet = new ReceiverWallet();
+        mockRegistry.setRegistered(address(wallet), true);
+
+        soulbound.mintTo(address(wallet));
+
+        assertEq(soulbound.ownerOf(1), address(wallet));
+        assertFalse(wallet.wasCalled(), "no receiver callback should fire on _mint");
+    }
+
+    /// @notice EOAs are unaffected, and the zero address is still rejected by ERC721 itself.
+    function test_V14_EoaMintUnchangedAndZeroAddressStillRejected() public {
+        soulbound.mintTo(registeredWallet);
+        assertEq(soulbound.ownerOf(1), registeredWallet);
+
+        mockRegistry.setRegistered(address(0), true);
+        vm.expectRevert(abi.encodeWithSignature("ERC721InvalidReceiver(address)", address(0)));
+        soulbound.mintTo(address(0));
+    }
+
+    /// @notice The token is still soulbound after the switch — a contract holder cannot move it.
+    /// @dev The justification for dropping `_safeMint` is that these tokens are non-transferable
+    ///      by design. If that ever stopped being true, `_mint` would become the wrong call.
+    function test_V14_ContractHeldTokenIsStillNonTransferrable() public {
+        ReceiverWallet wallet = new ReceiverWallet();
+        mockRegistry.setRegistered(address(wallet), true);
+        soulbound.mintTo(address(wallet));
+
+        vm.prank(address(wallet));
+        vm.expectRevert(BaseSoulbound.NonTransferrable.selector);
+        soulbound.transferFrom(address(wallet), makeAddr("elsewhere"), 1);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

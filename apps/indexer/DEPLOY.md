@@ -93,7 +93,7 @@ process. If you put another proxy (Cloudflare, a load balancer) in front of Rail
 match, or every client will share one rate-limit bucket — or worse, a client-supplied
 `X-Forwarded-For` will be trusted.
 
-### `/metrics` must be blocked at the edge
+### `/metrics` is blocked by the gateway process (no edge rule needed)
 
 Ponder registers `/metrics`, `/health`, `/ready` and `/status` on its own Hono instance
 **before** mounting `src/api/index.ts`, and those handlers return without calling `next`. They
@@ -103,18 +103,50 @@ exposes only `--config --debug --disable-ui --hostname --log-format --log-level 
 --schema --views-schema --trace`).
 
 `/metrics` is a full Prometheus dump — indexing progress, database pool state, per-chain RPC
-counters. It is free reconnaissance for sizing a flood and should not be publicly reachable.
-Block it in front of the service:
+counters. It is free reconnaissance for sizing a flood.
 
-- **Railway / Cloudflare:** add a WAF or redirect rule denying `/metrics` (and `/status` if you
-  do not need it public) for all sources except your monitoring egress.
-- **Self-hosted reverse proxy:** `location = /metrics { deny all; }`, or restrict by source IP.
+Because it cannot be gated in-process, **`pnpm start` no longer runs ponder directly.** It runs
+`gateway.mjs`, which:
 
-Leave `/ready` reachable — `railway.toml` uses it as the healthcheck path.
+1. binds the public port (`PORT`, default `42069`),
+2. spawns `ponder start` bound to **loopback only** on `INDEXER_UPSTREAM_PORT` (default `42070`),
+3. proxies everything through, returning `404` for any path in `INDEXER_BLOCKED_PATHS`.
+
+Ponder is not reachable from outside the container, so the block cannot be bypassed by
+addressing it directly. Path matching is percent-decoded, case-folded and slash-normalised, so
+`/Metrics/`, `/%6d%65trics` and `/metrics?x=1` are all blocked (`test/gateway.test.ts`).
+
+`/ready` stays reachable — `railway.toml` and the Dockerfile HEALTHCHECK both use it.
+
+| Variable                | Default    | Purpose                                                                    |
+| ----------------------- | ---------- | -------------------------------------------------------------------------- |
+| `PORT`                  | `42069`    | Public port the gateway binds.                                             |
+| `INDEXER_UPSTREAM_PORT` | `42070`    | Loopback port ponder binds. Must differ from `PORT`.                       |
+| `INDEXER_BLOCKED_PATHS` | `/metrics` | Comma-separated. Explicitly empty (`""`) disables blocking.                |
+| `INDEXER_METRICS_TOKEN` | unset      | If set, `Authorization: Bearer <token>` reaches `/metrics` for monitoring. |
+| `PONDER_SCHEMA`         | `swr_prod` | Passed through as `ponder start --schema`.                                 |
+
+To let a Prometheus scraper through without exposing the endpoint publicly:
+
+```bash
+railway variables set INDEXER_METRICS_TOKEN="$(openssl rand -hex 32)"
+# scrape_configs:
+#   - job_name: swr-indexer
+#     authorization: { type: Bearer, credentials: "<token>" }
+#     metrics_path: /metrics
+```
+
+If either process dies the container exits and Railway restarts a clean pair — a gateway
+answering 200s in front of a dead indexer, or an unfiltered ponder still listening after the
+gateway crashed, are both worse than a restart.
+
+`pnpm start:ponder-unfiltered` still exists for local debugging. It binds `0.0.0.0:42069` with
+`/metrics` open — **do not use it as a deployment start command.**
 
 There is a test in `test/security.test.ts` (`V17 — ponder routes this app cannot reach`) that
-documents this bypass. If a future ponder release lets user middleware intercept these routes,
-that test will fail, and this section can be replaced with real in-process enforcement.
+documents the in-process bypass. If a future ponder release lets user middleware intercept
+those routes, that test will fail and the gateway can be retired in favour of real in-process
+enforcement.
 
 ## Monitoring
 

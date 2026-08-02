@@ -21,12 +21,12 @@ export default meta;
 type Story = StoryObj<typeof PeerConnectForm>;
 
 /**
- * Default empty form ready for peer ID input.
+ * Default empty form ready for a pairing code.
  */
 export const Default: Story = {
   args: {
-    onConnect: async (peerId) => {
-      console.log('Connecting to:', peerId);
+    onConnect: async (pairingCode) => {
+      console.log('Connecting with:', pairingCode);
       await new Promise((resolve) => setTimeout(resolve, 1000));
     },
   },
@@ -61,17 +61,18 @@ export const ConnectionError: Story = {
 /**
  * Interactive story to test form validation.
  *
- * To see inline validation errors:
- * 1. Enter an invalid peer ID (e.g., "invalid" or "12345")
- * 2. Click "Connect to Peer"
- * 3. Zod validation will show "Invalid Peer ID. Please check and try again."
- *
- * Valid peer IDs start with "12D3KooW" (Ed25519) or "Qm" (RSA).
+ * A valid code looks like `swr1:<peer id>:<0x wallet address>`. Three refusals are worth
+ * seeing, because they are the security surface of this input:
+ * 1. Junk ("invalid") — "That is not a pairing code."
+ * 2. A BARE PEER ID ("12D3KooW...") — refused with its own message telling the user to ask
+ *    for the full code. Accepting it would pair with no wallet at all, which is exactly the
+ *    unauthorized-wallet path the code exists to close (audit V4).
+ * 3. A code carrying a malformed address or peer ID.
  */
 export const Interactive: Story = {
   args: {
-    onConnect: async (peerId) => {
-      console.log('Attempting to connect to:', peerId);
+    onConnect: async (pairingCode) => {
+      console.log('Attempting to connect with:', pairingCode);
       // Simulate connection attempt
       await new Promise((resolve) => setTimeout(resolve, 1000));
     },

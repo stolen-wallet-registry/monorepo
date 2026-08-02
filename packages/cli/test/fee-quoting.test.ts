@@ -197,13 +197,24 @@ describe('operator batch submissions quote OperatorSubmitter.quoteBatchFee', () 
         expect(tx.to).toBe(OPERATOR_SUBMITTER);
       });
 
+      // `yes: true` skips the V16 confirmation prompt, which would otherwise throw here
+      // because vitest's stdin is not a TTY. That refusal is asserted in safety.test.ts.
       it('puts the batch fee in the live submission value', async () => {
-        await c.run({ privateKey: TEST_KEY });
+        await c.run({ privateKey: TEST_KEY, yes: true });
 
         expect(writeCalls).toHaveLength(1);
         expect(writeCalls[0].value).toBe(BATCH_FEE);
         expect(writeCalls[0].address).toBe(OPERATOR_SUBMITTER);
         expect(writeCalls[0].abi).toBe(OperatorSubmitterABI);
+      });
+
+      // Audit V16: the confirmation gate has to sit on the real submit path, not just in
+      // safety.ts. Without `--yes` and without a TTY the command must abort BEFORE
+      // writeContract — a batch that reached the chain and then failed to confirm is
+      // exactly the irreversible outcome the gate exists to prevent.
+      it('does not write without --yes when the confirmation cannot be shown', async () => {
+        await expect(c.run({ privateKey: TEST_KEY })).rejects.toThrow(/not a TTY/);
+        expect(writeCalls).toHaveLength(0);
       });
     });
   }

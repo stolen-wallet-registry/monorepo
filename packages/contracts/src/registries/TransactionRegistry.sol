@@ -158,6 +158,16 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         }
     }
 
+    /// @dev Returns the entire `msg.value` to the caller. Used when a batch registers zero
+    ///      effective entries, so there is nothing to charge for. No-op when nothing was sent.
+    function _refundAll() internal {
+        if (msg.value == 0) return;
+        (bool refundSuccess,) = msg.sender.call{ value: msg.value }("");
+        if (!refundSuccess) {
+            revert TransactionRegistry__RefundFailed();
+        }
+    }
+
     /// @notice Withdraw fees held when hub was not configured
     /// @dev Only callable by owner. Sends entire contract balance to owner.
     function withdrawCollectedFees() external onlyOwner {
@@ -283,7 +293,7 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
     ///      typed data (see `packages/signatures`); this call exists for the deadline alone.
     ///      Do NOT reintroduce a hash-struct return by adding a `windowBlockHash` parameter —
     ///      the caller does not have one at this point in the flow.
-    function generateTransactionHashStruct(
+    function getTransactionSignatureDeadline(
         bytes32, /* dataHash */
         bytes32, /* reportedChainId */
         uint32, /* transactionCount */
@@ -468,14 +478,15 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         );
     }
 
-    /// @dev Execute batch registration (state changes)
+    /// @dev Execute batch registration (state changes). Returns the number of entries actually
+    ///      written — zero hashes and already-registered entries are skipped and do not count.
     function _executeTxBatchRegistration(
         address reporter,
         bytes32 dataHash,
         bool isSponsored,
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds
-    ) internal {
+    ) internal returns (uint32) {
         uint256 batchId = _nextBatchId++;
 
         // Register transactions, counting actual registrations
@@ -508,6 +519,8 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         });
 
         emit TransactionBatchRegistered(batchId, reporter, dataHash, actualCount, isSponsored);
+
+        return actualCount;
     }
 
     /// @dev Internal signature verification for registration
@@ -593,10 +606,20 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         nonces[reporter]++;
         delete _pendingAcknowledgements[reporter];
 
-        _executeTxBatchRegistration(reporter, dataHash, ack.isSponsored, transactionHashes, chainIds);
+        uint32 registeredCount =
+            _executeTxBatchRegistration(reporter, dataHash, ack.isSponsored, transactionHashes, chainIds);
 
         // === INTERACTIONS ===
-        _collectFee();
+        // V8: every entry was skipped (zero hash, or already registered by an earlier reporter),
+        // so nothing was written and there is nothing to charge for. Refund instead of reverting:
+        // the nonce bump and acknowledgement deletion above must stand, otherwise the live
+        // acknowledgement would block the reporter from acknowledging a corrected batch until the
+        // window expires (see `acknowledgeTransactions`' already-acknowledged guard).
+        if (registeredCount == 0) {
+            _refundAll();
+        } else {
+            _collectFee();
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

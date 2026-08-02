@@ -829,8 +829,8 @@ contract TransactionRegistryTest is EIP712TestHelper {
     // VIEW FUNCTION TESTS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @notice generateTransactionHashStruct returns valid structs for step 1 and step 2
-    function test_GenerateTransactionHashStruct() public {
+    /// @notice getTransactionSignatureDeadline returns a usable deadline for both phases
+    function test_GetTransactionSignatureDeadline() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
         bytes32 dataHash = _computeDataHash(txHashes, chainIds);
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
@@ -838,28 +838,28 @@ contract TransactionRegistryTest is EIP712TestHelper {
         // Deadline only — the function no longer returns a hash struct, because the
         // registration typehash commits to a `windowBlockHash` that is unknowable here.
         vm.prank(reporter);
-        uint256 deadline1 = txRegistry.generateTransactionHashStruct(dataHash, reportedChainId, 3, forwarder, 1);
+        uint256 deadline1 = txRegistry.getTransactionSignatureDeadline(dataHash, reportedChainId, 3, forwarder, 1);
         assertTrue(deadline1 > block.timestamp, "Deadline should be in the future");
 
         vm.prank(reporter);
-        uint256 deadline2 = txRegistry.generateTransactionHashStruct(dataHash, reportedChainId, 3, forwarder, 2);
+        uint256 deadline2 = txRegistry.getTransactionSignatureDeadline(dataHash, reportedChainId, 3, forwarder, 2);
         assertTrue(deadline2 > block.timestamp, "Deadline should be in the future");
     }
 
-    /// @notice generateTransactionHashStruct reverts for invalid step values
-    function test_GenerateTransactionHashStruct_RejectsInvalidStep() public {
+    /// @notice getTransactionSignatureDeadline reverts for invalid step values
+    function test_GetTransactionSignatureDeadline_RejectsInvalidStep() public {
         bytes32 dataHash = keccak256("data");
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
 
         // Step 0 is invalid
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidStep.selector);
         vm.prank(reporter);
-        txRegistry.generateTransactionHashStruct(dataHash, reportedChainId, 3, forwarder, 0);
+        txRegistry.getTransactionSignatureDeadline(dataHash, reportedChainId, 3, forwarder, 0);
 
         // Step 3 is invalid
         vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidStep.selector);
         vm.prank(reporter);
-        txRegistry.generateTransactionHashStruct(dataHash, reportedChainId, 3, forwarder, 3);
+        txRegistry.getTransactionSignatureDeadline(dataHash, reportedChainId, 3, forwarder, 3);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1139,6 +1139,47 @@ contract TransactionRegistryTest is EIP712TestHelper {
         _doFullFlowReg(feeRegistry, txHashes, chainIds, fee + overpayment);
 
         assertEq(balBefore - forwarder.balance, fee, "Forwarder should only pay the exact fee");
+    }
+
+    /// @notice V8: a two-phase batch where every entry is skipped (already registered) must not
+    ///         charge a registration fee — the caller gets the whole `msg.value` back.
+    /// @dev It must still clear the acknowledgement rather than revert. `acknowledgeTransactions`
+    ///      refuses a new acknowledgement while a live one exists, so reverting here would strand
+    ///      the reporter behind a dataHash they can never satisfy until the window expires.
+    function test_TxReg_ZeroEffectiveEntries_ChargesNoFee() public {
+        (TransactionRegistry feeRegistry,,) = _deployWithFeeManager();
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        // First round registers every hash, so the identical second round is a full no-op.
+        _doFullFlowOnRegistry(feeRegistry, txHashes, chainIds);
+        _zeroEffectiveSecondRound(feeRegistry, txHashes, chainIds);
+    }
+
+    /// @dev Extracted to keep the test body off the stack.
+    function _zeroEffectiveSecondRound(
+        TransactionRegistry feeRegistry,
+        bytes32[] memory txHashes,
+        bytes32[] memory chainIds
+    ) internal {
+        uint256 hubBefore = address(hub).balance;
+
+        _doFullFlowAck(feeRegistry, txHashes, chainIds);
+        _sigWindowBlock = _rollToWindow(feeRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+
+        uint256 fee = feeRegistry.quoteRegistration(reporter);
+        assertTrue(fee > 0, "Precondition: fee manager must price this non-zero");
+        vm.deal(forwarder, fee);
+        uint256 balBefore = forwarder.balance;
+
+        _doFullFlowReg(feeRegistry, txHashes, chainIds, fee);
+
+        assertEq(forwarder.balance, balBefore, "Zero-entry batch must be fully refunded");
+        assertEq(address(hub).balance, hubBefore, "Hub must receive nothing for a zero-entry batch");
+        assertEq(
+            feeRegistry.getTransactionAcknowledgementData(reporter).trustedForwarder,
+            address(0),
+            "Acknowledgement must still be cleared so the reporter is not locked out"
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -6,6 +6,7 @@ import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { TimelockOwnable } from "../libraries/TimelockOwnable.sol";
 import { IMessageRecipient } from "@hyperlane-xyz/core/contracts/interfaces/IMessageRecipient.sol";
 import { ISoulboundReceiver } from "../interfaces/ISoulboundReceiver.sol";
+import { BaseSoulbound } from "./BaseSoulbound.sol";
 import { WalletSoulbound } from "./WalletSoulbound.sol";
 import { SupportSoulbound } from "./SupportSoulbound.sol";
 
@@ -107,20 +108,53 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     }
 
     /// @notice Execute wallet soulbound mint
+    /// @dev Failure handling is deliberately split by cause, because "revert" and "consume" are
+    ///      both wrong as blanket policies for a Hyperlane message:
+    ///
+    ///        - Reverting makes `Mailbox.process` revert, so Hyperlane re-delivers the identical
+    ///          body forever and the message is never marked delivered. For a PERMANENT failure
+    ///          that is an undeliverable message and a burnt bridge fee, and it is trivially
+    ///          griefable: `WalletSoulbound.mintTo` is permissionless, so anyone can front-run
+    ///          the bridged request with a direct hub-side mint for ~80k gas and strand it.
+    ///          The same thing happens with zero malice when two spokes request the same wallet.
+    ///        - Returning on every failure would break the one case where the retry is the
+    ///          recovery mechanism: a mint request that arrives BEFORE the wallet's registration
+    ///          message. That is transient, and Hyperlane's retry resolves it by itself.
+    ///
+    ///      So: `NotRegistered` keeps reverting (transient — let the retry fix it); every other
+    ///      cause emits {MintFailed} and returns, consuming the message.
+    ///
+    ///      An EMPTY revert reason also re-reverts. A sub-call out-of-gas surfaces here as an
+    ///      empty reason under the 63/64 rule, and consuming the message on an OOG would discard
+    ///      a mint that a re-delivery with more gas would have completed.
+    ///
+    ///      Note the previous code emitted {MintFailed} and then reverted in the same frame, so
+    ///      the revert discarded the log — the event that existed to make this observable could
+    ///      never actually be observed.
+    ///
+    ///      The permissionless hub-side `mintTo` remains the manual recovery path for anything
+    ///      consumed here.
     /// @param wallet Wallet to mint for (must be registered in StolenWalletRegistry)
     /// @param origin Origin domain for event
     function _handleWalletMint(address wallet, uint32 origin) internal {
-        // Call WalletSoulbound.mintTo - it will revert if wallet is not registered
-        // or if already minted (those checks are in WalletSoulbound)
         try WalletSoulbound(walletSoulbound).mintTo(wallet) {
             emit CrossChainMintExecuted(MintType.WALLET, wallet, origin);
         } catch (bytes memory reason) {
             emit MintFailed(MintType.WALLET, wallet, origin, reason);
-            revert SoulboundReceiver__WalletMintFailed();
+            // Transient: the registration message has not landed yet, or we ran out of gas.
+            // Let Hyperlane re-deliver.
+            if (reason.length == 0 || _hasSelector(reason, WalletSoulbound.NotRegistered.selector)) {
+                revert SoulboundReceiver__WalletMintFailed();
+            }
+            // Permanent (already minted, or any other terminal cause): consume the message.
         }
     }
 
     /// @notice Execute support soulbound mint
+    /// @dev Same split as {_handleWalletMint}. The transient cause here is `NotAuthorizedMinter`:
+    ///      it means this receiver has not been (or has been un-) authorized on the soulbound
+    ///      contract, which the owner can fix, after which the retry succeeds. Everything else
+    ///      (zero supporter, terminal failures) is consumed.
     /// @param supporter Address to mint for
     /// @param donationAmount Donation amount (for metadata tracking - actual ETH stays on spoke)
     /// @param origin Origin domain for event
@@ -132,8 +166,23 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
             emit CrossChainMintExecuted(MintType.SUPPORT, supporter, origin);
         } catch (bytes memory reason) {
             emit MintFailed(MintType.SUPPORT, supporter, origin, reason);
-            revert SoulboundReceiver__SupportMintFailed();
+            if (reason.length == 0 || _hasSelector(reason, BaseSoulbound.NotAuthorizedMinter.selector)) {
+                revert SoulboundReceiver__SupportMintFailed();
+            }
         }
+    }
+
+    /// @dev Does a captured revert payload start with `selector`?
+    /// @param reason Raw revert data from a `try/catch`
+    /// @param selector The 4-byte custom-error selector to match
+    /// @return True if the payload is at least 4 bytes and its first 4 bytes equal `selector`
+    function _hasSelector(bytes memory reason, bytes4 selector) internal pure returns (bool) {
+        if (reason.length < 4) return false;
+        bytes4 found;
+        assembly {
+            found := mload(add(reason, 0x20))
+        }
+        return found == selector;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

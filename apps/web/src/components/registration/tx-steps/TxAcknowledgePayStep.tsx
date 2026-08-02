@@ -6,8 +6,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAccount, useChainId } from 'wagmi';
+import type { Libp2p } from 'libp2p';
 
-import { Alert, AlertDescription, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
+import { Alert, AlertDescription, Button, Tooltip, TooltipContent, TooltipTrigger } from '@swr/ui';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import {
   TransactionCard,
@@ -46,6 +47,8 @@ import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
 import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
+import { sendResignRequest } from '@/components/registration/p2pResignRequest';
+import { useP2PStore } from '@/stores/p2pStore';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -53,12 +56,21 @@ import { AlertCircle } from 'lucide-react';
 export interface TxAcknowledgePayStepProps {
   /** Called when step is complete */
   onComplete: () => void;
+  /**
+   * P2P relay only: getter for the relayer's libp2p node, used to ask the reporter to sign
+   * again when a revert kills the relayed signature. Optional because the standard and
+   * self-relay flows render this step with no peer at all. Without it the P2P path still
+   * discards the dead signature — it just cannot deliver the request, and says so.
+   *
+   * A getter, not the node: libp2p is a Proxy that throws when React DevTools serialises it.
+   */
+  getLibp2p?: () => Libp2p | null;
 }
 
 /**
  * Transaction batch acknowledgement payment step - submits the ACK transaction.
  */
-export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) {
+export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePayStepProps) {
   const { address } = useAccount();
   const chainId = useChainId();
   const { registrationType, step, setStep, setAcknowledgementHash } =
@@ -99,6 +111,12 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
   // Local state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  /**
+   * P2P only. Set once Retry has discarded a dead relayed signature; `notified` records
+   * whether the reporter actually received the request to sign again.
+   */
+  const [resignRequest, setResignRequest] = useState<{ notified: boolean | null } | null>(null);
+  const partnerPeerId = useP2PStore((s) => s.partnerPeerId);
 
   // See handleRetry: some reverts make the stored signature permanently unusable, so Retry
   // has to mean "sign again", not "submit the same bytes again".
@@ -396,15 +414,44 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
    */
   const handleRetry = () => {
     if (needsResign) {
-      logger.contract.warn(
-        'Transaction acknowledgement signature invalidated by revert, returning to sign',
-        { dataHash, error: error?.message }
-      );
       if (dataHash) {
         removeTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
       }
       reset();
       setLocalError(null);
+
+      // P2P relay: the signature is the reporter's, on another machine. Dropping the local
+      // copy is only half the recovery — without a request over the wire the reporter sits
+      // on a "waiting for the relayer" screen forever. The relayer also has to move back to
+      // `select-transactions`, the only step at which `isTxRelayerProtocolExpectedAtStep`
+      // admits a fresh TX_ACK_SIG; a re-signature arriving anywhere else is dropped.
+      if (isP2PRelayed) {
+        logger.contract.warn(
+          'Relayed transaction acknowledgement signature invalidated by revert; requesting a new one from the reporter',
+          { dataHash, error: error?.message }
+        );
+        setStoredSignature(null);
+        setResignRequest({ notified: null });
+
+        void sendResignRequest({
+          getLibp2p: getLibp2p ?? (() => null),
+          partnerPeerId,
+          reason: 'signature-invalidated',
+          flow: 'transaction',
+        }).then((notified) => {
+          setResignRequest({ notified });
+          if (notified) {
+            setResignRequest(null);
+            setStep('select-transactions');
+          }
+        });
+        return;
+      }
+
+      logger.contract.warn(
+        'Transaction acknowledgement signature invalidated by revert, returning to sign',
+        { dataHash, error: error?.message }
+      );
       const previous = step ? getTxPreviousStep(registrationType, step) : null;
       if (previous) setStep(previous);
       return;
@@ -421,6 +468,25 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>Please connect your wallet to continue.</AlertDescription>
       </Alert>
+    );
+  }
+
+  // Signature discarded after an invalidating revert on the P2P path. This has to come
+  // before the "signature not found" branch below — the signature is legitimately gone, and
+  // the reader needs to know why and what their partner has to do, not that something is
+  // missing.
+  if (resignRequest) {
+    return (
+      <div className="space-y-4">
+        <SignatureInvalidatedAlert
+          partner={{ notified: resignRequest.notified, role: 'reporter' }}
+        />
+        {resignRequest.notified === false && (
+          <Button variant="outline" size="sm" onClick={() => setStep('select-transactions')}>
+            I&apos;ve asked them — wait for a new signature
+          </Button>
+        )}
+      </div>
     );
   }
 
@@ -565,7 +631,12 @@ export function TxAcknowledgePayStep({ onComplete }: TxAcknowledgePayStepProps) 
         />
       )}
 
-      {needsResign && <SignatureInvalidatedAlert />}
+      {needsResign &&
+        (isP2PRelayed ? (
+          <SignatureInvalidatedAlert partner={{ notified: null, role: 'reporter' }} />
+        ) : (
+          <SignatureInvalidatedAlert />
+        ))}
 
       {/* P2P relay: review before you pay */}
       {isP2PRelayed && storedSignature && (

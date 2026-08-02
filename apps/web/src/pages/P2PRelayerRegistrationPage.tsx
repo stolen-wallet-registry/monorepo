@@ -122,7 +122,7 @@ async function processSignature(
  * Step descriptions for P2P relayer flow.
  */
 const STEP_DESCRIPTIONS: Partial<Record<RegistrationStep, string>> = {
-  'wait-for-connection': 'Share your Peer ID with the registeree',
+  'wait-for-connection': "Paste the registeree's pairing code",
   'acknowledge-and-sign': 'Waiting for registeree to sign acknowledgement',
   'acknowledgement-payment': 'Submit the acknowledgement transaction',
   'grace-period': 'Wait for the grace period to complete',
@@ -152,13 +152,28 @@ export function P2PRelayerRegistrationPage() {
   const { setFormValues } = useFormStore();
   const {
     partnerPeerId,
+    connectedToPeer,
     setPeerId,
     setPartnerPeerId,
     setConnectedToPeer,
+    clearPairedWallet,
     setInitialized,
     reset: resetP2P,
   } = useP2PStore();
   const { goToNextStep, resetFlow } = useStepNavigation();
+
+  // Entering (or returning to) the pairing step invalidates any earlier pairing. Without this
+  // a second attempt would find `connectedToPeer` already true and advance immediately, and a
+  // stale `pairedWallet` from an abandoned session would authorize payment for a wallet this
+  // relayer never agreed to. Deps are `[step]` only, so the CONNECT that legitimately sets
+  // these while still on this step is not undone.
+  useEffect(() => {
+    if (step === 'wait-for-connection') {
+      setConnectedToPeer(false);
+      clearPairedWallet();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- must run on step entry only
+  }, [step]);
 
   // Store libp2p in ref - NEVER pass libp2pRef.current directly as a prop!
   // libp2p uses a Proxy that throws when React DevTools tries to serialize it.
@@ -283,30 +298,48 @@ export function P2PRelayerRegistrationPage() {
               logger.p2p.info('Relayer received data', { protocol, data });
 
               switch (protocol) {
-                case PROTOCOLS.CONNECT:
-                  // Registeree connected
-                  // Validated rather than asserted: this is where a peer's claim about which
-                  // wallet is being registered enters the relayer's own state.
-                  if (data.form?.registeree && isAddress(data.form.registeree)) {
-                    setFormValues({ registeree: data.form.registeree });
+                case PROTOCOLS.CONNECT: {
+                  // The registeree's answer to the CONNECT this page sent after pasting their
+                  // pairing code. It proves the pairing was accepted; it is not where the
+                  // relayer learns anything.
+                  //
+                  // SECURITY (audit V4): the wallet being registered comes from the pairing
+                  // code and from nowhere else. `data.form.registeree` is the peer's own claim
+                  // — writing it into the form store is what made the later "does the
+                  // recovered signer match?" check compare a claim against itself. It is now
+                  // only ever compared, and a disagreement aborts the pairing rather than
+                  // being resolved in the peer's favour.
+                  const paired = useP2PStore.getState().pairedWallet;
+                  if (!paired) {
+                    logger.p2p.error('CONNECT accepted with no paired wallet; refusing');
+                    setConnectionError(
+                      'This session has no pairing code, so there is no way to tell which wallet you would be paying for. Restart this page and paste the code your partner shows you.'
+                    );
+                    break;
                   }
-                  // The partner peer ID is pinned by acceptStream from connection.remotePeer.
+                  if (
+                    data.form?.registeree &&
+                    (!isAddress(data.form.registeree) ||
+                      data.form.registeree.toLowerCase() !== paired.toLowerCase())
+                  ) {
+                    logger.p2p.warn('Peer claims a different wallet than the pairing code names', {
+                      claimed: data.form.registeree,
+                      paired,
+                    });
+                    setConnectionError(
+                      'Your partner is reporting a different wallet than the one in the pairing code you pasted. Do not continue — ask them for a fresh code.'
+                    );
+                    break;
+                  }
+                  setFormValues({ registeree: paired });
+                  // The partner peer ID was pinned from the pairing code before dialing.
                   // Deliberately NOT taken from data.p2p.partnerPeerId — a payload-supplied
                   // peer ID is attacker-controlled and would defeat the binding.
                   setConnectedToPeer(true);
-
-                  // Respond with relayer address
-                  await passStreamData({
-                    connection,
-                    protocols: [PROTOCOLS.CONNECT],
-                    streamData: {
-                      form: { relayer: address },
-                      success: true,
-                    },
-                  });
-
-                  goToNextStepRef.current();
+                  // No reply and no step advance here: this side dialed, so
+                  // WaitForConnectionStep owns the advance and gates it on `connectedToPeer`.
                   break;
+                }
 
                 case PROTOCOLS.ACK_SIG:
                   // Acknowledgement signature received
@@ -458,7 +491,14 @@ export function P2PRelayerRegistrationPage() {
     switch (step) {
       case 'wait-for-connection':
         return (
-          <WaitForConnectionStep role="relayer" getLibp2p={getLibp2p} onComplete={goToNextStep} />
+          <WaitForConnectionStep
+            role="relayer"
+            getLibp2p={getLibp2p}
+            onComplete={goToNextStep}
+            // Set by the CONNECT handler above when the registeree answers. A resolved write
+            // is not an accepted pairing — see the prop's documentation.
+            partnerAcknowledged={connectedToPeer}
+          />
         );
 
       case 'acknowledge-and-sign':

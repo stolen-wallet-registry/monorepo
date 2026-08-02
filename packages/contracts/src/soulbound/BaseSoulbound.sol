@@ -199,11 +199,26 @@ abstract contract BaseSoulbound is ERC721, IERC5192, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Mint a new token and emit the Locked event
+    /// @dev Uses `_mint`, NOT `_safeMint`, and that is deliberate.
+    ///
+    ///      `_safeMint` exists to stop a token being stranded in a contract that cannot move it.
+    ///      These tokens are stranded in every recipient by design — `_update` above reverts on
+    ///      every transfer — so the `onERC721Received` check protects against nothing here while
+    ///      costing a hard denial of service: a registered wallet that is a contract without an
+    ///      `IERC721Receiver` implementation (older Safes, most AA wallets) could never mint its
+    ///      soulbound at all. Since minting is one-per-wallet and gated on registration, that is
+    ///      a permanent lockout of exactly the users the token is meant to attest for.
+    ///
+    ///      Dropping the callback also removes the only reentrancy surface on the mint path. Both
+    ///      call sites write their metadata after minting; with `_safeMint` that was a CEI
+    ///      inversion (untrusted code ran before `tokenWallet` / `tokenDonation` were set), latent
+    ///      but real. With `_mint` no external code executes at all, so the ordering is no longer
+    ///      observable.
     /// @param to The recipient address
     /// @return tokenId The newly minted token ID
     function _mintAndLock(address to) internal returns (uint256) {
         uint256 tokenId = ++_tokenIdCounter;
-        _safeMint(to, tokenId);
+        _mint(to, tokenId);
         emit Locked(tokenId); // ERC-5192: signal that token is soulbound
         return tokenId;
     }

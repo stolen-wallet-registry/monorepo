@@ -5,6 +5,12 @@ import { parseWalletFile } from '../lib/files.js';
 import { createClients } from '../lib/client.js';
 import { getConfig } from '../lib/config.js';
 import { formatBatchFee } from '../lib/format.js';
+import {
+  addressEntryKey,
+  applyDuplicatePolicy,
+  confirmSubmission,
+  enforceBatchLimits,
+} from '../lib/safety.js';
 import { OperatorSubmitterABI } from '@swr/abis';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
@@ -17,6 +23,12 @@ export interface SubmitWalletsOptions {
   outputDir?: string;
   dryRun?: boolean;
   buildOnly?: boolean;
+  /** `--dedupe`: drop repeated entries instead of refusing the file (audit V16). */
+  dedupe?: boolean;
+  /** `--max-batch-size`: raise the default cap, up to the hard ceiling (audit V16). */
+  maxBatchSize?: number;
+  /** `--yes`: skip the interactive confirmation for scripted use (audit V16). */
+  yes?: boolean;
 }
 
 /** Transaction data for multisig import (Safe, Zodiac, etc.) */
@@ -46,8 +58,29 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
     // 2. Parse input file
     spinner.start('Parsing input file...');
     const defaultChainId = options.chainId ? BigInt(options.chainId) : 8453n;
-    const entries = await parseWalletFile(options.file, defaultChainId);
-    spinner.succeed(`Loaded ${entries.length} wallet addresses`);
+    const parsed = await parseWalletFile(options.file, defaultChainId);
+    spinner.succeed(`Loaded ${parsed.length} wallet addresses`);
+
+    // 2b. Blast-radius rails (audit V16). Dedupe first so a file that is only oversized
+    // because of repeats can still be fixed by --dedupe rather than by splitting it.
+    const { entries, duplicates } = applyDuplicatePolicy(parsed, addressEntryKey, {
+      dedupe: options.dedupe,
+      label: 'wallets',
+    });
+    if (duplicates.length > 0) {
+      console.warn(
+        chalk.yellow(
+          `Dropped ${parsed.length - entries.length} duplicate wallet ${
+            parsed.length - entries.length === 1 ? 'entry' : 'entries'
+          } (--dedupe); submitting ${entries.length}.`
+        )
+      );
+    }
+    enforceBatchLimits({
+      count: entries.length,
+      maxBatchSize: options.maxBatchSize,
+      label: 'wallets',
+    });
 
     // 3. Create public client for fee quote (no private key needed)
     const publicClient = createPublicClient({
@@ -137,6 +170,19 @@ export async function submitWallets(options: SubmitWalletsOptions): Promise<void
     const { walletClient, account } = createClients(config, options.privateKey);
 
     console.log(chalk.gray(`Operator address: ${account}`));
+
+    // 7b. Last stop before an irreversible write (audit V16).
+    await confirmSubmission({
+      env: options.env,
+      label: 'wallets',
+      count: entries.length,
+      chainName: config.chain.name,
+      chainId: config.chain.id,
+      contractAddress: config.contracts.operatorSubmitter,
+      fee: formatBatchFee(fee),
+      sample: entries.slice(0, 3).map((e) => e.address),
+      assumeYes: options.yes,
+    });
 
     // 8. Submit through OperatorSubmitter
     spinner.start('Submitting batch...');

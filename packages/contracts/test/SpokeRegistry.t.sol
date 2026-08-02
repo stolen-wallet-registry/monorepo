@@ -912,31 +912,31 @@ contract SpokeRegistryTest is Test {
         assertEq(fees.bridgeName, "Hyperlane");
     }
 
-    /// @notice generateHashStruct returns a usable signing deadline.
+    /// @notice getSignatureDeadline returns a usable signing deadline.
     /// @dev Deadline only — see {WalletRegistry} test of the same name for why there is no
     ///      hash-struct return value any more.
-    function test_GenerateHashStruct() public {
+    function test_GetSignatureDeadline() public {
         uint64 reportedChainId = 1;
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         vm.prank(wallet);
-        uint256 deadline = spoke.generateHashStruct(reportedChainId, incidentTimestamp, forwarder, 1);
+        uint256 deadline = spoke.getSignatureDeadline(reportedChainId, incidentTimestamp, forwarder, 1);
 
         assertGt(deadline, block.timestamp);
     }
 
-    /// @notice generateHashStruct reverts on invalid step values
-    function test_GenerateHashStruct_RevertIf_InvalidStep() public {
+    /// @notice getSignatureDeadline reverts on invalid step values
+    function test_GetSignatureDeadline_RevertIf_InvalidStep() public {
         uint64 reportedChainId = 1;
         uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
 
         vm.prank(wallet);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidStep.selector);
-        spoke.generateHashStruct(reportedChainId, incidentTimestamp, forwarder, 0);
+        spoke.getSignatureDeadline(reportedChainId, incidentTimestamp, forwarder, 0);
 
         vm.prank(wallet);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidStep.selector);
-        spoke.generateHashStruct(reportedChainId, incidentTimestamp, forwarder, 3);
+        spoke.getSignatureDeadline(reportedChainId, incidentTimestamp, forwarder, 3);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

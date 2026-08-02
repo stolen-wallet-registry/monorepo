@@ -173,8 +173,22 @@ export function sanitizeErrorMessage(error: unknown, logError?: (error: unknown)
   // Strip version info (e.g., "Version: viem@2.41.2")
   let sanitized = message.replace(/\s*Version:\s*\S+/gi, '');
 
-  // Strip "Details: " prefix if the details just repeat the message
-  sanitized = sanitized.replace(/\s*Details:\s*[^.]+\./gi, '');
+  // Strip the "Details:" clause.
+  //
+  // This used to be `/\s*Details:\s*[^.]+\./gi`, which failed two ways (audit V29 residual).
+  // It stopped at the FIRST period, so `Details: request failed for https://x.io/v2/KEY. …`
+  // stripped only as far as `io.` and rendered the rest — including whatever followed — into
+  // the DOM. And requiring a trailing `.` meant a clause without one was not stripped at all.
+  //
+  // Now truncated to end-of-line, matching the reasoning already applied to `URL:` and
+  // `Request body:` below: a partial match on a redaction target leaves fragments of exactly
+  // the thing being redacted, so over-stripping is the correct failure direction. Anything
+  // over-stripped falls through to the generic message via the length check at the end.
+  //
+  // End-of-LINE rather than end-of-string because viem puts `Version:` and
+  // `Raw Call Arguments:` on their own following lines; those have their own rules, and
+  // swallowing them here would make those rules untestable.
+  sanitized = sanitized.replace(/\s*Details:[^\n]*/gi, '');
 
   // Strip "Raw Call Arguments:" section (contains long hex data that breaks UI)
   sanitized = sanitized.replace(/\s*Raw Call Arguments:[\s\S]*$/i, '');

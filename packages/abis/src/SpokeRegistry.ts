@@ -64,6 +64,19 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'ACTIVATION_EXPIRY',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'MAX_CROSS_CHAIN_BATCH_SIZE',
     inputs: [],
     outputs: [
@@ -221,6 +234,25 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'activationExpiry',
+    inputs: [
+      {
+        name: 'actionKey',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'bridgeAdapter',
     inputs: [],
     outputs: [
@@ -336,79 +368,6 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
-    name: 'generateHashStruct',
-    inputs: [
-      {
-        name: '',
-        type: 'uint64',
-        internalType: 'uint64',
-      },
-      {
-        name: '',
-        type: 'uint64',
-        internalType: 'uint64',
-      },
-      {
-        name: '',
-        type: 'address',
-        internalType: 'address',
-      },
-      {
-        name: 'step',
-        type: 'uint8',
-        internalType: 'uint8',
-      },
-    ],
-    outputs: [
-      {
-        name: 'deadline',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'generateTransactionHashStruct',
-    inputs: [
-      {
-        name: '',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: '',
-        type: 'bytes32',
-        internalType: 'bytes32',
-      },
-      {
-        name: '',
-        type: 'uint32',
-        internalType: 'uint32',
-      },
-      {
-        name: '',
-        type: 'address',
-        internalType: 'address',
-      },
-      {
-        name: 'step',
-        type: 'uint8',
-        internalType: 'uint8',
-      },
-    ],
-    outputs: [
-      {
-        name: 'deadline',
-        type: 'uint256',
-        internalType: 'uint256',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
     name: 'getAcknowledgement',
     inputs: [
       {
@@ -493,6 +452,40 @@ export const SpokeRegistryABI = [
         name: 'isExpired',
         type: 'bool',
         internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getSignatureDeadline',
+    inputs: [
+      {
+        name: '',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: '',
+        type: 'uint64',
+        internalType: 'uint64',
+      },
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'step',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
+    outputs: [
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
     stateMutability: 'view',
@@ -588,6 +581,45 @@ export const SpokeRegistryABI = [
         name: 'isExpired',
         type: 'bool',
         internalType: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getTransactionSignatureDeadline',
+    inputs: [
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: '',
+        type: 'bytes32',
+        internalType: 'bytes32',
+      },
+      {
+        name: '',
+        type: 'uint32',
+        internalType: 'uint32',
+      },
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'step',
+        type: 'uint8',
+        internalType: 'uint8',
+      },
+    ],
+    outputs: [
+      {
+        name: 'deadline',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
     stateMutability: 'view',
@@ -1538,6 +1570,11 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'error',
+    name: 'TimelockOwnable__Expired',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'TimelockOwnable__NotProposed',
     inputs: [],
   },
@@ -1549,6 +1586,11 @@ export const SpokeRegistryABI = [
   {
     type: 'error',
     name: 'TimelockOwnable__SetupAlreadyComplete',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'TimelockOwnable__SetupNotComplete',
     inputs: [],
   },
   {

@@ -11,9 +11,11 @@
  * never from the payload — and every later stream must come from that same peer.
  *
  * This is connection-level binding only. It does not prove that the peer on the other end
- * controls the wallet address it claims; that needs each side to sign its libp2p peer ID
- * with its wallet key during the handshake, which is a protocol change affecting all four
- * pages and the pairing UX.
+ * controls the wallet address it claims. That is handled elsewhere and differently: the
+ * relayer learns the wallet out of band from the pairing token (`lib/p2p/pairingToken.ts`)
+ * and refuses to pay unless the signer recovered from the EIP-712 digest is that wallet — an
+ * authorization check, which a peer-ID↔wallet signing handshake could not have provided,
+ * since an attacker naming its own wallet passes any such challenge.
  */
 
 import { PROTOCOLS, PROTOCOL_SCHEMAS, type ParsedStreamData } from '@swr/p2p';
@@ -24,11 +26,19 @@ import type { Connection } from './libp2p';
 /**
  * Roles that receive inbound streams.
  *
- * Only the gas-paying side (`relayer`) legitimately learns its partner from an inbound
- * CONNECT: it publishes its peer ID and waits. The `registeree` side (and the transaction
- * flow's `reporter`) always dials out first, so by the time any stream arrives it already
- * knows the peer ID it agreed on out of band — it has nothing to learn and must never pin
- * from an inbound CONNECT.
+ * Which side may adopt a partner from an inbound CONNECT follows from who dials, and that
+ * flipped when pairing moved to the token (audit V4): the party being helped now publishes a
+ * pairing token and waits, and the gas-paying `relayer` pastes it and dials. So the `relayer`
+ * already knows the peer ID it agreed on out of band — it pins before it speaks and must
+ * never adopt one from an inbound stream — while `registeree` (and the transaction flow's
+ * reporter) learns its partner from the CONNECT that arrives.
+ *
+ * The residual trust-on-first-use race therefore sits on the `registeree` side now, and it is
+ * a deliberately cheaper one to lose: someone who intercepts the pairing token can dial first
+ * and be adopted as the helper, but everything they can then do is pay to register the
+ * victim's own wallet (the victim's goal) or stall and pay nothing. The race that was worth
+ * closing was the one on the relayer side, where losing it meant paying to permanently mark a
+ * wallet chosen by the attacker.
  */
 export type StreamRole = 'relayer' | 'registeree';
 
@@ -39,11 +49,9 @@ export type StreamRole = 'relayer' | 'registeree';
  * pin; on every other protocol the remote peer must equal the pinned partner.
  *
  * `mayPin` closes a race in trust-on-first-use: with both sides pinning, whoever CONNECTed
- * first won. An attacker who read the relayer's displayed peer ID could CONNECT to the
- * registeree before the real relayer did, get itself pinned, and lock the legitimate
- * relayer out — or, in the mirror case, substitute the trusted forwarder so the relayer
- * pays gas for a wallet the attacker controls. The registeree can never need to pin,
- * so it never does.
+ * first won, and on the relayer's side losing that race meant paying gas to register a wallet
+ * the attacker controls. The relayer now pins from the pairing token before dialing, so it
+ * never needs to adopt an unknown peer and never does.
  *
  * @param protocol - Protocol the stream arrived on
  * @param connection - libp2p connection the stream belongs to
@@ -68,8 +76,8 @@ export function authorizeStreamPeer(
   const { partnerPeerId, setPartnerPeerId } = useP2PStore.getState();
 
   if (protocol === PROTOCOLS.CONNECT) {
-    // The registeree already pinned the relayer's peer ID out of band before dialing, so a
-    // CONNECT from anyone else is an impostor. The relayer has nothing pinned yet and
+    // The relayer already pinned the peer ID from the pairing token before dialing, so a
+    // CONNECT from anyone else is an impostor. The registeree has nothing pinned yet and
     // learns its partner here — from the connection, not from data.p2p.peerId.
     if (partnerPeerId && partnerPeerId !== remotePeerId) {
       logger.p2p.warn('Rejected CONNECT from a peer that is not the agreed partner', {
@@ -155,9 +163,10 @@ export function validateProtocolMessage(protocol: string, data: ParsedStreamData
  * Narrows `connection` for the caller: a stream with no connection is always rejected, so
  * past this gate the handler can rely on having one to reply over.
  *
- * @param role - Local role. `'relayer'` waits to be dialed and may pin an unknown peer from
- *   an inbound CONNECT; `'registeree'` (including the transaction flow's reporter) dials out
- *   and must never pin. Required so every page makes the choice deliberately.
+ * @param role - Local role. `'registeree'` (including the transaction flow's reporter) waits
+ *   to be dialed and may pin an unknown peer from an inbound CONNECT; `'relayer'` pastes the
+ *   pairing token, pins from it and dials, so it must never pin from a stream. Required so
+ *   every page makes the choice deliberately.
  * @returns true if the handler should process the message
  */
 export function acceptStream(
@@ -166,7 +175,7 @@ export function acceptStream(
   data: ParsedStreamData,
   role: StreamRole
 ): connection is Connection {
-  if (authorizeStreamPeer(protocol, connection, role === 'relayer') === null) return false;
+  if (authorizeStreamPeer(protocol, connection, role === 'registeree') === null) return false;
   if (!validateProtocolMessage(protocol, data)) return false;
 
   // Liveness is recorded here rather than at parse time: a well-formed message from a

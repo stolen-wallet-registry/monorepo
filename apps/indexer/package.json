@@ -10,7 +10,8 @@
     "db:wipe:postgres": "psql postgresql://postgres:password@localhost:5432/postgres -c 'DROP SCHEMA IF EXISTS ponder_sync CASCADE; DROP SCHEMA IF EXISTS swr_indexer CASCADE; DROP SCHEMA IF EXISTS swr_dev CASCADE; DROP SCHEMA IF EXISTS swr_prod CASCADE; DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;'",
     "dev": "ponder dev --schema swr_dev",
     "lint": "eslint .",
-    "start": "ponder start --schema swr_prod",
+    "start": "node gateway.mjs",
+    "start:ponder-unfiltered": "ponder start --schema swr_prod",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc"

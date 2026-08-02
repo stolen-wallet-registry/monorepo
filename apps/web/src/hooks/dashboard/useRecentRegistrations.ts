@@ -17,7 +17,7 @@ import {
   type RawRecentTransactionsResponse,
 } from '@swr/search';
 import { logger } from '@/lib/logger';
-import { INDEXER_URL } from '@/lib/indexer';
+import { INDEXER_URL, parseIndexerAddress, parseIndexerHash } from '@/lib/indexer';
 import type { Address, Hash } from '@/lib/types/ethereum';
 
 /** Registration entry type */
@@ -179,10 +179,14 @@ export function useRecentRegistrations(
             type: 'wallet',
             identifier: walletAddress,
             chainId,
-            operator: raw.operator as Address | undefined,
+            // Parsed, not asserted. `operator` and `transactionHash` are optional on
+            // RecentRegistration, so a value the indexer sent in an unexpected shape becomes
+            // absent — which every consumer already handles — instead of being asserted into
+            // the type system and surfacing later as a broken explorer link on a fraud record.
+            operator: parseIndexerAddress(raw.operator),
             isSponsored: raw.isSponsored,
             registeredAt: BigInt(raw.registeredAt),
-            transactionHash: raw.transactionHash as Hash,
+            transactionHash: parseIndexerHash(raw.transactionHash),
             batchId: raw.batchId,
           });
         }
@@ -196,7 +200,7 @@ export function useRecentRegistrations(
             type: 'contract',
             identifier: raw.contractAddress,
             chainId: raw.caip2ChainId,
-            operator: raw.operator as Address,
+            operator: parseIndexerAddress(raw.operator),
             isSponsored: false, // Operator submissions are never "sponsored"
             registeredAt: BigInt(raw.reportedAt),
             // Note: batchId is not a tx hash; contracts don't have individual tx hashes
@@ -221,10 +225,10 @@ export function useRecentRegistrations(
             type: 'transaction',
             identifier: raw.txHash,
             chainId: txChainId,
-            reporter: raw.reporter as Address,
+            reporter: parseIndexerAddress(raw.reporter),
             isSponsored: false, // Individual tx entries don't track sponsorship
             registeredAt: BigInt(raw.reportedAt),
-            transactionHash: raw.txHash as Hash,
+            transactionHash: parseIndexerHash(raw.txHash),
             // Resolve batchId: prefer direct value, fall back to lookup via transactionHash
             batchId: raw.batchId ?? txHashToBatchId.get(raw.transactionHash),
           });

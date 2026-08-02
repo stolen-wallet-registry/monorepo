@@ -488,8 +488,13 @@ contract FeeManagerTest is Test {
     function testFuzz_FeeCalculation(uint256 baseFee, int256 ethPrice) public {
         // Bound inputs to reasonable ranges
         baseFee = bound(baseFee, 1, 100_000); // $0.01 to $1000
+        // Kept inside the oracle sanity band ($50 to $50,000, see MIN/MAX_PRICE_BOUND and
+        // _withinBounds). This range used to run to $100,000; above maxEthPriceUsdCents the
+        // contract now correctly rejects the answer and returns the fallback price, so the
+        // live-price formula asserted below would not apply. Out-of-band behaviour is covered
+        // separately by test_FuzzRange_AbovePriceBound_FallsBack.
         // forge-lint: disable-next-line(unsafe-typecast)
-        ethPrice = int256(bound(uint256(ethPrice), 10_000_000_000, 10_000_000_000_000)); // $100 to $100,000
+        ethPrice = int256(bound(uint256(ethPrice), 5_000_000_000, 5_000_000_000_000)); // $50 to $50,000
 
         mockOracle.setPrice(ethPrice);
 
@@ -502,6 +507,44 @@ contract FeeManagerTest is Test {
         uint256 expectedFee = (baseFee * 1e18) / expectedPrice;
 
         assertEq(fee, expectedFee);
+    }
+
+    // Companion to testFuzz_FeeCalculation, which was narrowed to the oracle sanity band when
+    // V10 added bounds. This covers the range that narrowing gave up: a fresh, positive,
+    // correctly-encoded answer ABOVE maxEthPriceUsdCents must be rejected in favour of the last
+    // known-good fallback, not used.
+    //
+    // This matters because the rejected direction is the dangerous one for the protocol rather
+    // than for the user: an absurdly high ETH price drives `baseFeeUsdCents * 1e18 / price`
+    // toward zero, making registration effectively free and removing the fee's sybil deterrent.
+    // Falling back (rather than reverting) is deliberate — a revert here would brick every
+    // fee-collecting registration path, which is strictly worse than quoting a stale price.
+    function test_FuzzRange_AbovePriceBound_FallsBack(int256 ethPrice) public {
+        uint256 maxCents = feeManager.maxEthPriceUsdCents();
+        // Just above the bound, up to the $1,000,000 hard ceiling. 1e6 converts cents -> 8-dec.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        ethPrice = int256(bound(uint256(ethPrice), (maxCents + 1) * 1e6, 100_000_000 * 1e6));
+
+        mockOracle.setPrice(ethPrice);
+
+        // The fallback is still the constructor default: no in-bounds answer has synced it.
+        assertEq(feeManager.getEthPriceUsdCentsView(), DEFAULT_FALLBACK_PRICE);
+        assertEq(feeManager.currentFeeWei(), (DEFAULT_BASE_FEE * 1e18) / DEFAULT_FALLBACK_PRICE);
+    }
+
+    // The mirror of the above on the low side. A near-zero answer is the more intuitive attack:
+    // it inflates the ETH-denominated fee without bound ($1/ETH prices a $5 registration at
+    // 5 ETH), so a manipulated feed could price victims out of registering entirely.
+    function test_FuzzRange_BelowPriceBound_FallsBack(int256 ethPrice) public {
+        uint256 minCents = feeManager.minEthPriceUsdCents();
+        // 1 cent up to just under the bound.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        ethPrice = int256(bound(uint256(ethPrice), 1e6, (minCents - 1) * 1e6));
+
+        mockOracle.setPrice(ethPrice);
+
+        assertEq(feeManager.getEthPriceUsdCentsView(), DEFAULT_FALLBACK_PRICE);
+        assertEq(feeManager.currentFeeWei(), (DEFAULT_BASE_FEE * 1e18) / DEFAULT_FALLBACK_PRICE);
     }
 
     // Fuzz test: validateFee should accept payments >= required and reject

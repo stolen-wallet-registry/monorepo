@@ -306,11 +306,17 @@ describe('reviewRelayedSignature', () => {
     expect(review.issues).toContain('deadline-expired');
   });
 
-  it('rejects when the relayer does not know who it is paying for', () => {
+  // No pairing code means there is no out-of-band statement of which wallet is being paid
+  // for, so the check has nothing to compare against and must fail closed. Reported as its
+  // own issue rather than as a mismatch: the remedy is "get a pairing code", not "do not
+  // trust your partner", and conflating them would hide the case where the app itself lost
+  // the pairing.
+  it('rejects when the relayer has no out-of-band wallet to check against', () => {
     const review = reviewRelayedSignature({ ...base, expectedSigner: undefined });
 
     expect(review.ok).toBe(false);
-    expect(review.issues).toContain('signer-mismatch');
+    expect(review.issues).toContain('pairing-unknown');
+    expect(review.issues).not.toContain('signer-mismatch');
   });
 
   it('reports every issue rather than only the first', () => {

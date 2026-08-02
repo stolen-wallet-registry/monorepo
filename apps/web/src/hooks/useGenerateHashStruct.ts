@@ -7,12 +7,13 @@
  * commits to `windowBlockHash`, which is not knowable at this point in the flow (the window block
  * is resolved later, at signing time), so any digest the contract could build here would be
  * missing a member its own typehash declares. Typed data is built client-side by
- * `packages/signatures`; this call exists for the deadline alone. The name is retained for ABI
- * and call-site stability.
+ * `packages/signatures`; this call exists for the deadline alone. The contract function was
+ * renamed `generateHashStruct` -> `getSignatureDeadline` to match (audit finding A3); this hook
+ * keeps its old name only to contain the blast radius of the rename across call sites.
  *
  * Chain-aware: Works with WalletRegistry (hub) and SpokeRegistry (spoke).
  *
- * Contract signature: generateHashStruct(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
+ * Contract signature: getSignatureDeadline(uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
  */
 
 import { useMemo } from 'react';
@@ -75,7 +76,7 @@ export function useGenerateHashStruct(
     address: contractAddress,
     abi,
     chainId, // Explicit chain ID ensures RPC call targets correct chain
-    functionName: 'generateHashStruct',
+    functionName: 'getSignatureDeadline',
     // Contract signature: (uint64 reportedChainId, uint64 incidentTimestamp, address trustedForwarder, uint8 step)
     args: forwarderAddress
       ? [effectiveReportedChainId, effectiveIncidentTimestamp, forwarderAddress, step]
@@ -90,7 +91,7 @@ export function useGenerateHashStruct(
 
   // Log contract read result for debugging
   if (result.isError) {
-    logger.contract.error('generateHashStruct call failed', {
+    logger.contract.error('getSignatureDeadline call failed', {
       chainId,
       contractAddress,
       registryType,
@@ -99,7 +100,7 @@ export function useGenerateHashStruct(
       error: result.error?.message,
     });
   } else if (result.data) {
-    logger.contract.debug('generateHashStruct call succeeded', {
+    logger.contract.debug('getSignatureDeadline call succeeded', {
       chainId,
       contractAddress,
       deadline: result.data?.toString(),

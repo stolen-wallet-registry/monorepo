@@ -32,6 +32,7 @@ import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 /** Everything that can be wrong with a relayed signature, in the order we report it. */
 export type RelaySignatureIssue =
   | 'recovery-failed'
+  | 'pairing-unknown'
   | 'signer-mismatch'
   | 'nonce-mismatch'
   | 'nonce-unknown'
@@ -49,7 +50,16 @@ export interface RelaySignatureReview {
 export interface ReviewRelayedSignatureInput {
   /** Result of `recoverWalletSignatureSigner` / `recoverTxSignatureSigner`. */
   recoveredSigner: Address | null;
-  /** Who the relayer believes it is paying for (registeree / reporter). */
+  /**
+   * The wallet the relayer agreed OUT OF BAND to pay for — the address half of the pairing
+   * token (`lib/p2p/pairingToken.ts`).
+   *
+   * SECURITY (audit V4): this must never be sourced from anything the peer sent. Comparing a
+   * recovered signer against `data.form.registeree`, or against a form-store value written
+   * from it, compares the peer's claim with itself: an attacker naming its own wallet passes
+   * trivially, and the relayer pays to permanently mark a wallet of the attacker's choosing.
+   * Absent (null/undefined) fails closed as `pairing-unknown`.
+   */
   expectedSigner: Address | null | undefined;
   /** Nonce the signature commits to. */
   signatureNonce: bigint;
@@ -74,9 +84,15 @@ export function reviewRelayedSignature(input: ReviewRelayedSignatureInput): Rela
 
   if (!recoveredSigner) {
     issues.push('recovery-failed');
-  } else if (!expectedSigner || recoveredSigner.toLowerCase() !== expectedSigner.toLowerCase()) {
-    // The signature is valid ECDSA but was produced by a different key than the peer claims
-    // to be. Submitting it registers someone else's wallet at the relayer's expense.
+  } else if (!expectedSigner) {
+    // No out-of-band wallet to check against. Reported separately from a mismatch because it
+    // is not an accusation and has a different remedy — and because falling back to the
+    // peer's own claim here is exactly the hole this check exists to close.
+    issues.push('pairing-unknown');
+  } else if (recoveredSigner.toLowerCase() !== expectedSigner.toLowerCase()) {
+    // The signature is valid ECDSA but was produced by a different key than the wallet named
+    // in the pairing code. Submitting it registers someone else's wallet at the relayer's
+    // expense.
     issues.push('signer-mismatch');
   }
 
@@ -103,8 +119,10 @@ export function describeRelaySignatureIssue(issue: RelaySignatureIssue): string 
   switch (issue) {
     case 'recovery-failed':
       return 'The signature could not be verified. Ask your partner to sign again.';
+    case 'pairing-unknown':
+      return 'This session has no pairing code, so there is no way to confirm which wallet you would be paying for. Restart and paste the pairing code your partner shows you.';
     case 'signer-mismatch':
-      return 'The signature was not produced by the wallet you were told it belongs to. Do not pay for this transaction.';
+      return 'The signature was not produced by the wallet named in the pairing code. Do not pay for this transaction.';
     case 'nonce-mismatch':
       return 'The signature uses a nonce the contract has already moved past. Ask your partner to sign again.';
     case 'nonce-unknown':

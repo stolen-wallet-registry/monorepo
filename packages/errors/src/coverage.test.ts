@@ -73,6 +73,16 @@ const UNCURATED = new Set<string>([
   'SpokeSoulboundForwarder__ZeroAddress',
   'SpokeSoulboundForwarder__InsufficientBalance',
   'SpokeSoulboundForwarder__WithdrawalFailed',
+  // Governance and fee-configuration guards added by the V10/V11/V15 audit remediation. Every
+  // one of these reverts inside an owner-only setter or the timelocked propose/activate path
+  // (FeeManager.sol:353,542,549,560,563 and TimelockOwnable's activation checks), so they are
+  // reachable only by the owner/DAO through the CLI or a deploy script — never by a registrant
+  // in an app flow. Curated copy here would be dead text.
+  'Fee__InvalidBounds',
+  'Fee__InvalidThreshold',
+  'Fee__PriceOutOfBounds',
+  'TimelockOwnable__Expired',
+  'TimelockOwnable__SetupNotComplete',
 ]);
 
 describe('contract error catalogue coverage', () => {

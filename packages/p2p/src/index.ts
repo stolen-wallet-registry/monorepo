@@ -68,12 +68,17 @@ export {
   TxSignatureMessageSchema,
   ConfirmationMessageSchema,
   PaymentMessageSchema,
+  ResignRequestMessageSchema,
+  // Re-sign reasons
+  RESIGN_REASONS,
+  type ResignReason,
   // Protocol-specific message types
   type HandshakeMessage,
   type WalletSignatureMessage,
   type TxSignatureMessage,
   type ConfirmationMessage,
   type PaymentMessage,
+  type ResignRequestMessage,
   // Send-side union type
   type StreamMessage,
   // Protocol-to-schema mapping
