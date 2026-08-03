@@ -11,8 +11,16 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useFormStore } from './formStore';
+import {
+  needsRehandshake,
+  matchesPairedRelayer,
+  REHANDSHAKE_WALLET_STEPS,
+} from '@/lib/p2p/rehandshake';
 
 const STORAGE_KEY = 'swr-form-state';
+
+/** Stands in for a pinned partner peer ID; only its presence matters here. */
+const PARTNER = '12D3KooWTestPartnerPeerId';
 
 // Both must be EIP-55 checksummed: this store validates with viem's `isAddress`, which
 // enforces the checksum by default and would otherwise drop them on rehydrate.
@@ -100,5 +108,113 @@ describe('formStore relayer provenance (V28)', () => {
     useFormStore.getState().reset();
 
     expect(useFormStore.getState().relayerFromPeerSession).toBe(false);
+  });
+});
+
+/**
+ * The other half of the same property: the gate has to be escapable.
+ *
+ * Holding `relayerFromPeerSession` false across a reload is correct, but until the
+ * re-handshake landed there was no way to earn it back — the flag was only ever set by a
+ * CONNECT, CONNECT was only admitted at `wait-for-connection`, and it was only ever SENT from
+ * `WaitForConnectionStep`, which no side renders at a sign step. So a reload mid-flow meant
+ * signing refused forever, with error copy pointing at a recovery that did not exist.
+ *
+ * These walk the real store through the real lifecycle and check both directions at once:
+ * a reload leaves the gate shut, and only a live partner's answer opens it.
+ */
+describe('formStore provenance across a mid-flow reload', () => {
+  it('shuts the signing gate on reload and reopens it only on a live answer', async () => {
+    // 1. A genuine handshake this session.
+    useFormStore.getState().setRelayerFromPeer(RELAYER);
+    expect(
+      needsRehandshake({
+        step: 'acknowledge-and-sign',
+        partnerPeerId: PARTNER,
+        provenanceOk: useFormStore.getState().relayerFromPeerSession,
+        rehandshakeSteps: REHANDSHAKE_WALLET_STEPS,
+      }),
+      'a live session must not dial anybody'
+    ).toBe(false);
+
+    // 2. Reload. `step` is persisted by the registration store, so the flow resumes at the
+    //    sign step; `relayer` comes back, the mark does not.
+    const reloaded = await rehydrateWith({ registeree: RELAYER, relayer: RELAYER });
+    expect(reloaded.relayer).toBe(RELAYER);
+    expect(reloaded.relayerFromPeerSession).toBe(false);
+
+    // 3. That is the dead end — and it is now detected rather than permanent.
+    expect(
+      needsRehandshake({
+        step: 'acknowledge-and-sign',
+        partnerPeerId: PARTNER,
+        provenanceOk: reloaded.relayerFromPeerSession,
+        rehandshakeSteps: REHANDSHAKE_WALLET_STEPS,
+      })
+    ).toBe(true);
+
+    // 4. The pinned partner answers, naming the same relayer already on file.
+    expect(matchesPairedRelayer(false, RELAYER, useFormStore.getState().relayer)).toBe(true);
+    useFormStore.getState().setRelayerFromPeer(RELAYER);
+
+    // 5. Signing is unblocked, and nothing dials again.
+    expect(useFormStore.getState().relayerFromPeerSession).toBe(true);
+    expect(
+      needsRehandshake({
+        step: 'acknowledge-and-sign',
+        partnerPeerId: PARTNER,
+        provenanceOk: useFormStore.getState().relayerFromPeerSession,
+        rehandshakeSteps: REHANDSHAKE_WALLET_STEPS,
+      })
+    ).toBe(false);
+  });
+
+  it('a persisted relayer alone never reopens the gate, however many times it rehydrates', async () => {
+    // The attack the flag exists for: write an address into localStorage and force reloads.
+    // Rehydration is not evidence, and repeating it is not evidence either — only an inbound
+    // CONNECT from the pinned peer calls `setRelayerFromPeer`, and nothing here does.
+    for (let i = 0; i < 3; i++) {
+      const state = await rehydrateWith({
+        relayer: ATTACKER,
+        // Injected directly, as an attacker with profile write access would.
+        relayerFromPeerSession: true,
+      });
+      expect(state.relayer).toBe(ATTACKER);
+      expect(state.relayerFromPeerSession).toBe(false);
+      expect(
+        needsRehandshake({
+          step: 'register-and-sign',
+          partnerPeerId: PARTNER,
+          provenanceOk: state.relayerFromPeerSession,
+          rehandshakeSteps: REHANDSHAKE_WALLET_STEPS,
+        }),
+        'the gate must still be shut'
+      ).toBe(true);
+    }
+  });
+
+  it('refuses an answer that names a relayer other than the one on file', async () => {
+    // The re-handshake must not become a second way to change the forwarder. The
+    // acknowledgement already on chain names the original, so a partner reporting a different
+    // one is refused rather than believed — the address is never adopted on this path.
+    await rehydrateWith({ relayer: RELAYER });
+
+    expect(matchesPairedRelayer(false, ATTACKER, useFormStore.getState().relayer)).toBe(false);
+    expect(useFormStore.getState().relayerFromPeerSession).toBe(false);
+  });
+
+  it('does not attempt a reconnect when nothing is pinned to reconnect to', async () => {
+    // No partner means no authenticated peer to ask, so this is a genuine restart. Retrying
+    // would spin against a peer that could not be accepted even if it answered.
+    const state = await rehydrateWith({ relayer: RELAYER });
+
+    expect(
+      needsRehandshake({
+        step: 'acknowledge-and-sign',
+        partnerPeerId: null,
+        provenanceOk: state.relayerFromPeerSession,
+        rehandshakeSteps: REHANDSHAKE_WALLET_STEPS,
+      })
+    ).toBe(false);
   });
 });

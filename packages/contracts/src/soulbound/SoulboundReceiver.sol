@@ -121,56 +121,77 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     ///          recovery mechanism: a mint request that arrives BEFORE the wallet's registration
     ///          message. That is transient, and Hyperlane's retry resolves it by itself.
     ///
-    ///      So: `NotRegistered` keeps reverting (transient — let the retry fix it); every other
-    ///      cause emits {MintFailed} and returns, consuming the message.
+    ///      So: `NotRegistered` reverts (let the retry fix it); every other cause emits
+    ///      {MintFailed} and returns, consuming the message.
     ///
     ///      An EMPTY revert reason also re-reverts. A sub-call out-of-gas surfaces here as an
     ///      empty reason under the 63/64 rule, and consuming the message on an OOG would discard
     ///      a mint that a re-delivery with more gas would have completed.
     ///
-    ///      Note the previous code emitted {MintFailed} and then reverted in the same frame, so
-    ///      the revert discarded the log — the event that existed to make this observable could
-    ///      never actually be observed.
+    ///      {MintFailed} is emitted ONLY on the consuming path. Emitting before a revert in the
+    ///      same frame discards the log, so an event on the revert path is unobservable by
+    ///      construction — an earlier version of this function did exactly that.
     ///
     ///      The permissionless hub-side `mintTo` remains the manual recovery path for anything
     ///      consumed here.
+    ///
+    ///      ── WHY `NotRegistered` IS UNCONDITIONALLY RETRIED ──────────────────────────────
+    ///
+    ///      This branch used to be gated on a hub-side `isWalletPending(wallet)` check, on the
+    ///      theory that a live acknowledgement distinguishes "registration in flight" (retry) from
+    ///      "wallet will never register" (consume). That gate was DEAD, and removing it is the
+    ///      fix, not a relaxation:
+    ///
+    ///        Every wallet that reaches this function registered on a SPOKE — `handle` is
+    ///        `onlyMailbox`, so there is no other caller. A spoke registration acknowledges into
+    ///        `SpokeRegistry._pendingAcknowledgements` on the SPOKE chain, and the hub side
+    ///        arrives through `WalletRegistry.registerFromHub`, which writes the entry directly
+    ///        and never creates a hub-side pending row. So hub `isWalletPending` was false for
+    ///        100% of the wallets reaching here, and the gate only ever chose "consume".
+    ///
+    ///      THE CONTRACT CANNOT TELL THE TWO CASES APART, and no reasonable machinery makes it
+    ///      able to. The payload is `(msgType, wallet, supporter, donationAmount)`: no proof of
+    ///      registration, no acknowledgement reference, no timestamp. A request whose registration
+    ///      message is one block behind and a request for a wallet that never registers are
+    ///      byte-identical and leave identical hub state. Having the spoke forwarder attest to a
+    ///      local acknowledgement would not fix it either — a spoke acknowledgement can expire
+    ///      without ever registering, so the attestation is not a promise, and it would put a
+    ///      registry dependency inside a soulbound wire format for no decidable gain.
+    ///
+    ///      So the only real question is which way an UNDECIDABLE case should fail, and the harm
+    ///      is asymmetric:
+    ///        - Consume when it was transient  -> a paid-for mint is silently and permanently
+    ///          lost, recoverable only if a human notices {MintFailed} and sends a second
+    ///          hub-side transaction.
+    ///        - Revert when it was terminal    -> the message stays undelivered. Nothing is lost
+    ///          that was not already lost: the bridge fee is spent either way and consuming
+    ///          refunds nothing. Relayers simulate before submitting, so a permanently-reverting
+    ///          message is skipped rather than repeatedly paid for, and producing one costs the
+    ///          sender a real bridge fee — a paid-for nuisance, not an amplification.
+    ///
+    ///      Note the two griefing cases in the list above are NOT in this branch: a front-running
+    ///      direct mint and a two-spoke collision both surface as `AlreadyMinted` (mintTo checks
+    ///      registration BEFORE `hasMinted`), which stays terminal and consumed — and in both the
+    ///      token was in fact minted to the wallet, so nothing is lost. Removing the pending gate
+    ///      does not re-open them.
+    ///
+    ///      Do NOT reintroduce a hub-side pending check here. It cannot observe spoke state.
     /// @param wallet Wallet to mint for (must be registered in StolenWalletRegistry)
     /// @param origin Origin domain for event
     function _handleWalletMint(address wallet, uint32 origin) internal {
         try WalletSoulbound(walletSoulbound).mintTo(wallet) {
             emit CrossChainMintExecuted(MintType.WALLET, wallet, origin);
         } catch (bytes memory reason) {
-            emit MintFailed(MintType.WALLET, wallet, origin, reason);
-            // Out of gas (empty reason under the 63/64 rule) is always worth re-delivering.
-            if (reason.length == 0) revert SoulboundReceiver__WalletMintFailed();
-            // `NotRegistered` is transient ONLY while a registration is still in flight. A wallet
-            // with a live acknowledgement is mid-flow, so the retry is the recovery mechanism.
-            // A wallet with NEITHER a registration NOR a pending acknowledgement is not going to
-            // become registered by being asked again: the acknowledgement expired, or the mint
-            // was requested for a wallet that never started. Reverting there means Hyperlane
-            // re-delivers the identical body forever, never marks it delivered, and the bridge
-            // fee is burnt on a message that can never succeed. Consume it instead — the
-            // permissionless hub-side `mintTo` remains the recovery path if the wallet does
-            // register later.
-            if (_hasSelector(reason, WalletSoulbound.NotRegistered.selector) && _isWalletPending(wallet)) {
+            // TRANSIENT — revert so Hyperlane re-delivers. No {MintFailed}: this frame is about
+            // to be discarded, so the log would be too.
+            //   - empty reason: sub-call out-of-gas under the 63/64 rule; more gas may succeed.
+            //   - NotRegistered: the registration message may still be in flight. See above for
+            //     why this is not conditioned on any pending check.
+            if (reason.length == 0 || _hasSelector(reason, WalletSoulbound.NotRegistered.selector)) {
                 revert SoulboundReceiver__WalletMintFailed();
             }
-            // Permanent (already minted, expired acknowledgement, any other terminal cause).
-        }
-    }
-
-    /// @notice Distinguishes a mint that is merely EARLY from one that can never succeed, which is
-    ///         what decides whether {_handleWalletMint} lets Hyperlane retry or consumes the message.
-    /// @dev Is a registration still in flight for this wallet?
-    /// @param wallet The wallet to check
-    /// @return True when the registry reports a live pending acknowledgement. A registry that
-    ///         reverts or returns nothing decodable is treated as NOT pending, so an unexpected
-    ///         registry failure consumes the message rather than pinning it in retry forever.
-    function _isWalletPending(address wallet) internal view returns (bool) {
-        try WalletSoulbound(walletSoulbound).registry().isWalletPending(wallet) returns (bool pending) {
-            return pending;
-        } catch {
-            return false;
+            // TERMINAL (already minted, or any other cause) — consume the message, loudly.
+            emit MintFailed(MintType.WALLET, wallet, origin, reason);
         }
     }
 

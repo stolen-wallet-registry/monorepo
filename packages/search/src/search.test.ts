@@ -324,6 +324,59 @@ describe('search() fails closed on an identifier it cannot answer for (S-2)', ()
   });
 });
 
+// ─── S-4: the same fail-open, reached the way it actually happens ───────────────────────────
+//
+// S-2 above covers the NAMESPACED form. But nobody types `bip122:<genesis>:bc1q…` — a block
+// explorer hands out the bare address, and that is what reaches an integrator's API call. So
+// the bare form was still returning a confident negative long after the namespaced one threw.
+// These run through `search()`, not `detectSearchType`, because the enforcement that matters
+// is what the exported entry point does.
+describe('search() fails closed on a bare non-EVM address (S-4)', () => {
+  const BARE_UNANSWERABLE = [
+    'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', // Bitcoin segwit
+    '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', // Bitcoin P2PKH
+    '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy', // Bitcoin P2SH
+    '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM', // Solana
+    'cosmos1t2uflqwqe0fsj0shcfkrvpukewcw40yjj6hdc0', // Cosmos
+  ];
+
+  it.each(BARE_UNANSWERABLE)('rejects %s instead of reporting it clean', async (identifier) => {
+    mockByQuery({ fallback: emptyWallet });
+
+    await expect(search(config, identifier)).rejects.toThrow(SearchUnavailableError);
+    // Nothing was queried, so the throw is the ONLY thing standing between the caller and a
+    // negative for an address no registry has a key for.
+    expect(mockRequest).not.toHaveBeenCalled();
+  });
+
+  it('names both registries and the reason, so the caller can tell it from an outage', async () => {
+    mockByQuery({ fallback: emptyWallet });
+
+    const thrown: unknown = await search(config, BARE_UNANSWERABLE[0] as string).then(
+      () => null,
+      (e: unknown) => e
+    );
+
+    expect(isSearchUnavailableError(thrown)).toBe(true);
+    const error = thrown as SearchUnavailableError;
+    expect(error.reason).toBe('unsupported-identifier');
+    expect(error.unverified).toEqual(['wallet', 'contract']);
+  });
+
+  // The other side of the line: widening 'unsupported' must not start throwing for typos.
+  // A returned negative is CORRECT for input that is not an identifier — there is no registry
+  // entry it could be missing — and a "could not verify" banner on every mistyped search
+  // trains users to dismiss the ones that mean something.
+  it('still returns a plain negative for input that is not an identifier', async () => {
+    for (const notAnIdentifier of ['gibberish', 'vitalik.eth', 'Coinbase', 'version1release']) {
+      const result = await search(config, notAnIdentifier);
+      expect(result.type).toBe('invalid');
+      expect(result.found).toBe(false);
+    }
+    expect(mockRequest).not.toHaveBeenCalled();
+  });
+});
+
 // ─── S-3's other half: assert the VARIABLES, not just the return value ──────────────────────
 //
 // The suite mocked `request` to answer by document only, so every test passed regardless of

@@ -444,6 +444,218 @@ contract FeeManagerTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // PRICE BOUNDS (the sanity band every price path is clamped to)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // setPriceBounds applies the band and announces it.
+    function test_SetPriceBounds_Success() public {
+        vm.prank(owner);
+        vm.expectEmit(true, true, true, true);
+        emit FeeManager.PriceBoundsUpdated(10_000, 1_000_000);
+
+        feeManager.setPriceBounds(10_000, 1_000_000);
+
+        assertEq(feeManager.minEthPriceUsdCents(), 10_000);
+        assertEq(feeManager.maxEthPriceUsdCents(), 1_000_000);
+    }
+
+    // setPriceBounds is owner-only.
+    function test_SetPriceBounds_OnlyOwner() public {
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user));
+        feeManager.setPriceBounds(10_000, 1_000_000);
+    }
+
+    /// @notice The owner-settable band is itself bounded by MIN_PRICE_BOUND / MAX_PRICE_BOUND.
+    /// @dev Without the hard limits, "clamp the oracle" is just a second lever with the same reach
+    ///      as the first: an owner who can widen the band to [1, type(uint256).max] has re-created
+    ///      the unbounded oracle the band exists to constrain. Each of the three clauses is
+    ///      exercised separately so a regression that drops one is not masked by the others.
+    function test_SetPriceBounds_RejectsBandOutsideHardLimits() public {
+        uint256 minBound = feeManager.MIN_PRICE_BOUND();
+        uint256 maxBound = feeManager.MAX_PRICE_BOUND();
+
+        // Lower bound beneath the floor.
+        vm.prank(owner);
+        vm.expectRevert(FeeManager.Fee__InvalidBounds.selector);
+        feeManager.setPriceBounds(minBound - 1, 1_000_000);
+
+        // Upper bound above the ceiling.
+        vm.prank(owner);
+        vm.expectRevert(FeeManager.Fee__InvalidBounds.selector);
+        feeManager.setPriceBounds(minBound, maxBound + 1);
+
+        // Inverted band. Both values are individually legal, so only min > max can reject this.
+        vm.prank(owner);
+        vm.expectRevert(FeeManager.Fee__InvalidBounds.selector);
+        feeManager.setPriceBounds(400_000, 200_000);
+
+        assertEq(feeManager.minEthPriceUsdCents(), 5000, "no rejected band may be written");
+        assertEq(feeManager.maxEthPriceUsdCents(), 5_000_000, "no rejected band may be written");
+    }
+
+    /// @notice Exactly MIN_PRICE_BOUND / MAX_PRICE_BOUND is accepted — the checks are `<` and `>`.
+    /// @dev The load-bearing half of the pair above. Without it, a bound mistakenly tightened to
+    ///      `<=` / `>=` (rejecting the documented limits) would pass CI, and so would a check that
+    ///      rejected every band outright.
+    function test_SetPriceBounds_AcceptsExactlyTheHardLimits() public {
+        // Read the constants BEFORE vm.prank: an external view in argument position is itself the
+        // next call, and it would consume the prank.
+        uint256 minBound = feeManager.MIN_PRICE_BOUND();
+        uint256 maxBound = feeManager.MAX_PRICE_BOUND();
+
+        vm.prank(owner);
+        feeManager.setPriceBounds(minBound, maxBound);
+
+        assertEq(feeManager.minEthPriceUsdCents(), 100);
+        assertEq(feeManager.maxEthPriceUsdCents(), 100_000_000);
+    }
+
+    /// @notice Narrowing the band must not orphan the fallback price already in storage.
+    /// @dev SECURITY. This is the second check in `_setPriceBounds`, and it is the one with no
+    ///      obvious motivation from the function signature. If the stored fallback falls outside
+    ///      the new band, `_setFallbackPrice` re-checks bounds and can therefore never move it back
+    ///      — the contract is wedged holding a fallback it considers invalid, while every degraded
+    ///      read path (`getEthPriceUsdCentsView`, `currentFeeWei` after a feed failure) keeps
+    ///      quoting exactly that value. Both directions are covered: a band that starts above the
+    ///      fallback, and one that ends below it.
+    ///
+    ///      Discriminating by construction — the preconditions assert each band passes the FIRST
+    ///      check, so only the orphan check can be what rejects them.
+    function test_SetPriceBounds_RejectsBandThatOrphansStoredFallback() public {
+        uint256 stored = feeManager.fallbackEthPriceUsdCents();
+        assertEq(stored, DEFAULT_FALLBACK_PRICE, "Precondition: fallback is $3,000");
+
+        // Band entirely ABOVE the stored fallback ($5,000–$10,000).
+        uint256 lowMin = 500_000;
+        uint256 lowMax = 1_000_000;
+        assertTrue(
+            lowMin >= feeManager.MIN_PRICE_BOUND() && lowMax <= feeManager.MAX_PRICE_BOUND() && lowMin <= lowMax,
+            "precondition: the hard-limit check does not reject this band"
+        );
+        vm.prank(owner);
+        vm.expectRevert(FeeManager.Fee__InvalidBounds.selector);
+        feeManager.setPriceBounds(lowMin, lowMax);
+
+        // Band entirely BELOW the stored fallback ($1–$10).
+        uint256 highMin = 100;
+        uint256 highMax = 1000;
+        assertTrue(
+            highMin >= feeManager.MIN_PRICE_BOUND() && highMax <= feeManager.MAX_PRICE_BOUND() && highMin <= highMax,
+            "precondition: the hard-limit check does not reject this band"
+        );
+        vm.prank(owner);
+        vm.expectRevert(FeeManager.Fee__InvalidBounds.selector);
+        feeManager.setPriceBounds(highMin, highMax);
+
+        assertEq(feeManager.minEthPriceUsdCents(), 5000, "orphaning band must not be written");
+        assertEq(feeManager.maxEthPriceUsdCents(), 5_000_000, "orphaning band must not be written");
+
+        // A band that still contains the fallback is accepted — proves the rejections above are
+        // about the fallback's position, not about narrowing per se.
+        vm.prank(owner);
+        feeManager.setPriceBounds(200_000, 400_000);
+        assertEq(feeManager.minEthPriceUsdCents(), 200_000);
+    }
+
+    /// @notice The fallback price is held to the same sanity band as a live oracle answer.
+    /// @dev Otherwise the bound on the oracle is trivially sidestepped: set the fallback to 1 cent,
+    ///      let the feed go stale, and every read path degrades to a price that drives
+    ///      `baseFeeUsdCents * 1e18 / price` to an absurd value. Covers `_setFallbackPrice`'s
+    ///      bounds check, which is a different call site from the oracle read path.
+    function test_SetFallbackPrice_RejectsValueOutsideBounds() public {
+        // Read the band BEFORE arming expectRevert: the cheatcode applies to the next external
+        // call, and a view in argument position is one.
+        uint256 aboveMax = feeManager.maxEthPriceUsdCents() + 1;
+
+        // Below minEthPriceUsdCents ($50).
+        vm.prank(owner);
+        vm.expectRevert(FeeManager.Fee__PriceOutOfBounds.selector);
+        feeManager.setFallbackPrice(1);
+
+        // Above maxEthPriceUsdCents ($50,000).
+        vm.prank(owner);
+        vm.expectRevert(FeeManager.Fee__PriceOutOfBounds.selector);
+        feeManager.setFallbackPrice(aboveMax);
+
+        assertEq(feeManager.fallbackEthPriceUsdCents(), DEFAULT_FALLBACK_PRICE, "rejected price must not be written");
+    }
+
+    /// @notice A fresh oracle answer outside the band is not laundered into the stored fallback.
+    /// @dev SECURITY. `refreshFallbackPrice` is PERMISSIONLESS and WRITES storage, which makes it
+    ///      the one path where a single bad oracle round becomes durable state: the written value
+    ///      outlives the feed's recovery and is what every later degraded read quotes. The bounds
+    ///      check is the only thing stopping that, and reverting is safe here precisely because
+    ///      nothing depends on this call succeeding.
+    ///
+    ///      Asserting the revert alone would be weak — the property that matters is that the
+    ///      fallback in storage is UNCHANGED, so that is asserted in both directions.
+    function test_RefreshFallbackPrice_RejectsOutOfBoundsOracleAnswer() public {
+        // $60,000 — fresh, positive, correctly encoded, and above maxEthPriceUsdCents ($50,000).
+        mockOracle.setPrice(6_000_000_000_000);
+
+        vm.prank(user);
+        vm.expectRevert(FeeManager.Fee__PriceOutOfBounds.selector);
+        feeManager.refreshFallbackPrice();
+
+        assertEq(
+            feeManager.fallbackEthPriceUsdCents(),
+            DEFAULT_FALLBACK_PRICE,
+            "an out-of-band answer must not reach the stored fallback"
+        );
+
+        // $10 — the dangerous direction for users, since a collapsed price inflates every fee.
+        mockOracle.setPrice(1_000_000_000);
+
+        vm.prank(user);
+        vm.expectRevert(FeeManager.Fee__PriceOutOfBounds.selector);
+        feeManager.refreshFallbackPrice();
+
+        assertEq(
+            feeManager.fallbackEthPriceUsdCents(),
+            DEFAULT_FALLBACK_PRICE,
+            "an out-of-band answer must not reach the stored fallback"
+        );
+
+        // An in-band answer still writes, so the guard is not simply refusing everything.
+        mockOracle.setPrice(ORACLE_PRICE_4000);
+        vm.prank(user);
+        feeManager.refreshFallbackPrice();
+        assertEq(feeManager.fallbackEthPriceUsdCents(), 400_000, "an in-band answer must still refresh");
+    }
+
+    /// @notice The staleness threshold is capped at MAX_STALE_PRICE_THRESHOLD.
+    /// @dev Without the cap the owner sets the threshold to `type(uint256).max`, every answer is
+    ///      "fresh" forever, and staleness detection is off — a feed frozen at a stale price keeps
+    ///      being treated as live, which is strictly worse than having no oracle at all because the
+    ///      contract believes it has one.
+    function test_SetStalePriceThreshold_RejectsAboveCap() public {
+        uint256 cap = feeManager.MAX_STALE_PRICE_THRESHOLD();
+
+        vm.prank(owner);
+        vm.expectRevert(FeeManager.Fee__InvalidThreshold.selector);
+        feeManager.setStalePriceThreshold(cap + 1);
+
+        vm.prank(owner);
+        vm.expectRevert(FeeManager.Fee__InvalidThreshold.selector);
+        feeManager.setStalePriceThreshold(type(uint256).max);
+
+        assertEq(feeManager.stalePriceThreshold(), 14_400, "rejected threshold must not be written");
+    }
+
+    /// @notice Exactly MAX_STALE_PRICE_THRESHOLD is accepted — the check is `>`, not `>=`.
+    /// @dev Paired with the rejection above so an off-by-one in either direction breaks exactly
+    ///      one of the two.
+    function test_SetStalePriceThreshold_AcceptsExactlyTheCap() public {
+        uint256 cap = feeManager.MAX_STALE_PRICE_THRESHOLD();
+
+        vm.prank(owner);
+        feeManager.setStalePriceThreshold(cap);
+
+        assertEq(feeManager.stalePriceThreshold(), 7 days);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // OWNERSHIP TESTS (Ownable2Step)
     // ═══════════════════════════════════════════════════════════════════════════
 

@@ -41,4 +41,9 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
 
 USER appuser
 
+# Ponder's GraphQL middleware only masks resolver/driver errors when NODE_ENV is
+# "production" — without this, raw Postgres errors naming schema and tables leak
+# through the public /graphql endpoint the gateway exists to front.
+ENV NODE_ENV=production
+
 CMD ["pnpm", "start"]

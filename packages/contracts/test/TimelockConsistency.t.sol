@@ -17,7 +17,9 @@ import { WalletRegistry } from "../src/registries/WalletRegistry.sol";
 import { TransactionRegistry } from "../src/registries/TransactionRegistry.sol";
 import { ContractRegistry } from "../src/registries/ContractRegistry.sol";
 import { TimelockOwnable } from "../src/libraries/TimelockOwnable.sol";
+import { FeeManager } from "../src/FeeManager.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
+import { MockAggregator } from "./mocks/MockAggregator.sol";
 
 /// @title TimelockConsistencyTest
 /// @notice Every trust-boundary setter must be timelocked after completeSetup().
@@ -610,6 +612,220 @@ contract TimelockConsistencyTest is Test {
         vm.prank(mailbox);
         vm.expectRevert(ISoulboundReceiver.SoulboundReceiver__UntrustedForwarder.selector);
         receiver.handle(SPOKE_DOMAIN, sender, message);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FeeManager — the contract that prices every registration
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function _feeManager() internal returns (FeeManager) {
+        MockAggregator agg = new MockAggregator(300_000_000_000); // $3,000, 8 decimals
+        return new FeeManager(owner, address(agg));
+    }
+
+    /// @notice Every immediate setter still works before completeSetup(), so deploy scripts do too.
+    function test_FeeManager_SettersImmediateDuringSetup() public {
+        FeeManager fm = _feeManager();
+
+        fm.setBaseFee(1000);
+        fm.setOperatorBatchFee(250);
+        fm.setFallbackPrice(350_000);
+        fm.setStalePriceThreshold(1 hours);
+        fm.setPriceBounds(200_000, 400_000);
+        fm.setPriceFeed(makeAddr("otherFeed"));
+
+        assertEq(fm.baseFeeUsdCents(), 1000);
+        assertEq(fm.operatorBatchFeeUsdCents(), 250);
+        assertEq(fm.fallbackEthPriceUsdCents(), 350_000);
+        assertEq(fm.stalePriceThreshold(), 1 hours);
+        assertEq(fm.minEthPriceUsdCents(), 200_000);
+        assertEq(fm.priceFeed(), makeAddr("otherFeed"));
+    }
+
+    /// @notice After completeSetup(), no FeeManager setter executes in a single transaction.
+    /// @dev SECURITY-CRITICAL. FeeManager was the one TimelockOwnable contract with no assertion
+    ///      in this file, and its own test file never called completeSetup() — so every one of its
+    ///      tests ran with `setupComplete == false` and the entire gate was unverified. Deleting
+    ///      `onlyDuringSetup` from any setter below used to pass the whole suite.
+    ///
+    ///      What that gate protects: both registries hold `feeManager` as `immutable`, so a
+    ///      FeeManager that starts quoting a hostile price cannot be swapped out without
+    ///      redeploying the registries. `setFallbackPrice(1)` alone makes `baseFee * 1e18 / price`
+    ///      enormous and prices every victim out of registering, with no delay and no warning.
+    function test_FeeManager_SettersBlockedAfterSetup() public {
+        FeeManager fm = _feeManager();
+        fm.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
+        fm.setBaseFee(999_999);
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
+        fm.setOperatorBatchFee(999_999);
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
+        fm.setFallbackPrice(6000);
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
+        fm.setStalePriceThreshold(7 days);
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
+        fm.setPriceBounds(200_000, 400_000);
+
+        assertEq(fm.baseFeeUsdCents(), 500, "base fee must be unchanged");
+        assertEq(fm.fallbackEthPriceUsdCents(), 300_000, "fallback price must be unchanged");
+        assertEq(fm.stalePriceThreshold(), 14_400, "staleness threshold must be unchanged");
+        assertEq(fm.minEthPriceUsdCents(), 5000, "price bounds must be unchanged");
+    }
+
+    /// @notice Pointing at a NEW feed is timelocked; un-pointing to address(0) stays immediate.
+    /// @dev `setPriceFeed` carries its gate inline rather than via `onlyDuringSetup`, so it is a
+    ///      distinct code path from the setters above and needs its own assertion. The carve-out
+    ///      follows the system-wide rule that revocations stay immediate: dropping to address(0)
+    ///      disables the oracle and falls back to the manual price, which only ever NARROWS what
+    ///      this contract trusts. It is the emergency response to a feed answering
+    ///      wrongly-but-plausibly, and making it wait two days would be the wrong direction.
+    function test_FeeManager_PriceFeedGrantTimelockedRevokeImmediate() public {
+        FeeManager fm = _feeManager();
+        fm.completeSetup();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
+        fm.setPriceFeed(makeAddr("hostileFeed"));
+
+        // Un-pointing is still a one-transaction emergency action.
+        fm.setPriceFeed(address(0));
+        assertFalse(fm.useChainlink(), "revoking the oracle must not require the timelock");
+    }
+
+    /// @notice Each timelocked setter has a working propose → wait → activate path.
+    /// @dev Without this, "blocked after setup" could be satisfied by a setter that is simply
+    ///      dead post-setup, which would be a liveness bug rather than a fix.
+    function test_FeeManager_SettersViaTimelock() public {
+        FeeManager fm = _feeManager();
+        fm.completeSetup();
+        uint256 delay = fm.ACTIVATION_DELAY();
+
+        fm.proposeBaseFee(1500);
+
+        // Too early — the delay is real.
+        vm.warp(block.timestamp + delay - 1);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__TooEarly.selector);
+        fm.activateBaseFee(1500);
+
+        vm.warp(block.timestamp + 1);
+        fm.activateBaseFee(1500);
+        assertEq(fm.baseFeeUsdCents(), 1500);
+
+        fm.proposeOperatorBatchFee(300);
+        fm.proposeFallbackPrice(350_000);
+        fm.proposeStalePriceThreshold(2 hours);
+        fm.proposePriceBounds(100_000, 6_000_000);
+        fm.proposePriceFeed(makeAddr("newFeed"));
+
+        vm.warp(block.timestamp + delay);
+
+        fm.activateOperatorBatchFee(300);
+        fm.activateFallbackPrice(350_000);
+        fm.activateStalePriceThreshold(2 hours);
+        fm.activatePriceBounds(100_000, 6_000_000);
+        fm.activatePriceFeed(makeAddr("newFeed"));
+
+        assertEq(fm.operatorBatchFeeUsdCents(), 300);
+        assertEq(fm.fallbackEthPriceUsdCents(), 350_000);
+        assertEq(fm.stalePriceThreshold(), 2 hours);
+        assertEq(fm.minEthPriceUsdCents(), 100_000);
+        assertEq(fm.maxEthPriceUsdCents(), 6_000_000);
+        assertEq(fm.priceFeed(), makeAddr("newFeed"));
+    }
+
+    /// @notice Activation applies only the exact values that were proposed.
+    /// @dev The delay is worthless if activation arguments are unconstrained — an owner could
+    ///      propose a benign fee, let the two days pass in public, then activate a different one.
+    ///      Also pins that the action keys are per-setter: a `setBaseFee` proposal must not be
+    ///      activatable as an `setOperatorBatchFee`, and a two-argument bounds proposal must match
+    ///      on BOTH arguments.
+    function test_FeeManager_ActivationRejectsUnproposedValues() public {
+        FeeManager fm = _feeManager();
+        fm.completeSetup();
+
+        fm.proposeBaseFee(1500);
+        fm.proposePriceBounds(100_000, 6_000_000);
+        vm.warp(block.timestamp + fm.ACTIVATION_DELAY());
+
+        // Same setter, different value.
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__NotProposed.selector);
+        fm.activateBaseFee(9999);
+
+        // A setBaseFee proposal is not a setOperatorBatchFee proposal, even at the same value.
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__NotProposed.selector);
+        fm.activateOperatorBatchFee(1500);
+
+        // Bounds must match on both arguments, not just the first.
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__NotProposed.selector);
+        fm.activatePriceBounds(100_000, 7_000_000);
+
+        fm.activateBaseFee(1500);
+        assertEq(fm.baseFeeUsdCents(), 1500, "the proposed value still activates");
+    }
+
+    /// @notice The timelocked path re-runs the same validation as the immediate one.
+    /// @dev Both paths funnel through the shared `_set*` internals, and this pins that they still
+    ///      do. A `propose`/`activate` pair that wrote state directly would turn the timelock into
+    ///      a validation bypass — the 2-day wait would buy an attacker an UNCHECKED write rather
+    ///      than a checked one, which is strictly worse than no timelock at all.
+    function test_FeeManager_TimelockedPathStillValidates() public {
+        FeeManager fm = _feeManager();
+        fm.completeSetup();
+        uint256 delay = fm.ACTIVATION_DELAY();
+
+        // Out-of-band fallback price: rejected by _setFallbackPrice, not by the timelock.
+        fm.proposeFallbackPrice(1);
+        // Bounds that would orphan the stored $3,000 fallback.
+        fm.proposePriceBounds(500_000, 1_000_000);
+        // Staleness threshold above the 7-day cap.
+        fm.proposeStalePriceThreshold(30 days);
+
+        vm.warp(block.timestamp + delay);
+
+        vm.expectRevert(FeeManager.Fee__PriceOutOfBounds.selector);
+        fm.activateFallbackPrice(1);
+
+        vm.expectRevert(FeeManager.Fee__InvalidBounds.selector);
+        fm.activatePriceBounds(500_000, 1_000_000);
+
+        vm.expectRevert(FeeManager.Fee__InvalidThreshold.selector);
+        fm.activateStalePriceThreshold(30 days);
+
+        assertEq(fm.fallbackEthPriceUsdCents(), 300_000, "invalid activation must not write");
+        assertEq(fm.minEthPriceUsdCents(), 5000, "invalid activation must not write");
+        assertEq(fm.stalePriceThreshold(), 14_400, "invalid activation must not write");
+    }
+
+    /// @notice Proposals cannot be armed before completeSetup().
+    /// @dev During setup the immediate setters are open, so a proposal buys nothing — its only
+    ///      effect is to pre-arm an action that outlives setup and can be activated the moment the
+    ///      contract goes live, with the community's reaction window already spent.
+    function test_FeeManager_ProposeBlockedBeforeSetup() public {
+        FeeManager fm = _feeManager();
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupNotComplete.selector);
+        fm.proposeBaseFee(1500);
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__SetupNotComplete.selector);
+        fm.proposePriceBounds(100_000, 6_000_000);
+    }
+
+    /// @notice setFallbackSyncInterval is deliberately NOT timelocked.
+    /// @dev Pins the documented exception so it is not "fixed" by someone pattern-matching the
+    ///      other setters, and equally so that adding a timelock later is a conscious decision.
+    ///      It is a gas-tuning knob: it cannot change a quoted fee, reject a payment, or repoint
+    ///      any trust boundary. Its worst abuse costs one caller an extra SSTORE.
+    function test_FeeManager_SyncIntervalStaysImmediateAfterSetup() public {
+        FeeManager fm = _feeManager();
+        fm.completeSetup();
+
+        fm.setFallbackSyncInterval(12 hours);
+
+        assertEq(fm.fallbackSyncInterval(), 12 hours);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

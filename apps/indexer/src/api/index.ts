@@ -3,7 +3,14 @@ import schema from 'ponder:schema';
 import { Hono } from 'hono';
 import { graphql } from 'ponder';
 
-import { enforceCors, parseAllowedOrigins, rateLimit, readRateLimitOptions } from './security.js';
+import {
+  enforceCors,
+  limitQueryOffset,
+  parseAllowedOrigins,
+  rateLimit,
+  readMaxOffset,
+  readRateLimitOptions,
+} from './security.js';
 
 const app = new Hono();
 
@@ -21,9 +28,16 @@ app.use('*', enforceCors(parseAllowedOrigins(process.env.INDEXER_ALLOWED_ORIGINS
 app.use('*', rateLimit(readRateLimitOptions(process.env)));
 
 // Ponder ships graphql-armor by default (maxOperationTokens 1000, maxOperationDepth 100,
-// maxAliases 30, MAX_LIMIT 1000), so query *shape* attacks — depth, alias and pagination
-// bombs — are already handled. The middleware above covers query *volume*, which armor does
-// not address.
+// maxAliases 30, MAX_LIMIT 1000), so depth and alias attacks are handled, and `rateLimit`
+// above covers query *volume*. What none of them look at is the COST of a single permitted
+// query: armor inspects a document's shape, never its argument values, and ponder caps
+// `limit` but not `offset`. `limitQueryOffset` closes that — see its doc comment.
+//
+// Request-body size is bounded one layer out, in `gateway.mjs`, which is the only place that
+// can reject before the bytes are proxied and the only one that also covers ponder's own
+// ungatable `/metrics|/health|/ready|/status` routes. See DEFAULT_MAX_BODY_BYTES there.
+app.use('*', limitQueryOffset(readMaxOffset(process.env)));
+
 app.use('/', graphql({ db, schema }));
 app.use('/graphql', graphql({ db, schema }));
 

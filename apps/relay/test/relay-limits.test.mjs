@@ -10,6 +10,7 @@ import {
   createReservationGater,
   extractHost,
   ipv6Prefix64,
+  PENDING_RESERVATION_TTL_MS,
   readRelayLimits,
   shouldDenyReservation,
   validateRelayLimits,
@@ -181,7 +182,7 @@ describe('shouldDenyReservation', () => {
   test('allows a host below the cap', () => {
     assert.equal(
       shouldDenyReservation({
-        requestingHost: '1.1.1.1',
+        requestingHosts: ['1.1.1.1'],
         alreadyReserved: false,
         reservationsByHost: new Map([['1.1.1.1', 7]]),
         reservationsPerHost: perHost,
@@ -193,7 +194,7 @@ describe('shouldDenyReservation', () => {
   test('denies a host at the cap', () => {
     assert.equal(
       shouldDenyReservation({
-        requestingHost: '1.1.1.1',
+        requestingHosts: ['1.1.1.1'],
         alreadyReserved: false,
         reservationsByHost: new Map([['1.1.1.1', 8]]),
         reservationsPerHost: perHost,
@@ -207,7 +208,7 @@ describe('shouldDenyReservation', () => {
   test('always allows a renewal, even for a host at the cap', () => {
     assert.equal(
       shouldDenyReservation({
-        requestingHost: '1.1.1.1',
+        requestingHosts: ['1.1.1.1'],
         alreadyReserved: true,
         reservationsByHost: new Map([['1.1.1.1', 99]]),
         reservationsPerHost: perHost,
@@ -221,7 +222,7 @@ describe('shouldDenyReservation', () => {
   test('allows when the host cannot be determined', () => {
     assert.equal(
       shouldDenyReservation({
-        requestingHost: null,
+        requestingHosts: [],
         alreadyReserved: false,
         reservationsByHost: new Map(),
         reservationsPerHost: perHost,
@@ -234,6 +235,36 @@ describe('shouldDenyReservation', () => {
     // 512 global slots, 8 per host => at least 64 distinct hosts required.
     const { maxReservations, reservationsPerHost } = readRelayLimits({});
     assert.ok(maxReservations / reservationsPerHost >= 64);
+  });
+
+  // A peer can hold several connections and they need not share a source. Charging it to
+  // whichever the array ordered first let an attacker at the cap open one connection from a
+  // fresh address and keep reserving; ANY presented host being full must deny.
+  test('denies when any presented host is at the cap, not just the first', () => {
+    assert.equal(
+      shouldDenyReservation({
+        requestingHosts: ['8.8.8.8', '1.1.1.1'],
+        alreadyReserved: false,
+        reservationsByHost: new Map([['1.1.1.1', 8]]),
+        reservationsPerHost: perHost,
+      }),
+      true
+    );
+  });
+
+  test('allows when every presented host is below the cap', () => {
+    assert.equal(
+      shouldDenyReservation({
+        requestingHosts: ['8.8.8.8', '1.1.1.1'],
+        alreadyReserved: false,
+        reservationsByHost: new Map([
+          ['1.1.1.1', 7],
+          ['8.8.8.8', 1],
+        ]),
+        reservationsPerHost: perHost,
+      }),
+      false
+    );
   });
 });
 
@@ -320,6 +351,108 @@ describe('createReservationGater', () => {
   test('fails open when the peer has no connection to inspect', async () => {
     const gater = makeGater({ reservations: [], connectionAddr: null });
     assert.equal(await gater('p1'), false);
+  });
+
+  // ── D5b-i: the cap must hold against a BURST, not just a sequence ─────────────────────────
+  //
+  // circuit-relay-v2 calls `reservationStore.reserve()` only after the gater's promise
+  // resolves, so a grant is invisible to concurrent gater calls. Every test above feeds the
+  // gater a store that already reflects prior grants — which is the sequential case, and the
+  // case an attacker will not use. These drive the interleaving that actually happens.
+  describe('in-flight reservations are counted', () => {
+    function makeBurstGater({ reservationsPerHost = 2, now = () => 0, addr } = {}) {
+      const map = new Map();
+      const gater = createReservationGater({
+        getNode: () => ({ getConnections: () => [{ remoteAddr: addr }] }),
+        getRelayService: () => ({
+          reservations: { entries: () => map.entries(), get: (peer) => map.get(peer) },
+        }),
+        reservationsPerHost,
+        now,
+      });
+      return { gater, map };
+    }
+
+    const ADDR = '/ip4/9.9.9.9/tcp/1/ws';
+
+    test('a concurrent burst from one host cannot exceed the per-host cap', async () => {
+      const { gater } = makeBurstGater({ reservationsPerHost: 2, addr: ADDR });
+
+      // Ten RESERVE streams, none of which has reached reserve() yet. Before the in-flight
+      // ledger every one of them read a stored count of 0 and all ten were granted, so one
+      // host could take the whole 512-slot ceiling in a single burst.
+      const verdicts = await Promise.all(Array.from({ length: 10 }, (_, i) => gater(`p${i}`)));
+
+      assert.equal(
+        verdicts.filter((denied) => denied === false).length,
+        2,
+        'exactly reservationsPerHost grants should survive a simultaneous burst'
+      );
+    });
+
+    // The other direction: the ledger must not double-count. An entry that stayed after its
+    // reservation landed would permanently halve the effective cap.
+    test('retires an in-flight grant once the reservation appears in the store', async () => {
+      const { gater, map } = makeBurstGater({ reservationsPerHost: 2, addr: ADDR });
+
+      assert.equal(await gater('p1'), false); // granted; now pending
+      map.set('p1', { addr: ADDR }); // reserve() ran
+
+      assert.equal(await gater('p2'), false); // 1 stored + 0 pending < 2
+      map.set('p2', { addr: ADDR });
+
+      assert.equal(await gater('p3'), true); // 2 stored => at cap
+    });
+
+    // Backstop for a grant whose reserve() never ran (handshake died after the gater said
+    // yes). Without the TTL that slot would be held in the ledger for the life of the process.
+    test('expires an in-flight grant that never reaches the store', async () => {
+      let clock = 0;
+      const { gater } = makeBurstGater({
+        reservationsPerHost: 1,
+        addr: ADDR,
+        now: () => clock,
+      });
+
+      assert.equal(await gater('p1'), false); // granted, pending, never stored
+      assert.equal(await gater('p2'), true); // still counted => cap reached
+
+      clock += PENDING_RESERVATION_TTL_MS + 1;
+
+      assert.equal(await gater('p3'), false); // stale entry dropped
+    });
+
+    test('does not count a peer against its own earlier in-flight grant', async () => {
+      const { gater } = makeBurstGater({ reservationsPerHost: 1, addr: ADDR });
+
+      assert.equal(await gater('p1'), false);
+      // A retry of the SAME peer is the same slot, so it must not be denied by its own record.
+      assert.equal(await gater('p1'), false);
+    });
+  });
+
+  // D5b-ii: a peer holding connections from two hosts used to be charged to whichever the
+  // array ordered first, so an attacker at the cap could open one connection from a fresh
+  // address and keep reserving.
+  test('charges a multi-connection peer against every host it presents', async () => {
+    const map = new Map([
+      ['p1', { addr: '/ip4/9.9.9.9/tcp/1/ws' }],
+      ['p2', { addr: '/ip4/9.9.9.9/tcp/2/ws' }],
+    ]);
+    const gater = createReservationGater({
+      getNode: () => ({
+        getConnections: () => [
+          { remoteAddr: '/ip4/8.8.8.8/tcp/3/ws' }, // fresh address, listed first
+          { remoteAddr: '/ip4/9.9.9.9/tcp/4/ws' }, // the exhausted one
+        ],
+      }),
+      getRelayService: () => ({
+        reservations: { entries: () => map.entries(), get: (peer) => map.get(peer) },
+      }),
+      reservationsPerHost: 2,
+    });
+
+    assert.equal(await gater('p3'), true);
   });
 
   test('reports the offending host to the caller', async () => {

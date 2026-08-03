@@ -17,6 +17,8 @@ import {
   TX_PROTOCOL_EXPECTED_STEP,
   RELAYER_PROTOCOL_EXPECTED_STEP,
   TX_RELAYER_PROTOCOL_EXPECTED_STEP,
+  CONNECT_RELAYER_STEPS,
+  TX_CONNECT_RELAYER_STEPS,
 } from './protocolSteps';
 import { RESIGN_ACK } from './resignAck';
 import { STEP_SEQUENCES } from '@/stores/registrationStore';
@@ -77,25 +79,33 @@ describe('isProtocolExpectedAtStep', () => {
     }
   });
 
-  // RESIGN_REQ is the ONE protocol allowed more than a single step, and the only one that
-  // moves the flow backwards. Everything else keeps the original one-step-each shape, so
-  // widening the value type did not quietly widen any other protocol's gate.
-  it('gives exactly one protocol a multi-step set, and only the two payment steps', () => {
+  // Exactly two protocols hold a multi-step set, for opposite reasons, and every other one
+  // keeps the original one-step-each shape — so widening the value type did not quietly widen
+  // anyone else's gate. RESIGN_REQ is the only message that moves the flow BACKWARDS; CONNECT
+  // is the only one that moves it NOWHERE.
+  const MULTI_STEP_PROTOCOLS: Record<string, string[]> = {
+    [PROTOCOLS.RESIGN_REQ]: ['acknowledgement-payment', 'registration-payment'],
+    [PROTOCOLS.CONNECT]: ['acknowledge-and-sign', 'register-and-sign', 'wait-for-connection'],
+  };
+
+  it('gives exactly two protocols a multi-step set, each to its documented steps', () => {
     for (const [protocol, steps] of Object.entries(PROTOCOL_EXPECTED_STEP)) {
-      if (protocol === PROTOCOLS.RESIGN_REQ) {
-        expect([...steps].sort()).toEqual(['acknowledgement-payment', 'registration-payment']);
+      const expected = MULTI_STEP_PROTOCOLS[protocol];
+      if (expected) {
+        expect([...steps].sort()).toEqual(expected);
       } else {
         expect(steps, `${protocol} must stay pinned to a single step`).toHaveLength(1);
       }
     }
   });
 
-  it('keeps every non-resign protocol on a distinct step', () => {
-    // Two of them sharing a step would let one stand in for the other. RESIGN_REQ overlaps
-    // by design — it acts where the payment notifications act — but it is dispatched by
-    // protocol, not by step, and its handler cannot do what theirs do.
+  it('keeps every single-step protocol on a distinct step', () => {
+    // Two of them sharing a step would let one stand in for the other. The two multi-step
+    // protocols overlap by design — RESIGN_REQ acts where the payment notifications act, and
+    // CONNECT where the receipts do — but both are dispatched by protocol, not by step, and
+    // neither handler can do what the overlapping one does.
     const steps = Object.entries(PROTOCOL_EXPECTED_STEP)
-      .filter(([protocol]) => protocol !== PROTOCOLS.RESIGN_REQ)
+      .filter(([protocol]) => !MULTI_STEP_PROTOCOLS[protocol])
       .flatMap(([, value]) => value);
     expect(new Set(steps).size).toBe(steps.length);
   });
@@ -174,10 +184,16 @@ describe('isTxProtocolExpectedAtStep', () => {
     }
   });
 
-  it('gives exactly one protocol a multi-step set, and only the two payment steps', () => {
+  it('gives exactly two protocols a multi-step set, each to its documented steps', () => {
+    // Mirrors the wallet flow: RESIGN_REQ moves the flow backwards, CONNECT moves it nowhere.
+    const multiStep: Record<string, string[]> = {
+      [PROTOCOLS.RESIGN_REQ]: ['acknowledgement-payment', 'registration-payment'],
+      [PROTOCOLS.CONNECT]: ['acknowledge-sign', 'register-sign', 'wait-for-connection'],
+    };
     for (const [protocol, steps] of Object.entries(TX_PROTOCOL_EXPECTED_STEP)) {
-      if (protocol === PROTOCOLS.RESIGN_REQ) {
-        expect([...steps].sort()).toEqual(['acknowledgement-payment', 'registration-payment']);
+      const expected = multiStep[protocol];
+      if (expected) {
+        expect([...steps].sort()).toEqual(expected);
       } else {
         expect(steps, `${protocol} must stay pinned to a single step`).toHaveLength(1);
       }
@@ -215,21 +231,31 @@ describe('isRelayerProtocolExpectedAtStep', () => {
     expect(isRelayerProtocolExpectedAtStep(PROTOCOLS.REG_SIG, 'register-and-sign')).toBe(true);
   });
 
-  it('rejects a repeated CONNECT — the relayer-side walk', () => {
-    // The relayer advanced on every CONNECT it accepted, so a bound partner could push it
-    // into a payment step holding no signature at all. Only the first one counts now.
+  it('admits CONNECT at the pairing step and the two sign steps, and nowhere else', () => {
+    // The relayer used to advance on every CONNECT it accepted, so a bound partner could push
+    // it into a payment step holding no signature at all. The advance is gone — it lives in
+    // `WaitForConnectionStep`, which renders only at `wait-for-connection` — so CONNECT is now
+    // the one protocol that can be admitted more widely without buying anyone latitude.
+    //
+    // The sign steps are here because the RELAYER answers a re-handshake: the victim is the
+    // side that reloaded, so the victim dials (see `rehandshake.ts`). Everything else stays
+    // shut, in particular the grace period and `success`.
     expect(isRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'wait-for-connection')).toBe(true);
-    expect(isRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'acknowledge-and-sign')).toBe(false);
+    expect(isRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'acknowledge-and-sign')).toBe(true);
+    expect(isRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'register-and-sign')).toBe(true);
+
     expect(isRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'acknowledgement-payment')).toBe(
       false
     );
     expect(isRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'grace-period')).toBe(false);
     expect(isRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'registration-payment')).toBe(false);
     expect(isRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'success')).toBe(false);
+    expect(isRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, null)).toBe(false);
   });
 
   it('never lets a message move the relayer out of the grace period or off success', () => {
-    for (const protocol of Object.keys(RELAYER_PROTOCOL_EXPECTED_STEP)) {
+    // CONNECT is checked explicitly because it no longer lives in the table.
+    for (const protocol of [...Object.keys(RELAYER_PROTOCOL_EXPECTED_STEP), PROTOCOLS.CONNECT]) {
       expect(isRelayerProtocolExpectedAtStep(protocol, 'grace-period')).toBe(false);
       expect(isRelayerProtocolExpectedAtStep(protocol, 'success')).toBe(false);
     }
@@ -366,6 +392,74 @@ describe('isTxRelayerProtocolExpectedAtStep', () => {
   it('keeps a single step per protocol', () => {
     for (const [protocol, step] of Object.entries(TX_RELAYER_PROTOCOL_EXPECTED_STEP)) {
       expect(typeof step, `${protocol} should be a bare step, not a set`).toBe('string');
+    }
+  });
+
+  it('admits CONNECT at the pairing step and the two sign steps, and nowhere else', () => {
+    expect(isTxRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'wait-for-connection')).toBe(true);
+    expect(isTxRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'acknowledge-sign')).toBe(true);
+    expect(isTxRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'register-sign')).toBe(true);
+
+    for (const step of TX_STEP_SEQUENCES.p2pRelay) {
+      if (step === 'wait-for-connection' || step === 'acknowledge-sign' || step === 'register-sign')
+        continue;
+      expect(isTxRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, step)).toBe(false);
+    }
+    expect(isTxRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, null)).toBe(false);
+  });
+});
+
+/**
+ * The re-handshake widening, checked as its own property rather than only through the tables.
+ *
+ * The defect: `relayerFromPeerSession` is session-only and `step` is persisted, so a reload
+ * resumed at a sign step with the signing gate shut and no CONNECT admitted there to reopen it.
+ * These pin the exact steps that were opened — on all four tables — so a later edit cannot
+ * quietly widen the set to the grace period or to `success`.
+ */
+describe('CONNECT step sets (re-handshake after reload)', () => {
+  it('opens exactly the sign steps, on both sides of both flows', () => {
+    expect([...CONNECT_RELAYER_STEPS].sort()).toEqual([
+      'acknowledge-and-sign',
+      'register-and-sign',
+      'wait-for-connection',
+    ]);
+    expect([...TX_CONNECT_RELAYER_STEPS].sort()).toEqual([
+      'acknowledge-sign',
+      'register-sign',
+      'wait-for-connection',
+    ]);
+    // The receiver-side tables are the same sets, reached through the table rather than a const.
+    expect([...(PROTOCOL_EXPECTED_STEP[PROTOCOLS.CONNECT] ?? [])].sort()).toEqual(
+      [...CONNECT_RELAYER_STEPS].sort()
+    );
+    expect([...(TX_PROTOCOL_EXPECTED_STEP[PROTOCOLS.CONNECT] ?? [])].sort()).toEqual(
+      [...TX_CONNECT_RELAYER_STEPS].sort()
+    );
+  });
+
+  it('never admits CONNECT during the grace period or after success, on any side', () => {
+    for (const step of ['grace-period', 'success'] as const) {
+      expect(isProtocolExpectedAtStep(PROTOCOLS.CONNECT, step)).toBe(false);
+      expect(isRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, step)).toBe(false);
+      expect(isTxProtocolExpectedAtStep(PROTOCOLS.CONNECT, step)).toBe(false);
+      expect(isTxRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, step)).toBe(false);
+    }
+  });
+
+  it('never admits CONNECT while the reporter is choosing transactions', () => {
+    // What gets reported is chosen locally. The relayer's own table admits TX_ACK_SIG there;
+    // that is the batch arriving, not a handshake, and the two must not be confused.
+    expect(isTxProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'select-transactions')).toBe(false);
+    expect(isTxRelayerProtocolExpectedAtStep(PROTOCOLS.CONNECT, 'select-transactions')).toBe(false);
+  });
+
+  it('keeps every opened step inside its flow sequence', () => {
+    for (const step of CONNECT_RELAYER_STEPS) {
+      expect(STEP_SEQUENCES.p2pRelay).toContain(step);
+    }
+    for (const step of TX_CONNECT_RELAYER_STEPS) {
+      expect(TX_STEP_SEQUENCES.p2pRelay).toContain(step);
     }
   });
 });

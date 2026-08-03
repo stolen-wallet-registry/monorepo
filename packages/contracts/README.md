@@ -201,6 +201,33 @@ forge coverage
 forge test --gas-report
 ```
 
+### What `forge test` does NOT cover: the live Hyperlane Mailbox
+
+`forge test` runs every Hyperlane test against `test/mocks/MockMailbox.sol`, which proves only
+that the adapter agrees with **our own** copy of the interface. The v2→v3 mismatch this suite
+was later written for shipped exactly that way: the adapter targeted the Hyperlane v2 `IMailbox`
+(non-payable `dispatch`, no `quoteDispatch`) while every live mailbox is v3, and nothing failed,
+because the mock had the same wrong shape. `@hyperlane-xyz/core/` remaps to the vendored
+`src/vendor/hyperlane/`, so those interfaces are in-repo copies that can drift from the
+deployed contract with nothing to notice.
+
+`test/HyperlaneForked.t.sol` is the only test that dials a real v3 Mailbox, and it `vm.skip`s
+itself unless an RPC is set — so in a default run its 4 tests report SKIPPED, not passed:
+
+```bash
+OPTIMISM_SEPOLIA_RPC=https://<your-op-sepolia-rpc> \
+  forge test --match-contract HyperlaneForked -vv
+```
+
+Expect `4 passed; 0 failed; 0 skipped`. A result of `0 passed` or any `[SKIP]` means the check
+did not run. Run it **before any testnet or mainnet deployment** and after any change under
+`src/vendor/hyperlane/`.
+
+`.github/workflows/hyperlane-forked.yml` runs the same suite, but it is **manual only** (Actions
+→ Hyperlane forked integration → Run workflow) and needs an `OPTIMISM_SEPOLIA_RPC` repository
+secret. Nothing runs it on a timer, so nothing will tell you when the vendored interfaces drift
+from the deployed Mailbox — the local command above, run before a deployment, is the real gate.
+
 ## Linting
 
 `pnpm lint` runs `solhint 'src/**/*.sol'` followed by `forge fmt --check`. Rule configuration is in

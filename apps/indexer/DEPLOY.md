@@ -79,11 +79,26 @@ variables are read in `src/api/security.ts`.
 | `INDEXER_RATE_LIMIT_MAX`         | `120`                        | Requests per client per window. `0` disables.               |
 | `INDEXER_RATE_LIMIT_WINDOW_MS`   | `60000`                      | Rate limit window. Must be > 0.                             |
 | `INDEXER_RATE_LIMIT_MAX_TRACKED` | `20000`                      | Client buckets held in memory. Must be > 0.                 |
+| `INDEXER_MAX_OFFSET`             | `10000`                      | Largest GraphQL `offset` accepted. `0` allows only `0`.     |
 
-Only `INDEXER_RATE_LIMIT_MAX` accepts `0` — that is the deliberate "disable" switch. A `0`
-window or a `0` client ceiling would silently disable the limiter instead (every request would
-land in a bucket that already expired), so those fall back to their defaults rather than
-letting a typo quietly turn the control off.
+Only `INDEXER_RATE_LIMIT_MAX` and `INDEXER_MAX_OFFSET` accept `0`. For the rate limit that is
+the deliberate "disable" switch; for the offset it is a lockdown that fails visibly on the
+first paginated request. A `0` window or a `0` client ceiling would silently disable the
+limiter instead (every request would land in a bucket that already expired), so those fall back
+to their defaults rather than letting a typo quietly turn the control off.
+
+### Query cost — `INDEXER_MAX_OFFSET`
+
+The rate limit meters how MANY requests a client makes, never how expensive one is. Ponder caps
+`limit` at 1000 but exposes `offset` with no ceiling, applied as a bare SQL `OFFSET`, and
+Postgres reaches an offset by producing and discarding every row before it. graphql-armor does
+not help: it inspects a document's shape, never its argument values, and its 30-alias ceiling
+means one permitted request can carry thirty of these.
+
+`limitQueryOffset` rejects an over-limit `offset` with `400` before it reaches a resolver,
+whether it arrives as a literal, as a variable, or as a variable's default value. Deep paging
+past the ceiling is what cursors are for — every plural query also accepts `after`/`before`,
+which seek instead of counting.
 
 **Set `INDEXER_ALLOWED_ORIGINS` on every deployment.** The default only covers local dev, so a
 deployed indexer with this unset will refuse CORS to your actual frontend:
@@ -104,20 +119,24 @@ overwriting whatever the client sent. That makes the one trusted hop inside pond
 of this repository rather than an assumption about the host's proxy behaviour — so
 `src/api/security.ts` no longer reads this variable at all.
 
-| Deployment                            | Set it to     | Why                                       |
-| ------------------------------------- | ------------- | ----------------------------------------- |
-| `docker run` / bare, nothing in front | `0` (default) | No proxy writes the header, so ignore it. |
-| **Railway** (terminates TLS in front) | **`1`**       | Trust the entry Railway's edge appended.  |
-| Cloudflare → Railway → gateway        | `2`           | Two appending proxies.                    |
+| Deployment                            | Set it to               | Why                                       |
+| ------------------------------------- | ----------------------- | ----------------------------------------- |
+| `docker run` / bare, nothing in front | `0` (default)           | No proxy writes the header, so ignore it. |
+| **Railway** (terminates TLS in front) | `1` (default there)     | Trust the entry Railway's edge appended.  |
+| Cloudflare → Railway → gateway        | `2` (must set manually) | Two appending proxies.                    |
 
 ```bash
-railway variables set INDEXER_TRUST_PROXY_HOPS=1
+# Only needed to OVERRIDE the defaults, e.g. with Cloudflare in front of Railway:
+railway variables set INDEXER_TRUST_PROXY_HOPS=2
 ```
 
 The default is `0` — trust nothing the client sent — because the two failure modes are not
 symmetric. Too low fails **visibly**: clients share a bucket and 429s appear. Too high fails
 **invisibly**: an attacker rotates `X-Forwarded-For` per request and the limiter silently does
-nothing. The gateway logs the effective value at startup.
+nothing. The one exception: when `RAILWAY_ENVIRONMENT` is present the gateway defaults to `1`,
+because Railway always terminates TLS one hop in front and `0` there guarantees the visible
+failure for every client. An explicit `INDEXER_TRUST_PROXY_HOPS` always wins. The gateway logs
+the effective value at startup.
 
 ### Ponder's own routes are handled by the gateway process (no edge rule needed)
 
@@ -158,14 +177,30 @@ The container's own healthcheck is exempt: a loopback socket that did **not** ar
 proxy. A remote client always has `X-Forwarded-For` appended by the edge, so it cannot claim the
 exemption by sending `X-Forwarded-For: 127.0.0.1`.
 
-| Variable                   | Default    | Purpose                                                                           |
-| -------------------------- | ---------- | --------------------------------------------------------------------------------- |
-| `PORT`                     | `42069`    | Public port the gateway binds.                                                    |
-| `INDEXER_UPSTREAM_PORT`    | `42070`    | Loopback port ponder binds. Must differ from `PORT`.                              |
-| `INDEXER_BLOCKED_PATHS`    | `/metrics` | Comma-separated. Explicitly empty (`""`) disables blocking.                       |
-| `INDEXER_METRICS_TOKEN`    | unset      | If set, `Authorization: Bearer <token>` reaches `/metrics` — and only `/metrics`. |
-| `INDEXER_TRUST_PROXY_HOPS` | `0`        | Proxies in front of the gateway. Set to `1` on Railway (see above).               |
-| `PONDER_SCHEMA`            | `swr_prod` | Passed through as `ponder start --schema`.                                        |
+| Variable                   | Default              | Purpose                                                                           |
+| -------------------------- | -------------------- | --------------------------------------------------------------------------------- |
+| `PORT`                     | `42069`              | Public port the gateway binds.                                                    |
+| `INDEXER_UPSTREAM_PORT`    | `42070`              | Loopback port ponder binds. Must differ from `PORT`.                              |
+| `INDEXER_BLOCKED_PATHS`    | `/metrics`           | Comma-separated. Explicitly empty (`""`) disables blocking.                       |
+| `INDEXER_METRICS_TOKEN`    | unset                | If set, `Authorization: Bearer <token>` reaches `/metrics` — and only `/metrics`. |
+| `INDEXER_TRUST_PROXY_HOPS` | `0` (`1` on Railway) | Proxies in front of the gateway (see above).                                      |
+| `INDEXER_MAX_BODY_BYTES`   | `1048576` (1 MiB)    | Request body ceiling. Over-size requests get 413 (see below).                     |
+| `PONDER_SCHEMA`            | `swr_prod`           | Passed through as `ponder start --schema`.                                        |
+
+### Request body ceiling — `INDEXER_MAX_BODY_BYTES`
+
+Nothing else on the path bounds body size: the application mounts no `bodyLimit`, ponder's own
+chain has none, and graphql-armor's `maxOperationTokens` cannot help because yoga has to buffer
+the whole body before there is a document to count tokens in. `headersTimeout` and
+`requestTimeout` bound how _long_ a client may take, not how much it may send — 60 seconds on a
+fast link is hundreds of megabytes buffered in the indexer process, for one token against the
+rate limit.
+
+The gateway enforces the ceiling twice: a declared `Content-Length` over the limit is refused
+before an upstream socket is opened, and a streaming counter catches a chunked request, which
+declares no length at all. Either way the client gets `413` and `Connection: close`. 1 MiB is
+far above any legitimate query — the largest document in `packages/search` is a few hundred
+bytes.
 
 The gateway also strips hop-by-hop headers, applies a 30s upstream timeout plus Slowloris
 ceilings on the public listener, and never echoes upstream error text (it names the internal

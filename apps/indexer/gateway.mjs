@@ -89,6 +89,27 @@ export const DEFAULT_UPSTREAM_TIMEOUT_MS = 30_000;
 export const DEFAULT_HEADERS_TIMEOUT_MS = 20_000;
 export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 
+/**
+ * Ceiling on a request body, in bytes (round-3 review D4-2).
+ *
+ * NOTHING else on this path bounds it. `src/api/index.ts` mounts no `bodyLimit`, ponder's own
+ * chain has none, and graphql-armor's `maxOperationTokens` cannot help because yoga must
+ * BUFFER the whole body before it has a document to count tokens in. `headersTimeout` and
+ * `requestTimeout` bound how LONG a client may take, not how much it may send — 60 seconds on
+ * a fast link is hundreds of megabytes, buffered in the indexer process, for the cost of a
+ * single token against the 120/minute rate limit.
+ *
+ * 1 MiB is enormous for the traffic this API actually serves: the largest query in
+ * `packages/search` is a few hundred bytes, and armor caps an operation at 1000 tokens anyway,
+ * so no legitimate request comes close. Raise it with `INDEXER_MAX_BODY_BYTES` if some future
+ * client genuinely needs to.
+ *
+ * Enforced HERE rather than in hono middleware because this is the only layer that can reject
+ * before the bytes are proxied — and it covers ponder's own ungatable routes too, which no
+ * application middleware can see.
+ */
+export const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+
 /** Per-client budget for the ungatable ponder paths. Generous: these are cheap for a real monitor. */
 export const DEFAULT_LIMITED_PATH_MAX = 60;
 export const DEFAULT_LIMITED_PATH_WINDOW_MS = 60_000;
@@ -439,6 +460,47 @@ export function createRateLimiter(options) {
 }
 
 /**
+ * Parse a declared `Content-Length` for comparison against the body ceiling.
+ *
+ * Returns null when the header is absent or not a plain non-negative integer. Null means
+ * "cannot pre-judge", NOT "allow" — the streaming counter in `createGatewayServer` is what
+ * actually enforces the limit, and it does so whether or not this header was truthful. A
+ * chunked request has no `Content-Length` at all, and a lying one is the entire reason the
+ * declaration is never trusted as the only check.
+ *
+ * @param {string | string[] | undefined} raw
+ * @returns {number | null}
+ */
+export function parseContentLength(raw) {
+  // Node joins duplicate Content-Length headers with ', '; that is malformed framing, and it
+  // will not parse here, so such a request falls through to the streaming counter.
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+/**
+ * Answer an over-sized request.
+ *
+ * `Connection: close` because the request body is being abandoned mid-stream: whatever the
+ * client has still to send would otherwise be parsed as the start of the next request on a
+ * keep-alive socket, which is request smuggling by accident.
+ *
+ * @param {import('node:http').ServerResponse} res
+ * @param {number} maxBodyBytes
+ */
+function sendPayloadTooLarge(res, maxBodyBytes) {
+  if (res.headersSent || res.writableEnded) return;
+  res.writeHead(413, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    Connection: 'close',
+  });
+  res.end(`Request body exceeds ${maxBodyBytes} bytes.\n`);
+}
+
+/**
  * Build the public-facing HTTP server.
  *
  * Exposed separately from `main()` so tests can point it at a stub upstream instead of a real
@@ -454,6 +516,7 @@ export function createRateLimiter(options) {
  *   upstreamTimeoutMs?: number,
  *   limitedPathMax?: number,
  *   limitedPathWindowMs?: number,
+ *   maxBodyBytes?: number,
  *   now?: () => number,
  * }} options
  * @returns {import('node:http').Server}
@@ -465,6 +528,7 @@ export function createGatewayServer(options) {
   const metricsToken = options.metricsToken;
   const trustProxyHops = options.trustProxyHops ?? 0;
   const upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
+  const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
 
   const limiter = createRateLimiter({
     maxRequests: options.limitedPathMax ?? DEFAULT_LIMITED_PATH_MAX,
@@ -514,6 +578,18 @@ export function createGatewayServer(options) {
       }
     }
 
+    // Body ceiling, half one: reject a request that DECLARES too much before a byte of it is
+    // read, so an honest oversized upload costs nothing and never opens an upstream socket.
+    const declaredLength = parseContentLength(req.headers['content-length']);
+    if (declaredLength !== null && declaredLength > maxBodyBytes) {
+      sendPayloadTooLarge(res, maxBodyBytes);
+      return;
+    }
+
+    // Set when the streaming counter below has already answered 413, so the upstream teardown
+    // it performs is not mistaken for a genuine upstream failure and answered a second time.
+    let bodyRejected = false;
+
     const upstream = http.request(
       {
         host: upstreamHost,
@@ -535,6 +611,9 @@ export function createGatewayServer(options) {
     });
 
     upstream.on('error', (error) => {
+      // We tore this socket down ourselves after answering 413. Not a failure, and the reply
+      // has already been sent.
+      if (bodyRejected) return;
       // The message names the internal host and port ("connect ECONNREFUSED 127.0.0.1:42070"),
       // which is precisely what this process exists to keep off the public surface. Log it;
       // return a fixed string.
@@ -551,6 +630,36 @@ export function createGatewayServer(options) {
 
     // If the client hangs up mid-request, do not leave the upstream socket held open.
     res.on('close', () => upstream.destroy());
+
+    // Body ceiling, half two: count what actually arrives.
+    //
+    // The declared length above is a courtesy to honest clients; this is the enforcement. A
+    // chunked request declares nothing, and a client is free to send a `Content-Length` that
+    // undersells what it then writes, so the only number that can be trusted is the one
+    // measured off the socket. Registering 'data' alongside `pipe` is safe — both handlers
+    // receive every chunk, and node defers the first emission past this tick.
+    let receivedBytes = 0;
+    const countBody = (chunk) => {
+      receivedBytes += chunk.length;
+      if (receivedBytes <= maxBodyBytes) return;
+
+      bodyRejected = true;
+      // Kill the upstream leg first. It has been handed part of a request it must never be
+      // allowed to complete, and a half-sent body abandoned in flight is the framing
+      // ambiguity this proxy is careful to avoid everywhere else.
+      req.unpipe(upstream);
+      upstream.destroy();
+
+      // Stop accepting bytes without destroying the socket: `req` and `res` share it, and
+      // tearing it down here would truncate the 413 we are about to write. Unhooking and
+      // pausing lets TCP backpressure stop the sender instead, and `Connection: close` in the
+      // response tells node to drop the socket once the reply has actually flushed.
+      req.removeListener('data', countBody);
+      req.pause();
+      sendPayloadTooLarge(res, maxBodyBytes);
+    };
+    req.on('data', countBody);
+
     req.pipe(upstream);
   });
 
@@ -586,7 +695,16 @@ function main() {
   }
 
   const blockedPaths = parseBlockedPaths(process.env.INDEXER_BLOCKED_PATHS);
-  const trustProxyHops = readNonNegativeInt(process.env.INDEXER_TRUST_PROXY_HOPS, 0);
+  // Default to 0 (socket address identifies the client) EXCEPT on Railway, which always
+  // terminates TLS one proxy in front of this process: there, 0 would collapse every client
+  // into the proxy's single rate-limit bucket, so one noisy client 429s the whole read API.
+  // An explicit INDEXER_TRUST_PROXY_HOPS still wins in both directions.
+  const defaultTrustProxyHops = process.env.RAILWAY_ENVIRONMENT ? 1 : 0;
+  const trustProxyHops = readNonNegativeInt(
+    process.env.INDEXER_TRUST_PROXY_HOPS,
+    defaultTrustProxyHops
+  );
+  const maxBodyBytes = readPositiveInt(process.env.INDEXER_MAX_BODY_BYTES, DEFAULT_MAX_BODY_BYTES);
   const schema = process.env.PONDER_SCHEMA ?? 'swr_prod';
   const ponderBin = fileURLToPath(new URL('./node_modules/.bin/ponder', import.meta.url));
 
@@ -625,6 +743,7 @@ function main() {
     upstreamPort,
     blockedPaths,
     trustProxyHops,
+    maxBodyBytes,
     metricsToken: process.env.INDEXER_METRICS_TOKEN,
   });
 
@@ -632,6 +751,7 @@ function main() {
     console.log(
       `[gateway] listening on 0.0.0.0:${publicPort} -> 127.0.0.1:${upstreamPort}; ` +
         `blocked: ${blockedPaths.join(', ') || '(none)'}; ` +
+        `max body: ${maxBodyBytes} bytes; ` +
         `rate limited: ${DEFAULT_LIMITED_PATHS.join(', ')}; ` +
         `trusted proxies in front: ${trustProxyHops}`
     );
@@ -655,6 +775,22 @@ function readPort(raw, fallback) {
   if (raw === undefined || raw.trim() === '') return fallback;
   const parsed = Number(raw);
   return Number.isInteger(parsed) && parsed > 0 && parsed < 65536 ? parsed : fallback;
+}
+
+/**
+ * Read a strictly positive integer, falling back on anything else.
+ *
+ * Zero is rejected rather than treated as "unlimited": a body ceiling of 0 would reject every
+ * request, and a typo must not be able to turn the control off OR wedge the service.
+ *
+ * @param {string | undefined} raw
+ * @param {number} fallback
+ * @returns {number}
+ */
+function readPositiveInt(raw, fallback) {
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const parsed = Number(raw);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 /**

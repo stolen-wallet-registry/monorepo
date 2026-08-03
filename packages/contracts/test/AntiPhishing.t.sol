@@ -36,7 +36,8 @@ import { EIP712TestHelper } from "./helpers/EIP712TestHelper.sol";
 ///   SpokeRegistry.registerTransactionBatch    |     yes     |   yes    |  yes
 ///
 ///   - WalletRegistry.register .................... here, plus test/WalletRegistry.t.sol
-///     (TooOld, and the MAX_WINDOW_BLOCK_AGE boundary, live in test/SpokeRegistry.t.sol)
+///     (`test_register_revertsIfWindowBlockTooOld`); the spoke-side MAX_WINDOW_BLOCK_AGE
+///     boundary pair lives in test/SpokeRegistry.t.sol
 ///   - TransactionRegistry.registerTransactions ... test/TransactionRegistry.t.sol, including
 ///     `test_registerTransactions_acceptsWindowBlockAtMaxAge` (255 passes) and
 ///     `test_registerTransactions_revertsIfWindowBlockTooOld` (256 reverts).

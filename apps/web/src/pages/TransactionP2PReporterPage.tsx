@@ -82,6 +82,13 @@ import {
   sendResignAck,
   getPeerConnection,
   isStreamAbortError,
+  matchesPairedRelayer,
+  needsRehandshake,
+  sendRehandshakeConnect,
+  REHANDSHAKE_TX_STEPS,
+  REHANDSHAKE_TIMEOUT_MS,
+  REHANDSHAKE_FAILED_MESSAGE,
+  SIGN_BLOCKED_MESSAGE,
   type ProtocolHandler,
 } from '@/lib/p2p';
 import { computeTransactionDataHash } from '@/lib/signatures/transactions';
@@ -205,9 +212,8 @@ function TxP2PAckSign({ getLibp2p }: TxP2PAckSignProps) {
       logger.p2p.warn(
         'Refusing to sign: forwarder was not established by a handshake this session'
       );
-      setSendError(
-        'Your relayer connection was not verified in this session. Please reconnect to your relayer before signing.'
-      );
+      // See useP2PSignFlow: the old copy promised a reconnection that did not exist.
+      setSendError(SIGN_BLOCKED_MESSAGE);
       return;
     }
 
@@ -480,9 +486,8 @@ function TxP2PRegSign({ getLibp2p }: TxP2PRegSignProps) {
       logger.p2p.warn(
         'Refusing to sign: forwarder was not established by a handshake this session'
       );
-      setSendError(
-        'Your relayer connection was not verified in this session. Please reconnect to your relayer before signing.'
-      );
+      // See useP2PSignFlow: the old copy promised a reconnection that did not exist.
+      setSendError(SIGN_BLOCKED_MESSAGE);
       return;
     }
 
@@ -827,6 +832,61 @@ export function TransactionP2PReporterPage() {
     remotePeerId: partnerPeerId,
   });
 
+  /** The (step, partner) pair a re-handshake has already been attempted for. */
+  const rehandshakeAttemptRef = useRef<string | null>(null);
+
+  /**
+   * Re-establish the handshake after a mid-flow reload — the wallet flow's effect, verbatim in
+   * shape. See `P2PRegistereeRegistrationPage` and `lib/p2p/rehandshake.ts` for the reasoning.
+   */
+  useEffect(() => {
+    if (isInitializing || !address) return;
+    if (
+      !needsRehandshake({
+        step,
+        partnerPeerId,
+        provenanceOk: forwarderFromPeerSession,
+        rehandshakeSteps: REHANDSHAKE_TX_STEPS,
+      })
+    ) {
+      return;
+    }
+
+    const attemptKey = `${step}:${partnerPeerId}`;
+    if (rehandshakeAttemptRef.current === attemptKey) return;
+    rehandshakeAttemptRef.current = attemptKey;
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const reportFailure = () => {
+      if (cancelled) return;
+      if (useTransactionFormStore.getState().forwarderFromPeerSession) return;
+      logger.p2p.warn('Re-handshake did not complete; signing stays blocked', { step });
+      setProtocolError(REHANDSHAKE_FAILED_MESSAGE);
+    };
+
+    void (async () => {
+      logger.p2p.info('Re-establishing the handshake after a reload', { step, partnerPeerId });
+      const sent = await sendRehandshakeConnect({
+        getLibp2p,
+        partnerPeerId,
+        streamData: { form: { registeree: address }, success: true },
+      });
+      if (cancelled) return;
+      if (!sent) {
+        reportFailure();
+        return;
+      }
+      timeoutId = setTimeout(reportFailure, REHANDSHAKE_TIMEOUT_MS);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [isInitializing, address, step, partnerPeerId, forwarderFromPeerSession, getLibp2p]);
+
   // Fetch user transactions
   const {
     transactions,
@@ -955,22 +1015,50 @@ export function TransactionP2PReporterPage() {
               logger.p2p.info('TX Reporter received data', { protocol, data });
 
               switch (protocol) {
-                case PROTOCOLS.CONNECT:
-                  // Relayer responded with their address.
+                case PROTOCOLS.CONNECT: {
+                  // Mirrors the wallet flow exactly — see `P2PRegistereeRegistrationPage`.
+                  // At `wait-for-connection` the relayer dialed us and we answer. At a sign
+                  // step this is the answer to a re-handshake WE asked for after a reload
+                  // (`lib/p2p/rehandshake.ts`), so we must not answer it back, and the address
+                  // it carries has to agree with the forwarder already on file.
+                  const isPairing = isPreConnectionStep(currentStep);
+
                   // `isAddress` narrows the wire value rather than asserting it: this is the
                   // boundary where peer-supplied text becomes the `trustedForwarder` the
-                  // reporter signs over. `setForwarderFromPeer` also marks it as handshaked in
-                  // this session — signing refuses a forwarder that only came back from
-                  // localStorage (see TransactionFormState.forwarderFromPeerSession).
-                  if (data.form?.relayer && isAddress(data.form.relayer)) {
-                    useTransactionFormStore.getState().setForwarderFromPeer(data.form.relayer);
-                  } else {
+                  // reporter signs over.
+                  if (!data.form?.relayer || !isAddress(data.form.relayer)) {
                     logger.p2p.warn('Ignored CONNECT without a usable relayer address', {
                       relayer: data.form?.relayer,
                     });
                     break;
                   }
+
+                  const onFileForwarder = useTransactionFormStore.getState().forwarder;
+                  if (!matchesPairedRelayer(isPairing, data.form.relayer, onFileForwarder)) {
+                    logger.p2p.error('Refused a re-handshake naming a different forwarder', {
+                      claimed: data.form.relayer,
+                      onFile: onFileForwarder,
+                      step: currentStep,
+                    });
+                    setProtocolError(
+                      'Your relayer is now reporting a different wallet than the one this report started with. Do not sign anything — stop and check with them, or start over.'
+                    );
+                    break;
+                  }
+
+                  // `setForwarderFromPeer` marks it as handshaked in this session — signing
+                  // refuses a forwarder that only came back from localStorage (see
+                  // TransactionFormState.forwarderFromPeerSession).
+                  useTransactionFormStore.getState().setForwarderFromPeer(data.form.relayer);
                   setConnectedToPeer(true);
+
+                  if (!isPairing) {
+                    logger.p2p.info('Re-handshake complete; signing is unblocked again', {
+                      step: currentStep,
+                    });
+                    setProtocolError(null);
+                    break;
+                  }
 
                   // Answer, so the relayer learns its dial was accepted rather than refused in
                   // silence — it cannot tell the two apart from a resolved write. The reporter
@@ -986,6 +1074,7 @@ export function TransactionP2PReporterPage() {
                   });
                   // Step advancement handled by WaitForConnectionStep.onComplete
                   break;
+                }
 
                 case PROTOCOLS.TX_ACK_REC:
                   // A receipt is only meaningful as an acknowledgement of something WE sent.

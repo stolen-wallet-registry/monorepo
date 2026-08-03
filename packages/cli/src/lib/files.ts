@@ -83,7 +83,11 @@ async function readEntryFile<T>(filePath: string): Promise<T[]> {
       );
     }
   } else if (ext === 'csv') {
-    entries = parseCSV(content, { columns: true, skip_empty_lines: true });
+    // bom: Excel/Sheets exports lead with a UTF-8 BOM (U+FEFF). csv-parse defaults to
+    // `bom: false`, which leaves that character glued to the front of the first header — so
+    // the `address` column parses under a key that is not `address`, every row reports an
+    // undefined address, and the operator hunts a data bug that is not there.
+    entries = parseCSV(content, { columns: true, skip_empty_lines: true, bom: true });
   } else {
     throw new Error(`Unsupported file format: ${ext}`);
   }

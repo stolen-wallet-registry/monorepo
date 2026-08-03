@@ -72,6 +72,22 @@ describe('reported chain resolution', () => {
     expect(entry!.chainIdDefaulted).toBe(false);
   });
 
+  // Excel and Google Sheets prefix a UTF-8 BOM (U+FEFF) to their CSV exports, and csv-parse
+  // defaults to `bom: false` — which leaves it glued to the front of the first header, so the
+  // `address` column parses under a key that is not `address`. Every row then reports an
+  // undefined address and the run aborts on row 0 of a file whose row 0 is fine, sending the
+  // operator hunting a data bug that does not exist. This guards the one-word `bom: true`
+  // option that fixes it; deleting it fails here.
+  it('parses a CSV that starts with a UTF-8 BOM (spreadsheet export)', async () => {
+    // \uFEFF rather than a literal BOM: the character is invisible in an editor and trips
+    // eslint's no-irregular-whitespace, so writing it as an escape is both readable and lintable.
+    const file = await fixture('csv', `\uFEFFaddress,chainId\n${WALLET},42161\n`);
+    const [entry] = await parseWalletFile(file, 8453n);
+
+    expect(entry!.address).toBe(WALLET);
+    expect(entry!.reportedChain).toBe('eip155:42161');
+  });
+
   // CSV gives '' for a column that exists but is empty — the shape of a spreadsheet export
   // with a header row and no values. That is genuinely "absent", not an error.
   it('treats an empty CSV cell as absent', async () => {

@@ -292,3 +292,127 @@ function getSocketAddress(c: Context): string | undefined {
     ?.incoming;
   return incoming?.socket?.remoteAddress;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PAGINATION OFFSET CEILING
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Largest `offset` a query may ask for.
+ *
+ * Ponder caps `limit` at MAX_LIMIT = 1000 but exposes `offset: GraphQLInt` with NO ceiling
+ * (ponder/dist/esm/graphql/index.js), applied as a bare SQL `OFFSET`. Postgres reaches an
+ * offset by producing and discarding every row before it, so cost scales with the number the
+ * caller picked — and graphql-armor does not look at argument VALUES at all. Its aliases cap
+ * of 30 then multiplies whatever one query costs by thirty, inside a single request that
+ * spends one token against the 120/minute rate limit.
+ *
+ * 10,000 is ten full pages at ponder's own maximum page size, comfortably past anything the
+ * dashboard's `offset`-paginated queries in `packages/search` ask for, and small enough that
+ * the discard is bounded. Deep paging past it is what cursors are for: every plural query in
+ * the schema also accepts `after`/`before`, which seek instead of counting.
+ */
+export const DEFAULT_MAX_OFFSET = 10_000;
+
+export function readMaxOffset(env: NodeJS.ProcessEnv): number {
+  // Zero is allowed and means "offset 0 only" — a legitimate lockdown, not a typo hazard,
+  // because it fails visibly on the first paginated request rather than silently permitting.
+  return readInt(env.INDEXER_MAX_OFFSET, DEFAULT_MAX_OFFSET, { allowZero: true });
+}
+
+/** `offset: 12345` written straight into the document. */
+const INLINE_OFFSET = /\boffset\s*:\s*(\d+)/g;
+
+/** `offset: $someVar` — the value then comes from `variables` or the variable's default. */
+const VARIABLE_OFFSET = /\boffset\s*:\s*\$([_A-Za-z][_0-9A-Za-z]*)/g;
+
+/**
+ * The default in a variable definition: `query Q($skip: Int = 2000000000)`.
+ *
+ * Easy to forget, and it is the bypass that matters: without it an attacker never writes the
+ * number next to the word `offset` at all, and both checks above miss. `name` is captured by
+ * {@link VARIABLE_OFFSET}, whose character class is GraphQL's name grammar, so it cannot carry
+ * regex metacharacters into this pattern.
+ */
+function variableDefault(document: string, name: string): number | null {
+  const match = new RegExp(`\\$${name}\\s*:[^,)=]*=\\s*(\\d+)`).exec(document);
+  return match === null ? null : Number(match[1]);
+}
+
+/**
+ * The first offset in a GraphQL request body that exceeds `maxOffset`, or null.
+ *
+ * Textual rather than an AST walk, deliberately. Parsing the document here would mean adding
+ * `graphql` as a direct dependency and paying a second parse of every request — a cost an
+ * attacker controls — to answer a question three regexes answer. The failure direction is also
+ * the safe one: a construction none of these patterns recognise (a value the server only
+ * resolves at execution time) is simply not blocked, exactly as today, while every form a
+ * client can actually write is.
+ *
+ * Exported for tests.
+ */
+export function findExcessiveOffset(body: unknown, maxOffset: number): number | null {
+  if (body === null || typeof body !== 'object') return null;
+  const { query, variables } = body as { query?: unknown; variables?: unknown };
+
+  const supplied = new Map<string, number>();
+  if (variables !== null && typeof variables === 'object') {
+    for (const [key, value] of Object.entries(variables as Record<string, unknown>)) {
+      if (typeof value === 'number' && Number.isFinite(value)) supplied.set(key, value);
+    }
+  }
+
+  // A variable named `offset` is how every query in `packages/search` passes one, so it is
+  // worth checking even when the document is absent or unparseable.
+  const byConvention = supplied.get('offset');
+  if (byConvention !== undefined && byConvention > maxOffset) return byConvention;
+
+  if (typeof query !== 'string') return null;
+
+  for (const match of query.matchAll(INLINE_OFFSET)) {
+    const value = Number(match[1]);
+    if (value > maxOffset) return value;
+  }
+
+  for (const match of query.matchAll(VARIABLE_OFFSET)) {
+    const name = match[1]!;
+    const value = supplied.get(name) ?? variableDefault(query, name);
+    if (value !== null && value !== undefined && value > maxOffset) return value;
+  }
+
+  return null;
+}
+
+/**
+ * Reject a query whose `offset` exceeds the ceiling, before it reaches a resolver.
+ *
+ * Reads a CLONE of the request. `c.req.raw` is handed on to yoga untouched, which is the whole
+ * constraint here: consuming the original — via `c.req.json()` or otherwise — leaves the
+ * GraphQL middleware with a used stream and an empty document, so the control would "work"
+ * while breaking every request that passes it. There is a test pinning that the body still
+ * arrives downstream intact.
+ */
+export function limitQueryOffset(maxOffset: number): MiddlewareHandler {
+  return async (c: Context, next: Next) => {
+    if (c.req.method !== 'POST') return next();
+
+    let body: unknown;
+    try {
+      body = await c.req.raw.clone().json();
+    } catch {
+      // Not JSON, or unreadable. Hand it on: yoga owns the shape of a malformed-request error,
+      // and this middleware should not invent one for input it does not understand.
+      return next();
+    }
+
+    const offending = findExcessiveOffset(body, maxOffset);
+    if (offending === null) return next();
+
+    // Phrased like ponder's own limit error (graphql/index.js: "Invalid limit. Got X,
+    // expected <=1000.") so a client hitting either gets one consistent explanation.
+    c.res = Response.json(
+      { errors: [{ message: `Invalid offset. Got ${offending}, expected <=${maxOffset}.` }] },
+      { status: 400 }
+    );
+  };
+}

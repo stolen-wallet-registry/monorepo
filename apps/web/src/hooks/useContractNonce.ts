@@ -63,9 +63,21 @@ export function useContractNonce(
   const isSpoke = registryType === 'spoke';
   const enabled = !!ownerAddress && !!contractAddress;
 
-  // Transaction registry needs faster polling for batch registration workflows
-  const refetchInterval = variant === 'transaction' ? 5_000 : undefined;
-  const staleTime = variant === 'transaction' ? undefined : 30_000;
+  // Both variants poll, at the same 5s interval.
+  //
+  // The wallet variant used to get `staleTime: 30_000` and NO interval, which meant it never
+  // refetched at all while mounted — a query with no interval and no invalidation only reruns
+  // on remount or refocus. `useRelayedSignatureReview` reads the nonce through this hook to
+  // decide whether a relayed signature is still current, so a relayer sitting on a pay step
+  // could pass that check against a value the chain had already moved past, and spend gas on a
+  // signature the contract then rejects. The contract still catches it — this is defence in
+  // depth — but finding out before paying is the entire point of that review.
+  //
+  // The asymmetry was not a considered trade-off: the transaction variant polls for exactly
+  // the same reason ("batch registration workflows"), and both flows read the nonce at the
+  // same moments. `staleTime` is dropped with it, since a 30s staleness floor under a 5s
+  // interval would just discard four polls in five.
+  const refetchInterval = 5_000;
 
   // Split-call: one hook per ABI, only one fires based on registryType
   // For hub, choose wallet or transaction ABI based on variant
@@ -79,7 +91,6 @@ export function useContractNonce(
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
       enabled: !isSpoke && enabled,
-      staleTime,
       refetchInterval,
     },
   });
@@ -100,7 +111,6 @@ export function useContractNonce(
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
       enabled: isSpoke && enabled,
-      staleTime,
       refetchInterval,
     },
   });

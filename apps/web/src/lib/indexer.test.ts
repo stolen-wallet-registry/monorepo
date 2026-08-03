@@ -19,7 +19,7 @@ import {
  * link on a fraud record. Each case below is a value that the old cast accepted silently.
  */
 describe('indexer boundary parsing', () => {
-  const VALID_ADDRESS = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1';
+  const VALID_ADDRESS = '0x742d35cC6634c0532925A3b844bc9E7595F0beB1';
   const VALID_HASH = `0x${'ab'.repeat(32)}`;
 
   describe('parseIndexerAddress', () => {

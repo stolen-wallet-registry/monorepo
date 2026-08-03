@@ -33,6 +33,15 @@ contract MockWalletRegistry {
     }
 }
 
+/// @notice A recipient that rejects every incoming ETH transfer.
+/// @dev Used to drive `sweep`'s failure branch. A plain EOA cannot: it always accepts ETH, so the
+///      low-level call succeeds and `SoulboundReceiver__SweepFailed` stays unreachable.
+contract RejectsEth {
+    receive() external payable {
+        revert("RejectsEth: no");
+    }
+}
+
 contract SoulboundReceiverTest is Test {
     SoulboundReceiver receiver;
     WalletSoulbound walletSoulbound;
@@ -151,39 +160,53 @@ contract SoulboundReceiverTest is Test {
         receiver.handle(SPOKE_DOMAIN, bytes32(uint256(uint160(spokeForwarder))), payload);
     }
 
-    /// @notice NotRegistered reverts while a registration is still in flight — the retry is the fix.
-    /// @dev A pending acknowledgement means the wallet is mid-two-phase, so Hyperlane's
-    ///      re-delivery will succeed once phase 2 lands. Consuming here would silently drop a
-    ///      mint that was always going to become valid.
-    function test_HandleWalletMint_RevertsIfRegistrationStillPending() public {
-        mockRegistry.setPending(registeredWallet, true);
+    /// @notice NotRegistered reverts so Hyperlane re-delivers — and does NOT consult pending state.
+    /// @dev This is the realistic hub state for a spoke-origin mint: `isWalletPending` is false,
+    ///      because a spoke registration acknowledges into `SpokeRegistry._pendingAcknowledgements`
+    ///      on the SPOKE and reaches the hub via `WalletRegistry.registerFromHub`, which never
+    ///      creates a hub-side pending row. The explicit `assertFalse` below is the point of the
+    ///      test: the revert must hold with pending FALSE, which is what the old pending-gated
+    ///      implementation got wrong (it consumed here).
+    function test_HandleWalletMint_RevertsWhenNotRegistered() public {
+        assertFalse(mockRegistry.isWalletRegistered(registeredWallet), "Precondition: not registered");
+        assertFalse(mockRegistry.isWalletPending(registeredWallet), "Precondition: no hub-side pending row");
+
         bytes memory payload = abi.encode(uint8(1), registeredWallet, address(0), uint256(0));
 
         vm.expectRevert(ISoulboundReceiver.SoulboundReceiver__WalletMintFailed.selector);
         mailbox.simulateReceive(address(receiver), SPOKE_DOMAIN, bytes32(uint256(uint160(spokeForwarder))), payload);
     }
 
-    /// @notice NotRegistered with NO pending acknowledgement is consumed, not retried forever.
-    /// @dev The wallet is neither registered nor mid-flow: the acknowledgement expired, or the
-    ///      mint was requested for a wallet that never started. Reverting would make Hyperlane
-    ///      re-deliver the identical body forever, never mark it delivered, and burn the bridge
-    ///      fee on a message that can never succeed. `MintFailed` records it; the permissionless
-    ///      hub-side `mintTo` remains the recovery path if the wallet registers later.
-    function test_HandleWalletMint_ConsumesWhenNeitherRegisteredNorPending() public {
-        assertFalse(mockRegistry.isWalletRegistered(registeredWallet), "Precondition: not registered");
-        assertFalse(mockRegistry.isWalletPending(registeredWallet), "Precondition: no acknowledgement in flight");
+    /// @notice A mint message delivered BEFORE its registration message is retried, not dropped.
+    /// @dev The whole reason the pending gate was removed. Hyperlane does not order independent
+    ///      messages, so `requestWalletMint` on the spoke can land on the hub ahead of the
+    ///      registration it depends on. Both arrive from the same spoke; neither carries proof of
+    ///      the other.
+    ///
+    ///      Under the old pending-gated code this delivery was CONSUMED: hub `isWalletPending` is
+    ///      false for every spoke registrant, so the "still in flight" branch was unreachable. The
+    ///      user's bridge fee bought nothing and the token was never minted unless a human noticed
+    ///      the `MintFailed` log and sent a second hub-side transaction. Now the delivery reverts,
+    ///      stays undelivered, and the re-delivery mints once the registration lands — no human in
+    ///      the loop.
+    function test_HandleWalletMint_MintBeforeRegistrationIsRetriedNotDropped() public {
+        // 1. The mint request wins the race. Hub has no record of this wallet at all.
+        assertFalse(mockRegistry.isWalletRegistered(registeredWallet));
+        assertFalse(mockRegistry.isWalletPending(registeredWallet));
 
-        bytes memory payload = abi.encode(uint8(1), registeredWallet, address(0), uint256(0));
+        vm.expectRevert(ISoulboundReceiver.SoulboundReceiver__WalletMintFailed.selector);
+        _deliverWallet(registeredWallet);
 
-        // No expectRevert: delivery must succeed so the message stops being retried.
-        mailbox.simulateReceive(address(receiver), SPOKE_DOMAIN, bytes32(uint256(uint160(spokeForwarder))), payload);
+        assertEq(walletSoulbound.balanceOf(registeredWallet), 0, "nothing minted yet");
+        assertFalse(walletSoulbound.hasMinted(registeredWallet), "the mint slot must not be burnt");
 
-        assertEq(walletSoulbound.balanceOf(registeredWallet), 0, "nothing was minted");
-
-        // And the manual recovery still works once the wallet actually registers.
+        // 2. The registration message lands (registerFromHub writes the entry directly).
         mockRegistry.setRegistered(registeredWallet, true);
-        walletSoulbound.mintTo(registeredWallet);
-        assertEq(walletSoulbound.balanceOf(registeredWallet), 1, "direct mint recovers the consumed request");
+
+        // 3. Hyperlane re-delivers the identical body and it now succeeds, with no manual step.
+        _deliverWallet(registeredWallet);
+        assertEq(walletSoulbound.balanceOf(registeredWallet), 1, "the retry minted the token");
+        assertTrue(walletSoulbound.hasMinted(registeredWallet));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -318,6 +341,32 @@ contract SoulboundReceiverTest is Test {
         assertEq(address(receiver).balance, 1 ether, "balance must be untouched");
     }
 
+    /// @notice A recipient that cannot receive ETH reverts the sweep instead of losing the balance.
+    /// @dev Pins `SoulboundReceiver__SweepFailed`, the branch that makes `sweep`'s low-level call
+    ///      safe. Without the success check the call's failure would be swallowed: `Swept` would
+    ///      be emitted for a transfer that never happened, and the owner would believe the funds
+    ///      were recovered while they sat in the contract. This is the reachable case after the
+    ///      DAO handover, when the owner names a multisig or Governor whose fallback is
+    ///      non-payable or gas-limited — the exact scenario `sweep(address to)` takes an explicit
+    ///      recipient for.
+    function test_Sweep_RevertsWhenRecipientRejectsEth() public {
+        address recipient = address(new RejectsEth());
+        vm.deal(address(receiver), 1 ether);
+
+        vm.prank(owner);
+        vm.expectRevert(ISoulboundReceiver.SoulboundReceiver__SweepFailed.selector);
+        receiver.sweep(recipient);
+
+        assertEq(address(receiver).balance, 1 ether, "a failed sweep must leave the balance intact");
+        assertEq(recipient.balance, 0, "the rejecting recipient received nothing");
+
+        // The balance is not stranded: naming a recipient that CAN receive still works.
+        address payable good = payable(makeAddr("goodRecipient"));
+        vm.prank(owner);
+        receiver.sweep(good);
+        assertEq(good.balance, 1 ether, "a second sweep to a valid recipient recovers the balance");
+    }
+
     /// @notice Non-owner cannot sweep
     function test_Sweep_OnlyOwner() public {
         address attacker = makeAddr("attacker");
@@ -397,26 +446,37 @@ contract SoulboundReceiverTest is Test {
         assertEq(walletSoulbound.totalSupply(), 1);
     }
 
-    /// @notice NotRegistered still reverts while in flight, because there the retry IS the fix.
-    /// @dev A mint request that races ahead of the wallet's registration message is transient:
-    ///      Hyperlane's re-delivery resolves it once registration lands. Consuming it would
-    ///      silently drop a mint that was always going to become valid.
+    /// @notice NotRegistered reverts identically whether or not a hub-side pending row exists.
+    /// @dev Regression guard for "do not reintroduce a hub-side pending check". The outcome must
+    ///      be a function of the revert CAUSE alone, never of `isWalletPending`, because that
+    ///      value is structurally false for every wallet that can reach this handler (spoke
+    ///      registrations never create a hub-side pending row) — so any implementation that
+    ///      consults it silently drops legitimate out-of-order mints.
     ///
-    ///      "In flight" is now the explicit test: the wallet holds a live acknowledgement, so it
-    ///      is mid-two-phase. Without a pending acknowledgement the same revert would be a
-    ///      message Hyperlane re-delivers forever — see
-    ///      test_HandleWalletMint_ConsumesWhenNeitherRegisteredNorPending.
-    function test_V9_WalletMint_NotRegisteredStillRevertsThenSucceedsOnRetry() public {
-        mockRegistry.setPending(registeredWallet, true);
+    ///      Driving BOTH flag values through the same assertion is what makes this a guard rather
+    ///      than a restatement: an implementation gated on the flag passes one leg and fails the
+    ///      other. The pending=false leg is the one the old code failed.
+    function test_V9_WalletMint_NotRegisteredRevertsRegardlessOfPendingFlag() public {
+        address pendingWallet = makeAddr("pendingWallet");
+        address notPendingWallet = makeAddr("notPendingWallet");
+        mockRegistry.setPending(pendingWallet, true);
+        assertFalse(mockRegistry.isWalletPending(notPendingWallet));
 
         vm.expectRevert(ISoulboundReceiver.SoulboundReceiver__WalletMintFailed.selector);
-        _deliverWallet(registeredWallet);
+        _deliverWallet(pendingWallet);
 
-        // Registration lands, the retry now succeeds — the message was never consumed.
-        mockRegistry.setPending(registeredWallet, false);
-        mockRegistry.setRegistered(registeredWallet, true);
-        _deliverWallet(registeredWallet);
-        assertTrue(walletSoulbound.hasMinted(registeredWallet));
+        vm.expectRevert(ISoulboundReceiver.SoulboundReceiver__WalletMintFailed.selector);
+        _deliverWallet(notPendingWallet);
+
+        // Registration lands for both; the retry succeeds — neither message was ever consumed.
+        mockRegistry.setPending(pendingWallet, false);
+        mockRegistry.setRegistered(pendingWallet, true);
+        mockRegistry.setRegistered(notPendingWallet, true);
+
+        _deliverWallet(pendingWallet);
+        _deliverWallet(notPendingWallet);
+        assertTrue(walletSoulbound.hasMinted(pendingWallet));
+        assertTrue(walletSoulbound.hasMinted(notPendingWallet));
     }
 
     /// @notice The hub-side permissionless mint remains the manual recovery for consumed messages.
@@ -424,12 +484,12 @@ contract SoulboundReceiverTest is Test {
     ///      is open to anyone, so the wallet (or a helper) can always mint directly.
     ///
     ///      The recovery must be exercised against a message that was ACTUALLY consumed, so this
-    ///      drives the full griefing sequence: the mint request arrives before the wallet is
-    ///      registered on the hub (`NotRegistered` — the one PERMANENT-looking cause that is in
-    ///      fact terminal for this delivery once the spoke stops retrying), the message is
-    ///      re-delivered after registration lands and is then consumed by the `AlreadyMinted`
-    ///      branch because an attacker front-ran it with a direct mint. Only then is the direct
-    ///      mint shown to be the way out.
+    ///      drives the full griefing sequence: the wallet is registered on the hub, an attacker
+    ///      front-runs the bridged request with a direct permissionless mint, and the delivery is
+    ///      then consumed by the `AlreadyMinted` branch. `AlreadyMinted` is the only terminal
+    ///      cause reachable here — `mintTo` checks registration BEFORE `hasMinted`, so a
+    ///      front-run against a registered wallet can never surface as `NotRegistered` (which is
+    ///      retried, not consumed). Only then is the direct mint shown to be the way out.
     function test_V9_ConsumedMessageStillRecoverableViaDirectMint() public {
         address victim = makeAddr("victimWallet");
         mockRegistry.setRegistered(victim, true);

@@ -28,15 +28,42 @@
  * unchanged (unknown protocol → false, unknown/absent step → false). An empty or non-array
  * entry is also false, so a malformed table cannot open the gate either.
  *
- * The two RELAYER tables are deliberately NOT widened. They keep the single-step shape,
- * because nothing the relayer receives is legitimate at more than one step and a set there
- * would be latitude bought for no reason.
+ * The two RELAYER tables are deliberately NOT widened. They keep the single-step shape, and
+ * the two protocols that genuinely need a set — `RESIGN_ACK` and `CONNECT` — each get their
+ * own named constant checked ahead of the table lookup. Widening the value type instead would
+ * hand every other entry latitude none of them needs, for the convenience of two that do.
  */
 
 import { PROTOCOLS } from '@swr/p2p';
 import { RESIGN_ACK } from './resignAck';
+import { REHANDSHAKE_WALLET_STEPS, REHANDSHAKE_TX_STEPS } from './rehandshake';
 import type { RegistrationStep } from '@/stores/registrationStore';
 import type { TransactionRegistrationStep } from '@/stores/transactionRegistrationStore';
+
+/**
+ * The steps at which a CONNECT may act, on either side of either flow.
+ *
+ * `wait-for-connection` is the original pairing. The rest are the sign steps, added so a side
+ * that reloaded mid-flow can re-run the handshake in place instead of dead-ending — see
+ * `rehandshake.ts` for why that does not weaken the provenance gate, and for why the set stops
+ * at the sign steps rather than covering the whole flow.
+ *
+ * Widening this costs no ordering property, which is the reason it is safe where widening any
+ * other protocol would not be: CONNECT is the one message whose handler advances nothing. Both
+ * victim pages leave the advance to `WaitForConnectionStep` (rendered only at
+ * `wait-for-connection`), and both relayer pages say so explicitly. Every other protocol in
+ * these tables either calls `goToNextStep` or hands a signature to a step that will.
+ */
+const CONNECT_STEPS: readonly RegistrationStep[] = [
+  'wait-for-connection',
+  ...REHANDSHAKE_WALLET_STEPS,
+];
+
+/** The transaction flow's {@link CONNECT_STEPS}. */
+const TX_CONNECT_STEPS: readonly TransactionRegistrationStep[] = [
+  'wait-for-connection',
+  ...REHANDSHAKE_TX_STEPS,
+];
 
 /**
  * The steps at which the relayer may accept the answer to a re-sign request.
@@ -69,16 +96,21 @@ export const TX_RESIGN_ACK_RELAYER_STEPS: readonly TransactionRegistrationStep[]
  * the flow out of them — the grace period ends on the local timer, and `success` is
  * terminal.
  *
- * `RESIGN_REQ` is the only entry with more than one step, and the only message that moves
- * the flow BACKWARDS. Both payment steps are listed because that is where the registeree
- * waits while the relayer is spending gas, which is the only window in which the relayer can
- * discover the signature is dead. It is absent from every other step for the usual reason:
- * at `acknowledge-and-sign`/`register-and-sign` there is nothing to recover (the victim is
- * already being asked to sign), and admitting it at `grace-period` would hand a peer the
- * ability to pull a victim out of the anti-phishing delay.
+ * Two entries hold more than one step, for unrelated reasons.
+ *
+ * `RESIGN_REQ` is the only message that moves the flow BACKWARDS. Both payment steps are
+ * listed because that is where the registeree waits while the relayer is spending gas, which
+ * is the only window in which the relayer can discover the signature is dead. It is absent
+ * from every other step for the usual reason: at `acknowledge-and-sign`/`register-and-sign`
+ * there is nothing to recover (the victim is already being asked to sign), and admitting it at
+ * `grace-period` would hand a peer the ability to pull a victim out of the anti-phishing delay.
+ *
+ * `CONNECT` is the message that moves the flow NOWHERE — see {@link CONNECT_STEPS}. Its extra
+ * steps buy a re-handshake after a reload, not latitude: the handler sets provenance and
+ * replies, and cannot touch the step machine on either side.
  */
 export const PROTOCOL_EXPECTED_STEP: Readonly<Record<string, readonly RegistrationStep[]>> = {
-  [PROTOCOLS.CONNECT]: ['wait-for-connection'],
+  [PROTOCOLS.CONNECT]: CONNECT_STEPS,
   [PROTOCOLS.ACK_REC]: ['acknowledge-and-sign'],
   [PROTOCOLS.ACK_PAY]: ['acknowledgement-payment'],
   [PROTOCOLS.REG_REC]: ['register-and-sign'],
@@ -131,19 +163,44 @@ export function isProtocolExpectedAtStep(protocol: string, step: RegistrationSte
  * check at all, and a bound partner could walk it forward one step per repeated CONNECT — the
  * same defect this module exists to close, on the side that spends the gas.
  *
- * A CONNECT is only ever legitimate at `wait-for-connection`. Reconnection does not re-send
- * one (`ReconnectDialog` re-dials without a handshake), so gating it here does not break resume.
- *
  * Single step per protocol, unlike the receiver-side tables above. `RESIGN_REQ` is absent on
  * purpose: the relayer sends re-sign requests, it never receives them, and the page registers
  * no handler for one. Listing it would only give a registeree a way to walk the relayer
  * backwards through the flow that spends the gas.
+ *
+ * CONNECT is absent from this table for the same shape reason `RESIGN_ACK` is: it needs a set,
+ * and it gets its own rather than widening the value type for every entry. It is the relayer
+ * that ANSWERS a re-handshake — the victim reloaded, so the victim dials — which is why the
+ * relayer has to admit one at the sign steps too. See {@link CONNECT_RELAYER_STEPS}.
  */
 export const RELAYER_PROTOCOL_EXPECTED_STEP: Readonly<Record<string, RegistrationStep>> = {
-  [PROTOCOLS.CONNECT]: 'wait-for-connection',
   [PROTOCOLS.ACK_SIG]: 'acknowledge-and-sign',
   [PROTOCOLS.REG_SIG]: 'register-and-sign',
 };
+
+/**
+ * The steps at which the relayer accepts a CONNECT.
+ *
+ * `wait-for-connection` is its own dial being answered. The sign steps are the victim asking
+ * to re-handshake after a reload; the relayer sits at the matching sign step throughout,
+ * because the two sides advance in lockstep across the sign phase (the relayer leaves
+ * `acknowledge-and-sign` only when it receives ACK_SIG, which is what the victim sends
+ * immediately after signing).
+ *
+ * Admitting CONNECT here cannot walk the relayer forward — the defect this module was written
+ * for. `WaitForConnectionStep` owns that advance and is rendered only at `wait-for-connection`;
+ * the relayer's CONNECT handler advances nothing on its own.
+ */
+export const CONNECT_RELAYER_STEPS: readonly RegistrationStep[] = [
+  'wait-for-connection',
+  ...REHANDSHAKE_WALLET_STEPS,
+];
+
+/** The transaction flow's {@link CONNECT_RELAYER_STEPS}. */
+export const TX_CONNECT_RELAYER_STEPS: readonly TransactionRegistrationStep[] = [
+  'wait-for-connection',
+  ...REHANDSHAKE_TX_STEPS,
+];
 
 /**
  * Whether a wallet-flow message on `protocol` may act while the relayer sits at `step`.
@@ -156,6 +213,7 @@ export function isRelayerProtocolExpectedAtStep(
 ): boolean {
   if (!step) return false;
   if (protocol === RESIGN_ACK) return RESIGN_ACK_RELAYER_STEPS.includes(step);
+  if (protocol === PROTOCOLS.CONNECT) return CONNECT_RELAYER_STEPS.includes(step);
   const expected = RELAYER_PROTOCOL_EXPECTED_STEP[protocol];
   if (!expected) return false;
   return expected === step;
@@ -176,7 +234,7 @@ export function isRelayerProtocolExpectedAtStep(
 export const TX_PROTOCOL_EXPECTED_STEP: Readonly<
   Record<string, readonly TransactionRegistrationStep[]>
 > = {
-  [PROTOCOLS.CONNECT]: ['wait-for-connection'],
+  [PROTOCOLS.CONNECT]: TX_CONNECT_STEPS,
   [PROTOCOLS.TX_ACK_REC]: ['acknowledge-sign'],
   [PROTOCOLS.TX_ACK_PAY]: ['acknowledgement-payment'],
   [PROTOCOLS.TX_REG_REC]: ['register-sign'],
@@ -203,11 +261,13 @@ export function isTxProtocolExpectedAtStep(
  * reporter chooses the batch locally, so the relayer has nothing to do at that step but wait,
  * and the signature message is what carries the batch to it. `processTxSignature` advances one
  * step and the handler advances a second time to reach `acknowledgement-payment`.
+ *
+ * CONNECT lives in {@link TX_CONNECT_RELAYER_STEPS} rather than here — see
+ * {@link CONNECT_RELAYER_STEPS} for why it needs a set.
  */
 export const TX_RELAYER_PROTOCOL_EXPECTED_STEP: Readonly<
   Record<string, TransactionRegistrationStep>
 > = {
-  [PROTOCOLS.CONNECT]: 'wait-for-connection',
   [PROTOCOLS.TX_ACK_SIG]: 'select-transactions',
   [PROTOCOLS.TX_REG_SIG]: 'register-sign',
 };
@@ -223,6 +283,7 @@ export function isTxRelayerProtocolExpectedAtStep(
 ): boolean {
   if (!step) return false;
   if (protocol === RESIGN_ACK) return TX_RESIGN_ACK_RELAYER_STEPS.includes(step);
+  if (protocol === PROTOCOLS.CONNECT) return TX_CONNECT_RELAYER_STEPS.includes(step);
   const expected = TX_RELAYER_PROTOCOL_EXPECTED_STEP[protocol];
   if (!expected) return false;
   return expected === step;

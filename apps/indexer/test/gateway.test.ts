@@ -1,10 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import http from 'node:http';
 import net from 'node:net';
 import type { AddressInfo } from 'node:net';
 import {
   DEFAULT_BLOCKED_PATHS,
   DEFAULT_LIMITED_PATHS,
+  DEFAULT_MAX_BODY_BYTES,
+  parseContentLength,
   buildDownstreamHeaders,
   buildUpstreamHeaders,
   createGatewayServer,
@@ -739,3 +741,196 @@ describe('gateway rate limits the ungatable ponder paths', () => {
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// D4-2 — request body ceiling
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('parseContentLength', () => {
+  it('reads a plain non-negative integer', () => {
+    expect(parseContentLength('0')).toBe(0);
+    expect(parseContentLength('  1024 ')).toBe(1024);
+  });
+
+  // Null means "cannot pre-judge", never "allow" — the streaming counter still runs. Anything
+  // that is not an unambiguous length has to land here rather than parse to something.
+  it('returns null for anything it cannot read as one length', () => {
+    expect(parseContentLength(undefined)).toBeNull();
+    expect(parseContentLength('')).toBeNull();
+    expect(parseContentLength('12abc')).toBeNull();
+    expect(parseContentLength('-1')).toBeNull();
+    expect(parseContentLength('1.5')).toBeNull();
+    expect(parseContentLength('1e10')).toBeNull();
+    // Node joins duplicate Content-Length headers; that is broken framing, not a length.
+    expect(parseContentLength('10, 20')).toBeNull();
+    expect(parseContentLength(['10', '20'])).toBeNull();
+    expect(parseContentLength('99999999999999999999999')).toBeNull();
+  });
+
+  it('has a default ceiling far above any legitimate query', () => {
+    // The largest document in packages/search is a few hundred bytes, and armor caps an
+    // operation at 1000 tokens regardless.
+    expect(DEFAULT_MAX_BODY_BYTES).toBeGreaterThanOrEqual(64 * 1024);
+  });
+});
+
+/**
+ * The enforcement path, against a real socket.
+ *
+ * A unit test of `parseContentLength` proves nothing about the control: the declared length is
+ * only the cheap half, and the half that matters is the streaming counter, which a chunked
+ * request reaches without ever declaring anything. The stub upstream records how many body
+ * bytes actually arrived, so "rejected" means the indexer never saw them — not merely that the
+ * client got a 413.
+ */
+describe('gateway enforces a request body ceiling', () => {
+  const MAX_BODY = 1024;
+  let upstream: http.Server;
+  let gateway: http.Server;
+  let gatewayPort: number;
+  let bodyBytesReceived: number;
+  let upstreamRequests: number;
+
+  beforeAll(async () => {
+    upstream = http.createServer((req, res) => {
+      upstreamRequests += 1;
+      req.on('data', (chunk: Buffer) => {
+        bodyBytesReceived += chunk.length;
+      });
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('upstream:ok');
+      });
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+
+    gateway = createGatewayServer({
+      upstreamPort: (upstream.address() as AddressInfo).port,
+      limitedPaths: [],
+      maxBodyBytes: MAX_BODY,
+    });
+    await new Promise<void>((resolve) => gateway.listen(0, '127.0.0.1', resolve));
+    gatewayPort = (gateway.address() as AddressInfo).port;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => gateway.close(() => resolve()));
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+  });
+
+  beforeEach(() => {
+    bodyBytesReceived = 0;
+    upstreamRequests = 0;
+  });
+
+  const post = async (body: string) => {
+    const response = await fetch(`http://127.0.0.1:${gatewayPort}/graphql`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    });
+    return { status: response.status, body: await response.text() };
+  };
+
+  it('rejects a declared over-size body without opening an upstream socket', async () => {
+    const response = await post('x'.repeat(MAX_BODY + 1));
+
+    expect(response.status).toBe(413);
+    expect(response.body).toContain(String(MAX_BODY));
+    // The saving that matters: not one byte was proxied and no upstream connection was made.
+    expect(upstreamRequests).toBe(0);
+    expect(bodyBytesReceived).toBe(0);
+  });
+
+  it('passes a body at the ceiling through intact', async () => {
+    const response = await post('x'.repeat(MAX_BODY));
+
+    expect(response.status).toBe(200);
+    expect(upstreamRequests).toBe(1);
+    expect(bodyBytesReceived).toBe(MAX_BODY);
+  });
+
+  // The case the Content-Length check cannot see. A chunked request declares no length at all,
+  // so without the streaming counter this is unbounded — which is precisely the shape of the
+  // finding: 60 seconds of requestTimeout on a fast link is hundreds of megabytes buffered.
+  it('rejects a chunked body that has no declared length', async () => {
+    const response = await rawChunkedPost(gatewayPort, '/graphql', 256, 40);
+
+    expect(response.status).toBe(413);
+    // Cut off partway, not after the whole 10 KiB was accepted and forwarded.
+    expect(bodyBytesReceived).toBeLessThanOrEqual(MAX_BODY + 256);
+  });
+
+  // A body abandoned mid-stream must not be left for the next request on a keep-alive socket
+  // to parse as a request line.
+  it('closes the connection when it abandons a body', async () => {
+    const response = await rawChunkedPost(gatewayPort, '/graphql', 256, 40);
+
+    expect(response.head).toContain('connection: close');
+  });
+
+  it('still answers a chunked body under the ceiling', async () => {
+    const response = await rawChunkedPost(gatewayPort, '/graphql', 100, 2);
+
+    expect(response.status).toBe(200);
+    expect(bodyBytesReceived).toBe(200);
+  });
+
+  it('does not disturb a request with no body at all', async () => {
+    const response = await fetch(`http://127.0.0.1:${gatewayPort}/graphql`);
+
+    expect(response.status).toBe(200);
+    expect(upstreamRequests).toBe(1);
+  });
+});
+
+/**
+ * POST a chunked body one chunk at a time, tolerating the server hanging up mid-write —
+ * which is the expected outcome for the over-size cases and would otherwise surface as an
+ * unhandled EPIPE rather than as a test result.
+ */
+async function rawChunkedPost(
+  port: number,
+  target: string,
+  chunkBytes: number,
+  chunkCount: number
+): Promise<{ status: number; head: string }> {
+  const socket = net.connect(port, '127.0.0.1');
+  // The peer closing on us is the success path here, not a failure to report.
+  socket.on('error', () => {});
+
+  await new Promise<void>((resolve, reject) => {
+    socket.once('connect', () => resolve());
+    socket.once('error', reject);
+  });
+
+  const collected: Buffer[] = [];
+  socket.on('data', (chunk: Buffer) => collected.push(chunk));
+  const closed = new Promise<void>((resolve) => socket.once('close', () => resolve()));
+
+  socket.write(
+    `POST ${target} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n` +
+      `Content-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n`
+  );
+
+  const payload = 'x'.repeat(chunkBytes);
+  const size = chunkBytes.toString(16);
+  for (let i = 0; i < chunkCount; i++) {
+    if (socket.writableEnded || socket.destroyed) break;
+    socket.write(`${size}\r\n${payload}\r\n`);
+    // Yield so the gateway can observe and react between chunks, which is what makes this an
+    // incremental send rather than one buffer node coalesces before anyone counts it.
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  if (!socket.writableEnded && !socket.destroyed) socket.write('0\r\n\r\n');
+
+  await Promise.race([closed, new Promise((resolve) => setTimeout(resolve, 2000))]);
+  socket.destroy();
+
+  const raw = Buffer.concat(collected).toString('utf8');
+  const headerEnd = raw.indexOf('\r\n\r\n');
+  return {
+    status: Number(/^HTTP\/1\.[01] (\d{3})/.exec(raw)?.[1] ?? 0),
+    head: (headerEnd === -1 ? raw : raw.slice(0, headerEnd)).toLowerCase(),
+  };
+}

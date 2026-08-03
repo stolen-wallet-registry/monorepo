@@ -13,12 +13,14 @@ export declare const DEFAULT_UPSTREAM_PORT: number;
 export declare const DEFAULT_UPSTREAM_TIMEOUT_MS: number;
 export declare const DEFAULT_HEADERS_TIMEOUT_MS: number;
 export declare const DEFAULT_REQUEST_TIMEOUT_MS: number;
+export declare const DEFAULT_MAX_BODY_BYTES: number;
 export declare const DEFAULT_LIMITED_PATH_MAX: number;
 export declare const DEFAULT_LIMITED_PATH_WINDOW_MS: number;
 export declare const DEFAULT_MAX_TRACKED_CLIENTS: number;
 
 export declare function parseBlockedPaths(raw: string | undefined): string[];
 export declare function normalisePath(url: string | undefined): string;
+export declare function parseContentLength(raw: string | string[] | undefined): number | null;
 export declare function resolveUpstreamTarget(url: string | undefined): string;
 export declare function isBlockedPath(
   url: string | undefined,
@@ -58,5 +60,6 @@ export declare function createGatewayServer(options: {
   upstreamTimeoutMs?: number;
   limitedPathMax?: number;
   limitedPathWindowMs?: number;
+  maxBodyBytes?: number;
   now?: () => number;
 }): Server;

@@ -59,6 +59,12 @@ import {
   isStreamAbortError,
   passStreamData,
   sendResignAck,
+  matchesPairedRelayer,
+  needsRehandshake,
+  sendRehandshakeConnect,
+  REHANDSHAKE_WALLET_STEPS,
+  REHANDSHAKE_TIMEOUT_MS,
+  REHANDSHAKE_FAILED_MESSAGE,
   type ProtocolHandler,
 } from '@/lib/p2p';
 import {
@@ -252,6 +258,81 @@ export function P2PRegistereeRegistrationPage() {
   });
 
   /**
+   * The (step, partner) pair a re-handshake has already been attempted for.
+   *
+   * One attempt per arrival at a sign step, not one per render: the effect below re-runs on
+   * every dependency change, and dialing a peer repeatedly is neither free nor quiet. A ref
+   * rather than state because nothing renders from it.
+   */
+  const rehandshakeAttemptRef = useRef<string | null>(null);
+
+  /**
+   * Re-establish the handshake after a mid-flow reload, so signing is not a dead end.
+   *
+   * `relayerFromPeerSession` is session-only by design and `step` is persisted, so a reload
+   * lands here at a sign step with the gate shut and — before this — no code path anywhere in
+   * the app that could re-open it. See `lib/p2p/rehandshake.ts`.
+   *
+   * Automatic rather than a button: the user did nothing wrong by reloading, and the condition
+   * is not something they could be expected to understand. It stays fail-closed either way —
+   * the flag flips only when the partner's answering CONNECT arrives, and the handler that
+   * receives it checks the address against the one already on file.
+   */
+  useEffect(() => {
+    if (isInitializing || !address) return;
+    if (
+      !needsRehandshake({
+        step,
+        partnerPeerId,
+        provenanceOk: relayerFromPeerSession,
+        rehandshakeSteps: REHANDSHAKE_WALLET_STEPS,
+      })
+    ) {
+      return;
+    }
+
+    const attemptKey = `${step}:${partnerPeerId}`;
+    if (rehandshakeAttemptRef.current === attemptKey) return;
+    rehandshakeAttemptRef.current = attemptKey;
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const reportFailure = () => {
+      if (cancelled) return;
+      // Re-read rather than close over: the answer may have landed between the write and here.
+      if (useFormStore.getState().relayerFromPeerSession) return;
+      logger.p2p.warn('Re-handshake did not complete; signing stays blocked', { step });
+      setProtocolError(REHANDSHAKE_FAILED_MESSAGE);
+    };
+
+    void (async () => {
+      logger.p2p.info('Re-establishing the handshake after a reload', { step, partnerPeerId });
+      const sent = await sendRehandshakeConnect({
+        getLibp2p,
+        partnerPeerId,
+        // Our own address, never a value from the wire. The relayer compares it against the
+        // wallet in the pairing code it holds; it must not adopt it.
+        streamData: { form: { registeree: address }, success: true },
+      });
+      if (cancelled) return;
+      if (!sent) {
+        reportFailure();
+        return;
+      }
+      // A resolved write is not an answer — the partner may be gone, or at a step that drops
+      // it. Only the flag flipping is success, so give it the same 30s every other
+      // wait-for-the-partner path in this app gives.
+      timeoutId = setTimeout(reportFailure, REHANDSHAKE_TIMEOUT_MS);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [isInitializing, address, step, partnerPeerId, relayerFromPeerSession, getLibp2p]);
+
+  /**
    * How many re-sign requests this flow has honoured.
    *
    * A ref, not state: nothing renders from it, and it must not be a dependency of the effect
@@ -337,26 +418,65 @@ export function P2PRegistereeRegistrationPage() {
               logger.p2p.info('Registeree received data', { protocol, data });
 
               switch (protocol) {
-                case PROTOCOLS.CONNECT:
-                  // The relayer dialed us after pasting our pairing code (audit V4 reversed
-                  // the direction: we publish, they dial). This is the handshake, not a reply.
-                  // Only update state here — step advancement is handled by
-                  // WaitForConnectionStep, gated on `relayerFromPeerSession` below.
+                case PROTOCOLS.CONNECT: {
+                  // Two arrivals share this case, distinguished by our own step.
+                  //
+                  //   At `wait-for-connection` the relayer dialed us after pasting our pairing
+                  //   code (audit V4 reversed the direction: we publish, they dial). We are the
+                  //   answering side, and we learn their address here.
+                  //
+                  //   At a sign step this is the ANSWER to a re-handshake we asked for after a
+                  //   reload (see `rehandshake.ts`). We are the initiating side, so we must not
+                  //   answer it — replying to an answer is an infinite CONNECT ping-pong — and
+                  //   we already have an address on file that theirs has to agree with.
+                  //
+                  // Neither advances the step machine; `WaitForConnectionStep` owns that.
+                  const isPairing = isPreConnectionStep(currentStep);
+
                   // `isAddress` narrows the wire value to `Address` and re-checks it. The Zod
                   // schema already enforces the shape, so this is belt-and-braces — but it is
                   // the boundary where peer-supplied text becomes an address the victim will
                   // sign over, so it validates here rather than asserting a type.
-                  if (data.form?.relayer && isAddress(data.form.relayer)) {
-                    // Marks the relayer as handshaked in this session. Signing refuses a
-                    // relayer that only came back from localStorage — see FormState.
-                    setRelayerFromPeer(data.form.relayer);
-                  } else {
+                  if (!data.form?.relayer || !isAddress(data.form.relayer)) {
                     logger.p2p.warn('CONNECT without a usable relayer address; ignoring', {
                       relayer: data.form?.relayer,
                     });
                     break;
                   }
+
+                  // Past the pairing step the relayer address is already on file and the
+                  // acknowledgement on chain names it. A partner reporting a DIFFERENT
+                  // forwarder mid-flow is refused rather than believed — adopting it would let
+                  // a re-handshake become a second, quieter way to change the address the
+                  // victim signs over, which is the whole thing the provenance flag protects.
+                  const onFileRelayer = useFormStore.getState().relayer;
+                  if (!matchesPairedRelayer(isPairing, data.form.relayer, onFileRelayer)) {
+                    logger.p2p.error('Refused a re-handshake naming a different relayer', {
+                      claimed: data.form.relayer,
+                      onFile: onFileRelayer,
+                      step: currentStep,
+                    });
+                    setProtocolError(
+                      'Your relayer is now reporting a different wallet than the one this registration started with. Do not sign anything — stop and check with them, or start over.'
+                    );
+                    break;
+                  }
+
+                  // Marks the relayer as handshaked in this session. Signing refuses a
+                  // relayer that only came back from localStorage — see FormState.
+                  setRelayerFromPeer(data.form.relayer);
                   setConnectedToPeer(true);
+
+                  if (!isPairing) {
+                    logger.p2p.info('Re-handshake complete; signing is unblocked again', {
+                      step: currentStep,
+                    });
+                    // Clear the "could not reconnect" notice this answer just disproved. A
+                    // slow answer that lands after the timeout would otherwise leave the user
+                    // reading an error about a connection that is now working.
+                    setProtocolError(null);
+                    break;
+                  }
 
                   // Answer, so the relayer learns its dial was accepted rather than refused
                   // in silence. It cannot tell the difference from a resolved write, and a
@@ -373,6 +493,7 @@ export function P2PRegistereeRegistrationPage() {
                     },
                   });
                   break;
+                }
 
                 case PROTOCOLS.ACK_REC:
                   // A receipt is only meaningful as an acknowledgement of something WE sent.

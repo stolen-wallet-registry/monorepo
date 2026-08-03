@@ -1,51 +1,56 @@
 name: CI
 
 # ╔══════════════════════════════════════════════════════════════════════════════════════╗
-# ║  READ THIS BEFORE TRUSTING A GREEN PR.                                               ║
+# ║  NOTHING RUNS UNLESS YOU ASK FOR IT.                                                 ║
 # ║                                                                                      ║
-# ║  Almost everything in this workflow is OPT-IN. On an ordinary pull request with no    ║
-# ║  `ci` label, the contracts / node / abi-drift jobs DO NOT RUN — they report           ║
-# ║  "skipped", and GitHub renders a skipped required check the same shade of green as a  ║
-# ║  passing one. A PR can be fully green and have had zero tests run against it.         ║
+# ║  Two ways to ask, both manual:                                                        ║
+# ║    1. Add the `ci` label to a PR (remove + re-add to re-run)                          ║
+# ║    2. Actions -> CI -> "Run workflow", and tick the jobs you want                     ║
 # ║                                                                                      ║
-# ║  To actually check a PR: add the `ci` label (remove + re-add to re-run).              ║
+# ║  Opening a PR runs nothing. Pushing to a PR runs nothing, even one already carrying   ║
+# ║  the label. A PR with no checks on it is the normal state — do not read the absence   ║
+# ║  of red as green, and do not make any of these a required status check.               ║
 # ║                                                                                      ║
-# ║  There are TWO exceptions that run on every PR: `supply-chain` (lockfile integrity +  ║
-# ║  audit, ungated because a lockfile edit is exactly what a malicious PR carries) and   ║
-# ║  `abi-freshness`, which runs on every PR WITHOUT the                                  ║
-# ║  `abi-unchanged` label, because it is seconds of pure git and needs no toolchain.     ║
-# ║  It only proves that packages/abis/src was touched alongside a Solidity change — NOT  ║
-# ║  that the committed ABIs are correct. Only the (label-gated) `abi-drift` job, which   ║
-# ║  actually regenerates them with Foundry, proves that.                                 ║
-# ║                                                                                      ║
-# ║  If these jobs are ever promoted to REQUIRED status checks, the label gate must go    ║
-# ║  first — otherwise "required" means "required to be skipped".                         ║
+# ║  Everything here also runs locally, for free:                                         ║
+# ║    pnpm check                 # lint + typecheck + test + format + syncpack + knip    ║
+# ║    cd packages/contracts && forge test                                                ║
 # ╚══════════════════════════════════════════════════════════════════════════════════════╝
 #
-# CI is OPT-IN to avoid burning Actions minutes on a pre-release, local-only project.
+# There is deliberately no `push` trigger and no `schedule`, and the `pull_request` trigger
+# below listens for `labeled` ONLY — not `opened`, not `synchronize`. Actions minutes cost money
+# and this project is pre-release and local-only; nothing here should ever spend them on its own.
 #
-# It runs only when you ask for it, in one of two ways:
-#   1. Add the `ci` label to a pull request (remove and re-add to re-run)
-#   2. Actions tab -> CI -> "Run workflow" (workflow_dispatch), any branch
-#
-# There is deliberately NO `push` trigger. A same-repo PR fires both `push` and
-# `pull_request`, so every job ran twice for the same commit — the duplicate
-# "(push)" and "(pull_request)" checks were pure waste.
-#
-# Everything here is runnable locally and costs nothing:
-#   pnpm check                    # lint + typecheck + test + format + syncpack + knip
-#   pnpm turbo lint typecheck test
-#   cd packages/contracts && forge test
-#
-# To make CI run on every push again, add back:
-#   push:
-#     branches: [main]
-# and drop the `if:` guard on each job below.
+# The dispatch checkboxes exist for the same reason: running this should not cost five runners
+# when you only wanted `forge test`. They default to on, so a plain "Run workflow" is still the
+# full sweep. (The `ci` label runs everything — GitHub has no way to pass inputs from a label.)
 on:
+  # `labeled` only. Adding ANY label starts a workflow run, but every job below checks for `ci`
+  # specifically, and a skipped job consumes no runner minutes — so an unrelated label costs
+  # nothing. Pushing new commits does not re-run: remove and re-add the label.
   pull_request:
-    # `labeled` is required so adding the `ci` label starts a run on an existing PR.
-    types: [opened, synchronize, reopened, labeled]
+    types: [labeled]
   workflow_dispatch:
+    inputs:
+      contracts:
+        description: 'Contracts (forge test + gas)'
+        type: boolean
+        default: true
+      node:
+        description: 'Node (lint / typecheck / test / format)'
+        type: boolean
+        default: true
+      abi_drift:
+        description: 'ABI drift (regenerate with Foundry and compare)'
+        type: boolean
+        default: true
+      supply_chain:
+        description: 'Supply chain (lockfile integrity + audit)'
+        type: boolean
+        default: true
+      abi_freshness:
+        description: 'ABI freshness (git-only, seconds — compares this branch against main)'
+        type: boolean
+        default: true
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -69,22 +74,17 @@ env:
   FOUNDRY_PROFILE: ci
 
 jobs:
-  # UNGATED, like abi-freshness. This is the second exception to the opt-in rule, and it is
-  # deliberate.
+  # Gated like everything else — this used to run on every PR, and no longer does.
   #
-  # Every other install site passes `--frozen-lockfile`, but they all sit behind the `ci`
-  # label — so on an ordinary PR `--frozen-lockfile` never actually executed, and nothing
-  # verified that a `pnpm-lock.yaml` change matched the manifests. With `^` ranges on
-  # viem/wagmi/rainbowkit, the lockfile is the only thing standing between this repo and a
-  # malicious minor release, and a lockfile edit is exactly what a supply-chain PR would carry.
-  # Skipped checks render the same green as passing ones, so the gap was invisible.
-  #
-  # `--ignore-scripts` is the point of the job as much as the lockfile check: it means a
-  # hostile postinstall in a newly-added dependency does not execute on a runner holding the
-  # repo token, even while we are busy verifying that dependency.
+  # `pnpm install --frozen-lockfile` fails if pnpm-lock.yaml disagrees with any package.json,
+  # which is the useful half. `--ignore-scripts` means a postinstall in a newly-added dependency
+  # does not execute on a runner holding the repo token while we are verifying it.
   supply-chain:
     name: Supply chain (lockfile + audit)
     runs-on: ubuntu-latest
+    if: >-
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.supply_chain)
+      || contains(github.event.pull_request.labels.*.name, 'ci') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -129,10 +129,9 @@ jobs:
   contracts:
     name: Contracts (forge)
     runs-on: ubuntu-latest
-    # Opt-in: runs only on manual dispatch, or when the PR carries the `ci` label.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'ci')
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.contracts)
+      || contains(github.event.pull_request.labels.*.name, 'ci') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -158,10 +157,9 @@ jobs:
   node:
     name: Node (lint / typecheck / test)
     runs-on: ubuntu-latest
-    # Opt-in: runs only on manual dispatch, or when the PR carries the `ci` label.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'ci')
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.node)
+      || contains(github.event.pull_request.labels.*.name, 'ci') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -206,8 +204,9 @@ jobs:
       - name: Prettier check
         run: pnpm exec prettier --check "**/*.{ts,tsx,js,json,md,mdx}"
 
-      # The remaining two thirds of `pnpm check`. Without these, a labelled CI run was still
-      # weaker than running `pnpm check` locally.
+      # The remaining two thirds of `pnpm check`. Without these, a CI run would be weaker than
+      # running `pnpm check` locally — which, since this workflow is manual, is the thing it is
+      # actually competing with.
       - name: Dependency version consistency
         run: pnpm syncpack:check
 
@@ -225,10 +224,9 @@ jobs:
   abi-drift:
     name: ABI drift
     runs-on: ubuntu-latest
-    # Opt-in: runs only on manual dispatch, or when the PR carries the `ci` label.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'ci')
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.abi_drift)
+      || contains(github.event.pull_request.labels.*.name, 'ci') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -279,28 +277,27 @@ jobs:
       - name: Fail if ABIs are stale
         run: git diff --exit-code -- packages/abis/src
 
-  # The only job WITHOUT the `ci` label gate, deliberately.
+  # The cheap half of the ABI check: pure git, no toolchain, a few seconds.
   #
   # `packages/abis` is a source-only package: the TypeScript ABI constants are committed, it
   # has no build step, and nothing in the turbo graph depends on `@swr/contracts#export-abi`.
   # That is on purpose — wiring export-abi into the frontend build would make every
   # `turbo build` (including host builds with no Foundry installed) require the Solidity
   # toolchain. The cost is that `turbo build` will happily bundle apps/web against ABIs
-  # generated from an arbitrarily old contract commit, and the authoritative check for that
-  # (the abi-drift job above) is label-gated, so by default nothing catches it.
+  # generated from an arbitrarily old contract commit.
   #
-  # This job closes that hole with the only check that is cheap enough to run unconditionally:
-  # pure git, no toolchain, a few seconds. It cannot tell whether a Solidity change altered
-  # the ABI — it only asserts that if `packages/contracts/src` changed, the generated ABIs
-  # were regenerated alongside it. False positives (comment-only or implementation-only
-  # edits) are expected and are cleared by regenerating anyway (the diff will be empty) or by
-  # labelling the PR `abi-unchanged`.
+  # This cannot tell whether a Solidity change actually altered the ABI — it only asserts that
+  # if `packages/contracts/src` changed, the generated ABIs were regenerated alongside it.
+  # False positives (comment-only or implementation-only edits) are expected and are cleared by
+  # regenerating anyway, since the resulting diff will be empty. `abi-drift` above is the
+  # authoritative check; this one is the one worth running on every dispatch because it costs
+  # almost nothing.
   abi-freshness:
-    name: ABI freshness (no label needed)
+    name: ABI freshness (git only)
     runs-on: ubuntu-latest
     if: >-
-      github.event_name == 'pull_request' &&
-      !contains(github.event.pull_request.labels.*.name, 'abi-unchanged')
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.abi_freshness)
+      || contains(github.event.pull_request.labels.*.name, 'ci') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -308,21 +305,32 @@ jobs:
 
       - name: Contracts changed without regenerating ABIs
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # On a labelled PR the base is the PR's own base commit. On a manual dispatch there is
+          # no pull_request context at all, so fall back to the default branch — which means
+          # dispatching this while ON the default branch compares it to itself and trivially
+          # passes. That is what "no changes relative to main" means; run it from the branch.
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          # THREE dots, not two (round-3 review I-3). BASE_SHA is the base branch TIP at event
-          # time, not the merge base, so `git diff A B` also reported the INVERSE of everything
-          # that landed on main since this branch forked: one unrelated Solidity merge and
-          # every other open PR started failing this check for a file it never touched. The
-          # only escape is the `abi-unchanged` label — i.e. a false positive here trains people
-          # to disable the one check that is not label-gated. `A...B` diffs from the merge base,
-          # which `fetch-depth: 0` above already guarantees is present.
-          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+
+          if [ -n "${PR_BASE_SHA:-}" ]; then
+            base="$PR_BASE_SHA"
+          else
+            # `fetch-depth: 0` gives full history for the checked-out ref, but the default
+            # branch's remote-tracking ref is not guaranteed to be present. Fetch it.
+            git fetch --no-tags origin "$DEFAULT_BRANCH"
+            base="origin/$DEFAULT_BRANCH"
+          fi
+
+          # THREE dots, not two (round-3 review I-3). Two-dot `git diff A B` also reports the
+          # INVERSE of everything that landed on the base since this branch forked, so an
+          # unrelated Solidity merge on main would fail this check for a file this branch never
+          # touched. `A...B` diffs from the merge base.
+          changed=$(git diff --name-only "$base...HEAD")
 
           if ! grep -qE '^packages/contracts/src/.*\.sol$' <<<"$changed"; then
-            echo "No Solidity source changes — nothing to check."
+            echo "No Solidity source changes relative to $base — nothing to check."
             exit 0
           fi
 
@@ -331,5 +339,5 @@ jobs:
             exit 0
           fi
 
-          echo "::error::Solidity sources under packages/contracts/src changed but packages/abis/src was not regenerated. Run 'cd packages/contracts && forge build && pnpm export-abi' then 'pnpm exec prettier --write \"packages/abis/src/*.ts\"' and commit the result. If the change genuinely cannot affect the ABI, label the PR 'abi-unchanged'."
+          echo "::error::Solidity sources under packages/contracts/src changed but packages/abis/src was not regenerated. Run 'cd packages/contracts && forge build && pnpm export-abi' then 'pnpm exec prettier --write \"packages/abis/src/*.ts\"' and commit the result."
           exit 1

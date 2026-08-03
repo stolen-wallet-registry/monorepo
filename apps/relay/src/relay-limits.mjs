@@ -295,18 +295,38 @@ export function countReservationsByHost(reservationEntries) {
  * merely extending it, so treating a refresh as a new reservation would evict long-running
  * legitimate flows at exactly the moment they matter.
  *
+ * `requestingHosts` is a LIST, not a single host. A peer can hold several connections, and
+ * they need not share a source: taking `connections[0]` meant a peer that also holds one
+ * connection from an unrelated host could be charged to whichever the array happened to
+ * order first, which is both non-deterministic and forgeable — open a second connection from
+ * a fresh address and the cap on the real one stops applying. Every host the peer presents is
+ * checked, and any one of them being at the cap denies. Conservative on purpose: a peer that
+ * presents an exhausted host IS from that host, whatever else it also presents.
+ *
  * @returns {boolean} true to DENY, matching the connectionGater contract.
  */
 export function shouldDenyReservation({
-  requestingHost,
+  requestingHosts,
   alreadyReserved,
   reservationsByHost,
   reservationsPerHost,
 }) {
   if (alreadyReserved) return false;
-  if (requestingHost === null || requestingHost === undefined) return false;
-  return (reservationsByHost.get(requestingHost) ?? 0) >= reservationsPerHost;
+  const hosts = requestingHosts ?? [];
+  // Fail open on an unattributable source: denying here would let one odd transport take the
+  // relay offline for everyone.
+  if (hosts.length === 0) return false;
+  return hosts.some((host) => (reservationsByHost.get(host) ?? 0) >= reservationsPerHost);
 }
+
+/**
+ * How long a granted-but-not-yet-stored reservation stays counted. See `createReservationGater`.
+ *
+ * Only a backstop. The normal exit is observing the reservation in the store, which happens on
+ * the very next gater call; this bounds the damage if a request is granted and then dies before
+ * `reserve()` runs, so a crashed handshake cannot hold a slot in the pending ledger forever.
+ */
+export const PENDING_RESERVATION_TTL_MS = 5_000;
 
 /**
  * Build the `denyInboundRelayReservation` gater.
@@ -315,36 +335,107 @@ export function shouldDenyReservation({
  * `createLibp2p()` before the node it inspects exists. They are only ever called while
  * handling an inbound HOP request, which cannot happen before startup completes.
  *
+ * THE IN-FLIGHT LEDGER (round-3 review D5b-i).
+ *
+ * The per-host cap used to be check-then-act, and the gap was wide enough to drive the whole
+ * attack through. circuit-relay-v2 does:
+ *
+ *     if ((await connectionGater.denyInboundRelayReservation?.(peer)) === true) { …deny… }
+ *     const result = this.reservationStore.reserve(peer, addr)     // server/index.js:123-128
+ *
+ * so a grant is only visible to the NEXT gater call once `reserve()` has run — one microtask
+ * later. Concurrent HOP RESERVE streams from one host therefore all counted the same stored
+ * total and all passed: 8-per-host was not a cap on a burst, it was a cap on a sequence. One
+ * host could fill the 512 global ceiling by firing its requests at once, which is precisely
+ * the exhaustion this gater exists to stop.
+ *
+ * The fix needs no library internals. This function's body runs to completion synchronously —
+ * it contains no `await` — so a grant recorded here before returning is visible to every
+ * other invocation, whatever order the microtask queue runs them in. `pending` is that record,
+ * and it is added to the stored counts below.
+ *
+ * Entries leave `pending` when the reservation is observed in the store (the normal case, on
+ * the next call) or when {@link PENDING_RESERVATION_TTL_MS} elapses (the backstop, for a
+ * grant whose `reserve()` never ran). Both directions are safe: an entry that lingers can only
+ * deny a request the real cap would also have denied a moment later, and an entry dropped
+ * early is just today's behaviour.
+ *
  * @param {{
  *   getNode: () => { getConnections: (peerId: unknown) => Array<{ remoteAddr: unknown }> } | null,
- *   getRelayService: () => { reservations?: { entries: () => Iterable<[unknown, { addr?: unknown }]> } } | null,
+ *   getRelayService: () => { reservations?: { entries: () => Iterable<[unknown, { addr?: unknown }]>, get?: (peer: unknown) => unknown } } | null,
  *   reservationsPerHost: number,
  *   onDeny?: (host: string, peerId: string) => void,
+ *   now?: () => number,
  * }} options
  */
-export function createReservationGater({ getNode, getRelayService, reservationsPerHost, onDeny }) {
+export function createReservationGater({
+  getNode,
+  getRelayService,
+  reservationsPerHost,
+  onDeny,
+  now = () => Date.now(),
+}) {
+  /**
+   * Reservations granted by this gater that have not yet appeared in the relay's store.
+   * @type {Map<string, { peer: unknown, hosts: string[], at: number }>}
+   */
+  const pending = new Map();
+
+  // `async` to match the ConnectionGater signature the library declares. The body contains no
+  // `await`, which is exactly why the ledger works: an async function runs synchronously up to
+  // its first await, so this one runs start-to-finish before any other invocation can observe
+  // a partially-updated `pending`. Do not introduce an `await` above the `pending.set` below.
   return async function denyInboundRelayReservation(remotePeer) {
     const node = getNode();
     const relayService = getRelayService();
     if (node == null || relayService?.reservations == null) return false;
 
+    const currentTime = now();
+    const peerKey = String(remotePeer);
+
+    // Retire in-flight records that have landed in the store or gone stale.
+    for (const [key, entry] of pending) {
+      const landed = Boolean(relayService.reservations.get?.(entry.peer));
+      if (landed || currentTime - entry.at > PENDING_RESERVATION_TTL_MS) pending.delete(key);
+    }
+    // This peer's own earlier grant must not count against it — it is the same slot, whether
+    // this request turns out to be a retry or a renewal.
+    pending.delete(peerKey);
+
     const connections = node.getConnections(remotePeer) ?? [];
     if (connections.length === 0) return false;
 
-    const requestingHost = extractHost(connections[0]?.remoteAddr);
+    // Every host the peer presents, deduplicated — see shouldDenyReservation.
+    const requestingHosts = [
+      ...new Set(
+        connections
+          .map((connection) => extractHost(connection?.remoteAddr))
+          .filter((h) => h != null)
+      ),
+    ];
 
     // A peer renewing its existing reservation is already accounted for.
     const alreadyReserved = Boolean(relayService.reservations.get?.(remotePeer));
 
+    const reservationsByHost = countReservationsByHost(relayService.reservations.entries());
+    for (const entry of pending.values()) {
+      for (const host of entry.hosts) {
+        reservationsByHost.set(host, (reservationsByHost.get(host) ?? 0) + 1);
+      }
+    }
+
     const deny = shouldDenyReservation({
-      requestingHost,
+      requestingHosts,
       alreadyReserved,
-      reservationsByHost: countReservationsByHost(relayService.reservations.entries()),
+      reservationsByHost,
       reservationsPerHost,
     });
 
-    if (deny && requestingHost !== null) {
-      onDeny?.(requestingHost, String(remotePeer));
+    if (deny) {
+      onDeny?.(requestingHosts.join(', '), peerKey);
+    } else if (!alreadyReserved && requestingHosts.length > 0) {
+      // Recorded BEFORE returning, so a concurrent request cannot read a total that omits it.
+      pending.set(peerKey, { peer: remotePeer, hosts: requestingHosts, at: currentTime });
     }
     return deny;
   };

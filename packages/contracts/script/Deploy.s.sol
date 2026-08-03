@@ -658,7 +658,7 @@ contract Deploy is Script {
     ///          --rpc-url $SPOKE_RPC --broadcast
     ///
     ///      Reads (all optional — a zero/unset address is skipped):
-    ///        HYPERLANE_ADAPTER, SPOKE_REGISTRY, SPOKE_SOULBOUND_FORWARDER
+    ///        HYPERLANE_ADAPTER, SPOKE_REGISTRY, SPOKE_SOULBOUND_FORWARDER, SPOKE_FEE_MANAGER
     function finalizeSpokeSetup() external {
         deployerPrivateKey = _getDeployerKey();
         deployer = vm.addr(deployerPrivateKey);
@@ -741,11 +741,19 @@ contract Deploy is Script {
     ///      became TimelockOwnable (C-5): `setHubConfig` repoints the hub receiver every paid mint
     ///      request is sent to, so it must be finalized like any other trust boundary. Leaving it
     ///      out would keep that a one-transaction owner call forever.
+    ///
+    ///      The spoke has its own FeeManager (SpokeRegistry.feeManager is immutable, so a
+    ///      mispriced one cannot be swapped out) and it must be finalized here for the same
+    ///      reason {_hubTargets} finalizes the hub's: an unfinalized FeeManager leaves
+    ///      setBaseFee/setFallbackPrice as one-transaction owner calls that can price every
+    ///      spoke registration out of reach. `SPOKE_FEE_MANAGER`, not `FEE_MANAGER` — hub and
+    ///      spoke finalize share one env file, and the hub key must not leak into the spoke run.
     function _spokeTargets() internal view returns (SetupTarget[] memory targets) {
-        targets = new SetupTarget[](3);
+        targets = new SetupTarget[](4);
         targets[0] = _target("HYPERLANE_ADAPTER", "HyperlaneAdapter");
         targets[1] = _target("SPOKE_REGISTRY", "SpokeRegistry");
         targets[2] = _target("SPOKE_SOULBOUND_FORWARDER", "SpokeSoulboundForwarder");
+        targets[3] = _target("SPOKE_FEE_MANAGER", "FeeManager (spoke)");
     }
 
     /// @dev Call completeSetup() unless the address is unset or already complete.
@@ -955,9 +963,9 @@ contract Deploy is Script {
     }
 
     /// @notice Hand the SPOKE-side contracts to the DAO (run on the spoke chain)
-    /// @dev HyperlaneAdapter and SpokeRegistry are TimelockOwnable, so they take the same
-    ///      propose → 2 days → activate path; pass `activate = false` for step 1 and `true` for
-    ///      step 2. SpokeSoulboundForwarder is plain Ownable2Step and transfers immediately.
+    /// @dev Every spoke target is TimelockOwnable (SpokeSoulboundForwarder included, since C-5),
+    ///      so they all take the same propose → 2 days → activate path; pass `activate = false`
+    ///      for step 1 and `true` for step 2.
     /// @param activate False to propose, true to activate a previously proposed handover
     function handoverSpokeOwnership(bool activate) external {
         deployerPrivateKey = _getDeployerKey();
@@ -987,12 +995,6 @@ contract Deploy is Script {
             console2.log("  done:", targets[i].label, targets[i].addr);
         }
 
-        // Plain Ownable2Step — only on the propose pass, since there is nothing to activate.
-        address forwarder = vm.envOr("SPOKE_SOULBOUND_FORWARDER", address(0));
-        if (!activate && forwarder != address(0)) {
-            IOwnable2Step(forwarder).transferOwnership(dao);
-            console2.log("  transferred (immediate): SpokeSoulboundForwarder", forwarder);
-        }
         vm.stopBroadcast();
     }
 
@@ -1010,75 +1012,6 @@ contract Deploy is Script {
     function _validateDao(address dao, address deployerAddr) internal pure {
         require(dao != address(0), "DAO_OWNER env var is zero address");
         require(dao != deployerAddr, "DAO_OWNER equals the deployer EOA - that is not a handover");
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // CREATE2 ADDRESS PREDICTION HELPERS (for split deployment)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    function _predictCrossChainInbox() internal view returns (address) {
-        address predictedHub = Create2Deployer.predict(
-            Salts.FRAUD_REGISTRY_HUB,
-            abi.encodePacked(type(FraudRegistryHub).creationCode, abi.encode(deployer, deployer))
-        );
-        return Create2Deployer.predict(
-            Salts.CROSS_CHAIN_INBOX,
-            abi.encodePacked(type(CrossChainInbox).creationCode, abi.encode(hubMailbox, predictedHub, deployer))
-        );
-    }
-
-    function _predictSoulboundReceiver() internal view returns (address) {
-        address predictedWalletRegistry = _predictWalletRegistry();
-        address predictedTranslationRegistry = Create2Deployer.predict(
-            Salts.TRANSLATION_REGISTRY, abi.encodePacked(type(TranslationRegistry).creationCode, abi.encode(deployer))
-        );
-        address predictedWalletSoulbound = Create2Deployer.predict(
-            Salts.WALLET_SOULBOUND,
-            abi.encodePacked(
-                type(WalletSoulbound).creationCode,
-                abi.encode(predictedWalletRegistry, predictedTranslationRegistry, deployer, DEFAULT_DOMAIN, deployer)
-            )
-        );
-        address predictedSupportSoulbound = Create2Deployer.predict(
-            Salts.SUPPORT_SOULBOUND,
-            abi.encodePacked(
-                type(SupportSoulbound).creationCode,
-                abi.encode(MIN_DONATION, predictedTranslationRegistry, deployer, DEFAULT_DOMAIN, deployer)
-            )
-        );
-        return Create2Deployer.predict(
-            Salts.SOULBOUND_RECEIVER,
-            abi.encodePacked(
-                type(SoulboundReceiver).creationCode,
-                abi.encode(deployer, hubMailbox, predictedWalletSoulbound, predictedSupportSoulbound)
-            )
-        );
-    }
-
-    function _predictWalletRegistry() internal pure returns (address) {
-        address predictedMockAggregator = Create2Deployer.predict(
-            Salts.MOCK_AGGREGATOR,
-            abi.encodePacked(type(MockAggregator).creationCode, abi.encode(int256(350_000_000_000)))
-        );
-        address predictedDeployer = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266; // Anvil account 0
-        address predictedFeeManager = Create2Deployer.predict(
-            Salts.FEE_MANAGER,
-            abi.encodePacked(type(FeeManager).creationCode, abi.encode(predictedDeployer, predictedMockAggregator))
-        );
-        return Create2Deployer.predict(
-            Salts.WALLET_REGISTRY,
-            abi.encodePacked(
-                type(WalletRegistry).creationCode,
-                abi.encode(predictedDeployer, predictedFeeManager, ANVIL_GRACE_BLOCKS, ANVIL_DEADLINE_BLOCKS)
-            )
-        );
-    }
-
-    function _predictHyperlaneAdapter() internal view returns (address) {
-        return Create2Deployer.predict(
-            Salts.HYPERLANE_ADAPTER,
-            abi.encodePacked(type(HyperlaneAdapter).creationCode, abi.encode(deployer, spokeMailbox))
-        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1280,12 +1213,20 @@ contract Deploy is Script {
     /// @dev Use for Optimism Sepolia, Arbitrum Sepolia, etc.
     ///      Required env vars: PRIVATE_KEY, SPOKE_HYPERLANE_MAILBOX,
     ///                         HUB_CHAIN_ID, HUB_INBOX_ADDRESS
+    ///      Optional: SPOKE_FEE_MANAGER (unset = free registrations on this spoke),
+    ///                SOULBOUND_RECEIVER (unset = no SpokeSoulboundForwarder)
     function deploySpoke() external {
         uint256 privKey = _getDeployerKey();
         address _deployer = vm.addr(privKey);
 
-        // Fee configuration (optional)
-        address feeManagerAddr = vm.envOr("FEE_MANAGER", address(0));
+        // Fee configuration (optional). SPOKE_FEE_MANAGER, not FEE_MANAGER: hub and spoke runs
+        // share one env file, and FEE_MANAGER is the HUB's key (read by deployHub and by
+        // _hubTargets). Reading it here wired the hub's FeeManager address — which has no code on
+        // this chain — into SpokeRegistry.feeManager, which is immutable. Every fee-collecting
+        // registration on the spoke would then revert on the extcodesize check with no way to
+        // repoint it. Same key, same file, two chains: it has to be two names, matching the
+        // SPOKE_FEE_MANAGER that {_spokeTargets} finalizes.
+        address feeManagerAddr = vm.envOr("SPOKE_FEE_MANAGER", address(0));
 
         // Hyperlane configuration (required for spoke)
         address mailbox = vm.envAddress("SPOKE_HYPERLANE_MAILBOX");
@@ -1354,9 +1295,10 @@ contract Deploy is Script {
 
         // 4. Optionally deploy SpokeSoulboundForwarder (for cross-chain soulbound minting)
         address soulboundReceiver = vm.envOr("SOULBOUND_RECEIVER", address(0));
+        address forwarderAddr;
         if (soulboundReceiver != address(0)) {
             bytes32 receiverBytes = _addressToBytes32(soulboundReceiver);
-            address forwarderAddr = Create2Deployer.deploy(
+            forwarderAddr = Create2Deployer.deploy(
                 Salts.SPOKE_SOULBOUND_FWD,
                 abi.encodePacked(
                     type(SpokeSoulboundForwarder).creationCode,
@@ -1390,6 +1332,14 @@ contract Deploy is Script {
         console2.log("  inbox.setTrustedSource(", block.chainid, ", adapterBytes32, true)");
         console2.log("  adapterBytes32:");
         console2.logBytes32(_addressToBytes32(adapterAddr));
+        if (forwarderAddr != address(0)) {
+            // Without this, every mint request from this spoke reverts UntrustedForwarder on the
+            // hub, Hyperlane redelivers it forever, and once the hub is finalized the fix sits
+            // behind the 2-day timelock. Takes the adapter ADDRESS (matching configureTrustLocal),
+            // not the bytes32 form the inbox uses.
+            console2.log("  soulboundReceiver.setTrustedForwarder(", block.chainid, ",", adapterAddr);
+            console2.log("  )");
+        }
         console2.log("");
         console2.log("=== THEN: lock the spoke timelock (LAST step, after hub trust is wired) ===");
         console2.log("  pnpm finalize:testnet:spoke   # then verify:setup:testnet:spoke");

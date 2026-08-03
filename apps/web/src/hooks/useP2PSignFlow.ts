@@ -20,7 +20,7 @@ import { useContractDeadlines } from '@/hooks/useContractDeadlines';
 import { type SignatureStep } from '@/lib/signatures';
 import { useFormStore } from '@/stores/formStore';
 import { useP2PStore } from '@/stores/p2pStore';
-import { passStreamData, getPeerConnection } from '@/lib/p2p';
+import { passStreamData, getPeerConnection, SIGN_BLOCKED_MESSAGE } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 import type { SignatureStatus } from '@/components/composed/SignatureCard';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
@@ -168,9 +168,12 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
       logger.p2p.warn('Refusing to sign: relayer was not established by a handshake this session', {
         keyRef,
       });
-      setSendError(
-        'Your relayer connection was not verified in this session. Please reconnect to your relayer before signing.'
-      );
+      // The old copy told the user to "reconnect to your relayer before signing" — a recovery
+      // that had no code path anywhere in the app, so the honest instruction was "start over"
+      // and the flow dead-ended here. `SIGN_BLOCKED_MESSAGE` describes what is actually
+      // happening now: the page is re-running the handshake by itself (see
+      // `lib/p2p/rehandshake.ts`), and says what to do if that does not clear it.
+      setSendError(SIGN_BLOCKED_MESSAGE);
       return;
     }
 
@@ -189,8 +192,10 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
 
       const freshNonce =
         nonceResult.status === 'success' ? (nonceResult.data as bigint) : undefined;
-      const rawHash = hashResult?.data as [bigint, string] | undefined;
-      const freshDeadline = rawHash?.[0] ?? hashData.deadline;
+      // getSignatureDeadline returns a bare uint256 (the old generateHashStruct tuple is gone),
+      // so anything non-bigint means the refetch failed and we fall back to the cached value.
+      const freshDeadline =
+        typeof hashResult?.data === 'bigint' ? hashResult.data : hashData.deadline;
 
       if (freshNonce === undefined) {
         logger.p2p.error('Failed to refetch nonce before signing', {

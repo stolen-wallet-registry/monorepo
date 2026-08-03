@@ -16,41 +16,95 @@ nvm use          # reads .nvmrc
 The guard is a `preinstall` script in the root `package.json`. `SWR_SKIP_NODE_CHECK=1` bypasses
 it if you know what you are doing. CI pins the same version via `node-version-file: .nvmrc`.
 
-## CI does not run on your PR unless you ask it to
+## CI only runs when you ask for it
 
 **This is the single most important thing to know about this repo.**
 
-The checks in `.github/workflows/ci.yml` (contracts, node, ABI drift) are **opt-in**. They have
-no `push` trigger and each carries a label gate, so on an ordinary pull request they do not
-run — they report **skipped**, which GitHub renders in the same green as a pass. A PR can look
-entirely green and have had zero tests, zero lint and zero type checks run against it.
+Nothing in `.github/workflows/` runs on its own. There is no `push` trigger, no `schedule`, and
+the `pull_request` trigger listens for `labeled` only — so opening a PR runs nothing, and
+pushing to a PR runs nothing even if it already carries the label. A PR with no checks on it is
+the normal state. Do not mistake "no checks" for "checks passed".
 
-That is a deliberate cost decision (this is a pre-release project and everything below is
-runnable locally for free), not an oversight. It only bites if you mistake a skipped check for
-a passing one.
+That is a deliberate cost decision: Actions minutes are real money on a pre-release project, and
+everything below runs locally for free.
 
-### To run CI on a PR
+### Two ways to run it, both manual
 
-Add the **`ci`** label to it. Remove and re-add the label to re-run.
+1. **Add the `ci` label to a PR.** Runs every job. Remove and re-add the label to re-run.
+2. **Actions → CI → Run workflow.** Pick a branch, then tick only the jobs you want:
 
-Or, for a branch without a PR: **Actions → CI → Run workflow** (`workflow_dispatch`).
+| Input           | Job                                                                    |
+| --------------- | ---------------------------------------------------------------------- |
+| `contracts`     | `forge test` + gas report                                              |
+| `node`          | lint, typecheck, test, prettier, syncpack, knip                        |
+| `abi_drift`     | Regenerates ABIs with Foundry and fails on any diff (authoritative)    |
+| `supply_chain`  | Lockfile integrity + audit                                             |
+| `abi_freshness` | Git-only check that Solidity and ABI changes landed together (seconds) |
 
-### Labels this workflow reads
+The checkboxes default to on, so a plain "Run workflow" is the full sweep. The `ci` label always
+runs everything — GitHub has no way to pass inputs from a label.
 
-| Label           | Effect                                                                                     |
-| --------------- | ------------------------------------------------------------------------------------------ |
-| `ci`            | Runs the contracts, node and ABI-drift jobs. Without it, none of them run.                 |
-| `abi-unchanged` | Skips the always-on ABI freshness check. Only for Solidity edits that cannot alter an ABI. |
+`abi_freshness` compares against the PR base, or against the default branch on a dispatch — so
+dispatching it while on the default branch compares main to itself and trivially passes.
 
-The **ABI freshness** job is the one exception: it runs on every PR regardless of labels,
-because it is a few seconds of pure git with no toolchain. It only asserts that a PR touching
-`packages/contracts/src/**` also touched `packages/abis/src/**` — it does not compile anything,
-so it is a guard rail, not a substitute for the labelled `ci` run.
+### Labels
 
-### If these jobs are ever made required status checks
+| Label              | Effect                                                       |
+| ------------------ | ------------------------------------------------------------ |
+| `ci`               | Runs every job in `ci.yml`.                                  |
+| `hyperlane-forked` | Runs the live-Mailbox check (separate workflow — see below). |
 
-Remove the label gate first. A skipped job satisfies a required check, so "required" would
-otherwise mean "required to be skipped".
+Adding any other label starts a workflow run whose jobs all skip, which costs no runner minutes.
+
+### Do not make any of these a required status check
+
+A required check that never runs blocks every merge forever.
+
+## The other workflow: `hyperlane-forked.yml`
+
+`.github/workflows/hyperlane-forked.yml` is separate from `ci.yml` and runs one thing:
+`packages/contracts/test/HyperlaneForked.t.sol` against the real Hyperlane v3 Mailbox on
+Optimism Sepolia.
+
+It exists because every other Hyperlane test runs against `test/mocks/MockMailbox.sol`, and a
+mock only proves the adapter agrees with our own copy of the interface. The v2→v3 mismatch that
+test was written for shipped exactly that way — the mock had the same wrong shape as the
+adapter, so nothing failed. `@hyperlane-xyz/core/` remaps to the vendored
+`src/vendor/hyperlane/`, so this is the only check that those in-repo copies still match the
+deployed contract.
+
+Like everything else here it is manual: add the **`hyperlane-forked`** label to a PR, or
+**Actions → Hyperlane forked integration → Run workflow**. It deliberately does NOT respond to
+the `ci` label, so an ordinary CI run never dials a live RPC.
+
+**Run it before any testnet or mainnet deployment.** That is what the test file's own header
+asks for, and it is the moment the answer matters. Nothing runs it on a timer, so nothing will
+warn you when Hyperlane changes something under you — you find out when you run it, or when a
+deployment misbehaves.
+
+### It needs a secret, and says so loudly when it does not have one
+
+The job reads `secrets.OPTIMISM_SEPOLIA_RPC` (any Optimism Sepolia endpoint). Without it the
+Solidity test `vm.skip`s itself. Behaviour when the secret is absent:
+
+- **The job FAILS.** That is intentional. A skipped or green job would claim coverage that does
+  not exist, and GitHub renders skipped in the same green as passing. You asked for this run, so
+  a run that verified nothing must not look like one that did. The failure is true, actionable
+  and not flaky, and it goes green the moment the secret is added — or run it locally instead,
+  which needs no secret at all.
+
+The job also fails if `forge test` exits 0 while having verified nothing — if `--match-contract`
+matches no suite (renamed contract), or if the tests report `[SKIP]` despite the secret being
+set (env-var name drift). Exit code 0 alone is not treated as evidence.
+
+**The local run is the one that does not depend on any of this**, and it is the version the
+deployment guide asks for:
+
+```bash
+cd packages/contracts
+OPTIMISM_SEPOLIA_RPC=https://<your-op-sepolia-rpc> \
+  forge test --match-contract HyperlaneForked -vv
+```
 
 ## Run the checks locally
 

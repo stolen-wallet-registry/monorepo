@@ -318,16 +318,23 @@ export function SearchPage() {
   useEffect(() => {
     if (!result) return;
 
-    if (result.type === 'address' && result.data) {
+    if (result.type === 'address') {
+      // A negative result carries `data: null` by construction, so the address has to come
+      // from the query we searched — the same extraction handleSearch used to key the entry.
+      const candidate = searchQuery.includes(':')
+        ? (searchQuery.split(':')[2] ?? searchQuery)
+        : searchQuery;
+      const address = result.data?.address ?? (isAddress(candidate) ? candidate : undefined);
+      if (!address) return;
       const resultStatus: SearchResultStatus = result.found ? 'registered' : 'clean';
       logger.ui.info('Address search result received', {
-        address: redactAddress(result.data.address),
+        address: redactAddress(address),
         found: result.found,
         foundInWalletRegistry: result.foundInWalletRegistry,
         foundInContractRegistry: result.foundInContractRegistry,
         resultStatus,
       });
-      updateRecentSearchResult(result.data.address, resultStatus);
+      updateRecentSearchResult(address, resultStatus);
       notifyRecentSearchesChange();
     } else if (result.type === 'transaction') {
       logger.ui.info('Transaction search result received', {
@@ -335,7 +342,7 @@ export function SearchPage() {
         chains: result.data?.chains.length ?? 0,
       });
     }
-  }, [result]);
+  }, [result, searchQuery]);
 
   /**
    * Clearing the child's input has to clear the query here too.

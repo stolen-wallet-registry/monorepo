@@ -13,6 +13,14 @@ import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
 import { CAIP10Evm } from "../src/libraries/CAIP10Evm.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
 
+/// @dev Recipient whose `receive` always reverts, used to drive the failed-transfer branch of
+///      `sweep`. Mirrors the helper of the same name in SoulboundReceiver.t.sol.
+contract RejectsEth {
+    receive() external payable {
+        revert("RejectsEth: no");
+    }
+}
+
 /// @title CrossChainInboxTest
 /// @notice Tests for CrossChainInbox: message handling, trust management, constructor validation
 contract CrossChainInboxTest is Test {
@@ -391,6 +399,27 @@ contract CrossChainInboxTest is Test {
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", nonOwner));
         vm.prank(nonOwner);
         inboxContract.sweep(nonOwner);
+    }
+
+    /// @notice A recipient that rejects ETH makes the whole sweep revert rather than report success.
+    /// @dev The `if (!success) revert` on the low-level call is the only thing standing between a
+    ///      failed transfer and a `Swept` event that says the money moved. Without it the balance
+    ///      stays put, the event lies, and the owner has no on-chain signal to retry with a
+    ///      different recipient — which is the entire reason `sweep` takes an explicit `to`.
+    ///      Also asserts the funds are not stranded: a second sweep to a payable recipient works.
+    function test_Sweep_RevertsWhenRecipientRejectsEth() public {
+        address recipient = address(new RejectsEth());
+        vm.deal(address(inboxContract), 1 ether);
+
+        vm.expectRevert(CrossChainInbox.CrossChainInbox__SweepFailed.selector);
+        inboxContract.sweep(recipient);
+
+        assertEq(address(inboxContract).balance, 1 ether, "a failed sweep must leave the balance intact");
+        assertEq(recipient.balance, 0, "the rejecting recipient received nothing");
+
+        address good = makeAddr("goodRecipient");
+        inboxContract.sweep(good);
+        assertEq(good.balance, 1 ether, "a second sweep to a valid recipient recovers the balance");
     }
 
     /// @dev Lets this test contract (the inbox owner) receive swept ETH.

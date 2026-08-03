@@ -78,6 +78,57 @@ describe('detectSearchType', () => {
     });
   });
 
+  // Finding S-4, the same fail-open reached by the likelier route. A block explorer hands the
+  // user `bc1q…` or `FN1abc…`, never `bip122:<genesis>:bc1q…`, so the bare form is what lands
+  // in the search box. 'invalid' would return `{ found: false }` and clear an address nothing
+  // looked at; these must reach the throwing path.
+  describe('recognises a bare non-EVM address with no namespace prefix', () => {
+    it('classifies bech32 addresses as unsupported', () => {
+      // Bitcoin segwit (mainnet + testnet) and the Cosmos family.
+      expect(detectSearchType('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4')).toBe('unsupported');
+      expect(detectSearchType('tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx')).toBe('unsupported');
+      expect(detectSearchType('cosmos1t2uflqwqe0fsj0shcfkrvpukewcw40yjj6hdc0')).toBe('unsupported');
+    });
+
+    it('classifies base58check Bitcoin addresses as unsupported', () => {
+      expect(detectSearchType('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa')).toBe('unsupported'); // P2PKH
+      expect(detectSearchType('3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy')).toBe('unsupported'); // P2SH
+    });
+
+    it('classifies a base58 Solana account as unsupported', () => {
+      expect(detectSearchType('9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM')).toBe('unsupported');
+      expect(detectSearchType('So11111111111111111111111111111111111111112')).toBe('unsupported');
+    });
+
+    it('is not defeated by surrounding whitespace', () => {
+      expect(detectSearchType('  1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa  ')).toBe('unsupported');
+    });
+
+    // The other half of the line. Widening 'unsupported' too far would show "could not
+    // verify" for every typo, which trains users to ignore it — and 'invalid' is a SAFE
+    // negative precisely because a typo has no registry entry it could be missing.
+    it('leaves ordinary non-identifier input as invalid', () => {
+      expect(detectSearchType('gibberish')).toBe('invalid');
+      expect(detectSearchType('vitalik.eth')).toBe('invalid');
+      expect(detectSearchType('Coinbase')).toBe('invalid');
+      expect(detectSearchType('some random search phrase')).toBe('invalid');
+      // Too short to be an account identifier in any of the shapes above.
+      expect(detectSearchType('1A1zP1eP5QGef')).toBe('invalid');
+      // Contains `0`, `O`, `I` and `l`, none of which are in the base58 alphabet.
+      expect(detectSearchType('0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl')).toBe('invalid');
+      // A `1` in a word does not make it bech32 — the data part is far too short and uses
+      // characters the bech32 charset excludes.
+      expect(detectSearchType('version1release')).toBe('invalid');
+    });
+
+    // A truncated EVM address must not become 'unsupported': it is 0x-prefixed, `0` is not in
+    // the base58 alphabet, and a mistyped address should stay a safe negative.
+    it('leaves a malformed EVM address as invalid', () => {
+      expect(detectSearchType('0x742D35CC6634c0532925A3b844BC9E7595F0BE')).toBe('invalid');
+      expect(detectSearchType('0xnope')).toBe('invalid');
+    });
+  });
+
   // Solana base58 and Bitcoin base58check are case-sensitive; classification must not depend
   // on having destroyed the casing first.
   it('does not depend on lowercasing a case-sensitive identifier', () => {

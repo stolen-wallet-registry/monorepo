@@ -46,6 +46,7 @@ import {
   acceptStream,
   isRelayerProtocolExpectedAtStep,
   isStreamAbortError,
+  passStreamData,
   RESIGN_ACK,
   publishResignAck,
   type ProtocolHandler,
@@ -273,8 +274,27 @@ export function P2PRelayerRegistrationPage() {
                   // Deliberately NOT taken from data.p2p.partnerPeerId — a payload-supplied
                   // peer ID is attacker-controlled and would defeat the binding.
                   setConnectedToPeer(true);
-                  // No reply and no step advance here: this side dialed, so
-                  // WaitForConnectionStep owns the advance and gates it on `connectedToPeer`.
+
+                  // At `wait-for-connection` this is the answer to our own dial: no reply (it
+                  // would be an answer to an answer, i.e. an endless CONNECT ping-pong) and no
+                  // step advance, because WaitForConnectionStep owns that and gates it on
+                  // `connectedToPeer`.
+                  //
+                  // Past it, the registeree reloaded and is asking us to re-assert the
+                  // handshake so they can sign again (see `lib/p2p/rehandshake.ts`). They
+                  // dialed, so here WE are the answering side. The reply carries our own
+                  // connected address — the same value they already have on file, which is
+                  // what their side checks it against; it is not read from this payload.
+                  if (isPreConnectionStep(currentStep)) break;
+
+                  logger.p2p.info('Answering a re-handshake request from the registeree', {
+                    step: currentStep,
+                  });
+                  await passStreamData({
+                    connection,
+                    protocols: [PROTOCOLS.CONNECT],
+                    streamData: { form: { relayer: address }, success: true },
+                  });
                   break;
                 }
 

@@ -2,9 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import {
+  DEFAULT_MAX_OFFSET,
   enforceCors,
+  findExcessiveOffset,
+  limitQueryOffset,
   parseAllowedOrigins,
   rateLimit,
+  readMaxOffset,
   readRateLimitOptions,
   resolveClientKey,
 } from '../src/api/security.js';
@@ -350,5 +354,182 @@ describe('V17 — ponder routes this app cannot reach', () => {
       expect((await request(chain, '/metrics', { headers })).status).toBe(200);
       expect((await request(chain, '/status', { headers })).status).toBe(200);
     }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// D4-1 — pagination offset ceiling
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * These exercise the mounted middleware, not just `findExcessiveOffset`, because the two ways
+ * this control can be wrong are both invisible to a unit test of the helper: it can fail to
+ * run at all, and it can run but eat the request body that the GraphQL middleware behind it
+ * needs. The stand-in handler below records what actually reached it.
+ */
+function buildOffsetApp(maxOffset: number = DEFAULT_MAX_OFFSET) {
+  const seen: { body: string | null; calls: number } = { body: null, calls: 0 };
+
+  const app = new Hono();
+  app.use('*', enforceCors(['https://app.example']));
+  app.use(
+    '*',
+    rateLimit({
+      maxRequests: 1000,
+      windowMs: 60_000,
+      maxTrackedClients: 100,
+      trustProxyHops: 1,
+    })
+  );
+  app.use('*', limitQueryOffset(maxOffset));
+  // Stands in for `graphql({ db, schema })`, which reads `c.req.raw` itself.
+  app.use('/graphql', async (c) => {
+    seen.calls += 1;
+    seen.body = await c.req.raw.text();
+    return c.json({ data: { ok: true } });
+  });
+
+  return { chain: buildPonderChain(app), seen };
+}
+
+const postQuery = (chain: Hono, payload: unknown) =>
+  request(chain, '/graphql', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+describe('D4-1 — an over-large offset is rejected before it reaches a resolver', () => {
+  it('rejects an inline offset above the ceiling and never calls the resolver', async () => {
+    const { chain, seen } = buildOffsetApp();
+
+    const res = await postQuery(chain, {
+      query:
+        '{ stolenWallets(orderBy: "registeredAt", offset: 2000000000, limit: 1000) { items { id } } }',
+    });
+
+    expect(res.status).toBe(400);
+    const payload = (await res.json()) as { errors: Array<{ message: string }> };
+    expect(payload.errors[0]!.message).toContain('Invalid offset');
+    // The whole point: the deep scan must not happen.
+    expect(seen.calls).toBe(0);
+  });
+
+  it('rejects an offset supplied as a variable', async () => {
+    const { chain, seen } = buildOffsetApp();
+
+    const res = await postQuery(chain, {
+      query:
+        'query R($limit: Int!, $offset: Int) { stolenWallets(limit: $limit, offset: $offset) { items { id } } }',
+      variables: { limit: 1000, offset: 2_000_000_000 },
+    });
+
+    expect(res.status).toBe(400);
+    expect(seen.calls).toBe(0);
+  });
+
+  // The bypass that matters: the attacker never writes the number next to the word `offset`.
+  it('rejects an offset hidden in a variable default', async () => {
+    const { chain, seen } = buildOffsetApp();
+
+    const res = await postQuery(chain, {
+      query:
+        'query R($skip: Int = 2000000000) { stolenWallets(limit: 1000, offset: $skip) { items { id } } }',
+    });
+
+    expect(res.status).toBe(400);
+    expect(seen.calls).toBe(0);
+  });
+
+  // 30 aliases is armor's ceiling, and armor never inspects argument values — so one request
+  // could carry thirty deep scans. Any single offending alias must sink the request.
+  it('rejects an aliased request where only one alias is over the ceiling', async () => {
+    const { chain, seen } = buildOffsetApp();
+    const aliases = Array.from(
+      { length: 30 },
+      (_, i) =>
+        `a${i}: stolenWallets(limit: 1000, offset: ${i === 17 ? 2_000_000_000 : 0}) { items { id } }`
+    ).join(' ');
+
+    const res = await postQuery(chain, { query: `{ ${aliases} }` });
+
+    expect(res.status).toBe(400);
+    expect(seen.calls).toBe(0);
+  });
+
+  it('lets a request at the ceiling through with its body intact', async () => {
+    const { chain, seen } = buildOffsetApp();
+    const payload = {
+      query:
+        'query R($offset: Int) { stolenWallets(limit: 1000, offset: $offset) { items { id } } }',
+      variables: { offset: DEFAULT_MAX_OFFSET },
+    };
+
+    const res = await postQuery(chain, payload);
+
+    expect(res.status).toBe(200);
+    expect(seen.calls).toBe(1);
+    // The failure this pins: reading `c.req.json()` instead of a clone would leave the GraphQL
+    // middleware a used stream, so every permitted query would arrive with an empty document
+    // and the control would look like it worked.
+    expect(JSON.parse(seen.body!)).toEqual(payload);
+  });
+
+  it('leaves the dashboard’s own paginated queries alone', async () => {
+    const { chain, seen } = buildOffsetApp();
+
+    const res = await postQuery(chain, {
+      query:
+        'query RecentWallets($limit: Int!, $offset: Int) { stolenWallets(orderBy: "registeredAt", limit: $limit, offset: $offset) { items { id } } }',
+      variables: { limit: 25, offset: 50 },
+    });
+
+    expect(res.status).toBe(200);
+    expect(seen.calls).toBe(1);
+  });
+
+  it('does not interfere with GET or with a non-JSON body', async () => {
+    const { chain } = buildOffsetApp();
+
+    expect((await request(chain, '/graphql')).status).toBe(200);
+    const res = await request(chain, '/graphql', {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: 'offset: 2000000000',
+    });
+    // Handed on rather than judged here — yoga owns malformed-request errors.
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('findExcessiveOffset', () => {
+  it('reports the offending value so the error can name it', () => {
+    expect(findExcessiveOffset({ query: '{ x(offset: 5000) }' }, 1000)).toBe(5000);
+  });
+
+  it('ignores offsets at or below the ceiling', () => {
+    expect(findExcessiveOffset({ query: '{ x(offset: 1000) }' }, 1000)).toBeNull();
+    expect(findExcessiveOffset({ query: '{ x(offset: 0) }' }, 1000)).toBeNull();
+  });
+
+  it('tolerates bodies with nothing to inspect', () => {
+    expect(findExcessiveOffset(null, 1000)).toBeNull();
+    expect(findExcessiveOffset({}, 1000)).toBeNull();
+    expect(findExcessiveOffset({ query: 42 }, 1000)).toBeNull();
+    expect(findExcessiveOffset({ query: '{ x }', variables: null }, 1000)).toBeNull();
+  });
+
+  // `limit` is ponder's own capped argument; matching it here would reject legitimate queries.
+  it('does not confuse other numeric arguments for an offset', () => {
+    expect(findExcessiveOffset({ query: '{ x(limit: 1000, offset: 10) }' }, 100)).toBeNull();
+    expect(findExcessiveOffset({ query: '{ x(registeredAt_gt: 1700000000) }' }, 100)).toBeNull();
+  });
+
+  it('reads the ceiling from env and falls back on a malformed value', () => {
+    expect(readMaxOffset({})).toBe(DEFAULT_MAX_OFFSET);
+    expect(readMaxOffset({ INDEXER_MAX_OFFSET: '500' })).toBe(500);
+    expect(readMaxOffset({ INDEXER_MAX_OFFSET: '5O0' })).toBe(DEFAULT_MAX_OFFSET);
+    expect(readMaxOffset({ INDEXER_MAX_OFFSET: '-1' })).toBe(DEFAULT_MAX_OFFSET);
+    expect(readMaxOffset({ INDEXER_MAX_OFFSET: '0' })).toBe(0);
   });
 });

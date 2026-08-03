@@ -63,6 +63,25 @@ const EXPORTED_CONTRACTS = [
   'SoulboundReceiver',
 ] as const;
 
+/**
+ * Everything downstream keys by bare error NAME (the curated map, UNCURATED, the staleness
+ * comparison). That is only sound while no two contracts declare the same name with different
+ * inputs — otherwise `found.set(name, ...)` silently keeps whichever artifact was read last
+ * and the signature checks validate against the wrong contract. Collisions are recorded here
+ * and asserted empty below, so the day a collision appears this file fails loudly instead of
+ * lying.
+ */
+const signatureCollisions = new Set<string>();
+
+function recordError(found: Map<string, string>, name: string, inputs?: { type: string }[]) {
+  const signature = `${name}(${(inputs ?? []).map((i) => i.type).join(',')})`;
+  const existing = found.get(name);
+  if (existing !== undefined && existing !== signature) {
+    signatureCollisions.add(`${name}: ${existing} vs ${signature}`);
+  }
+  found.set(name, signature);
+}
+
 /** Error names in the freshly-built Forge artifacts, or null when they are not present. */
 function collectForgeErrors(): Map<string, string> | null {
   if (!existsSync(CONTRACTS_OUT)) return null;
@@ -80,7 +99,7 @@ function collectForgeErrors(): Map<string, string> | null {
     };
     for (const item of artifact.abi ?? []) {
       if (item.type !== 'error' || !item.name) continue;
-      found.set(item.name, `${item.name}(${(item.inputs ?? []).map((i) => i.type).join(',')})`);
+      recordError(found, item.name, item.inputs);
     }
   }
 
@@ -98,7 +117,7 @@ function collectAbiErrors(): Map<string, string> {
       inputs?: { type: string }[];
     }[]) {
       if (item.type !== 'error' || !item.name) continue;
-      found.set(item.name, `${item.name}(${(item.inputs ?? []).map((i) => i.type).join(',')})`);
+      recordError(found, item.name, item.inputs);
     }
   }
   return found;
@@ -163,6 +182,15 @@ describe('contract error catalogue coverage', () => {
   it('finds errors in the generated ABIs (guards against a vacuous suite)', () => {
     // If the ABI walk silently returned nothing, every assertion below would pass trivially.
     expect(abiErrors.size).toBeGreaterThan(50);
+  });
+
+  it('no two contracts declare the same error name with different inputs', () => {
+    expect(
+      [...signatureCollisions],
+      `Name-keyed coverage checks are ambiguous for these errors — the selector was validated ` +
+        `against whichever contract was read last. Rename one side, or rework this suite to ` +
+        `key by full signature:\n  ${[...signatureCollisions].join('\n  ')}`
+    ).toEqual([]);
   });
 
   it('every ABI error is either curated or explicitly excluded', () => {

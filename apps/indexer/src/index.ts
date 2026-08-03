@@ -25,7 +25,7 @@ import {
   type Environment,
 } from '@swr/chains';
 import { type Address, type Hex } from 'viem';
-import { and, eq, inArray, isNotNull, isNull } from 'ponder';
+import { and, eq, isNotNull, isNull } from 'ponder';
 import {
   identifierToAddress,
   normalizeIdentifier,
@@ -316,16 +316,30 @@ ponder.on('WalletRegistry:BatchCreated', async ({ event, context }) => {
     .map((row) => row.walletAddress)
     .filter((address): address is Address => address !== null);
 
-  if (acknowledgedIds.length > 0) {
-    await db.sql
-      .update(walletAcknowledgement)
-      .set({ status: 'superseded' })
-      .where(
-        and(
-          inArray(walletAcknowledgement.id, acknowledgedIds),
-          eq(walletAcknowledgement.status, 'registered')
-        )
-      );
+  // Written through the KEYED store API, one row at a time, not as a bulk `db.sql.update`
+  // (round-3 review D5a).
+  //
+  // Raw SQL bypasses the `_reorg__` operation log ponder replays to unwind a reorged block.
+  // That is harmless for the `stolenWallet` back-fill above — those rows were INSERTED in this
+  // same block, so the revert deletes them outright and takes the back-fill with them — but it
+  // is not harmless here. A `walletAcknowledgement` row predates this block. Downgrading it
+  // with raw SQL left nothing for the revert to undo, so a batch that got reorged away still
+  // left its acknowledgements marked 'superseded' forever: a record that a two-phase flow was
+  // pre-empted by a batch that no longer exists. `db.update` on the primary key is logged and
+  // reverts cleanly.
+  //
+  // The row count is bounded by the batch's wallet count and every one of these keys was
+  // already looked up once by the `WalletRegistered` handler earlier in this transaction, so
+  // the finds are cache hits rather than new database work. Removing the raw statement also
+  // removes one whole-cache flush + invalidate + clear per batch (see the COST note above),
+  // which is a net saving, not a cost.
+  for (const walletAddress of acknowledgedIds) {
+    const ack = await db.find(walletAcknowledgement, { id: walletAddress });
+    // Only a 'registered' ack is a claim that needs correcting. 'pending' means the registeree
+    // never completed anything, and re-downgrading an already-'superseded' row is a no-op.
+    if (ack?.status === 'registered') {
+      await db.update(walletAcknowledgement, { id: walletAddress }).set({ status: 'superseded' });
+    }
   }
 
   await updateGlobalStats(db, { totalWalletBatches: 1 }, event.block.timestamp);

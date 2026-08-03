@@ -439,8 +439,26 @@ export function TransactionP2PRelayerPage() {
                   // Deliberately NOT taken from data.p2p.partnerPeerId — a payload-supplied
                   // peer ID is attacker-controlled and would defeat the binding.
                   setConnectedToPeer(true);
-                  // No reply and no step advance: this side dialed, so WaitForConnectionStep
-                  // owns the advance and gates it on `connectedToPeer`.
+
+                  // At `wait-for-connection` this is the answer to our own dial: no reply (an
+                  // answer to an answer is an endless CONNECT ping-pong) and no step advance,
+                  // because WaitForConnectionStep owns that and gates it on `connectedToPeer`.
+                  //
+                  // Past it, the reporter reloaded and is asking us to re-assert the handshake
+                  // so they can sign again (see `lib/p2p/rehandshake.ts`). They dialed, so here
+                  // WE answer. The reply carries our own connected address — the value their
+                  // side checks against the forwarder it already has on file, not one read out
+                  // of this payload.
+                  if (isPreConnectionStep(currentStep)) break;
+
+                  logger.p2p.info('Answering a re-handshake request from the reporter', {
+                    step: currentStep,
+                  });
+                  await passStreamData({
+                    connection,
+                    protocols: [PROTOCOLS.CONNECT],
+                    streamData: { form: { relayer: address }, success: true },
+                  });
                   break;
                 }
 

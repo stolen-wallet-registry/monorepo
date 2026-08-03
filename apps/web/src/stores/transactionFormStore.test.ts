@@ -16,8 +16,16 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useTransactionFormStore } from './transactionFormStore';
+import {
+  needsRehandshake,
+  matchesPairedRelayer,
+  REHANDSHAKE_TX_STEPS,
+} from '@/lib/p2p/rehandshake';
 
 const STORAGE_KEY = 'swr-transaction-form-state';
+
+/** Stands in for a pinned partner peer ID; only its presence matters here. */
+const PARTNER = '12D3KooWTestPartnerPeerId';
 
 const HASH_A = `0x${'a'.repeat(64)}`;
 const HASH_B = `0x${'b'.repeat(64)}`;
@@ -239,5 +247,85 @@ describe('transactionFormStore — forwarder provenance is session-only (V28)', 
     });
     expect(state.forwarder).toBe(RELAYER);
     expect(state.forwarderFromPeerSession).toBe(false);
+  });
+
+  /**
+   * Escaping the gate — the wallet flow's `formStore.test.ts` block, mirrored.
+   *
+   * Session-only provenance is only defensible if a reload is recoverable. Before the
+   * re-handshake it was not: nothing in the app could send the CONNECT that sets the mark, so
+   * a reporter who reloaded at a sign step could never sign again, and if the acknowledgement
+   * had already landed on chain, starting over meant the relayer paying for a second one.
+   */
+  it('shuts the signing gate on reload and reopens it only on a live answer', async () => {
+    useTransactionFormStore.getState().setForwarderFromPeer(RELAYER);
+    expect(
+      needsRehandshake({
+        step: 'acknowledge-sign',
+        partnerPeerId: PARTNER,
+        provenanceOk: useTransactionFormStore.getState().forwarderFromPeerSession,
+        rehandshakeSteps: REHANDSHAKE_TX_STEPS,
+      })
+    ).toBe(false);
+
+    const reloaded = await rehydrateWith({
+      reporter: REPORTER,
+      forwarder: RELAYER,
+      selectedTxHashes: [],
+      selectedTxDetails: [],
+      reportedChainId: 8453,
+    });
+    expect(reloaded.forwarder).toBe(RELAYER);
+    expect(reloaded.forwarderFromPeerSession).toBe(false);
+    expect(
+      needsRehandshake({
+        step: 'register-sign',
+        partnerPeerId: PARTNER,
+        provenanceOk: reloaded.forwarderFromPeerSession,
+        rehandshakeSteps: REHANDSHAKE_TX_STEPS,
+      })
+    ).toBe(true);
+
+    // The pinned partner answers, naming the forwarder already on file.
+    expect(matchesPairedRelayer(false, RELAYER, useTransactionFormStore.getState().forwarder)).toBe(
+      true
+    );
+    useTransactionFormStore.getState().setForwarderFromPeer(RELAYER);
+    expect(useTransactionFormStore.getState().forwarderFromPeerSession).toBe(true);
+  });
+
+  it('a persisted forwarder alone never reopens the gate', async () => {
+    const state = await rehydrateWith({
+      reporter: REPORTER,
+      forwarder: RELAYER,
+      forwarderFromPeerSession: true,
+      selectedTxHashes: [],
+      selectedTxDetails: [],
+      reportedChainId: 8453,
+    });
+
+    expect(state.forwarderFromPeerSession).toBe(false);
+    expect(
+      needsRehandshake({
+        step: 'acknowledge-sign',
+        partnerPeerId: PARTNER,
+        provenanceOk: state.forwarderFromPeerSession,
+        rehandshakeSteps: REHANDSHAKE_TX_STEPS,
+      })
+    ).toBe(true);
+  });
+
+  it('refuses an answer that names a forwarder other than the one on file', async () => {
+    await rehydrateWith({
+      reporter: REPORTER,
+      forwarder: RELAYER,
+      selectedTxHashes: [],
+      selectedTxDetails: [],
+      reportedChainId: 8453,
+    });
+
+    expect(
+      matchesPairedRelayer(false, REPORTER, useTransactionFormStore.getState().forwarder)
+    ).toBe(false);
   });
 });

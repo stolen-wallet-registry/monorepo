@@ -408,7 +408,11 @@ function assertConfirmCountEnv(count: number, label: string): void {
     );
   }
 
-  const supplied = Number(raw.trim());
+  // Plain decimal digits only — Number() alone would also accept hex ("0x32"), exponent
+  // ("5e2") and signed forms, which a templating wrapper could emit without anyone having
+  // typed the literal count this gate exists to make them type.
+  const trimmed = raw.trim();
+  const supplied = /^\d+$/.test(trimmed) ? Number(trimmed) : NaN;
 
   if (!Number.isInteger(supplied) || supplied < 0) {
     throw new Error(

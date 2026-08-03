@@ -41,6 +41,33 @@ Most faucets require a wallet with mainnet activity or a GitHub account. Alchemy
 
 - Foundry (`forge`, `cast`) — [install](https://book.getfoundry.sh/getting-started/installation)
 
+### Run the forked Hyperlane check first
+
+**A green `forge test` does not prove the bridge works.** Every Hyperlane test in the suite
+except one runs against `test/mocks/MockMailbox.sol`, and a mock only proves our code agrees
+with our own idea of the interface. That is not a theoretical gap: the adapter originally
+shipped built against the Hyperlane **v2** `IMailbox` (non-payable `dispatch`, no
+`quoteDispatch`) while every live Base/Optimism mailbox is **v3**, and the suite stayed green
+throughout — because MockMailbox had the same wrong shape as the adapter.
+
+`test/HyperlaneForked.t.sol` is the only test that breaks that circle, and it skips itself
+unless an RPC is supplied. Run it before you deploy:
+
+```bash
+cd packages/contracts
+OPTIMISM_SEPOLIA_RPC=https://<your-op-sepolia-rpc> \
+  forge test --match-contract HyperlaneForked -vv
+```
+
+Expect `4 passed; 0 failed; 0 skipped`. **If you see `0 passed` or any `[SKIP]`, the check did
+not run** — the env var is missing or misspelled, and you have verified nothing. Do not proceed
+on a skipped result.
+
+Re-run it after any change to the vendored interfaces in `src/vendor/hyperlane/`. There is a CI
+equivalent (`.github/workflows/hyperlane-forked.yml`, **Actions → Hyperlane forked integration →
+Run workflow**), but it is manual only and needs an `OPTIMISM_SEPOLIA_RPC` repository secret.
+Nothing runs it automatically, so treat the local command above as the deployment gate.
+
 ## Step 1: Environment Setup
 
 Create `packages/contracts/.env.testnet` (gitignored):
