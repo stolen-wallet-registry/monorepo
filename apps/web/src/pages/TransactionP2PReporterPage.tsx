@@ -839,6 +839,10 @@ export function TransactionP2PReporterPage() {
    * Re-establish the handshake after a mid-flow reload — the wallet flow's effect, verbatim in
    * shape. See `P2PRegistereeRegistrationPage` and `lib/p2p/rehandshake.ts` for the reasoning.
    */
+  // FALSE POSITIVE below, same shape as the wallet flow's effect: the returned cleanup clears
+  // the timer, but the rule cannot trace a handle assigned inside the async IIFE. `timeoutId`
+  // is only assigned after `if (cancelled) return`, so an unmount mid-await never creates one.
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     if (isInitializing || !address) return;
     if (

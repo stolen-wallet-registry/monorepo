@@ -278,6 +278,13 @@ export function P2PRegistereeRegistrationPage() {
    * the flag flips only when the partner's answering CONNECT arrives, and the handler that
    * receives it checks the address against the one already on file.
    */
+  // FALSE POSITIVE below: the cleanup DOES own the timer (`clearTimeout(timeoutId)`), but the
+  // rule cannot trace a handle assigned inside the async IIFE. There is also no window in which
+  // the timer outlives cleanup — `timeoutId` is only assigned after `if (cancelled) return`,
+  // and JS is single-threaded, so an unmount during the await never creates a timer at all.
+  // Line-scoped on purpose: the rest of this file stays covered, and the rule was verified to
+  // still catch a genuinely uncleaned setTimeout planted in this same component.
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     if (isInitializing || !address) return;
     if (

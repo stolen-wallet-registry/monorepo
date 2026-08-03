@@ -181,7 +181,14 @@ export function useP2PConnectionHealth({
   const peerDisconnectedFiredForRef = useRef<string | null>(null);
   // Guard against concurrent health checks (use ref, not state, to avoid dep cycles)
   const isCheckingRef = useRef(false);
-  // Track disconnect callback timeouts for cleanup on unmount
+  // Track disconnect callback timeouts for cleanup on unmount.
+  //
+  // FALSE POSITIVE below: this Set exists PRECISELY so every disconnect timer is owned — the
+  // health effect's cleanup iterates it and clears each handle, alongside the initial timeout,
+  // the retry timeout and the interval. The rule cannot trace handles held in a collection
+  // rather than a single variable, so it reads the most thorough cleanup in this file as the
+  // absence of one.
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
   const disconnectTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   // Use ref for getter to avoid effect re-runs
