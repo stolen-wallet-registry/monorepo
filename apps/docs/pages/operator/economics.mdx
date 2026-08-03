@@ -76,27 +76,39 @@ The `FeeManager` contract manages registration fees denominated in USD and conve
 
 Individual fees serve as an anti-spam mechanism — they create a cost barrier that makes mass false registrations expensive. Operators are DAO-approved entities whose trust is established through the approval process itself, so no additional fee is required.
 
+**"Free" is a default, not a constant.** `operatorBatchFeeUsdCents` ships as `0`, but the fee mechanism is retained rather than deleted so the DAO can enable it later via `proposeOperatorBatchFee` → 2 days → `activateOperatorBatchFee`, with no redeployment. Operators should always quote `OperatorSubmitter.quoteBatchFee()` rather than hardcoding zero — see [Batch Submissions](/operator/batch-submissions#batch-fees).
+
 ### USD-to-ETH Conversion
 
 ```solidity
 function currentFeeWei() public view returns (uint256) {
-    return (baseFeeUsdCents * 1e18) / ethPriceUsdCents;
+    if (baseFeeUsdCents == 0) return 0;           // free registrations
+    uint256 ethPrice = getEthPriceUsdCentsView(); // oracle, with fallback
+    if (ethPrice == 0) revert Fee__InvalidPrice();
+    return (baseFeeUsdCents * 1e18) / ethPrice;
 }
 ```
 
 At ETH = $3,000: `(500 * 1e18) / 300000 = 0.00167 ETH` (~$5.00)
 
+`operatorBatchFeeWei()` has the identical shape, reading `operatorBatchFeeUsdCents` instead.
+
 ### Price Oracle
 
 The `FeeManager` uses a Chainlink ETH/USD price feed with a manual fallback:
 
-| Parameter                  | Default           | Purpose                                        |
-| -------------------------- | ----------------- | ---------------------------------------------- |
-| `stalePriceThreshold`      | 14,400s (4 hours) | Max age before falling back to stored price    |
-| `fallbackSyncInterval`     | 86,400s (1 day)   | How often to auto-sync fallback from Chainlink |
-| `fallbackEthPriceUsdCents` | 300,000 ($3,000)  | Manual price used when oracle is unavailable   |
+| Parameter                   | Default             | Purpose                                        |
+| --------------------------- | ------------------- | ---------------------------------------------- |
+| `stalePriceThreshold`       | 14,400s (4 hours)   | Max age before falling back to stored price    |
+| `fallbackSyncInterval`      | 86,400s (1 day)     | How often to auto-sync fallback from Chainlink |
+| `fallbackEthPriceUsdCents`  | 300,000 ($3,000)    | Manual price used when oracle is unavailable   |
+| `minEthPriceUsdCents`       | 5,000 ($50)         | Reject oracle answers below this               |
+| `maxEthPriceUsdCents`       | 5,000,000 ($50,000) | Reject oracle answers above this               |
+| `MAX_STALE_PRICE_THRESHOLD` | 7 days (constant)   | Hard cap on `stalePriceThreshold`              |
 
 If Chainlink is stale or unreachable, the contract uses the fallback price. The fallback is opportunistically synced from Chainlink during normal operations, so it stays reasonably fresh without extra transactions.
+
+The sanity bounds cover the case the staleness check cannot: an answer that is fresh, positive, and correctly encoded but simply **wrong**. The fee formula is unbounded in both directions — a $1 answer would price a $5 registration at 5 ETH, and a 1e20 answer would make registration free and stop deterring spam. Out-of-band answers fall back to the last known-good price rather than reverting, since a revert here would brick every fee-collecting registration path. The same bounds apply to the fallback price itself, so it cannot be used to sidestep them. `stalePriceThreshold` is capped at 7 days because an unbounded threshold would mark every answer fresh forever and disable staleness detection entirely.
 
 ## Fee Distribution
 
@@ -128,7 +140,7 @@ Why would an exchange or security firm contribute fraud data to a public registr
 
 **Community trust.** Users prefer exchanges that actively contribute to ecosystem security. Operator status is public and verifiable on-chain.
 
-**Zero protocol fees.** Operators pay only L2 gas — no protocol fees. Submit your fraud data for free, get everyone else's data in return.
+**Zero protocol fees.** Operators pay only L2 gas — the batch fee is currently $0. Submit your fraud data for free, get everyone else's data in return. (Quote `quoteBatchFee()` at submission time rather than assuming zero; the DAO can enable a fee through the timelocked path.)
 
 ## Future: Operator-as-Paymaster
 

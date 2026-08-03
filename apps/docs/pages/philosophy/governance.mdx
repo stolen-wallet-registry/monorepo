@@ -2,18 +2,18 @@
 
 How the Stolen Wallet Registry is governed and how operators are approved.
 
-> **Note:** This document describes the proposed governance model. The registry is currently in Phase 1 with single-owner control. DAO governance and operator features are planned but not yet implemented.
+> **Note:** Operator functionality is **implemented and live** — `OperatorRegistry`, `OperatorSubmitter`, capability bits, and the operator CLI all ship today. What is not yet implemented is the **DAO** that is meant to approve operators: the registry currently runs under single-owner control, with a 2-day on-chain timelock on trust-boundary changes. The phased model below describes how that owner is intended to be replaced by a DAO; the approval mechanics it describes are governance process, not missing code.
 
 ## Governance Model
 
 The registry uses a **phased governance approach** that evolves with the protocol's maturity.
 
-### Phase 1: Individual Submissions (Current)
+### Phase 1: Owner-Approved Operators (Current)
 
-- Only individual wallet owners can register
-- No operator functionality enabled
-- Single owner controls contract upgrades
-- Focus on proving core functionality
+- Individual wallet owners register via the two-phase EIP-712 flow
+- Operator batch submission is **live** — `OperatorSubmitter` enforces per-registry capability bits (`WALLET_REGISTRY`, `TX_REGISTRY`, `CONTRACT_REGISTRY`)
+- Operators are approved by the **contract owner** rather than a DAO vote, through the timelocked `proposeOperator` → wait 2 days → `activateOperator` path
+- Single owner controls configuration, bounded by `TimelockOwnable`
 
 **Transition to Phase 2:** Triggered by DAO vote after achieving 1,000+ registrations and completing security audit.
 
@@ -26,10 +26,10 @@ The registry uses a **phased governance approach** that evolves with the protoco
 
 **Transition to Phase 3:** Triggered by successful 6-month DAO operation period and community vote.
 
-### Phase 3: Operator Approvals
+### Phase 3: DAO-Approved Operators
 
-- DAO can approve operators
-- Operators gain batch submission rights
+- Operator approval moves from the single owner to a DAO vote
+- Batch submission rights and per-registry capability bits work as they do today
 - Different trust levels per subregistry
 - Operator staking/slashing (TBD)
 
@@ -46,7 +46,7 @@ The registry uses a **phased governance approach** that evolves with the protoco
 
 ### What is an Operator?
 
-An operator is a **DAO-approved entity** with special permissions to submit data to the registry. Examples:
+An operator is an approved entity with special permissions to submit data to the registry — approved by the contract owner today, by DAO vote from Phase 3 on. Examples:
 
 - **Exchanges** (Coinbase, Kraken, Binance)
 - **Security firms** (Chainalysis, TRM Labs)
@@ -67,8 +67,10 @@ An operator is a **DAO-approved entity** with special permissions to submit data
 1. **Application** - Entity submits application to DAO
 2. **Due diligence** - Community reviews legitimacy
 3. **Vote** - DAO token holders vote
-4. **Onboarding** - If approved, added to OperatorRegistry
+4. **Onboarding** - If approved, added to `OperatorRegistry` via `proposeOperator` → 2-day timelock → `activateOperator`, with capability bits scoping which registries they may write to
 5. **Probation** - Initial period with limited permissions
+
+Steps 1-3 are the future DAO process. Step 4 is live today, executed by the contract owner.
 
 ### Operator Responsibilities
 
@@ -230,19 +232,26 @@ Each contract exposes **action-specific** propose/activate functions (e.g., `pro
 
 **What's timelocked:**
 
-| Contract          | Timelocked Functions                                        |
-| ----------------- | ----------------------------------------------------------- |
-| FraudRegistryHub  | Changing wallet, transaction, contract registries and inbox |
-| CrossChainInbox   | Adding or removing trusted cross-chain sources              |
-| OperatorRegistry  | Approving new operators                                     |
-| BaseSoulbound     | Granting or revoking minter authorization                   |
-| SoulboundReceiver | Changing trusted cross-chain forwarders                     |
+| Contract                                                | Timelocked Functions                                                                             |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| FraudRegistryHub                                        | Changing wallet, transaction, contract registries and inbox                                      |
+| CrossChainInbox                                         | Adding or removing trusted cross-chain sources                                                   |
+| OperatorRegistry                                        | Approving new operators                                                                          |
+| OperatorSubmitter                                       | Changing the wallet/transaction/contract registries and the operator registry it submits through |
+| WalletRegistry / TransactionRegistry / ContractRegistry | Changing the authorized `OperatorSubmitter`                                                      |
+| FeeManager                                              | Every economic setter, including the operator batch fee                                          |
+| BaseSoulbound                                           | Granting or revoking minter authorization                                                        |
+| SoulboundReceiver                                       | Changing trusted cross-chain forwarders                                                          |
+
+**Proposals expire.** A proposal that is never activated dies after `ACTIVATION_EXPIRY` (**14 days**), counted from when it was proposed — so the usable activation window is the 12 days between the 2-day delay and the 14-day expiry. This bounds how long a forgotten proposal stays armed: without it, a change proposed and abandoned months ago could be activated instantly by a later-compromised key. Re-proposing restarts the full delay and re-emits `ActionProposed` for watchers.
 
 **What stays immediate (by design):**
 
 - **`revokeOperator`** — revoking a bad actor is an emergency action; delaying it helps the attacker
 - **`pause` / `unpause`** — safety mechanisms that must act instantly
-- **`setFeeRecipient`** — doesn't affect trust boundaries (registry data integrity is unchanged), though a compromised owner key could redirect fee revenue; changes take effect immediately, so monitor `FeeRecipientSet` events and owner key access
+- **`FraudRegistryHub.setFeeRecipient`** — doesn't affect trust boundaries (registry data integrity is unchanged), though a compromised owner key could redirect fee revenue; changes take effect immediately, so monitor `FeeRecipientSet` events and owner key access
+
+`OperatorSubmitter.setFeeRecipient` is a different function with the same name: it is marked `onlyDuringSetup`, so it can only be called before `completeSetup()` and is permanently unavailable afterwards — neither immediate nor timelocked, simply closed.
 
 ### Emergency Powers
 

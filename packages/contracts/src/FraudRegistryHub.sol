@@ -133,7 +133,7 @@ contract FraudRegistryHub is IFraudRegistryHub, TimelockOwnable, Pausable {
     // TODO: Phase 10 — replace length-based routing with namespace-based routing for non-EVM CAIP-10 support
     /// @inheritdoc IFraudRegistryHub
     /// @notice Check if any identifier is registered across all registries
-    /// @param caip10 The CAIP-10 identifier (e.g., "eip155:8453:0x742d35...")
+    /// @param caip10 The CAIP-10 identifier (e.g., "eip155:8453:0x742D35CC6634c0532925A3b844BC9E7595F0BEb0")
     /// @return True if registered in any registry
     function isRegistered(string calldata caip10) external view returns (bool) {
         // Parse CAIP-10 to determine identifier length

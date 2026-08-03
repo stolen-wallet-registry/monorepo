@@ -24,7 +24,7 @@ A chain is identified by `{namespace}:{chainRef}`.
 An account is identified by `{namespace}:{chainRef}:{address}`.
 
 ```
-eip155:8453:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+eip155:8453:0x742D35CC6634c0532925A3b844BC9E7595F0BEb0
 ```
 
 ### [CAIP-363](https://standards.chainagnostic.org/CAIPs/caip-363): Wildcard Chain References
@@ -34,7 +34,7 @@ This is the key insight for wallet registration. An EVM address is the same acro
 CAIP-363 uses `_` as a wildcard chain reference:
 
 ```
-eip155:_:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+eip155:_:0x742D35CC6634c0532925A3b844BC9E7595F0BEb0
 ```
 
 This means **one registration covers all EVM chains**. Non-EVM chains (Solana, Bitcoin) use chain-specific identifiers since address formats differ.
@@ -74,16 +74,25 @@ function evmWalletKey(address wallet) internal pure returns (bytes32) {
 }
 ```
 
-**Non-EVM Wallets** - Chain-specific key:
+**Generic wallets** - the namespace-dispatching entry point. EVM takes the wildcard branch; everything else is chain-specific:
 
 ```solidity
 // CAIP10.sol
 function walletKey(bytes32 namespaceHash, bytes32 chainRef, bytes32 identifier)
     internal pure returns (bytes32)
 {
+    if (namespaceHash == NAMESPACE_EIP155) {
+        // EVM: wildcard key (same wallet on all EVM chains) - chainRef ignored
+        return keccak256(abi.encodePacked(NAMESPACE_EIP155, WILDCARD, identifier));
+    }
+    // Other namespaces: chain-specific key
     return keccak256(abi.encodePacked(namespaceHash, chainRef, identifier));
 }
 ```
+
+:::warning
+`walletKey`'s EVM branch hashes the **pre-hashed constants** `NAMESPACE_EIP155` and `WILDCARD`, while `evmWalletKey` hashes the **literal string** `"eip155:_:"`. These produce **different keys for the same wallet**. Every live EVM path uses `evmWalletKey` — `acknowledge`, `register`, the operator batch path, and the EVM branch of `registerFromHub` all call it directly. `walletKey` is reached only for non-EVM namespaces arriving via cross-chain messages, where `chainRefHash` is pre-computed by the spoke. Do not mix the two when computing a key off-chain.
+:::
 
 **Transactions** - Always chain-specific (a tx hash is only meaningful on its chain):
 

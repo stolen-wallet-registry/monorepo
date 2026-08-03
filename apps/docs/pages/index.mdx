@@ -34,10 +34,11 @@ graph TB
     end
 
     subgraph Hub Chain
-        Hub[FraudRegistryHub]
+        Sub[OperatorSubmitter]
         WR[WalletRegistry]
         TR[TransactionRegistry]
         CR[ContractRegistry]
+        Hub[FraudRegistryHub<br/>query router]
     end
 
     subgraph Spoke Chains
@@ -51,21 +52,27 @@ graph TB
 
     Users --> WebApp
     Users --> CLI
-    WebApp --> Hub
-    WebApp --> Spoke
-    CLI --> Hub
-    Hub --> WR
-    Hub --> TR
-    Hub --> CR
+    WebApp -->|register| WR
+    WebApp -->|register| TR
+    WebApp -->|register| Spoke
+    CLI -->|batch submit| Sub
+    Sub --> WR
+    Sub --> TR
+    Sub --> CR
     Spoke --> Adapter
     Adapter -->|Cross-Chain Message| Inbox
     Inbox --> Hub
+    Hub -->|registerFromHub| WR
+    Hub -->|registerFromHub| TR
     WR --> Indexer
     TR --> Indexer
     CR --> Indexer
     Indexer --> Dashboard
+    Dashboard -.->|isRegistered| Hub
 
 `} />
+
+Individual users write **directly to the registry contracts** — on the hub chain to `WalletRegistry` or `TransactionRegistry`, on a spoke chain to `SpokeRegistry`. Operators write through `OperatorSubmitter`, which checks their capability bits before forwarding the batch. `FraudRegistryHub` is not on the individual write path at all: it is the cross-chain receiver (routing inbound spoke messages to the right registry) and the unified read interface (`isRegistered`).
 
 ## Security Model
 

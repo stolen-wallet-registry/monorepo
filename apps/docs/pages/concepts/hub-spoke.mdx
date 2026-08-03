@@ -55,17 +55,23 @@ Currently only Hyperlane is active. Chainlink CCIP and Wormhole are planned futu
 
 ## Contract Deployment
 
-| Contract            | Hub (Base) | Spoke Chains |
-| ------------------- | ---------- | ------------ |
-| WalletRegistry      | Yes        | -            |
-| TransactionRegistry | Yes        | -            |
-| ContractRegistry    | Yes        | -            |
-| FraudRegistryHub    | Yes        | -            |
-| CrossChainInbox     | Yes        | -            |
-| OperatorRegistry    | Yes        | -            |
-| OperatorSubmitter   | Yes        | -            |
-| SpokeRegistry       | -          | Yes          |
-| Bridge Adapter      | -          | Yes          |
+| Contract                | Hub (Base) | Spoke Chains |
+| ----------------------- | ---------- | ------------ |
+| WalletRegistry          | Yes        | -            |
+| TransactionRegistry     | Yes        | -            |
+| ContractRegistry        | Yes        | -            |
+| FraudRegistryHub        | Yes        | -            |
+| CrossChainInbox         | Yes        | -            |
+| OperatorRegistry        | Yes        | -            |
+| OperatorSubmitter       | Yes        | -            |
+| FeeManager              | Yes        | Yes          |
+| WalletSoulbound         | Yes        | -            |
+| SupportSoulbound        | Yes        | -            |
+| SoulboundReceiver       | Yes        | -            |
+| TranslationRegistry     | Yes        | -            |
+| SpokeRegistry           | -          | Yes          |
+| SpokeSoulboundForwarder | -          | Yes          |
+| Bridge Adapter          | -          | Yes          |
 
 The hub has the full registry stack. Each spoke has a single SpokeRegistry that handles both wallet and transaction registrations (no contract registration on spokes - that's operator-only on the hub).
 
@@ -170,11 +176,18 @@ function register(
     uint64 incidentTimestamp,
     uint256 deadline,
     uint256 nonce,
+    uint256 windowBlock,   // NOT signed - binds via the signed windowBlockHash
     uint8 v, bytes32 r, bytes32 s
 ) external payable;
 ```
 
+`register()` takes ten parameters. The `windowBlock` is the block whose hash the registration signature committed to — the anti-phishing control described in [Two-Phase Registration](/concepts/two-phase-registration#signature-freshness-the-primary-control). It travels as unsigned calldata because the signed `windowBlockHash` already binds it.
+
 This means the frontend uses the **same argument construction** regardless of which chain the user is on. No hub/spoke branching in the UI code.
+
+:::info
+The hub names its first parameter `registeree` and the spoke names it `wallet`. Parameter names are not part of the ABI, so the function selectors are identical and the unification holds. Internally `SpokeRegistry.register` immediately collapses its arguments into a memory struct to stay under the EVM's 16-slot stack limit (this project builds without via-ir) — the external signature stays flat and byte-identical to the hub's.
+:::
 
 ## FraudRegistryHub Query Routing
 

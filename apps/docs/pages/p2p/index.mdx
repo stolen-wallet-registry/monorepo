@@ -26,7 +26,7 @@ flowchart LR
 
 `} />
 
-The relay server facilitates the initial connection between browsers (NAT traversal). Once connected, data flows directly between peers via WebRTC. The relay carries encrypted packets (including signatures) for some transports such as Safari/mobile WebSockets, but cannot read or verify their contents thanks to Noise encryption.
+The relay server facilitates the initial connection between browsers (NAT traversal). Once connected, dcutr upgrades the link and data flows directly between peers via WebRTC. Until that upgrade lands - and for the whole session if it never does - the relay carries the encrypted packets, including signatures, but cannot read or verify their contents thanks to Noise encryption.
 
 ## Roles
 
@@ -35,7 +35,7 @@ The relay server facilitates the initial connection between browsers (NAT traver
 | **Registeree** | Victim (compromised wallet) | Signs acknowledgement and registration messages, sends signatures to helper |
 | **Relayer**    | Helper (funded wallet)      | Receives signatures, submits transactions to the contract, pays gas         |
 
-The `trustedForwarder` field in the EIP-712 signature is set to the helper's address. Only that address can submit the `register()` transaction - the signature is useless to anyone else.
+The `trustedForwarder` field in the EIP-712 signature is set to the helper's address. Only that address can submit the `register()` transaction - the signature is useless to anyone else. The `acknowledge()` transaction is deliberately open to any submitter, because the forwarder is named inside the signature itself: whoever pays, the relationship the acknowledgement establishes is the one the victim signed.
 
 ## Why Peer-to-Peer?
 
@@ -43,34 +43,34 @@ A centralized relay server would be a single point of failure and a honeypot for
 
 - **No server holds signatures** - The relay server handles NAT traversal (connection setup) only. Actual message data flows browser-to-browser via WebRTC.
 - **Encrypted by default** - All libp2p connections use Noise protocol encryption (ChaCha20-Poly1305).
-- **No accounts or auth** - Connect with a Peer ID derived from your wallet. No sign-ups, no API keys.
+- **No accounts or auth** - Pair with a one-line code you exchange yourselves. No sign-ups, no API keys.
 - **Censorship resistant** - If one relay goes down, configure a different one. The protocol is relay-agnostic.
 
 ## Technology
 
 Built on **libp2p 3.x** with circuit relay v2:
 
-| Component        | Purpose                                                      |
-| ---------------- | ------------------------------------------------------------ |
-| Circuit Relay v2 | NAT traversal - connects browsers behind firewalls           |
-| WebRTC           | Direct browser-to-browser data channel (~85% of connections) |
-| dcutr            | Upgrades relayed connections to direct WebRTC automatically  |
-| WebSocket        | Fallback transport for Safari and restrictive networks       |
-| Noise Protocol   | Connection encryption (ChaCha20-Poly1305)                    |
-| Yamux            | Stream multiplexer (multiple protocols over one connection)  |
+| Component        | Purpose                                                     |
+| ---------------- | ----------------------------------------------------------- |
+| Circuit Relay v2 | NAT traversal - connects browsers behind firewalls          |
+| WebRTC           | Direct browser-to-browser data channel                      |
+| dcutr            | Upgrades relayed connections to direct WebRTC automatically |
+| WebSocket        | Transport to the relay, and the path when no upgrade lands  |
+| WebTransport     | Additional direct transport where the browser offers it     |
+| Noise Protocol   | Connection encryption (ChaCha20-Poly1305)                   |
+| Yamux            | Stream multiplexer (multiple protocols over one connection) |
 
 ### Browser Compatibility
 
-| Browser         | Transport         | Notes                                 |
-| --------------- | ----------------- | ------------------------------------- |
-| Chrome / Edge   | WebRTC (direct)   | Full support, best performance        |
-| Firefox         | WebRTC (direct)   | Full support                          |
-| Safari          | WebSocket (relay) | No WebRTC - data routes through relay |
-| Mobile browsers | WebSocket (relay) | Limited WebRTC support                |
+Every browser is handed the same transport list - circuit relay, WebRTC, WebRTC-direct, WebTransport and WebSockets - and libp2p negotiates whatever the two peers and their networks actually support. There is no browser sniffing and no per-browser fallback path in the app.
+
+What genuinely varies by browser is **storage**, not transport. Safari's private mode reports a zero quota and throws on the first `sessionStorage` write, which is where the P2P identity and any received signature live. The app handles that: the peer identity falls back to an in-memory value that stays stable for the life of the page (a reload then mints a new Peer ID), and a signature that cannot be saved is reported as such rather than silently lost.
 
 ## Connection Flow
 
 Both peers connect to a circuit relay server. The relay facilitates NAT traversal - punching through firewalls and routers so two browsers can find each other. Once the connection is established, dcutr attempts to upgrade to a direct WebRTC connection, removing the relay from the data path entirely.
+
+**The helper dials the victim, not the other way around.** The victim publishes a pairing code and waits; the helper pastes it and initiates the connection. See [Pairing](#pairing) for why that direction is the security-relevant one.
 
 <Mermaid chart={`
 sequenceDiagram
@@ -82,12 +82,13 @@ sequenceDiagram
     Reg->>Relay: Connect (WebSocket)
     Rel->>Relay: Connect (WebSocket)
 
-    Note over Reg,Rel: 2. Registeree dials Relayer via relay
-    Reg->>Relay: Dial Relayer's Peer ID
-    Relay->>Rel: Forward connection
+    Note over Reg,Rel: 2. Relayer dials Registeree via relay
+    Note over Rel: Peer ID + wallet come from<br/>the pasted pairing code
+    Rel->>Relay: Dial Registeree's Peer ID
+    Relay->>Reg: Forward connection
 
     Note over Reg,Rel: 3. dcutr upgrades to direct
-    Reg-->>Rel: WebRTC negotiation
+    Rel-->>Reg: WebRTC negotiation
     Note over Reg,Rel: Direct connection established
 
     Note over Reg,Rel: 4. All SWR protocol messages flow directly
@@ -96,9 +97,33 @@ sequenceDiagram
 
 `} />
 
+## Pairing
+
+The helper is agreeing to spend its own money marking **one specific wallet** as permanently stolen. So it has to learn which wallet that is from outside the channel - if the address arrived in the peer's own handshake, "which wallet am I paying for" would be whatever the peer that connected first claimed. That is an authorization gap, and no handshake closes it: an attacker naming its own wallet passes any challenge you put to it.
+
+The pairing code folds the address into the one string the two people already exchange:
+
+```
+swr1:<peerId>:<0x-address>
+```
+
+The victim's screen shows it; the helper pastes it into the field the flow already had. The helper therefore pins both the Peer ID and the wallet address **before it accepts anything**, and refuses to pay unless the signer recovered from the EIP-712 signature is that exact wallet.
+
+A bare Peer ID is rejected with an explanation rather than accepted as a legacy format. Silently falling back would restore the unauthorized-wallet path the code exists to close, which is worse than failing.
+
+This is also why the helper dials. The dialing side already knows who it agreed to talk to, so it never adopts a partner from an inbound connection; the victim, who cannot know in advance, pins the first peer that connects. That leaves a residual first-connection race on the victim's side only - and losing it is cheap, because everything an impostor can then do is pay to register the victim's own wallet (the victim's goal) or stall and pay nothing.
+
 ## Peer ID
 
-Each wallet gets a persistent Peer ID derived from an Ed25519 keypair stored in `localStorage`. Same wallet address + same browser = same Peer ID across sessions. This means your helper can reconnect to the same ID if the connection drops mid-flow.
+Each browser tab gets a Peer ID derived from an Ed25519 keypair held in `sessionStorage`. It is stable across reloads within that tab - the partner pins your Peer ID, so a mid-flow refresh during the grace period has to come back as the same peer - and it is discarded when the tab closes.
+
+Three deliberate properties, all of them security decisions:
+
+- **Not keyed by wallet address.** One key per address meant the storage keys alone enumerated every wallet ever connected in that browser, indefinitely.
+- **Not `localStorage`.** A key that survives forever still produces your Peer ID months later, and a Peer ID is exactly what your partner's binding check authenticates. That buys an attacker griefing: connect first, get pinned, and lock the real peer out of a registration they may have no other way to complete.
+- **One identity per tab.** Two tabs no longer claim the same Peer ID on the relay.
+
+Older builds stored keys under `swr-p2p-keypair-<address>` in `localStorage`; those entries are purged automatically the first time the current code runs.
 
 Peer IDs look like: `12D3KooWJCJbTjCCnCTGNSENuGK6Pu1aRqjLEJ4P7vEtFofpSXt7`
 
@@ -115,10 +140,10 @@ Peer IDs look like: `12D3KooWJCJbTjCCnCTGNSENuGK6Pu1aRqjLEJ4P7vEtFofpSXt7`
 **Terminal 1** - Start the relay server:
 
 ```bash
-pnpm relay:dev
+pnpm relay
 ```
 
-The relay prints its multiaddr and Peer ID on startup.
+The relay prints its multiaddr and Peer ID on startup, along with the reservation limits it resolved.
 
 **Terminal 2** - Start the web app:
 
@@ -126,29 +151,34 @@ The relay prints its multiaddr and Peer ID on startup.
 pnpm dev
 ```
 
-**Browser Tab 1** (the helper):
-
-1. Connect a funded wallet
-2. Navigate to P2P Relay registration
-3. Select the **Relayer** role
-4. Copy your displayed Peer ID
-
-**Browser Tab 2** (the victim):
+**Browser Tab 1** (the victim):
 
 1. Connect the "compromised" wallet (the one you want to register)
 2. Navigate to P2P Relay registration
 3. Select the **Registeree** role
-4. Paste the Relayer's Peer ID and click Connect
+4. Copy the pairing code shown on screen - it starts with `swr1:`
+
+**Browser Tab 2** (the helper):
+
+1. Connect a funded wallet
+2. Navigate to P2P Relay registration
+3. Select the **Relayer** role
+4. Paste the victim's pairing code and click Connect
+
+The helper dials, so the victim only waits. Pasting a bare Peer ID instead of the full `swr1:` code is rejected on purpose - see [Pairing](#pairing).
 
 **The flow:**
 
 1. Connection established - both tabs show "Connected"
 2. Registeree signs acknowledgement (EIP-712 popup in wallet)
 3. Signature sent to Relayer via P2P
-4. Relayer submits `acknowledge()` transaction, sends tx hash back
-5. Grace period (1-4 minutes on mainnet, shorter on local)
-6. Registeree signs registration
-7. Relayer submits `register()` transaction
-8. Wallet permanently registered as stolen
+4. Relayer confirms receipt; only then does the Registeree's flow advance
+5. Relayer submits `acknowledge()` transaction, sends tx hash back
+6. Grace period (1-4 minutes on mainnet, shorter on local)
+7. Registeree signs registration, Relayer confirms receipt
+8. Relayer submits `register()` transaction
+9. Wallet permanently registered as stolen
+
+The receipts in steps 4 and 7 are not cosmetic. The victim's flow leaves a signing step only when a receipt arrives **for a signature it actually sent** - which is what stops a relayer from pushing the victim past a step they never signed, into a payment screen that would wait forever.
 
 Both tabs track progress in real-time through the P2P message exchange.

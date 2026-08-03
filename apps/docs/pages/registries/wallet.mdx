@@ -65,12 +65,25 @@ sequenceDiagram
     participant W as Wallet Owner
     participant C as WalletRegistry
     W->>C: acknowledge(registeree, trustedForwarder, ...)
-    Note over C: Store pending ack<br/>Start grace period
-    Note over W,C: ~1-4 min randomized delay
-    W->>C: register(registeree, trustedForwarder, ...)
-    Note over C: Verify grace period elapsed<br/>Store WalletEntry permanently
+    Note over C: Store pending ack<br/>Start randomized grace period
+    Note over W,C: 2-4 min on production chains<br/>(see Grace Period Timing)
+    W->>C: register(..., windowBlock, ...)
+    Note over C: Verify grace period elapsed<br/>Verify signature commits to<br/>blockhash(windowBlock)<br/>Store WalletEntry permanently
 `}
 />
+
+### What Actually Prevents Phishing
+
+The primary anti-phishing control is **not** the randomized delay. It is the `windowBlockHash`
+commitment in the registration signature: the signature must commit to the hash of a block at or
+after `gracePeriodStart`. That block -- and therefore its hash -- did not exist when the
+acknowledgement was signed, so the registration signature **cannot** have been produced in the
+same sitting as the acknowledgement.
+
+Without it, a phishing page could collect both signatures seconds apart and submit the second one
+itself once the delay had quietly elapsed. The randomization is defense in depth: it widens the
+timing window an attacker must cover, but nothing depends on `block.prevrandao` being
+unpredictable (it is proposer-influenceable and is not cryptographically secure).
 
 ### Phase 1: Acknowledge
 
@@ -86,14 +99,24 @@ function acknowledge(
 ) external;
 ```
 
-- Verifies EIP-712 signature from `registeree`
+- Requires `msg.sender == trustedForwarder` (reverts with `WalletRegistry__InvalidForwarder`)
+- Validates the signature deadline is in the future and no more than 2 hours out
+  (`TimingConfig.MAX_SIGNATURE_LIFETIME`) -- reverts with `WalletRegistry__DeadlineExpired` or
+  `WalletRegistry__DeadlineTooFarInFuture`
+- Rejects a future-dated `incidentTimestamp` with `WalletRegistry__InvalidIncidentTimestamp`
+  (`0` is the accepted "unknown" sentinel and is still allowed)
 - Checks wallet is not already registered or pending
 - Validates nonce matches `nonces[registeree]` (reverts with `WalletRegistry__InvalidNonce` on mismatch)
+- Verifies EIP-712 signature from `registeree`
 - Increments nonce
 - Stores `AcknowledgementData` with randomized grace period timing
 - Emits `WalletAcknowledged(registeree, trustedForwarder, isSponsored)`
 
-Anyone can submit the transaction (the trusted forwarder is named in the signature). This is what enables relay registration methods.
+**Only the forwarder named in the signature may open the window.** All three registration methods
+already satisfy this -- standard: the registeree itself; self-relay: the gas wallet; P2P relay: the
+relayer. Requiring it closes two holes: an unrelated third party could otherwise grind their own
+address to steer the "randomized" timing, and could burn a victim's nonce to grief them. Phase 2
+already demanded `msg.sender == trustedForwarder`; this makes both phases consistent.
 
 ### Phase 2: Register
 
@@ -105,6 +128,7 @@ function register(
     uint64  incidentTimestamp,  // Must match ack phase
     uint256 deadline,
     uint256 nonce,
+    uint256 windowBlock,       // Block whose hash the signature commits to
     uint8 v, bytes32 r, bytes32 s
 ) external payable;
 ```
@@ -112,10 +136,30 @@ function register(
 - **Only** `trustedForwarder` can call this (`msg.sender` must match)
 - Grace period must have elapsed (`block.number >= gracePeriodStart`)
 - Must be within deadline window (`block.number < deadline`)
-- Verifies second EIP-712 signature from `registeree`
+- `reportedChainId` and `incidentTimestamp` must match the acknowledge phase
+- Validates nonce matches `nonces[registeree]` (fail-fast, before signature verification)
+- Resolves `windowBlockHash = blockhash(windowBlock)` -- see below
+- Verifies second EIP-712 signature from `registeree` (the signed struct includes `windowBlockHash`)
+- Reverts with `WalletRegistry__AlreadyRegistered` if a cross-chain or operator path registered the
+  wallet during the grace period
 - Stores `WalletEntry` permanently, deletes pending acknowledgement
-- Collects fee (if FeeManager configured)
+- Collects fee (if a FeeManager is configured; in free mode the full `msg.value` is refunded)
 - Emits `WalletRegistered(identifier, reportedChainId, incidentTimestamp, isSponsored)`
+
+#### The windowBlock Commitment
+
+`windowBlock` is **not** part of the signed struct -- the signed `windowBlockHash` binds it, so a
+false value simply fails the `blockhash` comparison. It must satisfy:
+
+| Bound                              | Error                                        |
+| ---------------------------------- | -------------------------------------------- |
+| `windowBlock >= gracePeriodStart`  | `TimingConfig__WindowBlockBeforeGracePeriod` |
+| `windowBlock < block.number`       | `TimingConfig__WindowBlockNotMined`          |
+| `block.number - windowBlock < 256` | `TimingConfig__WindowBlockTooOld`            |
+
+The 256-block bound is the EVM's `blockhash` availability horizon. A registration signature
+therefore **ages out**: if the forwarder waits too long between signing and submitting, the
+transaction reverts and the user must sign again against a fresher `windowBlock`.
 
 ### Dual Deadline System
 
@@ -125,6 +169,26 @@ Two different deadlines are in play:
 | ------------------------------ | ----------------------------- | ----------------------------------------------------- |
 | `deadline` param               | Timestamp (`block.timestamp`) | EIP-712 signature expiry -- prevents stale signatures |
 | `AcknowledgementData.deadline` | Block number (`block.number`) | Grace period window -- enforces registration timing   |
+
+### Grace Period Timing
+
+Grace and deadline are configured as **block counts** per chain, then randomized: the actual grace
+period lands in `[graceBlocks, 2 * graceBlocks)` blocks.
+
+| Chain         | `block.number` ticks at | Grace blocks | Deadline blocks | Actual grace period |
+| ------------- | ----------------------- | ------------ | --------------- | ------------------- |
+| Base/Optimism | 2s                      | 60           | 300             | ~2-4 min            |
+| Ethereum L1   | 12s                     | 10           | 50              | ~2-4 min            |
+| Arbitrum      | ~12s (L1 blocks!)       | 10           | 50              | ~2-4 min            |
+| Anvil (local) | 13s                     | 2            | 50              | ~26-52s             |
+
+:::warning
+On Arbitrum, `block.number` inside a contract returns the **L1** block number, which advances at
+~12s -- not the ~0.25s L2 rate. Arbitrum therefore uses the same block counts as Ethereum L1.
+:::
+
+The constructor enforces `deadlineBlocks >= 2 * graceBlocks + 1`, which guarantees that every
+randomized draw leaves at least one block on which `register` can actually succeed.
 
 ## Three Registration Methods
 
@@ -154,9 +218,19 @@ function registerFromHub(
 ) external onlyHub;
 ```
 
-Called by `FraudRegistryHub` when a cross-chain message arrives from a `SpokeRegistry`. Silently succeeds if the wallet is already registered (no revert). The entry struct stores only `registeredAt`, `incidentTimestamp`, `bridgeId`, and `isSponsored`. Cross-chain provenance fields (`reportedChainId`, `sourceChainId`, `messageId`) are emitted in events only -- they are not written to storage.
+Called by `FraudRegistryHub` when a cross-chain message arrives from a `SpokeRegistry`. The entry struct stores only `registeredAt`, `incidentTimestamp`, `bridgeId`, and `isSponsored`. Cross-chain provenance fields (`reportedChainId`, `sourceChainId`, `messageId`) are emitted in events only -- they are not written to storage.
 
 Emits both `WalletRegistered` and `CrossChainWalletRegistered`.
+
+**This path never reverts.** Hyperlane re-delivers a reverting message indefinitely, so a single
+malformed payload would become permanently undeliverable. Instead, inputs that every other path
+rejects are absorbed:
+
+| Input                            | Behavior                                       |
+| -------------------------------- | ---------------------------------------------- |
+| `identifier == bytes32(0)`       | Returns immediately (message marked delivered) |
+| Wallet already registered        | Returns immediately, no events                 |
+| Future-dated `incidentTimestamp` | Clamped to `0` (the "unknown" sentinel)        |
 
 ### Operator Batch
 
@@ -169,7 +243,23 @@ function registerWalletsFromOperator(
 ) external onlyOperatorSubmitter returns (uint256 batchId);
 ```
 
-Bypasses two-phase flow entirely. Skips zero identifiers and already-registered wallets (no revert). Returns the batch ID.
+Bypasses two-phase flow entirely. Returns the batch ID.
+
+Per-entry, it **skips** (without reverting) zero identifiers and wallets that are already
+registered. The batch as a whole still reverts on:
+
+| Condition                                   | Error                                      |
+| ------------------------------------------- | ------------------------------------------ |
+| Empty array                                 | `WalletRegistry__EmptyBatch`               |
+| More than `MAX_BATCH_SIZE` (10,000) entries | `WalletRegistry__BatchTooLarge`            |
+| Arrays of differing length                  | `WalletRegistry__ArrayLengthMismatch`      |
+| Any future-dated `incidentTimestamps[i]`    | `WalletRegistry__InvalidIncidentTimestamp` |
+| Every entry skipped (actual count 0)        | `WalletRegistry__EmptyBatch`               |
+
+A future-dated incident rejects the **whole batch** rather than skipping the entry: it is a fixable
+mistake in the operator's input file, and silently dropping entries would leave the operator
+believing data landed when it did not. Likewise, a batch in which nothing was actually registered
+reverts rather than burning a batch ID and materializing a phantom zero-entry batch in the indexer.
 
 Emits `WalletRegistered` per entry, then `BatchCreated` with the actual count (excluding skipped entries).
 
@@ -194,12 +284,24 @@ The `identifier` in `WalletRegistered` is `bytes32(uint256(uint160(address)))`. 
 
 ## View Functions
 
-| Function                             | Returns                                                              |
-| ------------------------------------ | -------------------------------------------------------------------- |
-| `isWalletRegistered(string caip10)`  | Whether wallet is registered (CAIP-10 string interface)              |
-| `isWalletRegistered(address wallet)` | Whether wallet is registered (gas-efficient EVM overload)            |
-| `getWalletEntry(...)`                | Full `WalletEntry` struct (both overloads)                           |
-| `isWalletPending(address)`           | Whether wallet has active acknowledgement                            |
-| `getDeadlines(address)`              | Grace period timing (currentBlock, expiryBlock, graceStartsAt, etc.) |
-| `getSignatureDeadline(...)`          | Signing deadline for frontend signature generation                   |
-| `nonces(address)`                    | Current nonce for replay protection                                  |
+| Function                             | Returns                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `isWalletRegistered(string caip10)`  | Whether wallet is registered (CAIP-10 string interface)                                           |
+| `isWalletRegistered(address wallet)` | Whether wallet is registered (gas-efficient EVM overload)                                         |
+| `getWalletEntry(...)`                | Full `WalletEntry` struct (both overloads)                                                        |
+| `isWalletPending(address)`           | Whether wallet has active acknowledgement                                                         |
+| `getAcknowledgementData(address)`    | Full `AcknowledgementData` struct for a pending registration                                      |
+| `getDeadlines(address)`              | `(currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)`                     |
+| `getSignatureDeadline(...)`          | Signing deadline (timestamp) for frontend signature generation                                    |
+| `nonces(address)`                    | Current nonce for replay protection                                                               |
+| `getBatch(uint256 batchId)`          | Operator batch metadata                                                                           |
+| `batchCount()`                       | Total number of operator batches created                                                          |
+| `quoteRegistration(address)`         | Total fee in wei (0 when no FeeManager is configured)                                             |
+| `quoteFeeBreakdown(address)`         | `FeeBreakdown` -- bridge fee, registration fee, total, bridge name (bridge fields 0/empty on hub) |
+
+:::info
+`getSignatureDeadline` returns **only** the deadline -- there is deliberately no hash-struct return
+value. The registration typehash includes `windowBlockHash`, which is not knowable at the time this
+is called: the frontend fetches the deadline _before_ signing and resolves the window block later,
+at signing time. Callers build their own typed data (see `packages/signatures`).
+:::

@@ -70,17 +70,20 @@ Nothing runs it automatically, so treat the local command above as the deploymen
 
 ## Step 1: Environment Setup
 
-Create `packages/contracts/.env.testnet` (gitignored):
+Copy the example file — it is the source of truth for this deployment, and every key in it is
+a name the deploy scripts actually read:
 
 ```bash
-# Deployer wallet private key
-PRIVATE_KEY=0x...
+cd packages/contracts
+cp .env.testnet.example .env.testnet   # .env.testnet is gitignored
+```
 
-# RPC endpoints (use your Alchemy key or any provider)
+To get through Step 2 you only need the inputs at the top:
+
+```bash
+PRIVATE_KEY=0x...                       # dedicated testnet wallet, never your mainnet key
 BASE_SEPOLIA_RPC=https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
 OPTIMISM_SEPOLIA_RPC=https://sepolia.optimism.io
-
-# Etherscan API keys (for contract verification)
 BASESCAN_API_KEY=...
 OPTIMISM_ETHERSCAN_API_KEY=...
 
@@ -88,9 +91,31 @@ OPTIMISM_ETHERSCAN_API_KEY=...
 HUB_HYPERLANE_MAILBOX=0x6966b0E55883d49BFB24539356a2f8A673E02039
 SPOKE_HYPERLANE_MAILBOX=0x6966b0E55883d49BFB24539356a2f8A673E02039
 
-# Hub chain ID
-HUB_CHAIN_ID=84532
+HUB_CHAIN_ID=84532                      # Hyperlane domain of the hub chain
 ```
+
+The rest of the file is **outputs you paste back in** after each deploy — every hub and spoke
+address, plus `DAO_OWNER` for the handover. They are not optional extras: `finalizeSetup` /
+`finalizeSpokeSetup` look each contract up by its exact env key and **silently skip anything
+unset**, while `verifySetup` / `verifySpokeSetup` then **reject** the same unset target. A
+missing or misnamed variable therefore gives you a finalize run that looks clean and a verify
+run that fails — or a contract shipped with its immediate setters still open.
+
+:::info
+To exclude a contract you genuinely did not deploy, opt out by name so the exclusion is a
+recorded decision rather than an oversight:
+
+```bash
+SKIP_SPOKE_FEE_MANAGER=true
+SKIP_SPOKE_SOULBOUND_FORWARDER=true
+```
+
+`verifySetup` / `verifySpokeSetup` reject an unset target precisely because a forgotten
+variable is indistinguishable from a contract that was never locked.
+:::
+
+Read `.env.testnet.example` in full before deploying — it documents each key's role, which
+script reads it, and the run order.
 
 ## Step 2: Deploy Hub (Base Sepolia)
 
@@ -113,7 +138,9 @@ forge script script/Deploy.s.sol:Deploy \
 
 :::
 
-The output will print all deployed addresses. Save them — you'll need:
+The output will print all deployed addresses. **Paste every one of them into the HUB ADDRESSES
+section of `.env.testnet`** — `verifySetup` requires all of them (see Step 1). The two you need
+immediately for Step 3 are:
 
 - **CrossChainInbox** address (for `HUB_INBOX_ADDRESS`)
 - **SoulboundReceiver** address (for `SOULBOUND_RECEIVER`)
@@ -124,13 +151,28 @@ The output will print all deployed addresses. Save them — you'll need:
 Add hub addresses to `.env.testnet` from the Step 2 output:
 
 ```bash
-# Convert CrossChainInbox address to bytes32:
-#   cast --to-bytes32 0x<CROSS_CHAIN_INBOX_ADDRESS>
+# Convert the CrossChainInbox address to a LEFT-padded bytes32:
+#   cast to-uint256 0x<CROSS_CHAIN_INBOX_ADDRESS>
 HUB_INBOX_ADDRESS=0x000000000000000000000000...
 
 # SoulboundReceiver address (enables cross-chain soulbound minting)
 SOULBOUND_RECEIVER=0x...
 ```
+
+:::danger
+Use `cast to-uint256`, which **left**-pads. Do **not** use `cast to-bytes32` — it **right**-pads,
+producing a valid-looking bytes32 that decodes to the wrong recipient:
+
+```
+address            0x1234…cdef
+cast to-uint256    0x0000000000000000000000001234…cdef   ✅ correct
+cast to-bytes32    0x1234…cdef000000000000000000000000   ❌ wrong recipient
+```
+
+Cross-chain recipients are `bytes32` left-padded addresses, which is how Hyperlane delivers
+them. `SpokeRegistry.hubInbox` is timelocked after `completeSetup()`, so a right-padded value
+pasted here cannot be corrected once you finalize in Step 5.
+:::
 
 Then deploy:
 
@@ -144,11 +186,19 @@ This deploys HyperlaneAdapter, SpokeRegistry, and SpokeSoulboundForwarder to OP 
 
 The hub needs to trust the spoke's HyperlaneAdapter. Replace the placeholder addresses with your actual deployed addresses:
 
+:::danger
+Same padding rule as Step 3, and here it fails silently. Hyperlane delivers `_sender` as a
+**left**-padded address and `CrossChainInbox.handle` compares it directly against
+`trustedSources[origin][sender]`. A right-padded value never matches, so every cross-chain
+message reverts as untrusted — and because Step 6 checks `trustedSources` with the _same_
+wrong bytes32, verification returns `true` while the bridge is dead.
+:::
+
 ```bash
 source .env.testnet
 
-# Get the adapter's bytes32 representation
-ADAPTER_BYTES32=$(cast --to-bytes32 0x<SPOKE_HYPERLANE_ADAPTER>)
+# Get the adapter's LEFT-padded bytes32 representation (NOT cast to-bytes32 — see above)
+ADAPTER_BYTES32=$(cast to-uint256 0x<SPOKE_HYPERLANE_ADAPTER>)
 
 # CrossChainInbox: trust the spoke's adapter
 cast send <CROSS_CHAIN_INBOX> \
@@ -205,12 +255,25 @@ cast call <FRAUD_REGISTRY_HUB> "walletRegistry()(address)" --rpc-url $BASE_SEPOL
 cast call <SPOKE_REGISTRY> "hubChainId()(uint32)" --rpc-url $OPTIMISM_SEPOLIA_RPC
 
 # Trust: check adapter is trusted
+# NOTE: this only proves the value you SET is the value stored. It cannot tell you the
+# padding was right — see the Step 4 warning. A right-padded adapter reads back `true` here
+# and still fails on every delivery.
 cast call <CROSS_CHAIN_INBOX> "trustedSources(uint32,bytes32)(bool)" \
   11155420 $ADAPTER_BYTES32 --rpc-url $BASE_SEPOLIA_RPC
 
-# FeeManager: check Chainlink feed is working
-cast call <FEE_MANAGER> "getLatestPrice()(int256)" --rpc-url $BASE_SEPOLIA_RPC
+# FeeManager: check the Chainlink feed resolves (price in USD cents)
+cast call <FEE_MANAGER> "getEthPriceUsdCentsView()(uint256)" --rpc-url $BASE_SEPOLIA_RPC
+
+# FeeManager: the fee a user would actually pay, in wei
+cast call <FEE_MANAGER> "currentFeeWei()(uint256)" --rpc-url $BASE_SEPOLIA_RPC
 ```
+
+:::info
+`getEthPriceUsdCentsView()` degrades to the stored fallback price when the oracle is
+unavailable, stale, or out of bounds, so a plausible number here is not by itself proof the
+Chainlink feed is live. Compare it against the real ETH price — if it reads exactly
+`fallbackEthPriceUsdCents`, the feed is not being used.
+:::
 
 ## Step 7: Update Chain Config
 

@@ -53,10 +53,10 @@ sequenceDiagram
 
     Note over R: Compute dataHash =<br/>keccak256(abi.encode(txHashes, chainIds))
     R->>C: acknowledgeTransactions(..., dataHash, ...)
-    Note over C: Store dataHash commitment<br/>Start grace period
-    Note over R,C: ~1-4 min randomized delay
-    R->>C: registerTransactions(..., txHashes[], chainIds[])
-    Note over C: Recompute dataHash from arrays<br/>Verify it matches commitment<br/>Register each transaction
+    Note over C: Store dataHash commitment<br/>Start randomized grace period
+    Note over R,C: 2-4 min on production chains<br/>(same timing as Wallet Registry)
+    R->>C: registerTransactions(..., txHashes[], chainIds[], windowBlock)
+    Note over C: Recompute dataHash from arrays<br/>Verify it matches commitment<br/>Verify signature commits to<br/>blockhash(windowBlock)<br/>Register each transaction
 
 `} />
 
@@ -78,13 +78,31 @@ function acknowledgeTransactions(
 ) external;
 ```
 
+- `dataHash` must not be `bytes32(0)` (`TransactionRegistry__InvalidDataHash`)
+- `transactionCount` must not be 0 (`TransactionRegistry__EmptyBatch`)
+- `transactionCount` must not exceed `MAX_TWO_PHASE_BATCH_SIZE` (800) --
+  `TransactionRegistry__BatchTooLarge`
+- Requires `msg.sender == trustedForwarder` (`TransactionRegistry__InvalidForwarder`)
+- Validates the signature deadline is in the future and no more than 2 hours out
+  (`TimingConfig.MAX_SIGNATURE_LIFETIME`) -- `TransactionRegistry__DeadlineExpired` or
+  `TransactionRegistry__DeadlineTooFarInFuture`
 - Verifies EIP-712 signature from `reporter`
-- `dataHash` must not be `bytes32(0)`
-- `transactionCount` must not be 0
 - Stores `TransactionAcknowledgementData` with the commitment
 - Emits `TransactionBatchAcknowledged(reporter, trustedForwarder, dataHash, isSponsored)`
 
 Both `reportedChainId` and `transactionCount` are included in the EIP-712 signature and stored for validation during Phase 2.
+
+**Why bound the count in Phase 1?** Committing to a count is not itself a bound. Without the
+explicit `MAX_TWO_PHASE_BATCH_SIZE` check a user could acknowledge a count too large for Phase 2 to
+fit in a block, then be unable to complete registration until the acknowledgement expires -- having
+already paid for the acknowledgement.
+
+**Only the forwarder named in the signature may open the window** (`msg.sender == trustedForwarder`),
+for the same reason as the Wallet Registry: an unrelated third party could otherwise grind their own
+address to steer the "randomized" timing, or burn the reporter's nonce to grief them.
+
+Unlike the Wallet Registry, the nonce is **not** a parameter here -- it is read from
+`nonces[reporter]` inside the contract and incremented on success.
 
 ### Phase 2: Register
 
@@ -94,16 +112,68 @@ function registerTransactions(
     uint256   deadline,
     bytes32[] transactionHashes,   // The actual tx hashes (revealed)
     bytes32[] chainIds,            // Per-tx chain IDs
+    uint256   windowBlock,         // Block whose hash the signature commits to
     uint8 v, bytes32 r, bytes32 s
 ) external payable;
 ```
 
 - **Only** `trustedForwarder` can call this (`msg.sender` must match stored forwarder)
-- Recomputes `dataHash = keccak256(abi.encode(transactionHashes, chainIds))` and verifies it matches the committed value
-- Validates `transactionHashes.length == transactionCount` from the ack phase
+- Grace period must have elapsed; must be within the block-number deadline window
+- Recomputes `dataHash = keccak256(abi.encode(transactionHashes, chainIds))` and verifies it matches the committed value (`TransactionRegistry__DataHashMismatch`)
+- Validates `transactionHashes.length == transactionCount` from the ack phase (`TransactionRegistry__BatchCountMismatch`)
+- Resolves `windowBlockHash = blockhash(windowBlock)` -- see below
+- Verifies the EIP-712 signature from `reporter` (the signed struct includes `windowBlockHash`)
 - Registers each transaction, skipping zeros and already-registered entries
-- Collects fee (if FeeManager configured)
+- Collects fee (if a FeeManager is configured), or refunds in full -- see "Zero Effective Entries"
 - Emits `TransactionRegistered` per entry, then `TransactionBatchRegistered` as batch summary
+
+:::info
+`DataHashMismatch` and `BatchCountMismatch` are **tampering** signals, distinct from the
+caller-bug errors `InvalidDataHash` (a zero hash in Phase 1) and `ArrayLengthMismatch` (the two
+submitted arrays disagree with each other). A count mismatch means the arrays are internally
+consistent -- they simply are not the batch the reporter signed for.
+:::
+
+#### The windowBlock Commitment
+
+Identical to the Wallet Registry: the signature commits to the hash of a block at or after
+`gracePeriodStart`, which did not exist when the acknowledgement was signed. This -- not the
+randomized delay -- is the primary anti-phishing control.
+
+`windowBlock` is not part of the signed struct; the signed `windowBlockHash` binds it. It must
+satisfy `gracePeriodStart <= windowBlock < block.number` and be less than 256 blocks old
+(`TimingConfig__WindowBlockBeforeGracePeriod`, `TimingConfig__WindowBlockNotMined`,
+`TimingConfig__WindowBlockTooOld`). Signatures therefore age out and must be regenerated against a
+fresher `windowBlock` if submission is delayed past the `blockhash` horizon.
+
+#### Zero Effective Entries
+
+If **every** submitted hash is skipped -- all zeros, or all already registered by an earlier
+reporter -- the call still **succeeds**, and:
+
+- No `TransactionRegistered` events are emitted
+- **No `TransactionBatchRegistered` event is emitted**
+- No batch ID is consumed and no `TransactionBatch` row is written
+- The entire `msg.value` is refunded
+
+This is deliberate. The nonce increment and acknowledgement deletion must stand, otherwise the live
+acknowledgement would block the reporter from acknowledging a corrected batch until the window
+expires. And emitting a batch event anyway would produce a batch with `transactionCount` 0 and no
+per-entry events sharing its transaction hash -- the indexer joins entries to batches on exactly
+that hash, so the row would be a permanent orphan and the consumed ID a hole in the sequence.
+
+#### Batch Size Limits
+
+| Path                                        | Limit                                       |
+| ------------------------------------------- | ------------------------------------------- |
+| Two-phase (individual)                      | `MAX_TWO_PHASE_BATCH_SIZE` = **800**        |
+| Operator batch                              | `MAX_BATCH_SIZE` = **10,000**               |
+| Cross-chain (`registerTransactionsFromHub`) | Unbounded on the hub (bounded by the spoke) |
+
+The 800 limit is grounded in the measured ~26,200 gas/entry: 800 entries is roughly 21M gas, which
+fits a 25M-gas block with headroom. It is shared with `SpokeRegistry` so a batch acceptable on a
+spoke is always executable on the hub after bridging. The 10,000 operator ceiling is structural
+only -- at ~26,200 gas/entry it would need ~262M gas, so operator tooling must chunk well below it.
 
 ## TransactionBatch
 
@@ -130,6 +200,12 @@ tx 0xabc...
 
 The indexer joins per-entry events to their batch by matching on `transactionHash` (the on-chain tx hash, not the reported fraud tx hash). All events in the same transaction share this value. This means per-entry **events** carry zero extra gas for batch association — no batchId field needed in each per-entry event. (Note: the `TransactionEntry` storage struct does include a `batchId` field for direct on-chain lookups.)
 
+The one exception is a batch with zero effective entries, which emits **neither** per-entry events
+nor the batch summary — see [Zero Effective Entries](#zero-effective-entries).
+
+Indexed parameters: `TransactionRegistered` indexes `identifier`, `reportedChainId`, and `reporter`;
+`TransactionBatchRegistered` indexes `batchId`, `reporter`, and `dataHash`.
+
 ## Other Registration Paths
 
 ### Cross-Chain (Hub Only)
@@ -150,6 +226,13 @@ function registerTransactionsFromHub(
 
 Called by `FraudRegistryHub` when a cross-chain message arrives. Emits both `TransactionRegistered` and `CrossChainTransactionRegistered` per entry, then a single `TransactionBatchRegistered`. No duplicate batch event.
 
+Like the two-phase path, a delivery in which every entry is skipped is a **no-op**: no events, no
+batch ID consumed, no revert. Here the no-revert behavior is mandatory rather than merely
+preferable -- a reverting Hyperlane `handle` is redelivered indefinitely, so the delivery must
+succeed and do nothing. This path is deliberately left unbounded for the same reason: the spoke
+enforces the 800-entry limit before the user pays any bridge fee, and a hub-side revert on an
+already-bridged message would make it permanently undeliverable rather than merely rejected.
+
 ### Operator Batch
 
 ```solidity
@@ -160,7 +243,18 @@ function registerTransactionsFromOperator(
 ) external onlyOperatorSubmitter returns (uint256 batchId);
 ```
 
-Single-phase, no signatures. Sets `reporter = address(0)` on entries. Emits `TransactionRegistered` per entry, then `TransactionBatchCreated` as the batch summary.
+Single-phase, no signatures. Emits `TransactionRegistered` per entry, then `TransactionBatchCreated` as the batch summary.
+
+There is no reporter on an operator entry: `TransactionEntry` has no `reporter` field at all (that
+is what keeps it inside one storage slot). What is set to `address(0)` is the `reporter` argument of
+the emitted `TransactionRegistered` event and the `reporter` field of the `TransactionBatch` row --
+provenance is carried by `operatorId` instead.
+
+Unlike the two-phase path, this one **reverts** with `TransactionRegistry__EmptyBatch` when every
+entry is skipped, rather than succeeding as a no-op. There is no acknowledgement state to unwind
+here, so reverting is strictly better: the operator does not pay full gas for a no-op, no batch ID
+is burned, and the indexer never sees a phantom zero-entry batch. It also reverts with
+`TransactionRegistry__BatchTooLarge` above 10,000 entries.
 
 ## Events
 
@@ -174,16 +268,27 @@ Single-phase, no signatures. Sets `reporter = address(0)` on entries. Emits `Tra
 
 ## View Functions
 
-| Function                                                   | Returns                                                                     |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `isTransactionRegistered(string chainQualifiedRef)`        | Whether tx is registered (string interface, format: `eip155:8453:0xabc...`) |
-| `isTransactionRegistered(bytes32 txHash, bytes32 chainId)` | Whether tx is registered (gas-efficient overload)                           |
-| `getTransactionEntry(...)`                                 | Full `TransactionEntry` struct (both overloads)                             |
-| `isTransactionPending(address reporter)`                   | Whether reporter has active acknowledgement                                 |
-| `getTransactionDeadlines(address reporter)`                | Grace period timing                                                         |
-| `getTransactionSignatureDeadline(...)`                     | Signing deadline for frontend signature generation                          |
-| `nonces(address reporter)`                                 | Current nonce for replay protection                                         |
-| `getTransactionBatch(uint256 batchId)`                     | Batch metadata                                                              |
+| Function                                                   | Returns                                                                       |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `isTransactionRegistered(string chainQualifiedRef)`        | Whether tx is registered (string interface, format: `eip155:8453:0xabc...`)   |
+| `isTransactionRegistered(bytes32 txHash, bytes32 chainId)` | Whether tx is registered (gas-efficient overload)                             |
+| `getTransactionEntry(...)`                                 | Full `TransactionEntry` struct (both overloads)                               |
+| `isTransactionPending(address reporter)`                   | Whether reporter has active acknowledgement                                   |
+| `getTransactionAcknowledgementData(address reporter)`      | Full `TransactionAcknowledgementData` struct                                  |
+| `getTransactionDeadlines(address reporter)`                | `(currentBlock, expiryBlock, startBlock, graceStartsAt, timeLeft, isExpired)` |
+| `getTransactionSignatureDeadline(...)`                     | Signing deadline (timestamp) for frontend signature generation                |
+| `nonces(address reporter)`                                 | Current nonce for replay protection                                           |
+| `getTransactionBatch(uint256 batchId)`                     | Batch metadata                                                                |
+| `transactionBatchCount()`                                  | Total number of batches created                                               |
+| `quoteRegistration(address reporter)`                      | Total fee in wei (0 when no FeeManager is configured)                         |
+| `quoteFeeBreakdown(address reporter)`                      | `FeeBreakdown` -- bridge fee, registration fee, total, bridge name            |
+
+The string overloads **revert** rather than returning `false` on a malformed reference: a hash
+portion that is not exactly 66 characters (`0x` + 64 hex) raises
+`TransactionRegistry__InvalidTxHashLength`.
+
+Like the Wallet Registry, `getTransactionSignatureDeadline` returns only the deadline -- the
+registration typehash includes `windowBlockHash`, which is not knowable before signing time.
 
 ## Future: Transaction Validation
 

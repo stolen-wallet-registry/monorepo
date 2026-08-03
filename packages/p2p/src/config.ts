@@ -20,7 +20,7 @@ export const RELAY_SERVERS: Record<Environment, RelayConfig[]> = {
     {
       // Ed25519 peer ID format (12D3KooW... prefix) - libp2p 3.x standard
       //
-      // SETUP: Run `pnpm relay:dev` once to generate stable keys.
+      // SETUP: Run `pnpm relay` (from the repo root) once to generate stable keys.
       // The relay prints the multiaddr on startup - copy the peer ID here.
       // Keys are persisted in apps/relay/keys.json for consistent restarts.
       //

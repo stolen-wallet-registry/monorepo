@@ -4,11 +4,15 @@ Get the Stolen Wallet Registry running locally with full cross-chain support. Th
 
 ## Prerequisites
 
-| Tool    | Version | Install                                                     |
-| ------- | ------- | ----------------------------------------------------------- |
-| Node.js | 22+     | [nodejs.org](https://nodejs.org)                            |
-| pnpm    | 9+      | `npm install -g pnpm`                                       |
-| Foundry | Latest  | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` |
+| Tool    | Version        | Install                                                     |
+| ------- | -------------- | ----------------------------------------------------------- |
+| Node.js | 22.x (exactly) | [nodejs.org](https://nodejs.org)                            |
+| pnpm    | 9+             | `npm install -g pnpm`                                       |
+| Foundry | Latest         | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` |
+
+:::warning
+Node must be **major version 22** — `engines` pins `>=22.12.0 <23` and a `preinstall` gate fails the install on anything else, including Node 23 and 24. Node 24 ships experimental Web Storage that shadows jsdom, so the web test suite would run against the wrong globals. Run `nvm use` to pick up the repo's `.nvmrc`.
+:::
 
 ## Install Dependencies
 
@@ -18,11 +22,17 @@ cd monorepo
 pnpm install
 ```
 
-Build contracts and generate ABIs:
+Build contracts and generate the TypeScript ABI exports:
 
 ```bash
-pnpm forge:build
+pnpm export-abi
 ```
+
+Run this **from the repo root**. It builds the contracts through turbo and then formats the generated files with Prettier. `pnpm forge:build` only runs `forge build` — it compiles the contracts but does not regenerate `packages/abis`, and the frontend consumes those exports, so stale ABIs cause silent runtime failures.
+
+:::info
+Re-run `pnpm export-abi` after **any** Solidity change. Two CI jobs guard this: `abi-drift` regenerates and fails on a diff, `abi-freshness` fails if `packages/contracts/src/**.sol` changed without `packages/abis/src` changing alongside it.
+:::
 
 ## Cross-Chain Development (Recommended)
 
@@ -36,13 +46,15 @@ pnpm anvil:crosschain
 
 Starts three processes:
 
-- **Hub chain** on port 8545 (chain ID 31337, 13s blocks)
-- **Spoke chain** on port 8546 (chain ID 31338, 13s blocks)
+- **Hub chain** on port 8545 (chain ID 31337)
+- **Spoke chain** on port 8546 (chain ID 31338)
 - **Bridge relayer** that auto-relays cross-chain messages
 
 :::info
 The Anvil instances load pre-deployed bridge state from `.anvil-state/`. The relayer starts after a 3-second delay to let the chains initialize.
 :::
+
+Both chains start with **12s** interval mining. `deploy:crosschain` (next step) switches them to automine so the deployment lands quickly, then restores interval mining at **13s** — so the steady-state block time you develop against is 13s, matching the `(2, 50)` grace/deadline block counts the local deployment uses.
 
 ### Terminal 2 - Deploy Contracts
 
@@ -121,7 +133,7 @@ pnpm dev:web            # Terminal 3
 ## Running Tests
 
 ```bash
-# Solidity tests (538 tests)
+# Solidity tests
 pnpm forge:test
 
 # Web app tests (Vitest)

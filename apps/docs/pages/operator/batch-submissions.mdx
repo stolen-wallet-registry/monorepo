@@ -9,7 +9,7 @@ All operator submissions flow through the `OperatorSubmitter` contract. It enfor
 Operators don't call registries directly. The `OperatorSubmitter` sits between operators and registries to:
 
 1. **Check permissions** - Validates operator approval via `OperatorRegistry`
-2. **Collect fees** - Charges a flat batch fee via `FeeManager`
+2. **Collect fees** - Applies the flat batch fee from `FeeManager` (currently **$0** - see [Batch Fees](#batch-fees))
 3. **Forward data** - Delegates validated entries to the target registry
 4. **Emit batch metadata** - Tracks submissions with `BatchSubmitted` events
 
@@ -45,11 +45,43 @@ Requires `TX_REGISTRY` capability (`0x02`).
 ```solidity
 function registerContractsAsOperator(
     bytes32[] calldata identifiers,        // Contract addresses as bytes32
-    bytes32[] calldata reportedChainIds    // CAIP-2 chain ID hashes
+    bytes32[] calldata reportedChainIds,   // CAIP-2 chain ID hashes
+    uint8[]   calldata threatCategories    // 0=unclassified, 1-5=defined, 6-255=future
 ) external payable;
 ```
 
 Requires `CONTRACT_REGISTRY` capability (`0x04`).
+
+Threat categories: `0` unclassified, `1` drainer, `2` rug pull, `3` honeypot, `4` ponzi, `5` fake token.
+
+## Batch Size Limits
+
+Every array passed to a submission function must be non-empty, the same length as its siblings, and within the registry's structural ceiling:
+
+| Limit                            | Value    | Enforced by                                                |
+| -------------------------------- | -------- | ---------------------------------------------------------- |
+| On-chain `MAX_BATCH_SIZE`        | `10,000` | All three registries - reverts `<Registry>__BatchTooLarge` |
+| CLI default (`--max-batch-size`) | `800`    | CLI splits larger inputs across transactions               |
+| CLI hard ceiling                 | `950`    | CLI refuses `--max-batch-size` above this                  |
+
+The on-chain ceiling is a structural bound, not a practical one. At the measured ~26,200 gas per entry, a 10,000-entry batch cannot fit in a 25M-gas transaction — it would revert on gas long before hitting `MAX_BATCH_SIZE`. The real limit is ~950 entries per transaction, which is why the CLI defaults to 800 with headroom. See [Economics](/operator/economics) for the gas breakdown.
+
+## Batch Fees
+
+The batch fee is quoted by `FeeManager.operatorBatchFeeWei()` and read through the submitter:
+
+```solidity
+// The ONLY correct way to quote an operator batch
+function quoteBatchFee() external view returns (uint256 fee);
+```
+
+`FeeManager.operatorBatchFeeUsdCents` ships as `0`, so `quoteBatchFee()` returns `0` today and operator batches cost only gas. Always quote it anyway — the fee mechanism stays live so the DAO can enable a fee without redeploying, and a hardcoded `0` breaks the day that happens.
+
+:::warning
+Do **not** quote `FeeManager.currentFeeWei()`. That is the per-**registration** fee charged to individuals — a different, unrelated price. Using it will under-fund the call whenever a batch fee is enabled, reverting with `OperatorSubmitter__InsufficientFee`.
+:::
+
+Excess ETH is refunded to `msg.sender` in the same transaction. The refund is push-based: a smart-contract operator that cannot receive ETH will revert with `OperatorSubmitter__RefundFailed`, so send the exact quoted amount.
 
 ## Submission Flow
 
@@ -81,9 +113,21 @@ sequenceDiagram
 
 Each batch submission produces events in a specific order:
 
-1. **Per-entry events** - One `WalletRegistered`, `TransactionRegistered`, or `ContractRegistered` event per entry in the batch
-2. **Batch event** - A single `BatchCreated` (or `TransactionBatchRegistered`) fires **after** all per-entry events in the same transaction
+1. **Per-entry events** - One `WalletRegistered`, `TransactionRegistered`, or `ContractRegistered` event per entry actually written
+2. **Batch event** - A single batch event fires **after** all per-entry events in the same transaction
 3. **Submitter event** - `BatchSubmitted` from the `OperatorSubmitter` fires last
+
+The batch event name differs per registry:
+
+| Registry              | Operator batch event      |
+| --------------------- | ------------------------- |
+| `WalletRegistry`      | `BatchCreated`            |
+| `TransactionRegistry` | `TransactionBatchCreated` |
+| `ContractRegistry`    | `ContractBatchCreated`    |
+
+:::warning
+`TransactionBatchRegistered` is **not** an operator event. It belongs to the individual two-phase transaction-batch flow. An indexer keying operator submissions off it will see nothing.
+:::
 
 All events share the same transaction hash, which indexers use to link individual entries to their batch.
 
@@ -93,17 +137,31 @@ event BatchSubmitted(
     address indexed operator,  // The operator address
     address indexed registry,  // Which registry received the batch
     uint256 batchId,           // Auto-incremented batch ID from the registry
-    uint32 entryCount          // Number of entries submitted
+    uint32 entryCount          // Entries SUBMITTED - the raw input array length
 );
 ```
 
+### `entryCount` is not the stored count
+
+The two counts in a single submission are different numbers, and conflating them double-counts skipped entries:
+
+| Source                           | Field                    | Meaning                                         |
+| -------------------------------- | ------------------------ | ----------------------------------------------- |
+| `BatchSubmitted` (submitter)     | `entryCount`             | Raw input array length - what was **offered**   |
+| `BatchCreated` / `*BatchCreated` | `walletCount` / `*Count` | `actualCount` after skips - what was **stored** |
+
+The registry silently skips zero identifiers and already-registered entries, so `actualCount <= entryCount`. **Indexers must use the batch event's count (or the per-entry events) for stored totals — never `entryCount`.** A batch where every entry was already registered reverts as an empty batch; anything short of that succeeds with the two counts disagreeing.
+
 ## Batch IDs
 
-Each registry maintains its own auto-incrementing batch counter. The batch ID type varies by registry: `WalletRegistry` and `TransactionRegistry` use `uint256`, while `ContractRegistry` uses `uint32` (sufficient for over 4 billion batches, and keeps the `ContractEntry` struct within a single storage slot). When an operator submits a batch:
+Each registry maintains its own auto-incrementing `uint256` batch counter, starting at `1`. When an operator submits a batch:
 
-- The registry assigns the next batch ID
-- The `BatchCreated` event includes the batch ID and actual entry count
-- The actual count excludes zero-address entries and already-registered entries (silently skipped)
+- The registry assigns the next batch ID and returns it to the submitter
+- The batch event includes the batch ID and the actual (stored) entry count
+- The actual count excludes zero identifiers and already-registered entries (silently skipped)
+- If **nothing** was stored — every entry was a zero identifier or already registered — the whole transaction reverts with `<Registry>__EmptyBatch` rather than burning a batch ID on a no-op
+
+Batch IDs are `uint256` in events and batch structs, but each entry struct stores its `batchId` as a **`uint64`**, truncated to keep `WalletEntry`, `TransactionEntry`, and `ContractEntry` within a single storage slot. Read the batch ID from the events, not from an entry, when the full width matters.
 
 ## Identifiers
 
@@ -133,26 +191,32 @@ This ID is stored alongside each batch in the registry, linking entries back to 
 
 ## The CLI Tool
 
-Operators don't need the web frontend. The `packages/cli/` package provides a command-line interface for batch submissions:
+Operators don't need the web frontend. The `packages/cli/` package provides a command-line interface for batch submissions. The submit commands are top-level — there is no `operator` subcommand group:
 
 ```bash
 # Submit a batch of stolen wallets
-swr operator submit-wallets \
-  --file wallets.csv \
-  --rpc-url https://mainnet.base.org
+swr submit-wallets -f wallets.json -e mainnet --keystore ~/.swr/operator.json
 
 # Submit flagged transactions
-swr operator submit-transactions \
-  --file transactions.csv \
-  --rpc-url https://mainnet.base.org
+swr submit-transactions -f transactions.csv -e mainnet --keystore ~/.swr/operator.json
 
 # Submit malicious contracts
-swr operator submit-contracts \
-  --file contracts.csv \
-  --rpc-url https://mainnet.base.org
+swr submit-contracts -f contracts.json -e mainnet --keystore ~/.swr/operator.json
 ```
 
-The CLI handles ABI encoding, fee quoting, and transaction submission. Operators provide a CSV and a funded wallet.
+The CLI handles ABI encoding, fee quoting, batch splitting, and transaction submission.
+
+**Input** - `-f, --file` is required and accepts **JSON or CSV**.
+
+**Network** - selected with `-e, --env <local|testnet|mainnet>` (default `local`). There is no `--rpc-url` flag; endpoints come from the CLI's environment config.
+
+**Credentials on mainnet/testnet** - use `--keystore <path>` (an encrypted V3 keystore; the passphrase is prompted, or read from `SWR_KEYSTORE_PASSWORD` in CI) or `--build-only`, which writes multisig-ready transaction JSON and needs no key at all. `-k, --private-key` is **refused** on testnet and mainnet — process arguments are world-readable — and remains available only for `-e local`.
+
+**Output** - `-o, --output-dir` is read **only** on the `--build-only` path, where it receives the multisig transaction JSON (without it, that JSON goes to stdout). On a real submission or a `--dry-run` it writes nothing; the CLI warns when you pass it anyway.
+
+Other useful flags: `--dry-run` parses, validates and quotes the fee without submitting (it does **not** simulate the call against the node, so it cannot detect an unapproved operator, a paused contract, or a short fee), `--dedupe` drops repeated entries instead of refusing the file, `--max-batch-size <n>` overrides the 800-entry default, and `-y, --yes` skips the interactive confirmation for scripted use.
+
+Run `swr quote -t <wallet|transaction|contract>` to read the current batch fee before submitting.
 
 ## No Two-Phase for Operators
 
@@ -173,6 +237,8 @@ All three submission functions use the `whenNotPaused` modifier. Individual regi
 
 ## Error Conditions
 
+From the `OperatorSubmitter`:
+
 | Error                                      | When                                                           |
 | ------------------------------------------ | -------------------------------------------------------------- |
 | `OperatorSubmitter__NotApprovedOperator()` | Caller is not an approved operator for the required capability |
@@ -182,3 +248,15 @@ All three submission functions use the `whenNotPaused` modifier. Individual regi
 | `OperatorSubmitter__FeeForwardFailed()`    | Fee transfer to recipient failed                               |
 | `OperatorSubmitter__RefundFailed()`        | Excess ETH refund to operator failed                           |
 | `OperatorSubmitter__InvalidFeeConfig()`    | Fee manager set without a fee recipient                        |
+| `OperatorSubmitter__ZeroAddress()`         | A constructor or setter was given `address(0)`                 |
+
+Bubbled up from the target registry (`<Registry>` is `WalletRegistry`, `TransactionRegistry`, or `ContractRegistry`):
+
+| Error                                        | When                                                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------- |
+| `<Registry>__BatchTooLarge()`                | Batch exceeds the on-chain `MAX_BATCH_SIZE` of `10,000`                   |
+| `<Registry>__EmptyBatch()`                   | Nothing was stored — every entry was a zero identifier or already present |
+| `<Registry>__ArrayLengthMismatch()`          | Input arrays have different lengths                                       |
+| `WalletRegistry__InvalidIncidentTimestamp()` | A wallet's incident timestamp is in the future — rejects the whole batch  |
+
+Note that a future-dated incident timestamp **rejects the entire wallet batch** rather than skipping the entry. A bad date is a fixable mistake in the operator's input file, and silently dropping entries would leave the operator believing data landed when it did not.

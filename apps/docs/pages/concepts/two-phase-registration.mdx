@@ -10,10 +10,10 @@ Single-transaction registration is vulnerable to social engineering. If an attac
 
 Two-phase registration breaks this attack:
 
-1. The victim would need to sign **twice**, minutes apart
-2. The randomized grace period makes automation unreliable
-3. The acknowledgement deadline expires (~10-20 minutes after acknowledgement, depending on randomization) — the attacker must trick the victim into signing a second transaction within this narrow window or the acknowledgement becomes invalid
-4. A second, unsolicited signature request minutes after the first **should** raise suspicion for any attentive user — though this is a behavioral assumption, not a technical guarantee
+1. The victim must sign **twice**, and the second signature **cannot physically be produced** until the grace period has elapsed on-chain — see [Signature Freshness](#signature-freshness-the-primary-control) below
+2. The acknowledgement deadline expires (~10-20 minutes after acknowledgement, depending on randomization) — the attacker must trick the victim into signing a second transaction within this narrow window or the acknowledgement becomes invalid
+3. A second, unsolicited signature request minutes after the first **should** raise suspicion for any attentive user — though this is a behavioral assumption, not a technical guarantee
+4. Randomized timing widens the window an attacker must cover — defense in depth, not a control to rely on
 
 :::warning
 Two-phase registration is an added layer of social engineering protection, not a guarantee. A sufficiently motivated attacker with sustained access to a victim could still complete both phases within the registration window. The design raises the bar significantly — it does not eliminate all risk.
@@ -29,11 +29,12 @@ sequenceDiagram
 
     U->>C: Sign ACK (EIP-712)
     C->>B: Submit acknowledge()
-    Note over B: Grace period begins<br/>(1-4 min randomized delay)
+    Note over B: Grace period begins<br/>(randomized delay)
     rect rgb(255, 245, 230)
     Note over B: Registration window open<br/>(~8-10 min before expiry)
-    U->>C: Sign REG (EIP-712)
-    C->>B: Submit register()
+    B-->>U: windowBlock hash now exists
+    U->>C: Sign REG (EIP-712)<br/>commits to blockhash(windowBlock)
+    C->>B: Submit register(..., windowBlock, ...)
     B-->>C: Wallet permanently registered
     end
     Note over B: If window expires:<br/>acknowledgement is invalid,<br/>must restart from Phase 1
@@ -45,36 +46,72 @@ sequenceDiagram
 The user signs an EIP-712 typed message declaring their wallet stolen. The contract:
 
 - Verifies the signature came from the wallet owner
+- Requires `msg.sender == trustedForwarder` (see [Registration Methods](#registration-methods--the-forwarder-field))
 - Validates the nonce and deadline
 - Stores a pending acknowledgement with randomized timing
 - Emits `WalletAcknowledged` event
 
 ### Phase 2: Grace Period & Registration Window
 
-A randomized delay using `block.prevrandao` prevents timing attacks. The user cannot proceed until the grace period ends, and must complete registration before the acknowledgement expires.
+The user cannot proceed until the grace period ends, and must complete registration before the acknowledgement expires.
 
 The registration window is the time between the end of the grace period and the acknowledgement deadline. If the user does not complete the second signature within this window, the acknowledgement becomes invalid and the entire process must restart from Phase 1. This expiry is central to the social engineering protection — an attacker has a narrow, non-renewable window to coerce a second signature.
 
 Both the grace period and deadline include randomized jitter (up to 1x the base block count via `block.prevrandao`), so actual timing varies per registration.
 
-| Chain           | Block Time | Grace Blocks | Deadline Blocks | Grace Period | Ack Deadline (from ack) |
-| --------------- | ---------- | ------------ | --------------- | ------------ | ----------------------- |
-| Anvil (local)   | 13s        | 2            | 50              | ~30s - 1 min | ~10 - 20 min            |
-| Base / Optimism | 2s         | 60           | 300             | ~2 - 4 min   | ~10 - 20 min            |
-| Arbitrum        | 0.25s      | 480          | 2400            | ~2 - 4 min   | ~10 - 20 min            |
-| Ethereum L1     | 12s        | 10           | 50              | ~2 - 4 min   | ~10 - 20 min            |
+| Chain           | `block.number` ticks at | Grace Blocks | Deadline Blocks | Grace Period | Ack Deadline (from ack) |
+| --------------- | ----------------------- | ------------ | --------------- | ------------ | ----------------------- |
+| Anvil (local)   | 13s (local blocks)      | 2            | 50              | ~30s - 1 min | ~10 - 20 min            |
+| Base / Optimism | 2s (L2 blocks)          | 60           | 300             | ~2 - 4 min   | ~10 - 20 min            |
+| Ethereum L1     | 12s (L1 blocks)         | 10           | 50              | ~2 - 4 min   | ~10 - 20 min            |
+| Arbitrum        | ~12s (L1 blocks)        | 10           | 50              | ~2 - 4 min   | ~10 - 20 min            |
 
 Block counts are derived from `TimingConfig.sol` and configured per chain in `DeployBase.s.sol` to maintain consistent UX across chains. The formula is: `block.number + random(0, baseBlocks) + baseBlocks`.
+
+:::warning
+Calibrate block counts to the rate `block.number` **actually ticks at**, not the chain's advertised block time. On Arbitrum, `block.number` inside a contract returns the **L1** block number (~12s), not the ~0.25s L2 rate — verified empirically against Arbitrum One mainnet on 2026-07-30. Arbitrum therefore uses the same counts as Ethereum L1. Configuring it for the L2 rate produces a ~96 minute grace period and an ~8 hour window.
+:::
 
 ### Phase 3: Registration
 
 The user signs a second EIP-712 message confirming permanent registration. The contract:
 
 - Validates the stored acknowledgement (trustedForwarder, timing, chain data)
+- Resolves `blockhash(windowBlock)` and requires the signature to commit to it
 - Verifies the second signature
 - Stores the wallet entry permanently
 - Deletes acknowledgement data
 - Collects registration fee
+
+## Signature Freshness: The Primary Control
+
+The randomized delay alone secures less than it appears to. Without an additional binding, the grace period delays only the **transaction**, not the **signature**: a phishing page could collect the acknowledgement and registration signatures seconds apart — signing `nonce` and `nonce + 1`, since a nonce is just a struct field and signing against one that does not exist yet is possible — then submit both itself once the delay had quietly elapsed, with the victim long gone. The delay would have been respected, unattended, by the attacker.
+
+The registration typehash therefore includes a `windowBlockHash` field. It is the hash of a block at or after the acknowledgement's `gracePeriodStart` — a block that **does not exist, and so has no hash, at acknowledgement time**. The registration signature cannot be produced until the grace period has actually elapsed on-chain. This is what makes the two victim interactions genuinely separated in time rather than merely the two transactions.
+
+### How `windowBlock` Travels
+
+Only the **hash** is signed. The corresponding block number travels as unsigned calldata in the `windowBlock` parameter of `register()`. The hash binds the number — a lied-about number fails the `blockhash()` comparison — so signing a second field would be redundant.
+
+`TimingConfig.resolveWindowBlockHash(windowBlock, gracePeriodStart)` enforces three bounds:
+
+| Condition                                      | Error                                          |
+| ---------------------------------------------- | ---------------------------------------------- |
+| `windowBlock < gracePeriodStart`               | `TimingConfig__WindowBlockBeforeGracePeriod()` |
+| `windowBlock >= block.number` (unmined)        | `TimingConfig__WindowBlockNotMined()`          |
+| `block.number - windowBlock >= 256` (aged out) | `TimingConfig__WindowBlockTooOld()`            |
+
+The EVM only keeps block hashes available for the previous 256 blocks (`MAX_WINDOW_BLOCK_AGE`), so a registration signature has a bounded shelf life. If the user signs and then waits too long before submitting, the referenced hash ages out and they must **re-sign against a newer block** — the acknowledgement itself is still valid, only the registration signature needs redoing.
+
+:::info
+The age check is deliberately conservative by one block. The EVM makes `blockhash` available for `block.number - 256 <= x < block.number`, so an age of exactly 256 does still resolve; the contract rejects it anyway. Erring inside the horizon keeps the bound correct on chains that trim the window, at a cost of one block out of 256.
+:::
+
+### Where Randomization Actually Fits
+
+`block.prevrandao` is proposer-influenceable and is **not** cryptographically secure. Nothing in the design depends on it being unpredictable. Randomized timing widens the window an attacker must cover and is genuine defense in depth — but the control being relied on is the block-hash commitment above, not the randomization.
+
+The randomness seed deliberately excludes `msg.sender`. Including it let whoever submitted the acknowledgement grind candidate submitter addresses off-chain, for free, until the seed produced a minimum grace period and a maximum registration window — making "randomized" timing attacker-selected.
 
 ## EIP-712 Typehashes
 
@@ -102,7 +139,8 @@ Registration(
     uint64 reportedChainId,
     uint64 incidentTimestamp,
     uint256 nonce,
-    uint256 deadline
+    uint256 deadline,
+    bytes32 windowBlockHash
 )
 ```
 
@@ -130,11 +168,16 @@ TransactionBatchRegistration(
     bytes32 reportedChainId,
     uint32 transactionCount,
     uint256 nonce,
-    uint256 deadline
+    uint256 deadline,
+    bytes32 windowBlockHash
 )
 ```
 
 The `statement` field contains a human-readable message displayed in MetaMask during signing (e.g., _"This signature acknowledges that the signing wallet is being reported as stolen..."_). It is hashed at compile time for gas efficiency.
+
+:::warning
+Both **registration** typehashes end with `bytes32 windowBlockHash`; neither acknowledgement typehash has it. Omitting the field produces a digest no wallet will ever generate and no verifier will ever accept. See [Signature Freshness](#signature-freshness-the-primary-control).
+:::
 
 ## Nonce & Deadline Mechanics
 
@@ -147,7 +190,9 @@ The `statement` field contains a human-readable message displayed in MetaMask du
 | Signature deadline    | `block.timestamp` | EIP-712 signature expiry. Prevents stale signatures from being submitted.          |
 | Grace period deadline | `block.number`    | Registration window. Defines when the user can start and must finish registration. |
 
-Both include randomized jitter via `block.prevrandao` to prevent prediction.
+Both include randomized jitter via `block.prevrandao`.
+
+**Signature deadlines are bounded on both ends.** `TimingConfig.MAX_SIGNATURE_LIFETIME` caps the accepted lifetime at **2 hours**: a deadline in the past reverts with `__DeadlineExpired`, and one more than 2 hours out reverts with `__DeadlineTooFarInFuture`. Without the upper bound, a hostile frontend could set `deadline` to `type(uint256).max` and hold a valid acknowledgement signature indefinitely, submitting it months later when the victim has no memory or context of signing. The honest client requests ~30-60 minutes via `getSignatureDeadline()`, so the cap never binds in normal use — but a client that picks its own deadline must stay inside it.
 
 ## Registration Methods & the Forwarder Field
 
@@ -163,8 +208,12 @@ In all cases:
 
 - The **wallet owner** must sign both EIP-712 messages
 - The `trustedForwarder` is named in the signature (cannot be changed after signing)
-- Only the `trustedForwarder` can submit the `register()` transaction
+- Only the `trustedForwarder` can submit **both** the `acknowledge()` and the `register()` transaction — each enforces `msg.sender == trustedForwarder`
 - `isSponsored` is derived from `wallet != trustedForwarder`
+
+:::info
+`acknowledge()` restricts the submitter for the same reason `register()` does. All three flows already satisfy it (standard: the wallet itself; self-relay: the gas wallet; P2P: the relayer), and requiring it closes two holes. An unrelated third party could otherwise grind their own address to steer the "randomized" timing, and could burn a victim's nonce to grief them.
+:::
 
 For self-relay and P2P relay, the victim signs with their compromised wallet but someone else submits the transaction and pays gas - critical when the wallet has been drained.
 

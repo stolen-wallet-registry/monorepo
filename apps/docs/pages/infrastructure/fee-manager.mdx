@@ -13,9 +13,14 @@ SWR charges USD-denominated registration fees converted to ETH at the current ma
 
 Fees are collected in ETH at the time of registration. Setting a fee to `0` disables it (free registrations). Operator batch fees are set to zero — DAO approval is the trust mechanism, so no additional fee is required.
 
+A registry deployed with `feeManager == address(0)` is in free-registration mode, and it
+**refunds the full `msg.value`** rather than keeping anything a caller sent by mistake. Every
+other mode refunds the overpayment above the required fee.
+
 ## Price Resolution
 
-The contract resolves ETH price through a two-layer fallback chain: Chainlink oracle first, stored fallback price second.
+The contract resolves ETH price through a three-layer chain: a live Chainlink answer, a sanity
+check on that answer's value, and a stored fallback price for everything else.
 
 <Mermaid
   chart={`
@@ -26,9 +31,13 @@ flowchart TD
     D -->|Reverts| C
     D -->|Success| E{Price > 0?}
     E -->|No| C
-    E -->|Yes| F{Stale?<br/>age > stalePriceThreshold}
+    E -->|Yes| F{Stale?<br/>zero, future, or<br/>age > stalePriceThreshold}
     F -->|Yes| C
-    F -->|No| G{Sync interval elapsed?}
+    F -->|No| L{Convertible?<br/>decimals readable}
+    L -->|No| C
+    L -->|Yes| M{Within price bounds?}
+    M -->|No| N[emit OraclePriceRejected] --> C
+    M -->|Yes| G{Sync interval elapsed?}
     G -->|Yes| H[Update fallback price<br/>~10k gas one-time]
     G -->|No| I[Use live price]
     H --> I
@@ -41,6 +50,31 @@ flowchart TD
 ### Staleness Check
 
 If `block.timestamp - updatedAt > stalePriceThreshold` (default: 4 hours / 14,400 seconds), the Chainlink data is considered stale and the contract falls back to the stored price.
+
+Two edge cases are also treated as stale: an `updatedAt` of `0` (incomplete round) and an
+`updatedAt` in the future (the feed is malfunctioning). Both are handled with explicit
+comparisons rather than a subtraction, because a future timestamp would underflow inside the
+`try` block's success branch — where the surrounding `catch` cannot catch it — and the panic
+would brick every fee-collecting registration path.
+
+### Price Bounds
+
+Every other guard defends against a _missing_ answer. Bounds defend against a fresh, positive,
+correctly-encoded answer that is simply **wrong**, because the fee formula is unbounded in both
+directions: a $1 answer prices a $5 registration at 5 ETH, while a 1e20 answer makes
+registration free and stops deterring sybil spam.
+
+| Parameter             | Default             | Meaning                                |
+| --------------------- | ------------------- | -------------------------------------- |
+| `minEthPriceUsdCents` | `5000` ($50)        | Lowest accepted oracle answer          |
+| `maxEthPriceUsdCents` | `5_000_000` ($50k)  | Highest accepted oracle answer         |
+| `MIN_PRICE_BOUND`     | `100` ($1)          | Hard floor for the bounds themselves   |
+| `MAX_PRICE_BOUND`     | `100_000_000` ($1M) | Hard ceiling for the bounds themselves |
+
+An out-of-band answer emits `OraclePriceRejected` and falls back to the last known-good price
+rather than reverting — a revert here would brick registration, which is strictly worse than
+quoting a slightly stale price. The fallback price is held to the same band, so "clamp the
+oracle" cannot be sidestepped by setting the fallback to 1 cent and letting the feed go stale.
 
 ### Opportunistic Sync
 
@@ -63,17 +97,17 @@ _Example at ETH = $3,000 — actual ETH amount varies with market price:_
 | Individual     | $5.00 | ~0.0017  |
 | Operator batch | Free  | 0        |
 
-Chainlink ETH/USD feeds typically use 8 decimals. The `_toCents()` function normalizes to 2-decimal cents, with a minimum return of 1 cent to prevent division by zero.
+Chainlink ETH/USD feeds typically use 8 decimals. The `_tryToCents()` function normalizes to 2-decimal cents, with a minimum return of 1 cent to prevent division by zero. It returns `ok = false` instead of reverting when the feed's `decimals()` call fails or would make the conversion overflow — a broken feed must degrade to the fallback price, not revert.
 
 ## Key Functions
 
 ### Read Functions
 
 ```solidity
-/// User registration fee in wei (view, uses cached price)
+/// User registration fee in wei (view — reads the oracle live, never writes)
 function currentFeeWei() public view returns (uint256);
 
-/// Operator batch fee in wei (view, uses cached price)
+/// Operator batch fee in wei (view — reads the oracle live, never writes)
 function operatorBatchFeeWei() public view returns (uint256);
 
 /// Read-only price check (no state mutation)
@@ -94,28 +128,69 @@ function syncAndGetEthPriceUsdCents() public returns (uint256);
 function refreshFallbackPrice() external;
 ```
 
-`syncAndGetEthPriceUsdCents()` is the primary price function used during registrations. It mutates state when the sync interval elapses. For pure reads (e.g., UI display), use `getEthPriceUsdCentsView()` instead.
+`syncAndGetEthPriceUsdCents()` is the primary price function used during registrations. It mutates state when the sync interval elapses. For pure reads (e.g., UI display), use `getEthPriceUsdCentsView()` instead — the two apply identical guards, or the quoted fee and the collected fee would disagree.
 
-`refreshFallbackPrice()` is permissionless - anyone can call it to sync the fallback price from Chainlink. It reverts if the oracle data is stale or invalid, so callers cannot set arbitrary values.
+`refreshFallbackPrice()` is permissionless - anyone can call it to sync the fallback price from Chainlink. It reverts if the oracle data is stale, invalid, or out of bounds, so callers cannot set arbitrary values. Reverting is correct here, unlike on the read paths: nothing depends on this call succeeding, and without the bounds check a single out-of-band answer would be laundered into stored state that survives long after the feed recovered.
 
 ## Owner Controls
 
-All admin functions are restricted to the contract owner (`Ownable2Step`).
+`FeeManager` inherits `TimelockOwnable`, **not** plain `Ownable2Step`. Every setter here is an
+economic trust boundary on the critical path of registration — a hostile fallback price plus a
+large base fee makes `currentFeeWei()` exceed any balance, so every fee-collecting registration
+reverts `Fee__Insufficient`. That lands on phase two of the two-phase flow, stranding victims who
+have already acknowledged, and `feeManager` is `immutable` on the registries, so recovery would
+otherwise mean redeploying them. A one-transaction owner call must not be able to do that.
 
-| Function                           | What it does                                     |
-| ---------------------------------- | ------------------------------------------------ |
-| `setBaseFee(uint256)`              | Update individual registration fee in USD cents  |
-| `setOperatorBatchFee(uint256)`     | Update operator batch fee in USD cents           |
-| `setFallbackPrice(uint256)`        | Manually set fallback ETH price (must be > 0)    |
-| `setPriceFeed(address)`            | Change or disable the Chainlink price feed       |
-| `setStalePriceThreshold(uint256)`  | Max age of oracle data before fallback (seconds) |
-| `setFallbackSyncInterval(uint256)` | How often to opportunistically sync (seconds)    |
+**During setup** (before `completeSetup()`), these are immediate:
 
-Setting `stalePriceThreshold` to `0` effectively disables the oracle (all prices are considered stale). Setting `fallbackSyncInterval` to `0` syncs on every call (higher gas).
+| Function                          | What it does                                     |
+| --------------------------------- | ------------------------------------------------ |
+| `setBaseFee(uint256)`             | Update individual registration fee in USD cents  |
+| `setOperatorBatchFee(uint256)`    | Update operator batch fee in USD cents           |
+| `setFallbackPrice(uint256)`       | Set fallback ETH price (> 0 and within bounds)   |
+| `setStalePriceThreshold(uint256)` | Max age of oracle data before fallback (seconds) |
+| `setPriceBounds(uint256,uint256)` | Set the oracle sanity band                       |
+
+**After `completeSetup()`**, each takes the propose → wait `ACTIVATION_DELAY` (2 days) → activate
+path: `proposeBaseFee`/`activateBaseFee`, `proposeOperatorBatchFee`/`activateOperatorBatchFee`,
+`proposeFallbackPrice`/`activateFallbackPrice`, `proposePriceFeed`/`activatePriceFeed`,
+`proposeStalePriceThreshold`/`activateStalePriceThreshold`, `proposePriceBounds`/`activatePriceBounds`.
+
+Two functions sit outside that rule:
+
+| Function                           | Timelock                                                                 |
+| ---------------------------------- | ------------------------------------------------------------------------ |
+| `setPriceFeed(address)`            | Timelocked for a **new** feed; `address(0)` stays immediate at all times |
+| `setFallbackSyncInterval(uint256)` | Never timelocked — a gas-tuning knob only                                |
+
+`setPriceFeed(address(0))` is deliberately left immediate: it disables the oracle and drops the
+contract to the manual fallback, which only ever _narrows_ what the contract trusts. It is the
+emergency response to a feed that has started answering wrongly-but-plausibly.
+
+Constraints worth knowing:
+
+- `stalePriceThreshold` is capped at `MAX_STALE_PRICE_THRESHOLD` (7 days); above it,
+  `Fee__InvalidThreshold`. Without a cap the owner could set it to `type(uint256).max` and turn
+  staleness detection off entirely.
+- Setting `stalePriceThreshold` to `0` effectively disables the oracle (all prices are considered stale).
+- `setFallbackPrice` reverts `Fee__InvalidPrice` on zero and `Fee__PriceOutOfBounds` outside the band.
+- `setPriceBounds` reverts `Fee__InvalidBounds` if inverted, outside `MIN_PRICE_BOUND`/`MAX_PRICE_BOUND`,
+  or if the new band would orphan the fallback price already in storage.
+- Setting `fallbackSyncInterval` to `0` syncs on every call (higher gas).
 
 ## Fee Distribution
 
-Fees are sent to a `feeRecipient` address at the registry level. Planned integration with [Splits Protocol](https://splits.org/) will distribute revenue across:
+Collected ETH accumulates in the contract that received it, and the owner withdraws it:
+
+| Contract                                | How fees leave                                                              |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| `WalletRegistry`, `TransactionRegistry` | `withdrawCollectedFees()` (to caller) or `withdrawTo(address)` — owner only |
+| `FraudRegistryHub`                      | `withdrawFees()` → the configured `feeRecipient`                            |
+| `OperatorSubmitter`                     | Forwards each fee to `feeRecipient` at submission time (nothing accrues)    |
+
+The registries themselves have no `feeRecipient` — only `FraudRegistryHub` and
+`OperatorSubmitter` do.
+Planned integration with [Splits Protocol](https://splits.org/) will distribute revenue across:
 
 - DAO treasury
 - Protocol Guild
@@ -123,13 +198,19 @@ Fees are sent to a `feeRecipient` address at the registry level. Planned integra
 
 ## Events
 
-| Event                                                                    | When                                      |
-| ------------------------------------------------------------------------ | ----------------------------------------- |
-| `FallbackPriceSynced(uint256 newPrice)`                                  | Opportunistic sync updated the fallback   |
-| `FallbackPriceRefreshed(uint256 newPrice)`                               | Manual `refreshFallbackPrice()` succeeded |
-| `BaseFeeUpdated(uint256 oldFee, uint256 newFee)`                         | Owner changed individual fee              |
-| `OperatorBatchFeeUpdated(uint256 oldFee, uint256 newFee)`                | Owner changed operator fee                |
-| `FallbackPriceUpdated(uint256 oldPrice, uint256 newPrice)`               | Owner set fallback price manually         |
-| `PriceFeedConfigured(address priceFeed)`                                 | Owner changed the Chainlink feed address  |
-| `StalePriceThresholdUpdated(uint256 oldThreshold, uint256 newThreshold)` | Owner changed staleness threshold         |
-| `FallbackSyncIntervalUpdated(uint256 oldInterval, uint256 newInterval)`  | Owner changed sync interval               |
+| Event                                                                    | When                                             |
+| ------------------------------------------------------------------------ | ------------------------------------------------ |
+| `FallbackPriceSynced(uint256 newPrice)`                                  | Opportunistic sync updated the fallback          |
+| `FallbackPriceRefreshed(uint256 newPrice)`                               | Manual `refreshFallbackPrice()` succeeded        |
+| `BaseFeeUpdated(uint256 oldFee, uint256 newFee)`                         | Owner changed individual fee                     |
+| `OperatorBatchFeeUpdated(uint256 oldFee, uint256 newFee)`                | Owner changed operator fee                       |
+| `FallbackPriceUpdated(uint256 oldPrice, uint256 newPrice)`               | Owner set fallback price manually                |
+| `PriceFeedConfigured(address priceFeed)`                                 | Owner changed the Chainlink feed address         |
+| `StalePriceThresholdUpdated(uint256 oldThreshold, uint256 newThreshold)` | Owner changed staleness threshold                |
+| `FallbackSyncIntervalUpdated(uint256 oldInterval, uint256 newInterval)`  | Owner changed sync interval                      |
+| `PriceBoundsUpdated(uint256 minUsdCents, uint256 maxUsdCents)`           | Owner changed the oracle sanity band             |
+| `OraclePriceRejected(uint256 rejectedUsdCents)`                          | A fresh, positive answer fell outside the bounds |
+
+`OraclePriceRejected` is deliberately loud: a feed that trips it is either broken or
+manipulated, and silent degradation to the fallback is exactly the kind of thing that goes
+unnoticed until the fallback itself is months stale.
