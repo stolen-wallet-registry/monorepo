@@ -581,6 +581,25 @@ export const SoulboundReceiverABI = [
   },
   {
     type: 'event',
+    name: 'Swept',
+    inputs: [
+      {
+        name: 'to',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'amount',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'TrustedForwarderProposed',
     inputs: [
       {

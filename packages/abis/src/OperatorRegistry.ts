@@ -695,17 +695,6 @@ export const OperatorRegistryABI = [
   },
   {
     type: 'error',
-    name: 'OperatorRegistry__NotAuthorizedForRegistry',
-    inputs: [
-      {
-        name: 'requiredCapability',
-        type: 'uint8',
-        internalType: 'uint8',
-      },
-    ],
-  },
-  {
-    type: 'error',
     name: 'OperatorRegistry__ZeroAddress',
     inputs: [],
   },

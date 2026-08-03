@@ -12,6 +12,7 @@ import {
   ipv6Prefix64,
   readRelayLimits,
   shouldDenyReservation,
+  validateRelayLimits,
 } from '../src/relay-limits.mjs';
 
 describe('ipv6Prefix64', () => {
@@ -36,6 +37,50 @@ describe('ipv6Prefix64', () => {
     assert.equal(ipv6Prefix64('203.0.113.7'), null);
     assert.equal(ipv6Prefix64('relay.example'), null);
     assert.equal(ipv6Prefix64('2001::db8::1'), null);
+  });
+});
+
+// An IPv4-mapped address is an IPv4 host in an IPv6 costume: its top 96 bits are constant, so
+// /64-grouping it filed every IPv4 client on earth under one `0:0:0:0::/64` bucket. With the
+// default cap of 8 that turns a per-host availability control into a global 8-slot cap on the
+// only registration path a fully drained wallet has. Dormant on the current `/ip4/0.0.0.0`
+// listen address; live the moment anyone switches to `/ip6/::` for dual-stack, because
+// @libp2p/utils routes anything isIPv6() — including ::ffff:x.x.x.x — to an /ip6/ multiaddr.
+describe('ipv6Prefix64 — IPv4-mapped addresses', () => {
+  test('returns the embedded IPv4 rather than a shared /64 bucket', () => {
+    assert.equal(ipv6Prefix64('::ffff:192.168.1.1'), '192.168.1.1');
+    assert.equal(ipv6Prefix64('::ffff:8.8.8.8'), '8.8.8.8');
+  });
+
+  // The three cases verified in the review as colliding before the fix.
+  test('keeps two different IPv4 clients in different buckets', () => {
+    assert.notEqual(ipv6Prefix64('::ffff:192.168.1.1'), ipv6Prefix64('::ffff:8.8.8.8'));
+    assert.notEqual(ipv6Prefix64('::ffff:192.168.1.1'), ipv6Prefix64('::1'));
+  });
+
+  test('matches the bare IPv4 key, so one client is one bucket across transports', () => {
+    // extractHost uses ip4 values verbatim, so `/ip4/8.8.8.8` and `/ip6/::ffff:8.8.8.8` must
+    // agree or the same host gets two allowances.
+    assert.equal(ipv6Prefix64('::ffff:8.8.8.8'), '8.8.8.8');
+    assert.equal(
+      extractHost('/ip6/::ffff:8.8.8.8/tcp/443/ws'),
+      extractHost('/ip4/8.8.8.8/tcp/443/ws')
+    );
+  });
+
+  test('handles the long-form and IPv4-compatible spellings', () => {
+    assert.equal(ipv6Prefix64('0:0:0:0:0:ffff:8.8.8.8'), '8.8.8.8');
+    assert.equal(ipv6Prefix64('::8.8.8.8'), '8.8.8.8');
+  });
+
+  test('rejects an out-of-range or padded quad rather than inventing a key', () => {
+    assert.equal(ipv6Prefix64('::ffff:999.1.1.1'), null);
+    assert.equal(ipv6Prefix64('::ffff:08.8.8.8'), null);
+  });
+
+  // A genuine IPv6 address with a dotted tail is still a /64 allocation, not a single host.
+  test('leaves a real IPv6 address with an embedded quad on the /64 path', () => {
+    assert.equal(ipv6Prefix64('2001:db8::1.2.3.4'), '2001:db8:0:0::/64');
   });
 });
 
@@ -342,5 +387,62 @@ describe('readRelayLimits', () => {
     assert.equal(limits.maxReservations, 512);
     assert.equal(limits.reservationsPerHost, 8);
     assert.equal(limits.reservationTtlMs, 20 * 60 * 1000);
+  });
+
+  // Falling back is right; falling back SILENTLY is not. `1O24` with a letter O is
+  // indistinguishable from never setting the variable, and the operator believes a ceiling is
+  // in force that never was.
+  test('warns about every rejected value instead of falling back quietly', () => {
+    const warnings = [];
+    const limits = readRelayLimits(
+      { RELAY_MAX_RESERVATIONS: '1O24', RELAY_MAX_CONNECTIONS: '12.5' },
+      (message) => warnings.push(message)
+    );
+
+    assert.equal(limits.maxReservations, 512);
+    assert.equal(limits.maxConnections, 600);
+    assert.equal(warnings.length, 2);
+    assert.ok(warnings.some((w) => w.includes('RELAY_MAX_RESERVATIONS') && w.includes('1O24')));
+    assert.ok(warnings.some((w) => w.includes('RELAY_MAX_CONNECTIONS') && w.includes('12.5')));
+  });
+
+  test('says nothing when every value is accepted', () => {
+    const warnings = [];
+    readRelayLimits({ RELAY_MAX_RESERVATIONS: '64' }, (message) => warnings.push(message));
+    assert.deepEqual(warnings, []);
+  });
+});
+
+// The invariants below were previously asserted only for the DEFAULTS, so any deployment that
+// set one variable in isolation walked straight past them.
+describe('validateRelayLimits', () => {
+  test('accepts the default set', () => {
+    assert.deepEqual(validateRelayLimits(readRelayLimits({})), []);
+  });
+
+  // The finding: RELAY_MAX_CONNECTIONS=50 against the default 512 reservation ceiling caps
+  // reservations at ~50, because every reservation holds a live connection — while the
+  // startup banner prints 512.
+  test('flags a connection ceiling that silently caps reservations', () => {
+    const problems = validateRelayLimits(
+      readRelayLimits({ RELAY_MAX_CONNECTIONS: '50' }, () => {})
+    );
+    assert.equal(problems.length, 1);
+    assert.match(problems[0], /RELAY_MAX_CONNECTIONS/);
+    assert.match(problems[0], /512/);
+  });
+
+  test('flags a per-host cap that does not actually cap anything', () => {
+    const problems = validateRelayLimits(
+      readRelayLimits({ RELAY_MAX_RESERVATIONS: '8', RELAY_RESERVATIONS_PER_HOST: '8' }, () => {})
+    );
+    assert.ok(problems.some((p) => p.includes('RELAY_RESERVATIONS_PER_HOST')));
+  });
+
+  test('flags a TTL shorter than a worst-case registration flow', () => {
+    const problems = validateRelayLimits(
+      readRelayLimits({ RELAY_RESERVATION_TTL_MS: '60000' }, () => {})
+    );
+    assert.ok(problems.some((p) => p.includes('RELAY_RESERVATION_TTL_MS')));
   });
 });

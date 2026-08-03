@@ -601,6 +601,9 @@ importers:
       '@swr/abis':
         specifier: workspace:*
         version: link:../abis
+      '@types/node':
+        specifier: ^24.10.2
+        version: 24.10.2
       eslint:
         specifier: ^9.39.1
         version: 9.39.1(jiti@2.7.0)

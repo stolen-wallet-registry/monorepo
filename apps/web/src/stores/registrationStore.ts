@@ -10,12 +10,26 @@ export type { RegistrationType, RegistrationStep } from '@/lib/types/registratio
 // BigInt-safe JSON storage for Zustand persist middleware
 // JSON.stringify throws on BigInt - this provides custom serialization
 const BIGINT_PREFIX = '__bigint__:';
+/**
+ * A prefixed value whose suffix is not a valid integer literal.
+ *
+ * `BigInt('abc')` throws a SyntaxError, and the reviver runs INSIDE `JSON.parse`, so an
+ * unguarded conversion made `getItem` throw for the whole blob. This is the only store with a
+ * custom storage, so it is the only one whose hydration can fail before its validating `merge`
+ * ever runs — the user mid-flow silently lost `step`, both transaction hashes and both incident
+ * fields with a paid acknowledgement live on chain. Returning the raw string instead lets
+ * `merge` see a non-bigint where a bigint belongs and substitute the initial value.
+ */
+const BIGINT_SUFFIX = /^-?\d+$/;
 const bigintStorage = createJSONStorage(() => localStorage, {
   replacer: (_key, value) => (typeof value === 'bigint' ? `${BIGINT_PREFIX}${value}` : value),
-  reviver: (_key, value) =>
-    typeof value === 'string' && value.startsWith(BIGINT_PREFIX)
-      ? BigInt(value.slice(BIGINT_PREFIX.length))
-      : value,
+  reviver: (_key, value) => {
+    if (typeof value !== 'string' || !value.startsWith(BIGINT_PREFIX)) {
+      return value;
+    }
+    const suffix = value.slice(BIGINT_PREFIX.length);
+    return BIGINT_SUFFIX.test(suffix) ? BigInt(suffix) : value;
+  },
 });
 
 export interface RegistrationState {
@@ -230,9 +244,21 @@ export const useRegistrationStore = create<RegistrationState & RegistrationActio
             registrationHash: state.registrationHash ?? initialState.registrationHash,
             registrationChainId: state.registrationChainId ?? initialState.registrationChainId,
             bridgeMessageId: state.bridgeMessageId ?? initialState.bridgeMessageId,
-            // Incident fields (null if migrating from v1)
-            reportedChainId: state.reportedChainId ?? initialState.reportedChainId,
-            incidentTimestamp: state.incidentTimestamp ?? initialState.incidentTimestamp,
+            // Incident fields (null if migrating from v1).
+            //
+            // Type-checked, not merely defaulted: the bigint reviver hands back the raw string
+            // for a corrupt `__bigint__:` value rather than letting `BigInt()` throw out of
+            // `JSON.parse` and take the whole rehydrate with it. That leaves a string sitting
+            // where a bigint belongs, which would reach `useAcknowledgement` as a contract
+            // argument. This is where it gets dropped.
+            reportedChainId:
+              typeof state.reportedChainId === 'bigint'
+                ? state.reportedChainId
+                : initialState.reportedChainId,
+            incidentTimestamp:
+              typeof state.incidentTimestamp === 'bigint'
+                ? state.incidentTimestamp
+                : initialState.incidentTimestamp,
           };
         },
       }

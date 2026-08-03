@@ -87,6 +87,58 @@ describe('V17 — CORS is restricted despite ponder pre-setting *', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
   });
 
+  // ─── Preflights never reach this middleware, and that is survivable — but only for a
+  // reason worth pinning down. Hono's cors() answers OPTIONS itself and returns without
+  // calling next, so ponder's `*` stands on the preflight and enforceCors is never invoked.
+  // What makes the control hold is that the browser re-checks the ACTUAL response, which does
+  // pass through here. Both halves are asserted so that "preflight says *" can never be read
+  // as "the restriction leaks", and so that deleting the post-next strip fails loudly.
+  describe('CORS preflight (OPTIONS) is answered upstream of this app', () => {
+    const preflight = (chain: Hono, origin: string) =>
+      request(chain, '/graphql', {
+        method: 'OPTIONS',
+        headers: {
+          origin,
+          'access-control-request-method': 'POST',
+          'access-control-request-headers': 'content-type',
+        },
+      });
+
+    it("leaves ponder's wildcard standing on the preflight of a disallowed origin", async () => {
+      const chain = buildPonderChain(buildApp());
+      const res = await preflight(chain, 'https://evil.example');
+
+      // Not the behaviour we would choose; it is the behaviour hono/cors produces upstream.
+      // Documented here so a future reader does not mistake it for a regression in our code.
+      expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    });
+
+    it('still denies the disallowed origin on the request that actually carries data', async () => {
+      // The load-bearing half. A permissive preflight buys an attacker nothing while this
+      // holds: the browser refuses to expose a response whose allow-origin does not match.
+      const chain = buildPonderChain(buildApp());
+      const res = await request(chain, '/graphql', {
+        method: 'POST',
+        headers: { origin: 'https://evil.example', 'content-type': 'application/json' },
+      });
+
+      expect(res.headers.get('access-control-allow-origin')).toBeNull();
+    });
+
+    it('leaves an allowed origin working end to end', async () => {
+      const chain = buildPonderChain(buildApp());
+
+      const pre = await preflight(chain, 'https://app.example');
+      expect(pre.status).toBeLessThan(300);
+
+      const actual = await request(chain, '/graphql', {
+        method: 'POST',
+        headers: { origin: 'https://app.example', 'content-type': 'application/json' },
+      });
+      expect(actual.headers.get('access-control-allow-origin')).toBe('https://app.example');
+    });
+  });
+
   describe('parseAllowedOrigins', () => {
     it('defaults to local dev origins when unset or blank', () => {
       expect(parseAllowedOrigins(undefined)).toContain('http://localhost:5173');

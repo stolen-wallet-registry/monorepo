@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { detectSearchType, isCAIP10, parseCAIP10, parseWildcardCAIP10 } from './detect';
+import {
+  detectSearchType,
+  isCAIP10,
+  isCAIP10Shaped,
+  parseCAIP10,
+  parseWildcardCAIP10,
+} from './detect';
 
 const ADDRESS = `0x${'a'.repeat(40)}`;
 const TX_HASH = `0x${'b'.repeat(64)}`;
@@ -35,6 +41,72 @@ describe('detectSearchType', () => {
     expect(detectSearchType(ADDRESS)).toBe('address');
     expect(detectSearchType(TX_HASH)).toBe('transaction');
     expect(detectSearchType('gibberish')).toBe('invalid');
+  });
+
+  // Finding S-2. These two classes must not be merged: 'invalid' routes to a returned
+  // `found: false`, and a returned negative for an identifier nothing looked at is how an
+  // off-ramp clears a wallet that IS registered stolen. 'unsupported' routes to a throw.
+  describe('tells an unanswerable identifier apart from a malformed one', () => {
+    it('classifies well-formed non-EVM identifiers as unsupported', () => {
+      expect(detectSearchType('solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:FN1abcDEFghi')).toBe(
+        'unsupported'
+      );
+      expect(
+        detectSearchType(
+          'bip122:000000000019d6689c085ae165831e93:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
+        )
+      ).toBe('unsupported');
+      expect(
+        detectSearchType('cosmos:cosmoshub-4:cosmos1t2uflqwqe0fsj0shcfkrvpukewcw40yjj6hdc0')
+      ).toBe('unsupported');
+    });
+
+    it('keeps a malformed EVM identifier as invalid', () => {
+      // The namespace is one we can adjudicate: we know what an EVM address looks like, so
+      // this is a typo with no registry entry to miss. Calling it 'unsupported' would show a
+      // "could not verify" warning for a mistyped address and blunt the real ones.
+      expect(detectSearchType('eip155:8453:0xnope')).toBe('invalid');
+      expect(detectSearchType(`eip155:not-a-chain:${ADDRESS}`)).toBe('invalid');
+      expect(detectSearchType(`eip155:8453:${ADDRESS}:junk`)).toBe('invalid');
+    });
+
+    it('keeps things that are not identifiers at all as invalid', () => {
+      expect(detectSearchType('hello:world')).toBe('invalid');
+      expect(detectSearchType('http://example.com/x')).toBe('invalid');
+      expect(detectSearchType('a:b:c')).toBe('invalid'); // namespace under 3 chars
+      expect(detectSearchType('')).toBe('invalid');
+    });
+  });
+
+  // Solana base58 and Bitcoin base58check are case-sensitive; classification must not depend
+  // on having destroyed the casing first.
+  it('does not depend on lowercasing a case-sensitive identifier', () => {
+    const mixed = 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:FN1abcDEFghi';
+    expect(detectSearchType(mixed)).toBe(detectSearchType(mixed.toLowerCase()));
+  });
+
+  it('accepts a checksummed EVM address regardless of casing', () => {
+    const checksummed = '0x742D35CC6634c0532925A3b844BC9E7595F0BEb0';
+    expect(detectSearchType(checksummed)).toBe('address');
+    expect(detectSearchType(`eip155:8453:${checksummed}`)).toBe('caip10');
+  });
+});
+
+describe('isCAIP10Shaped', () => {
+  // Namespace-agnostic on purpose: it is the test for "this is a real identifier", separate
+  // from "this is one we support".
+  it('accepts any namespace matching the CAIP-10 grammar', () => {
+    expect(isCAIP10Shaped(`eip155:8453:${ADDRESS}`)).toBe(true);
+    expect(isCAIP10Shaped('solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:FN1abc')).toBe(true);
+    expect(isCAIP10Shaped('bip122:000000000019d6689c085ae165831e93:1A1zP1eP')).toBe(true);
+  });
+
+  it('rejects strings that are not three-part identifiers', () => {
+    expect(isCAIP10Shaped(ADDRESS)).toBe(false);
+    expect(isCAIP10Shaped('solana:mainnet')).toBe(false);
+    expect(isCAIP10Shaped('solana:mainnet:abc:extra')).toBe(false);
+    expect(isCAIP10Shaped('ab:mainnet:abc')).toBe(false); // namespace too short
+    expect(isCAIP10Shaped(':mainnet:abc')).toBe(false);
   });
 });
 

@@ -26,6 +26,7 @@ import { areAddressesEqual } from '@/lib/address';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
 import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -72,7 +73,7 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
 
   // See handleRetry: some reverts make the stored signature permanently unusable, so Retry
   // has to mean "sign again", not "submit the same bytes again".
-  const { goToPreviousStep } = useStepNavigation();
+  const { goToPreviousStep, resetFlow } = useStepNavigation();
   const needsResign = isError && isSignatureInvalidatingError(error);
 
   // Determine forwarder: for standard registration, it's the same as registeree
@@ -275,24 +276,18 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   // Missing form data
   if (!registeree || !expectedWallet) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={resetFlow}>
+        Missing registration data. Start over to begin a new registration.
+      </FlowRecoveryAlert>
     );
   }
 
   // Missing signature
   if (!storedSignature) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Signature not found. Please go back and sign the acknowledgement again.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Back to Signing" onAction={goToPreviousStep}>
+        Signature not found. Go back and sign the acknowledgement again.
+      </FlowRecoveryAlert>
     );
   }
 

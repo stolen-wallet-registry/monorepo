@@ -120,12 +120,14 @@ contract HyperlaneAdapterTest is Test {
     }
 
     function test_QuoteMessage_CustomGasAmounts() public {
-        // Per-domain overrides should replace both halves of the gas model.
+        // Per-domain overrides should replace both halves of the gas model. Both values sit
+        // inside the accepted band — see {MIN_PER_ENTRY_GAS}; 10_000 per entry was below the
+        // floor this suite now enforces.
         vm.prank(owner);
-        adapter.setGasAmounts(HUB_DOMAIN, 500_000, 10_000);
+        adapter.setGasAmounts(HUB_DOMAIN, 500_000, 20_000);
 
         uint256 quote = adapter.quoteMessage(HUB_DOMAIN, "test");
-        assertEq(quote, (500_000 + 10_000) * 1 gwei);
+        assertEq(quote, (500_000 + 20_000) * 1 gwei);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -361,6 +363,65 @@ contract HyperlaneAdapterTest is Test {
         vm.prank(owner);
         adapter.setGasAmounts(HUB_DOMAIN, 0, maxPerEntry);
         assertEq(adapter.perEntryGasAmounts(HUB_DOMAIN), maxPerEntry);
+    }
+
+    /// @notice The gas model is bounded BELOW as well as above.
+    /// @dev SECURITY (C-4). The ceilings stop an owner overcharging; the floors stop the more
+    ///      damaging direction. `setGasAmounts(d, 1, 1)` is a silent kill switch: the quote
+    ///      collapses, the spoke accepts the cheap fee, burns the nonce, deletes the
+    ///      acknowledgement and dispatches \u2014 and the relayer then declines to execute a message
+    ///      it was not paid for. No revert reaches the user, no refund, no on-chain trace of why.
+    ///      Both terms are checked because under-setting either one alone is sufficient.
+    function test_SetGasAmounts_RejectsValuesBelowFloor() public {
+        // Read the bounds BEFORE arming expectRevert: it applies to the next external call,
+        // which would otherwise be the `MIN_*` view rather than setGasAmounts.
+        uint256 justUnderBase = adapter.MIN_BASE_GAS() - 1;
+        uint256 justUnderPerEntry = adapter.MIN_PER_ENTRY_GAS() - 1;
+
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigBelowFloor.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, 1, 1);
+
+        // Base alone below its floor, per-entry left at the default.
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigBelowFloor.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, justUnderBase, 0);
+
+        // Per-entry alone below its floor, base left at the default.
+        vm.prank(owner);
+        vm.expectRevert(HyperlaneAdapter.HyperlaneAdapter__GasConfigBelowFloor.selector);
+        adapter.setGasAmounts(HUB_DOMAIN, 0, justUnderPerEntry);
+
+        assertEq(adapter.baseGasAmounts(HUB_DOMAIN), 0, "rejected config must not be written");
+        assertEq(adapter.perEntryGasAmounts(HUB_DOMAIN), 0, "rejected config must not be written");
+    }
+
+    /// @notice Exactly the floor is accepted \u2014 the bound is `<`, not `<=`.
+    /// @dev The load-bearing half of the pair above: without it, a floor written one step too
+    ///      strict would reject the documented minimum and nothing would notice.
+    function test_SetGasAmounts_AcceptsValuesAtExactlyFloor() public {
+        uint256 minBase = adapter.MIN_BASE_GAS();
+        uint256 minPerEntry = adapter.MIN_PER_ENTRY_GAS();
+
+        vm.prank(owner);
+        adapter.setGasAmounts(HUB_DOMAIN, minBase, minPerEntry);
+
+        assertEq(adapter.baseGasAmounts(HUB_DOMAIN), minBase);
+        assertEq(adapter.perEntryGasAmounts(HUB_DOMAIN), minPerEntry);
+    }
+
+    /// @notice Explicit 0 still means "use the default" and is never treated as below the floor.
+    /// @dev A floor applied to the RAW arguments rather than the effective ones would reject
+    ///      `setGasAmounts(d, 0, 0)` \u2014 the documented way to clear a per-domain override.
+    function test_SetGasAmounts_ZeroClearsOverrideDespiteFloor() public {
+        vm.prank(owner);
+        adapter.setGasAmounts(HUB_DOMAIN, 400_000, 30_000);
+
+        vm.prank(owner);
+        adapter.setGasAmounts(HUB_DOMAIN, 0, 0);
+
+        assertEq(adapter.baseGasAmounts(HUB_DOMAIN), 0, "override must be clearable");
+        assertEq(adapter.perEntryGasAmounts(HUB_DOMAIN), 0, "override must be clearable");
     }
 
     // \u2550\u2550\u2550 PAYLOAD-AWARE GAS QUOTING \u2550\u2550\u2550

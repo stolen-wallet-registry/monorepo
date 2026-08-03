@@ -666,7 +666,9 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
         bytes32[] calldata transactionHashes,
         bytes32[] calldata chainIds
     ) internal {
-        uint256 batchId = _nextBatchId++;
+        // Read WITHOUT incrementing. The ID is only committed if at least one entry is written —
+        // see the zero-count branch below. Mirrors `_executeTxBatchRegistration`.
+        uint256 batchId = _nextBatchId;
 
         // Register transactions, counting actual registrations
         uint32 actualCount = 0;
@@ -691,6 +693,24 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
             emit TransactionRegistered(txHash, chainId, reporter, params.isSponsored);
             emit CrossChainTransactionRegistered(txHash, params.sourceChainId, params.bridgeId, params.messageId);
         }
+
+        // Nothing was written (every hash was zero or already registered), so there is no batch.
+        // Return WITHOUT consuming the ID, writing a row, or emitting the batch event.
+        //
+        // Deliberately NOT a revert: this is a Hyperlane-delivered message, and a reverting
+        // `handle` is redelivered indefinitely. The delivery must succeed and be a no-op.
+        //
+        // Emitting anyway would produce a batch with transactionCount 0 and no per-entry events
+        // sharing its transaction hash. The indexer joins entries to batches on exactly that hash,
+        // so the row would be a permanent orphan, and the skipped ID a hole in the sequence. The
+        // spoke's already-paid fee is the accepted V8 risk documented on
+        // `SpokeRegistry._executeTxBatchRegistration`; it is not made better by a phantom batch.
+        if (actualCount == 0) {
+            return;
+        }
+
+        // Commit the ID only now that it is backed by at least one entry.
+        _nextBatchId = batchId + 1;
 
         // Write batch after loop with accurate count
         _batches[batchId] = TransactionBatch({

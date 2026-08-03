@@ -25,7 +25,7 @@ import {
   type Environment,
 } from '@swr/chains';
 import { type Address, type Hex } from 'viem';
-import { and, eq, isNull } from 'ponder';
+import { and, eq, inArray, isNotNull, isNull } from 'ponder';
 import {
   identifierToAddress,
   normalizeIdentifier,
@@ -33,10 +33,13 @@ import {
   walletCaip10,
 } from './lib/identifiers';
 import { applyStatsDelta, type StatsDelta } from './lib/stats';
+import { readPonderEnv } from './lib/env';
 import { transactionBackfillValues, walletBackfillValues } from './lib/backfill';
 
-// Hub chain configuration - determined by environment
-const PONDER_ENV = (process.env.PONDER_ENV ?? 'development') as Environment;
+// Hub chain configuration - determined by environment.
+// Shares ponder.config.ts's validated read (src/lib/env.ts): an unrecognised PONDER_ENV must
+// fail here too, not silently index `HUB_CHAIN_ID === undefined`.
+const PONDER_ENV = readPonderEnv();
 
 const HUB_CHAIN_IDS: Record<Environment, number> = {
   development: anvilHub.chainId,
@@ -197,6 +200,9 @@ ponder.on('WalletRegistry:CrossChainWalletRegistered', async ({ event, context }
     .values({
       id: messageId,
       sourceChainId: sourceNumeric ?? 0,
+      // 0 is the unknown-chain sentinel, not a domain: this handler has only the bytes32
+      // chain hash. The inbox handler repairs it with the real origin domain if it can.
+      sourceChainIsDomain: false,
       targetChainId: HUB_CHAIN_ID,
       wallet: walletAddress,
       status: 'registered',
@@ -285,6 +291,43 @@ ponder.on('WalletRegistry:BatchCreated', async ({ event, context }) => {
       and(eq(stolenWallet.transactionHash, event.transaction.hash), isNull(stolenWallet.batchId))
     );
 
+  // Reclassify acknowledgements this batch ran over.
+  //
+  // The WalletRegistered handler marks a pending acknowledgement 'registered' whenever the
+  // wallet gets registered, but an operator batch registers a wallet WITHOUT the registeree
+  // ever signing the second message. Recording that as 'registered' claims a signature that
+  // was never produced, which is the one thing the two-phase flow exists to make real.
+  //
+  // The join key is precise, not a heuristic: `stolenWallet.transactionHash` equals THIS tx
+  // only for rows this batch actually created. A wallet that completed its own flow earlier
+  // keeps its original registration tx hash (the insert above is `onConflictDoNothing`), so
+  // its genuine 'registered' is never downgraded.
+  const batchWallets = await db.sql
+    .select({ walletAddress: stolenWallet.walletAddress })
+    .from(stolenWallet)
+    .where(
+      and(
+        eq(stolenWallet.transactionHash, event.transaction.hash),
+        isNotNull(stolenWallet.walletAddress)
+      )
+    );
+
+  const acknowledgedIds = batchWallets
+    .map((row) => row.walletAddress)
+    .filter((address): address is Address => address !== null);
+
+  if (acknowledgedIds.length > 0) {
+    await db.sql
+      .update(walletAcknowledgement)
+      .set({ status: 'superseded' })
+      .where(
+        and(
+          inArray(walletAcknowledgement.id, acknowledgedIds),
+          eq(walletAcknowledgement.status, 'registered')
+        )
+      );
+  }
+
   await updateGlobalStats(db, { totalWalletBatches: 1 }, event.block.timestamp);
 });
 
@@ -360,12 +403,19 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
   // TransactionRegistered events fire before TransactionBatchRegistered in the same transaction.
   // Note: batches CAN contain entries from multiple chains. This picks an arbitrary entry's
   // chain for display/filtering. Multi-chain batches show one of many possible chain IDs.
+  // Both columns come from the same row: `reportedChainIdHash` was declared and never
+  // written, so it was permanently NULL and any query filtering on the raw bytes32 hash
+  // matched nothing. Select it alongside the resolved CAIP-2 form rather than dropping it.
   const txEntries = await db.sql
-    .select({ caip2ChainId: transactionInBatch.caip2ChainId })
+    .select({
+      caip2ChainId: transactionInBatch.caip2ChainId,
+      chainIdHash: transactionInBatch.chainIdHash,
+    })
     .from(transactionInBatch)
     .where(eq(transactionInBatch.transactionHash, event.transaction.hash))
     .limit(1);
   const reportedChainCAIP2 = txEntries[0]?.caip2ChainId ?? null;
+  const reportedChainIdHash = txEntries[0]?.chainIdHash ?? null;
 
   await db
     .insert(transactionBatch)
@@ -373,6 +423,7 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
       id: batchId.toString(),
       dataHash,
       reporter: reporter.toLowerCase() as Address,
+      reportedChainIdHash,
       reportedChainCAIP2,
       transactionCount: Number(transactionCount),
       isSponsored,
@@ -431,6 +482,9 @@ ponder.on('TransactionRegistry:CrossChainTransactionRegistered', async ({ event,
     .values({
       id: messageId,
       sourceChainId: sourceNumeric ?? 0,
+      // 0 is the unknown-chain sentinel, not a domain: this handler has only the bytes32
+      // chain hash. The inbox handler repairs it with the real origin domain if it can.
+      sourceChainIsDomain: false,
       targetChainId: HUB_CHAIN_ID,
       status: 'registered',
       registeredAt: event.block.timestamp,
@@ -456,12 +510,17 @@ ponder.on('TransactionRegistry:TransactionBatchCreated', async ({ event, context
   // Derive reportedChainCAIP2 from any transaction entry in the same tx.
   // TransactionRegistered events fire before TransactionBatchCreated in the same transaction.
   // Note: operator batches CAN contain entries from multiple chains (see BatchCreated comment).
+  // `chainIdHash` travels with it — see TransactionBatchRegistered.
   const txEntries = await db.sql
-    .select({ caip2ChainId: transactionInBatch.caip2ChainId })
+    .select({
+      caip2ChainId: transactionInBatch.caip2ChainId,
+      chainIdHash: transactionInBatch.chainIdHash,
+    })
     .from(transactionInBatch)
     .where(eq(transactionInBatch.transactionHash, event.transaction.hash))
     .limit(1);
   const reportedChainCAIP2 = txEntries[0]?.caip2ChainId ?? null;
+  const reportedChainIdHash = txEntries[0]?.chainIdHash ?? null;
 
   await db
     .insert(transactionBatch)
@@ -469,6 +528,7 @@ ponder.on('TransactionRegistry:TransactionBatchCreated', async ({ event, context
       id: batchIdStr,
       dataHash: ('0x' + '0'.repeat(64)) as Hex, // No dataHash for operator batches
       reporter: operatorAddress,
+      reportedChainIdHash,
       reportedChainCAIP2,
       transactionCount: Number(transactionCount),
       isSponsored: false,
@@ -539,7 +599,13 @@ ponder.on('ContractRegistry:ContractRegistered', async ({ event, context }) => {
     })
     .onConflictDoNothing();
 
-  await updateGlobalStats(db, { totalFraudulentContracts: 1 }, event.block.timestamp);
+  // NO stats update here, deliberately. `updateGlobalStats` is a read-modify-write of the
+  // single `registry_stats` row, and this handler runs once per contract in a batch — an
+  // 800-entry submission did 800 sequential cycles on one row for a counter whose total is
+  // already on `ContractBatchCreated` as `contractCount`. That event fires in the same tx
+  // right after this loop, and `actualCount` there is exactly the number of
+  // `ContractRegistered` events emitted (ContractRegistry.sol:151,160), so the batched
+  // increment is not an approximation of this one — it is the same number.
 });
 
 // ContractBatchCreated — operator batch summary
@@ -573,7 +639,13 @@ ponder.on('ContractRegistry:ContractBatchCreated', async ({ event, context }) =>
     })
     .onConflictDoNothing();
 
-  await updateGlobalStats(db, { totalContractBatches: 1 }, event.block.timestamp);
+  // Both counters in one read-modify-write — see the ContractRegistered handler for why the
+  // per-entry total is accumulated here rather than 800 times.
+  await updateGlobalStats(
+    db,
+    { totalContractBatches: 1, totalFraudulentContracts: Number(contractCount) },
+    event.block.timestamp
+  );
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -593,7 +665,11 @@ ponder.on('CrossChainInbox:WalletRegistrationReceived', async ({ event, context 
     .insert(crossChainMessage)
     .values({
       id: messageId,
+      // `origin` is a Hyperlane DOMAIN, not a chain ID. They coincide for every chain
+      // @swr/chains knows; for one it does not, the domain is still a usable correlation key,
+      // so it is kept — and the flag says which numbering space the value is in.
       sourceChainId: sourceNumeric ?? origin,
+      sourceChainIsDomain: sourceNumeric === null,
       targetChainId: HUB_CHAIN_ID,
       wallet: walletAddress,
       hubTxHash: event.transaction.hash,
@@ -613,6 +689,8 @@ ponder.on('CrossChainInbox:WalletRegistrationReceived', async ({ event, context 
       // unknown spoke resolves to 0 there. This handler has the Hyperlane origin domain, a
       // strictly better fallback; repair a zero rather than leaving it wrong forever.
       sourceChainId: row.sourceChainId === 0 ? (sourceNumeric ?? origin) : row.sourceChainId,
+      sourceChainIsDomain:
+        row.sourceChainId === 0 ? sourceNumeric === null : row.sourceChainIsDomain,
     }));
 });
 
@@ -631,7 +709,11 @@ ponder.on('CrossChainInbox:TransactionBatchReceived', async ({ event, context })
     .insert(crossChainMessage)
     .values({
       id: messageId,
+      // `origin` is a Hyperlane DOMAIN, not a chain ID. They coincide for every chain
+      // @swr/chains knows; for one it does not, the domain is still a usable correlation key,
+      // so it is kept — and the flag says which numbering space the value is in.
       sourceChainId: sourceNumeric ?? origin,
+      sourceChainIsDomain: sourceNumeric === null,
       targetChainId: HUB_CHAIN_ID,
       hubTxHash: event.transaction.hash,
       status: 'received',
@@ -644,6 +726,8 @@ ponder.on('CrossChainInbox:TransactionBatchReceived', async ({ event, context })
       hubTxHash: event.transaction.hash,
       // Repair a zero sourceChainId left by the registry handler — see the wallet handler.
       sourceChainId: row.sourceChainId === 0 ? (sourceNumeric ?? origin) : row.sourceChainId,
+      sourceChainIsDomain:
+        row.sourceChainId === 0 ? sourceNumeric === null : row.sourceChainIsDomain,
     }));
 });
 

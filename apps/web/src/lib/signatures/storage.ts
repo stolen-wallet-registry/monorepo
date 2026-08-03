@@ -4,10 +4,30 @@
 
 import { isHex, isAddress, size } from 'viem';
 import { SIGNATURE_STEP, type SignatureStep } from '@swr/signatures';
+import { logger } from '@/lib/logger';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 /** Signature session TTL in milliseconds (30 minutes) */
 export const SIGNATURE_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * sessionStorage refused to hold a signature we have just obtained.
+ *
+ * Timing is what makes this worth its own error type: the write happens AFTER the user has
+ * already approved the signature in their wallet. Safari's private mode reports a zero quota
+ * and throws `QuotaExceededError` on the first `setItem`, so an unguarded write loses a
+ * signature the user has already produced and the flow proceeds to a pay step that will report
+ * "signature not found" with no explanation. The message is deliberately specific about the
+ * cause, because "try again" in the same private window fails identically.
+ */
+export class SignatureStorageError extends Error {
+  constructor() {
+    super(
+      'Your signature could not be saved in this browser. Private browsing blocks session storage — please reopen this page in a normal window and sign again.'
+    );
+    this.name = 'SignatureStorageError';
+  }
+}
 
 // Storage key format: swr_sig_{address}_{chainId}_{step}
 function getStorageKey(address: Address, chainId: number, step: SignatureStep): string {
@@ -79,7 +99,11 @@ interface SerializedSignature {
   windowBlockHash?: string;
 }
 
-// Store a signature
+/**
+ * Store a signature.
+ *
+ * @throws {SignatureStorageError} if sessionStorage refuses the write.
+ */
 export function storeSignature(sig: StoredSignature): void {
   const key = getStorageKey(sig.address, sig.chainId, sig.step);
   const serialized: SerializedSignature = {
@@ -97,7 +121,16 @@ export function storeSignature(sig: StoredSignature): void {
     windowBlock: sig.windowBlock?.toString(),
     windowBlockHash: sig.windowBlockHash,
   };
-  sessionStorage.setItem(key, JSON.stringify(serialized));
+  try {
+    sessionStorage.setItem(key, JSON.stringify(serialized));
+  } catch (err) {
+    logger.signature.error(
+      'Failed to persist signature to sessionStorage',
+      { address: sig.address, chainId: sig.chainId, step: sig.step },
+      err instanceof Error ? err : undefined
+    );
+    throw new SignatureStorageError();
+  }
 }
 
 /**

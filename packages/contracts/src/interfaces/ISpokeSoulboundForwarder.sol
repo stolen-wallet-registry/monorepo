@@ -20,6 +20,11 @@ interface ISpokeSoulboundForwarder {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
+
+    /// @notice Emitted when the owner withdraws accumulated donations
+    /// @param to Recipient of the withdrawal
+    /// @param amount Amount withdrawn in wei
+    event DonationsWithdrawn(address indexed to, uint256 amount);
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when a mint request is forwarded to the hub

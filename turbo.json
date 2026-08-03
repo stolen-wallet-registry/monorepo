@@ -40,6 +40,16 @@
       "dependsOn": ["^build"],
       "inputs": ["src/**", "test/**", "script/**", "foundry.toml", ".solhint.json"]
     },
+    // The solhint half of `lint`, on its own, because the combined task also runs
+    // `forge fmt --check` and CI's Node job has no Foundry (round-3 review I-2: solhint was
+    // running in NEITHER job — the contracts job never invoked it, and the Node job excluded
+    // @swr/contracts wholesale). Declaring it here is what lets that job run solhint without
+    // installing a Solidity toolchain; `forge fmt --check` stays in the contracts job, which
+    // has one.
+    "@swr/contracts#lint:sol": {
+      "dependsOn": [],
+      "inputs": ["src/**/*.sol", ".solhint.json", ".solhintignore"]
+    },
     "@swr/contracts#build": {
       "dependsOn": ["^build"],
       "inputs": ["src/**", "test/**", "script/**", "lib/**", "foundry.toml", "remappings.txt"],
@@ -67,6 +77,23 @@
     "typecheck": {
       "dependsOn": ["^build"],
       "inputs": ["src/**/*.{ts,tsx}", "tsconfig.json", "tsconfig.*.json"]
+    },
+    // apps/landing has NO src/ — its code lives in app/, components/ and providers/ (Next.js
+    // app router). The generic `src/**` globs above therefore matched ZERO landing files, so
+    // the task hash covered `package.json` + one config file and nothing else: with a warm
+    // cache, CI replayed a stale green and never looked at a line of landing source
+    // (round-3 review I-1, measured with `turbo --dry=json`).
+    //
+    // These overrides declare no `inputs` at all, which falls back to hashing every file in
+    // the package — the same accident that has been protecting @swr/docs. That is deliberate
+    // rather than a corrected glob list: a glob list has to be revisited every time a new
+    // top-level directory appears, and the failure mode when someone forgets is a silent
+    // false green. Over-invalidation costs a re-run; under-invalidation costs a missed bug.
+    "landing#lint": {
+      "dependsOn": ["^build"]
+    },
+    "landing#typecheck": {
+      "dependsOn": ["^build"]
     },
     "format": {
       "cache": false

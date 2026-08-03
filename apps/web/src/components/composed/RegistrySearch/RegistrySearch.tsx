@@ -49,6 +49,14 @@ export interface RegistrySearchProps {
    * `useRegistrySearch` with this same query and reads them from the cache.
    */
   onSearch?: (query: string, type: SearchType) => void;
+  /**
+   * Called when the clear button empties the input.
+   *
+   * A parent that mirrors the query (to run its own `useRegistrySearch`, or to drive a
+   * recent-search backfill) has no other way to learn about a clear — this component resets its
+   * own state only, so without this the parent kept the previous query mounted and live.
+   */
+  onClear?: () => void;
   /** Compact mode for header/navbar */
   compact?: boolean;
   /** Additional class names */
@@ -75,6 +83,12 @@ function getSearchTypeIndicator(type: SearchTypeWithEns) {
       return { Icon: AtSign, label: 'ENS name', valid: true };
     case 'transaction':
       return { Icon: FileText, label: 'Valid transaction hash', valid: true };
+    // A well-formed identifier on a chain the registry cannot query. Deliberately not
+    // labelled "invalid": the input is fine, we just have no way to answer for it, and the
+    // search is still allowed through so it surfaces the amber "could not verify" card
+    // rather than a silent nothing.
+    case 'unsupported':
+      return { Icon: AlertCircle, label: 'Unsupported chain — cannot verify', valid: false };
     case 'invalid':
     default:
       return { Icon: AlertCircle, label: 'Invalid input', valid: false };
@@ -95,6 +109,7 @@ function getSearchTypeIndicator(type: SearchTypeWithEns) {
 export function RegistrySearch({
   defaultQuery = '',
   onSearch,
+  onClear,
   compact = false,
   className,
 }: RegistrySearchProps) {
@@ -178,7 +193,8 @@ export function RegistrySearch({
     setInputValue('');
     setSearchQuery('');
     setHasSearched(false);
-  }, []);
+    onClear?.();
+  }, [onClear]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -193,7 +209,19 @@ export function RegistrySearch({
   // Determine loading states
   const showLoading = hasSearched && isLoading;
   const showEnsLoading = inputType === 'ens' && isEnsLoading;
-  const showResult = hasSearched && data && !isLoading;
+
+  // `!error` is load-bearing, not defensive tidiness (finding UI-9).
+  //
+  // TanStack Query KEEPS `data` from the last successful fetch of a query key when a later
+  // background refetch throws. So a refetch that raises `SearchUnavailableError` leaves both
+  // `data` (stale, from when the registry was reachable) and `error` set — and these flags
+  // were not mutually exclusive, so the amber "Could Not Verify" card rendered with a stale
+  // green "Clean" card directly beneath it. Presented with both, a user reads the reassuring
+  // one, which is exactly the false clean this whole component is built to prevent.
+  //
+  // An errored query has nothing trustworthy to show. The error surfaces (below) are the
+  // complete answer.
+  const showResult = hasSearched && data && !isLoading && !error;
 
   // `@swr/search` fails CLOSED: rather than return a result an integrator could read as
   // "clean", it throws `SearchUnavailableError` when it cannot establish whether an identifier
@@ -280,6 +308,10 @@ export function RegistrySearch({
                       ? 'animate-spin text-muted-foreground'
                       : ''
                   )}
+                  // lucide renders a bare <svg>, which has no implicit role, and an aria-label
+                  // on a roleless element is ignored by screen readers. `role="img"` is what
+                  // makes the label announceable.
+                  role="img"
                   aria-label={indicator.label}
                 />
               </InputGroupAddon>
@@ -371,18 +403,28 @@ export function RegistrySearch({
       {/* Search Results */}
       {showResult && data && (
         <>
-          {data.type === 'address' && (
-            <AddressSearchResult
-              found={data.found}
-              foundInWalletRegistry={data.foundInWalletRegistry}
-              foundInContractRegistry={data.foundInContractRegistry}
-              data={data.data}
-              unverified={data.unverified}
-            />
-          )}
-          {data.type === 'transaction' && (
-            <TransactionSearchResult found={data.found} data={data.data} />
-          )}
+          {/* Branch on `found` rather than forwarding fields: the result type and the card's
+              props are both discriminated unions now, so the compiler checks that a positive
+              result carries its data and a negative one carries nothing that could dress it
+              up as something else. */}
+          {data.type === 'address' &&
+            (data.found ? (
+              <AddressSearchResult
+                found
+                foundInWalletRegistry={data.foundInWalletRegistry}
+                foundInContractRegistry={data.foundInContractRegistry}
+                data={data.data}
+                unverified={data.unverified}
+              />
+            ) : (
+              <AddressSearchResult found={false} />
+            ))}
+          {data.type === 'transaction' &&
+            (data.found ? (
+              <TransactionSearchResult found data={data.data} />
+            ) : (
+              <TransactionSearchResult found={false} />
+            ))}
           {data.type === 'invalid' && (
             <p className="text-sm text-muted-foreground">Invalid search input.</p>
           )}

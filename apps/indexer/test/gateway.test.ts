@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'node:http';
+import net from 'node:net';
 import type { AddressInfo } from 'node:net';
 import {
   DEFAULT_BLOCKED_PATHS,
   DEFAULT_LIMITED_PATHS,
+  buildDownstreamHeaders,
   buildUpstreamHeaders,
   createGatewayServer,
   createRateLimiter,
@@ -14,6 +16,7 @@ import {
   normaliseSocketAddress,
   parseBlockedPaths,
   resolveForwardedClient,
+  resolveUpstreamTarget,
 } from '../gateway.mjs';
 
 /**
@@ -40,6 +43,23 @@ describe('normalisePath', () => {
     // literal string match and reaches ponder.
     ['/%6d%65trics', '/metrics'],
     ['/', '/'],
+    // Dot-segments (round-3 review D-1). The table above covered encoding and casing and had
+    // NO traversal case, which is exactly why `/foo/../metrics` shipped as a working bypass:
+    // this function compared a string containing `..` while @hono/node-server routed the
+    // request through the WHATWG URL parser, which removes them.
+    ['/foo/../metrics', '/metrics'],
+    ['/a/b/../../metrics', '/metrics'],
+    ['/./metrics', '/metrics'],
+    ['/%2f..%2fmetrics', '/metrics'],
+    ['/foo/./bar/../../metrics', '/metrics'],
+    ['/foo/../metrics?x=1', '/metrics'],
+    ['/foo/../metrics/', '/metrics'],
+    ['/FOO/../METRICS', '/metrics'],
+    // `..` can never climb above the root.
+    ['/../../../metrics', '/metrics'],
+    // A legitimate path is not mangled by the resolution.
+    ['/graphql', '/graphql'],
+    ['/api/metrics-export', '/api/metrics-export'],
   ])('%s -> %s', (input, expected) => {
     expect(normalisePath(input)).toBe(expected);
   });
@@ -47,6 +67,43 @@ describe('normalisePath', () => {
   // A URL whose escapes cannot be decoded must not fall through to "allow".
   it('does not throw on a malformed escape sequence', () => {
     expect(() => normalisePath('/%E0%A4%A')).not.toThrow();
+  });
+});
+
+/**
+ * The second half of D-1. Resolving dot-segments only for the DECISION is not enough: if the
+ * gateway then forwards `req.url` verbatim, ponder re-resolves it and the two halves are back
+ * to routing different paths. The gateway must send upstream the same resolution it judged.
+ */
+describe('resolveUpstreamTarget', () => {
+  it.each([
+    ['/foo/../metrics', '/metrics'],
+    ['/a/b/../../metrics', '/metrics'],
+    ['/./metrics', '/metrics'],
+    ['/../../../metrics', '/metrics'],
+    ['/graphql', '/graphql'],
+  ])('%s -> %s', (input, expected) => {
+    expect(resolveUpstreamTarget(input)).toBe(expected);
+  });
+
+  // A GraphQL GET or an authorised metrics scrape carries arguments; dropping them while
+  // "normalising" would break every real request to fix a security bug.
+  it('preserves the query string', () => {
+    expect(resolveUpstreamTarget('/graphql?query=%7Bwallets%7D')).toBe(
+      '/graphql?query=%7Bwallets%7D'
+    );
+    expect(resolveUpstreamTarget('/foo/../graphql?a=1&b=2')).toBe('/graphql?a=1&b=2');
+  });
+
+  // Unlike normalisePath, this value goes on the wire: decoding it would turn an escaped
+  // delimiter into a real one, and lowercasing it would corrupt a case-sensitive route arg.
+  it('preserves case and percent-encoding', () => {
+    expect(resolveUpstreamTarget('/sql/MyTable')).toBe('/sql/MyTable');
+    expect(resolveUpstreamTarget('/%6d%65trics')).toBe('/%6d%65trics');
+  });
+
+  it('defaults an absent target to the root', () => {
+    expect(resolveUpstreamTarget(undefined)).toBe('/');
   });
 });
 
@@ -211,6 +268,52 @@ describe('buildUpstreamHeaders', () => {
   });
 });
 
+// The response leg had no equivalent of the request-leg strip: `res.writeHead(status,
+// upstreamRes.headers)` echoed ponder's connection/keep-alive/transfer-encoding downstream
+// while node applied its own framing to the same message. Node rejects the conflicting pair
+// today, so this was latent — which is exactly the condition under which it stays broken.
+describe('buildDownstreamHeaders', () => {
+  it('strips hop-by-hop headers from the upstream response', () => {
+    const out = buildDownstreamHeaders({
+      connection: 'keep-alive',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      upgrade: 'h2c',
+      trailer: 'expires',
+      'content-type': 'application/json',
+    });
+    expect(Object.keys(out).sort()).toEqual(['content-type']);
+  });
+
+  it('strips headers the upstream named in its own Connection token list', () => {
+    const out = buildDownstreamHeaders({
+      connection: 'x-internal-hop',
+      'x-internal-hop': 'drop me',
+      'x-from': 'upstream',
+    });
+    expect(out).not.toHaveProperty('x-internal-hop');
+    expect(out['x-from']).toBe('upstream');
+  });
+
+  // Content-Length is end-to-end, not hop-by-hop. Dropping it would force chunked framing on
+  // every proxied response for no reason.
+  it('preserves end-to-end headers including content-length', () => {
+    const out = buildDownstreamHeaders({
+      'content-length': '17',
+      etag: 'W/"abc"',
+      'set-cookie': ['a=1', 'b=2'],
+    });
+    expect(out['content-length']).toBe('17');
+    expect(out.etag).toBe('W/"abc"');
+    expect(out['set-cookie']).toEqual(['a=1', 'b=2']);
+  });
+
+  it('drops an undefined header value rather than forwarding it', () => {
+    const out = buildDownstreamHeaders({ 'x-present': 'yes', 'x-absent': undefined });
+    expect(out).toEqual({ 'x-present': 'yes' });
+  });
+});
+
 describe('createRateLimiter', () => {
   it('allows up to the limit then reports limited', () => {
     const limiter = createRateLimiter({ maxRequests: 2, windowMs: 1000, now: () => 0 });
@@ -268,6 +371,77 @@ interface Hit {
   headers: http.IncomingHttpHeaders;
 }
 
+/**
+ * GET a request target EXACTLY as written, over a raw socket.
+ *
+ * `fetch` (and `http.request`) resolve `..` in the client before anything is sent, so a
+ * fetch-based test cannot reach the server with a dot-segment path at all — it would have gone
+ * green against the vulnerable gateway. An attacker writes bytes to a socket; so does this.
+ */
+async function rawGetWithHeaders(
+  port: number,
+  target: string,
+  headers: Record<string, string> = {}
+): Promise<{ status: number; head: string; body: string }> {
+  const socket = net.connect(port, '127.0.0.1');
+  await new Promise<void>((resolve, reject) => {
+    socket.once('connect', () => resolve());
+    socket.once('error', reject);
+  });
+  const extra = Object.entries(headers)
+    .map(([name, value]) => `${name}: ${value}\r\n`)
+    .join('');
+  // HTTP/1.0: the proxied response is piped through with the upstream's own framing, and a 1.1
+  // keep-alive response would leave this socket open until the test timed out. 1.0 makes
+  // "connection closed" the end-of-message signal.
+  socket.write(`GET ${target} HTTP/1.0\r\nHost: 127.0.0.1:${port}\r\n${extra}\r\n`);
+
+  // Read until the message is complete. Not just 'end': a proxied response is piped through
+  // with the UPSTREAM's framing (including its `Connection: keep-alive`), so the socket may
+  // stay open after a perfectly complete response and the test would hang rather than fail.
+  const chunks: Buffer[] = [];
+  const raw = await new Promise<string>((resolve, reject) => {
+    const finish = () => resolve(Buffer.concat(chunks).toString('utf8'));
+    socket.on('data', (chunk) => {
+      chunks.push(chunk);
+      if (isCompleteResponse(Buffer.concat(chunks).toString('utf8'))) {
+        socket.destroy();
+        finish();
+      }
+    });
+    socket.on('end', finish);
+    socket.on('error', reject);
+  });
+
+  const status = Number(/^HTTP\/1\.[01] (\d{3})/.exec(raw)?.[1] ?? 0);
+  const headerEnd = raw.indexOf('\r\n\r\n');
+  return {
+    status,
+    // Lowercased header block, so a test can assert on what the client actually received
+    // rather than only on the body.
+    head: raw.slice(0, headerEnd).toLowerCase(),
+    body: raw.slice(headerEnd + 4),
+  };
+}
+
+/** Have we received a whole HTTP message? Enough framing for this test's responses. */
+function isCompleteResponse(raw: string): boolean {
+  const headerEnd = raw.indexOf('\r\n\r\n');
+  if (headerEnd === -1) return false;
+
+  const head = raw.slice(0, headerEnd).toLowerCase();
+  const body = raw.slice(headerEnd + 4);
+
+  if (head.includes('transfer-encoding: chunked')) return body.includes('\r\n0\r\n\r\n');
+
+  const contentLength = /content-length: (\d+)/.exec(head)?.[1];
+  if (contentLength !== undefined) return Buffer.byteLength(body) >= Number(contentLength);
+
+  return false; // No framing we can measure — wait for the close.
+}
+
+const rawGet = (port: number, target: string) => rawGetWithHeaders(port, target);
+
 describe('gateway server', () => {
   let upstream: http.Server;
   let gateway: http.Server;
@@ -317,6 +491,19 @@ describe('gateway server', () => {
     expect((await get('/ready')).status).toBe(200);
   });
 
+  // The response leg of the hop-by-hop strip, end to end. Node's own server always writes
+  // `Connection` and `Keep-Alive` on the upstream response, so before this was fixed those
+  // headers reached the client alongside the framing the gateway applied itself.
+  it('does not echo the upstream connection headers to the client', async () => {
+    const response = await rawGet(gatewayPort, '/graphql');
+
+    expect(response.status).toBe(200);
+    expect(response.head).not.toMatch(/^keep-alive:/m);
+    expect(response.head).not.toMatch(/^transfer-encoding:/m);
+    // The gateway's own framing survives — this is a strip, not a blanket header wipe.
+    expect(response.head).toMatch(/^x-from: upstream$/m);
+  });
+
   // 404 rather than 403: 403 confirms the endpoint exists.
   it('returns 404 for /metrics and never reaches the indexer', async () => {
     upstreamHits.length = 0;
@@ -332,6 +519,34 @@ describe('gateway server', () => {
       expect((await get(path)).status).toBe(404);
     }
     expect(upstreamHits).toEqual([]);
+  });
+
+  // D-1, end to end. `fetch` normalises dot-segments client-side, so the request has to be
+  // written onto the socket by hand to prove the SERVER resolves them — which is precisely why
+  // a fetch-based test would have passed while the bypass was live.
+  it('blocks dot-segment traversal onto /metrics and never reaches the indexer', async () => {
+    upstreamHits.length = 0;
+    for (const target of [
+      '/foo/../metrics',
+      '/a/b/../../metrics',
+      '/./metrics',
+      '/%2f..%2fmetrics',
+      '/foo/../metrics?format=prometheus',
+      '/foo/./bar/../../METRICS',
+    ]) {
+      const response = await rawGet(gatewayPort, target);
+      expect(`${target} -> ${response.status}`).toBe(`${target} -> 404`);
+    }
+    expect(upstreamHits).toEqual([]);
+  });
+
+  // The gateway's decision and ponder's routing must be made on the same string. Forwarding
+  // req.url verbatim is what let them disagree in the first place.
+  it('forwards the resolved path upstream, not the raw one', async () => {
+    upstreamHits.length = 0;
+    await rawGet(gatewayPort, '/foo/../graphql?a=1');
+    expect(upstreamHits).toHaveLength(1);
+    expect(upstreamHits[0]!.url).toBe('/graphql?a=1');
   });
 
   it('lets an authorised monitoring scrape through', async () => {
@@ -494,6 +709,19 @@ describe('gateway rate limits the ungatable ponder paths', () => {
     for (let i = 0; i < 6; i++) {
       expect((await hit('/graphql', client)).status).toBe(200);
     }
+  });
+
+  // D-1's other victim. `/x/../status` runs the same unmetered database SELECT as `/status`;
+  // if the limiter matched on the raw path, a traversal prefix bought an unlimited budget for
+  // it — the exact DoS this process exists to close.
+  it('limits a dot-segment path onto /status', async () => {
+    const client = '198.51.100.80';
+    const traversal = (path: string) =>
+      rawGetWithHeaders(port, path, { 'x-forwarded-for': client });
+
+    expect((await traversal('/x/../status')).status).toBe(200);
+    expect((await traversal('/status')).status).toBe(200);
+    expect((await traversal('/a/b/../../status')).status).toBe(429);
   });
 
   it('buckets clients independently', async () => {

@@ -67,9 +67,7 @@ interface ITransactionRegistry {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    error TransactionRegistry__AlreadyRegistered();
     error TransactionRegistry__AlreadyAcknowledged();
-    error TransactionRegistry__NotAcknowledged();
     error TransactionRegistry__DeadlineExpired();
     /// @notice Signature deadline exceeds {TimingConfig.MAX_SIGNATURE_LIFETIME}
     /// @dev Blocks a hostile frontend from minting effectively non-expiring signatures.
@@ -77,7 +75,6 @@ interface ITransactionRegistry {
     error TransactionRegistry__DeadlineInPast();
     error TransactionRegistry__GracePeriodNotStarted();
     error TransactionRegistry__InvalidSignature();
-    error TransactionRegistry__InvalidSigner();
     error TransactionRegistry__InvalidForwarder();
     error TransactionRegistry__InsufficientFee();
     error TransactionRegistry__ZeroAddress();

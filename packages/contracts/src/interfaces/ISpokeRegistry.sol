@@ -57,6 +57,11 @@ interface ISpokeRegistry {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
+
+    /// @notice Emitted when the owner withdraws accumulated registration fees
+    /// @param to Recipient of the withdrawal
+    /// @param amount Amount withdrawn in wei
+    event FeesWithdrawn(address indexed to, uint256 amount);
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when wallet acknowledgement is recorded
@@ -304,10 +309,21 @@ interface ISpokeRegistry {
         view
         returns (TransactionAcknowledgementData memory);
 
-    /// @notice Get nonce for wallet
+    /// @notice Get the WALLET-flow nonce for an address
+    /// @dev Distinct from {txNonces}. Sign a wallet acknowledgement or registration against this
+    ///      one; the transaction-batch flow has its own counter so the two cannot displace each
+    ///      other mid-flow. Named `nonces` so the spoke's wallet ABI stays identical to
+    ///      WalletRegistry's on the hub.
     /// @param wallet The wallet address
-    /// @return The current nonce value
+    /// @return The current wallet-flow nonce value
     function nonces(address wallet) external view returns (uint256);
+
+    /// @notice Get the TRANSACTION-BATCH-flow nonce for an address
+    /// @dev Distinct from {nonces}. Sign `acknowledgeTransactionBatch` / `registerTransactionBatch`
+    ///      against this one. On the hub the equivalent value is `TransactionRegistry.nonces`.
+    /// @param reporter The reporter address
+    /// @return The current transaction-flow nonce value
+    function txNonces(address reporter) external view returns (uint256);
 
     /// @notice Quote total registration fee for a wallet registration
     /// @dev Wallet messages carry exactly one entry. Do NOT use this for transaction batches —

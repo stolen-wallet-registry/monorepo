@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import { Test } from "forge-std/Test.sol";
 import { console2 } from "forge-std/console2.sol";
 import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
+import { IBridgeAdapter } from "../src/interfaces/IBridgeAdapter.sol";
 import { IMailbox } from "@hyperlane-xyz/core/contracts/interfaces/IMailbox.sol";
 
 /// @title HyperlaneForkedTest
@@ -59,10 +60,13 @@ contract HyperlaneForkedTest is Test {
         vm.stopPrank();
     }
 
+    /// @dev `vm.skip(true)`, not an early `return`. An early return makes forge count the test as
+    ///      PASSED, which is exactly the bug the file header describes: four tests reporting green
+    ///      in the suite total while validating nothing. `vm.skip` reports them as SKIPPED.
     modifier onlyForked() {
         if (!forked) {
             console2.log("SKIP: set OPTIMISM_SEPOLIA_RPC to run the forked Hyperlane test");
-            return;
+            vm.skip(true);
         }
         _;
     }
@@ -105,6 +109,11 @@ contract HyperlaneForkedTest is Test {
     }
 
     /// @dev Under-paying a live dispatch must fail on our own check, not deep inside a hook.
+    ///      The selector is pinned because a bare `vm.expectRevert()` is satisfied by exactly the
+    ///      hook revert this test claims to rule out — it would keep passing if the adapter's own
+    ///      `msg.value < fee` guard were deleted and the mailbox rejected the payment instead,
+    ///      which is a materially worse failure mode (no clean error for the caller, and the
+    ///      excess-refund path never runs).
     function test_Forked_UnderpaymentReverts() public onlyForked {
         bytes memory payload = _walletSizedPayload();
         bytes32 recipient = bytes32(uint256(uint160(makeAddr("hubInbox"))));
@@ -113,7 +122,7 @@ contract HyperlaneForkedTest is Test {
         vm.deal(spoke, fee);
 
         vm.prank(spoke);
-        vm.expectRevert();
+        vm.expectRevert(IBridgeAdapter.BridgeAdapter__InsufficientFee.selector);
         adapter.sendMessage{ value: fee - 1 }(BASE_SEPOLIA_DOMAIN, recipient, payload);
     }
 

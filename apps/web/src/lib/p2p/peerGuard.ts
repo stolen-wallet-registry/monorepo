@@ -21,6 +21,7 @@
 import { PROTOCOLS, PROTOCOL_SCHEMAS, type ParsedStreamData } from '@swr/p2p';
 import { useP2PStore } from '@/stores/p2pStore';
 import { logger } from '@/lib/logger';
+import { LOCAL_PROTOCOL_SCHEMAS } from './resignAck';
 import type { Connection } from './libp2p';
 
 /**
@@ -138,7 +139,11 @@ export function authorizeStreamPeer(
  * @returns true if the message is valid for this protocol
  */
 export function validateProtocolMessage(protocol: string, data: ParsedStreamData): boolean {
-  const schema = PROTOCOL_SCHEMAS[protocol];
+  // `LOCAL_PROTOCOL_SCHEMAS` is the fallback for protocols this app speaks that `@swr/p2p`
+  // does not declare yet (see `resignAck.ts`). The shared map wins on any name it defines, so
+  // a protocol later moved upstream cannot be shadowed by a stale local entry, and the
+  // fail-closed behaviour for a genuinely unknown protocol is unchanged.
+  const schema = PROTOCOL_SCHEMAS[protocol] ?? LOCAL_PROTOCOL_SCHEMAS[protocol];
   if (!schema) {
     logger.p2p.warn('No schema registered for protocol', { protocol });
     return false;

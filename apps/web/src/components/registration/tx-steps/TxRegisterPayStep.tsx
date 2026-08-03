@@ -25,7 +25,7 @@ import { RelayedSignatureReview } from '@/components/composed/RelayedSignatureRe
 import { useRelayedTxSignatureReview } from '@/hooks/p2p/useRelayedSignatureReview';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
 import { areAddressesEqual } from '@/lib/address';
-import { useTransactionSelection } from '@/stores/transactionFormStore';
+import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import {
   useTransactionRegistration,
   useTxQuoteFeeBreakdown,
@@ -47,7 +47,7 @@ import {
 import { isSignatureInvalidatingError } from '@/lib/errors/signatureInvalidation';
 import { getTxPreviousStep } from '@/stores/transactionRegistrationStore';
 import type { Hash } from '@/lib/types/ethereum';
-import { parseSignature } from '@/lib/signatures';
+import { parseSignature, isWindowBlockStale, describeWindowBlockStale } from '@/lib/signatures';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { getHubChainId } from '@/lib/chains/config';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
@@ -59,8 +59,10 @@ import {
 import { extractBridgeMessageId } from '@/lib/bridge/messageId';
 import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
 import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { classifyP2PRetry, sendResignRequest } from '@/components/registration/p2pResignRequest';
 import { useP2PStore } from '@/stores/p2pStore';
+import { armResignAck, waitForResignAck, type ResignAckOutcome } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage, formatEthConsistent, formatCentsToUsd } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -151,21 +153,44 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
   const [resignRequest, setResignRequest] = useState<{
     notified: boolean | null;
     windowClosed: boolean;
+    /** The reporter's answer, or null while the request is still in flight. */
+    ack: ResignAckOutcome | null;
   } | null>(null);
   const partnerPeerId = useP2PStore((s) => s.partnerPeerId);
   const pairedWallet = useP2PStore((s) => s.pairedWallet);
+
+  /**
+   * The forwarder as it stands NOW, not as it stood when the signature was made.
+   *
+   * The gas wallet is part of the EIP-712 struct but not part of the signature's storage key,
+   * so a reporter who goes back and changes it gets the OLD signature handed back — and the
+   * pay step then insists they connect the wallet they just replaced, with no re-sign path
+   * out. Passing this to `getTxSignature` makes that a "please sign again" instead. See the
+   * `expectedForwarder` note there; the wallet flow has carried this since its own version of
+   * the bug.
+   */
+  const liveForwarder = useTransactionFormStore((s) => s.forwarder) ?? undefined;
+
+  /**
+   * Who the signature must belong to. Part of the storage key: `dataHash` commits to the batch
+   * and nothing else, so without this a browser that handled two reporters with the same batch
+   * on the same chain hands back the first one's signature.
+   */
+  const formReporter = useTransactionFormStore((s) => s.reporter) ?? undefined;
 
   // Get stored signature (client-only)
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
-    if (!dataHash) {
+    if (!dataHash || !formReporter) {
       setStoredSignatureState(null);
       return;
     }
-    setStoredSignatureState(getTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.REGISTRATION));
-  }, [dataHash, chainId]);
+    setStoredSignatureState(
+      getTxSignature(formReporter, dataHash, chainId, TX_SIGNATURE_STEP.REGISTRATION, liveForwarder)
+    );
+  }, [dataHash, chainId, liveForwarder, formReporter]);
 
   // Expected wallet for this step: forwarder (gas wallet) for relayed flows, reporter for standard
   const expectedWallet = storedSignatureState
@@ -184,6 +209,19 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
   // the contract, and check the deadline. Self-relay and standard skip this — the connected
   // wallet signed it itself, there is no peer to distrust.
   const isP2PRelayed = registrationType === 'p2pRelay';
+
+  // The contract reuses DeadlineExpired for a stale signature timestamp (fixable by
+  // re-signing) AND a registration window that closed on-chain (unfixable by any new
+  // signature). Distinguish via on-chain deadlines so Retry doesn't loop sign → revert →
+  // sign forever. Zeroed deadlines mean no pending acknowledgement, not a closed window.
+  //
+  // Read above the signature review because `currentBlock` off this same call is what the
+  // review's 256-block staleness check needs — no extra chain read.
+  const { data: ackDeadlines } = useTxContractDeadlines(storedSignatureState?.reporter);
+  const hasNoPendingAck =
+    ackDeadlines !== undefined && ackDeadlines.start === 0n && ackDeadlines.expiry === 0n;
+  const windowClosed = ackDeadlines !== undefined && !hasNoPendingAck && ackDeadlines.isExpired;
+
   const { review: signatureReview, isChecking: isReviewingSignature } = useRelayedTxSignatureReview(
     {
       enabled: isP2PRelayed && !!storedSignatureState,
@@ -191,23 +229,26 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
       storedSignature: storedSignatureState,
       expectedSigner: storedSignatureState?.reporter, // logged only; gating uses pairedWallet
       trustedForwarder: storedSignatureState?.trustedForwarder,
+      currentBlock: ackDeadlines?.currentBlock,
     }
   );
+
+  /**
+   * The registration signature commits to `blockhash(windowBlock)`, which the EVM only keeps
+   * for 256 blocks; past that the contract reverts with `TimingConfig__WindowBlockTooOld`.
+   * The P2P path gets this via `signatureReview` above; standard and self-relay have no
+   * review, so the same pre-flight is applied directly. On Base's 2s blocks the window is
+   * about 8.5 minutes, which a self-relay wallet switch can easily exceed.
+   */
+  const windowBlockStale =
+    !isP2PRelayed &&
+    isWindowBlockStale(storedSignatureState?.windowBlock, ackDeadlines?.currentBlock);
   // Only blocks the P2P path; elsewhere there is nothing to verify against.
   const isSignatureReviewBlocking = isP2PRelayed && !signatureReview?.ok;
 
   // See handleRetry: some reverts make the stored signature permanently unusable, so Retry
   // has to mean "sign again", not "submit the same bytes again".
   const needsResign = isError && isSignatureInvalidatingError(error);
-
-  // The contract reuses DeadlineExpired for a stale signature timestamp (fixable by
-  // re-signing) AND a registration window that closed on-chain (unfixable by any new
-  // signature). Distinguish via on-chain deadlines so Retry doesn't loop sign → revert →
-  // sign forever. Zeroed deadlines mean no pending acknowledgement, not a closed window.
-  const { data: ackDeadlines } = useTxContractDeadlines(storedSignatureState?.reporter);
-  const hasNoPendingAck =
-    ackDeadlines !== undefined && ackDeadlines.start === 0n && ackDeadlines.expiry === 0n;
-  const windowClosed = ackDeadlines !== undefined && !hasNoPendingAck && ackDeadlines.isExpired;
 
   // Convert reported chain ID to CAIP-2 format
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
@@ -437,6 +478,16 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
       return;
     }
 
+    if (windowBlockStale) {
+      logger.contract.error('Cannot submit transaction registration - window block is too old', {
+        dataHash,
+        windowBlock: storedSignatureState.windowBlock?.toString(),
+        currentBlock: ackDeadlines?.currentBlock?.toString(),
+      });
+      setLocalError(describeWindowBlockStale());
+      return;
+    }
+
     // Guard: Ensure valid fee quote is available to avoid underpayment revert
     if (feeWei === undefined || feeLoading || feeError) {
       logger.contract.error('Cannot submit transaction registration - fee quote unavailable', {
@@ -544,8 +595,8 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
     // stored signature is discarded and the user is sent back to sign — retrying it would
     // resubmit identical bytes forever.
     if (needsResign) {
-      if (dataHash) {
-        removeTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.REGISTRATION);
+      if (dataHash && formReporter) {
+        removeTxSignature(formReporter, dataHash, chainId, TX_SIGNATURE_STEP.REGISTRATION);
       }
       reset();
       setLocalError(null);
@@ -559,11 +610,11 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
         const action = classifyP2PRetry({ isError, error, windowClosed });
         const restartFromAck = action.kind === 'request-resign' && action.discardAcknowledgement;
 
-        if (dataHash && restartFromAck) {
-          removeTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
+        if (dataHash && formReporter && restartFromAck) {
+          removeTxSignature(formReporter, dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
         }
         setStoredSignatureState(null);
-        setResignRequest({ notified: null, windowClosed: restartFromAck });
+        setResignRequest({ notified: null, windowClosed: restartFromAck, ack: null });
 
         logger.contract.warn(
           restartFromAck
@@ -572,14 +623,29 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
           { dataHash, windowClosed: restartFromAck, error: error?.message }
         );
 
+        // Armed BEFORE the write: the reporter can answer before `passStreamData` resolves
+        // here, and an answer with nobody listening yet would be dropped and then waited on
+        // forever.
+        armResignAck();
+
         void sendResignRequest({
           getLibp2p: getLibp2p ?? (() => null),
           partnerPeerId,
           reason: restartFromAck ? 'window-closed' : 'signature-invalidated',
           flow: 'transaction',
-        }).then((notified) => {
-          setResignRequest({ notified, windowClosed: restartFromAck });
-          if (notified) {
+        }).then(async (notified) => {
+          if (!notified) {
+            setResignRequest({ notified: false, windowClosed: restartFromAck, ack: null });
+            return;
+          }
+
+          // A resolved stream write is NOT consent — the rule `WaitForConnectionStep` states
+          // for CONNECT. The reporter refuses a request past `MAX_RESIGN_REQUESTS`, or one
+          // arriving at a step it cannot recover from; navigating on a refusal deadlocks both
+          // sides with no timeout and no control on either screen.
+          const ack = await waitForResignAck();
+          setResignRequest({ notified: true, windowClosed: restartFromAck, ack });
+          if (ack === 'accepted') {
             setResignRequest(null);
             setStep(restartFromAck ? 'select-transactions' : 'register-sign');
           }
@@ -595,8 +661,8 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
           'Transaction registration window closed on-chain, restarting from acknowledgement',
           { dataHash, error: error?.message }
         );
-        if (dataHash) {
-          removeTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
+        if (dataHash && formReporter) {
+          removeTxSignature(formReporter, dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
         }
         setStep('acknowledge-sign');
         return;
@@ -613,6 +679,24 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
 
     reset();
     setLocalError(null);
+  };
+
+  /** Discard the aged-out signature and send the reporter back to sign a fresh one. */
+  const handleResignAfterStale = () => {
+    if (dataHash && formReporter) {
+      removeTxSignature(formReporter, dataHash, chainId, TX_SIGNATURE_STEP.REGISTRATION);
+    }
+    logger.contract.warn(
+      'Transaction registration window block aged out of blockhash range; re-signing',
+      {
+        dataHash,
+        windowBlock: storedSignatureState?.windowBlock?.toString(),
+        currentBlock: ackDeadlines?.currentBlock?.toString(),
+      }
+    );
+    setStoredSignatureState(null);
+    const previous = step ? getTxPreviousStep(registrationType, step) : null;
+    if (previous) setStep(previous);
   };
 
   /**
@@ -650,17 +734,35 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
           windowClosed={resignRequest.windowClosed}
           partner={{ notified: resignRequest.notified, role: 'reporter' }}
         />
-        {resignRequest.notified === false && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              setStep(resignRequest.windowClosed ? 'select-transactions' : 'register-sign')
-            }
-          >
-            I&apos;ve asked them — wait for a new signature
-          </Button>
+        {resignRequest.ack === 'refused' && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Your partner declined to sign again. They may have hit the limit on re-sign requests,
+              or moved on. Contact them directly before continuing.
+            </AlertDescription>
+          </Alert>
         )}
+        {resignRequest.ack === 'timeout' && (
+          <Alert>
+            <AlertDescription>
+              Your partner has not confirmed the request. It may still have reached them — check
+              with them directly before waiting for a new signature.
+            </AlertDescription>
+          </Alert>
+        )}
+        {(resignRequest.notified === false || resignRequest.ack !== null) &&
+          resignRequest.ack !== 'accepted' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setStep(resignRequest.windowClosed ? 'select-transactions' : 'register-sign')
+              }
+            >
+              I&apos;ve asked them — wait for a new signature
+            </Button>
+          )}
       </div>
     );
   }
@@ -668,24 +770,18 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
   // Missing required data
   if (!dataHash || selectedTxHashes.length === 0) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={() => setStep('select-transactions')}>
+        Missing registration data. Start over to select the transactions you want to report.
+      </FlowRecoveryAlert>
     );
   }
 
   // Missing signature
   if (!storedSignatureState) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Signature not found. Please go back and sign the registration again.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Back to Signing" onAction={() => setStep('register-sign')}>
+        Signature not found. Go back and sign the registration again.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -810,6 +906,18 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
         />
       )}
 
+      {windowBlockStale && !needsResign && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>{describeWindowBlockStale()}</span>
+            <Button variant="outline" size="sm" onClick={handleResignAfterStale}>
+              Sign Again
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* P2P relay: review before you pay */}
       {isP2PRelayed && storedSignatureState && (
         <RelayedSignatureReview
@@ -899,7 +1007,7 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
         onSubmit={handleSubmit}
         onRetry={handleRetry}
         onContinueAnyway={handleContinueAnyway}
-        disabled={!isCorrectWallet || isSignatureReviewBlocking}
+        disabled={!isCorrectWallet || isSignatureReviewBlocking || windowBlockStale}
       />
 
       {/* Disabled state message when wrong wallet connected */}

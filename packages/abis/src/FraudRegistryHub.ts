@@ -1050,11 +1050,6 @@ export const FraudRegistryHubABI = [
   },
   {
     type: 'error',
-    name: 'FraudRegistryHub__UnknownRegistryType',
-    inputs: [],
-  },
-  {
-    type: 'error',
     name: 'FraudRegistryHub__WithdrawFailed',
     inputs: [],
   },

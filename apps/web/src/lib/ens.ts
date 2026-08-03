@@ -2,7 +2,7 @@
  * ENS name detection and validation utilities.
  */
 
-import { detectSearchType } from '@swr/search';
+import { detectSearchType, type SearchType } from '@swr/search';
 import { normalize } from 'viem/ens';
 
 /**
@@ -107,7 +107,7 @@ export function isEnsName(value: string): boolean {
 /**
  * Extended search type that includes ENS names.
  */
-export type SearchTypeWithEns = 'address' | 'transaction' | 'ens' | 'caip10' | 'invalid';
+export type SearchTypeWithEns = SearchType | 'ens';
 
 /**
  * Extended search type detection that includes ENS names.

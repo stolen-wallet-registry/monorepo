@@ -658,11 +658,7 @@ contract Deploy is Script {
     ///          --rpc-url $SPOKE_RPC --broadcast
     ///
     ///      Reads (all optional — a zero/unset address is skipped):
-    ///        HYPERLANE_ADAPTER, SPOKE_REGISTRY
-    ///
-    ///      SpokeSoulboundForwarder is deliberately absent: it is still plain Ownable2Step, so
-    ///      it has no completeSetup() to call. Its owner powers are limited to withdrawing
-    ///      donations it holds; it cannot authorize a dispatcher or repoint a registry.
+    ///        HYPERLANE_ADAPTER, SPOKE_REGISTRY, SPOKE_SOULBOUND_FORWARDER
     function finalizeSpokeSetup() external {
         deployerPrivateKey = _getDeployerKey();
         deployer = vm.addr(deployerPrivateKey);
@@ -742,11 +738,14 @@ contract Deploy is Script {
 
     /// @notice Spoke-chain TimelockOwnable contracts, read from the deploy env
     /// @dev Single source for {finalizeSpokeSetup} and {verifySpokeSetup}. SpokeSoulboundForwarder
-    ///      is deliberately absent — see the note on {finalizeSpokeSetup}.
+    ///      became TimelockOwnable (C-5): `setHubConfig` repoints the hub receiver every paid mint
+    ///      request is sent to, so it must be finalized like any other trust boundary. Leaving it
+    ///      out would keep that a one-transaction owner call forever.
     function _spokeTargets() internal view returns (SetupTarget[] memory targets) {
-        targets = new SetupTarget[](2);
+        targets = new SetupTarget[](3);
         targets[0] = _target("HYPERLANE_ADAPTER", "HyperlaneAdapter");
         targets[1] = _target("SPOKE_REGISTRY", "SpokeRegistry");
+        targets[2] = _target("SPOKE_SOULBOUND_FORWARDER", "SpokeSoulboundForwarder");
     }
 
     /// @dev Call completeSetup() unless the address is unset or already complete.

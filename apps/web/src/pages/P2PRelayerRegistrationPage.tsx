@@ -22,7 +22,7 @@ import {
   CardTitle,
 } from '@swr/ui';
 import { StepIndicator } from '@/components/composed/StepIndicator';
-import { P2PDebugPanel } from '@/components/dev/P2PDebugPanel';
+import { P2PDebugPanel } from '@/components/dev';
 import {
   WaitForConnectionStep,
   P2PAckPayStep,
@@ -46,6 +46,8 @@ import {
   acceptStream,
   isRelayerProtocolExpectedAtStep,
   isStreamAbortError,
+  RESIGN_ACK,
+  publishResignAck,
   type ProtocolHandler,
 } from '@/lib/p2p';
 import { SIGNATURE_STEP } from '@/lib/signatures';
@@ -276,6 +278,14 @@ export function P2PRelayerRegistrationPage() {
                   break;
                 }
 
+                case RESIGN_ACK:
+                  // The registeree's answer to a re-sign request this page sent. Only ever
+                  // settles a promise `handleRetry` is already awaiting; one nobody armed is
+                  // dropped inside `publishResignAck`. `success` is the whole decision —
+                  // `message` is peer text and is logged, never rendered.
+                  publishResignAck(data.success === true);
+                  break;
+
                 case PROTOCOLS.ACK_SIG:
                   // Acknowledgement signature received
                   await processSignature(
@@ -285,7 +295,8 @@ export function P2PRelayerRegistrationPage() {
                     SIGNATURE_STEP.ACKNOWLEDGEMENT,
                     PROTOCOLS.ACK_REC,
                     address,
-                    goToNextStepRef.current
+                    goToNextStepRef.current,
+                    setConnectionError
                   );
                   break;
 
@@ -298,7 +309,8 @@ export function P2PRelayerRegistrationPage() {
                     SIGNATURE_STEP.REGISTRATION,
                     PROTOCOLS.REG_REC,
                     address,
-                    goToNextStepRef.current
+                    goToNextStepRef.current,
+                    setConnectionError
                   );
                   break;
               }
@@ -320,6 +332,7 @@ export function P2PRelayerRegistrationPage() {
           { protocol: PROTOCOLS.CONNECT, streamHandler: streamHandler(PROTOCOLS.CONNECT) },
           { protocol: PROTOCOLS.ACK_SIG, streamHandler: streamHandler(PROTOCOLS.ACK_SIG) },
           { protocol: PROTOCOLS.REG_SIG, streamHandler: streamHandler(PROTOCOLS.REG_SIG) },
+          { protocol: RESIGN_ACK, streamHandler: streamHandler(RESIGN_ACK) },
         ];
 
         const { libp2p: p2pNode } = await setup({ handlers, walletAddress: address });

@@ -61,6 +61,11 @@ abstract contract BaseSoulbound is ERC721, IERC5192, TimelockOwnable {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
+
+    /// @notice Emitted when accumulated fees are withdrawn to the fee collector
+    /// @param to The fee collector that received the balance
+    /// @param amount Amount withdrawn in wei
+    event FeesWithdrawn(address indexed to, uint256 amount);
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when domain is updated
@@ -154,6 +159,7 @@ abstract contract BaseSoulbound is ERC721, IERC5192, TimelockOwnable {
         uint256 balance = address(this).balance;
         (bool success,) = feeCollector.call{ value: balance }("");
         if (!success) revert WithdrawFailed();
+        emit FeesWithdrawn(feeCollector, balance);
     }
 
     /// @notice Update the domain displayed in SVG

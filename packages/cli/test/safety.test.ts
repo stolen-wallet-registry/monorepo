@@ -5,8 +5,11 @@ import {
   addressEntryKey,
   applyDuplicatePolicy,
   confirmSubmission,
+  describeDefaultedChains,
   enforceBatchLimits,
   findDuplicates,
+  formatReportedChain,
+  summariseReportedChains,
   resolveMaxBatchSize,
   transactionEntryKey,
 } from '../src/lib/safety.js';
@@ -297,5 +300,141 @@ describe('confirmSubmission', () => {
     expect(output).toContain('0x0000000000000000000000000000000000000abc');
     expect(output).toContain(WALLET_A);
     expect(output).toMatch(/irreversible/i);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REPORTED CHAIN (round-3 review S-4)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * The confirmation prompt showed `config.chain` — where the transaction LANDS, always the hub,
+ * always right, and never the value that can be wrong. The chain each entry is reported on is
+ * what `-c/--chain-id` controls, what gets written to storage, and it silently defaulted to
+ * Base while being displayed nowhere. An operator exporting Optimism drainers with no chainId
+ * column read "Chain: Base (8453)" — correct for the hub — confirmed, and permanently accused
+ * 800 Base addresses.
+ */
+const entry = (reportedChain: string, chainIdDefaulted = false) => ({
+  reportedChain,
+  chainIdDefaulted,
+});
+
+describe('summariseReportedChains', () => {
+  it('counts entries per reported chain, largest first', () => {
+    const summary = summariseReportedChains([
+      entry('eip155:10'),
+      entry('eip155:8453'),
+      entry('eip155:10'),
+      entry('eip155:10'),
+    ]);
+
+    expect(summary).toEqual([
+      { caip2: 'eip155:10', count: 3, defaultedCount: 0 },
+      { caip2: 'eip155:8453', count: 1, defaultedCount: 0 },
+    ]);
+  });
+
+  it('tracks how many entries inherited the default separately from the total', () => {
+    const summary = summariseReportedChains([
+      entry('eip155:8453', true),
+      entry('eip155:8453', true),
+      entry('eip155:8453'),
+    ]);
+
+    // Same chain, but two of the three never said so — that distinction is the finding.
+    expect(summary).toEqual([{ caip2: 'eip155:8453', count: 3, defaultedCount: 2 }]);
+  });
+
+  it('returns nothing for an empty batch', () => {
+    expect(summariseReportedChains([])).toEqual([]);
+  });
+});
+
+describe('formatReportedChain', () => {
+  it('names a chain we know', () => {
+    expect(formatReportedChain('eip155:8453')).toBe('eip155:8453 (Base)');
+  });
+
+  it('falls back to the bare CAIP-2 string for a chain we do not', () => {
+    expect(formatReportedChain('eip155:999999')).toBe('eip155:999999');
+  });
+});
+
+describe('describeDefaultedChains', () => {
+  it('is silent when every row stated its own chain', () => {
+    expect(describeDefaultedChains(summariseReportedChains([entry('eip155:10')]))).toBeUndefined();
+  });
+
+  it('names the count and the chain that was assumed', () => {
+    const warning = describeDefaultedChains(
+      summariseReportedChains([entry('eip155:8453', true), entry('eip155:8453', true)])
+    );
+    expect(warning).toContain('2 entries have no chainId');
+    expect(warning).toContain('eip155:8453 (Base)');
+    expect(warning).toContain('--chain-id');
+  });
+
+  it('counts only the defaulted rows, not the whole chain group', () => {
+    const warning = describeDefaultedChains(
+      summariseReportedChains([entry('eip155:8453', true), entry('eip155:8453')])
+    );
+    expect(warning).toContain('1 entry has no chainId');
+  });
+});
+
+describe('confirmSubmission shows the reported chain', () => {
+  async function summaryFor(overrides: Record<string, unknown>) {
+    const lines: string[] = [];
+    await confirmSubmission(
+      confirmOptions({
+        ...overrides,
+        prompt: vi.fn().mockResolvedValue('yes'),
+        write: (line: string) => lines.push(line),
+      })
+    );
+    return lines.join('\n');
+  }
+
+  // The failure this closes: submitting on Base is correct AND the entries are reported on
+  // Optimism. Only one of those two numbers was ever on screen.
+  it('shows the reported chain alongside the submission chain', async () => {
+    const output = await summaryFor({
+      reportedChains: summariseReportedChains([entry('eip155:10'), entry('eip155:10')]),
+    });
+
+    expect(output).toContain('Base Sepolia'); // where the transaction lands
+    expect(output).toContain('eip155:10'); // what the entries accuse
+  });
+
+  it('warns when the reported chain was assumed rather than stated', async () => {
+    const output = await summaryFor({
+      reportedChains: summariseReportedChains([entry('eip155:8453', true)]),
+    });
+
+    expect(output).toMatch(/no chainId/);
+    expect(output).toContain('eip155:8453 (Base)');
+  });
+
+  it('does not warn when the file stated every chain', async () => {
+    const output = await summaryFor({
+      reportedChains: summariseReportedChains([entry('eip155:8453')]),
+    });
+
+    expect(output).toContain('eip155:8453');
+    expect(output).not.toMatch(/no chainId/);
+  });
+
+  it('lists every chain in a mixed batch', async () => {
+    const output = await summaryFor({
+      reportedChains: summariseReportedChains([
+        entry('eip155:10'),
+        entry('eip155:42161'),
+        entry('eip155:10'),
+      ]),
+    });
+
+    expect(output).toContain('eip155:10');
+    expect(output).toContain('eip155:42161');
   });
 });

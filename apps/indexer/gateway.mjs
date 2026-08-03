@@ -130,11 +130,40 @@ export function parseBlockedPaths(raw) {
 }
 
 /**
+ * Guarantee a leading `/` before concatenating onto the placeholder origin.
+ *
+ * A proxy may legally receive an absolute-form request target (`GET http://host/x HTTP/1.1`).
+ * Concatenated unguarded that would produce `http://placeholderhttp://host/x`; with the slash
+ * it becomes a path, which is the conservative reading — the gateway is not an open proxy.
+ *
+ * @param {string} raw
+ * @returns {string}
+ */
+function prefixSlash(raw) {
+  return raw.startsWith('/') ? raw : `/${raw}`;
+}
+
+/**
  * Normalise a request URL to a comparable path.
  *
- * Percent-decoding happens BEFORE comparison so `/%6d%65trics` cannot slip past, and a
- * trailing slash is stripped so `/metrics/` is the same decision as `/metrics`. A URL that
- * fails to decode is treated as its raw form rather than allowed through.
+ * Percent-decoding happens BEFORE comparison so `/%6d%65trics` cannot slip past, dot-segments
+ * are resolved so `/foo/../metrics` cannot either, and a trailing slash is stripped so
+ * `/metrics/` is the same decision as `/metrics`. A URL that fails to decode is treated as its
+ * raw form rather than allowed through.
+ *
+ * DOT-SEGMENTS ARE THE LOAD-BEARING PART (round-3 review D-1).
+ *
+ * This function used to compare a string that still contained `..`, while the request it
+ * guarded was routed by something that did not. Downstream, `@hono/node-server` rebuilds the
+ * request as `new URL(scheme://host + url)`, and the WHATWG URL parser removes dot-segments:
+ * `new Request('http://x/foo/../metrics').url === 'http://x/metrics'`. So `GET /foo/../metrics`
+ * was not in the blocklist here, proxied through, and ponder served the full Prometheus dump.
+ * The same disagreement defeated every operator-added `INDEXER_BLOCKED_PATHS` entry and the
+ * `/health|/ready|/status` limiter — and `/x/../status` runs an unmetered database SELECT,
+ * which is the precise DoS this process exists to close.
+ *
+ * Resolving here is only half the fix; `createGatewayServer` must also proxy THIS path rather
+ * than `req.url`, so the gateway's decision and ponder's routing cannot disagree again.
  *
  * @param {string | undefined} url
  * @returns {string}
@@ -147,9 +176,50 @@ export function normalisePath(url) {
   } catch {
     // Malformed escape sequence — compare the raw form; never fall through to "allow".
   }
+
+  // Resolve `.` / `..` with the same parser the upstream uses. CONCATENATED onto the origin,
+  // not resolved against it as a relative reference: `new URL('//metrics', origin)` is a
+  // PROTOCOL-RELATIVE url and parses to host `metrics`, path `/` — which would have quietly
+  // un-blocked `//metrics`. @hono/node-server concatenates (`${scheme}://${host}${url}`), so
+  // this matches it exactly.
+  let resolved = decoded;
+  try {
+    resolved = decodeURIComponent(new URL(`http://placeholder${prefixSlash(decoded)}`).pathname);
+  } catch {
+    // A path the URL parser rejects (or re-encodes into an undecodable form) is compared as
+    // its decoded self. Never fall through to "allow".
+  }
+
   // Collapse repeated slashes and drop a single trailing one (but keep the root "/").
-  const collapsed = decoded.replace(/\/{2,}/g, '/').toLowerCase();
+  const collapsed = resolved.replace(/\/{2,}/g, '/').toLowerCase();
   return collapsed.length > 1 && collapsed.endsWith('/') ? collapsed.slice(0, -1) : collapsed;
+}
+
+/**
+ * The request target to send upstream: dot-segments resolved, query string preserved.
+ *
+ * The other half of D-1. Forwarding `req.url` verbatim let ponder route a request the gateway
+ * had judged as a different path; this sends ponder the SAME resolution the gateway decided on,
+ * computed with the same WHATWG parser `@hono/node-server` uses, so the two cannot disagree.
+ *
+ * Deliberately NOT `normalisePath`'s output: that one is decoded and lowercased for comparison,
+ * and neither is safe to put on the wire. Decoding would turn a legitimately-escaped `%3F` in a
+ * path segment into a query delimiter, and lowercasing would corrupt any case-sensitive route
+ * argument. `URL.pathname` keeps the original encoding and case and only removes `.`/`..`.
+ *
+ * @param {string | undefined} url
+ * @returns {string}
+ */
+export function resolveUpstreamTarget(url) {
+  const raw = url ?? '/';
+  try {
+    const parsed = new URL(`http://placeholder${prefixSlash(raw)}`);
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    // Unparseable target: pass it through untouched. The blocklist decision above was made on
+    // the same string, so this cannot open a path the gateway rejected — ponder will fail it.
+    return raw;
+  }
 }
 
 /**
@@ -268,6 +338,45 @@ export function buildUpstreamHeaders(headers, clientKey) {
   }
 
   out['x-forwarded-for'] = clientKey;
+  return out;
+}
+
+/**
+ * Build the header set to send DOWNSTREAM: the same hop-by-hop strip, on the response leg.
+ *
+ * `buildUpstreamHeaders` has always done this for the request; the response used to be handed
+ * to `res.writeHead(status, upstreamRes.headers)` verbatim, so ponder's `connection`,
+ * `keep-alive` and `transfer-encoding` were echoed to the client while node applied its own
+ * framing to the same message. Node currently rejects the conflicting pair, which is why this
+ * was latent rather than exploitable — but per the reasoning on HOP_BY_HOP_HEADERS, our
+ * correctness must not rest on the runtime catching our mistake. A proxy strips hop-by-hop
+ * headers in BOTH directions; there is no asymmetry in RFC 9110 §7.6.1 to justify one.
+ *
+ * `content-length` is deliberately NOT stripped: it is end-to-end, and node reconciles it with
+ * the body it actually writes.
+ *
+ * @param {Record<string, string | string[] | undefined>} headers
+ * @returns {Record<string, string | string[]>}
+ */
+export function buildDownstreamHeaders(headers) {
+  const connectionTokens = new Set(
+    String(headers.connection ?? '')
+      .split(',')
+      .map((token) => token.trim().toLowerCase())
+      .filter((token) => token.length > 0)
+  );
+
+  /** @type {Record<string, string | string[]>} */
+  const out = {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (value === undefined) continue;
+    const lower = name.toLowerCase();
+    if (HOP_BY_HOP_HEADERS.has(lower)) continue;
+    // `Connection: foo` marks `foo` hop-by-hop for this message — in either direction.
+    if (connectionTokens.has(lower)) continue;
+    out[name] = value;
+  }
+
   return out;
 }
 
@@ -410,11 +519,12 @@ export function createGatewayServer(options) {
         host: upstreamHost,
         port: options.upstreamPort,
         method: req.method,
-        path: req.url,
+        // The NORMALISED target, not req.url — see resolveUpstreamTarget (D-1).
+        path: resolveUpstreamTarget(req.url),
         headers: buildUpstreamHeaders(req.headers, clientKey),
       },
       (upstreamRes) => {
-        res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
+        res.writeHead(upstreamRes.statusCode ?? 502, buildDownstreamHeaders(upstreamRes.headers));
         upstreamRes.pipe(res);
       }
     );

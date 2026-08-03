@@ -1,9 +1,24 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
-import { isAddress } from 'viem';
 import { logger } from '@/lib/logger';
-import type { Address } from '@/lib/types/ethereum';
+import { isAddress, type Address } from '@/lib/types/ethereum';
+
+/**
+ * Whether a persisted value is a well-formed address.
+ *
+ * `strict: false` matches `transactionFormStore.isPersistedAddress` and `lib/indexer.ts`, and it
+ * is the correct question here. Strict mode short-circuits and ACCEPTS all-lowercase; what it
+ * rejects is a mixed-case address whose casing is not a valid EIP-55 checksum — exactly what
+ * persisted state routinely holds, since an address can be re-cased by any upstream that touched
+ * it before it was stored. Under strict mode a re-cased `registeree` or `relayer` was silently
+ * dropped on reload, returning a user mid-flow to an empty form. No security property here
+ * depends on casing: the P2P forwarder gate is `relayerFromPeerSession`, which is never
+ * persisted, and address comparisons downstream are case-insensitive.
+ */
+function isPersistedAddress(value: unknown): value is Address {
+  return typeof value === 'string' && isAddress(value, { strict: false });
+}
 
 export interface FormState {
   registeree: Address | null;
@@ -117,14 +132,12 @@ export const useFormStore = create<FormState & FormActions>()(
 
           // Validate addresses are properly formatted before restoring.
           // Corrupted localStorage data could cause type safety issues.
-          const validRegisteree =
-            state.registeree && isAddress(state.registeree)
-              ? (state.registeree as Address)
-              : initialState.registeree;
-          const validRelayer =
-            state.relayer && isAddress(state.relayer)
-              ? (state.relayer as Address)
-              : initialState.relayer;
+          const validRegisteree = isPersistedAddress(state.registeree)
+            ? state.registeree
+            : initialState.registeree;
+          const validRelayer = isPersistedAddress(state.relayer)
+            ? state.relayer
+            : initialState.relayer;
 
           return {
             ...current,

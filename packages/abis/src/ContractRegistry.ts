@@ -655,11 +655,6 @@ export const ContractRegistryABI = [
   },
   {
     type: 'error',
-    name: 'ContractRegistry__AlreadyRegistered',
-    inputs: [],
-  },
-  {
-    type: 'error',
     name: 'ContractRegistry__ArrayLengthMismatch',
     inputs: [],
   },

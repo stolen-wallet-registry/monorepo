@@ -23,7 +23,7 @@ import {
   CardTitle,
 } from '@swr/ui';
 import { StepIndicator } from '@/components/composed/StepIndicator';
-import { P2PDebugPanel } from '@/components/dev/P2PDebugPanel';
+import { P2PDebugPanel } from '@/components/dev';
 import {
   WaitForConnectionStep,
   P2PAckSignStep,
@@ -58,6 +58,7 @@ import {
   isProtocolExpectedAtStep,
   isStreamAbortError,
   passStreamData,
+  sendResignAck,
   type ProtocolHandler,
 } from '@/lib/p2p';
 import {
@@ -211,6 +212,21 @@ export function P2PRegistereeRegistrationPage() {
   const [, setNodeReady] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [protocolError, setProtocolError] = useState<string | null>(null);
+  /**
+   * Why this victim is being asked to sign a second EIP-712 message.
+   *
+   * Its own channel, deliberately. This is the only text that explains an unexpected signing
+   * prompt to a fraud victim and tells them to stop and check with their relayer first, and it
+   * used to be written into `protocolError` — the same dismissable slot a keep-alive failure or
+   * any later stream error writes to. Either would silently overwrite the warning while the
+   * victim sat looking at the wallet prompt it was warning them about.
+   *
+   * Tagged with the step it was raised for and rendered inside that step, so it cannot outlive
+   * the prompt it describes and there is no Dismiss to make it disappear early.
+   */
+  const [resignNotice, setResignNotice] = useState<{ step: RegistrationStep; text: string } | null>(
+    null
+  );
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
 
   // Getter for libp2p - pass this to components, NOT libp2pRef.current
@@ -466,12 +482,21 @@ export function P2PRegistereeRegistrationPage() {
                   //    sender decides when to send one. `MAX_RESIGN_REQUESTS` caps the flow's
                   //    lifetime total across both phases, so a hostile relayer gets a small
                   //    fixed number of attempts at signature fatigue, not an unbounded loop.
+                  // Every exit path below answers, refusals included. Without a reply the
+                  // relayer treats a resolved stream write as consent and navigates back to
+                  // wait for a signature this side has decided not to send — both sides then
+                  // wait forever. See `lib/p2p/resignAck.ts`.
                   const reason = parseResignReason(data.reason);
                   if (!reason) {
                     // Unreachable while the schema requires the field; kept so relaxing the
                     // schema cannot silently turn a malformed request into a default recovery.
                     logger.p2p.warn('Ignored re-sign request with no recognised reason', {
                       step: currentStep,
+                    });
+                    await sendResignAck({
+                      connection,
+                      accepted: false,
+                      message: 'Re-sign request carried no recognised reason.',
                     });
                     break;
                   }
@@ -481,6 +506,11 @@ export function P2PRegistereeRegistrationPage() {
                     logger.p2p.warn('Ignored re-sign request that names no valid recovery step', {
                       step: currentStep,
                       reason,
+                    });
+                    await sendResignAck({
+                      connection,
+                      accepted: false,
+                      message: 'This flow is not at a step where a re-sign can be honoured.',
                     });
                     break;
                   }
@@ -497,6 +527,11 @@ export function P2PRegistereeRegistrationPage() {
                     setProtocolError(
                       `Your relayer has asked you to sign again ${MAX_RESIGN_REQUESTS} times. Further requests are being ignored — stop here and start over with a relayer you trust.`
                     );
+                    await sendResignAck({
+                      connection,
+                      accepted: false,
+                      message: 'This flow has already honoured its limit of re-sign requests.',
+                    });
                     break;
                   }
                   resignRequestCount.current += 1;
@@ -517,7 +552,10 @@ export function P2PRegistereeRegistrationPage() {
                   // Locally-composed copy. `data.message` is peer-supplied text and is never
                   // rendered — showing it would hand the relayer a caption above a wallet
                   // signing prompt on a fraud victim's screen.
-                  setProtocolError(resignNoticeForRecipient(reason, 'wallet'));
+                  setResignNotice({
+                    step: target,
+                    text: resignNoticeForRecipient(reason, 'wallet'),
+                  });
                   logger.registration.warn('Relayer asked for a new signature; moving back', {
                     from: currentStep,
                     to: target,
@@ -529,6 +567,14 @@ export function P2PRegistereeRegistrationPage() {
                   // already open for a signature that no longer exists.
                   clearSentSignature('wallet-reg');
                   if (target === 'acknowledge-and-sign') clearSentSignature('wallet-ack');
+
+                  // Answered BEFORE the step change, so the relayer is released even if
+                  // re-rendering this page tears the handler's context down behind us.
+                  await sendResignAck({
+                    connection,
+                    accepted: true,
+                    message: 'Re-sign request accepted.',
+                  });
 
                   useRegistrationStore.getState().setStep(target);
                   break;
@@ -772,7 +818,15 @@ export function P2PRegistereeRegistrationPage() {
               </div>
               <CardDescription>{currentDescription}</CardDescription>
             </CardHeader>
-            <CardContent className="flex-grow flex flex-col justify-center">
+            <CardContent className="flex-grow flex flex-col justify-center gap-4">
+              {/* Rendered here, not in the page-level alert slot: it explains the signing
+                  prompt directly below it, and it has no Dismiss because nothing about it
+                  stops being true until the victim has decided whether to sign. */}
+              {resignNotice?.step === step && (
+                <Alert variant="destructive">
+                  <AlertDescription>{resignNotice.text}</AlertDescription>
+                </Alert>
+              )}
               {renderStep()}
             </CardContent>
           </Card>

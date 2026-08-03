@@ -19,6 +19,11 @@ interface ISoulboundReceiver {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
+
+    /// @notice Emitted when the owner sweeps the contract balance
+    /// @param to Recipient of the sweep
+    /// @param amount Amount swept in wei
+    event Swept(address indexed to, uint256 amount);
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when a cross-chain mint is executed

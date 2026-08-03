@@ -24,6 +24,21 @@ import type { Context, MiddlewareHandler, Next } from 'hono';
  *     which are registered before this app and return without calling next. They never reach
  *     this middleware, so nothing here can gate or rate-limit them. See DEPLOY.md — that has
  *     to be enforced at the edge.
+ *
+ * A third consequence, which the description above used to gloss over: `enforceCors` never
+ * runs on a CORS PREFLIGHT. Hono's `cors()` answers `OPTIONS` itself with a 204 and returns
+ * WITHOUT calling next (hono/cors: the preflight branch builds its own Response), so ponder's
+ * `Access-Control-Allow-Origin: *` stands on every preflight and nothing here can strip it.
+ *
+ * The control still holds, and it is worth being precise about why, because the reasoning is
+ * what stops someone "simplifying" the post-next delete on the assumption preflight is
+ * covered. A preflight is only ever a question about a request the browser has not made yet;
+ * the browser re-checks the ACTUAL response's `Access-Control-Allow-Origin` before handing any
+ * of it to script, and that response DOES pass through this middleware and does get the header
+ * deleted. So a denied origin can learn "the preflight said yes" and still read nothing. There
+ * is a preflight test in security.test.ts pinning both halves of that.
+ *
+ * Deleting the header on preflights too would need the gateway or the edge, not this app.
  */
 
 // ═══════════════════════════════════════════════════════════════════════════

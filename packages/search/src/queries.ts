@@ -50,11 +50,37 @@ export const WALLET_BY_CAIP10_QUERY = gql`
 `;
 
 /**
+ * Page size for the two per-chain report lookups below, and the number of pages either will
+ * follow before giving up and reporting the result as truncated.
+ *
+ * Both queries used to take whatever the server handed back — TRANSACTION_QUERY passed no
+ * limit at all and silently inherited ponder's `DEFAULT_LIMIT = 50`, CONTRACT_QUERY pinned
+ * `limit: 10` — with no cursor follow-up in either case. A contract flagged on 12 chains
+ * reported 10, and `chains.length` is quoted verbatim in user-facing copy.
+ *
+ * 100 per page sits well under ponder's `MAX_LIMIT = 1000` and covers every realistic
+ * multi-chain report in one round trip; the page cap exists only so a pathological row count
+ * cannot turn one search into an unbounded fetch loop. Exceeding it sets `chainsTruncated`
+ * rather than passing the shortfall off as the whole answer.
+ */
+export const REPORT_PAGE_SIZE = 100;
+export const REPORT_MAX_PAGES = 20;
+
+/**
  * Query fraudulent transactions by transaction hash.
+ *
+ * Paginated — see {@link REPORT_PAGE_SIZE}. `orderBy` is pinned because a cursor is only
+ * stable under a deterministic order.
  */
 export const TRANSACTION_QUERY = gql`
-  query SearchTransaction($txHash: String!) {
-    transactionInBatchs(where: { txHash: $txHash }) {
+  query SearchTransaction($txHash: String!, $limit: Int!, $after: String) {
+    transactionInBatchs(
+      where: { txHash: $txHash }
+      orderBy: "reportedAt"
+      orderDirection: "asc"
+      limit: $limit
+      after: $after
+    ) {
       items {
         id
         txHash
@@ -64,16 +90,28 @@ export const TRANSACTION_QUERY = gql`
         reporter
         reportedAt
       }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
     }
   }
 `;
 
 /**
  * Query fraudulent contracts by address.
+ *
+ * Paginated — see {@link REPORT_PAGE_SIZE}.
  */
 export const CONTRACT_QUERY = gql`
-  query SearchContract($address: String!) {
-    fraudulentContracts(where: { contractAddress: $address }, limit: 10) {
+  query SearchContract($address: String!, $limit: Int!, $after: String) {
+    fraudulentContracts(
+      where: { contractAddress: $address }
+      orderBy: "reportedAt"
+      orderDirection: "asc"
+      limit: $limit
+      after: $after
+    ) {
       items {
         contractAddress
         caip2ChainId
@@ -81,6 +119,10 @@ export const CONTRACT_QUERY = gql`
         batchId
         operator
         reportedAt
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }
@@ -441,16 +483,22 @@ export interface RawWalletItem {
   reportedChainCAIP2?: string | null;
 }
 
+/** Also the response shape for `WALLET_BY_CAIP10_QUERY`, whenever that lookup is re-enabled. */
 export interface RawWalletResponse {
   stolenWallets: {
     items: RawWalletItem[];
   };
 }
 
-export interface RawWalletByCAIP10Response {
-  stolenWallets: {
-    items: RawWalletItem[];
-  };
+/**
+ * Ponder's cursor envelope on a plural query.
+ *
+ * Optional because tests and older stubs return bare `{ items }`; an absent `pageInfo` is
+ * read as "no further pages", which stops the loop rather than looping forever on undefined.
+ */
+export interface RawPageInfo {
+  hasNextPage: boolean;
+  endCursor: string | null;
 }
 
 export interface RawTransactionResponse {
@@ -460,10 +508,12 @@ export interface RawTransactionResponse {
       txHash: string;
       caip2ChainId: string;
       numericChainId?: number;
+      /** uint256 batch ID as a DECIMAL string, not hex. */
       batchId: string | null;
       reporter: string;
       reportedAt: string;
     }>;
+    pageInfo?: RawPageInfo;
   };
 }
 
@@ -473,10 +523,12 @@ export interface RawContractResponse {
       contractAddress: string;
       caip2ChainId: string;
       numericChainId?: number;
+      /** uint256 batch ID as a DECIMAL string, not hex. */
       batchId: string;
       operator: string;
       reportedAt: string;
     }>;
+    pageInfo?: RawPageInfo;
   };
 }
 

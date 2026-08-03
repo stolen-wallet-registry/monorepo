@@ -27,6 +27,7 @@ import {
   type TxSignatureStep,
 } from '@swr/signatures';
 import { logger } from '@/lib/logger';
+import { isWindowBlockStale, describeWindowBlockStale } from './windowBlock';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 /** Everything that can be wrong with a relayed signature, in the order we report it. */
@@ -36,7 +37,8 @@ export type RelaySignatureIssue =
   | 'signer-mismatch'
   | 'nonce-mismatch'
   | 'nonce-unknown'
-  | 'deadline-expired';
+  | 'deadline-expired'
+  | 'window-block-stale';
 
 export interface RelaySignatureReview {
   /** Address recovered from the EIP-712 digest, or null if recovery failed. */
@@ -69,6 +71,18 @@ export interface ReviewRelayedSignatureInput {
   deadline: bigint;
   /** Current time in unix seconds. */
   nowSeconds: bigint;
+  /**
+   * Registration only: the block number the signature committed to
+   * (`blockhash(windowBlock)` is inside the signed struct). Undefined for acknowledgement
+   * signatures, which carry no freshness commitment.
+   */
+  windowBlock?: bigint;
+  /**
+   * Chain head as last read. Every pay step already has this from `getDeadlines`, which is
+   * why this check costs no extra chain read. Undefined while the read is outstanding, in
+   * which case staleness is simply not asserted.
+   */
+  currentBlock?: bigint;
 }
 
 /**
@@ -77,8 +91,16 @@ export interface ReviewRelayedSignatureInput {
  * Pure: no chain access, no clock, no wallet. `nowSeconds` and `onChainNonce` are inputs.
  */
 export function reviewRelayedSignature(input: ReviewRelayedSignatureInput): RelaySignatureReview {
-  const { recoveredSigner, expectedSigner, signatureNonce, onChainNonce, deadline, nowSeconds } =
-    input;
+  const {
+    recoveredSigner,
+    expectedSigner,
+    signatureNonce,
+    onChainNonce,
+    deadline,
+    nowSeconds,
+    windowBlock,
+    currentBlock,
+  } = input;
 
   const issues: RelaySignatureIssue[] = [];
 
@@ -108,6 +130,13 @@ export function reviewRelayedSignature(input: ReviewRelayedSignatureInput): Rela
     issues.push('deadline-expired');
   }
 
+  // The registration signature commits to `blockhash(windowBlock)`, and the contract can only
+  // recompute that for the last 256 blocks. Past that it reverts — AFTER the relayer's gas is
+  // spent, which is exactly what this whole review exists to prevent.
+  if (isWindowBlockStale(windowBlock, currentBlock)) {
+    issues.push('window-block-stale');
+  }
+
   return { recoveredSigner, issues, ok: issues.length === 0 };
 }
 
@@ -129,6 +158,8 @@ export function describeRelaySignatureIssue(issue: RelaySignatureIssue): string 
       return 'Still reading the current nonce from the contract. Payment is blocked until it is confirmed.';
     case 'deadline-expired':
       return 'The signature has expired. Ask your partner to sign again.';
+    case 'window-block-stale':
+      return describeWindowBlockStale();
   }
 }
 

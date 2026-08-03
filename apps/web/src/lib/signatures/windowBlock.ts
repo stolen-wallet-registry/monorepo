@@ -26,6 +26,42 @@ import { logger } from '@/lib/logger';
  */
 export const WINDOW_BLOCK_HISTORY_LIMIT = 256n;
 
+/**
+ * Has the committed block aged out of the EVM's `blockhash` window?
+ *
+ * The contract computes `block.number - windowBlock` and reverts with
+ * `TimingConfig__WindowBlockTooOld` at or beyond {@link WINDOW_BLOCK_HISTORY_LIMIT}, because
+ * `blockhash()` returns zero past that point and the commitment can no longer be verified.
+ *
+ * This is the only one of the four invalidating conditions that is knowable client-side
+ * without an extra chain read — every pay step already reads `currentBlock` off `getDeadlines`
+ * — and it is the one most likely to bite in practice: on Base's 2s blocks the window is about
+ * 8.5 minutes, so a relayer who takes a coffee break before approving, or retries once after
+ * an RPC failure, pays gas for a guaranteed revert.
+ *
+ * Returns false when either value is unknown: an unread block number is not evidence of
+ * staleness, and blocking payment on a pending read is the `nonce-unknown` case, reported
+ * separately.
+ *
+ * @param windowBlock - The block number the signature committed to
+ * @param currentBlock - Chain head as last read (e.g. `useContractDeadlines().data.currentBlock`)
+ */
+export function isWindowBlockStale(
+  windowBlock: bigint | undefined,
+  currentBlock: bigint | undefined
+): boolean {
+  if (windowBlock === undefined || currentBlock === undefined) return false;
+  // A currentBlock behind the committed block is a lagging RPC node, not an aged-out
+  // commitment; subtracting would underflow into a huge positive bigint and report staleness.
+  if (currentBlock <= windowBlock) return false;
+  return currentBlock - windowBlock >= WINDOW_BLOCK_HISTORY_LIMIT;
+}
+
+/** User-facing explanation for a signature whose committed block has aged out. */
+export function describeWindowBlockStale(): string {
+  return 'This signature has gone stale — the block it commits to is too old for the contract to verify. Ask for a new signature before paying.';
+}
+
 export interface WindowBlockCommitment {
   /** Block number whose hash was signed. Travels unsigned in the `register` calldata. */
   windowBlock: bigint;

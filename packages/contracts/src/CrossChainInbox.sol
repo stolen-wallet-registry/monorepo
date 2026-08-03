@@ -43,6 +43,11 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
+
+    /// @notice Emitted when the owner sweeps ETH a misbehaving hook forwarded with a message
+    /// @param to Recipient of the sweep
+    /// @param amount Amount swept in wei
+    event Swept(address indexed to, uint256 amount);
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// @notice Emitted when a wallet registration is received and processed
@@ -284,8 +289,10 @@ contract CrossChainInbox is IMessageRecipient, TimelockOwnable {
     /// @param to Recipient of the swept balance
     function sweep(address to) external onlyOwner {
         if (to == address(0)) revert CrossChainInbox__ZeroAddress();
-        (bool success,) = to.call{ value: address(this).balance }("");
+        uint256 amount = address(this).balance;
+        (bool success,) = to.call{ value: amount }("");
         if (!success) revert CrossChainInbox__SweepFailed();
+        emit Swept(to, amount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

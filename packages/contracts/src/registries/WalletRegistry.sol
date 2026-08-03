@@ -547,6 +547,18 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
         uint8 bridgeId,
         bytes32 messageId
     ) external onlyHub {
+        // Ignore, rather than revert, on inputs every other path rejects. Hyperlane re-delivers a
+        // reverting message indefinitely, so reverting here would turn one malformed payload into
+        // a permanently undeliverable message — the exact situation the duplicate no-op logic
+        // upstream exists to avoid. Returning marks it delivered and drops it.
+        if (identifier == bytes32(0)) return;
+
+        // A future incident is not physically possible; `acknowledge`, `register` and the operator
+        // batch path all reject it outright. This path cannot reject (see above), so clamp to the
+        // established "unknown" sentinel rather than writing an unfalsifiable timestamp into
+        // permanent storage where it would poison every downstream time-based analytic.
+        if (incidentTimestamp > block.timestamp) incidentTimestamp = 0;
+
         // Compute storage key based on namespace
         bytes32 key;
 

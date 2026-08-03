@@ -12,6 +12,7 @@ import { TimingConfig } from "../src/libraries/TimingConfig.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
+import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /// @title TransactionRegistryTest
 /// @notice Comprehensive tests for TransactionRegistry two-phase batch registration
@@ -867,6 +868,65 @@ contract TransactionRegistryTest is EIP712TestHelper {
         }
     }
 
+    /// @notice A cross-chain batch whose entries were all already registered writes no batch.
+    /// @dev SECURITY/DATA-INTEGRITY (C-2). The cross-chain path used to increment `_nextBatchId`
+    ///      unconditionally and emit `TransactionBatchRegistered(..., 0, ...)` even when every
+    ///      entry was skipped. The indexer joins entries to their batch on the shared transaction
+    ///      hash, so a batch row with no per-entry events beside it is a permanent orphan, and the
+    ///      consumed ID is a hole in the sequence. The local path (`_executeTxBatchRegistration`)
+    ///      already got this right; this asserts the cross-chain path matches it.
+    ///
+    ///      It must NOT revert: Hyperlane redelivers a reverting `handle` indefinitely, so the
+    ///      duplicate delivery has to succeed as a no-op.
+    function test_TxRegFromHub_AllAlreadyRegistered_WritesNoBatch() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 chainRef = CAIP10Evm.caip2Hash(uint64(10));
+
+        // First delivery lands normally and takes batch ID 1.
+        vm.prank(address(hub));
+        txRegistry.registerTransactionsFromHub(
+            reporter, dataHash, chainRef, chainRef, true, txHashes, chainIds, 1, keccak256("msg1")
+        );
+        assertEq(txRegistry.getTransactionBatch(1).transactionCount, 3, "First delivery should write batch 1");
+
+        // Second delivery of the same hashes: every entry is skipped.
+        vm.recordLogs();
+        vm.prank(address(hub));
+        txRegistry.registerTransactionsFromHub(
+            reporter, dataHash, chainRef, chainRef, true, txHashes, chainIds, 1, keccak256("msg2")
+        );
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 batchTopic = keccak256("TransactionBatchRegistered(uint256,address,bytes32,uint32,bool)");
+        for (uint256 i = 0; i < logs.length; i++) {
+            assertTrue(logs[i].topics[0] != batchTopic, "Zero-entry delivery must not emit a batch event");
+        }
+
+        // Nothing was written at ID 2 ...
+        assertEq(txRegistry.getTransactionBatch(2).timestamp, 0, "No batch row should exist at ID 2");
+
+        // ... and the ID was not consumed: the next real batch takes 2, not 3.
+        bytes32[] memory freshHashes = new bytes32[](1);
+        bytes32[] memory freshChains = new bytes32[](1);
+        freshHashes[0] = keccak256("tx-fresh");
+        freshChains[0] = chainIds[0];
+
+        vm.prank(address(hub));
+        txRegistry.registerTransactionsFromHub(
+            reporter,
+            _computeDataHash(freshHashes, freshChains),
+            chainRef,
+            chainRef,
+            true,
+            freshHashes,
+            freshChains,
+            1,
+            keccak256("msg3")
+        );
+        assertEq(txRegistry.getTransactionBatch(2).transactionCount, 1, "Next real batch must reuse ID 2");
+    }
+
     /// @notice Non-hub callers are rejected
     function test_TxRegFromHub_RejectsNonHub() public {
         (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
@@ -1699,8 +1759,105 @@ contract TransactionRegistryTest is EIP712TestHelper {
         bytes32 packed = vm.load(address(txRegistry), reads[0]);
         assertNotEq(packed, bytes32(0), "TransactionEntry should be populated");
 
-        // Next slot must be empty — proves no overflow to a second slot
-        bytes32 nextSlot = bytes32(uint256(reads[0]) + 1);
-        assertEq(vm.load(address(txRegistry), nextSlot), bytes32(0), "TransactionEntry overflowed to second slot");
+        // Deliberately NOT asserted: that slot+1 is zero. Entry slots are keccak-derived, so the
+        // neighbouring slot is unallocated whatever the struct's size — that assertion held for a
+        // two-slot struct too and read as a second, independent proof of the invariant while
+        // proving nothing. The vm.record()/reads.length check above is the real proof.
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SIGNATURE MALLEABILITY AND REPLAY
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev secp256k1 group order. (v^1, r, n - s) recovers the same signer under raw ecrecover.
+    uint256 internal constant SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+
+    function _malleate(uint8 v, bytes32 s) internal pure returns (uint8 flippedV, bytes32 flippedS) {
+        flippedS = bytes32(SECP256K1_N - uint256(s));
+        flippedV = v == 27 ? 28 : 27;
+    }
+
+    /// @notice A malleated acknowledgement signature is rejected.
+    /// @dev SECURITY. Recovery goes through OpenZeppelin's ECDSA, which rejects s > n/2, so the
+    ///      property holds — but nothing pinned it anywhere in the suite. A hand-rolled
+    ///      `ecrecover` swapped in during a gas optimisation would accept the malleated twin of
+    ///      every signature this contract consumes, and no test would notice.
+    function test_AcknowledgeTransactions_RejectsMalleatedSignature() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 txCount = uint32(txHashes.length);
+        uint256 deadline = block.timestamp + 3600;
+
+        (uint8 v, bytes32 r, bytes32 s) = _signProdTxAckFor(
+            address(txRegistry), dataHash, reportedChainId, txCount, txRegistry.nonces(reporter), deadline
+        );
+        (uint8 flippedV, bytes32 flippedS) = _malleate(v, s);
+
+        vm.prank(forwarder);
+        vm.expectRevert(abi.encodeWithSelector(ECDSA.ECDSAInvalidSignatureS.selector, flippedS));
+        txRegistry.acknowledgeTransactions(
+            reporter, forwarder, deadline, dataHash, reportedChainId, txCount, flippedV, r, flippedS
+        );
+
+        assertFalse(txRegistry.isTransactionPending(reporter), "A malleated signature must not open a window");
+    }
+
+    /// @notice A captured acknowledgement signature cannot be replayed once its window lapses.
+    /// @dev SECURITY. Capture a genuine acknowledgement, wait for the registration window to
+    ///      expire without the reporter completing, then re-submit the identical bytes. The
+    ///      `AlreadyAcknowledged` guard has lapsed by then, so the nonce is the only defense left.
+    ///      vm.roll moves block.number only, so the EIP-712 deadline (a timestamp) stays valid.
+    ///      This contract reads `nonces[reporter]` itself rather than taking it as a parameter, so
+    ///      the moved nonce surfaces as a digest mismatch (`InvalidSignature`) rather than a
+    ///      dedicated nonce error — the defense is the same, the reported reason differs.
+    function test_AcknowledgeTransactions_CapturedSignatureCannotBeReplayed() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 txCount = uint32(txHashes.length);
+        uint256 deadline = block.timestamp + 3600;
+        uint256 nonce = txRegistry.nonces(reporter);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signProdTxAckFor(address(txRegistry), dataHash, reportedChainId, txCount, nonce, deadline);
+
+        vm.prank(forwarder);
+        txRegistry.acknowledgeTransactions(reporter, forwarder, deadline, dataHash, reportedChainId, txCount, v, r, s);
+
+        vm.roll(txRegistry.getTransactionAcknowledgementData(reporter).deadline + 1);
+
+        vm.prank(forwarder);
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidSignature.selector);
+        txRegistry.acknowledgeTransactions(reporter, forwarder, deadline, dataHash, reportedChainId, txCount, v, r, s);
+    }
+
+    /// @notice A registration signature cannot be replayed after it has succeeded.
+    /// @dev Asserting no second batch is minted (rather than only that the call reverts) is what
+    ///      makes this survive a change to which guard wins: a replay that got through would
+    ///      burn a batch ID and emit a phantom batch for the indexer to join against.
+    function test_RegisterTransactions_CannotBeReplayedAfterSuccess() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+
+        _doAcknowledge(forwarder, txHashes, chainIds);
+        _sigWindowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 txCount = uint32(txHashes.length);
+        uint256 deadline = block.timestamp + 3600;
+        (uint8 v, bytes32 r, bytes32 s) = _signProdTxRegFor(
+            address(txRegistry), dataHash, reportedChainId, txCount, txRegistry.nonces(reporter), deadline
+        );
+
+        vm.prank(forwarder);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, _sigWindowBlock, v, r, s);
+        uint256 batchesAfterFirst = txRegistry.transactionBatchCount();
+
+        vm.prank(forwarder);
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__InvalidForwarder.selector);
+        txRegistry.registerTransactions(reporter, deadline, txHashes, chainIds, _sigWindowBlock, v, r, s);
+
+        assertEq(txRegistry.transactionBatchCount(), batchesAfterFirst, "A replay must not mint a second batch");
     }
 }

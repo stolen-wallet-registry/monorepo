@@ -13,7 +13,7 @@ import fs from 'fs';
 
 import { KEYS_PATH, RELAY_PORT } from './config.mjs';
 import { verifyKeyIntegrity, writeFileSecurely, acquireLock, releaseLock } from './key-utils.mjs';
-import { createReservationGater, readRelayLimits } from './relay-limits.mjs';
+import { createReservationGater, readRelayLimits, validateRelayLimits } from './relay-limits.mjs';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -21,8 +21,7 @@ let peerId;
 let privateKey;
 
 // TODO(p2p): Dockerfile hardening for the relay container.
-// - Run as non-root: add `USER node` (or create a dedicated `app` user) and ensure `/app` is owned by that user
-//   (e.g., `COPY --chown=node:node ...` or `RUN chown -R node:node /app`).
+// (The non-root half is done — the Dockerfile chowns /app and drops to `USER node`.)
 // - Add HEALTHCHECK: a simple TCP check against port 12312 is sufficient until we add a real HTTP health endpoint.
 //   Example: `HEALTHCHECK ... CMD node -e "const net=require('net');const s=net.connect(12312,'127.0.0.1');s.on('connect',()=>process.exit(0));s.on('error',()=>process.exit(1));"`
 
@@ -127,6 +126,14 @@ async function loadOrGenerateKeys() {
 await loadOrGenerateKeys();
 
 const limits = readRelayLimits();
+
+// The cross-field invariants the limit comments assert are checked against the RESOLVED set,
+// before the node is built — not just against the defaults in a unit test. A deployment that
+// sets one variable without the others gets told which ceiling is actually in force instead
+// of discovering it under load.
+for (const problem of validateRelayLimits(limits)) {
+  console.warn(`⚠ Relay limit misconfiguration: ${problem}`);
+}
 
 // The gater is constructed before the node exists and reads it lazily; see
 // createReservationGater. Both handles are `let … = null` rather than a forward reference to

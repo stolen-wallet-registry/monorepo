@@ -146,18 +146,14 @@ function createStubbedTransactionResult(txHash: string): SearchResult {
   };
 }
 
-function createStubbedNotFoundAddressResult(address: string): SearchResult {
+function createStubbedNotFoundAddressResult(): SearchResult {
   return {
     type: 'address',
     found: false,
     unverified: [],
     foundInWalletRegistry: false,
     foundInContractRegistry: false,
-    data: {
-      address: address.toLowerCase() as `0x${string}`,
-      wallet: null,
-      contract: null,
-    },
+    data: null,
   };
 }
 
@@ -234,7 +230,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
           setResult(createStubbedWalletResult(trimmed));
           return;
         case 'clean-wallet':
-          setResult(createStubbedNotFoundAddressResult(trimmed));
+          setResult(createStubbedNotFoundAddressResult());
           return;
         case 'reported-tx':
           setResult(createStubbedTransactionResult(trimmed));
@@ -246,7 +242,7 @@ export function RegistrySearchPreview({ className }: RegistrySearchPreviewProps)
           setResult(createStubbedContractResult(trimmed));
           return;
         case 'clean-contract':
-          setResult(createStubbedNotFoundAddressResult(trimmed));
+          setResult(createStubbedNotFoundAddressResult());
           return;
       }
     }

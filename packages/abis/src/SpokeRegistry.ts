@@ -1117,6 +1117,25 @@ export const SpokeRegistryABI = [
   },
   {
     type: 'function',
+    name: 'txNonces',
+    inputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'withdrawFees',
     inputs: [
       {
@@ -1182,6 +1201,25 @@ export const SpokeRegistryABI = [
     type: 'event',
     name: 'EIP712DomainChanged',
     inputs: [],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'FeesWithdrawn',
+    inputs: [
+      {
+        name: 'to',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'amount',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
     anonymous: false,
   },
   {

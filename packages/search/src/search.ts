@@ -10,14 +10,15 @@ import { getCAIP2ChainName } from '@swr/chains';
 import { detectSearchType, parseCAIP10, parseWildcardCAIP10 } from './detect';
 import {
   WALLET_QUERY,
-  WALLET_BY_CAIP10_QUERY,
   TRANSACTION_QUERY,
   CONTRACT_QUERY,
   OPERATOR_QUERY,
   OPERATORS_LIST_QUERY,
+  REPORT_PAGE_SIZE,
+  REPORT_MAX_PAGES,
+  type RawPageInfo,
   type RawWalletItem,
   type RawWalletResponse,
-  type RawWalletByCAIP10Response,
   type RawTransactionResponse,
   type RawContractResponse,
   type RawOperatorResponse,
@@ -27,6 +28,7 @@ import { SearchUnavailableError } from './errors';
 import type {
   Address,
   Hash,
+  Hex,
   RegistryKind,
   SearchConfig,
   SearchResult,
@@ -52,9 +54,12 @@ function mapWalletData(wallet: RawWalletItem): WalletSearchData {
   const reportedChainCAIP2 = wallet.reportedChainCAIP2 ?? undefined;
 
   return {
-    // `id` is the full bytes32 identifier; `walletAddress` is the EVM address (null for
-    // non-EVM identifiers, which have no address form).
-    address: (wallet.walletAddress ?? wallet.id) as Address,
+    // `id` is the full bytes32 identifier; `walletAddress` is the EVM address, and it is null
+    // for non-EVM identifiers because they have no address form. This used to fall back to
+    // `id` and claim the `Address` type for it, handing consumers a 66-char string that fails
+    // `isAddress` on a genuine hit. The identifier now travels in its own field.
+    address: (wallet.walletAddress?.toLowerCase() ?? null) as Address | null,
+    identifier: wallet.id.toLowerCase() as Hex,
     caip10: wallet.caip10,
     registeredAt: BigInt(wallet.registeredAt),
     transactionHash: wallet.transactionHash as Hash,
@@ -64,6 +69,50 @@ function mapWalletData(wallet: RawWalletItem): WalletSearchData {
     reportedChainCAIP2,
     reportedChainName: reportedChainCAIP2 ? getCAIP2ChainName(reportedChainCAIP2) : undefined,
   };
+}
+
+/**
+ * Follow a ponder cursor to the end of a plural query, or to {@link REPORT_MAX_PAGES}.
+ *
+ * A search reports how many chains an identifier is flagged on, and that count is quoted to
+ * users. Taking one server-chosen page and presenting it as the whole set under-reports the
+ * spread with nothing to signal it, so this drains the cursor and, if it runs out of pages
+ * first, says so via `truncated` instead of letting the shortfall pass as the answer.
+ *
+ * A page that comes back empty ends the walk even if `hasNextPage` claims otherwise: without
+ * that, a server bug or a stub that echoes a stale cursor would spin here for MAX_PAGES.
+ *
+ * Errors are NOT swallowed. A failure on page 2 rejects, and `searchAddress` turns that into
+ * an unverified registry (and, with nothing found, a throw). Returning page 1 as if it were
+ * complete would be the false-clean this package exists to prevent.
+ */
+async function fetchAllPages<TItem>(
+  config: SearchConfig,
+  document: string,
+  variables: Record<string, unknown>,
+  select: (response: unknown) => { items?: TItem[]; pageInfo?: RawPageInfo } | undefined
+): Promise<{ items: TItem[]; truncated: boolean }> {
+  const items: TItem[] = [];
+  let after: string | null = null;
+
+  for (let page = 0; page < REPORT_MAX_PAGES; page++) {
+    const response: unknown = await request(config.indexerUrl, document, {
+      ...variables,
+      limit: REPORT_PAGE_SIZE,
+      after,
+    });
+
+    const connection = select(response);
+    const pageItems = connection?.items ?? [];
+    items.push(...pageItems);
+
+    const pageInfo = connection?.pageInfo;
+    if (pageItems.length === 0) return { items, truncated: false };
+    if (!pageInfo?.hasNextPage || !pageInfo.endCursor) return { items, truncated: false };
+    after = pageInfo.endCursor;
+  }
+
+  return { items, truncated: true };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -103,6 +152,10 @@ export async function searchWallet(
  *
  * @param config - Search configuration with indexer URL
  * @param caip10 - CAIP-10 identifier (e.g., "eip155:8453:0x...")
+ *
+ * @throws {SearchUnavailableError} with `reason: 'unsupported-identifier'` for any non-eip155
+ *   namespace. See the comment on that branch: the indexer's stored key and the identifier a
+ *   user types are different strings today, so a lookup cannot answer the question.
  */
 export async function searchWalletByCAIP10(
   config: SearchConfig,
@@ -125,27 +178,30 @@ export async function searchWalletByCAIP10(
     return searchWallet(config, evm.address);
   }
 
-  // Non-EVM namespaces keep chain-specific keys, so exact match is correct there.
-  const result = await request<RawWalletByCAIP10Response>(
-    config.indexerUrl,
-    WALLET_BY_CAIP10_QUERY,
-    {
-      caip10: caip10.toLowerCase(),
-    }
-  );
-
-  const wallet = result.stolenWallets?.items?.[0];
-
-  if (!wallet) {
-    return { type: 'wallet', found: false, data: null, unverified: [] };
-  }
-
-  return {
-    type: 'wallet',
-    found: true,
-    data: mapWalletData(wallet),
-    unverified: [],
-  };
+  // ─── Non-EVM namespaces: cannot be answered, so this fails closed (finding S-3) ─────────
+  //
+  // This branch used to issue an exact-match query on `caip10.toLowerCase()`. That query can
+  // never match, for two independent reasons, and a query that structurally cannot match is
+  // far worse than no query at all: it returns "not found" with full confidence.
+  //
+  //   1. FORM. The indexer does not store the native identifier. `walletCaip10()` in
+  //      apps/indexer/src/lib/identifiers.ts builds non-EVM keys as
+  //      `${reportedChainCAIP2}:${normalizeIdentifier(identifier)}` — the raw 32-byte
+  //      identifier as lowercase hex, because the contract event carries bytes32 and the
+  //      native encoding is not recoverable from it. A user searching a Solana wallet types
+  //      base58, which is a different string entirely.
+  //   2. CASE. Solana base58 and Bitcoin base58check are case-SENSITIVE. `.toLowerCase()`
+  //      does not normalize such an identifier, it destroys it.
+  //
+  // So: a registered non-EVM wallet was a permanent silent miss, and the miss rendered green.
+  // Until the indexer and this package agree on one canonical non-EVM key, the honest answer
+  // is "we cannot look this up", which is an unknown and takes the route every unknown takes.
+  //
+  // WHEN CHANGING THIS: the fix is not here alone. It requires the indexer to store a key
+  // this function can construct from user input (or a resolver that maps one to the other).
+  // Re-enable the lookup only once both sides derive the same string from the same wallet —
+  // WALLET_BY_CAIP10_QUERY is still exported and ready for that day.
+  throw new SearchUnavailableError(['wallet'], [], 'unsupported-identifier');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -162,11 +218,15 @@ export async function searchTransaction(
   config: SearchConfig,
   txHash: string
 ): Promise<TransactionSearchResult> {
-  const result = await request<RawTransactionResponse>(config.indexerUrl, TRANSACTION_QUERY, {
-    txHash: txHash.toLowerCase(),
-  });
+  const { items: transactions, truncated } = await fetchAllPages<
+    RawTransactionResponse['transactionInBatchs']['items'][number]
+  >(
+    config,
+    TRANSACTION_QUERY,
+    { txHash: txHash.toLowerCase() },
+    (response) => (response as RawTransactionResponse | undefined)?.transactionInBatchs
+  );
 
-  const transactions = result.transactionInBatchs?.items ?? [];
   const firstTx = transactions[0];
 
   if (!firstTx) {
@@ -179,11 +239,13 @@ export async function searchTransaction(
     unverified: [],
     data: {
       txHash: firstTx.txHash as Hash,
+      chainsTruncated: truncated,
       chains: transactions.map((t) => ({
         caip2ChainId: t.caip2ChainId,
         chainName: getCAIP2ChainName(t.caip2ChainId),
         numericChainId: t.numericChainId,
-        batchId: (t.batchId as Hash) ?? null,
+        // Decimal string from a uint256 column — see the `BatchId` type.
+        batchId: t.batchId ?? null,
         reporter: t.reporter as Address,
         reportedAt: BigInt(t.reportedAt),
       })),
@@ -206,11 +268,15 @@ export async function searchContract(
   config: SearchConfig,
   address: string
 ): Promise<ContractSearchData | null> {
-  const result = await request<RawContractResponse>(config.indexerUrl, CONTRACT_QUERY, {
-    address: address.toLowerCase(),
-  });
+  const { items: contracts, truncated } = await fetchAllPages<
+    RawContractResponse['fraudulentContracts']['items'][number]
+  >(
+    config,
+    CONTRACT_QUERY,
+    { address: address.toLowerCase() },
+    (response) => (response as RawContractResponse | undefined)?.fraudulentContracts
+  );
 
-  const contracts = result.fraudulentContracts?.items ?? [];
   const firstContract = contracts[0];
 
   if (!firstContract) {
@@ -219,11 +285,13 @@ export async function searchContract(
 
   return {
     contractAddress: firstContract.contractAddress as Address,
+    chainsTruncated: truncated,
     chains: contracts.map((c) => ({
       caip2ChainId: c.caip2ChainId,
       chainName: getCAIP2ChainName(c.caip2ChainId),
       numericChainId: c.numericChainId,
-      batchId: c.batchId as Hash,
+      // Decimal string from a uint256 column — see the `BatchId` type.
+      batchId: c.batchId,
       operator: c.operator as Address,
       reportedAt: BigInt(c.reportedAt),
     })),
@@ -339,8 +407,9 @@ export async function searchAddress(
  * @param caip10 - CAIP-10 identifier (e.g., "eip155:8453:0x…" or "eip155:*:0x…")
  *
  * @throws {SearchUnavailableError} when nothing was found and a registry could not be
- *   consulted — either because it did not answer, or (for non-EVM namespaces) because the
- *   contract registry has no form for the identifier. Check `error.reason` to tell them apart.
+ *   consulted — either because it did not answer (`reason: 'unreachable'`), or because this
+ *   is a non-EVM namespace neither registry can be queried for
+ *   (`reason: 'unsupported-identifier'`, always thrown for such identifiers).
  */
 export async function searchAddressByCAIP10(
   config: SearchConfig,
@@ -358,37 +427,20 @@ export async function searchAddressByCAIP10(
     return searchAddress(config, evm.address);
   }
 
-  // Non-EVM namespaces: the contract registry is keyed by an EVM address and has no form for
-  // these identifiers, so it genuinely cannot be consulted.
+  // Non-EVM namespaces: NEITHER registry can be consulted.
   //
-  // That is an UNKNOWN, not an absence, and it takes the same route every other unknown takes.
-  // This branch used to return `{ found: false, unverified: ['contract'] }`, which is precisely
-  // the shape the package forbids elsewhere: the flag is advisory, `found: false` is not, and
-  // `if (!result.found) allow()` clears the address. The cause differs from an indexer outage
-  // (nothing failed — there was nothing to query), so the error carries a distinct `reason`
-  // rather than claiming the indexer went missing.
-  const walletResult = await searchWalletByCAIP10(config, caip10);
-
-  if (!walletResult.found) {
-    throw new SearchUnavailableError(['contract'], [], 'unsupported-identifier');
-  }
-
-  // A hit is actionable even with partial coverage, so it returns — with the gap stated,
-  // exactly as the EVM partial-failure path does.
-  return {
-    type: 'address',
-    found: true,
-    foundInWalletRegistry: true,
-    foundInContractRegistry: false,
-    data: walletResult.data
-      ? {
-          address: walletResult.data.address,
-          wallet: walletResult.data,
-          contract: null,
-        }
-      : null,
-    unverified: ['contract'],
-  };
+  // The contract registry is keyed by an EVM address and has no form for these identifiers.
+  // The wallet registry has a form but not a matching one — see the long comment in
+  // searchWalletByCAIP10 (finding S-3). So both are unknowns, and an unknown with nothing
+  // found takes the route every unknown takes.
+  //
+  // This branch used to return `{ found: false, unverified: ['contract'] }`, which is exactly
+  // the shape the package forbids: the flag is advisory, `found: false` is not, and
+  // `if (!result.found) allow()` clears the address. It is now not even constructible — see
+  // `NoUnverifiedRegistries`. The cause differs from an indexer outage (nothing failed —
+  // there was nothing to query), so the error carries a distinct `reason` rather than
+  // claiming the indexer went missing.
+  throw new SearchUnavailableError(['wallet', 'contract'], [], 'unsupported-identifier');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -472,6 +524,11 @@ export async function listOperators(
  * @param config - Search configuration with indexer URL
  * @param query - Search query (address, tx hash, or CAIP-10)
  *
+ * @throws {SearchUnavailableError} when the registry cannot answer for this identifier —
+ *   either a registry did not respond, or the identifier belongs to a namespace this registry
+ *   has no way to look up. Both are unknowns. This function NEVER returns a negative result
+ *   for an identifier it did not actually check; that is what the throw is for.
+ *
  * @example
  * ```ts
  * const config = { indexerUrl: 'http://localhost:42069' };
@@ -507,7 +564,17 @@ export async function search(config: SearchConfig, query: string): Promise<Searc
       return searchAddressByCAIP10(config, trimmed);
     case 'transaction':
       return searchTransaction(config, trimmed);
+    case 'unsupported':
+      // A well-formed identifier in a namespace this registry cannot answer for (finding
+      // S-2). Before this branch existed, `detectSearchType` folded it into 'invalid' and
+      // `search()` handed back `{ found: false }` — which `isCompromised()` reports as false
+      // and `getResultStatus()` reports as 'not-found'. An integrator writing the obvious
+      // `if (!isCompromised(r)) allow()` then cleared a withdrawal for an address nothing
+      // had looked at. Neither registry has a key for this, so both are named.
+      throw new SearchUnavailableError(['wallet', 'contract'], [], 'unsupported-identifier');
     case 'invalid':
+      // Safe, and the ONLY safe negative-without-a-query: this is not an identifier, so there
+      // is no registry entry it could be missing. See `SearchType`.
       return { type: 'invalid', found: false, data: null, unverified: [] };
   }
 }

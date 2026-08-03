@@ -23,7 +23,7 @@ import {
   CardTitle,
 } from '@swr/ui';
 import { TransactionStepIndicator } from '@/components/composed/TransactionStepIndicator';
-import { P2PDebugPanel } from '@/components/dev/P2PDebugPanel';
+import { P2PDebugPanel } from '@/components/dev';
 import {
   TxAcknowledgePayStep,
   TxGracePeriodStep,
@@ -52,6 +52,8 @@ import {
   passStreamData,
   getPeerConnection,
   isStreamAbortError,
+  RESIGN_ACK,
+  publishResignAck,
   isValidTxSignatureData,
   type ProtocolHandler,
   type ParsedStreamData,
@@ -79,7 +81,13 @@ async function processTxSignature(
   step: typeof TX_SIGNATURE_STEP.ACKNOWLEDGEMENT | typeof TX_SIGNATURE_STEP.REGISTRATION,
   receiptProtocol: string,
   goToNextStep: () => void,
-  updateFormStore: (data: ParsedStreamData) => void
+  updateFormStore: (data: ParsedStreamData) => void,
+  /**
+   * Called when the signature was stored but the receipt could NOT be delivered — see the
+   * receipt block below. The relayer still advances; this tells the human their partner has
+   * not been confirmed to.
+   */
+  onReceiptFailed?: (message: string) => void
 ): Promise<boolean> {
   if (!isValidTxSignatureData(data, expectedChainId)) {
     logger.p2p.warn(
@@ -126,21 +134,51 @@ async function processTxSignature(
     windowBlock: sig.windowBlock != null ? BigInt(sig.windowBlock) : undefined,
     windowBlockHash: sig.windowBlockHash != null ? (sig.windowBlockHash as Hash) : undefined,
   };
-  storeTxSignature(stored);
+  try {
+    storeTxSignature(stored);
+  } catch (e) {
+    // sessionStorage refused the write (Safari private mode). The pay step reads the signature
+    // back out of storage, so advancing would strand the relayer with nothing to submit.
+    logger.p2p.error(
+      'Failed to store relayed transaction signature',
+      { step },
+      e instanceof Error ? e : undefined
+    );
+    return false;
+  }
 
   // Update form store with transaction batch data
   updateFormStore(data);
 
-  // Confirm receipt
-  await passStreamData({
-    connection,
-    protocols: [receiptProtocol],
-    streamData: { success: true, message: 'Transaction signature received' },
-  });
+  // Confirm receipt.
+  //
+  // Isolated from the advance: a circuit-relay drop makes this write throw, and letting that
+  // propagate meant `goToNextStep()` never ran — the relayer held the stored signature but
+  // stayed on the waiting screen while the reporter, never receiving its receipt, had no
+  // resend control. The signature is stored and the pay step is where the relayer belongs, so
+  // the advance happens regardless; the undelivered receipt is a message to a human.
+  let receiptDelivered = true;
+  try {
+    await passStreamData({
+      connection,
+      protocols: [receiptProtocol],
+      streamData: { success: true, message: 'Transaction signature received' },
+    });
+  } catch (e) {
+    receiptDelivered = false;
+    logger.p2p.warn('Stored the relayed signature but could not confirm receipt to the partner', {
+      step,
+      receiptProtocol,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    onReceiptFailed?.(
+      'Your partner\'s signature arrived, but the confirmation back to them could not be delivered. They may still be showing "waiting" — tell them it arrived before you submit.'
+    );
+  }
 
   logger.p2p.info(
     `TX ${step === TX_SIGNATURE_STEP.ACKNOWLEDGEMENT ? 'ACK' : 'REG'} signature stored, advancing to payment`,
-    { reporter: sig.address, transactionCount: batch.transactionCount }
+    { reporter: sig.address, transactionCount: batch.transactionCount, receiptDelivered }
   );
   goToNextStep();
   return true;
@@ -406,6 +444,12 @@ export function TransactionP2PRelayerPage() {
                   break;
                 }
 
+                case RESIGN_ACK:
+                  // The reporter's answer to a re-sign request this page sent. See the wallet
+                  // relayer page; identical semantics.
+                  publishResignAck(data.success === true);
+                  break;
+
                 case PROTOCOLS.TX_ACK_SIG: {
                   // Transaction acknowledgement signature + batch data received.
                   // processTxSignature advances one step (select-transactions → acknowledge-sign)
@@ -420,7 +464,8 @@ export function TransactionP2PRelayerPage() {
                     TX_SIGNATURE_STEP.ACKNOWLEDGEMENT,
                     PROTOCOLS.TX_ACK_REC,
                     goToNextStepRef.current,
-                    (d) => updateFormStoreFromP2PRef.current(d, address)
+                    (d) => updateFormStoreFromP2PRef.current(d, address),
+                    setConnectionError
                   );
                   if (ackAccepted) {
                     // Skip acknowledge-sign → acknowledgement-payment
@@ -439,7 +484,8 @@ export function TransactionP2PRelayerPage() {
                     TX_SIGNATURE_STEP.REGISTRATION,
                     PROTOCOLS.TX_REG_REC,
                     goToNextStepRef.current,
-                    (d) => updateFormStoreFromP2PRef.current(d, address)
+                    (d) => updateFormStoreFromP2PRef.current(d, address),
+                    setConnectionError
                   );
                   if (!regAccepted) {
                     logger.p2p.warn('Rejected TX registration signature payload', { protocol });
@@ -464,6 +510,7 @@ export function TransactionP2PRelayerPage() {
           { protocol: PROTOCOLS.CONNECT, streamHandler: streamHandler(PROTOCOLS.CONNECT) },
           { protocol: PROTOCOLS.TX_ACK_SIG, streamHandler: streamHandler(PROTOCOLS.TX_ACK_SIG) },
           { protocol: PROTOCOLS.TX_REG_SIG, streamHandler: streamHandler(PROTOCOLS.TX_REG_SIG) },
+          { protocol: RESIGN_ACK, streamHandler: streamHandler(RESIGN_ACK) },
         ];
 
         const { libp2p: p2pNode } = await setup({ handlers, walletAddress: address });

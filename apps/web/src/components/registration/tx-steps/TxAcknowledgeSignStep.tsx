@@ -13,6 +13,7 @@ import { SignatureCard, type SignatureStatus } from '@/components/composed/Signa
 import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import {
   useSignTxEIP712,
   useTransactionAcknowledgementHashStruct,
@@ -23,6 +24,7 @@ import {
   TX_SIGNATURE_STEP,
   computeTransactionDataHash,
 } from '@/lib/signatures/transactions';
+import { SignatureStorageError } from '@/lib/signatures';
 import { chainIdToBytes32, toCAIP2, getChainName } from '@swr/chains';
 import { selectionMatchesSignedBatch } from '@/lib/transactions/selectionConsistency';
 import { DATA_HASH_TOOLTIP } from '@/lib/utils';
@@ -52,7 +54,7 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
     txHashesForContract,
     chainIdsForContract,
   } = useTransactionSelection();
-  const { registrationType } = useTransactionRegistrationStore();
+  const { registrationType, setStep } = useTransactionRegistrationStore();
   const storedForwarder = useTransactionFormStore((s) => s.forwarder);
 
   const isSelfRelay = registrationType === 'selfRelay';
@@ -180,11 +182,11 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
         signaturePreview: `${sig.slice(0, 10)}...${sig.slice(-8)}`,
       });
 
-      // Set signature state first so UI reflects success even if storage fails.
       setSignature(sig);
-      setSignatureStatus('success');
 
-      // Store signature without letting storage failure discard the signature.
+      // The pay step reads this signature back OUT of sessionStorage, so advancing past a
+      // failed write lands on "signature not found" with nothing explaining why. Report it
+      // here instead — see the same block in `TxRegisterSignStep`.
       try {
         storeTxSignature({
           signature: sig,
@@ -208,7 +210,16 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
           { error: storageErr instanceof Error ? storageErr.message : String(storageErr) },
           storageErr instanceof Error ? storageErr : undefined
         );
+        setSignatureError(
+          storageErr instanceof SignatureStorageError
+            ? storageErr.message
+            : sanitizeErrorMessage(storageErr)
+        );
+        setSignatureStatus('error');
+        return;
       }
+
+      setSignatureStatus('success');
 
       logger.registration.info(
         'Transaction batch acknowledgement signing complete, advancing to next step'
@@ -252,12 +263,12 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   // Missing required data
   if (!dataHash || selectedTxHashes.length === 0) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          No transactions selected. Please go back and select transactions to report.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert
+        actionLabel="Back to Selection"
+        onAction={() => setStep('select-transactions')}
+      >
+        No transactions selected. Go back and select the transactions to report.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -269,13 +280,13 @@ export function TxAcknowledgeSignStep({ onComplete, onBack }: TxAcknowledgeSignS
   // sign rather than sign something the user cannot see.
   if (!selectionIsConsistent) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          The transactions shown do not match the transactions that would be signed. Nothing has
-          been signed. Please go back and select your transactions again.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert
+        actionLabel="Back to Selection"
+        onAction={() => setStep('select-transactions')}
+      >
+        The transactions shown do not match the transactions that would be signed. Nothing has been
+        signed. Go back and select your transactions again.
+      </FlowRecoveryAlert>
     );
   }
 

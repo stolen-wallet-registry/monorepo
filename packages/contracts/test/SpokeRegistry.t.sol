@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { SpokeRegistry } from "../src/spoke/SpokeRegistry.sol";
 import { ISpokeRegistry } from "../src/interfaces/ISpokeRegistry.sol";
 import { CrossChainMessage } from "../src/libraries/CrossChainMessage.sol";
@@ -11,6 +13,10 @@ import { TimingConfig } from "../src/libraries/TimingConfig.sol";
 import { EIP712Constants } from "../src/libraries/EIP712Constants.sol";
 import { WalletRegistry } from "../src/registries/WalletRegistry.sol";
 import { IWalletRegistry } from "../src/interfaces/IWalletRegistry.sol";
+import { TransactionRegistry } from "../src/registries/TransactionRegistry.sol";
+import { ContractRegistry } from "../src/registries/ContractRegistry.sol";
+import { FraudRegistryHub } from "../src/FraudRegistryHub.sol";
+import { CrossChainInbox } from "../src/CrossChainInbox.sol";
 import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
@@ -55,6 +61,16 @@ contract SpokeRegistryTest is Test {
     uint256 internal _sNonce;
     uint256 internal _sWindowBlock;
     uint256 internal _txWindowBlock;
+
+    // Second, independent set of the same slots. The nonce-separation tests (C-1) must hold a
+    // WALLET registration signature across a TRANSACTION-batch acknowledgement, and both helpers
+    // stage their output in _sv/_sr/_ss/_sDeadline/_sNonce — so the second call would clobber the
+    // first. These slots park the wallet signature out of the way.
+    uint8 internal _wv;
+    bytes32 internal _wr;
+    bytes32 internal _ws;
+    uint256 internal _wDeadline;
+    uint256 internal _wNonce;
 
     // EIP-712 constants — duplicated here (not imported from EIP712Constants) because
     // spoke uses uint64 reportedChainId/incidentTimestamp while hub uses bytes32.
@@ -345,7 +361,7 @@ contract SpokeRegistryTest is Test {
         internal
     {
         uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(reporter);
+        uint256 nonce = spoke.txNonces(reporter);
 
         (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
             reporterPrivateKey, reporter, _forwarder, dataHash, reportedChainId, transactionCount, nonce, deadline
@@ -415,7 +431,7 @@ contract SpokeRegistryTest is Test {
             uint32 transactionCount = uint32(txHashes.length);
             bytes32 dataHash = _computeDataHash(txHashes, chainIds);
             deadline = block.timestamp + 1 hours;
-            nonce = spoke.nonces(reporter);
+            nonce = spoke.txNonces(reporter);
             (v, r, s) = _signTxBatchReg(
                 reporterPrivateKey,
                 reporter,
@@ -452,7 +468,7 @@ contract SpokeRegistryTest is Test {
         uint256 nonce;
         {
             deadline = block.timestamp + 1 hours;
-            nonce = spoke.nonces(reporter);
+            nonce = spoke.txNonces(reporter);
             (v, r, s) = _signTxBatchReg(
                 reporterPrivateKey,
                 reporter,
@@ -504,7 +520,7 @@ contract SpokeRegistryTest is Test {
         uint256 deadline
     ) internal {
         _sDeadline = deadline;
-        _sNonce = spoke.nonces(reporter);
+        _sNonce = spoke.txNonces(reporter);
         _sWindowBlock = windowBlock;
         (_sv, _sr, _ss) = _signTxBatchReg(
             reporterPrivateKey,
@@ -517,6 +533,27 @@ contract SpokeRegistryTest is Test {
             _sDeadline,
             windowBlock
         );
+    }
+
+    // ── Calldata trampolines ────────────────────────────────────────────────
+    // CrossChainMessage's decoders take `bytes calldata`; `mailbox.lastMessage()` returns memory.
+    // Calling these through `this.` converts it. Using the PRODUCTION decoder (rather than
+    // re-implementing the layout here) is the point: it is the decoder the hub inbox runs.
+
+    function decodeWalletPayload(bytes calldata data)
+        external
+        pure
+        returns (CrossChainMessage.WalletRegistrationPayload memory)
+    {
+        return CrossChainMessage.decodeWalletRegistration(data);
+    }
+
+    function decodeTxBatchPayload(bytes calldata data)
+        external
+        pure
+        returns (CrossChainMessage.TransactionBatchPayload memory)
+    {
+        return CrossChainMessage.decodeTransactionBatch(data);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -707,6 +744,20 @@ contract SpokeRegistryTest is Test {
         // Verify acknowledgement cleaned up
         assertFalse(spoke.isPending(wallet));
         assertEq(spoke.nonces(wallet), 2); // Incremented again
+
+        // The dispatched message itself — previously unasserted, so field-order drift or a wrong
+        // sourceChainId in the encoder left this test green while breaking every cross-chain
+        // registration on arrival at the hub. See test_E2E_WalletRegistrationReachesHub for the
+        // other half: that the hub's DECODER agrees with what is asserted here.
+        assertEq(mailbox.lastDestination(), HUB_CHAIN_ID, "Message must be addressed to the hub domain");
+        assertEq(mailbox.lastRecipient(), HUB_INBOX, "Message must be addressed to the configured hub inbox");
+
+        CrossChainMessage.WalletRegistrationPayload memory sent = this.decodeWalletPayload(mailbox.lastMessage());
+        assertEq(sent.identifier, bytes32(uint256(uint160(wallet))), "identifier must be the registered wallet");
+        assertEq(sent.sourceChainId, CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID)), "sourceChainId must be this spoke");
+        assertEq(sent.reportedChainId, CAIP10Evm.caip2Hash(reportedChainId), "reportedChainId must survive encoding");
+        assertEq(sent.incidentTimestamp, incidentTimestamp, "incidentTimestamp must survive encoding");
+        assertTrue(sent.isSponsored, "wallet != forwarder is a sponsored registration");
     }
 
     /// @notice Registration fails before grace period
@@ -797,8 +848,13 @@ contract SpokeRegistryTest is Test {
     }
 
     /// @notice Registration fails when hub not configured
-    function test_Register_FailsWhenHubNotConfigured() public {
-        // Deploy spoke with no hub configured
+    /// @notice Phase 1 already refuses on a spoke with no hub configured.
+    /// @dev This test used to acknowledge successfully and assert only that `register` reverted —
+    ///      which is the bug: the user had already spent acknowledgement gas and burned a nonce on
+    ///      a spoke that can never deliver phase 2, and could not re-acknowledge until the window
+    ///      expired. `acknowledge` now carries the same `hubInbox != 0` check `register` has, so
+    ///      the flow fails on the first call and costs the user nothing.
+    function test_Acknowledge_FailsWhenHubNotConfigured() public {
         SpokeRegistry unconfiguredSpoke = new SpokeRegistry(
             owner,
             address(bridgeAdapter),
@@ -815,28 +871,38 @@ contract SpokeRegistryTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         uint256 nonce = unconfiguredSpoke.nonces(wallet);
 
-        // First do acknowledgement
         (uint8 v, bytes32 r, bytes32 s) = _signAckForSpoke(
             unconfiguredSpoke, walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline
         );
 
         vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__HubNotConfigured.selector);
         unconfiguredSpoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
 
-        // Skip to registration window (one block past grace start, so a window block exists)
-        uint256 windowBlock = _rollToWindow(unconfiguredSpoke.getAcknowledgement(wallet).startBlock);
+        assertFalse(unconfiguredSpoke.isPending(wallet), "No window may open on an undeliverable spoke");
+        assertEq(unconfiguredSpoke.nonces(wallet), nonce, "A rejected acknowledgement must not burn the nonce");
+    }
 
-        // Try to register
-        nonce = unconfiguredSpoke.nonces(wallet);
-        (v, r, s) = _signRegForSpoke(
-            unconfiguredSpoke, forwarder, reportedChainId, incidentTimestamp, nonce, deadline, windowBlock
+    /// @notice The tx-batch acknowledgement carries the same guard as the wallet one.
+    function test_TxBatchAck_FailsWhenHubNotConfigured() public {
+        SpokeRegistry unconfiguredSpoke = new SpokeRegistry(
+            owner, address(bridgeAdapter), address(feeManager), 0, bytes32(0), GRACE_BLOCKS, DEADLINE_BLOCKS, 1
         );
+
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 dataHash = _computeDataHash(txHashes, chainIds);
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+        uint32 transactionCount = uint32(txHashes.length);
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = unconfiguredSpoke.txNonces(reporter);
 
         vm.prank(forwarder);
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__HubNotConfigured.selector);
-        unconfiguredSpoke.register{ value: 1 ether }(
-            wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, windowBlock, v, r, s
+        unconfiguredSpoke.acknowledgeTransactionBatch(
+            dataHash, reportedChainId, transactionCount, deadline, nonce, reporter, 27, bytes32(0), bytes32(0)
         );
+
+        assertEq(unconfiguredSpoke.txNonces(reporter), nonce, "A rejected acknowledgement must not burn the nonce");
     }
 
     // Helper for signing with different spoke contract
@@ -987,8 +1053,113 @@ contract SpokeRegistryTest is Test {
         address notOwner = makeAddr("notOwner");
 
         vm.prank(notOwner);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, notOwner));
         spoke.setHubConfig(10, bytes32(uint256(0xdead)));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // NONCE SEPARATION (C-1)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev Acknowledge a transaction batch on behalf of an ARBITRARY reporter/key, unlike
+    ///      {_doTxBatchAck} which is hardwired to the suite's `reporter`. The nonce-separation
+    ///      tests need one address to be active in BOTH flows at once, which is only reachable
+    ///      if the tx-flow reporter can be the wallet.
+    ///
+    ///      Signature components, deadline and nonce travel through the suite's storage slots
+    ///      rather than locals: `acknowledgeTransactionBatch` takes nine arguments, and holding
+    ///      them alongside this helper's six parameters overflows the EVM's 16-slot stack (this
+    ///      project builds without via-ir). Same pattern as {_prepareTxBatchRegSigWithDeadline}.
+    function _doTxBatchAckFor(
+        uint256 privateKey,
+        address _reporter,
+        address _forwarder,
+        bytes32 dataHash,
+        bytes32 reportedChainId,
+        uint32 transactionCount
+    ) internal {
+        _sDeadline = block.timestamp + 1 hours;
+        _sNonce = spoke.txNonces(_reporter);
+        (_sv, _sr, _ss) = _signTxBatchAck(
+            privateKey, _reporter, _forwarder, dataHash, reportedChainId, transactionCount, _sNonce, _sDeadline
+        );
+
+        vm.prank(_forwarder);
+        spoke.acknowledgeTransactionBatch(
+            dataHash, reportedChainId, transactionCount, _sDeadline, _sNonce, _reporter, _sv, _sr, _ss
+        );
+    }
+
+    /// @notice A transaction-batch acknowledgement must not strand an in-flight WALLET registration.
+    /// @dev SECURITY-CRITICAL (C-1). The spoke hosts both flows on one contract, where the hub
+    ///      splits them across WalletRegistry and TransactionRegistry. With a single shared
+    ///      `nonces` mapping, acknowledging a batch moved the counter out from under the wallet
+    ///      registration signature the user had already produced — and because the wallet
+    ///      acknowledgement is still live, they could not re-acknowledge to obtain a fresh nonce
+    ///      either. The registration was unrecoverable until `expiryBlock`, with the
+    ///      acknowledgement gas already spent.
+    function test_NonceSeparation_TxBatchAckDoesNotStrandWalletRegistration() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        // Phase 1 of the wallet flow, then produce the phase-2 signature against the nonce as it
+        // stands right now — exactly what a frontend does the moment the grace period opens.
+        _doAck(forwarder, reportedChainId, incidentTimestamp);
+        uint256 windowBlock = _skipToRegistrationWindow();
+        _prepareWalletRegSig(forwarder, reportedChainId, incidentTimestamp, windowBlock);
+        assertEq(_sNonce, 1, "Wallet registration signed against wallet nonce 1");
+        // Park it: the tx-batch helper below stages into the same slots.
+        (_wv, _wr, _ws, _wDeadline, _wNonce) = (_sv, _sr, _ss, _sDeadline, _sNonce);
+
+        // Now interleave: the SAME address opens a transaction-batch flow. Under the shared
+        // mapping this incremented the wallet counter to 2 and invalidated _sNonce above.
+        {
+            (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+            _doTxBatchAckFor(
+                walletPrivateKey,
+                wallet,
+                forwarder,
+                _computeDataHash(txHashes, chainIds),
+                CAIP10Evm.caip2Hash(uint64(1)),
+                uint32(txHashes.length)
+            );
+        }
+
+        // The two counters moved independently.
+        assertEq(spoke.nonces(wallet), 1, "Wallet nonce must be untouched by the tx-batch flow");
+        assertEq(spoke.txNonces(wallet), 1, "Tx nonce advanced on its own counter");
+
+        // And the wallet registration still lands.
+        uint256 fee = spoke.quoteRegistration(wallet);
+        vm.prank(forwarder);
+        spoke.register{ value: fee }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, _wDeadline, _wNonce, windowBlock, _wv, _wr, _ws
+        );
+
+        assertFalse(spoke.isPending(wallet), "Wallet registration should have consumed the acknowledgement");
+        assertEq(spoke.nonces(wallet), 2, "Wallet nonce advances only on the wallet flow");
+        assertTrue(spoke.isPendingTransactionBatch(wallet), "Tx-batch acknowledgement must survive intact");
+    }
+
+    /// @notice The mirror of the above: a wallet acknowledgement must not disturb the tx counter.
+    /// @dev Same shared-mapping defect seen from the other side — a user who reports a stolen
+    ///      wallet mid-batch would have found their already-signed batch registration rejected.
+    function test_NonceSeparation_WalletAckDoesNotMoveTxNonce() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        _doTxBatchAckFor(
+            walletPrivateKey,
+            wallet,
+            forwarder,
+            _computeDataHash(txHashes, chainIds),
+            CAIP10Evm.caip2Hash(uint64(1)),
+            uint32(txHashes.length)
+        );
+        assertEq(spoke.txNonces(wallet), 1);
+
+        _doAck(forwarder, 1, uint64(block.timestamp - 1 days));
+
+        assertEq(spoke.txNonces(wallet), 1, "Wallet acknowledgement must not move the tx counter");
+        assertEq(spoke.nonces(wallet), 1, "Wallet counter advances on its own");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1009,7 +1180,7 @@ contract SpokeRegistryTest is Test {
 
         // Verify acknowledgement stored
         assertTrue(spoke.isPendingTransactionBatch(reporter));
-        assertEq(spoke.nonces(reporter), 1);
+        assertEq(spoke.txNonces(reporter), 1);
 
         // Verify data stored correctly
         ISpokeRegistry.TransactionAcknowledgementData memory ack = spoke.getTransactionAcknowledgement(reporter);
@@ -1035,7 +1206,7 @@ contract SpokeRegistryTest is Test {
         ISpokeRegistry.TransactionAcknowledgementData memory first = spoke.getTransactionAcknowledgement(reporter);
 
         uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(reporter);
+        uint256 nonce = spoke.txNonces(reporter);
         (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
             reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, transactionCount, nonce, deadline
         );
@@ -1067,7 +1238,7 @@ contract SpokeRegistryTest is Test {
         _doTxBatchAck(forwarder, dataHash, reportedChainId, transactionCount);
 
         assertTrue(spoke.isPendingTransactionBatch(reporter));
-        assertEq(spoke.nonces(reporter), 2, "Second acknowledgement should have consumed another nonce");
+        assertEq(spoke.txNonces(reporter), 2, "Second acknowledgement should have consumed another nonce");
     }
 
     /// @dev The hub executes the whole batch in one destination transaction. A batch larger than a
@@ -1080,7 +1251,7 @@ contract SpokeRegistryTest is Test {
         uint32 tooMany = spoke.MAX_CROSS_CHAIN_BATCH_SIZE() + 1;
 
         uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(reporter);
+        uint256 nonce = spoke.txNonces(reporter);
         (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
             reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, tooMany, nonce, deadline
         );
@@ -1140,7 +1311,7 @@ contract SpokeRegistryTest is Test {
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint32 transactionCount = uint32(txHashes.length);
         uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(reporter);
+        uint256 nonce = spoke.txNonces(reporter);
 
         (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
             reporterPrivateKey, reporter, reporter, dataHash, reportedChainId, transactionCount, nonce, deadline
@@ -1165,7 +1336,7 @@ contract SpokeRegistryTest is Test {
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint32 transactionCount = uint32(txHashes.length);
         uint256 deadline = block.timestamp - 1; // Already expired
-        uint256 nonce = spoke.nonces(reporter);
+        uint256 nonce = spoke.txNonces(reporter);
 
         (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
             reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, transactionCount, nonce, deadline
@@ -1205,7 +1376,7 @@ contract SpokeRegistryTest is Test {
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint32 transactionCount = 0; // Empty batch
         uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(reporter);
+        uint256 nonce = spoke.txNonces(reporter);
 
         (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
             reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, transactionCount, nonce, deadline
@@ -1242,14 +1413,53 @@ contract SpokeRegistryTest is Test {
 
         // Verify acknowledgement cleaned up
         assertFalse(spoke.isPendingTransactionBatch(reporter));
-        assertEq(spoke.nonces(reporter), 2); // Incremented again
+        assertEq(spoke.txNonces(reporter), 2); // Incremented again
+
+        // Assert the dispatched payload, not just that something was dispatched — see the same
+        // block in test_Register_Success for why.
+        assertEq(mailbox.lastDestination(), HUB_CHAIN_ID, "Message must be addressed to the hub domain");
+        assertEq(mailbox.lastRecipient(), HUB_INBOX, "Message must be addressed to the configured hub inbox");
+
+        CrossChainMessage.TransactionBatchPayload memory sent = this.decodeTxBatchPayload(mailbox.lastMessage());
+        assertEq(sent.dataHash, dataHash, "dataHash must survive encoding");
+        assertEq(sent.reporter, reporter, "reporter must survive encoding");
+        assertEq(sent.sourceChainId, CAIP10Evm.caip2Hash(uint64(SPOKE_CHAIN_ID)), "sourceChainId must be this spoke");
+        assertEq(sent.reportedChainId, reportedChainId, "reportedChainId must survive encoding");
+        assertEq(sent.transactionCount, uint32(txHashes.length), "transactionCount must survive encoding");
+        assertEq(sent.transactionHashes.length, txHashes.length, "every hash must be carried");
+        assertTrue(sent.isSponsored, "reporter != forwarder is a sponsored registration");
     }
 
-    // NOTE: Transaction batch error tests (grace period, expiry, wrong forwarder,
-    // invalid dataHash, array mismatch, insufficient fee) share validation logic with
-    // wallet registration tests. Stack-too-deep issues in test helpers prevent adding
-    // them here without --via-ir compilation. See wallet registration error tests for
-    // validation coverage.
+    /// @notice A transaction batch whose two arrays differ in length is rejected.
+    /// @dev This is the one gap the old NOTE here was right about: `__ArrayLengthMismatch` had no
+    ///      test. The rest of the errors that NOTE claimed were untestable (grace period, expiry,
+    ///      wrong forwarder, invalid dataHash, insufficient fee) now have tests in this file, so
+    ///      the NOTE was stale as well as wrong. Signature is produced against the SUBMITTED
+    ///      arrays' dataHash so the length check is what fires, not a hash mismatch.
+    function test_TxBatchReg_RejectsArrayLengthMismatch() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+
+        _doTxBatchAck(forwarder, _computeDataHash(txHashes, chainIds), reportedChainId, uint32(txHashes.length));
+        uint256 windowBlock = _skipToTxBatchRegistrationWindow(reporter);
+
+        // Drop one chain ID so the arrays disagree.
+        bytes32[] memory shortChainIds = new bytes32[](2);
+        shortChainIds[0] = chainIds[0];
+        shortChainIds[1] = chainIds[1];
+
+        // Pre-compute nonce and signature: vm.expectRevert would otherwise consume the view read.
+        _prepareTxBatchRegSig(
+            _computeDataHash(txHashes, shortChainIds), reportedChainId, uint32(txHashes.length), forwarder, windowBlock
+        );
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__ArrayLengthMismatch.selector);
+        spoke.registerTransactionBatch{ value: fee }(
+            reportedChainId, _sDeadline, _sNonce, reporter, txHashes, shortChainIds, _sWindowBlock, _sv, _sr, _ss
+        );
+    }
 
     /// @notice View functions for transaction batch work correctly
     function test_TxBatch_ViewFunctions() public {
@@ -1518,7 +1728,7 @@ contract SpokeRegistryTest is Test {
     function test_TxBatchAck_RejectsZeroDataHash() public {
         bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
         uint256 deadline = block.timestamp + 1 hours;
-        uint256 nonce = spoke.nonces(reporter);
+        uint256 nonce = spoke.txNonces(reporter);
         (uint8 v, bytes32 r, bytes32 s) =
             _signTxBatchAck(reporterPrivateKey, reporter, forwarder, bytes32(0), reportedChainId, 3, nonce, deadline);
 
@@ -1712,7 +1922,7 @@ contract SpokeRegistryTest is Test {
         uint32 txCount = uint32(txHashes.length);
 
         uint256 deadline = block.timestamp + TimingConfig.MAX_SIGNATURE_LIFETIME + 1;
-        uint256 nonce = spoke.nonces(reporter);
+        uint256 nonce = spoke.txNonces(reporter);
         (uint8 v, bytes32 r, bytes32 s) = _signTxBatchAck(
             reporterPrivateKey, reporter, forwarder, dataHash, reportedChainId, txCount, nonce, deadline
         );
@@ -1990,7 +2200,7 @@ contract SpokeRegistryTest is Test {
         bytes32 dataHash = _computeDataHash(txHashes, chainIds);
         uint32 txCount = uint32(txHashes.length);
         _sDeadline = block.timestamp + 1 hours;
-        _sNonce = longSpoke.nonces(reporter);
+        _sNonce = longSpoke.txNonces(reporter);
         (_sv, _sr, _ss) = vm.sign(
             reporterPrivateKey,
             _txBatchAckDigestFor(address(longSpoke), dataHash, reportedChainId, txCount, _sNonce, _sDeadline)
@@ -2039,7 +2249,7 @@ contract SpokeRegistryTest is Test {
         uint256 windowBlock
     ) internal {
         _sDeadline = block.timestamp + 1 hours;
-        _sNonce = longSpoke.nonces(reporter);
+        _sNonce = longSpoke.txNonces(reporter);
         _sWindowBlock = windowBlock;
         (_sv, _sr, _ss) = vm.sign(
             reporterPrivateKey,
@@ -2289,5 +2499,230 @@ contract SpokeRegistryTest is Test {
                 verifying
             )
         );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // END-TO-END: REAL SPOKE DISPATCH → REAL HUB INBOX (T-4)
+    //
+    // Every CrossChainInbox test hand-constructs a payload and calls simulateReceive, so the
+    // spoke's ENCODER and the inbox's DECODER were only ever tested against themselves. A field
+    // reordered in one and not the other, or a wrong sourceChainId, leaves both suites green and
+    // breaks every cross-chain registration on testnet. These two tests close the loop: a real
+    // two-phase flow on a real spoke, the bytes it actually dispatched read back out of the spoke
+    // mailbox, and those exact bytes delivered to a real hub inbox.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    MockMailbox internal hubMailbox;
+    CrossChainInbox internal hubInboxContract;
+    WalletRegistry internal hubWalletRegistry;
+    TransactionRegistry internal hubTxRegistry;
+
+    /// @dev Stand up the hub side and trust THIS spoke's bridge adapter as the cross-chain sender.
+    ///      Hyperlane records the dispatching contract as the sender, which is the adapter, not
+    ///      the SpokeRegistry — trusting the wrong one here would make these tests pass against a
+    ///      configuration that cannot work in production.
+    function _deployHubSide() internal {
+        hubMailbox = new MockMailbox(HUB_CHAIN_ID);
+        hubWalletRegistry = new WalletRegistry(owner, address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
+        hubTxRegistry = new TransactionRegistry(owner, address(0), GRACE_BLOCKS, DEADLINE_BLOCKS);
+
+        FraudRegistryHub hub = new FraudRegistryHub(owner, makeAddr("hubFeeRecipient"));
+        hub.setWalletRegistry(address(hubWalletRegistry));
+        hub.setTransactionRegistry(address(hubTxRegistry));
+        hub.setContractRegistry(address(new ContractRegistry(owner)));
+        hubWalletRegistry.setHub(address(hub));
+        hubTxRegistry.setHub(address(hub));
+
+        hubInboxContract = new CrossChainInbox(address(hubMailbox), address(hub), owner);
+        hub.setInbox(address(hubInboxContract));
+        hubInboxContract.setTrustedSource(SPOKE_CHAIN_ID, _adapterAsSender(), true);
+    }
+
+    function _adapterAsSender() internal view returns (bytes32) {
+        return bytes32(uint256(uint160(address(bridgeAdapter))));
+    }
+
+    /// @dev Deliver whatever the spoke last dispatched to the hub inbox, over the real route.
+    function _deliverLastSpokeMessageToHub() internal {
+        hubMailbox.simulateReceive(address(hubInboxContract), SPOKE_CHAIN_ID, _adapterAsSender(), mailbox.lastMessage());
+    }
+
+    /// @notice A real spoke wallet registration decodes and registers on a real hub.
+    /// @dev SECURITY-ADJACENT. This is the only test that runs the production encoder's output
+    ///      through the production decoder. It would fail on field-order drift between
+    ///      CrossChainMessage's encode/decode halves, on a wrong `sourceChainId` (the inbox
+    ///      rejects it against the Hyperlane origin domain), and on a namespace/key mismatch that
+    ///      would file the wallet under an identifier nothing can look up.
+    function test_E2E_WalletRegistrationReachesHub() public {
+        _deployHubSide();
+
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        _doAck(forwarder, reportedChainId, incidentTimestamp);
+        uint256 windowBlock = _skipToRegistrationWindow();
+        _prepareWalletRegSig(forwarder, reportedChainId, incidentTimestamp, windowBlock);
+
+        uint256 fee = spoke.quoteRegistration(wallet);
+        vm.prank(forwarder);
+        spoke.register{ value: fee }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
+
+        assertFalse(hubWalletRegistry.isWalletRegistered(wallet), "Precondition: hub must not know the wallet yet");
+
+        _deliverLastSpokeMessageToHub();
+
+        assertTrue(hubWalletRegistry.isWalletRegistered(wallet), "Hub must register the wallet the spoke dispatched");
+
+        IWalletRegistry.WalletEntry memory entry = hubWalletRegistry.getWalletEntry(wallet);
+        assertEq(entry.incidentTimestamp, incidentTimestamp, "incidentTimestamp must survive the round trip");
+        assertEq(entry.bridgeId, 1, "bridgeId must be recorded as Hyperlane");
+        assertTrue(entry.isSponsored, "Sponsorship must survive the round trip");
+    }
+
+    /// @notice A real spoke transaction batch decodes and registers on a real hub.
+    /// @dev The batch message carries two dynamic arrays, so it is the encoding most exposed to
+    ///      offset drift — and the one whose failure mode (a batch that decodes to the wrong
+    ///      hashes) is silent rather than a revert. Asserting each submitted hash is registered
+    ///      under its chain ID is what makes that visible.
+    function test_E2E_TransactionBatchReachesHub() public {
+        _deployHubSide();
+
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        bytes32 reportedChainId = CAIP10Evm.caip2Hash(uint64(1));
+
+        _doTxBatchAck(forwarder, _computeDataHash(txHashes, chainIds), reportedChainId, uint32(txHashes.length));
+        uint256 windowBlock = _skipToTxBatchRegistrationWindow(reporter);
+        uint256 fee = spoke.quoteTransactionBatchRegistration(reporter);
+        _doTxBatchReg(forwarder, reportedChainId, txHashes, chainIds, fee, windowBlock);
+
+        _deliverLastSpokeMessageToHub();
+
+        for (uint256 i = 0; i < txHashes.length; i++) {
+            assertTrue(
+                hubTxRegistry.isTransactionRegistered(txHashes[i], chainIds[i]),
+                "Every dispatched transaction must be registered on the hub"
+            );
+        }
+        assertEq(hubTxRegistry.transactionBatchCount(), 1, "Exactly one batch must be minted on the hub");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SIGNATURE MALLEABILITY AND REPLAY
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// @dev secp256k1 group order. (v^1, r, n - s) recovers the same signer under raw ecrecover.
+    uint256 internal constant SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+
+    function _malleate(uint8 v, bytes32 s) internal pure returns (uint8 flippedV, bytes32 flippedS) {
+        flippedS = bytes32(SECP256K1_N - uint256(s));
+        flippedV = v == 27 ? 28 : 27;
+    }
+
+    /// @notice A malleated acknowledgement signature is rejected on the spoke.
+    /// @dev SECURITY. The spoke recovers via OpenZeppelin's ECDSA, which rejects s > n/2. Nothing
+    ///      pinned that, so a hand-rolled `ecrecover` introduced during a gas optimisation would
+    ///      silently accept the malleated twin of every signature this contract consumes.
+    function test_Acknowledge_RejectsMalleatedSignature() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(wallet);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAck(walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
+        (uint8 flippedV, bytes32 flippedS) = _malleate(v, s);
+
+        vm.prank(forwarder);
+        vm.expectRevert(abi.encodeWithSelector(ECDSA.ECDSAInvalidSignatureS.selector, flippedS));
+        spoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, flippedV, r, flippedS);
+
+        assertFalse(spoke.isPending(wallet), "A malleated signature must not open a window");
+    }
+
+    /// @notice A malleated registration signature is rejected on the spoke.
+    function test_Register_RejectsMalleatedSignature() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        _doAck(forwarder, reportedChainId, incidentTimestamp);
+        uint256 windowBlock = _skipToRegistrationWindow();
+        _prepareWalletRegSig(forwarder, reportedChainId, incidentTimestamp, windowBlock);
+
+        (uint8 flippedV, bytes32 flippedS) = _malleate(_sv, _ss);
+        uint256 fee = spoke.quoteRegistration(wallet);
+
+        vm.prank(forwarder);
+        vm.expectRevert(abi.encodeWithSelector(ECDSA.ECDSAInvalidSignatureS.selector, flippedS));
+        spoke.register{ value: fee }(
+            wallet,
+            forwarder,
+            reportedChainId,
+            incidentTimestamp,
+            _sDeadline,
+            _sNonce,
+            windowBlock,
+            flippedV,
+            _sr,
+            flippedS
+        );
+
+        assertTrue(spoke.isPending(wallet), "A rejected registration must leave the acknowledgement intact");
+    }
+
+    /// @notice A captured acknowledgement signature cannot be replayed once its window lapses.
+    /// @dev SECURITY. Drives the real replay: capture a genuine acknowledgement, wait for the
+    ///      registration window to expire, then re-submit the identical bytes. The
+    ///      `AlreadyAcknowledged` guard has lapsed by then, so the nonce is the only defense left.
+    ///      vm.roll moves block.number only, so the EIP-712 deadline (a timestamp) is still valid.
+    function test_Acknowledge_CapturedSignatureCannotBeReplayed() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = spoke.nonces(wallet);
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAck(walletPrivateKey, wallet, forwarder, reportedChainId, incidentTimestamp, nonce, deadline);
+
+        vm.prank(forwarder);
+        spoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+
+        vm.roll(spoke.getAcknowledgement(wallet).expiryBlock + 1);
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidNonce.selector);
+        spoke.acknowledge(wallet, forwarder, reportedChainId, incidentTimestamp, deadline, nonce, v, r, s);
+    }
+
+    /// @notice A registration signature cannot be replayed after it has succeeded.
+    /// @dev The acknowledgement is deleted on success and the nonce has moved; on the spoke the
+    ///      nonce check fires first (the hub's `register` orders these the other way round, which
+    ///      is why both suites pin the reason rather than accepting any revert). Asserting that no
+    ///      second message is dispatched is the property that matters —
+    ///      a replay that got through would register the same wallet on the hub twice and bill the
+    ///      relayer a second bridge fee.
+    function test_Register_CannotBeReplayedAfterSuccess() public {
+        uint64 reportedChainId = 1;
+        uint64 incidentTimestamp = uint64(block.timestamp - 1 days);
+
+        _doAck(forwarder, reportedChainId, incidentTimestamp);
+        uint256 windowBlock = _skipToRegistrationWindow();
+        _prepareWalletRegSig(forwarder, reportedChainId, incidentTimestamp, windowBlock);
+
+        uint256 fee = spoke.quoteRegistration(wallet);
+        vm.prank(forwarder);
+        spoke.register{ value: fee }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
+        uint32 messagesAfterFirst = mailbox.messageCount();
+
+        vm.prank(forwarder);
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidNonce.selector);
+        spoke.register{ value: fee }(
+            wallet, forwarder, reportedChainId, incidentTimestamp, _sDeadline, _sNonce, windowBlock, _sv, _sr, _ss
+        );
+
+        assertEq(mailbox.messageCount(), messagesAfterFirst, "A replay must not dispatch a second message");
     }
 }

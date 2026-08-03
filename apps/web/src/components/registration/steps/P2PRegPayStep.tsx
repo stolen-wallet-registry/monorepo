@@ -25,7 +25,14 @@ import { getSignature, removeSignature, parseSignature, SIGNATURE_STEP } from '@
 import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
 import { classifyP2PRetry, sendResignRequest } from '@/components/registration/p2pResignRequest';
 import type { Hash } from '@/lib/types/ethereum';
-import { PROTOCOLS, passStreamData, getPeerConnection } from '@/lib/p2p';
+import {
+  PROTOCOLS,
+  passStreamData,
+  getPeerConnection,
+  armResignAck,
+  waitForResignAck,
+  type ResignAckOutcome,
+} from '@/lib/p2p';
 import { applyScheduledRetry, backoffDelay, MAX_AUTO_RETRIES } from '@/lib/p2p/retryBackoff';
 import { useP2PStore } from '@/stores/p2pStore';
 import { extractBridgeMessageId } from '@/lib/bridge/messageId';
@@ -81,6 +88,8 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
   const [resignRequest, setResignRequest] = useState<{
     notified: boolean | null;
     windowClosed: boolean;
+    /** The registeree's answer, or null while the request is still in flight. */
+    ack: ResignAckOutcome | null;
   } | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   /** Pending auto-retry: when it should fire, and which attempt it was scheduled from. */
@@ -100,6 +109,9 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
 
   /** Guards the tx-hash send against a concurrent second attempt — see `sendHash`. */
   const sendInFlightRef = useRef(false);
+
+  /** Guards `handleSubmit` against a double-click before wagmi's `isPending` commits. */
+  const isSubmittingRef = useRef(false);
 
   // Latch recording that the step already advanced. Three separate paths can advance this
   // step (local-chain send completing, hub confirming a cross-chain delivery, registeree
@@ -123,9 +135,26 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       ? getSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION, relayerAddress)
       : null;
 
+  // The contract reuses DeadlineExpired for two distinct failures: a stale signature
+  // timestamp (the registeree can fix that by signing again) and an acknowledgement window
+  // that closed on-chain (no registration signature can fix that — the acknowledgement
+  // itself has to be redone). Zeroed deadlines mean there is no pending acknowledgement at
+  // all, and the contract reports those as expired too, so they do not count as closed.
+  //
+  // Read here, above the signature review, because `currentBlock` off this same call is what
+  // the review's 256-block staleness check needs — no extra chain read.
+  const { data: deadlines } = useContractDeadlines(
+    role === 'relayer' ? (registeree ?? undefined) : undefined
+  );
+  const hasNoPendingAck =
+    deadlines !== undefined && deadlines.start === 0n && deadlines.expiry === 0n;
+  const windowClosed = deadlines !== undefined && !hasNoPendingAck && deadlines.isExpired;
+
   // Defence in depth before spending gas: recover the signer from the EIP-712 digest,
-  // re-read the nonce from the contract, and check the deadline. The contract enforces all
-  // of this too — this is so the relayer finds out first, and can see who it is paying for.
+  // re-read the nonce from the contract, check the deadline, and check that the block the
+  // signature committed to has not aged out of the EVM's 256-block `blockhash` window. The
+  // contract enforces all of this too — this is so the relayer finds out first, and can see
+  // who it is paying for.
   const { review: signatureReview, isChecking: isReviewingSignature } =
     useRelayedWalletSignatureReview({
       enabled: role === 'relayer' && !!storedSig,
@@ -133,7 +162,18 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       storedSignature: storedSig,
       expectedSigner: registeree, // logged only; gating uses pairedWallet
       trustedForwarder: relayerAddress,
+      currentBlock: deadlines?.currentBlock,
     });
+
+  // Mirrors `P2PAckPayStep`. Without this the button was enabled whenever the review passed,
+  // so a peer that sent `windowBlockHash` but no `windowBlock` produced a live button whose
+  // click hit the guard inside `handleSubmit` and returned silently — a dead click with no
+  // explanation on screen.
+  const hasRequiredFields = Boolean(
+    storedSig?.reportedChainId !== undefined &&
+    storedSig?.incidentTimestamp !== undefined &&
+    storedSig?.windowBlock !== undefined
+  );
 
   // Registration submission hook (relayer only)
   const { submitRegistration, hash, isPending, isConfirming, isConfirmed, isError, error, reset } =
@@ -196,18 +236,6 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     return 'idle';
   };
 
-  // The contract reuses DeadlineExpired for two distinct failures: a stale signature
-  // timestamp (the registeree can fix that by signing again) and an acknowledgement window
-  // that closed on-chain (no registration signature can fix that — the acknowledgement
-  // itself has to be redone). Zeroed deadlines mean there is no pending acknowledgement at
-  // all, and the contract reports those as expired too, so they do not count as closed.
-  const { data: deadlines } = useContractDeadlines(
-    role === 'relayer' ? (registeree ?? undefined) : undefined
-  );
-  const hasNoPendingAck =
-    deadlines !== undefined && deadlines.start === 0n && deadlines.expiry === 0n;
-  const windowClosed = deadlines !== undefined && !hasNoPendingAck && deadlines.isExpired;
-
   // `onRetry={reset}` rebuilt byte-identical calldata from the same cached signature and
   // reverted identically, forever. On this path the relayer cannot break the loop by
   // re-signing either — the signature belongs to the registeree, on another machine.
@@ -253,7 +281,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       }
     }
     reset();
-    setResignRequest({ notified: null, windowClosed: restartFromAck });
+    setResignRequest({ notified: null, windowClosed: restartFromAck, ack: null });
 
     logger.registration.warn(
       restartFromAck
@@ -262,14 +290,28 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
       { registeree, windowClosed: restartFromAck, error: error?.message }
     );
 
+    // Armed BEFORE the write: the registeree can answer before `passStreamData` resolves here,
+    // and an answer with nobody listening yet would be dropped and then waited on forever.
+    armResignAck();
+
     void sendResignRequest({
       getLibp2p,
       partnerPeerId,
       reason: retryAction.reason,
       flow: 'wallet',
-    }).then((notified) => {
-      setResignRequest({ notified, windowClosed: restartFromAck });
-      if (notified) {
+    }).then(async (notified) => {
+      if (!notified) {
+        setResignRequest({ notified: false, windowClosed: restartFromAck, ack: null });
+        return;
+      }
+
+      // A resolved stream write is NOT consent — the same rule `WaitForConnectionStep` states
+      // for CONNECT. The registeree refuses a request that exceeds `MAX_RESIGN_REQUESTS` or
+      // arrives at a step it cannot recover from, and moving to "waiting for a signature" on
+      // a refusal deadlocks both sides with no timeout and no control on either screen.
+      const ack = await waitForResignAck();
+      setResignRequest({ notified: true, windowClosed: restartFromAck, ack });
+      if (ack === 'accepted') {
         returnToAwaitingSignature(restartFromAck);
       }
     });
@@ -284,8 +326,24 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     returnToAwaitingSignature,
   ]);
 
+  /** True once we know the registeree will not act on the request, or never answered. */
+  const resignUnconfirmed = Boolean(
+    resignRequest &&
+    (resignRequest.notified === false || resignRequest.ack !== null) &&
+    resignRequest.ack !== 'accepted'
+  );
+
   // Relayer: Submit registration transaction
   const handleSubmit = useCallback(async () => {
+    // Re-entrancy guard, mirroring the four non-P2P pay steps. `TransactionCard`'s `disabled`
+    // is derived from wagmi's `isPending`, which only becomes true after a state commit — so a
+    // double-click inside that window produced two `writeContract` calls and two wallet
+    // prompts. A ref rather than state: it has to be set synchronously within the same click.
+    if (isSubmittingRef.current) {
+      logger.p2p.warn('REG submission already in progress, ignoring duplicate call');
+      return;
+    }
+
     if (!storedSig || !registeree) {
       return;
     }
@@ -338,17 +396,22 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     const reportedChainId = storedSig.reportedChainId;
     const incidentTimestamp = storedSig.incidentTimestamp;
 
-    await submitRegistration({
-      registeree,
-      trustedForwarder: relayerAddress,
-      reportedChainId,
-      incidentTimestamp,
-      deadline: storedSig.deadline,
-      nonce: storedSig.nonce,
-      windowBlock: storedSig.windowBlock,
-      signature: parsedSig,
-      feeWei,
-    });
+    isSubmittingRef.current = true;
+    try {
+      await submitRegistration({
+        registeree,
+        trustedForwarder: relayerAddress,
+        reportedChainId,
+        incidentTimestamp,
+        deadline: storedSig.deadline,
+        nonce: storedSig.nonce,
+        windowBlock: storedSig.windowBlock,
+        signature: parsedSig,
+        feeWei,
+      });
+    } finally {
+      isSubmittingRef.current = false;
+    }
   }, [storedSig, registeree, relayerAddress, submitRegistration, feeWei, signatureReview]);
 
   // Relayer: Store registration hash when confirmed (for success step display)
@@ -575,7 +638,23 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
             windowClosed={resignRequest.windowClosed}
             partner={{ notified: resignRequest.notified, role: 'registeree' }}
           />
-          {resignRequest.notified === false && (
+          {resignRequest.ack === 'refused' && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Your partner declined to sign again. They may have hit the limit on re-sign
+                requests, or moved on. Contact them directly before continuing.
+              </AlertDescription>
+            </Alert>
+          )}
+          {resignRequest.ack === 'timeout' && (
+            <Alert>
+              <AlertDescription>
+                Your partner has not confirmed the request. It may still have reached them — check
+                with them directly before waiting for a new signature.
+              </AlertDescription>
+            </Alert>
+          )}
+          {resignUnconfirmed && (
             <Button
               variant="outline"
               size="sm"
@@ -632,11 +711,17 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
             type="registration"
             status={getStatus()}
             hash={hash}
-            error={error ? sanitizeErrorMessage(error) : null}
+            error={
+              !hasRequiredFields && storedSig
+                ? 'Signature is missing required data. Registeree may need to sign again.'
+                : error
+                  ? sanitizeErrorMessage(error)
+                  : null
+            }
             chainId={chainId}
             onSubmit={handleSubmit}
             onRetry={handleRetry}
-            disabled={!storedSig || !signatureReview?.ok}
+            disabled={!storedSig || !hasRequiredFields || !signatureReview?.ok}
           />
           {sendError && isConfirmed && !hasSentHash && (
             <Alert variant="destructive" className="mt-4">

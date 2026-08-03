@@ -67,7 +67,6 @@ interface IOperatorRegistry {
     error OperatorRegistry__AlreadyApproved();
     error OperatorRegistry__NotApproved();
     error OperatorRegistry__InvalidCapabilities();
-    error OperatorRegistry__NotAuthorizedForRegistry(uint8 requiredCapability);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WRITE FUNCTIONS (DAO only)

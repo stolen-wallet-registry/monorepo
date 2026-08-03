@@ -2,9 +2,11 @@
 pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SpokeSoulboundForwarder } from "../src/spoke/SpokeSoulboundForwarder.sol";
 import { ISpokeSoulboundForwarder } from "../src/interfaces/ISpokeSoulboundForwarder.sol";
 import { HyperlaneAdapter } from "../src/crosschain/adapters/HyperlaneAdapter.sol";
+import { TimelockOwnable } from "../src/libraries/TimelockOwnable.sol";
 import { MockMailbox } from "./mocks/MockMailbox.sol";
 
 contract SpokeSoulboundForwarderTest is Test {
@@ -197,6 +199,70 @@ contract SpokeSoulboundForwarderTest is Test {
         assertEq(forwarder.hubReceiver(), bytes32(uint256(uint160(newReceiver))));
     }
 
+    /// @notice Repointing the hub receiver post-setup requires the timelock.
+    /// @dev SECURITY (C-5). `hubReceiver` is where every paid mint request lands.
+    ///      `setHubConfig(d, bytes32(0))` bricks both mint paths on the HubNotConfigured check,
+    ///      and a garbage domain burns real bridge fees on messages nothing will ever handle —
+    ///      neither is recoverable for users who already paid. This contract was plain
+    ///      Ownable2Step, so that was a one-transaction owner call; the deploy script's comment
+    ///      claiming it "cannot repoint a registry" was simply wrong.
+    function test_SetHubConfig_BlockedAfterSetup() public {
+        vm.prank(owner);
+        forwarder.completeSetup();
+
+        vm.prank(owner);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
+        forwarder.setHubConfig(999, bytes32(0));
+
+        assertTrue(forwarder.hubReceiver() != bytes32(0), "Hub receiver must be unchanged");
+    }
+
+    /// @notice The propose → wait → activate path repoints after the full delay.
+    function test_SetHubConfig_ViaTimelock() public {
+        vm.prank(owner);
+        forwarder.completeSetup();
+
+        uint32 newDomain = 1;
+        bytes32 newReceiver = bytes32(uint256(uint160(makeAddr("newReceiver"))));
+
+        vm.prank(owner);
+        forwarder.proposeHubConfig(newDomain, newReceiver);
+
+        vm.warp(block.timestamp + forwarder.ACTIVATION_DELAY() - 1);
+        vm.prank(owner);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__TooEarly.selector);
+        forwarder.activateHubConfig(newDomain, newReceiver);
+
+        vm.warp(block.timestamp + 1);
+        vm.prank(owner);
+        forwarder.activateHubConfig(newDomain, newReceiver);
+
+        assertEq(forwarder.hubDomain(), newDomain);
+        assertEq(forwarder.hubReceiver(), newReceiver);
+    }
+
+    /// @notice Activation applies only the exact configuration that was proposed.
+    /// @dev Both members are part of the action key, so a proposal for one domain cannot be
+    ///      activated against another — otherwise the two-day public delay would say nothing
+    ///      about what actually gets written at the end of it.
+    function test_ActivateHubConfig_RejectsUnproposedValues() public {
+        vm.prank(owner);
+        forwarder.completeSetup();
+
+        bytes32 receiver = bytes32(uint256(uint160(makeAddr("proposedReceiver"))));
+        vm.prank(owner);
+        forwarder.proposeHubConfig(1, receiver);
+        vm.warp(block.timestamp + forwarder.ACTIVATION_DELAY());
+
+        vm.prank(owner);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__NotProposed.selector);
+        forwarder.activateHubConfig(2, receiver);
+
+        vm.prank(owner);
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__NotProposed.selector);
+        forwarder.activateHubConfig(1, bytes32(uint256(uint160(makeAddr("attacker")))));
+    }
+
     function test_SetMinDonation_Success() public {
         uint256 newMin = 0.02 ether;
 
@@ -239,21 +305,34 @@ contract SpokeSoulboundForwarderTest is Test {
     }
 
     function test_SetHubConfig_OnlyOwner() public {
-        vm.prank(makeAddr("attacker"));
-        vm.expectRevert();
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, attacker));
         forwarder.setHubConfig(1, bytes32(uint256(1)));
     }
 
     function test_SetMinDonation_OnlyOwner() public {
-        vm.prank(makeAddr("attacker"));
-        vm.expectRevert();
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, attacker));
         forwarder.setMinDonation(0.1 ether);
     }
 
+    /// @notice Only the owner can move accumulated donations out of the contract.
+    /// @dev SECURITY. This test previously used a bare `vm.expectRevert()` against a contract
+    ///      `setUp` never funded, so it was satisfied by the `InsufficientBalance` guard and
+    ///      passed with `onlyOwner` deleted — a vacuous test on the one function that moves user
+    ///      donations. The contract is funded first so the balance guard cannot fire, and the
+    ///      access-control selector is pinned so only the access control can satisfy it.
     function test_WithdrawDonations_OnlyOwner() public {
-        vm.prank(makeAddr("attacker"));
-        vm.expectRevert();
+        vm.deal(address(forwarder), 5 ether);
+
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, attacker));
         forwarder.withdrawDonations(makeAddr("treasury"), 1 ether);
+
+        assertEq(address(forwarder).balance, 5 ether, "Donations must be untouched");
     }
 
     function test_SetMinDonation_EmitsEvent() public {

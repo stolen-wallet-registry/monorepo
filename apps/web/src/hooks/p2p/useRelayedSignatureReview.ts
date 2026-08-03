@@ -88,6 +88,13 @@ export interface UseRelayedWalletSignatureReviewParams {
   expectedSigner: Address | null | undefined;
   /** The relayer's own address — the forwarder named in the signed struct. */
   trustedForwarder: Address | undefined;
+  /**
+   * Chain head as last read, for the 256-block `blockhash` staleness check on registration
+   * signatures. Supplied by the caller rather than read here because every pay step already
+   * has it from `getDeadlines` — see {@link isWindowBlockStale}. Omit on acknowledgement
+   * steps, which carry no window commitment.
+   */
+  currentBlock?: bigint;
 }
 
 /**
@@ -99,6 +106,7 @@ export function useRelayedWalletSignatureReview({
   storedSignature,
   expectedSigner,
   trustedForwarder,
+  currentBlock,
 }: UseRelayedWalletSignatureReviewParams): UseRelayedSignatureReviewResult {
   const chainId = useChainId();
   const { address: contractAddress, role } = resolveRegistryContract(
@@ -129,6 +137,8 @@ export function useRelayedWalletSignatureReview({
   const wallet = storedSignature?.address;
   // Part of the registration struct; recovery without it yields a different digest.
   const windowBlockHash = storedSignature?.windowBlockHash;
+  // Submitted as calldata; checked against `currentBlock` for the 256-block blockhash window.
+  const windowBlock = storedSignature?.windowBlock;
 
   useEffect(() => {
     // Cleared FIRST, before any bail-out. `review` is memoized over recoveredSigner (the old
@@ -238,6 +248,8 @@ export function useRelayedWalletSignatureReview({
       onChainNonce,
       deadline,
       nowSeconds,
+      windowBlock,
+      currentBlock,
     });
   }, [
     enabled,
@@ -248,6 +260,8 @@ export function useRelayedWalletSignatureReview({
     onChainNonce,
     deadline,
     nowSeconds,
+    windowBlock,
+    currentBlock,
   ]);
 
   return { review, isChecking };
@@ -260,6 +274,8 @@ export interface UseRelayedTxSignatureReviewParams {
   /** Peer-claimed reporter. Logged only — gating uses `pairedWallet`; see the wallet hook. */
   expectedSigner: Address | null | undefined;
   trustedForwarder: Address | undefined;
+  /** See {@link UseRelayedWalletSignatureReviewParams.currentBlock}. */
+  currentBlock?: bigint;
 }
 
 /**
@@ -271,6 +287,7 @@ export function useRelayedTxSignatureReview({
   storedSignature,
   expectedSigner,
   trustedForwarder,
+  currentBlock,
 }: UseRelayedTxSignatureReviewParams): UseRelayedSignatureReviewResult {
   const chainId = useChainId();
   const { address: contractAddress, role } = resolveRegistryContract(
@@ -297,6 +314,8 @@ export function useRelayedTxSignatureReview({
   const reporter = storedSignature?.reporter;
   // Part of the registration struct; recovery without it yields a different digest.
   const windowBlockHash = storedSignature?.windowBlockHash;
+  // Submitted as calldata; checked against `currentBlock` for the 256-block blockhash window.
+  const windowBlock = storedSignature?.windowBlock;
 
   useEffect(() => {
     // Cleared before any bail-out — see the wallet hook for why an early return that leaves
@@ -399,6 +418,8 @@ export function useRelayedTxSignatureReview({
       onChainNonce,
       deadline,
       nowSeconds,
+      windowBlock,
+      currentBlock,
     });
   }, [
     enabled,
@@ -409,6 +430,8 @@ export function useRelayedTxSignatureReview({
     onChainNonce,
     deadline,
     nowSeconds,
+    windowBlock,
+    currentBlock,
   ]);
 
   return { review, isChecking };

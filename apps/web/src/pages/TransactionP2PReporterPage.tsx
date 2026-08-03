@@ -33,7 +33,7 @@ import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import { SelectedTransactionsTable } from '@/components/composed/SelectedTransactionsTable';
 import { SignatureCard, type SignatureStatus } from '@/components/composed/SignatureCard';
 import { EnsExplorerLink } from '@/components/composed/EnsExplorerLink';
-import { P2PDebugPanel } from '@/components/dev/P2PDebugPanel';
+import { P2PDebugPanel } from '@/components/dev';
 import { WaitForConnectionStep } from '@/components/registration/steps';
 import { TxGracePeriodStep, TxSuccessStep } from '@/components/registration/tx-steps';
 import {
@@ -77,6 +77,7 @@ import {
   acceptStream,
   isTxProtocolExpectedAtStep,
   passStreamData,
+  sendResignAck,
   getPeerConnection,
   isStreamAbortError,
   type ProtocolHandler,
@@ -789,6 +790,18 @@ export function TransactionP2PReporterPage() {
   const libp2pRef = useRef<Libp2p | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [protocolError, setProtocolError] = useState<string | null>(null);
+  /**
+   * Why this reporter is being asked to sign a second EIP-712 message.
+   *
+   * Its own channel, deliberately — see the identical note on `P2PRegistereeRegistrationPage`.
+   * Sharing the dismissable `protocolError` slot meant a keep-alive failure or any later stream
+   * error silently overwrote the one "stop and check with your relayer" warning while the
+   * reporter was looking at the signing prompt it was warning them about.
+   */
+  const [resignNotice, setResignNotice] = useState<{
+    step: TransactionRegistrationStep;
+    text: string;
+  } | null>(null);
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
 
   // Getter for libp2p
@@ -1063,10 +1076,19 @@ export function TransactionP2PReporterPage() {
                   //            cannot make the reporter re-open which transactions get
                   //            reported.
                   //   HOW OFTEN capped by `MAX_RESIGN_REQUESTS` for the life of the flow.
+                  // Every exit path below answers, refusals included. Without a reply the
+                  // relayer treats a resolved stream write as consent and navigates back to
+                  // wait for a signature this side has decided not to send — both sides then
+                  // wait forever. See `lib/p2p/resignAck.ts`.
                   const reason = parseResignReason(data.reason);
                   if (!reason) {
                     logger.p2p.warn('Ignored re-sign request with no recognised reason', {
                       step: currentStep,
+                    });
+                    await sendResignAck({
+                      connection,
+                      accepted: false,
+                      message: 'Re-sign request carried no recognised reason.',
                     });
                     break;
                   }
@@ -1076,6 +1098,11 @@ export function TransactionP2PReporterPage() {
                     logger.p2p.warn('Ignored re-sign request that names no valid recovery step', {
                       step: currentStep,
                       reason,
+                    });
+                    await sendResignAck({
+                      connection,
+                      accepted: false,
+                      message: 'This flow is not at a step where a re-sign can be honoured.',
                     });
                     break;
                   }
@@ -1092,6 +1119,11 @@ export function TransactionP2PReporterPage() {
                     setProtocolError(
                       `Your relayer has asked you to sign again ${MAX_RESIGN_REQUESTS} times. Further requests are being ignored — stop here and start over with a relayer you trust.`
                     );
+                    await sendResignAck({
+                      connection,
+                      accepted: false,
+                      message: 'This flow has already honoured its limit of re-sign requests.',
+                    });
                     break;
                   }
                   resignRequestCount.current += 1;
@@ -1101,7 +1133,10 @@ export function TransactionP2PReporterPage() {
                   // component state and send it straight out). Moving off the payment step
                   // unmounts the sign component, so the dead signature goes with it and the
                   // remounted step starts from a fresh signing prompt.
-                  setProtocolError(resignNoticeForRecipient(reason, 'transaction'));
+                  setResignNotice({
+                    step: target,
+                    text: resignNoticeForRecipient(reason, 'transaction'),
+                  });
                   logger.registration.warn('Relayer asked for a new signature; moving back', {
                     from: currentStep,
                     to: target,
@@ -1113,6 +1148,14 @@ export function TransactionP2PReporterPage() {
                   // already open for a signature that no longer exists.
                   clearSentSignature('tx-reg');
                   if (target === 'acknowledge-sign') clearSentSignature('tx-ack');
+
+                  // Answered BEFORE the step change, so the relayer is released even if
+                  // re-rendering this page tears the handler's context down behind us.
+                  await sendResignAck({
+                    connection,
+                    accepted: true,
+                    message: 'Re-sign request accepted.',
+                  });
 
                   useTransactionRegistrationStore.getState().setStep(target);
                   break;
@@ -1486,7 +1529,15 @@ export function TransactionP2PReporterPage() {
               </div>
               <CardDescription>{currentDescription}</CardDescription>
             </CardHeader>
-            <CardContent className="flex-grow flex flex-col justify-center">
+            <CardContent className="flex-grow flex flex-col justify-center gap-4">
+              {/* Rendered here, not in the page-level alert slot: it explains the signing
+                  prompt directly below it, and it has no Dismiss because nothing about it
+                  stops being true until the reporter has decided whether to sign. */}
+              {resignNotice?.step === step && (
+                <Alert variant="destructive">
+                  <AlertDescription>{resignNotice.text}</AlertDescription>
+                </Alert>
+              )}
               {renderStep()}
             </CardContent>
           </Card>

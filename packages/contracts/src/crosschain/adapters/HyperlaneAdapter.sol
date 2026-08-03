@@ -56,6 +56,24 @@ contract HyperlaneAdapter is IBridgeAdapter, TimelockOwnable {
     ///      enough that the fixed term cannot dominate a quote. See {setGasAmounts}.
     uint256 public constant MAX_BASE_GAS = DEFAULT_BASE_GAS * 4;
 
+    /// @notice Floor on the per-domain FIXED destination gas term
+    /// @dev Half of DEFAULT_BASE_GAS. Both gas terms need a floor as well as a ceiling: the
+    ///      ceiling stops an owner overcharging users, the floor stops them UNDER-funding
+    ///      destination execution, which is the more damaging direction. An under-funded message
+    ///      still dispatches — the spoke consumes the nonce, deletes the acknowledgement, keeps
+    ///      the fee — and then the Hyperlane relayer simply declines to execute it. The user gets
+    ///      no revert, no refund, and no registration, and nothing on either chain records why.
+    ///      Half the measured default is the widest plausible downward gas-schedule move; below
+    ///      that the value is not a re-quote, it is a silent kill switch.
+    uint256 public constant MIN_BASE_GAS = DEFAULT_BASE_GAS / 2;
+
+    /// @notice Floor on the per-domain PER-ENTRY destination gas term
+    /// @dev Half of DEFAULT_PER_ENTRY_GAS, for the same reason as {MIN_BASE_GAS}. This is the
+    ///      term that scales with batch size, so under-setting it strands large batches first
+    ///      while single-entry registrations keep working — a failure that looks like a batch-size
+    ///      problem rather than a configuration one.
+    uint256 public constant MIN_PER_ENTRY_GAS = DEFAULT_PER_ENTRY_GAS / 2;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // IMMUTABLES
     // ═══════════════════════════════════════════════════════════════════════════
@@ -104,6 +122,10 @@ contract HyperlaneAdapter is IBridgeAdapter, TimelockOwnable {
 
     /// @notice Thrown when a proposed gas model would make a maximum-size batch exceed MAX_GAS_LIMIT
     error HyperlaneAdapter__GasConfigExceedsLimit();
+
+    /// @notice Thrown when a proposed gas model falls below MIN_BASE_GAS or MIN_PER_ENTRY_GAS
+    /// @dev See {MIN_BASE_GAS} — an under-funded quote produces silent non-delivery, not a revert.
+    error HyperlaneAdapter__GasConfigBelowFloor();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -312,6 +334,13 @@ contract HyperlaneAdapter is IBridgeAdapter, TimelockOwnable {
     ///      magnitude above cost, charged to users, with no delay for anyone to react. This is
     ///      the one way an untimelocked owner call here can change what a user pays, so it is
     ///      bounded rather than left to the combined limit.
+    ///
+    ///      Both terms are also bounded BELOW ({MIN_BASE_GAS} / {MIN_PER_ENTRY_GAS}). Without a
+    ///      floor, `setGasAmounts(d, 1, 1)` is an untimelocked, unlogged kill switch: the quote
+    ///      collapses, the spoke happily accepts the cheap fee, burns the nonce, deletes the
+    ///      acknowledgement and dispatches — and the relayer then declines to execute a message
+    ///      it was not paid for. The user sees no error and gets no refund. Staying inside the
+    ///      band keeps this a re-pricing lever and nothing else.
     /// @param domain Hyperlane domain ID
     /// @param baseGas Fixed gas amount (0 = use DEFAULT_BASE_GAS)
     /// @param perEntryGas Per-entry gas amount (0 = use DEFAULT_PER_ENTRY_GAS)
@@ -319,6 +348,12 @@ contract HyperlaneAdapter is IBridgeAdapter, TimelockOwnable {
         uint256 effectiveBase = baseGas == 0 ? DEFAULT_BASE_GAS : baseGas;
         uint256 effectivePerEntry = perEntryGas == 0 ? DEFAULT_PER_ENTRY_GAS : perEntryGas;
         if (effectiveBase > MAX_BASE_GAS) revert HyperlaneAdapter__GasConfigExceedsLimit();
+        // Floors matter more than the ceilings: under-funding does not revert anywhere the user
+        // can see it — see {MIN_BASE_GAS}. Explicit 0 is exempt by construction, since it resolves
+        // to the default before this check.
+        if (effectiveBase < MIN_BASE_GAS || effectivePerEntry < MIN_PER_ENTRY_GAS) {
+            revert HyperlaneAdapter__GasConfigBelowFloor();
+        }
         if (effectiveBase + effectivePerEntry * BatchLimits.MAX_CROSS_CHAIN_BATCH_SIZE > MAX_GAS_LIMIT) {
             revert HyperlaneAdapter__GasConfigExceedsLimit();
         }

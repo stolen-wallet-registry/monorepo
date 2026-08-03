@@ -17,6 +17,8 @@ import { useGenerateHashStruct } from '@/hooks/useGenerateHashStruct';
 import { useContractNonce } from '@/hooks/useContractNonce';
 import { useContractDeadlines } from '@/hooks/useContractDeadlines';
 import { storeSignature, removeSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { areAddressesEqual } from '@/lib/address';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
@@ -36,6 +38,7 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
   const chainId = useChainId();
   const { registrationType } = useRegistrationStore();
   const { registeree, relayer } = useFormStore();
+  const { resetFlow } = useStepNavigation();
 
   const isSelfRelay = registrationType === 'selfRelay';
 
@@ -280,12 +283,9 @@ export function RegistrationSignStep({ onComplete }: RegistrationSignStepProps) 
   // Missing form data
   if (!registeree || !forwarder) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={resetFlow}>
+        Missing registration data. Start over to begin a new registration.
+      </FlowRecoveryAlert>
     );
   }
 

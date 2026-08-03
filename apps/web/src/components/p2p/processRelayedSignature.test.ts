@@ -144,3 +144,104 @@ describe('processSignature — pairing check', () => {
     expect(storeSignature).toHaveBeenCalled();
   });
 });
+
+/**
+ * UI-2. The receipt write is the LAST thing `processSignature` does, and it used to be able to
+ * take the step advance down with it.
+ *
+ * A circuit-relay drop mid-handler makes `passStreamData` throw — the exact condition
+ * `isStreamAbortError` exists for. That throw propagated to the page's catch, which logged and
+ * returned, so `goToNextStep()` never ran: the relayer HELD the stored signature but stayed on
+ * the waiting screen, while the registeree, never receiving its receipt, had no resend control.
+ * Neither side could get out.
+ *
+ * These cases were previously unreachable because the mock above always resolves — which is
+ * exactly why the bug survived a test file dedicated to this function.
+ */
+describe('processSignature — receipt delivery', () => {
+  it('advances anyway when the receipt write throws, and reports it', async () => {
+    passStreamData.mockRejectedValueOnce(new Error('stream reset'));
+    const goToNextStep = vi.fn();
+    const onReceiptFailed = vi.fn();
+
+    const accepted = await processSignature(
+      payload(PAIRED),
+      connection,
+      31337,
+      1,
+      'ack-rec',
+      RELAYER as never,
+      goToNextStep,
+      onReceiptFailed
+    );
+
+    // The signature IS stored and the pay step is where the relayer belongs, so the flow moves.
+    expect(accepted).toBe(true);
+    expect(storeSignature).toHaveBeenCalled();
+    expect(goToNextStep).toHaveBeenCalledTimes(1);
+    // ...and the human is told their partner has not been confirmed to.
+    expect(onReceiptFailed).toHaveBeenCalledTimes(1);
+    expect(onReceiptFailed.mock.calls[0]?.[0]).toMatch(/could not be delivered/i);
+  });
+
+  it('does not report a failure when the receipt is delivered', async () => {
+    const goToNextStep = vi.fn();
+    const onReceiptFailed = vi.fn();
+
+    await processSignature(
+      payload(PAIRED),
+      connection,
+      31337,
+      1,
+      'ack-rec',
+      RELAYER as never,
+      goToNextStep,
+      onReceiptFailed
+    );
+
+    expect(goToNextStep).toHaveBeenCalledTimes(1);
+    expect(onReceiptFailed).not.toHaveBeenCalled();
+  });
+
+  // A caller that does not care still must not be broken by the failure path.
+  it('advances with no reporter supplied', async () => {
+    passStreamData.mockRejectedValueOnce(new Error('stream reset'));
+    const goToNextStep = vi.fn();
+
+    const accepted = await processSignature(
+      payload(PAIRED),
+      connection,
+      31337,
+      1,
+      'ack-rec',
+      RELAYER as never,
+      goToNextStep
+    );
+
+    expect(accepted).toBe(true);
+    expect(goToNextStep).toHaveBeenCalledTimes(1);
+  });
+
+  // The mirror case: storage failing means there is nothing for the pay step to read back, so
+  // advancing would strand the relayer with an empty payment screen.
+  it('does not advance when the signature cannot be stored', async () => {
+    storeSignature.mockImplementationOnce(() => {
+      throw new Error('QuotaExceededError');
+    });
+    const goToNextStep = vi.fn();
+
+    const accepted = await processSignature(
+      payload(PAIRED),
+      connection,
+      31337,
+      1,
+      'ack-rec',
+      RELAYER as never,
+      goToNextStep
+    );
+
+    expect(accepted).toBe(false);
+    expect(goToNextStep).not.toHaveBeenCalled();
+    expect(passStreamData).not.toHaveBeenCalled();
+  });
+});

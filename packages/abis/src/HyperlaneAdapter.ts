@@ -95,6 +95,32 @@ export const HyperlaneAdapterABI = [
   },
   {
     type: 'function',
+    name: 'MIN_BASE_GAS',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'MIN_PER_ENTRY_GAS',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'acceptOwnership',
     inputs: [],
     outputs: [],
@@ -799,6 +825,11 @@ export const HyperlaneAdapterABI = [
   {
     type: 'error',
     name: 'BridgeAdapter__UnsupportedChain',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'HyperlaneAdapter__GasConfigBelowFloor',
     inputs: [],
   },
   {

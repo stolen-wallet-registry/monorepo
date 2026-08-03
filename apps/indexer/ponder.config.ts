@@ -15,21 +15,15 @@ import {
 // handlers if their config events (RegistryUpdated / InboxUpdated / FeeRecipientUpdated,
 // BaseFeeUpdated / OperatorBatchFeeUpdated / FallbackPriceUpdated) are ever needed.
 import { anvilHub, baseSepolia, base, type Environment, type HubContracts } from '@swr/chains';
+import { readPonderEnv } from './src/lib/env';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ENVIRONMENT CONFIGURATION
 // ═══════════════════════════════════════════════════════════════════════════
-// Set PONDER_ENV to switch environments: development | staging | production
-const VALID_ENVIRONMENTS = ['development', 'staging', 'production'] as const;
-const rawEnv = process.env.PONDER_ENV ?? 'development';
-
-if (!VALID_ENVIRONMENTS.includes(rawEnv as Environment)) {
-  throw new Error(
-    `Invalid PONDER_ENV: "${rawEnv}". Must be one of: ${VALID_ENVIRONMENTS.join(', ')}`
-  );
-}
-
-const PONDER_ENV = rawEnv as Environment;
+// Set PONDER_ENV to switch environments: development | staging | production.
+// Validation lives in src/lib/env.ts so the indexing handlers share this exact read rather
+// than casting the raw value and relying on this file having loaded first.
+const PONDER_ENV = readPonderEnv();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONTRACT ADDRESSES BY ENVIRONMENT

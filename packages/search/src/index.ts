@@ -21,6 +21,8 @@ export type {
   // Primitives
   Address,
   Hash,
+  Hex,
+  BatchId,
   // Search types
   SearchType,
   SearchConfig,
@@ -28,6 +30,7 @@ export type {
   // Verification coverage
   RegistryKind,
   UnverifiedRegistries,
+  NoUnverifiedRegistries,
   // Indexer freshness
   IndexerStatus,
   IndexerChainStatus,
@@ -58,6 +61,7 @@ export {
   isAddress,
   isTransactionHash,
   isCAIP10,
+  isCAIP10Shaped,
   parseCAIP10,
   parseWildcardCAIP10,
   EVM_WILDCARD_CHAIN_REF,

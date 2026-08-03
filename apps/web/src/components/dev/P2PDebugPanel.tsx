@@ -29,7 +29,7 @@ import { P2PDebugControls } from './p2p-debug/P2PDebugControls';
 /** Cached relay peer IDs - computed once on first access, static thereafter */
 let relayPeerIdsCache: Set<string> | null = null;
 
-interface P2PDebugPanelProps {
+export interface P2PDebugPanelProps {
   /**
    * Getter function that returns the libp2p node.
    * Using a getter avoids React trying to serialize the libp2p object.

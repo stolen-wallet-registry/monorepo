@@ -18,6 +18,7 @@ import {
   RELAYER_PROTOCOL_EXPECTED_STEP,
   TX_RELAYER_PROTOCOL_EXPECTED_STEP,
 } from './protocolSteps';
+import { RESIGN_ACK } from './resignAck';
 import { STEP_SEQUENCES } from '@/stores/registrationStore';
 import { TX_STEP_SEQUENCES } from '@/stores/transactionRegistrationStore';
 
@@ -271,6 +272,30 @@ describe('isRelayerProtocolExpectedAtStep', () => {
       expect(typeof step, `${protocol} should be a bare step, not a set`).toBe('string');
     }
   });
+
+  /**
+   * The re-sign ACKNOWLEDGEMENT is the one thing the relayer receives at more than one step —
+   * a dead signature is discovered at either payment step. It gets its own set rather than
+   * widening the table above, which would buy latitude for every protocol in it.
+   */
+  it('admits the re-sign acknowledgement at both payment steps and nowhere else', () => {
+    expect(isRelayerProtocolExpectedAtStep(RESIGN_ACK, 'acknowledgement-payment')).toBe(true);
+    expect(isRelayerProtocolExpectedAtStep(RESIGN_ACK, 'registration-payment')).toBe(true);
+
+    for (const step of STEP_SEQUENCES.p2pRelay) {
+      if (step === 'acknowledgement-payment' || step === 'registration-payment') continue;
+      expect(isRelayerProtocolExpectedAtStep(RESIGN_ACK, step)).toBe(false);
+    }
+    expect(isRelayerProtocolExpectedAtStep(RESIGN_ACK, null)).toBe(false);
+  });
+
+  // The ACK travels registeree → relayer only; admitting it on the receiver side would let a
+  // relayer answer its own question.
+  it('does not admit the re-sign acknowledgement on the receiver side', () => {
+    for (const step of STEP_SEQUENCES.p2pRelay) {
+      expect(isProtocolExpectedAtStep(RESIGN_ACK, step)).toBe(false);
+    }
+  });
 });
 
 describe('isTxRelayerProtocolExpectedAtStep', () => {
@@ -319,6 +344,23 @@ describe('isTxRelayerProtocolExpectedAtStep', () => {
       expect(isTxRelayerProtocolExpectedAtStep(PROTOCOLS.RESIGN_REQ, step)).toBe(false);
     }
     expect(TX_RELAYER_PROTOCOL_EXPECTED_STEP[PROTOCOLS.RESIGN_REQ]).toBeUndefined();
+  });
+
+  it('admits the re-sign acknowledgement at both payment steps and nowhere else', () => {
+    expect(isTxRelayerProtocolExpectedAtStep(RESIGN_ACK, 'acknowledgement-payment')).toBe(true);
+    expect(isTxRelayerProtocolExpectedAtStep(RESIGN_ACK, 'registration-payment')).toBe(true);
+
+    for (const step of TX_STEP_SEQUENCES.p2pRelay) {
+      if (step === 'acknowledgement-payment' || step === 'registration-payment') continue;
+      expect(isTxRelayerProtocolExpectedAtStep(RESIGN_ACK, step)).toBe(false);
+    }
+    expect(isTxRelayerProtocolExpectedAtStep(RESIGN_ACK, null)).toBe(false);
+  });
+
+  it('does not admit the re-sign acknowledgement on the reporter side', () => {
+    for (const step of TX_STEP_SEQUENCES.p2pRelay) {
+      expect(isTxProtocolExpectedAtStep(RESIGN_ACK, step)).toBe(false);
+    }
   });
 
   it('keeps a single step per protocol', () => {

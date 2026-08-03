@@ -21,7 +21,7 @@ import { useRelayedTxSignatureReview } from '@/hooks/p2p/useRelayedSignatureRevi
 import { WalletSwitchPrompt } from '@/components/composed/WalletSwitchPrompt';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
 import { areAddressesEqual } from '@/lib/address';
-import { useTransactionSelection } from '@/stores/transactionFormStore';
+import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import {
   useTransactionAcknowledgement,
   useTxGasEstimate,
@@ -47,8 +47,10 @@ import { DATA_HASH_TOOLTIP } from '@/lib/utils';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
 import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { sendResignRequest } from '@/components/registration/p2pResignRequest';
 import { useP2PStore } from '@/stores/p2pStore';
+import { armResignAck, waitForResignAck, type ResignAckOutcome } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -115,13 +117,36 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
    * P2P only. Set once Retry has discarded a dead relayed signature; `notified` records
    * whether the reporter actually received the request to sign again.
    */
-  const [resignRequest, setResignRequest] = useState<{ notified: boolean | null } | null>(null);
+  const [resignRequest, setResignRequest] = useState<{
+    notified: boolean | null;
+    /** The reporter's answer, or null while the request is still in flight. */
+    ack: ResignAckOutcome | null;
+  } | null>(null);
   const partnerPeerId = useP2PStore((s) => s.partnerPeerId);
   const pairedWallet = useP2PStore((s) => s.pairedWallet);
 
   // See handleRetry: some reverts make the stored signature permanently unusable, so Retry
   // has to mean "sign again", not "submit the same bytes again".
   const needsResign = isError && isSignatureInvalidatingError(error);
+
+  /**
+   * The forwarder as it stands NOW, not as it stood when the signature was made.
+   *
+   * The gas wallet is part of the EIP-712 struct but not part of the signature's storage key,
+   * so a reporter who goes back and changes it gets the OLD signature handed back — and the
+   * pay step then insists they connect the wallet they just replaced, with no re-sign path
+   * out. Passing this to `getTxSignature` makes that a "please sign again" instead. See the
+   * `expectedForwarder` note there; the wallet flow has carried this since its own version of
+   * the bug.
+   */
+  const liveForwarder = useTransactionFormStore((s) => s.forwarder) ?? undefined;
+
+  /**
+   * Who the signature must belong to. Part of the storage key: `dataHash` commits to the batch
+   * and nothing else, so without this a browser that handled two reporters with the same batch
+   * on the same chain hands back the first one's signature.
+   */
+  const formReporter = useTransactionFormStore((s) => s.reporter) ?? undefined;
 
   // SSR-safe signature retrieval - sessionStorage not available during SSR
   // Use undefined for "not yet loaded" vs null for "loaded but not found"
@@ -130,12 +155,20 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
   >(undefined);
 
   useEffect(() => {
-    if (dataHash) {
-      setStoredSignature(getTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT));
+    if (dataHash && formReporter) {
+      setStoredSignature(
+        getTxSignature(
+          formReporter,
+          dataHash,
+          chainId,
+          TX_SIGNATURE_STEP.ACKNOWLEDGEMENT,
+          liveForwarder
+        )
+      );
     } else {
       setStoredSignature(null);
     }
-  }, [dataHash, chainId]);
+  }, [dataHash, chainId, liveForwarder, formReporter]);
 
   // Signature is still loading from sessionStorage
   const isSignatureLoading = storedSignature === undefined;
@@ -415,8 +448,8 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
    */
   const handleRetry = () => {
     if (needsResign) {
-      if (dataHash) {
-        removeTxSignature(dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
+      if (dataHash && formReporter) {
+        removeTxSignature(formReporter, dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
       }
       reset();
       setLocalError(null);
@@ -432,16 +465,26 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
           { dataHash, error: error?.message }
         );
         setStoredSignature(null);
-        setResignRequest({ notified: null });
+        setResignRequest({ notified: null, ack: null });
+
+        // Armed BEFORE the write — see the identical block in `TxRegisterPayStep`.
+        armResignAck();
 
         void sendResignRequest({
           getLibp2p: getLibp2p ?? (() => null),
           partnerPeerId,
           reason: 'signature-invalidated',
           flow: 'transaction',
-        }).then((notified) => {
-          setResignRequest({ notified });
-          if (notified) {
+        }).then(async (notified) => {
+          if (!notified) {
+            setResignRequest({ notified: false, ack: null });
+            return;
+          }
+
+          // A resolved stream write is NOT consent. See `TxRegisterPayStep`.
+          const ack = await waitForResignAck();
+          setResignRequest({ notified: true, ack });
+          if (ack === 'accepted') {
             setResignRequest(null);
             setStep('select-transactions');
           }
@@ -482,11 +525,29 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
         <SignatureInvalidatedAlert
           partner={{ notified: resignRequest.notified, role: 'reporter' }}
         />
-        {resignRequest.notified === false && (
-          <Button variant="outline" size="sm" onClick={() => setStep('select-transactions')}>
-            I&apos;ve asked them — wait for a new signature
-          </Button>
+        {resignRequest.ack === 'refused' && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Your partner declined to sign again. They may have hit the limit on re-sign requests,
+              or moved on. Contact them directly before continuing.
+            </AlertDescription>
+          </Alert>
         )}
+        {resignRequest.ack === 'timeout' && (
+          <Alert>
+            <AlertDescription>
+              Your partner has not confirmed the request. It may still have reached them — check
+              with them directly before waiting for a new signature.
+            </AlertDescription>
+          </Alert>
+        )}
+        {(resignRequest.notified === false || resignRequest.ack !== null) &&
+          resignRequest.ack !== 'accepted' && (
+            <Button variant="outline" size="sm" onClick={() => setStep('select-transactions')}>
+              I&apos;ve asked them — wait for a new signature
+            </Button>
+          )}
       </div>
     );
   }
@@ -494,12 +555,9 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
   // Missing required data
   if (!dataHash || selectedTxHashes.length === 0) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={() => setStep('select-transactions')}>
+        Missing registration data. Start over to select the transactions you want to report.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -515,12 +573,9 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
   // Missing signature (loaded but not found)
   if (!storedSignature) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Signature not found. Please go back and sign the acknowledgement again.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Back to Signing" onAction={() => setStep('acknowledge-sign')}>
+        Signature not found. Go back and sign the acknowledgement again.
+      </FlowRecoveryAlert>
     );
   }
 

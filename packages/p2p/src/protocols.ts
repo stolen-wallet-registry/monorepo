@@ -38,6 +38,22 @@ export const PROTOCOLS = {
    * everything actionable from its own step machine, never from the message.
    */
   RESIGN_REQ: '/swr/resign-request/1.0.0',
+  /**
+   * Re-sign acknowledgement (registeree/reporter → relayer), the reply to {@link RESIGN_REQ}.
+   *
+   * A stream write that a peer silently drops still resolves — this codebase established that
+   * for CONNECT — so `RESIGN_REQ` returning true proved only that the bytes left. The receiver
+   * has explicit refusal paths (its re-sign budget is spent, or a poll already moved its
+   * step), and without a reply both sides waited forever: the relayer on a signature nobody
+   * was going to send, the receiver on a request it had already dropped.
+   *
+   * So the receiver answers every request, refusals included, and the relayer moves only once
+   * the answer arrives. `success` carries the whole decision — `true` means the receiver is
+   * going back to a sign step, `false` means it refused. Any `message` is prose for the LOG:
+   * it is peer-supplied and must never be rendered to a victim mid-flow, which is why the
+   * schema below is the plain confirmation shape and carries nothing the receiver acts on.
+   */
+  RESIGN_ACK: '/swr/resign-ack/1.0.0',
 
   // ── Transaction Registration ─────────────────────────────────────────
   /** Transaction acknowledgement signature + batch data (reporter → relayer) */

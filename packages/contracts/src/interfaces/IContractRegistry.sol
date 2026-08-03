@@ -44,7 +44,6 @@ interface IContractRegistry {
     // ERRORS
     // ═══════════════════════════════════════════════════════════════════════════
 
-    error ContractRegistry__AlreadyRegistered();
     error ContractRegistry__ZeroAddress();
     error ContractRegistry__OnlyOperatorSubmitter();
     error ContractRegistry__EmptyBatch();

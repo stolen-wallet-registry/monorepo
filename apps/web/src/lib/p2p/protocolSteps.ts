@@ -34,8 +34,32 @@
  */
 
 import { PROTOCOLS } from '@swr/p2p';
+import { RESIGN_ACK } from './resignAck';
 import type { RegistrationStep } from '@/stores/registrationStore';
 import type { TransactionRegistrationStep } from '@/stores/transactionRegistrationStore';
+
+/**
+ * The steps at which the relayer may accept the answer to a re-sign request.
+ *
+ * The two relayer tables below are deliberately single-step, and `RESIGN_ACK` is legitimate at
+ * both payment steps — the relayer discovers a dead signature at either one. Rather than
+ * widening those tables (which would buy latitude for every other protocol in them), the one
+ * protocol that needs a set gets its own.
+ *
+ * The bound is narrow because it is cheap to make narrow, not because much rides on it: a
+ * `RESIGN_ACK` only settles a promise the relayer is already awaiting, and one nobody armed is
+ * dropped by `publishResignAck`. It cannot move the flow on its own.
+ */
+export const RESIGN_ACK_RELAYER_STEPS: readonly RegistrationStep[] = [
+  'acknowledgement-payment',
+  'registration-payment',
+];
+
+/** The transaction flow's {@link RESIGN_ACK_RELAYER_STEPS}. */
+export const TX_RESIGN_ACK_RELAYER_STEPS: readonly TransactionRegistrationStep[] = [
+  'acknowledgement-payment',
+  'registration-payment',
+];
 
 /**
  * The steps the victim may be on when each relayer message legitimately arrives.
@@ -131,6 +155,7 @@ export function isRelayerProtocolExpectedAtStep(
   step: RegistrationStep | null
 ): boolean {
   if (!step) return false;
+  if (protocol === RESIGN_ACK) return RESIGN_ACK_RELAYER_STEPS.includes(step);
   const expected = RELAYER_PROTOCOL_EXPECTED_STEP[protocol];
   if (!expected) return false;
   return expected === step;
@@ -197,6 +222,7 @@ export function isTxRelayerProtocolExpectedAtStep(
   step: TransactionRegistrationStep | null
 ): boolean {
   if (!step) return false;
+  if (protocol === RESIGN_ACK) return TX_RESIGN_ACK_RELAYER_STEPS.includes(step);
   const expected = TX_RELAYER_PROTOCOL_EXPECTED_STEP[protocol];
   if (!expected) return false;
   return expected === step;

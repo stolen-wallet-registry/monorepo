@@ -6,16 +6,36 @@
  * signature minted for a different chain all produce a transaction that reverts after the
  * relayer has already spent gas.
  *
- * The protocol schema gate in `peerGuard.validateProtocolMessage` runs first and enforces the
- * wire shape (bytes32 fields, array parity, address regex). What is added here is what the
- * schema cannot know: the chain the relayer is actually about to submit on, and the numeric
- * strings being safe to hand to `BigInt()`.
+ * DO NOT DELETE THESE CHECKS AS REDUNDANT. The obvious misreading of this file is that
+ * `peerGuard.validateProtocolMessage` has already run the payload through the `@swr/p2p` zod
+ * schema, so everything below is a second copy of the same shape checks. It is not, for two
+ * separate reasons:
+ *
+ * 1. **This file is where the shape checks actually came from.** The schema's signature envelope
+ *    used to be bare length caps — `windowBlockHash` was `z.string().max(66)` and `windowBlock`
+ *    was `z.string().max(50)`, so `"hello"` and `"abc"` both parsed clean and `BigInt("abc")`
+ *    then threw inside the relayer's submit path. The schema advertised a shape it did not
+ *    enforce, and the enforcement lived here. `@swr/p2p` has since been tightened to match
+ *    (`decimalUintSchema`, `bytes32Schema`, and a co-presence refine on the windowBlock pair),
+ *    which makes the two layers agree — it does not make this layer removable. Deleting these
+ *    checks moves the guarantee back into a package this app does not own, on the strength of a
+ *    docblock. That is exactly the arrangement that produced the bug.
+ *
+ * 2. **Some of what is checked here is not knowable at the schema layer at all.** The schema
+ *    sees one message in isolation. It cannot know which chain the relayer is about to submit
+ *    on (`expectedChainId`), and it cannot know that the batch arrays recompute to the
+ *    `dataHash` the signature actually committed to — the one local check that mirrors the
+ *    on-chain check, and the difference between a revert and a caught mismatch.
+ *
+ * So: the schema is the wire contract every consumer of `@swr/p2p` inherits. This file is the
+ * gate for the one consumer that spends money on the result, and it is load-bearing on its own.
  */
 
 import type { ParsedStreamData } from '@swr/p2p';
+import { computeTransactionDataHash } from '@swr/signatures';
 import { logger } from '@/lib/logger';
 import { isAddress } from '@/lib/types/ethereum';
-import type { Address } from '@/lib/types/ethereum';
+import type { Address, Hash } from '@/lib/types/ethereum';
 
 /** A 65-byte ECDSA signature: 0x + 130 hex characters. */
 export const SIGNATURE_HEX = /^0x[0-9a-fA-F]{130}$/;
@@ -206,6 +226,42 @@ export function isValidTxSignatureData(
     !batch.chainIdHashes.every((h) => typeof h === 'string' && BYTES32_HEX.test(h))
   ) {
     logger.p2p.warn('Transaction signature rejected: batch contains a non-bytes32 entry');
+    return false;
+  }
+
+  // The one relationship in this payload that is checkable locally AND checked on-chain.
+  //
+  // Everything above validates the arrays and the hash in isolation; none of it establishes
+  // that they describe each other. `dataHash` is what the reporter actually SIGNED, while the
+  // arrays are what the relayer would SUBMIT — so a reporter whose selection changed between
+  // signing and sending produces a payload that passes every shape check and then reverts with
+  // `DataHashMismatch` after the relayer's gas is spent. The contract recomputes exactly this,
+  // so recomputing it here turns a paid-for revert into a rejected message.
+  //
+  // `computeTransactionDataHash` is the shared implementation the sign steps use, so this
+  // cannot drift from what was signed.
+  let recomputed: Hash;
+  try {
+    recomputed = computeTransactionDataHash(
+      batch.transactionHashes as Hash[],
+      batch.chainIdHashes as Hash[]
+    );
+  } catch (err) {
+    // Throws only on length mismatch or an empty batch, both already rejected above. Treated
+    // as a rejection rather than propagating: this is a validation predicate, and a throw
+    // escaping it would take down the stream handler instead of dropping one message.
+    logger.p2p.warn('Transaction signature rejected: could not recompute the batch data hash', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+
+  if (recomputed.toLowerCase() !== batch.dataHash.toLowerCase()) {
+    logger.p2p.warn('Transaction signature rejected: batch does not match the signed dataHash', {
+      signed: batch.dataHash,
+      recomputed,
+      transactionCount: batch.transactionCount,
+    });
     return false;
   }
 

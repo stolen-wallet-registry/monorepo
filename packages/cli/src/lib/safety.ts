@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { promptLine } from './prompt.js';
+import { getCAIP2ChainName } from './caip.js';
 
 /**
  * Blast-radius controls for operator batch submission (security audit V16 — Medium).
@@ -201,6 +202,75 @@ export function applyDuplicatePolicy<T>(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// REPORTED CHAIN (audit S-4)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ReportedChainCount {
+  /** CAIP-2 string, e.g. `eip155:10`. */
+  caip2: string;
+  /** Entries reporting this chain. */
+  count: number;
+  /** How many of those inherited the CLI default rather than stating it. */
+  defaultedCount: number;
+}
+
+/**
+ * Summarise which chains a parsed batch ACCUSES.
+ *
+ * The confirmation prompt has always shown `config.chain` — the chain the transaction is
+ * SUBMITTED on, which is always the hub and is therefore always "correct" and never the thing
+ * that can be wrong. The chain each entry is reported on is a completely different value, comes
+ * from `-c/--chain-id` or the file, silently defaults to Base, and is what gets written to
+ * storage. It was never displayed anywhere (audit S-4): an operator exporting Optimism drainers
+ * to a CSV with no chainId column saw "Chain: Base (8453)", confirmed, and permanently accused
+ * 800 Base addresses that may belong to unrelated parties.
+ */
+export function summariseReportedChains(
+  entries: readonly { reportedChain: string; chainIdDefaulted: boolean }[]
+): ReportedChainCount[] {
+  const byChain = new Map<string, ReportedChainCount>();
+
+  for (const entry of entries) {
+    let row = byChain.get(entry.reportedChain);
+    if (row === undefined) {
+      row = { caip2: entry.reportedChain, count: 0, defaultedCount: 0 };
+      byChain.set(entry.reportedChain, row);
+    }
+    row.count += 1;
+    if (entry.chainIdDefaulted) row.defaultedCount += 1;
+  }
+
+  // Largest first: the chain most of the batch accuses is the one worth reading.
+  return [...byChain.values()].sort((a, b) => b.count - a.count || a.caip2.localeCompare(b.caip2));
+}
+
+/** `eip155:10 (OP Mainnet)`, or just the CAIP-2 string when the chain is unknown to us. */
+export function formatReportedChain(caip2: string): string {
+  const name = getCAIP2ChainName(caip2);
+  return name === caip2 ? caip2 : `${caip2} (${name})`;
+}
+
+/**
+ * One-line warning about rows that inherited the default reported chain, or `undefined` when
+ * every row stated its own.
+ *
+ * Printed in every mode (including `--dry-run` and `--build-only`), because a multisig
+ * reviewing a built transaction has even less context than the operator who built it.
+ */
+export function describeDefaultedChains(chains: readonly ReportedChainCount[]): string | undefined {
+  const defaulted = chains.filter((c) => c.defaultedCount > 0);
+  if (defaulted.length === 0) return undefined;
+
+  const total = defaulted.reduce((sum, c) => sum + c.defaultedCount, 0);
+  const targets = defaulted.map((c) => formatReportedChain(c.caip2)).join(', ');
+  return (
+    `${total} ${total === 1 ? 'entry has' : 'entries have'} no chainId in the input file; ` +
+    `defaulted to ${targets}. Pass -c/--chain-id if the fraud happened on another chain — ` +
+    'the reported chain is permanent and cannot be corrected once registered.'
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // CONFIRMATION
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -209,8 +279,14 @@ export interface ConfirmSubmissionOptions {
   /** 'wallets' | 'transactions' | 'contracts' */
   label: string;
   count: number;
+  /** Chain the TRANSACTION is submitted on (always the hub). */
   chainName: string;
   chainId: number;
+  /**
+   * Chains the ENTRIES are reported on — a different value entirely, and the one `-c/--chain-id`
+   * controls. See `summariseReportedChains` (audit S-4).
+   */
+  reportedChains?: readonly ReportedChainCount[];
   contractAddress: string;
   /** Human-readable batch fee, already formatted. */
   fee: string;
@@ -259,9 +335,22 @@ export async function confirmSubmission(options: ConfirmSubmissionOptions): Prom
   write('');
   write(banner('  ─── CONFIRM BATCH SUBMISSION ───'));
   write(`  Environment:  ${options.env}`);
-  write(`  Chain:        ${options.chainName} (${options.chainId})`);
+  write(`  Submitting on: ${options.chainName} (${options.chainId})`);
   write(`  Contract:     ${options.contractAddress}`);
   write(`  Registering:  ${chalk.bold(String(options.count))} ${options.label}`);
+
+  // The reported chain is the value that can silently be wrong, so it is shown in bold beside
+  // the submission chain rather than left implicit (audit S-4).
+  const reportedChains = options.reportedChains ?? [];
+  if (reportedChains.length > 0) {
+    write(`  Reported on:`);
+    for (const chain of reportedChains) {
+      write(
+        `    ${chalk.bold(formatReportedChain(chain.caip2))} — ${chain.count} ${options.label}`
+      );
+    }
+  }
+
   write(`  Batch fee:    ${options.fee}`);
   if (options.sample.length > 0) {
     write(`  First entries:`);
@@ -270,6 +359,8 @@ export async function confirmSubmission(options: ConfirmSubmissionOptions): Prom
       write(`    ...and ${options.count - options.sample.length} more`);
     }
   }
+  const defaultWarning = describeDefaultedChains(reportedChains);
+  if (defaultWarning !== undefined) write(chalk.yellow(`  ⚠ ${defaultWarning}`));
   write(chalk.gray('  This is irreversible: entries cannot be removed once registered on chain.'));
   write('');
 

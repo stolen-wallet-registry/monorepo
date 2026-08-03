@@ -4,14 +4,31 @@
 
 import { isHex, isAddress, size } from 'viem';
 import type { TxSignatureStep } from '@swr/signatures';
+import { logger } from '@/lib/logger';
+import { SignatureStorageError } from '@/lib/signatures/storage';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
 
 /** Signature session TTL in milliseconds (30 minutes) */
 export const TX_SIGNATURE_TTL_MS = 30 * 60 * 1000;
 
-// Storage key format: swr_tx_sig_{dataHash}_{chainId}_{step}
-function getStorageKey(dataHash: Hash, chainId: number, step: TxSignatureStep): string {
-  return `swr_tx_sig_${dataHash.toLowerCase()}_${chainId}_${step}`;
+/**
+ * Storage key format: `swr_tx_sig_{reporter}_{dataHash}_{chainId}_{step}`.
+ *
+ * `reporter` is in the key because `dataHash` is `keccak256(abi.encode(txHashes, chainIds))` —
+ * it commits to the batch contents and to nothing about who is reporting them. Two reporters
+ * submitting the same transaction set on the same chain therefore produced the same key, and a
+ * browser that had handled both (a relayer running back-to-back P2P sessions) returned the
+ * first reporter's signature — and its `reporter` field — for the second. The P2P path fails
+ * closed on the `pairedWallet` signer check, but standard and self-relay have no such gate and
+ * would submit a signature that cannot verify against the connected wallet.
+ */
+function getStorageKey(
+  reporter: Address,
+  dataHash: Hash,
+  chainId: number,
+  step: TxSignatureStep
+): string {
+  return `swr_tx_sig_${reporter.toLowerCase()}_${dataHash.toLowerCase()}_${chainId}_${step}`;
 }
 
 export interface StoredTxSignature {
@@ -59,9 +76,15 @@ interface SerializedTxSignature {
   windowBlockHash?: string;
 }
 
-// Store a signature
+/**
+ * Store a signature.
+ *
+ * @throws {SignatureStorageError} if sessionStorage refuses the write. See
+ *   {@link SignatureStorageError} — this happens AFTER the user approved the signature in
+ *   their wallet, so it has to be reported rather than swallowed.
+ */
 export function storeTxSignature(sig: StoredTxSignature): void {
-  const key = getStorageKey(sig.dataHash, sig.chainId, sig.step);
+  const key = getStorageKey(sig.reporter, sig.dataHash, sig.chainId, sig.step);
   const serialized: SerializedTxSignature = {
     signature: sig.signature,
     deadline: sig.deadline.toString(),
@@ -77,16 +100,47 @@ export function storeTxSignature(sig: StoredTxSignature): void {
     windowBlock: sig.windowBlock?.toString(),
     windowBlockHash: sig.windowBlockHash,
   };
-  sessionStorage.setItem(key, JSON.stringify(serialized));
+  try {
+    sessionStorage.setItem(key, JSON.stringify(serialized));
+  } catch (err) {
+    logger.signature.error(
+      'Failed to persist transaction batch signature to sessionStorage',
+      { dataHash: sig.dataHash, chainId: sig.chainId, step: sig.step },
+      err instanceof Error ? err : undefined
+    );
+    throw new SignatureStorageError();
+  }
 }
 
-// Retrieve a signature (returns null if not found or expired)
+/**
+ * Retrieve a signature (returns null if not found, expired, or bound to another forwarder).
+ *
+ * @param reporter - The address that signed. Part of the storage key: `dataHash` carries no
+ *   identity, so without this two reporters with the same batch on the same chain share a slot.
+ * @param dataHash - The batch commitment the signature was made over
+ * @param chainId - Chain the signature was made on
+ * @param step - Acknowledgement or registration
+ * @param expectedForwarder - When supplied, the signature is only returned if it was signed
+ *   over this exact forwarder.
+ *
+ *   The forwarder is part of the EIP-712 struct and verified on-chain, but is NOT part of the
+ *   storage key (`swr_tx_sig_{dataHash}_{chainId}_{step}`). In self-relay the reporter can go
+ *   back and change the gas wallet after signing; without this check the cached signature —
+ *   naming the OLD gas wallet — is still returned, and the pay step then demands the reporter
+ *   connect the very wallet they just replaced, with no way to re-sign. This mirrors the
+ *   wallet flow's `getSignature`; see the long note on `StoredSignature.trustedForwarder`.
+ *
+ *   Not removed from storage on a mismatch: switching back to the original gas wallet makes
+ *   this same signature usable again.
+ */
 export function getTxSignature(
+  reporter: Address,
   dataHash: Hash,
   chainId: number,
-  step: TxSignatureStep
+  step: TxSignatureStep,
+  expectedForwarder?: Address
 ): StoredTxSignature | null {
-  const key = getStorageKey(dataHash, chainId, step);
+  const key = getStorageKey(reporter, dataHash, chainId, step);
   const stored = sessionStorage.getItem(key);
 
   if (!stored) {
@@ -134,6 +188,26 @@ export function getTxSignature(
       return null;
     }
 
+    // The reporter is part of the key, so this can only disagree for a hand-edited entry — but
+    // the stored `reporter` is what the pay steps submit as the signer, so a disagreement means
+    // the record is not what its key claims and must not be used.
+    if (parsed.reporter.toLowerCase() !== reporter.toLowerCase()) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+
+    // Forwarder binding: a signature is only valid for the forwarder it was signed over.
+    // Case-insensitive because the forwarder reaches storage from a form input or a P2P
+    // payload and may not be checksummed, and rejecting on casing alone would force a
+    // needless re-sign. Deliberately does NOT remove the record — the user may switch back to
+    // the original gas wallet, at which point this signature is usable again.
+    if (
+      expectedForwarder !== undefined &&
+      parsed.trustedForwarder.toLowerCase() !== expectedForwarder.toLowerCase()
+    ) {
+      return null;
+    }
+
     const signature: StoredTxSignature = {
       signature: parsed.signature as Hex,
       deadline: BigInt(parsed.deadline),
@@ -165,11 +239,22 @@ export function getTxSignature(
  * consumed nonce, expired forwarder) must discard it, or Retry rebuilds the identical
  * transaction from the identical cached bytes and reverts identically forever.
  */
-export function removeTxSignature(dataHash: Hash, chainId: number, step: TxSignatureStep): void {
-  sessionStorage.removeItem(getStorageKey(dataHash, chainId, step));
+export function removeTxSignature(
+  reporter: Address,
+  dataHash: Hash,
+  chainId: number,
+  step: TxSignatureStep
+): void {
+  sessionStorage.removeItem(getStorageKey(reporter, dataHash, chainId, step));
 }
 
-// Clear all SWR transaction signatures from sessionStorage
+/**
+ * Clear all SWR transaction signatures from sessionStorage.
+ *
+ * Prefix-matched rather than key-reconstructed, so this also sweeps records written under the
+ * pre-`reporter` key format. Those are otherwise unreadable but harmless: nothing looks them up,
+ * sessionStorage dies with the tab, and the 30-minute TTL makes them stale either way.
+ */
 export function clearAllTxSignatures(): void {
   const keysToRemove: string[] = [];
   for (let i = 0; i < sessionStorage.length; i++) {

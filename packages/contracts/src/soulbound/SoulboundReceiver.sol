@@ -273,8 +273,10 @@ contract SoulboundReceiver is ISoulboundReceiver, IMessageRecipient, TimelockOwn
     /// @param to Recipient of the swept balance
     function sweep(address to) external onlyOwner {
         if (to == address(0)) revert SoulboundReceiver__ZeroAddress();
-        (bool success,) = to.call{ value: address(this).balance }("");
+        uint256 amount = address(this).balance;
+        (bool success,) = to.call{ value: amount }("");
         if (!success) revert SoulboundReceiver__SweepFailed();
+        emit Swept(to, amount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -23,14 +23,80 @@ const DEFAULT_MAX_RESERVATIONS = 512;
 const DEFAULT_MAX_CONNECTIONS = 600;
 const DEFAULT_RESERVATION_TTL_MS = 20 * 60 * 1000;
 
-function readInt(raw, fallback) {
+/**
+ * Parse a positive-integer env var, falling back loudly.
+ *
+ * The fallback used to be silent, which made a typo indistinguishable from not setting the
+ * variable at all: `RELAY_MAX_RESERVATIONS=1O24` (letter O) resolved to 512 and the operator
+ * had no way to know their intended 1024 never took effect. These values are the difference
+ * between a relay that survives a flood and one that does not, so a rejected value has to be
+ * visible in the logs at the moment it is rejected.
+ *
+ * @param {string | undefined} raw
+ * @param {number} fallback
+ * @param {string} name  env var name, for the warning
+ * @param {(message: string) => void} [warn]
+ */
+function readInt(raw, fallback, name, warn = console.warn) {
   if (raw === undefined || raw.trim() === '') return fallback;
   const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    warn(
+      `⚠ ${name}="${raw}" is not a positive integer — ignoring it and using ${fallback}. ` +
+        `Fix the value or unset it; the relay is running with the default, not with yours.`
+    );
+    return fallback;
+  }
   return parsed;
 }
 
-export function readRelayLimits(env = process.env) {
+/**
+ * Check the RESOLVED limits against the invariants the comments below assert.
+ *
+ * Those invariants were only ever asserted for the DEFAULTS, in a unit test. A deployment
+ * setting `RELAY_MAX_CONNECTIONS=50` against the untouched 512 reservation ceiling silently
+ * capped reservations at ~50 — every reservation is backed by a live connection — and the
+ * startup log happily printed "512 total" while the real ceiling was a tenth of that.
+ *
+ * Returns problems rather than throwing: a misconfigured relay that still runs is better for
+ * the drained-wallet user than no relay at all. The caller logs them.
+ *
+ * @param {{ maxReservations: number, reservationsPerHost: number, maxConnections: number, reservationTtlMs: number }} limits
+ * @returns {string[]} human-readable problems, empty when the set is coherent
+ */
+export function validateRelayLimits(limits) {
+  const problems = [];
+
+  if (limits.maxConnections <= limits.maxReservations) {
+    problems.push(
+      `RELAY_MAX_CONNECTIONS (${limits.maxConnections}) must exceed RELAY_MAX_RESERVATIONS ` +
+        `(${limits.maxReservations}): every reservation holds a live connection, so the real ` +
+        `reservation ceiling is ${limits.maxConnections}, not ${limits.maxReservations}.`
+    );
+  }
+
+  if (limits.reservationsPerHost >= limits.maxReservations) {
+    problems.push(
+      `RELAY_RESERVATIONS_PER_HOST (${limits.reservationsPerHost}) is not below ` +
+        `RELAY_MAX_RESERVATIONS (${limits.maxReservations}): one host can take every slot, ` +
+        `which is the exhaustion the per-host cap exists to prevent.`
+    );
+  }
+
+  // A registration is a 1-4 minute randomized grace period plus the registration window,
+  // ~15 minutes worst case. A TTL under that drops the reservation mid-flow.
+  if (limits.reservationTtlMs < 15 * 60 * 1000) {
+    problems.push(
+      `RELAY_RESERVATION_TTL_MS (${limits.reservationTtlMs}) is under the ~15 minute worst-case ` +
+        `registration flow: a reservation can expire between the acknowledgement and the ` +
+        `registration signature.`
+    );
+  }
+
+  return problems;
+}
+
+export function readRelayLimits(env = process.env, warn = console.warn) {
   return {
     /**
      * Global reservation ceiling, raised from the library default of 15.
@@ -40,7 +106,12 @@ export function readRelayLimits(env = process.env) {
      * map entry plus an idle WebSocket — and combined with the per-host cap it takes 64
      * distinct source addresses to fill, instead of one.
      */
-    maxReservations: readInt(env.RELAY_MAX_RESERVATIONS, DEFAULT_MAX_RESERVATIONS),
+    maxReservations: readInt(
+      env.RELAY_MAX_RESERVATIONS,
+      DEFAULT_MAX_RESERVATIONS,
+      'RELAY_MAX_RESERVATIONS',
+      warn
+    ),
 
     /**
      * Reservations permitted from a single source host.
@@ -50,7 +121,12 @@ export function readRelayLimits(env = process.env) {
      * where a stale reservation has not yet expired, while making single-source exhaustion
      * of the 512 ceiling impossible.
      */
-    reservationsPerHost: readInt(env.RELAY_RESERVATIONS_PER_HOST, DEFAULT_RESERVATIONS_PER_HOST),
+    reservationsPerHost: readInt(
+      env.RELAY_RESERVATIONS_PER_HOST,
+      DEFAULT_RESERVATIONS_PER_HOST,
+      'RELAY_RESERVATIONS_PER_HOST',
+      warn
+    ),
 
     /**
      * Connection ceiling, raised from 100.
@@ -59,7 +135,12 @@ export function readRelayLimits(env = process.env) {
      * silently capped reservations at ~100 regardless of maxReservations. 600 keeps headroom
      * over the 512 reservation ceiling for in-flight dials and relayed streams.
      */
-    maxConnections: readInt(env.RELAY_MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS),
+    maxConnections: readInt(
+      env.RELAY_MAX_CONNECTIONS,
+      DEFAULT_MAX_CONNECTIONS,
+      'RELAY_MAX_CONNECTIONS',
+      warn
+    ),
 
     /**
      * Reservation lifetime, reduced from 30 minutes.
@@ -72,7 +153,12 @@ export function readRelayLimits(env = process.env) {
      * before expiry (transport/reservation-store.js REFRESH_TIMEOUT), so a live peer re-ups
      * at the 15 minute mark and a dead one releases its slot 10 minutes sooner than before.
      */
-    reservationTtlMs: readInt(env.RELAY_RESERVATION_TTL_MS, DEFAULT_RESERVATION_TTL_MS),
+    reservationTtlMs: readInt(
+      env.RELAY_RESERVATION_TTL_MS,
+      DEFAULT_RESERVATION_TTL_MS,
+      'RELAY_RESERVATION_TTL_MS',
+      warn
+    ),
   };
 }
 
@@ -89,13 +175,34 @@ export function readRelayLimits(env = process.env) {
  * Returns null for anything that does not parse as IPv6, so the caller falls back to the
  * global ceiling rather than inventing a key.
  *
+ * IPv4-MAPPED ADDRESSES ARE NOT /64-GROUPED. `::ffff:1.2.3.4` is an IPv4 host wearing an IPv6
+ * costume: its high 96 bits are a constant, so grouping it by /64 put every IPv4 client on
+ * earth — plus `::1` — into one `0:0:0:0::/64` bucket. That inverts the control. The per-host
+ * cap becomes a GLOBAL cap of `reservationsPerHost` (8 by default), and the 9th IPv4
+ * registrant anywhere is denied a reservation, on the only registration path available to a
+ * fully drained wallet.
+ *
+ * This is dormant only while the relay listens on `/ip4/0.0.0.0` — @libp2p/utils routes
+ * anything `isIPv6()`, including `::ffff:x.x.x.x`, to an `/ip6/` multiaddr, so switching to
+ * `/ip6/::` for dual-stack (the natural next step) is all it takes. The embedded IPv4 is
+ * returned verbatim instead, which also makes the same client one bucket whether it arrived
+ * over `/ip4/1.2.3.4` or `/ip6/::ffff:1.2.3.4`.
+ *
  * @param {string} address
  * @returns {string | null}
  */
 export function ipv6Prefix64(address) {
-  // Strip a zone index (fe80::1%eth0) and any IPv4-mapped tail before counting groups.
+  // Strip a zone index (fe80::1%eth0) before parsing.
   const bare = address.split('%')[0];
   if (!bare.includes(':')) return null;
+
+  // An IPv4-mapped (::ffff:1.2.3.4) or IPv4-compatible (::1.2.3.4) address identifies a single
+  // IPv4 host, not a /64 allocation. Key it on that host.
+  const mapped = /^(?:0*:)*(?:ffff:)?((?:\d{1,3}\.){3}\d{1,3})$/i.exec(bare);
+  if (mapped) {
+    const octets = mapped[1].split('.');
+    return octets.every((o) => Number(o) <= 255 && String(Number(o)) === o) ? mapped[1] : null;
+  }
 
   const halves = bare.split('::');
   if (halves.length > 2) return null;
@@ -130,7 +237,8 @@ export function ipv6Prefix64(address) {
  * Extract the source host from a multiaddr, for grouping reservations by origin.
  *
  * IPv6 sources are grouped by /64 (see `ipv6Prefix64`); IPv4 and DNS sources are used
- * verbatim.
+ * verbatim, as are IPv4-mapped IPv6 sources, which resolve back to the embedded IPv4 so that
+ * `/ip4/1.2.3.4` and `/ip6/::ffff:1.2.3.4` are one bucket rather than two.
  *
  * Returns null when the address has no host component we recognise; callers treat that as
  * "cannot attribute" and fall back to the global ceiling rather than denying, so an

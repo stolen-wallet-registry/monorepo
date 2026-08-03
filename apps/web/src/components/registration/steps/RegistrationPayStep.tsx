@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { useAccount, useChainId, useWaitForTransactionReceipt } from 'wagmi';
 
-import { Alert, AlertDescription } from '@swr/ui';
+import { Alert, AlertDescription, Button } from '@swr/ui';
 import {
   TransactionCard,
   type TransactionStatus,
@@ -24,7 +24,14 @@ import {
   useCrossChainConfirmation,
   needsCrossChainConfirmation,
 } from '@/hooks/useCrossChainConfirmation';
-import { getSignature, removeSignature, parseSignature, SIGNATURE_STEP } from '@/lib/signatures';
+import {
+  getSignature,
+  removeSignature,
+  parseSignature,
+  isWindowBlockStale,
+  describeWindowBlockStale,
+  SIGNATURE_STEP,
+} from '@/lib/signatures';
 import { isSignatureInvalidatingError } from '@/lib/errors/signatureInvalidation';
 import { useContractDeadlines } from '@/hooks/useContractDeadlines';
 import { useStepNavigation } from '@/hooks/useStepNavigation';
@@ -35,6 +42,7 @@ import { getHubChainId } from '@/lib/chains/config';
 import { extractBridgeMessageId } from '@/lib/bridge/messageId';
 import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
 import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { logger } from '@/lib/logger';
 import { sanitizeErrorMessage } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
@@ -86,7 +94,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // forwarder). Retrying those rebuilds the SAME transaction from the SAME cached signature
   // and reverts identically — the user could press Retry forever with no way to re-sign. Those
   // are routed to a re-sign instead of a resubmit.
-  const { goToPreviousStep, goToStep } = useStepNavigation();
+  const { goToPreviousStep, goToStep, resetFlow } = useStepNavigation();
   const needsResign = isError && isSignatureInvalidatingError(error);
 
   // The contract reuses DeadlineExpired for two distinct failures: a stale signature
@@ -115,6 +123,33 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     registeree && forwarder
       ? getSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION, forwarder)
       : null;
+
+  /**
+   * The registration signature commits to `blockhash(windowBlock)`, and the EVM only keeps
+   * 256 blocks of history — past that the contract reverts with
+   * `TimingConfig__WindowBlockTooOld`. This is the same pre-flight the relayed path applies in
+   * `reviewRelayedSignature`; it belongs here too, because a self-relay user who signs, then
+   * switches wallets, then funds the gas wallet can easily spend more than 256 blocks (about
+   * 8.5 minutes on Base) getting to this button. `currentBlock` comes off the `getDeadlines`
+   * read already on screen, so it costs nothing extra.
+   */
+  const windowBlockStale = isWindowBlockStale(
+    storedSignature?.windowBlock,
+    deadlines?.currentBlock
+  );
+
+  /** Discard the dead signature and send the user back to sign a fresh one. */
+  const handleResignAfterStale = () => {
+    if (registeree) {
+      removeSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION);
+    }
+    logger.registration.warn('Registration window block aged out of blockhash range; re-signing', {
+      registeree,
+      windowBlock: storedSignature?.windowBlock?.toString(),
+      currentBlock: deadlines?.currentBlock?.toString(),
+    });
+    goToPreviousStep();
+  };
 
   // Parse signature once for reuse (avoid calling parseSignature 4 times)
   const parsedSig = storedSignature ? parseSignature(storedSignature.signature) : null;
@@ -329,6 +364,16 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
       return;
     }
 
+    if (windowBlockStale) {
+      logger.contract.error('Cannot submit registration - committed window block is too old', {
+        registeree,
+        windowBlock: storedSignature.windowBlock?.toString(),
+        currentBlock: deadlines?.currentBlock?.toString(),
+      });
+      setLocalError(describeWindowBlockStale());
+      return;
+    }
+
     if (feeWei === undefined) {
       logger.contract.error('Cannot submit registration - fee quote unavailable', {
         registeree,
@@ -437,24 +482,18 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
   // Missing form data
   if (!registeree || !expectedWallet) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={resetFlow}>
+        Missing registration data. Start over to begin a new registration.
+      </FlowRecoveryAlert>
     );
   }
 
   // Missing signature
   if (!storedSignature) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Signature not found. Please go back and sign the registration again.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Back to Signing" onAction={goToPreviousStep}>
+        Signature not found. Go back and sign the registration again.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -490,6 +529,18 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
 
       {needsResign && <SignatureInvalidatedAlert windowClosed={windowClosed} />}
 
+      {windowBlockStale && !needsResign && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>{describeWindowBlockStale()}</span>
+            <Button variant="outline" size="sm" onClick={handleResignAfterStale}>
+              Sign Again
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Transaction card with integrated cost estimate */}
       <TransactionCard
         type="registration"
@@ -502,7 +553,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         chainId={chainId}
         onSubmit={handleSubmit}
         onRetry={handleRetry}
-        disabled={!isCorrectWallet || !isFeeReady}
+        disabled={!isCorrectWallet || !isFeeReady || windowBlockStale}
         crossChainProgress={crossChainProgress}
       />
 

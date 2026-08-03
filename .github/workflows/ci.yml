@@ -178,6 +178,19 @@ jobs:
       - name: Lint / typecheck / test
         run: pnpm turbo lint typecheck test --filter='!@swr/contracts'
 
+      # solhint ran in NEITHER job (round-3 review I-2): the `contracts` job invokes forge
+      # directly and never calls it, and the filter above excludes @swr/contracts wholesale —
+      # so `@swr/contracts#lint` was defined in turbo.json and executed by nothing, on every
+      # configuration including workflow_dispatch.
+      #
+      # `lint:sol`, not `lint`: the combined task is `solhint && forge fmt --check`, and this
+      # job has no Foundry. `forge fmt --check` is already the contracts job's first step, so
+      # splitting them puts each half in the job that can actually run it rather than adding a
+      # second Solidity toolchain install here. Verified locally: @swr/contracts#lint:sol has
+      # no build dependency and needs nothing but node_modules.
+      - name: Solidity lint (solhint)
+        run: pnpm turbo lint:sol --filter=@swr/contracts
+
       # Nothing in this workflow built anything before this step, so a change that typechecks
       # but breaks the PRODUCTION bundle reached Vercel uncaught. Those are different failures:
       # `tsc` never resolves a dynamic import, runs a Vite plugin, evaluates a Next server
@@ -284,7 +297,14 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          # THREE dots, not two (round-3 review I-3). BASE_SHA is the base branch TIP at event
+          # time, not the merge base, so `git diff A B` also reported the INVERSE of everything
+          # that landed on main since this branch forked: one unrelated Solidity merge and
+          # every other open PR started failing this check for a file it never touched. The
+          # only escape is the `abi-unchanged` label — i.e. a false positive here trains people
+          # to disable the one check that is not label-gated. `A...B` diffs from the merge base,
+          # which `fetch-depth: 0` above already guarantees is present.
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
 
           if ! grep -qE '^packages/contracts/src/.*\.sol$' <<<"$changed"; then
             echo "No Solidity source changes — nothing to check."

@@ -148,6 +148,21 @@ export function useCrossChainSoulboundConfirmation({
    * the run tag, so it happens once per run and cannot loop.
    */
   const [startingBalance, setStartingBalance] = useState<StartingBalance | null>(null);
+  /**
+   * The last hub balance observed while this hook was NOT enabled — i.e. before the spoke
+   * transaction that this run is confirming.
+   *
+   * This is what makes the baseline a genuine "before" reading. Taking it from the first hub
+   * read AFTER enabling races the bridge: if the Hyperlane message is delivered before that
+   * first `balanceOf` resolves, the baseline already contains the new token, `balance > baseline`
+   * is never true, and a mint that actually succeeded runs the full three-minute window to
+   * `timeout`. Support mints therefore keep the hub query alive while idle (see the query's
+   * `enabled`) purely so this ref is populated by the time a mint starts.
+   *
+   * Null on a mid-confirmation reload, where no pre-transaction observation exists; the
+   * baseline then falls back to the first post-enable read, which is the old behaviour.
+   */
+  const preRunBalanceRef = useRef<bigint | null>(null);
 
   const hubChainId = getHubChainIdForEnvironment();
   const spokeClient = usePublicClient({ chainId: spokeChainId });
@@ -300,7 +315,12 @@ export function useCrossChainSoulboundConfirmation({
     args: wallet ? [wallet] : undefined,
     chainId: hubChainId,
     query: {
-      enabled: enabled && !!wallet && !!hubContractAddress,
+      // Support mints read the hub while idle too, so `preRunBalanceRef` holds a genuine
+      // pre-transaction balance by the time a mint starts. It is a single cached read with no
+      // refetch interval outside the polling window, and it is what stops a fast bridge from
+      // baselining away its own mint. Wallet mints need no baseline (`hasMinted` is absolute),
+      // so they stay gated on `enabled`.
+      enabled: (enabled || mintType === 'support') && !!wallet && !!hubContractAddress,
       refetchInterval: withinPollingWindow
         ? (query) => (deriveIsMinted(query.state.data) ? false : pollInterval)
         : false,
@@ -325,12 +345,25 @@ export function useCrossChainSoulboundConfirmation({
   useEffect(() => {
     if (mintType !== 'support') return;
     if (mintQueryResult === undefined) return;
+
+    // Not confirming anything yet: this reading is a "before" observation, which is exactly
+    // what the baseline has to be. Recorded in a ref rather than state because nothing renders
+    // from it until a run starts.
+    if (!enabled) {
+      preRunBalanceRef.current = mintQueryResult as bigint;
+      return;
+    }
+
     if (startingBalance?.runKey === runKey) return;
     // See the note above the effect: the first observed balance is external-system state,
-    // not derivable from render inputs.
+    // not derivable from render inputs. Prefer the pre-transaction reading; fall back to the
+    // first post-enable read only when there is none (mid-confirmation reload).
     // eslint-disable-next-line react-hooks/set-state-in-effect -- capturing external state
-    setStartingBalance({ runKey, value: mintQueryResult as bigint });
-  }, [mintType, mintQueryResult, runKey, startingBalance]);
+    setStartingBalance({
+      runKey,
+      value: preRunBalanceRef.current ?? (mintQueryResult as bigint),
+    });
+  }, [mintType, mintQueryResult, runKey, startingBalance, enabled]);
 
   const isMintedOnHub = useMemo(
     () => deriveIsMinted(mintQueryResult),

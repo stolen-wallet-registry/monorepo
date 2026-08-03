@@ -1529,17 +1529,7 @@ export const WalletRegistryABI = [
   },
   {
     type: 'error',
-    name: 'WalletRegistry__InvalidSigner',
-    inputs: [],
-  },
-  {
-    type: 'error',
     name: 'WalletRegistry__InvalidStep',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'WalletRegistry__NotAcknowledged',
     inputs: [],
   },
   {

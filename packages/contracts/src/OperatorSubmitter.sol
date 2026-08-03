@@ -424,10 +424,83 @@ contract OperatorSubmitter is TimelockOwnable, Pausable, ReentrancyGuard {
     }
 
     /// @notice Set fee manager address
-    /// @dev If setting both feeManager and feeRecipient from scratch, use setFeeConfig() instead.
+    /// @dev Immediate during initial setup, timelocked after completeSetup(). The fee pointers
+    ///      are the one set of state on this contract that moves MONEY rather than data:
+    ///      {_collectFee} pushes the collected fee straight to `feeRecipient`, so `feeRecipient`
+    ///      IS the money and `feeManager` sets how much of it there is. Leaving these on a
+    ///      one-transaction owner call let a compromised key divert every future operator fee
+    ///      with no delay and nothing for watchers to react to — while every other pointer here
+    ///      already carried the 2-day path.
+    ///
+    ///      If setting both feeManager and feeRecipient from scratch, use setFeeConfig() instead.
     ///      Order constraint: feeRecipient must be set before feeManager (cannot enable fees without a recipient).
     /// @param _feeManager The new fee manager address (address(0) for free)
-    function setFeeManager(address _feeManager) external onlyOwner {
+    function setFeeManager(address _feeManager) external onlyOwner onlyDuringSetup {
+        _setFeeManager(_feeManager);
+    }
+
+    /// @notice Propose a fee manager change (2-day delay before activation)
+    /// @param _feeManager The new fee manager address (address(0) for free)
+    function proposeFeeManager(address _feeManager) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setFeeManager", _feeManager)));
+    }
+
+    /// @notice Activate a previously proposed fee manager change
+    /// @param _feeManager The new fee manager address
+    function activateFeeManager(address _feeManager) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setFeeManager", _feeManager)));
+        _setFeeManager(_feeManager);
+    }
+
+    /// @notice Set fee recipient address
+    /// @dev Immediate during initial setup, timelocked after completeSetup() — see
+    ///      {setFeeManager} for why the fee pointers are trust-boundary state.
+    /// @param _feeRecipient The new fee recipient address
+    function setFeeRecipient(address _feeRecipient) external onlyOwner onlyDuringSetup {
+        _setFeeRecipient(_feeRecipient);
+    }
+
+    /// @notice Propose a fee recipient change (2-day delay before activation)
+    /// @param _feeRecipient The new fee recipient address
+    function proposeFeeRecipient(address _feeRecipient) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setFeeRecipient", _feeRecipient)));
+    }
+
+    /// @notice Activate a previously proposed fee recipient change
+    /// @param _feeRecipient The new fee recipient address
+    function activateFeeRecipient(address _feeRecipient) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setFeeRecipient", _feeRecipient)));
+        _setFeeRecipient(_feeRecipient);
+    }
+
+    /// @notice Set both fee manager and fee recipient atomically
+    /// @dev Avoids ordering issues when configuring fees from scratch.
+    ///      To disable fees, pass address(0) for both.
+    ///      Immediate during initial setup, timelocked after completeSetup() — see
+    ///      {setFeeManager}. The atomic pair has its OWN action key, so a proposal to change
+    ///      both cannot be activated as two separate single-pointer changes (or vice versa).
+    /// @param _feeManager The fee manager address (address(0) to disable)
+    /// @param _feeRecipient The fee recipient address
+    function setFeeConfig(address _feeManager, address _feeRecipient) external onlyOwner onlyDuringSetup {
+        _setFeeConfig(_feeManager, _feeRecipient);
+    }
+
+    /// @notice Propose an atomic fee configuration change (2-day delay before activation)
+    /// @param _feeManager The fee manager address (address(0) to disable)
+    /// @param _feeRecipient The fee recipient address
+    function proposeFeeConfig(address _feeManager, address _feeRecipient) external onlyOwner {
+        _proposeAction(keccak256(abi.encode("setFeeConfig", _feeManager, _feeRecipient)));
+    }
+
+    /// @notice Activate a previously proposed atomic fee configuration change
+    /// @param _feeManager The fee manager address
+    /// @param _feeRecipient The fee recipient address
+    function activateFeeConfig(address _feeManager, address _feeRecipient) external onlyOwner {
+        _activateAction(keccak256(abi.encode("setFeeConfig", _feeManager, _feeRecipient)));
+        _setFeeConfig(_feeManager, _feeRecipient);
+    }
+
+    function _setFeeManager(address _feeManager) internal {
         if (_feeManager != address(0) && feeRecipient == address(0)) {
             revert OperatorSubmitter__InvalidFeeConfig();
         }
@@ -435,9 +508,7 @@ contract OperatorSubmitter is TimelockOwnable, Pausable, ReentrancyGuard {
         emit FeeManagerSet(_feeManager);
     }
 
-    /// @notice Set fee recipient address
-    /// @param _feeRecipient The new fee recipient address
-    function setFeeRecipient(address _feeRecipient) external onlyOwner {
+    function _setFeeRecipient(address _feeRecipient) internal {
         if (feeManager != address(0) && _feeRecipient == address(0)) {
             revert OperatorSubmitter__InvalidFeeConfig();
         }
@@ -445,12 +516,7 @@ contract OperatorSubmitter is TimelockOwnable, Pausable, ReentrancyGuard {
         emit FeeRecipientSet(_feeRecipient);
     }
 
-    /// @notice Set both fee manager and fee recipient atomically
-    /// @dev Avoids ordering issues when configuring fees from scratch.
-    ///      To disable fees, pass address(0) for both.
-    /// @param _feeManager The fee manager address (address(0) to disable)
-    /// @param _feeRecipient The fee recipient address
-    function setFeeConfig(address _feeManager, address _feeRecipient) external onlyOwner {
+    function _setFeeConfig(address _feeManager, address _feeRecipient) internal {
         if (_feeManager != address(0) && _feeRecipient == address(0)) {
             revert OperatorSubmitter__InvalidFeeConfig();
         }

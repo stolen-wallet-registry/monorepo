@@ -80,8 +80,23 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     /// @notice Pending transaction batch acknowledgements
     mapping(address => TransactionAcknowledgementData) private _pendingTxAcknowledgements;
 
-    /// @notice Nonces for replay protection
+    /// @notice Wallet-flow nonces for replay protection
+    /// @dev SEPARATE from {txNonces} on purpose, and it must stay that way. The two flows have
+    ///      independent pending acknowledgements and independent two-phase windows, so a single
+    ///      shared counter lets one flow move the other's nonce out from under an already-signed
+    ///      registration: acknowledge a wallet, then acknowledge a transaction batch, and the
+    ///      wallet registration signature — produced against the nonce read at ack time — no
+    ///      longer validates. The acknowledgement gas is already spent and the user cannot
+    ///      re-acknowledge until `expiryBlock`, so the registration is stranded, not merely
+    ///      retryable. The hub avoids this structurally by putting the two flows on two
+    ///      contracts (WalletRegistry.nonces vs TransactionRegistry.nonces); the spoke hosts
+    ///      both, so it needs two mappings to match. Keeping this one named `nonces` also keeps
+    ///      the hub and spoke wallet ABIs identical for the shared frontend code path.
     mapping(address => uint256) public nonces;
+
+    /// @notice Transaction-batch-flow nonces for replay protection
+    /// @dev The transaction-side counterpart to {nonces}; see the rationale there.
+    mapping(address => uint256) public txNonces;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -155,6 +170,11 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         // Only the forwarder named in the signature may open the window — hub parity.
         // See {WalletRegistry.acknowledge} for why (timing grind + nonce-burn griefing).
         if (msg.sender != trustedForwarder) revert SpokeRegistry__InvalidForwarder();
+
+        // Validate hub is configured. `register` already checks this; without the same check here
+        // a user completes phase 1 on a spoke that can never deliver phase 2 — burning a nonce
+        // and the acknowledgement gas, and only discovering it one grace period later.
+        if (hubInbox == bytes32(0)) revert SpokeRegistry__HubNotConfigured();
 
         // Accepted range lives in TimingConfig.isSignatureDeadlineValid; the inner branch
         // only picks which of the two user-facing errors to report.
@@ -424,6 +444,10 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         // Fail fast: reject zero address
         if (reporter == address(0)) revert SpokeRegistry__InvalidOwner();
 
+        // Validate hub is configured — see the wallet-path acknowledge for why phase 1 must check
+        // this and not leave it to phase 2.
+        if (hubInbox == bytes32(0)) revert SpokeRegistry__HubNotConfigured();
+
         // Validate dataHash is not zero
         if (dataHash == bytes32(0)) revert SpokeRegistry__InvalidDataHash();
 
@@ -449,8 +473,8 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
             }
         }
 
-        // Validate nonce matches expected value
-        if (nonce != nonces[reporter]) revert SpokeRegistry__InvalidNonce();
+        // Validate nonce matches expected value (transaction-flow counter — see {txNonces})
+        if (nonce != txNonces[reporter]) revert SpokeRegistry__InvalidNonce();
 
         // Verify EIP-712 signature
         bytes32 digest = _hashTypedDataV4(
@@ -472,7 +496,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         if (signer == address(0) || signer != reporter) revert SpokeRegistry__InvalidSigner();
 
         // Increment nonce AFTER validation
-        nonces[reporter]++;
+        txNonces[reporter]++;
 
         // Store acknowledgement with randomized grace period
         _pendingTxAcknowledgements[reporter] = TransactionAcknowledgementData({
@@ -646,7 +670,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
             sourceChainId: sourceChainId,
             transactionCount: count,
             isSponsored: false,
-            nonce: nonces[reporter],
+            nonce: txNonces[reporter],
             timestamp: uint64(block.timestamp),
             transactionHashes: empty,
             chainIds: empty
@@ -837,6 +861,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         if (to == address(0)) revert SpokeRegistry__ZeroAddress();
         (bool success,) = to.call{ value: amount }("");
         if (!success) revert SpokeRegistry__WithdrawalFailed();
+        emit FeesWithdrawn(to, amount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -904,8 +929,8 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
             revert SpokeRegistry__DeadlineTooFarInFuture();
         }
 
-        // Validate nonce matches expected value
-        if (p.nonce != nonces[p.reporter]) revert SpokeRegistry__InvalidNonce();
+        // Validate nonce matches expected value (transaction-flow counter — see {txNonces})
+        if (p.nonce != txNonces[p.reporter]) revert SpokeRegistry__InvalidNonce();
 
         // Load and validate acknowledgement
         TransactionAcknowledgementData memory ack = _pendingTxAcknowledgements[p.reporter];
@@ -1008,7 +1033,7 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
         if (msg.value < totalRequired) revert SpokeRegistry__InsufficientFee();
 
         // EFFECTS: Update state after fee validation
-        nonces[reporter]++;
+        txNonces[reporter]++;
         delete _pendingTxAcknowledgements[reporter];
 
         // INTERACTIONS: Send cross-chain message

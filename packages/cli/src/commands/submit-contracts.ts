@@ -9,7 +9,10 @@ import {
   addressEntryKey,
   applyDuplicatePolicy,
   confirmSubmission,
+  describeDefaultedChains,
   enforceBatchLimits,
+  formatReportedChain,
+  summariseReportedChains,
 } from '../lib/safety.js';
 import { OperatorSubmitterABI } from '@swr/abis';
 import { writeFile, mkdir } from 'fs/promises';
@@ -82,6 +85,13 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
       label: 'contracts',
     });
 
+    // 2c. Which chain(s) this batch ACCUSES (audit S-4). Distinct from config.chain, which is
+    // where the transaction lands and is always the hub. Warn in every mode — --build-only
+    // hands a multisig a transaction whose reported chain is otherwise invisible.
+    const reportedChains = summariseReportedChains(entries);
+    const defaultedWarning = describeDefaultedChains(reportedChains);
+    if (defaultedWarning !== undefined) console.warn(chalk.yellow(`⚠ ${defaultedWarning}`));
+
     // 3. Create public client for fee quote (no private key needed)
     const publicClient = createPublicClient({
       chain: config.chain,
@@ -152,6 +162,11 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
       console.log(chalk.yellow('\n--- DRY RUN ---'));
       console.log('Would submit:');
       console.log(`  Contracts: ${entries.length}`);
+      for (const chain of reportedChains) {
+        console.log(
+          `  Reported on: ${formatReportedChain(chain.caip2)} — ${chain.count} contracts`
+        );
+      }
       console.log(`  Batch fee: ${formatBatchFee(fee)}`);
       return;
     }
@@ -176,7 +191,8 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
       chainId: config.chain.id,
       contractAddress: config.contracts.operatorSubmitter,
       fee: formatBatchFee(fee),
-      sample: entries.slice(0, 3).map((e) => e.address),
+      reportedChains,
+      sample: entries.slice(0, 3).map((e) => `${e.address} @ ${e.reportedChain}`),
       assumeYes: options.yes,
     });
 

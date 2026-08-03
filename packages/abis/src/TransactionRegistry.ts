@@ -1515,11 +1515,6 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'error',
-    name: 'TransactionRegistry__AlreadyRegistered',
-    inputs: [],
-  },
-  {
-    type: 'error',
     name: 'TransactionRegistry__ArrayLengthMismatch',
     inputs: [],
   },
@@ -1590,22 +1585,12 @@ export const TransactionRegistryABI = [
   },
   {
     type: 'error',
-    name: 'TransactionRegistry__InvalidSigner',
-    inputs: [],
-  },
-  {
-    type: 'error',
     name: 'TransactionRegistry__InvalidStep',
     inputs: [],
   },
   {
     type: 'error',
     name: 'TransactionRegistry__InvalidTxHashLength',
-    inputs: [],
-  },
-  {
-    type: 'error',
-    name: 'TransactionRegistry__NotAcknowledged',
     inputs: [],
   },
   {

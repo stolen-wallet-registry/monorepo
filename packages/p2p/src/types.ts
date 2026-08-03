@@ -19,30 +19,69 @@ const bytes32Schema = z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid bytes32')
 /** Transaction hash — alias for bytes32 with domain-specific error message */
 const txHashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid transaction hash');
 
-/** Signature over the wire schema */
+/**
+ * A 65-byte ECDSA signature: 0x + 130 hex characters.
+ *
+ * Nothing else is a signature. A bare length cap of 500 accepted `"hello"`, and a relayer that
+ * accepted it paid gas for a transaction that could only revert.
+ */
+const signatureHexSchema = z.string().regex(/^0x[a-fA-F0-9]{130}$/, 'Invalid 65-byte signature');
+
+/**
+ * An unsigned decimal integer, safe to hand to `BigInt()`.
+ *
+ * The bound is uint256's digit count. A length cap alone let `"abc"` through, and `BigInt("abc")`
+ * throws — inside the relayer's submit path, after the payload was accepted as well-formed.
+ */
+const decimalUintSchema = z
+  .string()
+  .regex(/^(0|[1-9][0-9]{0,77})$/, 'Expected a plain decimal integer');
+
+/**
+ * Signature over the wire schema.
+ *
+ * These field shapes are the contract this schema advertises to anything that decodes a
+ * stream. They used to be bare length caps, with the real enforcement living a layer above in
+ * apps/web's `signatureData.ts` — so the web app was safe and any other consumer trusting the
+ * schema inherited none of it. The checks now live with the shape that describes them.
+ */
 export const SignatureOverTheWireSchema = z
   .object({
     keyRef: z.string().max(100),
     chainId: z.number().int().positive(),
     address: ethereumAddressSchema,
-    value: z.string().max(500), // Signatures are ~130 chars
-    deadline: z.string().max(50), // BigInt as string
-    nonce: z.string().max(50), // BigInt as string
+    value: signatureHexSchema,
+    deadline: decimalUintSchema,
+    nonce: decimalUintSchema,
     // Extended fields (optional for backward compatibility)
-    /** CAIP-2 bytes32 hash of chain where incident occurred */
-    reportedChainId: z.string().max(66).optional(), // bytes32 hex string
+    /**
+     * DECIMAL chain ID where the incident occurred — NOT a bytes32 hash, despite sharing a
+     * name with `TransactionBatchOverTheWireSchema.reportedChainId`. The wallet contracts take
+     * `uint64 reportedChainId` and the sender ships `BigInt(chainId).toString()`; only the
+     * transaction flow hashes it into a bytes32 CAIP-2 reference. The previous comment here
+     * claimed bytes32, and validating it as bytes32 would reject every relayed wallet
+     * signature.
+     */
+    reportedChainId: decimalUintSchema.optional(),
     /** Unix timestamp when incident occurred (0 = unknown) */
-    incidentTimestamp: z.string().max(50).optional(), // BigInt as string
+    incidentTimestamp: decimalUintSchema.optional(),
     /**
      * Registration only: block number whose hash the signature committed to (anti-phishing
      * freshness control). Travels unsigned — the relayer submits it verbatim and the contract
      * recomputes `blockhash(windowBlock)` to check it against the signed hash.
      */
-    windowBlock: z.string().max(50).optional(), // BigInt as string
+    windowBlock: decimalUintSchema.optional(),
     /** Registration only: `blockhash(windowBlock)`, the value actually signed. */
-    windowBlockHash: z.string().max(66).optional(), // bytes32 hex string
+    windowBlockHash: bytes32Schema.optional(),
   })
-  .strict();
+  .strict()
+  // Co-presence, at the schema layer rather than only in the web app. The relayer submits
+  // `windowBlock` as calldata and the contract rebuilds the signed digest from
+  // `windowBlockHash`; half a pair is a transaction that can only revert, after the gas.
+  .refine((sig) => (sig.windowBlock === undefined) === (sig.windowBlockHash === undefined), {
+    message: 'windowBlock and windowBlockHash must both be present or both be absent',
+    path: ['windowBlock'],
+  });
 
 /** Form state over the wire schema */
 export const FormStateOverTheWireSchema = z
@@ -263,6 +302,9 @@ export const PROTOCOL_SCHEMAS: Record<string, z.ZodType> = {
   [PROTOCOLS.TX_REG_REC]: ConfirmationMessageSchema,
   [PROTOCOLS.TX_REG_PAY]: PaymentMessageSchema,
   [PROTOCOLS.RESIGN_REQ]: ResignRequestMessageSchema,
+  // The reply to RESIGN_REQ. Deliberately the plain confirmation shape: `success` is the whole
+  // decision, and `message` is log prose the relayer must not render — see PROTOCOLS.
+  [PROTOCOLS.RESIGN_ACK]: ConfirmationMessageSchema,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

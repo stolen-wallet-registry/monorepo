@@ -337,6 +337,17 @@ export function SearchPage() {
     }
   }, [result]);
 
+  /**
+   * Clearing the child's input has to clear the query here too.
+   *
+   * `RegistrySearch.handleClear` resets its own state only, so without this the parent kept the
+   * previous query mounted: `useRegistrySearch` stayed live on a search the user had visibly
+   * dismissed, and the backfill effect above kept rewriting its recent-search entry.
+   */
+  const handleClear = useCallback(() => {
+    setSearchQuery('');
+  }, []);
+
   // Handle clicking "Check your wallet" quick action
   const handleQuickCheckWallet = useCallback(
     (address: Address) => {
@@ -398,6 +409,7 @@ export function SearchPage() {
             key={searchQuery} // Force re-render when query changes
             defaultQuery={searchQuery}
             onSearch={handleSearch}
+            onClear={handleClear}
           />
         </CardContent>
       </Card>

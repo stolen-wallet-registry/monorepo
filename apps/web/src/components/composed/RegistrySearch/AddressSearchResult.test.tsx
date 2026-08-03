@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { TooltipProvider } from '@swr/ui';
-import { AddressSearchResult } from './AddressSearchResult';
+import { AddressSearchResult, type AddressSearchResultProps } from './AddressSearchResult';
 import type { AddressSearchData, WalletSearchData } from '@swr/search';
 
 function renderWithProviders(ui: React.ReactElement) {
@@ -125,5 +125,69 @@ describe('AddressSearchResult — unverified registries', () => {
     );
 
     expect(screen.getByText('Clean')).toBeInTheDocument();
+  });
+});
+
+// ─── Finding UI-8: a hit with no data must not resolve downward into "Clean" ────────────────
+//
+// The guard used to be `if (found && data)`. A result with `found: true, data: null` failed
+// it, then failed the amber branch too (because `unverified` was empty), and fell all the way
+// through to the green "Not Found / Clean" card — for an address the registry had MATCHED.
+// That is the single most dangerous output this component can produce.
+describe('AddressSearchResult — found without data (UI-8)', () => {
+  /** Compile-time proof that `T` is NOT assignable to `U`. Resolves to `never` if it is. */
+  type NotAssignable<T, U> = T extends U ? never : true;
+
+  it('cannot be constructed through the props type', () => {
+    // The primary fix is structural: the props are a discriminated union on `found`, so a
+    // caller cannot pass this combination at all. If this assertion stops compiling, the
+    // union has been loosened back into a shape that can express the false clean.
+    type FoundWithoutData = {
+      found: true;
+      foundInWalletRegistry: true;
+      foundInContractRegistry: false;
+      data: null;
+    };
+
+    const rejected: NotAssignable<FoundWithoutData, AddressSearchResultProps> = true;
+    expect(rejected).toBe(true);
+  });
+
+  it('renders "Could Not Verify", never "Clean", if it reaches the component anyway', () => {
+    // Types do not survive to runtime. Props can arrive from plain JS, an untyped test
+    // fixture, or a `data` payload that failed to parse — so the downward resolution is
+    // blocked at runtime too. The cast is how a JS caller would reach this state.
+    renderWithProviders(
+      <AddressSearchResult
+        {...({
+          found: true,
+          foundInWalletRegistry: true,
+          foundInContractRegistry: false,
+          data: null,
+          unverified: [],
+        } as unknown as AddressSearchResultProps)}
+      />
+    );
+
+    expect(screen.queryByText('Clean')).not.toBeInTheDocument();
+    expect(screen.queryByText('Not Found')).not.toBeInTheDocument();
+    expect(screen.getByText('Could Not Verify')).toBeInTheDocument();
+    expect(screen.getByText(/not.*a clean result/i)).toBeVisible();
+  });
+
+  it('tells the user to treat it as registered rather than to retry', () => {
+    renderWithProviders(
+      <AddressSearchResult
+        {...({
+          found: true,
+          foundInWalletRegistry: true,
+          foundInContractRegistry: false,
+          data: null,
+        } as unknown as AddressSearchResultProps)}
+      />
+    );
+
+    // A match we cannot describe is still a match. "Try again" understates it.
+    expect(screen.getByText(/treat it as registered/i)).toBeVisible();
   });
 });

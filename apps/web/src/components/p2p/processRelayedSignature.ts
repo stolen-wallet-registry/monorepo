@@ -28,7 +28,13 @@ export async function processSignature(
   step: typeof SIGNATURE_STEP.ACKNOWLEDGEMENT | typeof SIGNATURE_STEP.REGISTRATION,
   receiptProtocol: string,
   trustedForwarder: Address,
-  goToNextStep: () => void
+  goToNextStep: () => void,
+  /**
+   * Called when the signature was stored but the receipt could NOT be delivered. The relayer
+   * still advances (see below); this is how the page tells the human that their partner has
+   * not been told, so they can say so out of band instead of both sides waiting.
+   */
+  onReceiptFailed?: (message: string) => void
 ): Promise<boolean> {
   if (!isValidSignatureData(data, expectedChainId)) {
     logger.p2p.warn(
@@ -86,17 +92,53 @@ export async function processSignature(
     logger.p2p.warn('Failed to parse signature fields as BigInt', { error: e, data });
     return false;
   }
-  storeSignature(stored);
+  try {
+    storeSignature(stored);
+  } catch (e) {
+    // sessionStorage refused the write (Safari private mode). Nothing downstream can read the
+    // signature back, so advancing would strand the relayer on a payment step with no
+    // signature; report the failure instead and let the caller decide.
+    logger.p2p.error(
+      'Failed to store relayed signature',
+      { step },
+      e instanceof Error ? e : undefined
+    );
+    return false;
+  }
 
-  // Confirm receipt
-  await passStreamData({
-    connection,
-    protocols: [receiptProtocol],
-    streamData: { success: true, message: 'Signature received' },
-  });
+  // Confirm receipt.
+  //
+  // Isolated from the advance on purpose. A circuit-relay drop mid-handler makes this write
+  // throw — the exact condition `isStreamAbortError` exists for — and letting that propagate
+  // meant the page's catch logged it and returned, so `goToNextStep()` never ran. The result
+  // was a two-sided deadlock: the relayer HELD the stored signature but stayed on the waiting
+  // screen, and the registeree, never having received its receipt, had no resend control.
+  //
+  // The signature is stored and valid, and the pay step is the correct place for the relayer
+  // to be, so the advance happens regardless. What the failure costs is the partner's
+  // knowledge that it arrived, which is a message to a human, not a reason to stall the flow.
+  let receiptDelivered = true;
+  try {
+    await passStreamData({
+      connection,
+      protocols: [receiptProtocol],
+      streamData: { success: true, message: 'Signature received' },
+    });
+  } catch (e) {
+    receiptDelivered = false;
+    logger.p2p.warn('Stored the relayed signature but could not confirm receipt to the partner', {
+      step,
+      receiptProtocol,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    onReceiptFailed?.(
+      'Your partner\'s signature arrived, but the confirmation back to them could not be delivered. They may still be showing "waiting" — tell them it arrived before you submit.'
+    );
+  }
 
   logger.p2p.info(
-    `${step === SIGNATURE_STEP.ACKNOWLEDGEMENT ? 'ACK' : 'REG'} signature stored, advancing to payment`
+    `${step === SIGNATURE_STEP.ACKNOWLEDGEMENT ? 'ACK' : 'REG'} signature stored, advancing to payment`,
+    { receiptDelivered }
   );
   goToNextStep();
   return true;

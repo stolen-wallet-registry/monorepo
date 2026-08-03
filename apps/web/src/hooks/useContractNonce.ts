@@ -84,11 +84,19 @@ export function useContractNonce(
     },
   });
 
+  // The spoke hosts BOTH flows on one contract, so unlike the hub it needs two counters and
+  // the variant has to pick between them (`SpokeRegistry.nonces` vs `SpokeRegistry.txNonces`).
+  // Reading `nonces` for a transaction batch returns the WALLET counter, and every spoke
+  // batch signature would then be signed against the wrong value and revert with
+  // `SpokeRegistry__InvalidNonce`. The hub branch above is unaffected: its two flows live on
+  // separate contracts, so `nonces` is the only counter either of them has.
+  const spokeNonceFn = variant === 'transaction' ? 'txNonces' : 'nonces';
+
   const spokeResult = useReadContract({
     address: contractAddress,
     abi: spokeRegistryAbi,
     chainId,
-    functionName: 'nonces',
+    functionName: spokeNonceFn,
     args: ownerAddress ? [ownerAddress] : undefined,
     query: {
       enabled: isSpoke && enabled,
@@ -152,10 +160,12 @@ export function useTxContractNonce(address: Address | undefined): UseContractNon
     },
   });
 
+  // `txNonces`, never `nonces` — this hook is transaction-batch-only, and on the spoke the two
+  // flows are separate counters on one contract. See the note in `useContractNonce`.
   const spokeResult = useReadContract({
     address: contractAddress,
     abi: spokeRegistryAbi,
-    functionName: 'nonces',
+    functionName: 'txNonces',
     args: address ? [address] : undefined,
     chainId,
     query: {

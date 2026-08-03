@@ -793,46 +793,15 @@ export const CONTRACT_ERROR_SELECTORS: Record<string, ContractErrorInfo> = {
     message: 'The incident date cannot be in the future.',
     action: 'Please choose when the theft actually happened.',
   },
-  '0x4cd2cf7c': {
-    name: 'WalletRegistry__InvalidSigner',
-    message: 'The signature did not come from the wallet being registered.',
-    action: 'Please sign with the wallet you are reporting as stolen.',
-  },
-  '0x4da4c90e': {
-    name: 'WalletRegistry__NotAcknowledged',
-    message: 'This wallet has no registration in progress.',
-    action: 'Please start again from the first step.',
-  },
-  '0xd37e23c3': {
-    name: 'TransactionRegistry__AlreadyRegistered',
-    message: 'These transactions are already reported.',
-    action: 'No action needed.',
-  },
-  '0x2f6ed989': {
-    name: 'TransactionRegistry__InvalidSigner',
-    message: 'The signature did not come from the reporting wallet.',
-    action: 'Please sign with the wallet that started this report.',
-  },
-  '0xe72eb6fd': {
-    name: 'TransactionRegistry__NotAcknowledged',
-    message: 'This report has no registration in progress.',
-    action: 'Please start again from the first step.',
-  },
-  '0x5b6ca878': {
-    name: 'ContractRegistry__AlreadyRegistered',
-    message: 'This contract is already in the registry.',
-    action: 'No action needed.',
-  },
-  '0x00472d32': {
-    name: 'FraudRegistryHub__UnknownRegistryType',
-    message: 'Unknown registry type.',
-    action: 'Please contact support.',
-  },
-  '0x0790c247': {
-    name: 'OperatorRegistry__NotAuthorizedForRegistry',
-    message: 'Your operator account is not approved for this registry.',
-    action: 'Request the capability from the DAO before submitting.',
-  },
+
+  // REMOVED (2026-08-03): eight entries for errors that no longer exist in any ABI —
+  // WalletRegistry__InvalidSigner / __NotAcknowledged, TransactionRegistry__AlreadyRegistered
+  // / __InvalidSigner / __NotAcknowledged, ContractRegistry__AlreadyRegistered,
+  // FraudRegistryHub__UnknownRegistryType, OperatorRegistry__NotAuthorizedForRegistry.
+  // They were dead declarations in the interfaces, never reverted from src/, and were dropped
+  // in the same sweep. A curated message for a selector no contract can emit is unreachable
+  // text that still has to be maintained; the coverage guard fails on them for that reason. If
+  // any of these come back in Solidity, that same guard will demand a message again.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Soulbound Errors

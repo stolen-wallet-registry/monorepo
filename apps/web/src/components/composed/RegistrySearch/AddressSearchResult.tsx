@@ -19,15 +19,8 @@ import type {
   UnverifiedRegistries,
 } from '@swr/search';
 
-export interface AddressSearchResultProps {
-  /** Whether the address was found in any registry */
-  found: boolean;
-  /** Found in stolen wallet registry */
-  foundInWalletRegistry: boolean;
-  /** Found in fraudulent contract registry */
-  foundInContractRegistry: boolean;
-  /** Combined search data (null if not found in any registry) */
-  data: AddressSearchData | null;
+/** Props shared by both states of the card. */
+interface AddressSearchResultBaseProps {
   /**
    * Registries that could not be consulted.
    *
@@ -49,6 +42,36 @@ export interface AddressSearchResultProps {
   /** Additional class names */
   className?: string;
 }
+
+/**
+ * Props for the address result card.
+ *
+ * A discriminated union on `found`, mirroring `AddressSearchResult` in `@swr/search`, so the
+ * combination that caused finding UI-8 — `found: true` with `data: null` — cannot be passed
+ * at all. It used to slip through the `if (found && data)` guard, miss the amber branch when
+ * `unverified` was empty, and render the green "Not Found / Clean" card for an address that
+ * IS registered.
+ */
+export type AddressSearchResultProps = AddressSearchResultBaseProps &
+  (
+    | {
+        /** Found in at least one registry. */
+        found: true;
+        /** Found in stolen wallet registry */
+        foundInWalletRegistry: boolean;
+        /** Found in fraudulent contract registry */
+        foundInContractRegistry: boolean;
+        /** Required: a hit always carries its data. */
+        data: AddressSearchData;
+      }
+    | {
+        /** Not found in any registry that answered. */
+        found: false;
+        foundInWalletRegistry?: false;
+        foundInContractRegistry?: false;
+        data?: null;
+      }
+  );
 
 /** Sentence naming the registries that did not answer. */
 function unverifiedSentence(unverified: UnverifiedRegistries): string {
@@ -147,13 +170,23 @@ function ContractSection({ data }: { data: ContractSearchData }) {
  */
 export function AddressSearchResult({
   found,
-  foundInWalletRegistry,
-  foundInContractRegistry,
-  data,
+  foundInWalletRegistry = false,
+  foundInContractRegistry = false,
+  data = null,
   unverified = [],
   reason = 'unreachable',
   className,
 }: AddressSearchResultProps) {
+  // A hit whose data went missing. The props union makes this unconstructible in TypeScript,
+  // but this component is one render away from a decision about someone's money, so it is
+  // also handled at runtime: props can arrive from plain JS, from a hand-built object, or
+  // from a future `data` shape that fails to parse.
+  //
+  // The rule is that it must never resolve DOWNWARD into a negative. `found` is the only
+  // signal here that is definitely trustworthy, and it says the address was matched — so this
+  // falls into the amber card, not the green one. (Finding UI-8.)
+  const foundWithoutData = found && !data;
+
   if (found && data) {
     // Determine severity - both registries is worst case
     const isBothRegistries = foundInWalletRegistry && foundInContractRegistry;
@@ -216,7 +249,8 @@ export function AddressSearchResult({
 
   // Nothing found, but a registry never answered — this is an unknown, not a clean result.
   // Rendering the green card here is the false negative the search layer exists to prevent.
-  if (unverified.length > 0) {
+  // `foundWithoutData` lands here too: a match we cannot describe is still not an absence.
+  if (foundWithoutData || unverified.length > 0) {
     return (
       <Alert
         className={cn(
@@ -236,8 +270,16 @@ export function AddressSearchResult({
         </AlertTitle>
         <AlertDescription className="text-amber-800 dark:text-amber-200">
           <p>
-            {unverifiedSentence(unverified)}{' '}
-            {reason === 'unsupported-identifier' ? (
+            {foundWithoutData ? (
+              <>
+                This address was matched in the registry, but its details could not be loaded. This
+                is <strong>not</strong> a clean result — treat it as registered until it can be
+                checked again.
+              </>
+            ) : (
+              <>{unverifiedSentence(unverified)}</>
+            )}{' '}
+            {foundWithoutData ? null : reason === 'unsupported-identifier' ? (
               <>
                 That registry cannot be queried for this kind of identifier, so nothing there was
                 checked. This is <strong>not</strong> a clean result — the address may be registered

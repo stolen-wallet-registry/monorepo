@@ -99,3 +99,70 @@ describe('RegistrySearch — unavailable search', () => {
     expect(screen.queryByText('Could Not Verify')).not.toBeInTheDocument();
   });
 });
+
+// ─── Finding UI-9: an error and a stale result must not render together ─────────────────────
+//
+// TanStack Query RETAINS `data` from the last successful fetch of a query key when a later
+// background refetch throws. So `data` (stale, from when the registry was reachable) and
+// `error` are both set at once — and `showResult` / `showUnavailable` were not mutually
+// exclusive. The amber "Could Not Verify" card rendered with a green "Clean" card directly
+// beneath it, and a user presented with both reads the reassuring one.
+describe('RegistrySearch — stale data alongside an error', () => {
+  /** What TanStack hands back after a successful fetch that later refetches into an error. */
+  const staleCleanResult = {
+    type: 'address' as const,
+    found: false as const,
+    foundInWalletRegistry: false as const,
+    foundInContractRegistry: false as const,
+    data: null,
+    unverified: [] as const,
+  };
+
+  it('shows only "Could Not Verify" when a refetch throws SearchUnavailableError', () => {
+    searchResult.data = staleCleanResult;
+    searchResult.error = new SearchUnavailableError(['wallet'], [new Error('fetch failed')]);
+
+    const { container } = render(<RegistrySearch defaultQuery={ADDRESS} />);
+
+    expect(screen.getByText('Could Not Verify')).toBeInTheDocument();
+    // The stale green card must be gone entirely — not merely ordered below the amber one.
+    expect(screen.queryByText('Clean')).not.toBeInTheDocument();
+    expect(screen.queryByText('Not Found')).not.toBeInTheDocument();
+    expect(container.textContent ?? '').not.toMatch(AFFIRMATIVE_CLEAN);
+  });
+
+  it('shows no result card when a refetch throws an ordinary error', () => {
+    searchResult.data = staleCleanResult;
+    searchResult.error = new Error('boom');
+
+    const { container } = render(<RegistrySearch defaultQuery={ADDRESS} />);
+
+    expect(screen.getByText(/Error querying indexer/i)).toBeInTheDocument();
+    expect(screen.queryByText('Clean')).not.toBeInTheDocument();
+    expect(container.textContent ?? '').not.toMatch(AFFIRMATIVE_CLEAN);
+  });
+
+  it('does not announce a result to screen readers while erroring', () => {
+    // The visual card and the live region are separate render paths; an aria-live
+    // "No match found." is the same false clean, delivered to the user who can least
+    // cross-check it against the amber card.
+    searchResult.data = staleCleanResult;
+    searchResult.error = new SearchUnavailableError(['wallet'], [new Error('down')]);
+
+    render(<RegistrySearch defaultQuery={ADDRESS} />);
+
+    expect(screen.queryByText(/No match found/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/registry was not checked/i)).toBeInTheDocument();
+  });
+
+  it('still renders the result when there is no error', () => {
+    // The exclusion must not be so broad that it swallows ordinary results.
+    searchResult.data = staleCleanResult;
+    searchResult.error = null;
+
+    render(<RegistrySearch defaultQuery={ADDRESS} />);
+
+    expect(screen.getByText('Clean')).toBeInTheDocument();
+    expect(screen.queryByText('Could Not Verify')).not.toBeInTheDocument();
+  });
+});

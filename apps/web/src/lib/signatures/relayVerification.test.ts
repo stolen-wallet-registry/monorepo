@@ -319,6 +319,43 @@ describe('reviewRelayedSignature', () => {
     expect(review.issues).not.toContain('signer-mismatch');
   });
 
+  /**
+   * W-2. `WINDOW_BLOCK_HISTORY_LIMIT` was exported and never referenced, so this — the only
+   * invalidating condition knowable client-side without an extra chain read — was never
+   * checked. A relayer who takes longer than ~8.5 minutes on Base, or retries once after an
+   * RPC failure, spends gas on a guaranteed `TimingConfig__WindowBlockTooOld` revert.
+   */
+  it('rejects a registration whose committed block has aged out of the blockhash window', () => {
+    const review = reviewRelayedSignature({
+      ...base,
+      windowBlock: 1_000_000n,
+      currentBlock: 1_000_300n,
+    });
+
+    expect(review.ok).toBe(false);
+    expect(review.issues).toContain('window-block-stale');
+  });
+
+  it('accepts a registration still inside the blockhash window', () => {
+    const review = reviewRelayedSignature({
+      ...base,
+      windowBlock: 1_000_000n,
+      currentBlock: 1_000_100n,
+    });
+
+    expect(review.ok).toBe(true);
+    expect(review.issues).toEqual([]);
+  });
+
+  /**
+   * Acknowledgement signatures carry no window commitment, and a chain-head read that has not
+   * landed is not evidence of staleness. Neither may block payment on its own.
+   */
+  it('asserts nothing about staleness when the window block or chain head is unknown', () => {
+    expect(reviewRelayedSignature({ ...base, currentBlock: 1_000_300n }).ok).toBe(true);
+    expect(reviewRelayedSignature({ ...base, windowBlock: 1_000_000n }).ok).toBe(true);
+  });
+
   it('reports every issue rather than only the first', () => {
     const review = reviewRelayedSignature({
       ...base,
@@ -341,6 +378,7 @@ describe('describeRelaySignatureIssue', () => {
       'nonce-mismatch',
       'nonce-unknown',
       'deadline-expired',
+      'window-block-stale',
     ] as const) {
       expect(describeRelaySignatureIssue(issue).length).toBeGreaterThan(10);
     }

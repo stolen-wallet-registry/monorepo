@@ -64,7 +64,6 @@ interface IWalletRegistry {
 
     error WalletRegistry__AlreadyRegistered();
     error WalletRegistry__AlreadyAcknowledged();
-    error WalletRegistry__NotAcknowledged();
     error WalletRegistry__DeadlineExpired();
     error WalletRegistry__DeadlineInPast();
     /// @notice Signature deadline exceeds {TimingConfig.MAX_SIGNATURE_LIFETIME}
@@ -72,7 +71,6 @@ interface IWalletRegistry {
     error WalletRegistry__DeadlineTooFarInFuture();
     error WalletRegistry__GracePeriodNotStarted();
     error WalletRegistry__InvalidSignature();
-    error WalletRegistry__InvalidSigner();
     error WalletRegistry__InvalidForwarder();
     error WalletRegistry__InsufficientFee();
     error WalletRegistry__FeeTransferFailed();

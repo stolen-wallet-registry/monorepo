@@ -19,6 +19,7 @@ export declare const DEFAULT_MAX_TRACKED_CLIENTS: number;
 
 export declare function parseBlockedPaths(raw: string | undefined): string[];
 export declare function normalisePath(url: string | undefined): string;
+export declare function resolveUpstreamTarget(url: string | undefined): string;
 export declare function isBlockedPath(
   url: string | undefined,
   blockedPaths: readonly string[]
@@ -37,6 +38,9 @@ export declare function isLoopback(address: string | undefined): boolean;
 export declare function buildUpstreamHeaders(
   headers: Record<string, string | string[] | undefined>,
   clientKey: string
+): Record<string, string | string[]>;
+export declare function buildDownstreamHeaders(
+  headers: Record<string, string | string[] | undefined>
 ): Record<string, string | string[]>;
 export declare function createRateLimiter(options: {
   maxRequests: number;

@@ -1,9 +1,22 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
-import { isAddress } from 'viem';
 import { logger } from '@/lib/logger';
-import type { Address } from '@/lib/types/ethereum';
+import { isAddress, type Address } from '@/lib/types/ethereum';
+
+/**
+ * Whether a persisted value is a well-formed address.
+ *
+ * `strict: false` matches `transactionFormStore` and `lib/indexer.ts`. Strict mode rejects a
+ * mixed-case address whose casing is not a valid EIP-55 checksum, which persisted state
+ * routinely holds — and the V4 gate fails closed with no pairing, so discarding `pairedWallet`
+ * over casing strands a relayer who reloaded mid-flow: every relayed signature, including their
+ * partner's, is then rejected with no way to re-pair short of restarting. The gate compares
+ * case-insensitively, so nothing here depends on the checksum.
+ */
+function isPersistedAddress(value: unknown): value is Address {
+  return typeof value === 'string' && isAddress(value, { strict: false });
+}
 
 export type P2PConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -49,7 +62,6 @@ export interface P2PActions {
   setConnectedToPeer: (connected: boolean) => void;
   setConnectionStatus: (status: P2PConnectionStatus, errorMessage?: string) => void;
   setInitialized: (initialized: boolean) => void;
-  setP2PValues: (values: Partial<P2PState>) => void;
   reset: () => void;
 }
 
@@ -127,11 +139,11 @@ export const useP2PStore = create<P2PState & P2PActions>()(
             state.isInitialized = initialized;
           }),
 
-        setP2PValues: (values) =>
-          set((state) => {
-            logger.p2p.debug('P2P values batch updated', { values });
-            Object.assign(state, values);
-          }),
+        // NOTE: there is deliberately no batch `setP2PValues`. It was a raw `Object.assign` over
+        // `Partial<P2PState>`, which meant `pairedWallet` and `partnerPeerId` could be written
+        // without going through the setters that validate them — and those two values are what
+        // the whole V4 mitigation rests on (see the `pairedWallet` note above). Nothing called
+        // it. Use the individual setters.
 
         reset: () => {
           logger.p2p.debug('P2P state reset');
@@ -174,14 +186,21 @@ export const useP2PStore = create<P2PState & P2PActions>()(
 
           return {
             ...current,
-            peerId: state.peerId ?? initialState.peerId,
-            partnerPeerId: state.partnerPeerId ?? initialState.partnerPeerId,
+            // Type-checked, not merely defaulted. `partnerPeerId` is compared against
+            // `connection.remotePeer.toString()` in `peerGuard`, so a corrupt blob holding an
+            // object or a number rehydrates cleanly, matches nothing, and then rejects every
+            // inbound stream — including the legitimate partner's CONNECT — silently and for
+            // the rest of the session.
+            peerId: typeof state.peerId === 'string' ? state.peerId : initialState.peerId,
+            partnerPeerId:
+              typeof state.partnerPeerId === 'string'
+                ? state.partnerPeerId
+                : initialState.partnerPeerId,
             // Re-validated rather than trusted: a corrupt or hand-edited entry must not become
             // the address a payment is authorized against.
-            pairedWallet:
-              state.pairedWallet && isAddress(state.pairedWallet)
-                ? (state.pairedWallet as Address)
-                : initialState.pairedWallet,
+            pairedWallet: isPersistedAddress(state.pairedWallet)
+              ? state.pairedWallet
+              : initialState.pairedWallet,
           };
         },
       }

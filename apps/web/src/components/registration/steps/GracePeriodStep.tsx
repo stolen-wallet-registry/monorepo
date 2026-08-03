@@ -12,11 +12,15 @@ import { Alert, AlertDescription, Skeleton } from '@swr/ui';
 import { GracePeriodTimer, getGracePeriodStatus } from '@/components/composed/GracePeriodTimer';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { useFormStore } from '@/stores/formStore';
 import { useRegistrationStore } from '@/stores/registrationStore';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { useContractDeadlines } from '@/hooks/useContractDeadlines';
 import { useCountdownTimer } from '@/hooks/useCountdownTimer';
+import { useStepNavigation } from '@/hooks/useStepNavigation';
+import { removeSignature } from '@/lib/signatures';
+import { SIGNATURE_STEP } from '@swr/signatures';
 import { logger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/useTheme';
@@ -37,6 +41,7 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   const chainId = useChainId();
   const { registeree } = useFormStore();
   const { acknowledgementHash } = useRegistrationStore();
+  const { goToStep, resetFlow } = useStepNavigation();
   const { themeVariant, triggerThemeAnimation, setThemeVariant, setColorScheme } = useTheme();
 
   // Use refs for theme values to avoid stale closure issues in handleExpire callback.
@@ -55,8 +60,11 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
     ? getExplorerTxUrl(chainId, acknowledgementHash)
     : null;
 
-  // Track logging state
+  // Track logging state. Separate refs on purpose: the deadline-loaded log and the
+  // timer-initialized log fire on different conditions, and sharing one latch meant whichever
+  // ran first permanently suppressed the other (the timer log was dead code).
   const hasLoggedStart = useRef(false);
+  const hasLoggedTimerInit = useRef(false);
   const hasLoggedNoPendingAck = useRef(false);
   // Store initial totalMs for progress bar calculation (captured once from first valid totalMs)
   const [initialTotalMs, setInitialTotalMs] = useState<number | undefined>(undefined);
@@ -130,6 +138,27 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
     onComplete();
   }, [setThemeVariant, setColorScheme, onComplete]);
 
+  /**
+   * Recovery for both unrecoverable grace-period states.
+   *
+   * Either the contract has no pending acknowledgement or its window has closed on chain. In
+   * both cases the acknowledgement's nonce is spent, so every cached signature for this
+   * registeree can now only produce another revert — they are discarded before returning to the
+   * first signing step. Mirrors `RegistrationPayStep`'s window-closed retry path, which is the
+   * only other place the flow restarts from acknowledgement.
+   */
+  const restartFromAcknowledgement = useCallback(() => {
+    logger.registration.warn('Grace period unrecoverable, restarting from acknowledgement', {
+      registeree,
+      chainId,
+    });
+    if (registeree) {
+      removeSignature(registeree, chainId, SIGNATURE_STEP.ACKNOWLEDGEMENT);
+      removeSignature(registeree, chainId, SIGNATURE_STEP.REGISTRATION);
+    }
+    goToStep('acknowledge-and-sign');
+  }, [registeree, chainId, goToStep]);
+
   // Countdown timer - target is the START block (when window opens)
   // Note: The hook is intentionally called even when deadlines is null/loading.
   // The hook is designed to handle null values gracefully (returns 0 time remaining),
@@ -161,8 +190,8 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
         setInitialTotalMs(totalMs);
       }
       // Log once
-      if (!hasLoggedStart.current) {
-        hasLoggedStart.current = true;
+      if (!hasLoggedTimerInit.current) {
+        hasLoggedTimerInit.current = true;
         logger.registration.debug('Grace period timer initialized', {
           totalMs,
           blocksLeft: blocksLeft.toString(),
@@ -174,12 +203,9 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   // Missing registeree
   if (!registeree) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={resetFlow}>
+        Missing registration data. Start over to begin a new registration.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -212,27 +238,21 @@ export function GracePeriodStep({ onComplete, className }: GracePeriodStepProps)
   // No pending acknowledgement — contract returned zeroed deadline data
   if (hasNoPendingAck) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          No pending acknowledgement found. The registration window may have expired. Please go back
-          and submit the acknowledgement again.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={restartFromAcknowledgement}>
+        No pending acknowledgement found. The registration window may have expired. Start over to
+        sign and submit the acknowledgement again.
+      </FlowRecoveryAlert>
     );
   }
 
   // Registration window closed on-chain — advancing would only produce a revert
   if (windowClosed) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          The registration window has expired (closed at block {deadlines.expiry.toString()},
-          current block {deadlines.currentBlock.toString()}). Please go back and submit the
-          acknowledgement again to restart the process.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={restartFromAcknowledgement}>
+        The registration window has expired (closed at block {deadlines.expiry.toString()}, current
+        block {deadlines.currentBlock.toString()}). Start over to sign and submit the
+        acknowledgement again.
+      </FlowRecoveryAlert>
     );
   }
 

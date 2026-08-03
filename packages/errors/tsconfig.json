@@ -2,6 +2,9 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2023"],
+    // The ABI-staleness guard in coverage.test.ts reads the Forge artifacts off disk, which
+    // is the only way to see drift the committed ABIs cannot report about themselves.
+    "types": ["node"],
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",

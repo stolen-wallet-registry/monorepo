@@ -1,11 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import type { ParsedStreamData } from '@swr/p2p';
+import { computeTransactionDataHash } from '@swr/signatures';
 import { isValidSignatureData, isValidTxSignatureData } from './signatureData';
+import type { Hash } from '@/lib/types/ethereum';
 
 const CHAIN_ID = 8453;
 const ADDRESS = `0x${'a'.repeat(40)}`;
 const SIG = `0x${'b'.repeat(130)}`;
 const BYTES32 = `0x${'c'.repeat(64)}`;
+const OTHER_BYTES32 = `0x${'d'.repeat(64)}`;
+
+// The default batch's real commitment. Computed rather than hard-coded so the fixture cannot
+// drift from `computeTransactionDataHash`, which is the same function the reporter signs over
+// and the contract recomputes.
+const DEFAULT_DATA_HASH = computeTransactionDataHash(
+  [BYTES32, BYTES32] as Hash[],
+  [BYTES32, BYTES32] as Hash[]
+);
 
 // Mirrors exactly what useP2PSignFlow puts on the wire, including the extended fields —
 // reportedChainId as a DECIMAL chain ID (the contracts take uint64), not a bytes32 hash.
@@ -40,7 +51,7 @@ function txMessage(
       ...sigOverrides,
     },
     transactionBatch: {
-      dataHash: BYTES32,
+      dataHash: DEFAULT_DATA_HASH,
       reportedChainId: BYTES32,
       transactionCount: 2,
       transactionHashes: [BYTES32, BYTES32],
@@ -185,6 +196,75 @@ describe('isValidTxSignatureData (transaction flow)', () => {
     expect(
       isValidTxSignatureData(txMessage({}, { transactionHashes: [BYTES32, '0xnope'] }), CHAIN_ID)
     ).toBe(false);
+  });
+
+  // W-3. The relayer submits `transactionHashes`/`chainIdHashes` while the reporter signed
+  // `dataHash`; nothing above ties the two together, so a selection that changed between
+  // signing and sending passed every shape check and reverted on-chain after the relayer's gas
+  // was spent. This is the same computation the contract performs.
+  it('rejects a batch whose arrays do not hash to the signed dataHash', () => {
+    expect(isValidTxSignatureData(txMessage({}, { dataHash: BYTES32 }), CHAIN_ID)).toBe(false);
+  });
+
+  it('rejects a batch where one entry was swapped after signing', () => {
+    // Same length, same shapes, same count — only the content differs, which is precisely
+    // what every other check in this validator is blind to.
+    expect(
+      isValidTxSignatureData(
+        txMessage({}, { transactionHashes: [BYTES32, OTHER_BYTES32] }),
+        CHAIN_ID
+      )
+    ).toBe(false);
+    expect(
+      isValidTxSignatureData(txMessage({}, { chainIdHashes: [BYTES32, OTHER_BYTES32] }), CHAIN_ID)
+    ).toBe(false);
+  });
+
+  it('accepts a batch whose arrays hash to the signed dataHash', () => {
+    const hashes = [BYTES32, OTHER_BYTES32] as Hash[];
+    const chainIds = [OTHER_BYTES32, BYTES32] as Hash[];
+    expect(
+      isValidTxSignatureData(
+        txMessage(
+          {},
+          {
+            transactionHashes: hashes,
+            chainIdHashes: chainIds,
+            dataHash: computeTransactionDataHash(hashes, chainIds),
+          }
+        ),
+        CHAIN_ID
+      )
+    ).toBe(true);
+  });
+
+  // The hash is order-sensitive (abi.encode of two arrays), so the same set in a different
+  // order is a different batch — and the contract agrees.
+  it('rejects the same entries in a different order', () => {
+    const hashes = [BYTES32, OTHER_BYTES32] as Hash[];
+    const chainIds = [OTHER_BYTES32, BYTES32] as Hash[];
+    expect(
+      isValidTxSignatureData(
+        txMessage(
+          {},
+          {
+            transactionHashes: [OTHER_BYTES32, BYTES32],
+            chainIdHashes: chainIds,
+            dataHash: computeTransactionDataHash(hashes, chainIds),
+          }
+        ),
+        CHAIN_ID
+      )
+    ).toBe(false);
+  });
+
+  it('accepts a dataHash that differs only in hex casing', () => {
+    expect(
+      isValidTxSignatureData(
+        txMessage({}, { dataHash: DEFAULT_DATA_HASH.toUpperCase().replace('0X', '0x') }),
+        CHAIN_ID
+      )
+    ).toBe(true);
   });
 
   it('rejects a signature with no batch attached', () => {

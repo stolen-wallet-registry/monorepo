@@ -11,8 +11,10 @@ import { Alert, AlertDescription, Skeleton } from '@swr/ui';
 import { GracePeriodTimer, getGracePeriodStatus } from '@/components/composed/GracePeriodTimer';
 import { ExplorerLink } from '@/components/composed/ExplorerLink';
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
+import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
 import { useTransactionSelection, useTransactionFormStore } from '@/stores/transactionFormStore';
 import { useTransactionRegistrationStore } from '@/stores/transactionRegistrationStore';
+import { clearAllTxSignatures } from '@/lib/signatures/transactions';
 import { getExplorerTxUrl } from '@/lib/explorer';
 import { useTxContractDeadlines } from '@/hooks/transactions';
 import { useCountdownTimer } from '@/hooks/useCountdownTimer';
@@ -37,7 +39,7 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
   // Use reporter from form store - this is the address deadlines are stored under in the contract
   // In self-relay, the connected wallet may be the gas wallet (forwarder), not the reporter
   const reporter = useTransactionFormStore((s) => s.reporter);
-  const { acknowledgementHash } = useTransactionRegistrationStore();
+  const { acknowledgementHash, setStep } = useTransactionRegistrationStore();
   const { themeVariant, triggerThemeAnimation, setThemeVariant, setColorScheme } = useTheme();
 
   // Use refs for theme values to avoid stale closure issues in handleExpire callback
@@ -126,6 +128,24 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
     onComplete();
   }, [setThemeVariant, setColorScheme, onComplete]);
 
+  /**
+   * Recovery for the unrecoverable grace-period states.
+   *
+   * The acknowledgement is missing or its window has closed on chain, so its nonce is spent and
+   * every cached batch signature can now only produce another revert. Returns to the selection
+   * step rather than straight to signing — the same target `TxRegisterPayStep` uses for its
+   * window-closed retry, since the reporter may well want to revise the batch before paying for
+   * a second acknowledgement.
+   */
+  const restartFromSelection = useCallback(() => {
+    logger.registration.warn(
+      'Transaction grace period unrecoverable, restarting from transaction selection',
+      { reporter, chainId }
+    );
+    clearAllTxSignatures();
+    setStep('select-transactions');
+  }, [reporter, chainId, setStep]);
+
   // Countdown timer - target is the START block (when window opens)
   // Pass null when no pending ack OR when the on-chain window has already closed. The timer
   // targets the START block, so on a closed window it would see the target in the past, fire
@@ -164,12 +184,9 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
   // Missing transaction data or reporter
   if (txHashesForContract.length === 0 || !reporter) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Missing registration data. Please start over from the beginning.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={restartFromSelection}>
+        Missing registration data. Start over to select the transactions you want to report.
+      </FlowRecoveryAlert>
     );
   }
 
@@ -202,27 +219,20 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
   // No pending acknowledgement — contract returned zeroed deadline data
   if (hasNoPendingAck) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          No pending acknowledgement found. The registration window may have expired. Please go back
-          and submit the acknowledgement again.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={restartFromSelection}>
+        No pending acknowledgement found. The registration window may have expired. Start over to
+        submit the acknowledgement again.
+      </FlowRecoveryAlert>
     );
   }
 
   // Registration window closed on-chain — advancing would only produce a revert
   if (windowClosed) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          The registration window has expired (closed at block {deadlines.expiry.toString()},
-          current block {deadlines.currentBlock.toString()}). Please go back and submit the
-          acknowledgement again to restart the process.
-        </AlertDescription>
-      </Alert>
+      <FlowRecoveryAlert actionLabel="Start Over" onAction={restartFromSelection}>
+        The registration window has expired (closed at block {deadlines.expiry.toString()}, current
+        block {deadlines.currentBlock.toString()}). Start over to submit the acknowledgement again.
+      </FlowRecoveryAlert>
     );
   }
 

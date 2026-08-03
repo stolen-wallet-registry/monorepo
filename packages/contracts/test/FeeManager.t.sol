@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { Test } from "forge-std/Test.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { FeeManager } from "../src/FeeManager.sol";
 import { IFeeManager } from "../src/interfaces/IFeeManager.sol";
 import { MockAggregator } from "./mocks/MockAggregator.sol";
@@ -309,7 +310,7 @@ contract FeeManagerTest is Test {
     // setBaseFee should be owner-only.
     function test_SetBaseFee_OnlyOwner() public {
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user));
         feeManager.setBaseFee(1000);
     }
 
@@ -341,7 +342,7 @@ contract FeeManagerTest is Test {
     // setFallbackPrice should be owner-only.
     function test_SetFallbackPrice_OnlyOwner() public {
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user));
         feeManager.setFallbackPrice(400_000);
     }
 
@@ -365,7 +366,7 @@ contract FeeManagerTest is Test {
     // setPriceFeed should be owner-only.
     function test_SetPriceFeed_OnlyOwner() public {
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user));
         feeManager.setPriceFeed(address(0));
     }
 
@@ -384,7 +385,7 @@ contract FeeManagerTest is Test {
     // setStalePriceThreshold should be owner-only.
     function test_SetStalePriceThreshold_OnlyOwner() public {
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user));
         feeManager.setStalePriceThreshold(1 hours);
     }
 
@@ -411,7 +412,7 @@ contract FeeManagerTest is Test {
     // setFallbackSyncInterval should be owner-only.
     function test_SetFallbackSyncInterval_OnlyOwner() public {
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user));
         feeManager.setFallbackSyncInterval(12 hours);
     }
 
@@ -475,7 +476,7 @@ contract FeeManagerTest is Test {
 
         // Random user cannot accept
         vm.prank(user);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user));
         feeManager.acceptOwnership();
     }
 

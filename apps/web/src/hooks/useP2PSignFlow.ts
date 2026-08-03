@@ -75,6 +75,17 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
   const [sendError, setSendError] = useState<string | null>(null);
   const [signature, setSignature] = useState<Hex | null>(null);
 
+  /**
+   * In-flight latch for `handleSign`.
+   *
+   * `isSending` is only set AFTER signing resolves, so it cannot guard the window that
+   * matters: two clicks while the wallet prompt is open produce two signatures, each with its
+   * own freshly-resolved `windowBlock`, and both are written to the relayer's stream. The
+   * relayer stores whichever arrives last and the victim has already approved two prompts. A
+   * ref rather than state because it must be set synchronously inside the same click.
+   */
+  const signInFlightRef = useRef(false);
+
   // Use ref for getter to avoid callback re-creation when parent re-renders
   const getLibp2pRef = useRef(getLibp2p);
   useEffect(() => {
@@ -129,6 +140,11 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
   };
 
   const handleSign = useCallback(async () => {
+    if (signInFlightRef.current) {
+      logger.p2p.warn('Sign already in progress, ignoring duplicate call', { keyRef });
+      return;
+    }
+
     const libp2p = getLibp2pRef.current();
     if (
       !hashData ||
@@ -158,6 +174,7 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
       return;
     }
 
+    signInFlightRef.current = true;
     try {
       setSendError(null);
       resetSign();
@@ -243,6 +260,7 @@ export function useP2PSignFlow(config: P2PSignFlowConfig): P2PSignFlowResult {
       setSendError(message);
     } finally {
       setIsSending(false);
+      signInFlightRef.current = false;
     }
   }, [
     hashData,

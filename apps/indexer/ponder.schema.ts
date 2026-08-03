@@ -111,7 +111,17 @@ export const walletAcknowledgement = onchainTable(
     /** Was gas sponsored? */
     isSponsored: t.boolean().notNull(),
     /**
-     * Status: pending | registered.
+     * Status: pending | registered | superseded.
+     *
+     * `registered` means THIS acknowledgement completed its own two-phase flow: the
+     * registeree signed the second message and `WalletRegistered` followed.
+     *
+     * `superseded` means the wallet ended up registered by some other route — in practice an
+     * operator batch covering the same wallet — while this acknowledgement was still pending.
+     * The registration is real and the pending ack is moot, but the registeree never signed
+     * the second message, so recording it as `registered` claimed a signature that does not
+     * exist. Display-only today; the distinction matters the moment anything counts completed
+     * two-phase flows.
      *
      * There is deliberately no grace-period window here. The contract derives it from
      * `TimingConfig` with a per-acknowledgement random component and does NOT put the
@@ -258,8 +268,25 @@ export const crossChainMessage = onchainTable(
   (t) => ({
     /** messageId (Hyperlane message ID) */
     id: t.hex().primaryKey(),
-    /** Origin chain ID (numeric) */
+    /**
+     * Origin chain ID (numeric) — OR a Hyperlane domain, see {@link sourceChainIsDomain}.
+     *
+     * The inbox handlers only receive the Hyperlane `origin` domain and map it through
+     * `hyperlaneDomainToCAIP2`. For every chain @swr/chains knows, that yields a real numeric
+     * chain ID. For one it does not, the handlers fall back to the raw domain rather than
+     * writing 0, because a domain is still a usable correlation key — but the two are
+     * different numbering spaces, and a consumer that renders this as a chain ID (or joins it
+     * against one) is wrong in exactly that case. Read `sourceChainIsDomain` before doing
+     * either.
+     */
     sourceChainId: t.integer().notNull(),
+    /**
+     * True when {@link sourceChainId} holds a Hyperlane domain rather than a chain ID.
+     *
+     * The fallback was previously documented only in the handler, three files away from where
+     * anyone reads the column.
+     */
+    sourceChainIsDomain: t.boolean(),
     /** Destination chain ID (always hub) */
     targetChainId: t.integer().notNull(),
     /** Wallet address (for wallet registrations) */

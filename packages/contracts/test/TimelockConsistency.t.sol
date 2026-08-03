@@ -211,6 +211,95 @@ contract TimelockConsistencyTest is Test {
         assertEq(submitter.contractRegistry(), newContract);
     }
 
+    /// @notice The fee pointers — the state that MOVES MONEY — are timelocked after setup.
+    /// @dev SECURITY-CRITICAL (C-3). `_collectFee` pushes the collected fee straight to
+    ///      `feeRecipient`, so `feeRecipient` is not a pointer to data, it IS the money.
+    ///      These three setters were the only owner calls on this contract still executable in
+    ///      one transaction, which made `setFeeRecipient(attacker)` a complete, instant, and
+    ///      undelayed diversion of all future operator fees — on a contract whose every other
+    ///      pointer already carried the 2-day delay.
+    function test_Submitter_FeeSettersBlockedAfterSetup() public {
+        OperatorSubmitter submitter = _submitter();
+        submitter.completeSetup();
+        address attacker = makeAddr("attacker");
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
+        submitter.setFeeRecipient(attacker);
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
+        submitter.setFeeManager(makeAddr("hostileFeeManager"));
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__UseTimelockedPath.selector);
+        submitter.setFeeConfig(makeAddr("hostileFeeManager"), attacker);
+
+        assertEq(submitter.feeRecipient(), address(0), "Fee recipient must be unchanged");
+        assertEq(submitter.feeManager(), address(0), "Fee manager must be unchanged");
+    }
+
+    /// @notice Each fee setter has a working propose → wait → activate path.
+    function test_Submitter_FeeSettersViaTimelock() public {
+        OperatorSubmitter submitter = _submitter();
+        submitter.completeSetup();
+        address recipient = makeAddr("treasury");
+        address fm = makeAddr("feeManager");
+
+        // Recipient first: _setFeeManager rejects enabling fees with no recipient.
+        submitter.proposeFeeRecipient(recipient);
+        vm.warp(block.timestamp + submitter.ACTIVATION_DELAY());
+        submitter.activateFeeRecipient(recipient);
+        assertEq(submitter.feeRecipient(), recipient);
+
+        submitter.proposeFeeManager(fm);
+        vm.warp(block.timestamp + submitter.ACTIVATION_DELAY());
+        submitter.activateFeeManager(fm);
+        assertEq(submitter.feeManager(), fm);
+
+        // And the atomic pair, which carries its own action key.
+        address fm2 = makeAddr("feeManager2");
+        address recipient2 = makeAddr("treasury2");
+        submitter.proposeFeeConfig(fm2, recipient2);
+        vm.warp(block.timestamp + submitter.ACTIVATION_DELAY());
+        submitter.activateFeeConfig(fm2, recipient2);
+        assertEq(submitter.feeManager(), fm2);
+        assertEq(submitter.feeRecipient(), recipient2);
+    }
+
+    /// @notice Activation applies only the exact fee configuration that was proposed.
+    /// @dev The delay is worthless if the activation arguments are unconstrained — an owner could
+    ///      propose a benign recipient, wait out the two days in public, then activate a different
+    ///      one. Also pins that a single-pointer proposal cannot be activated as an atomic pair:
+    ///      the two paths hash different action keys.
+    function test_Submitter_FeeActivationRejectsUnproposedValues() public {
+        OperatorSubmitter submitter = _submitter();
+        submitter.completeSetup();
+        address proposed = makeAddr("proposedTreasury");
+
+        submitter.proposeFeeRecipient(proposed);
+        vm.warp(block.timestamp + submitter.ACTIVATION_DELAY());
+
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__NotProposed.selector);
+        submitter.activateFeeRecipient(makeAddr("attacker"));
+
+        // A setFeeRecipient proposal is not a setFeeConfig proposal.
+        vm.expectRevert(TimelockOwnable.TimelockOwnable__NotProposed.selector);
+        submitter.activateFeeConfig(address(0), proposed);
+
+        submitter.activateFeeRecipient(proposed);
+        assertEq(submitter.feeRecipient(), proposed);
+    }
+
+    /// @notice Fee setters stay immediate during setup, so deploy scripts keep working.
+    function test_Submitter_FeeSettersImmediateDuringSetup() public {
+        OperatorSubmitter submitter = _submitter();
+        address recipient = makeAddr("treasury");
+        address fm = makeAddr("feeManager");
+
+        submitter.setFeeConfig(fm, recipient);
+
+        assertEq(submitter.feeManager(), fm);
+        assertEq(submitter.feeRecipient(), recipient);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // OperatorRegistry — capability escalation bypassed the approval timelock
     // ═══════════════════════════════════════════════════════════════════════════
