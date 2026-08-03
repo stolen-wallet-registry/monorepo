@@ -28,5 +28,8 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vocs": "^1.4.1"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }

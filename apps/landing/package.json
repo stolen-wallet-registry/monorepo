@@ -42,5 +42,8 @@
     "tailwindcss": "^4.1.17",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }

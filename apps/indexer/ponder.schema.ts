@@ -11,10 +11,25 @@ export const stolenWallet = onchainTable(
     /**
      * The FULL bytes32 identifier from the event (lowercase, zero-padded).
      *
-     * NOT the address: `CAIP10.walletKey` supports non-eip155 namespaces whose
-     * identifiers use all 32 bytes, so truncating to 20 bytes would let two distinct
-     * non-EVM accounts collide onto one row (and `.onConflictDoNothing()` would silently
-     * drop the second registration). Use `walletAddress` for EVM display/lookup.
+     * PREVENTED by this key: 20-byte truncation collisions. `CAIP10.walletKey` supports
+     * non-eip155 namespaces whose identifiers use all 32 bytes, so truncating to 20 bytes
+     * would let two distinct non-EVM accounts sharing a 20-byte suffix collide onto one row
+     * (and `.onConflictDoNothing()` would silently drop the second registration). Use
+     * `walletAddress` for EVM display/lookup.
+     *
+     * NOT PREVENTED — REVISIT BEFORE ANY NON-EVM SPOKE SHIPS: the same identifier registered
+     * under two different non-EVM chain references, or under two different namespaces. The
+     * contract's key for those is `CAIP10.walletKey(namespaceHash, chainRefHash, identifier)`
+     * (`WalletRegistry.registerFromHub`) — chain- and namespace-scoped — while this key is the
+     * identifier alone. Only the eip155 branch is genuinely chain-wildcarded, so for EVM the
+     * two agree; for anything else they do not. Consequences today: the second registration's
+     * `WalletRegistered` is dropped by `.onConflictDoNothing()`, and the `CrossChainWalletRegistered`
+     * handler's unconditional `db.update` then overwrites the FIRST row's `sourceChainId` /
+     * `sourceChainCAIP2` / `bridgeId` / `messageId` with the second message's provenance.
+     *
+     * Unreachable while every spoke is EVM, which is why this is documented rather than fixed:
+     * the fix is a primary-key change (identifier + namespaceHash + chainRefHash), i.e. a
+     * schema migration and a re-index. Do it as part of non-EVM spoke support, not after.
      */
     id: t.hex().primaryKey(),
     /** EVM address (lowercase) when the identifier is EVM-shaped, else null */
@@ -170,8 +185,20 @@ export const transactionBatch = onchainTable(
     registeredAtBlock: t.bigint().notNull(),
     /** Registration transaction hash */
     transactionHash: t.hex().notNull(),
-    /** If cross-chain, source chain ID */
+    /**
+     * Cross-chain provenance, mirroring the same four columns on `stolenWallet`.
+     *
+     * `TransactionBatchRegistered` carries none of this — the batch summary fires AFTER the
+     * per-entry `CrossChainTransactionRegistered` events in the same tx, so the batch handler
+     * reads them back off the `crossChainMessage` row keyed by `hubTxHash`. All four are NULL
+     * for a locally-registered batch, which is how "was this delivered from a spoke?" is
+     * answered; before they were written, a cross-chain batch was byte-identical to a local one.
+     */
     sourceChainId: t.integer(),
+    /** If cross-chain, CAIP-2 string of the source chain */
+    sourceChainCAIP2: t.text(),
+    /** If cross-chain, bridge protocol ID (0=local, 1=Hyperlane) */
+    bridgeId: t.integer(),
     /** If cross-chain, Hyperlane message ID */
     messageId: t.hex(),
   }),
@@ -250,7 +277,26 @@ export const transactionBatchAcknowledgement = onchainTable(
     acknowledgedAtBlock: t.bigint().notNull(),
     /** Acknowledgement transaction hash */
     transactionHash: t.hex().notNull(),
-    /** Status: pending | registered — see walletAcknowledgement.status for why there is no window */
+    /**
+     * Status: pending | registered | superseded — see `walletAcknowledgement.status` for why
+     * there is no grace-period window here.
+     *
+     * `registered` is claimed ONLY when the batch that registered carries the same `dataHash`
+     * this acknowledgement committed to. That is an exact discriminator, not a heuristic:
+     * `TransactionRegistry.registerTransactions` reverts with `DataHashMismatch` unless the
+     * two match, so a matching hash on a non-cross-chain batch IS this reporter's completed
+     * two-phase flow.
+     *
+     * `superseded` is the same idea as on the wallet side: the exact batch this reporter
+     * committed to got registered by another route (a spoke delivery for the same reporter and
+     * the same dataHash) while the acknowledgement was still pending. The registration is real,
+     * the pending ack is moot, but the reporter never signed the second message.
+     *
+     * A batch with a DIFFERENT dataHash leaves this row `pending` and untouched. It registers
+     * other transactions entirely and does not consume the on-chain acknowledgement, so the
+     * reporter can still complete their own flow — recording either `registered` (a signature
+     * that does not exist) or `superseded` (a completion that never happened) would be false.
+     */
     status: t.text().notNull(),
   }),
   (table) => ({
@@ -287,6 +333,15 @@ export const crossChainMessage = onchainTable(
      * anyone reads the column.
      */
     sourceChainIsDomain: t.boolean(),
+    /**
+     * CAIP-2 string of the source chain, or null when the chain is unknown to @swr/chains.
+     *
+     * Unlike {@link sourceChainId} this is never ambiguous — it is only ever written when the
+     * chain actually resolved, so there is no domain-vs-chain-ID reading to get wrong. It also
+     * saves the transaction-batch handler from having to invert `sourceChainId` back into a
+     * CAIP-2 string, which it could not do correctly for the domain-fallback case.
+     */
+    sourceChainCAIP2: t.text(),
     /** Destination chain ID (always hub) */
     targetChainId: t.integer().notNull(),
     /** Wallet address (for wallet registrations) */
@@ -314,6 +369,9 @@ export const crossChainMessage = onchainTable(
   (table) => ({
     statusIdx: index().on(table.status),
     walletIdx: index().on(table.wallet),
+    // The transaction-batch handler looks a message up by the hub tx it was delivered in —
+    // the only key it has, since `TransactionBatchRegistered` carries no messageId.
+    hubTxHashIdx: index().on(table.hubTxHash),
   })
 );
 

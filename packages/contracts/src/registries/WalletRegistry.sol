@@ -86,8 +86,20 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
     {
         if (_owner == address(0)) revert WalletRegistry__ZeroAddress();
 
-        // Validate timing: deadline must allow for worst-case grace period
-        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks) {
+        // Validate timing: the acknowledgement must always leave at least one block on which
+        // `register` can actually succeed, for EVERY randomised draw.
+        //
+        // `getGracePeriodEndBlock` tops out at `block.number + 2 * graceBlocks - 1`;
+        // `getDeadlineBlock` bottoms out at `block.number + deadlineBlocks`. Registration needs a
+        // block B with `gracePeriodStart < B < deadline` — strictly greater, not >=, because
+        // `TimingConfig.resolveWindowBlockHash` demands `gracePeriodStart <= windowBlock < B`, so
+        // the earliest usable B is `gracePeriodStart + 1`. That makes the required bound
+        // `deadlineBlocks >= 2 * graceBlocks + 1`.
+        //
+        // `>= 2 * graceBlocks` (what this used to be) predates `windowBlock` and is off by one:
+        // it admits configurations where an unlucky draw produces an acknowledgement that can
+        // never be registered, burning the user's nonce and acknowledgement gas.
+        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks + 1) {
             revert WalletRegistry__DeadlineInPast();
         }
 
@@ -119,7 +131,14 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     function _collectFee() internal {
-        if (feeManager == address(0)) return;
+        // Free-registration mode (`feeManager == address(0)`) is a supported deployment shape, so
+        // it must still return anything the caller sent. Returning early WITHOUT refunding skipped
+        // the excess branch below and silently retained the whole `msg.value`, recoverable only by
+        // the owner — every other mode refunds the overpayment.
+        if (feeManager == address(0)) {
+            _refundAll();
+            return;
+        }
 
         uint256 requiredFee = IFeeManager(feeManager).currentFeeWei();
         if (msg.value < requiredFee) {
@@ -143,6 +162,16 @@ contract WalletRegistry is IWalletRegistry, EIP712, TimelockOwnable {
             if (!refundSuccess) {
                 revert WalletRegistry__RefundFailed();
             }
+        }
+    }
+
+    /// @dev Returns the entire `msg.value` to the caller. Used when there is no fee to charge at
+    ///      all, so nothing should be retained. No-op when nothing was sent.
+    function _refundAll() internal {
+        if (msg.value == 0) return;
+        (bool refundSuccess,) = msg.sender.call{ value: msg.value }("");
+        if (!refundSuccess) {
+            revert WalletRegistry__RefundFailed();
         }
     }
 

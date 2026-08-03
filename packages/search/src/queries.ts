@@ -147,11 +147,45 @@ export const OPERATOR_QUERY = gql`
 `;
 
 /**
- * Query list of operators.
+ * Query operators filtered by approval status.
+ *
+ * `$approved` is NON-NULL on purpose. It used to be nullable, and `listOperators` passed
+ * `undefined` for the unfiltered case — which `graphql-request` drops from the variables map,
+ * so `$approved` resolved to null and ponder turned `where: { approved: null }` into
+ * `approved IS NULL` (`buildWhereConditions`, graphql/index.js). `operator.approved` is NOT
+ * NULL, so that predicate matched zero rows: an unfiltered listing came back as an empty array
+ * with no error, reading as "this registry has no operators".
+ *
+ * The unfiltered case now has its own document ({@link OPERATORS_LIST_ALL_QUERY}) with no
+ * `where` clause at all, and the `!` here makes the old mistake a GraphQL validation error
+ * rather than a silent empty result.
  */
 export const OPERATORS_LIST_QUERY = gql`
-  query ListOperators($approved: Boolean) {
+  query ListOperators($approved: Boolean!) {
     operators(where: { approved: $approved }, orderBy: "approvedAt", orderDirection: "desc") {
+      items {
+        id
+        identifier
+        capabilities
+        approved
+        canSubmitWallet
+        canSubmitTransaction
+        canSubmitContract
+        approvedAt
+      }
+    }
+  }
+`;
+
+/**
+ * Query ALL operators, approved or revoked.
+ *
+ * A separate document rather than a nullable filter — see {@link OPERATORS_LIST_QUERY} for why
+ * "omit the variable" is not a safe way to express "no filter" against ponder.
+ */
+export const OPERATORS_LIST_ALL_QUERY = gql`
+  query ListAllOperators {
+    operators(orderBy: "approvedAt", orderDirection: "desc") {
       items {
         id
         identifier
@@ -265,6 +299,8 @@ export const RECENT_TRANSACTIONS_QUERY = gql`
         operatorId
         registeredAt
         transactionHash
+        sourceChainCAIP2
+        messageId
       }
     }
   }
@@ -398,6 +434,10 @@ export const TRANSACTION_BATCH_ONLY_QUERY = gql`
       operatorId
       registeredAt
       transactionHash
+      sourceChainId
+      sourceChainCAIP2
+      bridgeId
+      messageId
     }
   }
 `;
@@ -619,6 +659,13 @@ export interface RawRecentTransactionsResponse {
       operatorId?: string;
       registeredAt: string;
       transactionHash: string;
+      /**
+       * Cross-chain provenance. NULL for a batch registered directly on the hub — that is the
+       * discriminator, since nothing else on the row distinguishes a spoke delivery from a
+       * local registration. See `transactionBatch` in the indexer schema.
+       */
+      sourceChainCAIP2?: string | null;
+      messageId?: string | null;
     }>;
   };
 }
@@ -700,6 +747,16 @@ export interface RawTransactionBatchOnlyResponse {
     operatorId?: string;
     registeredAt: string;
     transactionHash: string;
+    /**
+     * Cross-chain provenance, all four NULL for a hub-registered batch — see
+     * {@link RawRecentTransactionsResponse}. `sourceChainId` is null rather than 0 when the
+     * source chain is unknown to @swr/chains; `sourceChainCAIP2` is only ever set when the
+     * chain actually resolved.
+     */
+    sourceChainId?: number | null;
+    sourceChainCAIP2?: string | null;
+    bridgeId?: number | null;
+    messageId?: string | null;
   } | null;
 }
 

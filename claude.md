@@ -78,13 +78,19 @@ pnpm format           # Prettier
 
 ### ABI Regeneration (MANDATORY)
 
-After ANY Solidity contract change, regenerate the TypeScript ABI exports:
+After ANY Solidity contract change, regenerate the TypeScript ABI exports **from the repo root**:
 
 ```bash
-cd packages/contracts && forge build && pnpm export-abi
+pnpm export-abi
 ```
 
-This runs `scripts/export-abi.js` which reads Forge artifacts from `out/` and writes typed ABI constants to `packages/abis/src/`. The frontend (`@swr/abis`) consumes these — stale ABIs cause silent runtime failures.
+This runs `@swr/contracts#export-abi` through turbo (which builds the contracts first via its `dependsOn`, so no separate `forge build` is needed) and then `prettier --write "packages/abis/src/*.ts"`.
+
+**Run it from the root, not `cd packages/contracts && pnpm export-abi`.** The package-level script emits raw `JSON.stringify` output while the committed ABIs are Prettier-formatted, so running it directly leaves the whole of `packages/abis/src` dirty with a formatting-only diff and fails the `Prettier check` step in CI's `node` job. The root script chains the formatter for you.
+
+Under the hood this is `scripts/export-abi.js`, which reads Forge artifacts from `out/` and writes typed ABI constants to `packages/abis/src/`. The frontend (`@swr/abis`) consumes these — stale ABIs cause silent runtime failures.
+
+Two CI jobs guard this (both manual — see `.github/workflows/ci.yml`): `abi-drift` regenerates with Foundry and fails on any diff, and `abi-freshness` fails if `packages/contracts/src/**.sol` changed without `packages/abis/src` changing alongside it.
 
 ---
 

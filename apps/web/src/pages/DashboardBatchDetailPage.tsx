@@ -2,7 +2,7 @@
  * Batch detail page.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useSearch } from 'wouter';
 import { Badge, Button, Card, CardContent } from '@swr/ui';
 import { ArrowLeft } from 'lucide-react';
@@ -54,9 +54,27 @@ function BatchDetailContent({
   }, [data]);
 
   const totalPages = Math.max(1, Math.ceil(totalEntries / pageSize));
-  // Clamp page at render time to handle data size changes without cascading renders.
-  // When totalEntries shrinks, clampedPage adjusts automatically; state syncs on next interaction.
-  const clampedPage = Math.min(entryPage, totalPages);
+
+  /**
+   * Clamped where the page is SET, not where it is rendered.
+   *
+   * There used to be a derived `clampedPage` for display while the query kept using the raw
+   * `entryPage` for its offset, so the fetch and the pager could describe different pages.
+   * Feeding the clamped value into the offset instead would not fix that — it would loop:
+   * `useBatchDetail` keys on `offset` and has no `placeholderData`, so `data` is `undefined`
+   * for the whole of every page change, which collapses `totalEntries` to 0 and `totalPages`
+   * to 1, which clamps the page straight back to 1, which restores the previous (cached)
+   * offset, which restores `totalPages`… a flip-flop on every click.
+   *
+   * So there is one page number and it is validated on the way in. Nothing downstream can
+   * disagree with the offset because nothing downstream derives a second one.
+   */
+  const handlePageChange = useCallback(
+    (page: number) => {
+      setEntryPage(Math.min(Math.max(1, page), Math.max(1, Math.ceil(totalEntries / pageSize))));
+    },
+    [totalEntries]
+  );
 
   const batchLabel = data?.type ?? batchType;
   const operatorNames = useMemo(() => {
@@ -121,9 +139,9 @@ function BatchDetailContent({
         isLoading={isLoading}
         totalEntries={totalEntries}
         pageSize={pageSize}
-        clampedPage={clampedPage}
+        page={entryPage}
         totalPages={totalPages}
-        onPageChange={setEntryPage}
+        onPageChange={handlePageChange}
       />
     </div>
   );

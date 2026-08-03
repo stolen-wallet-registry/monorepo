@@ -17,6 +17,7 @@ import {
   searchContract,
   searchTransaction,
   searchWallet,
+  listOperators,
 } from './search';
 import { detectSearchType } from './detect';
 import { isSearchUnavailableError, SearchUnavailableError } from './errors';
@@ -29,6 +30,8 @@ import {
 } from './interpret';
 import {
   CONTRACT_QUERY,
+  OPERATORS_LIST_ALL_QUERY,
+  OPERATORS_LIST_QUERY,
   REPORT_MAX_PAGES,
   REPORT_PAGE_SIZE,
   TRANSACTION_QUERY,
@@ -702,5 +705,64 @@ describe('result fields carry the shape their types promise', () => {
     const result = await searchTransaction(config, `0x${'d'.repeat(64)}`);
 
     expect(result.data?.chains[0]?.batchId).toBe('5');
+  });
+});
+
+describe('listOperators', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const OPERATOR_ROW = {
+    id: `0x${'e'.repeat(40)}`,
+    identifier: 'Test Operator',
+    capabilities: 7,
+    approved: true,
+    canSubmitWallet: true,
+    canSubmitTransaction: true,
+    canSubmitContract: true,
+    approvedAt: '1700000000',
+  };
+
+  it('filters on approved when approvedOnly is true', async () => {
+    mockRequest.mockResolvedValue({ operators: { items: [OPERATOR_ROW] } });
+
+    const result = await listOperators(config, true);
+
+    expect(result).toHaveLength(1);
+    expect(mockRequest).toHaveBeenCalledWith(config.indexerUrl, OPERATORS_LIST_QUERY, {
+      approved: true,
+    });
+  });
+
+  it('defaults to approved-only', async () => {
+    mockRequest.mockResolvedValue({ operators: { items: [OPERATOR_ROW] } });
+
+    await listOperators(config);
+
+    expect(mockRequest).toHaveBeenCalledWith(config.indexerUrl, OPERATORS_LIST_QUERY, {
+      approved: true,
+    });
+  });
+
+  /**
+   * The regression this exists for: `approvedOnly: false` used to send
+   * `{ approved: undefined }`, which graphql-request drops. `$approved` then resolved to null,
+   * ponder compiled `where: { approved: null }` to `approved IS NULL` against a NOT NULL
+   * column, and the call returned `[]` — indistinguishable from a registry with no operators.
+   * The unfiltered path must use a document that carries no `where` clause at all, and it must
+   * never send an `approved` variable.
+   */
+  it('sends no approval filter at all when approvedOnly is false', async () => {
+    const revoked = { ...OPERATOR_ROW, approved: false };
+    mockRequest.mockResolvedValue({ operators: { items: [OPERATOR_ROW, revoked] } });
+
+    const result = await listOperators(config, false);
+
+    expect(result).toHaveLength(2);
+    expect(result.map((op) => op.approved)).toEqual([true, false]);
+    expect(mockRequest).toHaveBeenCalledWith(config.indexerUrl, OPERATORS_LIST_ALL_QUERY);
+    // No third argument: an `approved` variable of ANY value (including undefined) is the bug.
+    expect(mockRequest.mock.calls[0]).toHaveLength(2);
   });
 });

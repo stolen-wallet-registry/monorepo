@@ -361,6 +361,29 @@ describe('useCrossChainConfirmation', () => {
       expect(readOptions().args).toEqual([OTHER_WALLET]);
     });
 
+    // The gap the two tests above leave open: they advance a full second first, by which time
+    // the interval tick has already re-measured from the new start time. The bug lived in the
+    // render BEFORE that tick — the new subject briefly inherited the old run's elapsed value,
+    // so a previous run that had already timed out made the fresh run report 'timeout' before
+    // it had polled once. Asserting immediately after the subject change is what pins it.
+    it('does not inherit a previous run’s timeout when the subject changes mid-run', async () => {
+      const { result, rerender } = renderWallet();
+      await flush();
+
+      await advance(MAX_POLLING_TIME);
+      expect(result.current.status).toBe('timeout');
+
+      await act(async () => {
+        rerender({ wallet: OTHER_WALLET, spokeChainId: SPOKE, enabled: true });
+      });
+      await flush();
+
+      // No timers advanced since the change: this is the first render of the new run.
+      expect(result.current.elapsedTime).toBe(0);
+      expect(result.current.status).not.toBe('timeout');
+      expect(result.current.status).toBe('waiting');
+    });
+
     // The reported chain is half of the transaction key, so a change to it is a different
     // subject even when the sentinel hash is unchanged.
     it('restarts the clock when only the reported chain changes', async () => {

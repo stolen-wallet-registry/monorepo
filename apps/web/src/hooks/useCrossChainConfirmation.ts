@@ -286,6 +286,17 @@ export function useCrossChainConfirmation(
     startTimeRef.current = Date.now();
     prevStatusRef.current = 'idle';
 
+    // Zero the stopwatch for THIS run, not just when the hook is disabled.
+    //
+    // This effect also re-runs when the subject changes while `enabled` stays true (a new
+    // wallet, or a new sentinel tx hash — `argsKey`). The reset above only covers the
+    // disabled path, so without this the new run inherits the previous run's `elapsedTime`
+    // until the interval's first tick a second later. `status` is derived from it, so a
+    // previous run that had passed `maxPollingTime` makes the fresh run report 'timeout'
+    // before it has polled once. Same `queueMicrotask` as the disabled branch, for the same
+    // reason: it keeps the write out of the effect body (`react-hooks/set-state-in-effect`).
+    queueMicrotask(() => setElapsedTime(0));
+
     logger.registration.info('Starting cross-chain confirmation polling', {
       registry,
       subject,

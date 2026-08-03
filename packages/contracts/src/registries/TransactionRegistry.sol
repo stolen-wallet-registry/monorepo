@@ -97,8 +97,12 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
     {
         if (_owner == address(0)) revert TransactionRegistry__ZeroAddress();
 
-        // Validate timing
-        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks) {
+        // Validate timing. See {WalletRegistry} for the full derivation: the bound is
+        // `2 * graceBlocks + 1`, not `2 * graceBlocks`, because `resolveWindowBlockHash` requires
+        // `gracePeriodStart <= windowBlock < block.number`, so the earliest block on which
+        // `registerTransactions` can succeed is `gracePeriodStart + 1`. The old `2 * graceBlocks`
+        // bound predates `windowBlock` and admits draws with no usable registration block at all.
+        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks + 1) {
             revert TransactionRegistry__DeadlineInPast();
         }
 
@@ -133,7 +137,14 @@ contract TransactionRegistry is ITransactionRegistry, EIP712, TimelockOwnable {
     ///      When hub == address(0), fees are held in this contract and can be recovered
     ///      via withdrawCollectedFees().
     function _collectFee() internal {
-        if (feeManager == address(0)) return;
+        // Free-registration mode (`feeManager == address(0)`) is a supported deployment shape, so
+        // it must still return anything the caller sent. Returning early WITHOUT refunding skipped
+        // the excess branch below and silently retained the whole `msg.value`, recoverable only by
+        // the owner — every other mode refunds the overpayment.
+        if (feeManager == address(0)) {
+            _refundAll();
+            return;
+        }
 
         uint256 requiredFee = IFeeManager(feeManager).currentFeeWei();
         if (msg.value < requiredFee) {

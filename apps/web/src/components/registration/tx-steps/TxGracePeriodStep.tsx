@@ -132,10 +132,19 @@ export function TxGracePeriodStep({ onComplete, className }: TxGracePeriodStepPr
    * Recovery for the unrecoverable grace-period states.
    *
    * The acknowledgement is missing or its window has closed on chain, so its nonce is spent and
-   * every cached batch signature can now only produce another revert. Returns to the selection
-   * step rather than straight to signing — the same target `TxRegisterPayStep` uses for its
-   * window-closed retry, since the reporter may well want to revise the batch before paying for
-   * a second acknowledgement.
+   * every cached batch signature can now only produce another revert.
+   *
+   * Returns to `select-transactions` rather than to `acknowledge-sign`, which is deliberately
+   * EARLIER than `TxRegisterPayStep`'s non-P2P window-closed retry (that one goes to
+   * `acknowledge-sign` and keeps the batch). The difference is what is still known good.
+   * There, the selection has already been signed over twice and only the acknowledgement needs
+   * redoing. Here, `clearAllTxSignatures()` has just discarded every signature for every batch,
+   * so nothing binds the reporter to the batch they picked — and since they are about to pay
+   * for a second acknowledgement, re-opening the selection is the cheaper moment to revise it.
+   *
+   * `TxRegisterPayStep`'s P2P window-closed path also lands on `select-transactions`, but for
+   * an unrelated reason: that is the only step at which `isTxRelayerProtocolExpectedAtStep`
+   * admits a fresh `TX_ACK_SIG` from the partner.
    */
   const restartFromSelection = useCallback(() => {
     logger.registration.warn(

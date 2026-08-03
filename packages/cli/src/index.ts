@@ -120,28 +120,38 @@ async function prepareSubmit(options: SubmitOptions) {
 
 /** Options shared by every submit command, in recommended-first order. */
 function withSubmitOptions(command: Command): Command {
-  return command
-    .requiredOption('-f, --file <path>', 'Input file (JSON or CSV)')
-    .option('-e, --env <env>', 'Environment: local, testnet, mainnet', 'local')
-    .option('--build-only', 'Build transaction data for multisig (no key needed; use for mainnet)')
-    .option('--keystore <path>', 'Encrypted V3 keystore file (passphrase prompted)')
-    .option('-c, --chain-id <id>', 'Default chain ID for entries', '8453')
-    .option('-o, --output-dir <path>', 'Directory to save transaction data')
-    .option('--dry-run', 'Simulate without submitting')
-    .option(
-      '-y, --yes',
-      'Skip the interactive confirmation. For scripted/CI use only — the batch is irreversible.'
-    )
-    .option('--dedupe', 'Drop repeated entries instead of refusing the file')
-    .option(
-      '--max-batch-size <n>',
-      `Maximum entries per batch (default ${DEFAULT_MAX_BATCH_SIZE}, hard ceiling ${ABSOLUTE_MAX_BATCH_SIZE})`
-    )
-    .option(
-      '-k, --private-key <key>',
-      'Plaintext operator key. LOCAL DEVELOPMENT ONLY — refused for testnet/mainnet ' +
-        'because process arguments are world-readable. Use --keystore or --build-only.'
-    );
+  return (
+    command
+      .requiredOption('-f, --file <path>', 'Input file (JSON or CSV)')
+      .option('-e, --env <env>', 'Environment: local, testnet, mainnet', 'local')
+      .option(
+        '--build-only',
+        'Build transaction data for multisig (no key needed; use for mainnet)'
+      )
+      .option('--keystore <path>', 'Encrypted V3 keystore file (passphrase prompted)')
+      .option('-c, --chain-id <id>', 'Default chain ID for entries', '8453')
+      .option('-o, --output-dir <path>', 'Where --build-only writes its transaction JSON')
+      // NOT "simulate": nothing is sent to the node beyond the fee quote. A dry run parses the
+      // file, applies the batch/duplicate/reported-chain rails and quotes the fee — it does not
+      // eth_call the batch, so it cannot tell you the operator is unapproved, the contract is
+      // paused, the fee is short, or the batch exceeds the block gas limit. Promising
+      // "simulate" invites operators to read a clean dry run as "this will land".
+      .option('--dry-run', 'Parse, validate and quote the fee without submitting (no simulation)')
+      .option(
+        '-y, --yes',
+        'Skip the interactive confirmation. For scripted/CI use only — the batch is irreversible.'
+      )
+      .option('--dedupe', 'Drop repeated entries instead of refusing the file')
+      .option(
+        '--max-batch-size <n>',
+        `Maximum entries per batch (default ${DEFAULT_MAX_BATCH_SIZE}, hard ceiling ${ABSOLUTE_MAX_BATCH_SIZE})`
+      )
+      .option(
+        '-k, --private-key <key>',
+        'Plaintext operator key. LOCAL DEVELOPMENT ONLY — refused for testnet/mainnet ' +
+          'because process arguments are world-readable. Use --keystore or --build-only.'
+      )
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

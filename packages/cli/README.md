@@ -28,11 +28,32 @@ pnpm --filter @swr/cli build
 --build-only            Build transaction data for multisig (no key needed)
 --keystore <path>       Encrypted V3 keystore file (passphrase prompted)
 -c, --chain-id <id>     Default chain ID for entries [default: 8453]
--o, --output-dir <path> Directory to save transaction data
---dry-run               Simulate without submitting
+-o, --output-dir <path> Where --build-only writes its transaction JSON (ignored otherwise)
+--dry-run               Parse, validate and quote the fee without submitting (no simulation)
 -y, --yes               Skip the confirmation prompt (mainnet also needs SWR_CONFIRM_COUNT)
 -k, --private-key <key> Plaintext key — LOCAL DEVELOPMENT ONLY (see below)
 ```
+
+### `-o/--output-dir` only applies to `--build-only`
+
+`-o` is where `--build-only` writes its multisig transaction JSON. On a real submission — and on
+`--dry-run` — nothing is written to it. The CLI warns when you pass it anyway:
+
+```console
+⚠ -o/--output-dir "./output" is ignored on a direct submission — it only receives the multisig
+transaction JSON built by --build-only. No files will be written.
+```
+
+Receipts for direct submissions are not implemented; the transaction hash printed on success is
+the record.
+
+### `--dry-run` validates the input, it does not simulate the call
+
+A dry run reads and validates the input file, applies the batch-size, duplicate and
+reported-chain rails, and quotes the batch fee. It does **not** `eth_call` the batch, so a clean
+dry run does not mean the transaction will land — it cannot tell you that the operator is
+unapproved, the contract is paused, the fee is short, or the batch exceeds the block gas limit.
+Those are only tested when you submit.
 
 ### `--yes` on mainnet requires `SWR_CONFIRM_COUNT`
 
@@ -115,8 +136,7 @@ is prompted interactively and is never echoed, never logged, and never placed on
 pnpm --filter @swr/cli swr submit-contracts \
   -f ./entries.json \
   -e mainnet \
-  --keystore ~/.swr/operator-keystore.json \
-  -o ./output
+  --keystore ~/.swr/operator-keystore.json
 # Passphrase for /Users/you/.swr/operator-keystore.json: (not echoed)
 ```
 
@@ -139,8 +159,7 @@ automatically, so it does not need to be passed on the command line.
 ```bash
 pnpm --filter @swr/cli swr submit-contracts \
   -f test/fixtures/contracts.json \
-  -e local \
-  -o ./output
+  -e local
 ```
 
 ### Submit wallets
@@ -148,8 +167,7 @@ pnpm --filter @swr/cli swr submit-contracts \
 ```bash
 pnpm --filter @swr/cli swr submit-wallets \
   -f test/fixtures/wallets.json \
-  -e local \
-  -o ./output
+  -e local
 ```
 
 ### Submit transactions
@@ -157,8 +175,7 @@ pnpm --filter @swr/cli swr submit-wallets \
 ```bash
 pnpm --filter @swr/cli swr submit-transactions \
   -f test/fixtures/transactions.json \
-  -e local \
-  -o ./output
+  -e local
 ```
 
 ### Quote fees
@@ -227,8 +244,7 @@ pnpm --filter @swr/cli swr submit-contracts \
 pnpm --filter @swr/cli swr submit-contracts \
   -f test/fixtures/contracts.json \
   -e local \
-  -k 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6 \
-  -o ./output
+  -k 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6
 ```
 
 #### 1.2 Submit Stolen Wallets (Operator A)
@@ -237,8 +253,7 @@ pnpm --filter @swr/cli swr submit-contracts \
 pnpm --filter @swr/cli swr submit-wallets \
   -f test/fixtures/wallets.json \
   -e local \
-  -k 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6 \
-  -o ./output
+  -k 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6
 ```
 
 #### 1.3 Submit Stolen Transactions (Operator A)
@@ -247,8 +262,7 @@ pnpm --filter @swr/cli swr submit-wallets \
 pnpm --filter @swr/cli swr submit-transactions \
   -f test/fixtures/transactions.json \
   -e local \
-  -k 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6 \
-  -o ./output
+  -k 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6
 ```
 
 #### 1.4 Verify Submissions
@@ -269,8 +283,7 @@ Operator B only has CONTRACT permission.
 pnpm --filter @swr/cli swr submit-contracts \
   -f test/fixtures/contracts.json \
   -e local \
-  -k 0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a \
-  -o ./output
+  -k 0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a
 
 # Should fail
 pnpm --filter @swr/cli swr submit-wallets \

@@ -6,6 +6,7 @@ import {
   applyDuplicatePolicy,
   confirmSubmission,
   describeDefaultedChains,
+  describeUnusedOutputDir,
   enforceBatchLimits,
   findDuplicates,
   formatReportedChain,
@@ -380,6 +381,36 @@ describe('describeDefaultedChains', () => {
       summariseReportedChains([entry('eip155:8453', true), entry('eip155:8453')])
     );
     expect(warning).toContain('1 entry has no chainId');
+  });
+});
+
+/**
+ * Round-4 finding 2. `-o` is read only on the --build-only path, so on a real submission it
+ * produced an empty directory and no explanation — and the README's own examples paired it
+ * with a real submission, so operators were taught the combination.
+ */
+describe('describeUnusedOutputDir', () => {
+  it('is silent when -o is not passed', () => {
+    expect(describeUnusedOutputDir({})).toBeUndefined();
+    expect(describeUnusedOutputDir({ dryRun: true })).toBeUndefined();
+  });
+
+  it('is silent on --build-only, where -o is the whole point', () => {
+    expect(describeUnusedOutputDir({ outputDir: './out', buildOnly: true })).toBeUndefined();
+  });
+
+  it('warns on a direct submission and names the directory', () => {
+    const warning = describeUnusedOutputDir({ outputDir: './out' });
+    expect(warning).toContain('./out');
+    expect(warning).toContain('a direct submission');
+    expect(warning).toContain('--build-only');
+    expect(warning).toContain('No files will be written');
+  });
+
+  it('names --dry-run rather than a submission that is not happening', () => {
+    const warning = describeUnusedOutputDir({ outputDir: './out', dryRun: true });
+    expect(warning).toContain('--dry-run');
+    expect(warning).not.toContain('direct submission');
   });
 });
 

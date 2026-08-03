@@ -14,6 +14,7 @@ import {
   CONTRACT_QUERY,
   OPERATOR_QUERY,
   OPERATORS_LIST_QUERY,
+  OPERATORS_LIST_ALL_QUERY,
   REPORT_PAGE_SIZE,
   REPORT_MAX_PAGES,
   type RawPageInfo,
@@ -484,14 +485,23 @@ export async function getOperator(
  *
  * @param config - Search configuration with indexer URL
  * @param approvedOnly - If true, only return approved operators
+ *
+ * @remarks
+ * The unfiltered case uses a document with NO `where` clause rather than passing `undefined`
+ * for the filter variable. Omitting the variable is not "no filter": graphql-request drops it,
+ * `$approved` resolves to null, and ponder compiles `where: { approved: null }` to
+ * `approved IS NULL` against a NOT NULL column — zero rows, no error. See
+ * {@link OPERATORS_LIST_QUERY}.
  */
 export async function listOperators(
   config: SearchConfig,
   approvedOnly: boolean = true
 ): Promise<OperatorData[]> {
-  const result = await request<RawOperatorsListResponse>(config.indexerUrl, OPERATORS_LIST_QUERY, {
-    approved: approvedOnly ? true : undefined,
-  });
+  const result = approvedOnly
+    ? await request<RawOperatorsListResponse>(config.indexerUrl, OPERATORS_LIST_QUERY, {
+        approved: true,
+      })
+    : await request<RawOperatorsListResponse>(config.indexerUrl, OPERATORS_LIST_ALL_QUERY);
 
   const operators = result.operators?.items ?? [];
 

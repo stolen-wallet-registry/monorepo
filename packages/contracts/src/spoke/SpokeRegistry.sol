@@ -123,8 +123,11 @@ contract SpokeRegistry is ISpokeRegistry, EIP712, TimelockOwnable {
     ) EIP712("StolenWalletRegistry", "4") Ownable(_owner) {
         if (_bridgeAdapter == address(0)) revert SpokeRegistry__ZeroAddress();
 
-        // Validate timing: deadline must be >= 2*grace to ensure window always exists
-        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks) {
+        // Validate timing: `deadlineBlocks >= 2 * graceBlocks + 1` so a usable registration block
+        // exists for EVERY randomised draw. See {WalletRegistry} for the derivation — the `+ 1`
+        // accounts for `resolveWindowBlockHash` requiring `startBlock <= windowBlock < block.number`,
+        // which makes `startBlock + 1` the earliest block on which `register` can succeed.
+        if (_graceBlocks == 0 || _deadlineBlocks == 0 || _deadlineBlocks < 2 * _graceBlocks + 1) {
             revert SpokeRegistry__InvalidTimingConfig();
         }
 

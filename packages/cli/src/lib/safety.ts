@@ -271,6 +271,38 @@ export function describeDefaultedChains(chains: readonly ReportedChainCount[]): 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// OUTPUT DIRECTORY
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Warning text for `-o/--output-dir` passed to a run that writes no files, or `undefined` when
+ * the combination is fine.
+ *
+ * `-o` is only read on the `--build-only` path, where it receives the multisig transaction
+ * JSON. On a real submission — and on `--dry-run` — nothing is written to it at all, silently.
+ * An operator who passes `-o ./output` expecting a record of what a batch registered gets an
+ * empty directory and no indication they were wrong, which is the worst possible time to
+ * discover that the only record of an irreversible write is the terminal scrollback. (The
+ * README's own examples paired `-o` with a real submission, so this was taught, not stumbled
+ * into.)
+ *
+ * Receipts on the submit path are future work; this only makes the current behaviour visible.
+ */
+export function describeUnusedOutputDir(options: {
+  outputDir?: string;
+  buildOnly?: boolean;
+  dryRun?: boolean;
+}): string | undefined {
+  if (!options.outputDir || options.buildOnly) return undefined;
+
+  const mode = options.dryRun ? '--dry-run' : 'a direct submission';
+  return (
+    `-o/--output-dir "${options.outputDir}" is ignored on ${mode} — it only receives the ` +
+    'multisig transaction JSON built by --build-only. No files will be written.'
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // CONFIRMATION
 // ═══════════════════════════════════════════════════════════════════════════
 

@@ -1557,6 +1557,37 @@ contract SpokeRegistryTest is Test {
         );
     }
 
+    /// @notice Constructor rejects `deadlineBlocks == 2 * graceBlocks` — the exact boundary.
+    /// @dev The case the old `< 2 * graceBlocks` bound wrongly ACCEPTED. `getGracePeriodEndBlock`
+    ///      can return `bn + 2g - 1` while `getDeadlineBlock` can return `bn + 2g`, and
+    ///      `resolveWindowBlockHash` requires `startBlock <= windowBlock < block.number` — so the
+    ///      earliest usable registration block is `startBlock + 1`, already at/past `expiryBlock`
+    ///      on that draw. On a spoke this is worse than on the hub: the user has burned a nonce and
+    ///      the acknowledgement gas on a chain whose registration can only complete by bridging,
+    ///      and the already-acknowledged guard blocks a retry until the window expires.
+    function test_Constructor_RejectsInvalidTiming_DeadlineExactlyTwiceGrace() public {
+        vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidTimingConfig.selector);
+        new SpokeRegistry(
+            owner,
+            address(bridgeAdapter),
+            address(feeManager),
+            HUB_CHAIN_ID,
+            HUB_INBOX,
+            10, // grace
+            20, // deadline == 2*10, no usable registration block on the worst draw
+            1
+        );
+    }
+
+    /// @notice Constructor accepts `deadlineBlocks == 2 * graceBlocks + 1` — the smallest config
+    ///         that guarantees a usable registration block for every randomised draw.
+    function test_Constructor_AcceptsDeadlineTwiceGracePlusOne() public {
+        SpokeRegistry reg =
+            new SpokeRegistry(owner, address(bridgeAdapter), address(feeManager), HUB_CHAIN_ID, HUB_INBOX, 10, 21, 1);
+        assertEq(reg.graceBlocks(), 10);
+        assertEq(reg.deadlineBlocks(), 21);
+    }
+
     /// @notice Constructor rejects mismatched hub config (chainId set, inbox zero)
     function test_Constructor_RejectsMismatchedHubConfig() public {
         vm.expectRevert(ISpokeRegistry.SpokeRegistry__InvalidHubConfig.selector);

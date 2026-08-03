@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { chainIdToBytes32, caip2ToBytes32 } from '../src/lib/caip.js';
 import { parseWalletFile, parseTransactionFile, parseContractFile } from '../src/lib/files.js';
+import { summariseReportedChains } from '../src/lib/safety.js';
 
 /**
  * Round-3 review S-4 and its neighbours.
@@ -34,6 +35,7 @@ async function fixture(extension: 'json' | 'csv', content: string): Promise<stri
 }
 
 const WALLET = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
+const OTHER_WALLET = '0x742D35CC6634c0532925A3b844BC9E7595F0BEb0';
 const TX = '0x'.padEnd(66, '1') as `0x${string}`;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -60,7 +62,7 @@ describe('reported chain resolution', () => {
     expect(entry!.chainIdDefaulted).toBe(false);
   });
 
-  it('accepts a CAIP-2 chainId and keeps it verbatim', async () => {
+  it('accepts a CAIP-2 chainId', async () => {
     const file = await fixture(
       'json',
       JSON.stringify([{ address: WALLET, chainId: 'eip155:42161' }])
@@ -70,6 +72,44 @@ describe('reported chain resolution', () => {
     expect(entry!.chainId).toBe(caip2ToBytes32('eip155:42161'));
     expect(entry!.reportedChain).toBe('eip155:42161');
     expect(entry!.chainIdDefaulted).toBe(false);
+  });
+
+  // Round-4 regression. `caip2ToBytes32` normalises before hashing, so `eip155:08453` and
+  // `eip155:8453` are one chain on chain — but `reportedChain` used to keep the operator's
+  // spelling, and `summariseReportedChains` groups on that string. A file mixing the two
+  // rendered TWO rows in the confirmation prompt for one chain, which is a false reading of
+  // the exact value that prompt exists to let the operator verify.
+  it('canonicalises a non-canonical CAIP-2 spelling so the summary shows one chain', async () => {
+    const file = await fixture(
+      'json',
+      JSON.stringify([
+        { address: WALLET, chainId: 'eip155:08453' },
+        { address: OTHER_WALLET, chainId: 'eip155:8453' },
+      ])
+    );
+    const entries = await parseWalletFile(file, 10n);
+
+    // Both spellings hash identically...
+    expect(entries[0]!.chainId).toBe(entries[1]!.chainId);
+    // ...and now display identically, so the summary collapses to a single row.
+    expect(entries[0]!.reportedChain).toBe('eip155:8453');
+    expect(entries[1]!.reportedChain).toBe('eip155:8453');
+    expect(summariseReportedChains(entries)).toEqual([
+      { caip2: 'eip155:8453', count: 2, defaultedCount: 0 },
+    ]);
+  });
+
+  // The eip155 namespace is the only one the registries key by, and `caip2ToBytes32` throws
+  // for anything else — but its message carries no row index, which is the whole reason the
+  // errors around it name one.
+  it('rejects a non-eip155 CAIP-2 namespace with a row index', async () => {
+    const file = await fixture(
+      'json',
+      JSON.stringify([{ address: WALLET }, { address: OTHER_WALLET, chainId: 'solana:mainnet' }])
+    );
+    await expect(parseWalletFile(file, 8453n)).rejects.toThrow(
+      /Unsupported chainId at index 1.*eip155/s
+    );
   });
 
   // Excel and Google Sheets prefix a UTF-8 BOM (U+FEFF) to their CSV exports, and csv-parse

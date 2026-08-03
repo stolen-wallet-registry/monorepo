@@ -1079,6 +1079,27 @@ contract TransactionRegistryTest is EIP712TestHelper {
         new TransactionRegistry(owner, address(0), 10, 15);
     }
 
+    /// @notice Constructor rejects `deadlineBlocks == 2 * graceBlocks` — the exact boundary.
+    /// @dev The case the old `< 2 * graceBlocks` bound wrongly ACCEPTED. `getGracePeriodEndBlock`
+    ///      can return `bn + 2g - 1` while `getDeadlineBlock` can return `bn + 2g`, and
+    ///      `resolveWindowBlockHash` requires `gracePeriodStart <= windowBlock < block.number` — so
+    ///      the earliest usable registration block is `gracePeriodStart + 1`, already at/past the
+    ///      deadline on that draw. A reporter acknowledging under such a config burns a nonce and
+    ///      the acknowledgement gas on a batch that can never be registered, and cannot
+    ///      re-acknowledge until the window expires. See {WalletRegistry} for the full derivation.
+    function test_Constructor_RejectsDeadlineExactlyTwiceGrace() public {
+        vm.expectRevert(ITransactionRegistry.TransactionRegistry__DeadlineInPast.selector);
+        new TransactionRegistry(owner, address(0), 10, 20);
+    }
+
+    /// @notice Constructor accepts `deadlineBlocks == 2 * graceBlocks + 1` — the smallest config
+    ///         that guarantees a usable registration block for every randomised draw.
+    function test_Constructor_AcceptsDeadlineTwiceGracePlusOne() public {
+        TransactionRegistry reg = new TransactionRegistry(owner, address(0), 10, 21);
+        assertEq(reg.graceBlocks(), 10);
+        assertEq(reg.deadlineBlocks(), 21);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // STRING INTERFACE HELPERS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1285,6 +1306,44 @@ contract TransactionRegistryTest is EIP712TestHelper {
     function test_RegisterTransactions_RefundsExcess() public {
         (TransactionRegistry feeRegistry,,) = _deployWithFeeManager();
         _doFullFlowRefundsExcess(feeRegistry);
+    }
+
+    /// @notice Free-registration mode (feeManager == address(0)) refunds everything the caller sent.
+    /// @dev `_collectFee` used to `return` on its first line in this mode, BEFORE the excess-refund
+    ///      branch, so any `msg.value` was silently retained and recoverable only by the owner.
+    ///      `feeManager == address(0)` is a documented, supported deployment shape (it is what this
+    ///      suite's own `setUp` uses), and every other fee mode refunds the overpayment — including
+    ///      the zero-effective-entry path just below, which already returned the full amount. The
+    ///      free path must not be the one mode that keeps the most.
+    function test_RegisterTransactions_FreeMode_RefundsEntireMsgValue() public {
+        // The suite registry is deployed with feeManager == address(0).
+        assertEq(txRegistry.quoteRegistration(reporter), 0, "Precondition: registrations are free");
+
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        _doFullFlowAck(txRegistry, txHashes, chainIds);
+        _sigWindowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+
+        uint256 sent = 1 ether;
+        vm.deal(forwarder, sent);
+        uint256 registryBefore = address(txRegistry).balance;
+
+        _doFullFlowReg(txRegistry, txHashes, chainIds, sent);
+
+        assertTrue(txRegistry.isTransactionRegistered(txHashes[0], chainIds[0]), "Registration must still succeed");
+        assertEq(forwarder.balance, sent, "Caller must get the full amount back");
+        assertEq(address(txRegistry).balance, registryBefore, "Registry must retain nothing");
+    }
+
+    /// @notice Free-registration mode with msg.value == 0 is unaffected (the refund is a no-op).
+    function test_RegisterTransactions_FreeMode_ZeroValueIsNoOp() public {
+        (bytes32[] memory txHashes, bytes32[] memory chainIds) = _createSampleBatch();
+        _doFullFlowAck(txRegistry, txHashes, chainIds);
+        _sigWindowBlock = _rollToWindow(txRegistry.getTransactionAcknowledgementData(reporter).gracePeriodStart);
+
+        _doFullFlowReg(txRegistry, txHashes, chainIds, 0);
+
+        assertTrue(txRegistry.isTransactionRegistered(txHashes[0], chainIds[0]));
+        assertEq(address(txRegistry).balance, 0);
     }
 
     /// @dev Extracted to a separate function to avoid stack-too-deep in the test body

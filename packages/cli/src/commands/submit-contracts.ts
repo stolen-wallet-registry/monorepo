@@ -10,6 +10,7 @@ import {
   applyDuplicatePolicy,
   confirmSubmission,
   describeDefaultedChains,
+  describeUnusedOutputDir,
   enforceBatchLimits,
   formatReportedChain,
   summariseReportedChains,
@@ -57,6 +58,11 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
           'Set operatorSubmitter in @swr/chains hub contracts.'
       );
     }
+
+    // 1b. `-o` is only read on the --build-only path; say so before anything else runs rather
+    // than leaving an empty output directory as the only clue.
+    const unusedOutputDir = describeUnusedOutputDir(options);
+    if (unusedOutputDir !== undefined) console.warn(chalk.yellow(`⚠ ${unusedOutputDir}`));
 
     // 2. Parse input file
     spinner.start('Parsing input file...');
@@ -168,6 +174,12 @@ export async function submitContracts(options: SubmitContractsOptions): Promise<
         );
       }
       console.log(`  Batch fee: ${formatBatchFee(fee)}`);
+      console.log(
+        chalk.gray(
+          '  No simulation was performed — this checked the input file and quoted the fee. ' +
+            'Operator approval, pause state and the block gas limit are only tested on submit.'
+        )
+      );
       return;
     }
 

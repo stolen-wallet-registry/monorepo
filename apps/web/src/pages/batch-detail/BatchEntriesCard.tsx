@@ -138,8 +138,12 @@ interface BatchEntriesCardProps {
   totalEntries: number;
   /** Entries per page */
   pageSize: number;
-  /** Current page, already clamped to totalPages by the page */
-  clampedPage: number;
+  /**
+   * Current page. Already within [1, totalPages]: the owning page clamps on the way in, so
+   * this is the same number its query built its offset from. Do not re-clamp here — a second
+   * derivation is exactly how the pager and the fetch came to disagree.
+   */
+  page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
 }
@@ -149,7 +153,7 @@ export function BatchEntriesCard({
   isLoading,
   totalEntries,
   pageSize,
-  clampedPage,
+  page,
   totalPages,
   onPageChange,
 }: BatchEntriesCardProps) {
@@ -161,8 +165,8 @@ export function BatchEntriesCard({
           <p className="text-xs text-muted-foreground">
             {totalEntries === 0
               ? '0 entries'
-              : `Showing ${(clampedPage - 1) * pageSize + 1}–${Math.min(
-                  clampedPage * pageSize,
+              : `Showing ${(page - 1) * pageSize + 1}–${Math.min(
+                  page * pageSize,
                   totalEntries
                 )} of ${totalEntries}`}
           </p>
@@ -373,22 +377,22 @@ export function BatchEntriesCard({
             </Table>
             <div className="flex items-center justify-between mt-4">
               <p className="text-xs text-muted-foreground">
-                Page {clampedPage} of {totalPages}
+                Page {page} of {totalPages}
               </p>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => onPageChange(Math.max(1, clampedPage - 1))}
-                  disabled={clampedPage <= 1}
+                  onClick={() => onPageChange(page - 1)}
+                  disabled={page <= 1}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => onPageChange(Math.min(totalPages, clampedPage + 1))}
-                  disabled={clampedPage >= totalPages}
+                  onClick={() => onPageChange(page + 1)}
+                  disabled={page >= totalPages}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>

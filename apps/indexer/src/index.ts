@@ -32,6 +32,7 @@ import {
   truncateToAddress,
   walletCaip10,
 } from './lib/identifiers';
+import { resolveTransactionAckStatus, type TransactionAckStatus } from './lib/acknowledgements';
 import { applyStatsDelta, type StatsDelta } from './lib/stats';
 import { readPonderEnv } from './lib/env';
 import { transactionBackfillValues, walletBackfillValues } from './lib/backfill';
@@ -203,6 +204,7 @@ ponder.on('WalletRegistry:CrossChainWalletRegistered', async ({ event, context }
       // 0 is the unknown-chain sentinel, not a domain: this handler has only the bytes32
       // chain hash. The inbox handler repairs it with the real origin domain if it can.
       sourceChainIsDomain: false,
+      sourceChainCAIP2: sourceCAIP2,
       targetChainId: HUB_CHAIN_ID,
       wallet: walletAddress,
       status: 'registered',
@@ -215,6 +217,8 @@ ponder.on('WalletRegistry:CrossChainWalletRegistered', async ({ event, context }
       registeredAt: event.block.timestamp,
       hubTxHash: event.transaction.hash,
       wallet: walletAddress ?? row.wallet,
+      // Never clobber a resolved chain with an unresolved one — same rule as `wallet`.
+      sourceChainCAIP2: sourceCAIP2 ?? row.sourceChainCAIP2,
       bridgeId,
     }));
 
@@ -431,6 +435,35 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
   const reportedChainCAIP2 = txEntries[0]?.caip2ChainId ?? null;
   const reportedChainIdHash = txEntries[0]?.chainIdHash ?? null;
 
+  // Cross-chain provenance for this batch.
+  //
+  // `TransactionBatchRegistered` carries none — it is emitted once, AFTER the per-entry loop
+  // (TransactionRegistry.sol:725 vs :693-694), so by the time this handler runs the
+  // `CrossChainTransactionRegistered` handler has already written the `crossChainMessage` row
+  // for this delivery. Its `hubTxHash` is this transaction: inbox delivery and registration are
+  // the same tx, and a Hyperlane `Mailbox.process` call carries exactly one message, so this
+  // lookup returns at most one row and it is unambiguously ours.
+  //
+  // A locally-registered batch matches nothing here and keeps all four columns NULL, which is
+  // what makes "did this batch come from a spoke?" answerable at all — before this, a
+  // cross-chain batch row was byte-identical to a local one.
+  const crossChainRows = await db.sql
+    .select({
+      messageId: crossChainMessage.id,
+      sourceChainId: crossChainMessage.sourceChainId,
+      sourceChainCAIP2: crossChainMessage.sourceChainCAIP2,
+      bridgeId: crossChainMessage.bridgeId,
+    })
+    .from(crossChainMessage)
+    .where(eq(crossChainMessage.hubTxHash, event.transaction.hash))
+    .limit(1);
+  const crossChain = crossChainRows[0] ?? null;
+  // 0 is the unknown-chain sentinel that handler writes, not a real chain ID — surface it as
+  // NULL here rather than as chain 0. `sourceChainCAIP2` is only ever set when it resolved,
+  // so it needs no such treatment.
+  const sourceChainId =
+    crossChain && crossChain.sourceChainId !== 0 ? crossChain.sourceChainId : null;
+
   await db
     .insert(transactionBatch)
     .values({
@@ -445,6 +478,10 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
       registeredAt: event.block.timestamp,
       registeredAtBlock: event.block.number,
       transactionHash: event.transaction.hash,
+      sourceChainId,
+      sourceChainCAIP2: crossChain?.sourceChainCAIP2 ?? null,
+      bridgeId: crossChain?.bridgeId ?? null,
+      messageId: crossChain?.messageId ?? null,
     })
     .onConflictDoNothing();
 
@@ -461,13 +498,47 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
       )
     );
 
-  // Mark pending ack as registered
+  // Resolve the reporter's pending acknowledgement.
+  //
+  // This used to mark ANY pending ack for this reporter 'registered', which is the transaction
+  // twin of the wallet bug the `BatchCreated` handler fixes: a batch delivered from a spoke
+  // also emits `TransactionBatchRegistered` with the reporter's address, so a reporter who was
+  // mid-flow on the hub had their ack recorded as completed without ever signing the second
+  // message — a claim to a signature that does not exist.
+  //
+  // `dataHash` is an EXACT discriminator, not a heuristic. `registerTransactions` reverts with
+  // `TransactionRegistry__DataHashMismatch` unless the batch's dataHash equals the one the
+  // acknowledgement committed to (TransactionRegistry.sol:598-600), so:
+  //
+  //   - hash matches, not cross-chain -> this IS the reporter's completed two-phase flow.
+  //   - hash matches, cross-chain     -> the exact batch they committed to was registered by
+  //                                      another route while their ack was pending. Real
+  //                                      registration, no second signature: 'superseded',
+  //                                      exactly as on the wallet side.
+  //   - hash differs                  -> a different batch entirely. It does NOT consume the
+  //                                      on-chain acknowledgement (the hub only deletes
+  //                                      `_pendingAcknowledgements[reporter]` on that
+  //                                      reporter's own `registerTransactions` call), so the
+  //                                      reporter can still complete. Leave it 'pending' —
+  //                                      'registered' would invent a signature and
+  //                                      'superseded' would invent a completion.
+  //
+  // Only a 'pending' row is a live claim; re-deciding a settled one is not this event's job.
+  //
+  // The decision itself lives in `resolveTransactionAckStatus` so it is pinned by unit tests
+  // rather than by this comment — see src/lib/acknowledgements.ts.
   const reporterAddr = reporter.toLowerCase() as Address;
   const pending = await db.find(transactionBatchAcknowledgement, { id: reporterAddr });
-  if (pending) {
-    await db.update(transactionBatchAcknowledgement, { id: reporterAddr }).set({
-      status: 'registered',
-    });
+  const nextAckStatus = resolveTransactionAckStatus({
+    current: (pending?.status as TransactionAckStatus | undefined) ?? null,
+    committedDataHash: pending?.dataHash ?? null,
+    batchDataHash: dataHash,
+    isCrossChain: crossChain !== null,
+  });
+  if (nextAckStatus !== null) {
+    await db
+      .update(transactionBatchAcknowledgement, { id: reporterAddr })
+      .set({ status: nextAckStatus });
   }
 
   await updateGlobalStats(
@@ -475,6 +546,12 @@ ponder.on('TransactionRegistry:TransactionBatchRegistered', async ({ event, cont
     {
       transactionBatches: 1,
       transactionsReported: Number(transactionCount),
+      // Counted per delivered BATCH, not per transaction. The wallet counter increments once
+      // per `CrossChainWalletRegistered`, which is once per wallet because `registerFromHub`
+      // handles one wallet per message; the transaction equivalent of "one message" is one
+      // batch. Incrementing in the `CrossChainTransactionRegistered` handler instead would add
+      // one per entry and count a 500-tx batch as 500 cross-chain registrations.
+      crossChain: crossChain ? 1 : 0,
     },
     event.block.timestamp
   );
@@ -499,18 +576,21 @@ ponder.on('TransactionRegistry:CrossChainTransactionRegistered', async ({ event,
       // 0 is the unknown-chain sentinel, not a domain: this handler has only the bytes32
       // chain hash. The inbox handler repairs it with the real origin domain if it can.
       sourceChainIsDomain: false,
+      sourceChainCAIP2: sourceCAIP2,
       targetChainId: HUB_CHAIN_ID,
       status: 'registered',
       registeredAt: event.block.timestamp,
       hubTxHash: event.transaction.hash,
       bridgeId,
     })
-    .onConflictDoUpdate({
+    .onConflictDoUpdate((row) => ({
       status: 'registered',
       registeredAt: event.block.timestamp,
       hubTxHash: event.transaction.hash,
+      // Never clobber a resolved chain with an unresolved one — see the wallet handler.
+      sourceChainCAIP2: sourceCAIP2 ?? row.sourceChainCAIP2,
       bridgeId,
-    });
+    }));
 });
 
 // TransactionBatchCreated — operator batch summary
@@ -684,6 +764,7 @@ ponder.on('CrossChainInbox:WalletRegistrationReceived', async ({ event, context 
       // so it is kept — and the flag says which numbering space the value is in.
       sourceChainId: sourceNumeric ?? origin,
       sourceChainIsDomain: sourceNumeric === null,
+      sourceChainCAIP2: sourceCAIP2,
       targetChainId: HUB_CHAIN_ID,
       wallet: walletAddress,
       hubTxHash: event.transaction.hash,
@@ -705,6 +786,10 @@ ponder.on('CrossChainInbox:WalletRegistrationReceived', async ({ event, context 
       sourceChainId: row.sourceChainId === 0 ? (sourceNumeric ?? origin) : row.sourceChainId,
       sourceChainIsDomain:
         row.sourceChainId === 0 ? sourceNumeric === null : row.sourceChainIsDomain,
+      // Same repair, on the unambiguous column: the registry handler resolves the bytes32
+      // chain hash, this one resolves the Hyperlane domain, and either may be the one that
+      // knows the chain. Fill a null; never overwrite a value that resolved.
+      sourceChainCAIP2: row.sourceChainCAIP2 ?? sourceCAIP2,
     }));
 });
 
@@ -728,6 +813,7 @@ ponder.on('CrossChainInbox:TransactionBatchReceived', async ({ event, context })
       // so it is kept — and the flag says which numbering space the value is in.
       sourceChainId: sourceNumeric ?? origin,
       sourceChainIsDomain: sourceNumeric === null,
+      sourceChainCAIP2: sourceCAIP2,
       targetChainId: HUB_CHAIN_ID,
       hubTxHash: event.transaction.hash,
       status: 'received',
@@ -742,6 +828,7 @@ ponder.on('CrossChainInbox:TransactionBatchReceived', async ({ event, context })
       sourceChainId: row.sourceChainId === 0 ? (sourceNumeric ?? origin) : row.sourceChainId,
       sourceChainIsDomain:
         row.sourceChainId === 0 ? sourceNumeric === null : row.sourceChainIsDomain,
+      sourceChainCAIP2: row.sourceChainCAIP2 ?? sourceCAIP2,
     }));
 });
 

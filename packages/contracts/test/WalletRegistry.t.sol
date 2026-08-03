@@ -161,6 +161,47 @@ contract WalletRegistryTest is EIP712TestHelper {
         new WalletRegistry(owner, address(0), 10, 0);
     }
 
+    /// @notice Constructor rejects `deadlineBlocks == 2 * graceBlocks` — the exact boundary.
+    /// @dev This is the case the old `< 2 * graceBlocks` bound wrongly ACCEPTED. It matters because
+    ///      `getGracePeriodEndBlock` can return `bn + 2g - 1` while `getDeadlineBlock` can return
+    ///      `bn + 2g`, and `resolveWindowBlockHash` requires `gracePeriodStart <= windowBlock <
+    ///      block.number` — so the earliest usable registration block is `gracePeriodStart + 1`,
+    ///      which on that draw is already at/past the deadline. An acknowledgement made under such
+    ///      a config can never be registered: the user burns a nonce and the acknowledgement gas
+    ///      and cannot re-acknowledge until the window expires. Pinned by
+    ///      `test_Constructor_AcceptsDeadlineTwiceGracePlusOne`, the other half of the boundary.
+    function test_Constructor_RejectsDeadlineExactlyTwiceGrace() public {
+        vm.expectRevert(IWalletRegistry.WalletRegistry__DeadlineInPast.selector);
+        new WalletRegistry(owner, address(0), 10, 20);
+    }
+
+    /// @notice Constructor accepts `deadlineBlocks == 2 * graceBlocks + 1` — the smallest config
+    ///         that guarantees a usable registration block for every randomised draw.
+    function test_Constructor_AcceptsDeadlineTwiceGracePlusOne() public {
+        WalletRegistry reg = new WalletRegistry(owner, address(0), 10, 21);
+        assertEq(reg.graceBlocks(), 10);
+        assertEq(reg.deadlineBlocks(), 21);
+    }
+
+    /// @notice Every draw under the minimum accepted config leaves a block on which `register`
+    ///         can actually run.
+    /// @dev The property the `+ 1` exists to guarantee, asserted directly rather than trusted:
+    ///      for the tightest legal config, `gracePeriodStart + 1 < deadline` must hold for EVERY
+    ///      randomised outcome, since `gracePeriodStart + 1` is the earliest block at which
+    ///      `resolveWindowBlockHash` can supply a mined `windowBlock` at/after the grace start.
+    ///      Rolling across many blocks re-draws `prevrandao`/`timestamp`/`number`, so this sweeps
+    ///      the offset space rather than sampling one draw.
+    function test_Constructor_MinimumConfigAlwaysLeavesARegistrationBlock() public {
+        WalletRegistry reg = new WalletRegistry(owner, address(0), 10, 21);
+
+        for (uint256 i = 0; i < 300; i++) {
+            vm.roll(block.number + 1);
+            uint256 graceStart = TimingConfig.getGracePeriodEndBlock(reg.graceBlocks());
+            uint256 deadlineBlock = TimingConfig.getDeadlineBlock(reg.deadlineBlocks());
+            assertLt(graceStart + 1, deadlineBlock, "draw leaves no usable registration block");
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // TWO-PHASE FLOW: ACKNOWLEDGEMENT TESTS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1609,6 +1650,37 @@ contract WalletRegistryTest is EIP712TestHelper {
         relayer.forwardRegister{ value: fee + 1 ether }(
             feeRegistry, wallet, REPORTED_CHAIN_ID, incidentTimestamp, deadline, nonce, _feeWindowBlock, v, r, s
         );
+    }
+
+    /// @notice Free-registration mode (feeManager == address(0)) refunds everything the caller sent.
+    /// @dev `_collectFee` used to `return` on its first line in this mode, BEFORE the excess-refund
+    ///      branch, so any `msg.value` was silently retained and recoverable only by the owner.
+    ///      `feeManager == address(0)` is a documented, supported deployment shape (it is what this
+    ///      suite's own `setUp` uses), and every other fee mode refunds the overpayment — so the one
+    ///      mode that charges nothing must not be the one that keeps the most.
+    function test_Register_FreeMode_RefundsEntireMsgValue() public {
+        // The suite registry is deployed with feeManager == address(0).
+        assertEq(walletRegistry.quoteRegistration(wallet), 0, "Precondition: registrations are free");
+
+        uint256 sent = 1 ether;
+        vm.deal(forwarder, sent);
+        uint256 registryBefore = address(walletRegistry).balance;
+
+        _ackOn(walletRegistry, forwarder);
+        _regOn(walletRegistry, forwarder, sent);
+
+        assertTrue(walletRegistry.isWalletRegistered(wallet), "Registration must still succeed");
+        assertEq(forwarder.balance, sent, "Caller must get the full amount back");
+        assertEq(address(walletRegistry).balance, registryBefore, "Registry must retain nothing");
+    }
+
+    /// @notice Free-registration mode with msg.value == 0 is unaffected (the refund is a no-op).
+    function test_Register_FreeMode_ZeroValueIsNoOp() public {
+        _ackOn(walletRegistry, forwarder);
+        _regOn(walletRegistry, forwarder, 0);
+
+        assertTrue(walletRegistry.isWalletRegistered(wallet));
+        assertEq(address(walletRegistry).balance, 0);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

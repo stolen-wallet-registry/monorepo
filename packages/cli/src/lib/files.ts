@@ -1,7 +1,13 @@
 import { readFile } from 'fs/promises';
 import { parse as parseCSV } from 'csv-parse/sync';
 import { isAddress, isHash, zeroAddress, zeroHash, type Address, type Hex } from 'viem';
-import { chainIdToBytes32, caip2ToBytes32, isValidCAIP2 } from './caip.js';
+import {
+  chainIdToBytes32,
+  caip2ToBytes32,
+  caip2ToNumericChainId,
+  isValidCAIP2,
+  toCAIP2,
+} from './caip.js';
 
 /**
  * Every parsed entry carries the chain it is REPORTED ON, in two forms.
@@ -150,7 +156,23 @@ function resolveEntryChain(
           '(expected e.g. "eip155:10").'
       );
     }
-    return { chainId: caip2ToBytes32(caip2), reportedChain: caip2, chainIdDefaulted: false };
+    // `reportedChain` must be the CANONICAL form, not the operator's spelling. It is only a
+    // display string, but `summariseReportedChains` groups on it, so a file mixing
+    // `eip155:8453` and `eip155:08453` rendered TWO rows in the confirmation prompt for what
+    // is one chain on chain — `caip2ToBytes32` normalises, so both hash identically. Showing
+    // one chain as two is a false reading of the exact value that prompt exists to verify.
+    const numeric = caip2ToNumericChainId(caip2);
+    if (numeric === null) {
+      throw new Error(
+        `Unsupported chainId at index ${index}: "${raw}". Only the eip155 namespace with a ` +
+          'numeric reference is supported (expected e.g. "eip155:10").'
+      );
+    }
+    return {
+      chainId: caip2ToBytes32(caip2),
+      reportedChain: toCAIP2(numeric),
+      chainIdDefaulted: false,
+    };
   }
 
   let numeric: bigint;
