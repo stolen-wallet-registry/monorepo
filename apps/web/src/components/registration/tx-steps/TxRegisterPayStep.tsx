@@ -14,6 +14,7 @@ import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import {
   TransactionCard,
   deriveTransactionStatus,
+  deriveCrossChainStatus,
   type TransactionStatus,
   type SignedMessageData,
   type CrossChainProgress,
@@ -333,17 +334,10 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
 
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
-    // Cross-chain states
+    // Cross-chain states — shared with RegistrationPayStep so the two cannot diverge again.
     if (isCrossChain && isConfirmed) {
-      if (crossChainConfirmation.status === 'confirmed') return 'hub-confirmed';
-      if (
-        crossChainConfirmation.status === 'polling' ||
-        crossChainConfirmation.status === 'waiting'
-      ) {
-        return 'relaying';
-      }
-      // timeout - show warning state, don't auto-advance
-      if (crossChainConfirmation.status === 'timeout') return 'hub-timeout';
+      const hubStatus = deriveCrossChainStatus(crossChainConfirmation.status);
+      if (hubStatus) return hubStatus;
     }
     // Local states
     return deriveTransactionStatus({

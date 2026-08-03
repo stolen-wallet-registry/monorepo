@@ -49,9 +49,9 @@ export interface TransactionStatusState {
 /**
  * Map write-hook state to the card's status.
  *
- * Callers with cross-chain states (`relaying`, `hub-confirmed`, `hub-timeout`) decide those
- * BEFORE calling this — they depend on hub polling, which is not part of the local ladder, and
- * the two register steps deliberately map a hub timeout differently from each other.
+ * Callers with cross-chain states (`relaying`, `hub-confirmed`, `hub-timeout`) resolve those
+ * BEFORE calling this, via {@link deriveCrossChainStatus} — they depend on hub polling, which is
+ * not part of the local ladder.
  */
 export function deriveTransactionStatus({
   isConfirmed,
@@ -66,4 +66,39 @@ export function deriveTransactionStatus({
   if (isPending || isSubmitting) return 'submitting';
   if (isError || localError) return 'failed';
   return 'idle';
+}
+
+/** The subset of `useCrossChainConfirmation().status` that maps to a card status. */
+export type CrossChainConfirmationStatus =
+  | 'idle'
+  | 'waiting'
+  | 'polling'
+  | 'confirmed'
+  | 'timeout'
+  | 'error';
+
+/**
+ * Map cross-chain hub-confirmation state to the card's status.
+ *
+ * Returns `null` when the hub state does not determine the card — the caller then falls through
+ * to {@link deriveTransactionStatus} for the local ladder.
+ *
+ * Shared by both register steps ON PURPOSE. These two had drifted to opposite answers for a hub
+ * timeout: the transaction flow warned and held, while the wallet flow reported `confirmed` and
+ * auto-advanced to a success screen — telling a fraud victim their wallet was registered when
+ * the hub, which is the canonical registry, never acknowledged the bridged message. A victim who
+ * believes they are protected stops looking for a problem, so the failure is silent and costly.
+ *
+ * The honest answer is neither extreme: the spoke transaction really did succeed, so this is
+ * "submitted, hub confirmation pending" — `hub-timeout`, which keeps the bridge explorer link on
+ * screen and requires the user to acknowledge via "Continue Anyway" rather than being told it
+ * finished. Keeping the mapping here is what stops the two flows disagreeing again.
+ */
+export function deriveCrossChainStatus(
+  crossChainStatus: CrossChainConfirmationStatus
+): TransactionStatus | null {
+  if (crossChainStatus === 'confirmed') return 'hub-confirmed';
+  if (crossChainStatus === 'polling' || crossChainStatus === 'waiting') return 'relaying';
+  if (crossChainStatus === 'timeout') return 'hub-timeout';
+  return null;
 }

@@ -11,6 +11,7 @@ import { Alert, AlertDescription, Button } from '@swr/ui';
 import {
   TransactionCard,
   deriveTransactionStatus,
+  deriveCrossChainStatus,
   type TransactionStatus,
   type SignedMessageData,
   type CrossChainProgress,
@@ -224,17 +225,10 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
 
   // Map hook state to TransactionStatus
   const getStatus = (): TransactionStatus => {
-    // Cross-chain states
+    // Cross-chain states — shared with TxRegisterPayStep so the two cannot diverge again.
     if (isCrossChain && isConfirmed) {
-      if (crossChainConfirmation.status === 'confirmed') return 'hub-confirmed';
-      if (
-        crossChainConfirmation.status === 'polling' ||
-        crossChainConfirmation.status === 'waiting'
-      ) {
-        return 'relaying';
-      }
-      // timeout or error - show as confirmed locally (user can check later)
-      if (crossChainConfirmation.status === 'timeout') return 'confirmed';
+      const hubStatus = deriveCrossChainStatus(crossChainConfirmation.status);
+      if (hubStatus) return hubStatus;
     }
     // Local states
     return deriveTransactionStatus({
@@ -247,9 +241,13 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     });
   };
 
-  // Build cross-chain progress data for UI
+  // Build cross-chain progress data for UI.
+  // Includes 'hub-timeout' as well as 'relaying' so the bridge explorer link stays visible
+  // after the timeout — that link is the only way a user can check whether the message
+  // eventually landed on the hub.
+  const currentStatus = getStatus();
   const crossChainProgress: CrossChainProgress | undefined =
-    isCrossChain && getStatus() === 'relaying'
+    isCrossChain && (currentStatus === 'relaying' || currentStatus === 'hub-timeout')
       ? {
           elapsedTime: crossChainConfirmation.elapsedTime,
           hubChainName: hubChainId ? getChainName(hubChainId) : undefined,
@@ -282,15 +280,16 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         return () => clearTimeout(timerId);
       }
 
-      // Handle timeout - still show as complete (user can verify later)
+      // Handle timeout - show the pending-confirmation state, do NOT auto-advance.
+      // Advancing here would drop the user on a success screen for a registration the hub
+      // never confirmed. They must acknowledge it via "Continue Anyway".
       if (crossChainConfirmation.status === 'timeout') {
         logger.registration.warn('Cross-chain confirmation timed out', {
           registeree,
           transactionHash: hash,
           elapsedTime: crossChainConfirmation.elapsedTime,
         });
-        const timerId = window.setTimeout(onComplete, 1500);
-        return () => clearTimeout(timerId);
+        return;
       }
 
       return; // Still waiting for hub confirmation
@@ -474,6 +473,22 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
     setLocalError(null);
   };
 
+  /**
+   * Handle "Continue Anyway" after cross-chain timeout.
+   *
+   * The spoke transaction succeeded; only the hub acknowledgement is outstanding. The user has
+   * seen the bridge explorer link and is choosing to proceed, so this is an acknowledgement
+   * rather than a claim that the registration confirmed.
+   */
+  const handleContinueAnyway = () => {
+    logger.registration.info('User clicked Continue Anyway after cross-chain timeout', {
+      registeree,
+      transactionHash: hash,
+      elapsedTime: crossChainConfirmation.elapsedTime,
+    });
+    onComplete();
+  };
+
   // Not connected
   if (!address) {
     return (
@@ -558,6 +573,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
         chainId={chainId}
         onSubmit={handleSubmit}
         onRetry={handleRetry}
+        onContinueAnyway={currentStatus === 'hub-timeout' ? handleContinueAnyway : undefined}
         disabled={!isCorrectWallet || !isFeeReady || windowBlockStale}
         crossChainProgress={crossChainProgress}
       />

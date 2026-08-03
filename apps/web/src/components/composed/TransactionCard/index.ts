@@ -1,4 +1,9 @@
-export { deriveTransactionStatus, type TransactionStatusState } from './transactionStatus';
+export {
+  deriveTransactionStatus,
+  deriveCrossChainStatus,
+  type TransactionStatusState,
+  type CrossChainConfirmationStatus,
+} from './transactionStatus';
 export {
   TransactionCard,
   type TransactionCardProps,

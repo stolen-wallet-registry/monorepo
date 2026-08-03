@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { deriveTransactionStatus } from './transactionStatus';
+import { deriveTransactionStatus, deriveCrossChainStatus } from './transactionStatus';
 
 const NONE = {
   isConfirmed: false,
@@ -108,5 +108,37 @@ describe('the pay steps all use the shared ladder', () => {
   // which is a different decision and deliberately stays local to those components.
   it.each(PAY_STEPS)('%s does not re-declare the local ladder inline', (file) => {
     expect(source(file)).not.toMatch(/if \(isConfirming\) return 'pending';/);
+  });
+});
+
+describe('deriveCrossChainStatus', () => {
+  it('maps hub confirmation to hub-confirmed', () => {
+    expect(deriveCrossChainStatus('confirmed')).toBe('hub-confirmed');
+  });
+
+  it('maps in-flight hub polling to relaying', () => {
+    expect(deriveCrossChainStatus('waiting')).toBe('relaying');
+    expect(deriveCrossChainStatus('polling')).toBe('relaying');
+  });
+
+  /**
+   * The load-bearing case. A hub timeout means the spoke transaction confirmed but the hub —
+   * the canonical registry — never acknowledged the bridged message.
+   *
+   * `RegistrationPayStep` used to return 'confirmed' here and auto-advance to a success screen,
+   * while `TxRegisterPayStep` returned 'hub-timeout' and held. Opposite answers to the same
+   * question, and the wallet flow's answer told a fraud victim they were registered when they
+   * may not have been. Both now route through this function, so a regression on either side is
+   * a regression here.
+   */
+  it('maps a hub timeout to hub-timeout, never to confirmed', () => {
+    expect(deriveCrossChainStatus('timeout')).toBe('hub-timeout');
+    expect(deriveCrossChainStatus('timeout')).not.toBe('confirmed');
+  });
+
+  it('returns null when the hub state does not determine the card', () => {
+    // Caller falls through to the local ladder for these.
+    expect(deriveCrossChainStatus('idle')).toBeNull();
+    expect(deriveCrossChainStatus('error')).toBeNull();
   });
 });
