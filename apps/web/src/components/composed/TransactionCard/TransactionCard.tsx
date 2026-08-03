@@ -17,17 +17,11 @@ import { cn, sanitizeErrorMessage } from '@/lib/utils';
 import { getChainShortName } from '@/lib/explorer';
 import { AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import type { Address, Hash, Hex } from '@/lib/types/ethereum';
+import type { TransactionStatus } from './transactionStatus';
 
-export type TransactionStatus =
-  | 'idle'
-  | 'submitting'
-  | 'pending'
-  | 'confirmed'
-  | 'failed'
-  // Cross-chain states (spoke → hub)
-  | 'relaying' // Spoke tx confirmed, waiting for hub delivery
-  | 'hub-confirmed' // Hub chain shows wallet as registered
-  | 'hub-timeout'; // Cross-chain confirmation timed out (spoke tx confirmed, hub unconfirmed)
+// Defined in `transactionStatus.ts` alongside `deriveTransactionStatus`, the single ladder the
+// pay steps use to produce it. Re-exported here so every existing import site is unchanged.
+export type { TransactionStatus };
 
 /** Signed message data to display */
 export interface SignedMessageData {

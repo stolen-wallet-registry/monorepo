@@ -10,6 +10,7 @@ import { useAccount, useChainId, useWaitForTransactionReceipt } from 'wagmi';
 import { Alert, AlertDescription, Button } from '@swr/ui';
 import {
   TransactionCard,
+  deriveTransactionStatus,
   type TransactionStatus,
   type SignedMessageData,
   type CrossChainProgress,
@@ -193,6 +194,7 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
 
   // Cross-chain confirmation - polls hub chain after spoke tx confirms
   const crossChainConfirmation = useCrossChainConfirmation({
+    registry: 'wallet',
     wallet: registeree ?? undefined,
     spokeChainId: chainId,
     enabled: isCrossChain && isConfirmed && !!registeree,
@@ -235,11 +237,14 @@ export function RegistrationPayStep({ onComplete }: RegistrationPayStepProps) {
       if (crossChainConfirmation.status === 'timeout') return 'confirmed';
     }
     // Local states
-    if (isConfirmed) return 'confirmed';
-    if (isConfirming) return 'pending';
-    if (isPending || isSubmitting) return 'submitting';
-    if (isError || localError) return 'failed';
-    return 'idle';
+    return deriveTransactionStatus({
+      isConfirmed,
+      isConfirming,
+      isPending,
+      isError,
+      isSubmitting,
+      localError,
+    });
   };
 
   // Build cross-chain progress data for UI

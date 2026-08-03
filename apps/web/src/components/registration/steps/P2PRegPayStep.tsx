@@ -9,7 +9,11 @@ import { useCallback, useState, useEffect, useRef } from 'react';
 import { useAccount, useChainId, useWaitForTransactionReceipt } from 'wagmi';
 import type { Libp2p } from 'libp2p';
 
-import { TransactionCard, type TransactionStatus } from '@/components/composed/TransactionCard';
+import {
+  TransactionCard,
+  deriveTransactionStatus,
+  type TransactionStatus,
+} from '@/components/composed/TransactionCard';
 import { SignatureDetails } from '@/components/composed/SignatureDetails';
 import { RelayedSignatureReview } from '@/components/composed/RelayedSignatureReview';
 import { useRelayedWalletSignatureReview } from '@/hooks/p2p/useRelayedSignatureReview';
@@ -194,6 +198,7 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
 
   // Relayer: Poll hub chain for cross-chain confirmation after sending hash
   const crossChain = useCrossChainConfirmation({
+    registry: 'wallet',
     wallet: registeree ?? undefined,
     spokeChainId: chainId,
     enabled: role === 'relayer' && isCrossChain && hasSentHash,
@@ -227,14 +232,10 @@ export function P2PRegPayStep({ onComplete, role, getLibp2p }: P2PRegPayStepProp
     invalidateRegistryQueries(queryClient, { step: 'registration', hash });
   }, [isConfirmed, hash, queryClient]);
 
-  // Derive TransactionCard status
-  const getStatus = (): TransactionStatus => {
-    if (isConfirmed) return 'confirmed';
-    if (isConfirming) return 'pending';
-    if (isPending) return 'submitting';
-    if (isError) return 'failed';
-    return 'idle';
-  };
+  // Derive TransactionCard status. No `isSubmitting`/`localError` here: this step guards the
+  // submit window with a ref and surfaces failures through the write hook.
+  const getStatus = (): TransactionStatus =>
+    deriveTransactionStatus({ isConfirmed, isConfirming, isPending, isError });
 
   // `onRetry={reset}` rebuilt byte-identical calldata from the same cached signature and
   // reverted identically, forever. On this path the relayer cannot break the loop by

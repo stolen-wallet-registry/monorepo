@@ -19,7 +19,7 @@
   "dependencies": {
     "@swr/abis": "workspace:*",
     "@swr/chains": "workspace:*",
-    "hono": "^4.11.7",
+    "hono": "^4.12.33",
     "ponder": "^0.16.1",
     "viem": "^2.41.2"
   },
@@ -29,7 +29,7 @@
     "eslint": "^9.39.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vitest": "^4.0.15"
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=22.12.0 <23"

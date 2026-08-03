@@ -10,6 +10,7 @@ import { useAccount, useChainId } from 'wagmi';
 import { Alert, AlertDescription } from '@swr/ui';
 import {
   TransactionCard,
+  deriveTransactionStatus,
   type TransactionStatus,
   type SignedMessageData,
 } from '@/components/composed/TransactionCard';
@@ -125,13 +126,15 @@ export function AcknowledgementPayStep({ onComplete }: AcknowledgementPayStepPro
   useInvalidateRegistryOnConfirm('acknowledgement', hash, isConfirmed);
 
   // Map hook state to TransactionStatus
-  const getStatus = (): TransactionStatus => {
-    if (isConfirmed) return 'confirmed';
-    if (isConfirming) return 'pending';
-    if (isPending || isSubmitting) return 'submitting';
-    if (isError || localError) return 'failed';
-    return 'idle';
-  };
+  const getStatus = (): TransactionStatus =>
+    deriveTransactionStatus({
+      isConfirmed,
+      isConfirming,
+      isPending,
+      isError,
+      isSubmitting,
+      localError,
+    });
 
   // Handle confirmed transaction
   useEffect(() => {

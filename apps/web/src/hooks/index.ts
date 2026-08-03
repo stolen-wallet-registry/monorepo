@@ -75,6 +75,8 @@ export {
   needsCrossChainConfirmation,
   type CrossChainStatus,
   type UseCrossChainConfirmationOptions,
+  type WalletCrossChainConfirmationOptions,
+  type TransactionCrossChainConfirmationOptions,
   type UseCrossChainConfirmationResult,
 } from './useCrossChainConfirmation';
 

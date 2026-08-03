@@ -12,6 +12,7 @@ import { Alert, AlertDescription, Button, Tooltip, TooltipContent, TooltipTrigge
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import {
   TransactionCard,
+  deriveTransactionStatus,
   type TransactionStatus,
   type SignedMessageData,
 } from '@/components/composed/TransactionCard';
@@ -38,7 +39,6 @@ import {
   TX_SIGNATURE_STEP,
   computeTransactionDataHash,
 } from '@/lib/signatures/transactions';
-import { isSignatureInvalidatingError } from '@/lib/errors/signatureInvalidation';
 import { getTxPreviousStep } from '@/stores/transactionRegistrationStore';
 import type { Hash } from '@/lib/types/ethereum';
 import { parseSignature } from '@/lib/signatures';
@@ -48,7 +48,7 @@ import { getExplorerTxUrl } from '@/lib/explorer';
 import { useInvalidateRegistryOnConfirm } from '@/hooks/useInvalidateRegistryOnConfirm';
 import { SignatureInvalidatedAlert } from '@/components/registration/SignatureInvalidatedAlert';
 import { FlowRecoveryAlert } from '@/components/registration/FlowRecoveryAlert';
-import { sendResignRequest } from '@/components/registration/p2pResignRequest';
+import { classifyP2PRetry, sendResignRequest } from '@/components/registration/p2pResignRequest';
 import { useP2PStore } from '@/stores/p2pStore';
 import { armResignAck, waitForResignAck, type ResignAckOutcome } from '@/lib/p2p';
 import { logger } from '@/lib/logger';
@@ -127,7 +127,13 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
 
   // See handleRetry: some reverts make the stored signature permanently unusable, so Retry
   // has to mean "sign again", not "submit the same bytes again".
-  const needsResign = isError && isSignatureInvalidatingError(error);
+  //
+  // No `windowClosed` argument, matching `P2PAckPayStep`: this is an acknowledgement step, so
+  // there is no prior on-chain window to have closed and the classifier can only ever return
+  // `signature-invalidated` here. Routing through it anyway keeps the "which reverts kill a
+  // signature" decision in one place for all four relayed pay steps.
+  const retryAction = classifyP2PRetry({ isError, error });
+  const needsResign = retryAction.kind === 'request-resign';
 
   /**
    * The forwarder as it stands NOW, not as it stood when the signature was made.
@@ -254,13 +260,15 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
   useInvalidateRegistryOnConfirm('transaction-acknowledgement', hash, isConfirmed);
 
   // Map hook state to TransactionStatus
-  const getStatus = (): TransactionStatus => {
-    if (isConfirmed) return 'confirmed';
-    if (isConfirming) return 'pending';
-    if (isPending || isSubmitting) return 'submitting';
-    if (isError || localError) return 'failed';
-    return 'idle';
-  };
+  const getStatus = (): TransactionStatus =>
+    deriveTransactionStatus({
+      isConfirmed,
+      isConfirming,
+      isPending,
+      isError,
+      isSubmitting,
+      localError,
+    });
 
   // Handle confirmed transaction
   useEffect(() => {
@@ -447,7 +455,7 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
    * resubmit identical bytes forever.
    */
   const handleRetry = () => {
-    if (needsResign) {
+    if (retryAction.kind === 'request-resign') {
       if (dataHash && formReporter) {
         removeTxSignature(formReporter, dataHash, chainId, TX_SIGNATURE_STEP.ACKNOWLEDGEMENT);
       }
@@ -473,7 +481,7 @@ export function TxAcknowledgePayStep({ onComplete, getLibp2p }: TxAcknowledgePay
         void sendResignRequest({
           getLibp2p: getLibp2p ?? (() => null),
           partnerPeerId,
-          reason: 'signature-invalidated',
+          reason: retryAction.reason,
           flow: 'transaction',
         }).then(async (notified) => {
           if (!notified) {

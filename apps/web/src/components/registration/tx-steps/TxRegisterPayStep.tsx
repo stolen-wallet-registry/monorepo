@@ -13,6 +13,7 @@ import { Alert, AlertDescription, Button, Tooltip, TooltipContent, TooltipTrigge
 import { InfoTooltip } from '@/components/composed/InfoTooltip';
 import {
   TransactionCard,
+  deriveTransactionStatus,
   type TransactionStatus,
   type SignedMessageData,
   type CrossChainProgress,
@@ -30,13 +31,15 @@ import {
   useTransactionRegistration,
   useTxQuoteFeeBreakdown,
   useTxGasEstimate,
-  useTxCrossChainConfirmation,
   useTxContractDeadlines,
-  needsTxCrossChainConfirmation,
   type TxRegistrationParams,
   type TxRegistrationParamsHub,
   type TxRegistrationParamsSpoke,
 } from '@/hooks/transactions';
+import {
+  useCrossChainConfirmation,
+  needsCrossChainConfirmation,
+} from '@/hooks/useCrossChainConfirmation';
 import { isHubChain, isSpokeChain } from '@swr/chains';
 import {
   getTxSignature,
@@ -124,7 +127,7 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
   });
 
   // Check if this is a cross-chain registration (spoke → hub)
-  const isCrossChain = needsTxCrossChainConfirmation(chainId);
+  const isCrossChain = needsCrossChainConfirmation(chainId);
   const hubChainId = getHubChainId(chainId);
 
   // Get registration fee breakdown (chain-aware: hub vs spoke)
@@ -300,7 +303,8 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
   // Cross-chain confirmation - polls hub chain after spoke tx confirms
   // Uses the first tx hash from the batch as a sentinel for registration lookup
   const sampleTxHash = txHashesForContract.length > 0 ? txHashesForContract[0] : undefined;
-  const crossChainConfirmation = useTxCrossChainConfirmation({
+  const crossChainConfirmation = useCrossChainConfirmation({
+    registry: 'transaction',
     sampleTxHash,
     reportedChainId: reportedChainIdHash,
     spokeChainId: chainId,
@@ -342,11 +346,14 @@ export function TxRegisterPayStep({ onComplete, getLibp2p }: TxRegisterPayStepPr
       if (crossChainConfirmation.status === 'timeout') return 'hub-timeout';
     }
     // Local states
-    if (isConfirmed) return 'confirmed';
-    if (isConfirming) return 'pending';
-    if (isPending || isSubmitting) return 'submitting';
-    if (isError || localError) return 'failed';
-    return 'idle';
+    return deriveTransactionStatus({
+      isConfirmed,
+      isConfirming,
+      isPending,
+      isError,
+      isSubmitting,
+      localError,
+    });
   };
 
   useInvalidateRegistryOnConfirm('transaction-registration', hash, isConfirmed);

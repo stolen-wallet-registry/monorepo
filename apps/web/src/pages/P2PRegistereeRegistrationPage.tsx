@@ -137,6 +137,7 @@ function WalletP2PWaitForRegistration({ wallet, onComplete }: WalletP2PWaitForRe
     bridgeMessageId && bridgeMessageId !== staleMessageId ? bridgeMessageId : null;
 
   const confirmation = useCrossChainConfirmation({
+    registry: 'wallet',
     wallet,
     spokeChainId: chainId,
     enabled: !!wallet,

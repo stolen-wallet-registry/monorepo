@@ -57,9 +57,11 @@ import {
   useTransactionRegistrationHashStruct,
   useTxContractNonce,
   useTxContractDeadlines,
-  useTxCrossChainConfirmation,
-  needsTxCrossChainConfirmation,
 } from '@/hooks/transactions';
+import {
+  useCrossChainConfirmation,
+  needsCrossChainConfirmation,
+} from '@/hooks/useCrossChainConfirmation';
 import { useP2PKeepAlive } from '@/hooks/p2p/useP2PKeepAlive';
 import {
   clearSentSignature,
@@ -686,7 +688,7 @@ interface TxP2PWaitForRegistrationProps {
 
 /**
  * Waits for the relayer to complete transaction registration.
- * Polls hub chain via useTxCrossChainConfirmation; delegates
+ * Polls hub chain via useCrossChainConfirmation; delegates
  * rendering and auto-advance to the shared P2PWaitForConfirmation.
  *
  * On spoke chains, shows CrossChainRelayProgress with Hyperlane tracking.
@@ -696,7 +698,7 @@ function TxP2PWaitForRegistration({ onComplete }: TxP2PWaitForRegistrationProps)
   const { txHashesForContract, reportedChainId } = useTransactionSelection();
   const { bridgeMessageId } = useTransactionRegistrationStore();
 
-  const isCrossChain = needsTxCrossChainConfirmation(chainId);
+  const isCrossChain = needsCrossChainConfirmation(chainId);
   const hubChainId = isCrossChain ? getHubChainId(chainId) : undefined;
   const sampleTxHash = txHashesForContract.length > 0 ? txHashesForContract[0] : undefined;
   const reportedChainIdHash = reportedChainId ? chainIdToBytes32(reportedChainId) : undefined;
@@ -708,7 +710,8 @@ function TxP2PWaitForRegistration({ onComplete }: TxP2PWaitForRegistrationProps)
   const freshMessageId =
     bridgeMessageId && bridgeMessageId !== staleMessageId ? bridgeMessageId : null;
 
-  const confirmation = useTxCrossChainConfirmation({
+  const confirmation = useCrossChainConfirmation({
+    registry: 'transaction',
     sampleTxHash,
     reportedChainId: reportedChainIdHash,
     spokeChainId: chainId,

@@ -5,6 +5,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   ContractFunctionExecutionError,
   ContractFunctionRevertedError,
@@ -418,5 +421,60 @@ describe('sendResignRequest', () => {
     ).resolves.toBe(false);
 
     expect(getPeerConnection).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The relayed pay steps must reach this decision through the classifier, not around it.
+ *
+ * `TxAcknowledgePayStep` used to compute `isError && isSignatureInvalidatingError(error)`
+ * inline and hardcode `reason: 'signature-invalidated'` at the send site. That agreed with the
+ * classifier — an acknowledgement step has no prior window to have closed, so the classifier
+ * can only return that same reason there — but it was a second copy of "which reverts kill a
+ * signature, and does recovery also discard the acknowledgement", which is exactly the decision
+ * a future edit to `classifyP2PRetry` would silently miss in a file that does not call it.
+ *
+ * A source check rather than a render test because these components have none, so nothing else
+ * would notice the copy coming back.
+ */
+describe('the relayed pay steps classify Retry through classifyP2PRetry', () => {
+  const PAY_STEPS = [
+    'steps/P2PAckPayStep.tsx',
+    'steps/P2PRegPayStep.tsx',
+    'tx-steps/TxAcknowledgePayStep.tsx',
+    'tx-steps/TxRegisterPayStep.tsx',
+  ];
+
+  const dir = dirname(fileURLToPath(import.meta.url));
+  const source = (file: string) => readFileSync(join(dir, file), 'utf8');
+
+  it.each(PAY_STEPS)('%s calls classifyP2PRetry', (file) => {
+    expect(source(file)).toContain('classifyP2PRetry({');
+  });
+
+  /**
+   * `TxRegisterPayStep` is knowingly absent.
+   *
+   * It calls the classifier, but only INSIDE its P2P branch; the gate that opens that branch is
+   * still its own inline `isError && isSignatureInvalidatingError(error)`. The two agree today
+   * for the same reason every other pairing does, and rewiring it is a separate change with its
+   * own blast radius — it also drives the non-P2P `windowClosed` recovery below the branch.
+   * Listed here so its absence reads as a known gap rather than an oversight.
+   */
+  const GATES_ON_THE_CLASSIFIER = PAY_STEPS.filter(
+    (file) => file !== 'tx-steps/TxRegisterPayStep.tsx'
+  );
+
+  it.each(GATES_ON_THE_CLASSIFIER)('%s does not decide invalidation itself', (file) => {
+    expect(source(file)).not.toMatch(/isError && isSignatureInvalidatingError\(error\)/);
+  });
+
+  // The transaction acknowledgement step now takes the wire `reason` off the classifier result
+  // rather than writing the literal at the send site, so a classifier that grows a third reason
+  // reaches the peer instead of being flattened here.
+  it('TxAcknowledgePayStep takes the wire reason from the classifier', () => {
+    const text = source('tx-steps/TxAcknowledgePayStep.tsx');
+    expect(text).toContain('reason: retryAction.reason');
+    expect(text).not.toMatch(/reason: '(signature-invalidated|window-closed)'/);
   });
 });

@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { PROTOCOLS, PROTOCOL_SCHEMAS } from '@swr/p2p';
 
 vi.mock('@/lib/logger', () => ({
   logger: {
@@ -28,7 +29,6 @@ const {
   resetResignAckForTesting,
   sendResignAck,
   RESIGN_ACK,
-  LOCAL_PROTOCOL_SCHEMAS,
 } = await import('./resignAck');
 
 beforeEach(() => {
@@ -137,14 +137,21 @@ describe('resign acknowledgement — receiver side', () => {
 });
 
 describe('RESIGN_ACK protocol registration', () => {
+  // The protocol id and its schema both live in `@swr/p2p` now; this app must be using that
+  // declaration rather than a second copy, or the two can drift into a silent mismatch.
+  it('is the upstream protocol id, not a local copy of the string', () => {
+    expect(RESIGN_ACK).toBe(PROTOCOLS.RESIGN_ACK);
+    expect(RESIGN_ACK).toBe('/swr/resign-ack/1.0.0');
+  });
+
   // Without a schema entry, `validateProtocolMessage` fails closed and every answer is dropped
   // — which is the deadlock again, silently.
   it('has a schema so peerGuard admits it', () => {
-    expect(LOCAL_PROTOCOL_SCHEMAS[RESIGN_ACK]).toBeDefined();
+    expect(PROTOCOL_SCHEMAS[RESIGN_ACK]).toBeDefined();
   });
 
   it('accepts a confirmation payload and rejects anything richer', () => {
-    const schema = LOCAL_PROTOCOL_SCHEMAS[RESIGN_ACK];
+    const schema = PROTOCOL_SCHEMAS[RESIGN_ACK];
     expect(schema).toBeDefined();
     expect(schema?.safeParse({ success: true, message: 'ok' }).success).toBe(true);
     // `.strict()` — an answer may not smuggle a signature or a step alongside its verdict.

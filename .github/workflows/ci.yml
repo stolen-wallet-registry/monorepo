@@ -249,11 +249,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build contracts
+        working-directory: packages/contracts
+        run: forge build
+
+      # Runs BETWEEN `forge build` and `export-abi`, and the order is the whole point: this
+      # compares the freshly-built Forge artifacts against the ABIs as COMMITTED. Run it after
+      # export-abi and the committed files have already been overwritten with the fresh ones,
+      # so the comparison is trivially true and the guard proves nothing.
+      #
+      # SWR_REQUIRE_FORGE_ARTIFACTS=1 makes absent artifacts a failure rather than a skip. The
+      # Node job installs no Foundry, so the guard silently skips there; this is the one job
+      # that can satisfy it, and therefore the one job where it must be strict.
+      - name: Check error catalogue against freshly-built artifacts
+        env:
+          SWR_REQUIRE_FORGE_ARTIFACTS: '1'
+        run: pnpm --filter @swr/errors test
+
       - name: Regenerate ABIs
         working-directory: packages/contracts
-        run: |
-          forge build
-          pnpm export-abi
+        run: pnpm export-abi
 
       # export-abi emits raw JSON.stringify output while the committed ABIs are
       # Prettier-formatted, so the formatter must run before diffing or every

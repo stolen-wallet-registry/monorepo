@@ -1,3 +1,4 @@
+export { deriveTransactionStatus, type TransactionStatusState } from './transactionStatus';
 export {
   TransactionCard,
   type TransactionCardProps,

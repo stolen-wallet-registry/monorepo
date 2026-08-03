@@ -61,10 +61,5 @@ export {
   type UseTxGasEstimateResult,
 } from './useTxGasEstimate';
 
-export {
-  useTxCrossChainConfirmation,
-  needsTxCrossChainConfirmation,
-  type TxCrossChainStatus,
-  type UseTxCrossChainConfirmationOptions,
-  type UseTxCrossChainConfirmationResult,
-} from './useTxCrossChainConfirmation';
+// Cross-chain confirmation is no longer transaction-specific: `useCrossChainConfirmation` in
+// `@/hooks` covers both registries via its `registry` option. Import it from there.

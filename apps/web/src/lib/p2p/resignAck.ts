@@ -16,16 +16,16 @@
  * So the receiver now answers every request, including its refusals, and the relayer only
  * moves once that answer arrives.
  *
- * ── Why the protocol lives here and not in `@swr/p2p` ────────────────────────────────────
- * The protocol STRING is declared here because this change did not have write access to
- * `packages/p2p`. The payload is the existing `ConfirmationMessage` shape (`{success,
- * message}`), which `ParsedStreamDataSchema` — the strict envelope every inbound message is
- * parsed against first — already accepts, so nothing about the wire format needed a change
- * upstream. Only the protocol id and its schema registration are local.
+ * ── Where the protocol is declared ───────────────────────────────────────────────────────
+ * In `@swr/p2p`, next to `RESIGN_REQ`: both halves of the exchange are declared together, and
+ * `PROTOCOL_SCHEMAS` maps this one to `ConfirmationMessageSchema` so `peerGuard` validates it
+ * through the same single path as every other protocol. It briefly lived here instead, with a
+ * local schema map as a fallback; that is gone, and nothing in this app declares a protocol id
+ * or a schema of its own any more.
  *
- * TODO(packages/p2p): move `RESIGN_ACK` into `PROTOCOLS` and `PROTOCOL_SCHEMAS` next to
- * `RESIGN_REQ`, then delete {@link LOCAL_PROTOCOL_SCHEMAS} and import it like every other
- * protocol. Both halves of the exchange should be declared in the same place.
+ * The payload is the existing `ConfirmationMessage` shape (`{success, message}`), which
+ * `ParsedStreamDataSchema` — the strict envelope every inbound message is parsed against first
+ * — already accepts, so the wire format never differed from the rest.
  *
  * `success` carries the whole decision:
  *   - `true`  — the request was honoured and the receiver is moving back to a sign step.
@@ -34,26 +34,19 @@
  */
 
 import type { Connection } from '@libp2p/interface';
-import { ConfirmationMessageSchema } from '@swr/p2p';
-import type { z } from 'zod';
+import { PROTOCOLS } from '@swr/p2p';
 
 import { logger } from '@/lib/logger';
 import { passStreamData } from './libp2p';
 
-/** Re-sign acknowledgement (receiver → relayer), the reply to `PROTOCOLS.RESIGN_REQ`. */
-export const RESIGN_ACK = '/swr/resign-ack/1.0.0';
-
 /**
- * Protocols this app speaks that `@swr/p2p` does not yet declare a schema for.
+ * Re-sign acknowledgement (receiver → relayer), the reply to `PROTOCOLS.RESIGN_REQ`.
  *
- * Consulted by `peerGuard.validateProtocolMessage` after `PROTOCOL_SCHEMAS`. Kept as a
- * separate map rather than mutating the imported one: a shared module quietly gaining entries
- * at import time is the kind of action-at-a-distance that makes a security check hard to
- * reason about, and this way the fallback is visible at the one place that reads it.
+ * An alias for the upstream id, not a second declaration of it — the string exists once, in
+ * `@swr/p2p`. Kept because this module and its callers read better naming the protocol they are
+ * about than repeating the namespace at every use.
  */
-export const LOCAL_PROTOCOL_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
-  [RESIGN_ACK]: ConfirmationMessageSchema,
-};
+export const RESIGN_ACK = PROTOCOLS.RESIGN_ACK;
 
 /**
  * How long the relayer waits for the answer before giving up.

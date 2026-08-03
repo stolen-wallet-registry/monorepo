@@ -22,6 +22,9 @@ const ADDRESS = '0x742D35CC6634c0532925A3b844BC9E7595F0BEb0';
 
 const walletData: WalletSearchData = {
   address: ADDRESS,
+  // The registry's storage key: the address left-padded into a full bytes32, lowercase. Real
+  // results always carry it — supplying it here is what lets the field stop being optional.
+  identifier: `0x${'0'.repeat(24)}${ADDRESS.slice(2).toLowerCase()}`,
   caip10: `eip155:*:${ADDRESS.toLowerCase()}`,
   registeredAt: 1700000000n,
   transactionHash: `0x${'a'.repeat(64)}`,
